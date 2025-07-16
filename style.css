@@ -1,0 +1,153 @@
+/* =====================
+   General Grid Styles
+   ===================== */
+.album-artist-label {
+    color: var(--window_fg_color, #666);
+    font-size: 0.95em;
+    font-weight: 400;
+}
+.album-meta-label {
+    color: var(--window_fg_color, #888);
+    font-size: 0.9em;
+    font-style: italic;
+}
+.album-technical-label {
+    font-size: 13px;
+    color: #bbb;
+    margin-bottom: 2px;
+    font-family: monospace;
+}
+.album-tile {
+    border-radius: 12px;
+    background: transparent;
+    transition: background 0.2s, box-shadow 0.2s;
+    box-shadow: none;
+}
+.album-tile:hover, .album-tile:selected, .album-tile:focus {
+    background: var(--accent_color, rgba(128,128,128,0.08));
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+.album-title-label {
+    font-weight: 700;
+    font-size: 1.1em;
+}
+
+/* =====================
+   Album Detail Page Styles
+   ===================== */
+.album-detail-page .album-artist-label {
+    font-size: 20px;
+    font-weight: 500;
+    color: #888;
+    margin-bottom: 6px;
+}
+.album-detail-page .album-meta-label {
+    font-size: 15px;
+    color: #aaa;
+    margin-bottom: 6px;
+}
+.album-detail-page .album-technical-label {
+    font-size: 13px;
+    color: #bbb;
+    margin-bottom: 2px;
+    font-family: monospace;
+}
+.album-detail-page .album-title-label {
+    font-size: 28px;
+    font-weight: bold;
+    margin-bottom: 8px;
+}
+.album-header {
+    margin-bottom: 24px;
+}
+.album-info-box {
+    margin-left: 32px;
+    padding: 8px 0;
+}
+.album-cover-play {
+    background: rgba(0,0,0,0.6);
+    border-radius: 50%;
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.20);
+    transition: background 0.2s;
+}
+.album-cover-play:hover {
+    background: rgba(0,0,0,0.9);
+}
+.album-format-label {
+    color: var(--window_fg_color, #888);
+    font-size: 0.9em;
+    font-style: italic;
+    margin-top: 2px;
+}
+.track-list-container {
+    padding: 24px;
+}
+
+/* =====================
+   DR Badge Styles
+   ===================== */
+.dr-badge-label {
+    background: var(--accent_color, #888);
+    border: 2px solid var(--window_fg_color, #222);
+    border-radius: 4px;
+    color: var(--window_bg_color, #fff);
+    font-family: monospace;
+    font-size: 28px;
+    font-weight: bold;
+    margin: 0;
+    min-height: 44px;
+    min-width: 44px;
+    padding: 0;
+}
+.dr-badge-label.dr-00,
+.dr-badge-label.dr-01,
+.dr-badge-label.dr-02,
+.dr-badge-label.dr-03,
+.dr-badge-label.dr-04,
+.dr-badge-label.dr-05,
+.dr-badge-label.dr-06,
+.dr-badge-label.dr-07 {
+    background: var(--error_color, #ff2222);
+    color: var(--window_fg_color, #000);
+}
+.dr-badge-label.dr-08 {
+    background: var(--warning_color, #ff8800);
+    color: var(--window_fg_color, #000);
+}
+.dr-badge-label.dr-09 {
+    background: var(--warning_color, #ffaa00);
+    color: var(--window_fg_color, #000);
+}
+.dr-badge-label.dr-10 {
+    background: var(--warning_color, #ffee00);
+    color: var(--window_fg_color, #000);
+}
+.dr-badge-label.dr-11 {
+    background: var(--success_color, #ccff00);
+    color: var(--window_fg_color, #000);
+}
+.dr-badge-label.dr-12 {
+    background: var(--success_color, #99ff00);
+    color: var(--window_fg_color, #000);
+}
+.dr-badge-label.dr-13 {
+    background: var(--success_color, #44dd00);
+    color: var(--window_fg_color, #000);
+}
+.dr-badge-label.dr-14,
+.dr-badge-label.dr-15,
+.dr-badge-label.dr-16,
+.dr-badge-label.dr-17,
+.dr-badge-label.dr-18,
+.dr-badge-label.dr-19,
+.dr-badge-label.dr-20 {
+    background: var(--success_color, #00cc44);
+    color: var(--window_fg_color, #000);
+}
+.dr-badge-label.dr-badge-label-grid {
+    font-size: 18px;
+    min-width: 28px;
+    min-height: 28px;
+    padding: 0;
+}

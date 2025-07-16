@@ -1,0 +1,19 @@
+[package]
+name = "oxhidifi"
+version = "0.1.0"
+edition = "2024"
+authors = ["loxoron218"]
+description = "A music player tailored for audiophiles, focusing on detailed collection data visualization."
+
+
+[dependencies]
+gdk-pixbuf = "*"
+glib = "*"
+gtk4 = "*"
+libadwaita = "*"
+lofty = "*"
+regex = "*"
+serde = "*"
+serde_json = "*"
+sqlx = { version = "*", features = ["sqlite", "macros", "runtime-tokio-native-tls"] }
+tokio = { version = "*", features = ["macros", "rt-multi-thread", "fs"] }
