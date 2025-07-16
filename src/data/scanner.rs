@@ -207,10 +207,11 @@ pub fn connect_rescan_button(
 }
 
 /// Scan for DR value in .txt/.log files in a folder.
-/// Returns the first valid DR value found, or None if not found.
+/// Returns the highest valid DR value found, or None if not found.
 async fn scan_dr_value(folder_path: &str) -> Result<Option<u8>, Box<dyn Error>> {
     let mut entries = read_dir(folder_path).await?;
     let dr_regex = Regex::new(r"Official DR value:\s*DR(\d+|ERR)|Реальные значения DR:\s*DR(\d+|ERR)|Official EP/Album DR:\s*(\d+|ERR)").unwrap();
+    let mut highest_dr: Option<u8> = None;
     while let Some(entry) = entries.next_entry().await? {
         let path = entry.path();
         if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
@@ -230,9 +231,17 @@ async fn scan_dr_value(folder_path: &str) -> Result<Option<u8>, Box<dyn Error>> 
                                             if dr_str != "ERR" { // Only parse if not "ERR"
                                                 if let Ok(dr) = dr_str.parse::<u8>() {
                                                     if (1..=20).contains(&dr) {
-
-                                                        // Return the first valid numeric DR value found
-                                                        return Ok(Some(dr));
+                                                        
+                                                        // Update highest DR value found
+                                                        match highest_dr {
+                                                            Some(current_max) if dr > current_max => {
+                                                                highest_dr = Some(dr);
+                                                            }
+                                                            None => {
+                                                                highest_dr = Some(dr);
+                                                            }
+                                                            _ => {} // Keep current max
+                                                        }
                                                     }
                                                 }
                                             }
@@ -244,7 +253,6 @@ async fn scan_dr_value(folder_path: &str) -> Result<Option<u8>, Box<dyn Error>> 
                             //EOF
                             Ok(None) => break,
                             Err(_) => {
-
                                 // skip this file, but do not abort scan
                                 break;
                             }
@@ -254,7 +262,7 @@ async fn scan_dr_value(folder_path: &str) -> Result<Option<u8>, Box<dyn Error>> 
             }
         }
     }
-    Ok(None)
+    Ok(highest_dr)
 }
 
 /// Update process_audio_file signature to accept dr_value
