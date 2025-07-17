@@ -3,10 +3,10 @@ use std::cell::{Cell, RefCell};
 
 use gdk_pixbuf::{InterpType, PixbufLoader};
 use glib::{MainContext, markup_escape_text};
-use gtk4::{Align, Box, Button, Fixed, FlowBox, FlowBoxChild, GestureClick, Label, Orientation, Overlay, Picture, PolicyType, ScrolledWindow, SelectionMode, Widget};
+use gtk4::{Align, Box, Button, Fixed, FlowBox, FlowBoxChild, GestureClick, Label, Orientation, Overlay, Picture, PolicyType, ScrolledWindow, SelectionMode, Spinner, Stack, StackTransitionType, Widget};
 use gtk4::pango::{EllipsizeMode, WrapMode};
 use libadwaita::{ApplicationWindow, StatusPage, ViewStack};
-use libadwaita::prelude::{BoxExt, FixedExt, FlowBoxChildExt, IsA, ObjectExt, PixbufLoaderExt, WidgetExt};
+use libadwaita::prelude::{BoxExt, Cast, FixedExt, FlowBoxChildExt, IsA, ObjectExt, PixbufLoaderExt, WidgetExt};
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -93,6 +93,7 @@ pub fn rebuild_albums_grid_for_window(
     cover_size_rc: &Rc<Cell<i32>>,
     tile_size_rc: &Rc<Cell<i32>>,
     albums_grid_cell: &Rc<RefCell<Option<FlowBox>>>,
+    albums_stack_cell: &Rc<RefCell<Option<Stack>>>,
 ) {
 
     // Remove old grid widget if present
@@ -100,10 +101,11 @@ pub fn rebuild_albums_grid_for_window(
         stack.remove(&child);
     }
 
-    // Drop old FlowBox
+    // Drop old FlowBox and Stack
     *albums_grid_cell.borrow_mut() = None;
+    *albums_stack_cell.borrow_mut() = None;
 
-    // Create new grid
+    // Create new grid and stack
     let (albums_stack, albums_grid) = build_albums_grid(
         scanning_label_albums,
         cover_size_rc.get(),
@@ -111,23 +113,57 @@ pub fn rebuild_albums_grid_for_window(
     );
     stack.add_titled(&albums_stack, Some("albums"), "Albums");
     *albums_grid_cell.borrow_mut() = Some(albums_grid.clone());
+    *albums_stack_cell.borrow_mut() = Some(albums_stack.clone());
 }
 
 /// Build the albums grid and its containing stack.
 /// Returns (albums_stack, albums_grid).
 pub fn build_albums_grid<W: IsA<Widget>>(
-    scanning_label: &W,
+    _scanning_label: &W,
     _cover_size: i32,
     _tile_size: i32,
-) -> (Box, FlowBox) {
+) -> (Stack, FlowBox) { // Changed return type
+
+    // Empty state
+    let empty_state_status_page = StatusPage::builder()
+        .icon_name("folder-music-symbolic")
+        .title("No Music Found")
+        .description("Add music to your library to get started.")
+        .vexpand(true)
+        .hexpand(true)
+        .build();
+    let add_music_button = Button::with_label("Add Music");
+    add_music_button.add_css_class("suggested-action");
+    empty_state_status_page.set_child(Some(&add_music_button));
+    let empty_state_container = Box::builder()
+        .orientation(Orientation::Vertical)
+        .halign(Align::Center)
+        .valign(Align::Center)
+        .vexpand(true)
+        .hexpand(true)
+        .build();
+    empty_state_container.append(&empty_state_status_page);
+
+    // Loading state
+    let loading_spinner = Spinner::builder().spinning(true).build();
+    loading_spinner.set_size_request(48, 48);
+    let loading_state_container = Box::builder()
+        .orientation(Orientation::Vertical)
+        .halign(Align::Center)
+        .valign(Align::Center)
+        .vexpand(true)
+        .hexpand(true)
+        .build();
+    loading_state_container.append(&loading_spinner);
 
     // Albums grid
     let albums_grid = FlowBox::builder()
-        .valign(Align::Center)
+        .valign(Align::Start)
         .max_children_per_line(128)
         .row_spacing(1)
         .column_spacing(0)
         .selection_mode(SelectionMode::None)
+        .homogeneous(true)
         .build();
     albums_grid.set_halign(Align::Center);
     let scrolled = ScrolledWindow::builder()
@@ -137,18 +173,19 @@ pub fn build_albums_grid<W: IsA<Widget>>(
         .min_content_height(400)
         .min_content_width(400)
         .vexpand(true)
+        .margin_start(8)
+        .margin_end(8)
+        .margin_top(8)
+        .margin_bottom(8)
         .build();
     scrolled.set_hexpand(true);
     scrolled.set_halign(Align::Fill);
-    let albums_stack = Box::builder()
-        .orientation(Orientation::Vertical)
-        .margin_top(24)
-        .margin_bottom(24)
-        .margin_start(24)
-        .margin_end(24)
+    let albums_stack = Stack::builder()
+        .transition_type(StackTransitionType::None)
         .build();
-    albums_stack.append(scanning_label);
-    albums_stack.append(&scrolled);
+    albums_stack.add_named(&loading_state_container, Some("loading_state"));
+    albums_stack.add_named(&empty_state_container, Some("empty_state"));
+    albums_stack.add_named(&scrolled, Some("populated_grid"));
     (albums_stack, albums_grid)
 }
 
@@ -165,6 +202,7 @@ pub async fn populate_albums_grid(
     sender: &UnboundedSender<()>,
     stack: &ViewStack,
     header_btn_stack: &ViewStack,
+    albums_inner_stack: &Stack,
 ) {
     thread_local! {
         static BUSY: Cell<bool> = Cell::new(false);
@@ -187,30 +225,32 @@ pub async fn populate_albums_grid(
     match fetch_result {
         Err(_) => {
             BUSY.with(|b| b.set(false));
+
+            // In case of error, show empty state or a specific error state
+            albums_inner_stack.set_visible_child_name("empty_state");
         }
         Ok(mut albums) => {
             if albums.is_empty() {
-                let status_page = StatusPage::builder()
-                    .icon_name("folder-music-symbolic")
-                    .title("No Music Found")
-                    .description("Add music to your library to get started.")
-                    .vexpand(true)
-                    .hexpand(true)
-                    .build();
-                let add_music_button = Button::with_label("Add Music");
-                add_music_button.add_css_class("suggested-action");
-                connect_add_folder_dialog(
-                    &add_music_button,
-                    window.clone(),
-                    scanning_label.clone(),
-                    db_pool.clone(),
-                    sender.clone(),
-                );
-                status_page.set_child(Some(&add_music_button));
-                albums_grid.insert(&status_page, -1);
+                albums_inner_stack.set_visible_child_name("empty_state");
+
+                // Retrieve the button from the empty_state
+                if let Some(empty_state_container) = albums_inner_stack.child_by_name("empty_state") {
+                    if let Some(status_page) = empty_state_container.downcast::<Box>().ok().and_then(|b| b.first_child().and_then(|c| c.downcast::<StatusPage>().ok())) {
+                        if let Some(add_music_button) = status_page.child().and_then(|c| c.downcast::<Button>().ok()) {
+                            connect_add_folder_dialog(
+                                    &add_music_button,
+                                window.clone(),
+                                scanning_label.clone(),
+                                db_pool.clone(),
+                                sender.clone(),
+                            );
+                        }
+                    }
+                }
                 BUSY.with(|b| b.set(false));
                 return;
             }
+            albums_inner_stack.set_visible_child_name("populated_grid");
 
             // Multi-level sort albums according to sort_orders
             let sort_orders = sort_orders.borrow();

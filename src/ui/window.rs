@@ -2,7 +2,7 @@ use std::{rc::Rc, sync::Arc};
 use std::cell::{Cell, RefCell};
 
 use glib::WeakRef;
-use gtk4::{Box, FlowBox, Orientation};
+use gtk4::{Box, FlowBox, Orientation, Stack};
 use libadwaita::{Application, ApplicationWindow, Clamp, ViewStack};
 use libadwaita::prelude::{AdwApplicationWindowExt, BoxExt, ButtonExt, GtkWindowExt};
 use sqlx::SqlitePool;
@@ -82,9 +82,11 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     let cover_size_rc = Rc::new(Cell::new(cover_size));
     let tile_size_rc = Rc::new(Cell::new(tile_size));
 
-    // Robust grid storage using Rc<RefCell<Option<FlowBox>>>
+    // Robust grid and stack storage using Rc<RefCell<Option<FlowBox>>> and Rc<RefCell<Option<Stack>>>
     let albums_grid_cell: Rc<RefCell<Option<FlowBox>>> = Rc::new(RefCell::new(None));
+    let albums_stack_cell: Rc<RefCell<Option<Stack>>> = Rc::new(RefCell::new(None));
     let artists_grid_cell: Rc<RefCell<Option<FlowBox>>> = Rc::new(RefCell::new(None));
+    let artists_stack_cell: Rc<RefCell<Option<Stack>>> = Rc::new(RefCell::new(None));
 
     // Albums grid (modularized)
     rebuild_albums_grid_for_window(
@@ -93,6 +95,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         &cover_size_rc,
         &tile_size_rc,
         &albums_grid_cell,
+        &albums_stack_cell,
     );
 
     // Artists grid (modularized)
@@ -100,6 +103,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         &stack,
         &scanning_label_artists,
         &artists_grid_cell,
+        &artists_stack_cell,
     );
     let window = ApplicationWindow::builder()
         .application(app)
@@ -113,7 +117,9 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     let (sender, receiver, refresh_library_ui) = setup_library_refresh_channel(
         db_pool.clone(),
         albums_grid_cell.clone(),
+        albums_stack_cell.clone(),
         artists_grid_cell.clone(),
+        artists_stack_cell.clone(),
         sort_orders.clone(),
         stack_rc.clone(),
         left_btn_stack_rc.clone(),
@@ -129,7 +135,6 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         header.left_btn_stack.clone().into(),
         nav_history.clone(),
     );
-
     setup_live_monitor_refresh(
         sort_ascending.clone(),
         sort_ascending_artists.clone(),
@@ -248,7 +253,9 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     connect_live_search(
         &search_bar.entry,
         albums_grid_cell.borrow().as_ref().unwrap(),
+        albums_stack_cell.borrow().as_ref().unwrap(),
         artists_grid_cell.borrow().as_ref().unwrap(),
+        artists_stack_cell.borrow().as_ref().unwrap(),
         db_pool.clone(),
         sort_ascending.clone(),
         sort_ascending_artists.clone(),

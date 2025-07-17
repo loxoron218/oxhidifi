@@ -1,7 +1,7 @@
 use std::{rc::Rc, sync::Arc, time::Duration};
 use std::cell::{Cell, RefCell};
 use glib::{ControlFlow::Continue, MainContext};
-use gtk4::{FlowBox, Label};
+use gtk4::{FlowBox, Label, Stack};
 use gtk4::glib::source::timeout_add_local;
 use libadwaita::{ApplicationWindow, Clamp, ViewStack};
 use sqlx::SqlitePool;
@@ -16,7 +16,9 @@ use crate::utils::screen::{compute_cover_and_tile_size, get_primary_screen_size}
 pub fn setup_library_refresh_channel(
     db_pool: Arc<SqlitePool>,
     albums_grid_cell: Rc<RefCell<Option<FlowBox>>>,
+    albums_stack_cell: Rc<RefCell<Option<Stack>>>,
     artists_grid_cell: Rc<RefCell<Option<FlowBox>>>,
+    artists_stack_cell: Rc<RefCell<Option<Stack>>>,
     sort_orders: Rc<RefCell<Vec<SortOrder>>>,
     stack_rc: Rc<ViewStack>,
     left_btn_stack_rc: Rc<ViewStack>,
@@ -47,7 +49,9 @@ pub fn setup_library_refresh_channel(
         let cover_size_rc = cover_size_rc.clone();
         let tile_size_rc = tile_size_rc.clone();
         let albums_grid_cell = albums_grid_cell.clone();
+        let albums_stack_cell = albums_stack_cell.clone();
         let artists_grid_cell = artists_grid_cell.clone();
+        let artists_stack_cell = artists_stack_cell.clone();
         let window = window.clone();
         let scanning_label_albums = scanning_label_albums.clone();
         let scanning_label_artists = scanning_label_artists.clone();
@@ -62,7 +66,9 @@ pub fn setup_library_refresh_channel(
                 let left_btn_stack_rc = left_btn_stack_rc.clone();
                 let right_btn_box_clone = right_btn_box_clone.clone();
                 let albums_grid_cell = albums_grid_cell.clone();
+                let albums_stack_cell = albums_stack_cell.clone();
                 let artists_grid_cell = artists_grid_cell.clone();
+                let artists_stack_cell = artists_stack_cell.clone();
                 let cover_size_rc = cover_size_rc.clone();
                 let tile_size_rc = tile_size_rc.clone();
                 let window = window.clone();
@@ -75,7 +81,7 @@ pub fn setup_library_refresh_channel(
                 MainContext::default().spawn_local(async move {
                     let current_tab = stack_rc.visible_child_name().unwrap_or_else(|| "albums".into());
                     if current_tab == "albums" {
-                        if let Some(albums_grid) = albums_grid_cell.borrow().as_ref() {
+                        if let (Some(albums_grid), Some(albums_inner_stack)) = (albums_grid_cell.borrow().as_ref(), albums_stack_cell.borrow().as_ref()) {
                             populate_albums_grid(
                                 albums_grid,
                                 db_pool.clone(),
@@ -88,11 +94,12 @@ pub fn setup_library_refresh_channel(
                                 &sender,
                                 &stack,
                                 &header_btn_stack,
+                                albums_inner_stack,
                             )
                             .await;
                         }
                     } else if current_tab == "artists" {
-                    if let Some(artists_grid) = artists_grid_cell.borrow().as_ref() {
+                    if let (Some(artists_grid), Some(artists_inner_stack)) = (artists_grid_cell.borrow().as_ref(), artists_stack_cell.borrow().as_ref()) {
                         populate_artists_grid(
                             artists_grid,
                             db_pool.clone(),
@@ -104,6 +111,7 @@ pub fn setup_library_refresh_channel(
                             &scanning_label_artists,
                             &sender,
                             nav_history.clone(),
+                            artists_inner_stack,
                         );
                     }
                 }

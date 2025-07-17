@@ -2,10 +2,10 @@ use std::{rc::Rc, sync::Arc};
 use std::cell::{Cell, RefCell};
 
 use glib::{markup_escape_text, MainContext, WeakRef};
-use gtk4::{Align, Box, Button, FlowBox, FlowBoxChild, GestureClick, Image, Label, Orientation, PolicyType, ScrolledWindow, SelectionMode, Widget};
+use gtk4::{Align, Box, Button, FlowBox, FlowBoxChild, GestureClick, Image, Label, Orientation, PolicyType, ScrolledWindow, SelectionMode, Stack, StackTransitionType, Widget};
 use gtk4::pango::{EllipsizeMode, WrapMode};
 use libadwaita::{ApplicationWindow, Clamp, StatusPage, ViewStack};
-use libadwaita::prelude::{BoxExt, FlowBoxChildExt, IsA, ObjectExt, WidgetExt};
+use libadwaita::prelude::{BoxExt, Cast, FlowBoxChildExt, IsA, ObjectExt, WidgetExt};
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -21,6 +21,7 @@ pub fn rebuild_artists_grid_for_window(
     stack: &ViewStack,
     scanning_label_artists: &impl IsA<Widget>,
     artists_grid_cell: &Rc<RefCell<Option<FlowBox>>>,
+    artists_stack_cell: &Rc<RefCell<Option<Stack>>>,
 ) {
 
     // Always remove existing "artists" child before adding a new one
@@ -28,23 +29,47 @@ pub fn rebuild_artists_grid_for_window(
         stack.remove(&child);
     }
     *artists_grid_cell.borrow_mut() = None;
+    *artists_stack_cell.borrow_mut() = None;
     let (artists_stack, artists_grid) = build_artists_grid(scanning_label_artists);
     stack.add_titled(&artists_stack, Some("artists"), "Artists");
     *artists_grid_cell.borrow_mut() = Some(artists_grid.clone());
+    *artists_stack_cell.borrow_mut() = Some(artists_stack.clone());
 }
 
 /// Build the artists grid and its containing stack.
 /// Returns (artists_stack, artists_grid).
-pub fn build_artists_grid<W: IsA<Widget>>(scanning_label: &W) -> (Box, FlowBox) {
-    use {ScrolledWindow, PolicyType};
-    let artists_grid = FlowBox::builder()
+pub fn build_artists_grid<W: IsA<Widget>>(_scanning_label: &W) -> (Stack, FlowBox) {
+
+    // Empty state
+    let empty_state_status_page = StatusPage::builder()
+        .icon_name("avatar-default-symbolic")
+        .title("No Artists Found")
+        .description("Add music to your library to get started.")
+        .vexpand(true)
+        .hexpand(true)
+        .build();
+    let add_music_button = Button::with_label("Add Music");
+    add_music_button.add_css_class("suggested-action");
+    empty_state_status_page.set_child(Some(&add_music_button));
+    let empty_state_container = Box::builder()
+        .orientation(Orientation::Vertical)
+        .halign(Align::Center)
         .valign(Align::Center)
+        .vexpand(true)
+        .hexpand(true)
+        .build();
+    empty_state_container.append(&empty_state_status_page);
+
+    // Artists grid
+    let artists_grid = FlowBox::builder()
+        .valign(Align::Start)
         .max_children_per_line(128)
         .row_spacing(1)
         .column_spacing(0)
         .selection_mode(SelectionMode::None)
+        .homogeneous(true)
         .build();
-        artists_grid.set_halign(Align::Center);
+    artists_grid.set_halign(Align::Center);
     let scrolled = ScrolledWindow::builder()
         .hscrollbar_policy(PolicyType::Automatic)
         .vscrollbar_policy(PolicyType::Automatic)
@@ -52,18 +77,18 @@ pub fn build_artists_grid<W: IsA<Widget>>(scanning_label: &W) -> (Box, FlowBox) 
         .min_content_height(400)
         .min_content_width(400)
         .vexpand(true)
+        .margin_start(8)
+        .margin_end(8)
+        .margin_top(8)
+        .margin_bottom(8)
         .build();
     scrolled.set_hexpand(true);
     scrolled.set_halign(Align::Fill);
-    let artists_stack = Box::builder()
-        .orientation(Orientation::Vertical)
-        .margin_top(24)
-        .margin_bottom(24)
-        .margin_start(24)
-        .margin_end(24)
+    let artists_stack = Stack::builder()
+        .transition_type(StackTransitionType::None)
         .build();
-    artists_stack.append(scanning_label);
-    artists_stack.append(&scrolled);
+    artists_stack.add_named(&empty_state_container, Some("empty_state"));
+    artists_stack.add_named(&scrolled, Some("populated_grid"));
     (artists_stack, artists_grid)
 }
 
@@ -154,6 +179,7 @@ pub fn populate_artists_grid(
     scanning_label: &Label,
     sender: &UnboundedSender<()>, 
     nav_history: Rc<RefCell<Vec<String>>>,
+    artists_inner_stack: &Stack,
 ) {
     thread_local! {
         static BUSY: Cell<bool> = Cell::new(false);
@@ -173,6 +199,7 @@ pub fn populate_artists_grid(
     let left_btn_stack = left_btn_stack.clone();
     let right_btn_box_weak = right_btn_box.downgrade();
     let artists_grid = artists_grid.clone();
+    let artists_inner_stack = artists_inner_stack.clone();
     let db_pool = Arc::clone(&db_pool);
     let window = window.clone();
     let scanning_label = scanning_label.clone();
@@ -183,30 +210,34 @@ pub fn populate_artists_grid(
     MainContext::default().spawn_local(async move {
         let fetch_result = fetch_all_artists(&db_pool).await;
         match fetch_result {
-            Err(_) => BUSY.with(|b| b.set(false)),
+            Err(_) => {
+                BUSY.with(|b| b.set(false));
+
+                // In case of error, show empty state or a specific error state
+                artists_inner_stack.set_visible_child_name("empty_state");
+            }
             Ok(mut artists) => {
                 if artists.is_empty() {
-                    let status_page = StatusPage::builder()
-                        .icon_name("avatar-default-symbolic")
-                        .title("No Artists Found")
-                        .description("Add music to your library to get started.")
-                        .vexpand(true)
-                        .hexpand(true)
-                        .build();
-                    let add_music_button = Button::with_label("Add Music");
-                    add_music_button.add_css_class("suggested-action");
-                    connect_add_folder_dialog(
-                        &add_music_button,
-                        window,
-                        scanning_label,
-                        db_pool.clone(),
-                        sender,
-                    );
-                    status_page.set_child(Some(&add_music_button));
-                    artists_grid.insert(&status_page, -1);
+                    artists_inner_stack.set_visible_child_name("empty_state");
+
+                    // Retrieve the button from the empty_state
+                    if let Some(empty_state_container) = artists_inner_stack.child_by_name("empty_state") {
+                        if let Some(status_page) = empty_state_container.downcast::<Box>().ok().and_then(|b| b.first_child().and_then(|c| c.downcast::<StatusPage>().ok())) {
+                            if let Some(add_music_button) = status_page.child().and_then(|c| c.downcast::<Button>().ok()) {
+                                connect_add_folder_dialog(
+                                    &add_music_button,
+                                    window,
+                                    scanning_label,
+                                    db_pool.clone(),
+                                    sender,
+                                );
+                            }
+                        }
+                    }
                     BUSY.with(|b| b.set(false));
                     return;
                 }
+                artists_inner_stack.set_visible_child_name("populated_grid");
                 artists.sort_by(|a, b| {
                     let cmp = a.name.to_lowercase().cmp(&b.name.to_lowercase());
                     if sort_ascending {
@@ -230,5 +261,6 @@ pub fn populate_artists_grid(
                 }
             }
         }
+        artists_inner_stack.set_visible(true);
     });
 }

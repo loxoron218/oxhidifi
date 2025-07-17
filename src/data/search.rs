@@ -5,7 +5,7 @@ use gdk_pixbuf::{InterpType, PixbufLoader};
 use gdk_pixbuf::prelude::PixbufLoaderExt;
 use glib::{MainContext, markup_escape_text};
 use glib::prelude::ObjectExt;
-use gtk4::{Align, Box, Entry, FlowBox, FlowBoxChild, GestureClick, Image, Label, Orientation, Picture};
+use gtk4::{Align, Box, Entry, FlowBox, FlowBoxChild, GestureClick, Image, Label, Orientation, Picture, Stack};
 use gtk4::pango::EllipsizeMode;
 use libadwaita::{Clamp, ViewStack};
 use libadwaita::prelude::{BoxExt, EditableExt, FlowBoxChildExt, WidgetExt};
@@ -21,7 +21,9 @@ use crate::utils::screen::{compute_cover_and_tile_size, get_primary_screen_size}
 pub fn connect_live_search(
     search_entry: &Entry,
     albums_grid: &FlowBox,
+    albums_stack: &Stack,
     artists_grid: &FlowBox,
+    artists_stack: &Stack,
     db_pool: Arc<SqlitePool>,
     sort_ascending: Rc<Cell<bool>>,
     sort_ascending_artists: Rc<Cell<bool>>,
@@ -35,11 +37,11 @@ pub fn connect_live_search(
     // Compute dynamic sizes based on screen dimensions
     let (screen_width, _) = get_primary_screen_size();
     let (cover_size, tile_size) = compute_cover_and_tile_size(screen_width);
-
-    // Clone dependencies for async closure
     let db_pool = db_pool.clone();
     let albums_grid = albums_grid.clone();
+    let albums_stack = albums_stack.clone();
     let artists_grid = artists_grid.clone();
+    let artists_stack = artists_stack.clone();
     let sort_ascending = sort_ascending.clone();
     let refresh_library_ui = refresh_library_ui.clone();
     let sort_ascending_artists = sort_ascending_artists.clone();
@@ -59,6 +61,10 @@ pub fn connect_live_search(
         // Handle empty search query
         if text.trim().is_empty() {
             refresh_library_ui(sort_ascending.get(), sort_ascending_artists.get());
+
+            // Ensure stacks are set to populated_grid, as refresh_library_ui will handle empty state if needed
+            albums_stack.set_visible_child_name("populated_grid");
+            artists_stack.set_visible_child_name("populated_grid");
             return;
         }
 
@@ -68,7 +74,9 @@ pub fn connect_live_search(
         // Clone variables for async move
         let db_pool = db_pool.clone();
         let albums_grid = albums_grid.clone();
+        let albums_stack = albums_stack.clone();
         let artists_grid = artists_grid.clone();
+        let artists_stack = artists_stack.clone();
         let sort_ascending = sort_ascending.clone();
         let stack_for_closure = stack_clone.clone();
         let left_btn_stack_for_closure = left_btn_stack_clone.clone();
@@ -115,12 +123,9 @@ pub fn connect_live_search(
 
                     // Handle empty search results
                     if albums.is_empty() {
-                        let label = Label::builder()
-                            .label("No albums found")
-                            .css_classes(["dim-label"])
-                            .build();
-                        albums_grid.insert(&label, -1);
+                        albums_stack.set_visible_child_name("empty_state");
                     } else {
+                        albums_stack.set_visible_child_name("populated_grid");
 
                         // Create album tiles
                         for album in albums {
@@ -250,13 +255,9 @@ pub fn connect_live_search(
 
                     // Handle empty search results
                     if artists.is_empty() {
-                        let label = Label::builder()
-                            .label("No artists found")
-                            .css_classes(["dim-label"])
-                            .build();
-                        artists_grid.insert(&label, -1);
+                        artists_stack.set_visible_child_name("empty_state");
                     } else {
-                        let right_btn_box_weak = right_btn_box_clone.downgrade();
+                        artists_stack.set_visible_child_name("populated_grid");
 
                         // Create artist tiles
                         for artist in artists {
@@ -297,7 +298,7 @@ pub fn connect_live_search(
                             let nav_history_clone = nav_history.clone();
                             let gesture = GestureClick::builder().build();
                             let flow_child_clone = flow_child.clone();
-                            let right_btn_box_weak_clone = right_btn_box_weak.clone();
+                            let right_btn_box_weak_clone = right_btn_box_clone.clone();
                             gesture.connect_pressed(move |_, _, _, _| {
                                 if let (Some(stack), Some(left_btn_stack)) =
                                     (stack_weak.upgrade(), left_btn_stack_weak.upgrade())
@@ -312,7 +313,7 @@ pub fn connect_live_search(
                                             db_pool_clone.clone(),
                                             artist_id,
                                             left_btn_stack.downgrade(),
-                                            right_btn_box_weak_clone.clone(),
+                                            right_btn_box_weak_clone.clone().downgrade(),
                                             nav_history_clone.clone(),
                                         ),
                                     );
