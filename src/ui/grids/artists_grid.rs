@@ -2,10 +2,10 @@ use std::{rc::Rc, sync::Arc};
 use std::cell::{Cell, RefCell};
 
 use glib::{markup_escape_text, MainContext, WeakRef};
-use gtk4::{Align, Box, Button, FlowBox, GestureClick, Image, Label, Orientation, PolicyType, ScrolledWindow, SelectionMode, Widget};
+use gtk4::{Align, Box, Button, FlowBox, FlowBoxChild, GestureClick, Image, Label, Orientation, PolicyType, ScrolledWindow, SelectionMode, Widget};
 use gtk4::pango::{EllipsizeMode, WrapMode};
 use libadwaita::{ApplicationWindow, Clamp, StatusPage, ViewStack};
-use libadwaita::prelude::{BoxExt, IsA, ObjectExt, WidgetExt};
+use libadwaita::prelude::{BoxExt, FlowBoxChildExt, IsA, ObjectExt, WidgetExt};
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -38,7 +38,7 @@ pub fn rebuild_artists_grid_for_window(
 pub fn build_artists_grid<W: IsA<Widget>>(scanning_label: &W) -> (Box, FlowBox) {
     use {ScrolledWindow, PolicyType};
     let artists_grid = FlowBox::builder()
-        .valign(Align::Center)
+        .valign(Align::Start)
         .max_children_per_line(128)
         .row_spacing(1)
         .column_spacing(0)
@@ -76,7 +76,7 @@ fn create_artist_tile(
     db_pool: &Arc<SqlitePool>,
     left_btn_stack: &ViewStack,
     right_btn_box_weak: &WeakRef<Clamp>,
-) -> Box {
+) -> FlowBoxChild {
     let (screen_width, _) = get_primary_screen_size();
     let (cover_size, _) = compute_cover_and_tile_size(screen_width);
     let icon = Image::from_icon_name("avatar-default-symbolic");
@@ -96,18 +96,26 @@ fn create_artist_tile(
     tile.set_halign(Align::Fill);
     tile.append(&icon);
     tile.append(&label);
+    let flow_child = FlowBoxChild::builder().build();
+    flow_child.set_child(Some(&tile));
+    flow_child.set_hexpand(false);
+    flow_child.set_vexpand(false);
+    flow_child.set_halign(Align::Fill);
+    flow_child.set_valign(Align::Start);
     unsafe {
-        tile.set_data::<i64>("artist_id", artist_id);
+        flow_child.set_data::<i64>("artist_id", artist_id);
     }
     let stack_weak = stack.downgrade();
     let db_pool = Arc::clone(db_pool);
     let left_btn_stack_weak = left_btn_stack.downgrade();
     let right_btn_box_weak_inner = right_btn_box_weak.clone();
     let gesture = GestureClick::builder().build();
+    let flow_child_clone = flow_child.clone();
     gesture.connect_pressed(move |_, _, _, _| {
         if let (Some(stack), Some(left_btn_stack)) =
             (stack_weak.upgrade(), left_btn_stack_weak.upgrade())
         {
+            let artist_id = unsafe { flow_child_clone.data::<i64>("artist_id").map(|ptr| *ptr.as_ref()).unwrap_or_default() };
             MainContext::default().spawn_local(
                 artist_page(
                     stack.downgrade(),
@@ -123,10 +131,8 @@ fn create_artist_tile(
             );
         }
     });
-    tile.add_controller(gesture);
-    tile.set_hexpand(true);
-    tile.set_halign(Align::Fill);
-    tile
+    flow_child.add_controller(gesture);
+    flow_child
 }
 
 /// Populate the given artists grid with artist tiles, clearing and sorting as needed.

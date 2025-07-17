@@ -12,6 +12,7 @@ use sqlx::SqlitePool;
 
 use crate::data::db::{search_album_display_info, search_artists};
 use crate::ui::pages::album_page::album_page;
+use crate::ui::pages::artist_page::artist_page;
 use crate::utils::formatting::format_freq_khz;
 use crate::utils::screen::{compute_cover_and_tile_size, get_primary_screen_size};
 
@@ -68,7 +69,7 @@ pub fn connect_live_search(
         let sort_ascending = sort_ascending.clone();
         let stack_for_closure = stack_clone.clone();
         let left_btn_stack_for_closure = left_btn_stack_clone.clone();
-        let _right_btn_box_for_async_closure = right_btn_box_clone.clone();
+        let right_btn_box_clone = right_btn_box_clone.clone();
 
         // Spawn async task for search
         MainContext::default().spawn_local(async move {
@@ -247,6 +248,7 @@ pub fn connect_live_search(
                             .build();
                         artists_grid.insert(&label, -1);
                     } else {
+                        let right_btn_box_weak = right_btn_box_clone.downgrade();
 
                         // Create artist tiles
                         for artist in artists {
@@ -272,7 +274,40 @@ pub fn connect_live_search(
                             box_.append(&picture);
                             box_.append(&label);
                             box_.set_css_classes(&["artist-tile"]);
-                            artists_grid.insert(&box_, -1);
+                            let flow_child = FlowBoxChild::builder().build();
+                            flow_child.set_child(Some(&box_));
+                            flow_child.set_hexpand(false);
+                            flow_child.set_vexpand(false);
+                            flow_child.set_halign(Align::Fill);
+                            flow_child.set_valign(Align::Start);
+                            unsafe {
+                                flow_child.set_data::<i64>("artist_id", artist.id);
+                            }
+                            let stack_weak = stack_for_closure.downgrade();
+                            let db_pool_clone = Arc::clone(&db_pool);
+                            let left_btn_stack_weak = left_btn_stack_for_closure.downgrade();
+                            
+                            let gesture = GestureClick::builder().build();
+                            let flow_child_clone = flow_child.clone();
+                            let right_btn_box_weak_clone = right_btn_box_weak.clone();
+                            gesture.connect_pressed(move |_, _, _, _| {
+                                if let (Some(stack), Some(left_btn_stack)) =
+                                    (stack_weak.upgrade(), left_btn_stack_weak.upgrade())
+                                {
+                                    let artist_id = unsafe { flow_child_clone.data::<i64>("artist_id").map(|ptr| *ptr.as_ref()).unwrap_or_default() };
+                                    MainContext::default().spawn_local(
+                                        artist_page(
+                                            stack.downgrade(),
+                                            db_pool_clone.clone(),
+                                            artist_id,
+                                            left_btn_stack.downgrade(),
+                                            right_btn_box_weak_clone.clone(),
+                                        ),
+                                    );
+                                }
+                            });
+                            flow_child.add_controller(gesture);
+                            artists_grid.insert(&flow_child, -1);
                         }
                     }
                 }
