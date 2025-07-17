@@ -123,7 +123,7 @@ pub fn build_albums_grid<W: IsA<Widget>>(
 
     // Albums grid
     let albums_grid = FlowBox::builder()
-        .valign(Align::Start)
+        .valign(Align::Center)
         .max_children_per_line(128)
         .row_spacing(1)
         .column_spacing(0)

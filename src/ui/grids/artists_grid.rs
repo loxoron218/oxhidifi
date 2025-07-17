@@ -38,7 +38,7 @@ pub fn rebuild_artists_grid_for_window(
 pub fn build_artists_grid<W: IsA<Widget>>(scanning_label: &W) -> (Box, FlowBox) {
     use {ScrolledWindow, PolicyType};
     let artists_grid = FlowBox::builder()
-        .valign(Align::Start)
+        .valign(Align::Center)
         .max_children_per_line(128)
         .row_spacing(1)
         .column_spacing(0)
