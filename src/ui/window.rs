@@ -101,12 +101,11 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         &scanning_label_artists,
         &artists_grid_cell,
     );
-
     let window = ApplicationWindow::builder()
         .application(app)
         .title("oxhidifi")
-        .default_width(850)
-        .default_height(675)
+        .default_width(1200)
+        .default_height(800)
         .maximized(false)
         .build();
 
