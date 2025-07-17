@@ -4,12 +4,14 @@ use gdk_pixbuf::{InterpType, PixbufLoader};
 use gdk_pixbuf::prelude::PixbufLoaderExt;
 use glib::{MainContext, markup_escape_text};
 use glib::prelude::ObjectExt;
-use gtk4::{Align, Box, Entry, FlowBox, FlowBoxChild, Image, Label, Orientation, Picture};
+use gtk4::{Align, Box, Entry, FlowBox, FlowBoxChild, GestureClick, Image, Label, Orientation, Picture};
 use gtk4::pango::EllipsizeMode;
+use libadwaita::{Clamp, ViewStack};
 use libadwaita::prelude::{BoxExt, EditableExt, FlowBoxChildExt, WidgetExt};
 use sqlx::SqlitePool;
 
 use crate::data::db::{search_album_display_info, search_artists};
+use crate::ui::pages::album_page::album_page;
 use crate::utils::formatting::format_freq_khz;
 use crate::utils::screen::{compute_cover_and_tile_size, get_primary_screen_size};
 
@@ -22,6 +24,9 @@ pub fn connect_live_search(
     sort_ascending: Rc<Cell<bool>>,
     sort_ascending_artists: Rc<Cell<bool>>,
     refresh_library_ui: Rc<dyn Fn(bool, bool)>,
+    stack: Rc<ViewStack>,
+    left_btn_stack: Rc<ViewStack>,
+    right_btn_box: Rc<Clamp>,
 ) {
 
     // Compute dynamic sizes based on screen dimensions
@@ -35,6 +40,9 @@ pub fn connect_live_search(
     let sort_ascending = sort_ascending.clone();
     let refresh_library_ui = refresh_library_ui.clone();
     let sort_ascending_artists = sort_ascending_artists.clone();
+    let stack_clone = stack.clone();
+    let left_btn_stack_clone = left_btn_stack.clone();
+    let right_btn_box_clone = right_btn_box.clone();
 
     // Connect search entry changed signal
     search_entry.connect_changed(move |entry| {
@@ -58,6 +66,9 @@ pub fn connect_live_search(
         let albums_grid = albums_grid.clone();
         let artists_grid = artists_grid.clone();
         let sort_ascending = sort_ascending.clone();
+        let stack_for_closure = stack_clone.clone();
+        let left_btn_stack_for_closure = left_btn_stack_clone.clone();
+        let _right_btn_box_for_async_closure = right_btn_box_clone.clone();
 
         // Spawn async task for search
         MainContext::default().spawn_local(async move {
@@ -185,7 +196,7 @@ pub fn connect_live_search(
                             box_.append(&artist_label);
                             box_.append(&format_label);
                             box_.set_css_classes(&["album-tile"]);
-                            let flow_child = FlowBoxChild::new();
+                            let flow_child = Rc::new(FlowBoxChild::new());
                             flow_child.set_child(Some(&box_));
                             flow_child.set_hexpand(false);
                             flow_child.set_vexpand(false);
@@ -194,7 +205,29 @@ pub fn connect_live_search(
                             unsafe {
                                 flow_child.set_data::<i64>("album_id", album.id);
                             }
-                            albums_grid.insert(&flow_child, -1);
+
+                            // Add click gesture for navigation
+                            let stack_weak = stack_for_closure.downgrade();
+                            let db_pool_clone = Arc::clone(&db_pool);
+                            let header_btn_stack_weak = left_btn_stack_for_closure.downgrade();
+                            let flow_child_clone = flow_child.clone(); // Clone Rc for the closure
+                            let gesture = GestureClick::builder().build();
+                            gesture.connect_pressed(move |_, _, _, _| {
+                                if let (Some(stack), Some(header_btn_stack)) = (stack_weak.upgrade(), header_btn_stack_weak.upgrade()) {
+                                    let album_id = unsafe { flow_child_clone.data::<i64>("album_id").map(|ptr| *ptr.as_ref()).unwrap_or_default() };
+                                    MainContext::default().spawn_local(
+                                        album_page(
+                                            stack.downgrade(),
+                                            db_pool_clone.clone(),
+                                            album_id,
+                                            header_btn_stack.downgrade(),
+                                        )
+                                    );
+                                }
+                            });
+                            flow_child.add_controller(gesture);
+
+                            albums_grid.insert(flow_child.as_ref(), -1);
                         }
                     }
                 }

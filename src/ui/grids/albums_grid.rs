@@ -2,8 +2,8 @@ use std::{cmp::Ordering, rc::Rc, sync::Arc};
 use std::cell::{Cell, RefCell};
 
 use gdk_pixbuf::{InterpType, PixbufLoader};
-use glib::markup_escape_text;
-use gtk4::{Align, Box, Button, Fixed, FlowBox, FlowBoxChild, Label, Orientation, Overlay, Picture, PolicyType, ScrolledWindow, SelectionMode, Widget};
+use glib::{MainContext, markup_escape_text};
+use gtk4::{Align, Box, Button, Fixed, FlowBox, FlowBoxChild, GestureClick, Label, Orientation, Overlay, Picture, PolicyType, ScrolledWindow, SelectionMode, Widget};
 use gtk4::pango::{EllipsizeMode, WrapMode};
 use libadwaita::{ApplicationWindow, StatusPage, ViewStack};
 use libadwaita::prelude::{BoxExt, FixedExt, FlowBoxChildExt, IsA, ObjectExt, PixbufLoaderExt, WidgetExt};
@@ -14,6 +14,7 @@ use crate::data::db::fetch_album_display_info;
 use crate::data::search::clear_grid;
 use crate::ui::components::dialogs::connect_add_folder_dialog;
 use crate::ui::components::sorting::SortOrder;
+use crate::ui::pages::album_page::album_page;
 use crate::utils::formatting::format_freq_khz;
 
 /// Helper to create a styled label for album metadata.
@@ -122,7 +123,7 @@ pub fn build_albums_grid<W: IsA<Widget>>(
 
     // Albums grid
     let albums_grid = FlowBox::builder()
-        .valign(Align::Center)
+        .valign(Align::Start)
         .max_children_per_line(128)
         .row_spacing(1)
         .column_spacing(0)
@@ -162,6 +163,8 @@ pub async fn populate_albums_grid(
     window: &ApplicationWindow,
     scanning_label: &Label,
     sender: &UnboundedSender<()>,
+    stack: &ViewStack,
+    header_btn_stack: &ViewStack,
 ) {
     thread_local! {
         static BUSY: Cell<bool> = Cell::new(false);
@@ -332,6 +335,28 @@ pub async fn populate_albums_grid(
                 }
                 box_.set_hexpand(true);
                 box_.set_halign(Align::Fill);
+
+                // Add click gesture for navigation
+                let stack_weak = stack.downgrade();
+                let db_pool_clone = Arc::clone(&db_pool);
+                let header_btn_stack_weak = header_btn_stack.downgrade();
+                let flow_child_clone = flow_child.clone(); // Clone Rc for the closure
+                let gesture = GestureClick::builder().build();
+                gesture.connect_pressed(move |_, _, _, _| {
+                    if let (Some(stack), Some(header_btn_stack)) = (stack_weak.upgrade(), header_btn_stack_weak.upgrade()) {
+                        let album_id = unsafe { flow_child_clone.data::<i64>("album_id").map(|ptr| *ptr.as_ref()).unwrap_or_default() };
+                        MainContext::default().spawn_local(
+                            album_page(
+                                stack.downgrade(),
+                                db_pool_clone.clone(),
+                                album_id,
+                                header_btn_stack.downgrade(),
+                            )
+                        );
+                    }
+                });
+                flow_child.add_controller(gesture);
+
                 albums_grid.insert(&flow_child, -1);
             }
         }

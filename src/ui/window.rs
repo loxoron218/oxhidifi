@@ -124,6 +124,8 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         window.clone(),
         scanning_label_albums.clone(),
         scanning_label_artists.clone(),
+        stack.clone().into(),
+        header.left_btn_stack.clone().into(),
     );
 
     setup_live_monitor_refresh(
@@ -248,6 +250,9 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         sort_ascending.clone(),
         sort_ascending_artists.clone(),
         refresh_library_ui.clone(),
+        stack.clone().into(),
+        left_btn_stack.clone().into(),
+        Rc::new(right_btn_box.clone()),
     );
 
     // Search bar focus out
