@@ -12,7 +12,7 @@ use sqlx::{query, Row, SqlitePool};
 use tokio::{fs::File, fs::read_dir, io::AsyncBufReadExt, io::BufReader, runtime::Runtime};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
-use crate::data::db::{fetch_all_folders, insert_or_get_album, insert_or_get_artist, insert_track, remove_album_and_tracks, remove_artists_with_no_albums, remove_folder_and_albums};
+use crate::data::db::{clear_all_dr_values, fetch_all_folders, insert_or_get_album, insert_or_get_artist, insert_track, remove_album_and_tracks, remove_artists_with_no_albums, remove_folder_and_albums};
 
 /// Recursively scan a folder for supported audio files and subfolders.
 /// For each audio file, extract tags and insert into the database.
@@ -144,6 +144,11 @@ pub fn connect_rescan_button(
         spawn(move || {
             let rt = Runtime::new().unwrap();
             rt.block_on(async {
+
+                // Clear all DR values before re-scanning
+                if let Err(e) = clear_all_dr_values(&db_pool).await {
+                    eprintln!("Failed to clear DR values: {}", e);
+                }
                 match fetch_all_folders(&db_pool).await {
                     Ok(folders) => {
 

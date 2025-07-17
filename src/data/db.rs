@@ -68,6 +68,14 @@ pub async fn remove_artists_with_no_albums(pool: &SqlitePool) -> Result<()> {
     Ok(())
 }
 
+/// Clear all DR values from the albums table.
+pub async fn clear_all_dr_values(pool: &SqlitePool) -> Result<()> {
+    query("UPDATE albums SET dr_value = NULL")
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 /// Fetch a single artist by its ID.
 pub async fn fetch_artist_by_id(pool: &SqlitePool, artist_id: i64) -> Result<Artist> {
     let row = query("SELECT id, name FROM artists WHERE id = ?")
@@ -268,8 +276,20 @@ pub async fn insert_or_get_album(
             .fetch_optional(pool)
             .await?
     {
-        Ok(row.get(0))
+        let album_id: i64 = row.get(0);
+
+        // Album exists, update it
+        query("UPDATE albums SET year = ?, cover_art = ?, dr_value = ? WHERE id = ?")
+            .bind(year)
+            .bind(cover_art)
+            .bind(dr_value)
+            .bind(album_id)
+            .execute(pool)
+            .await?;
+        Ok(album_id)
     } else {
+
+        // Album doesn't exist, insert it
         let res = query("INSERT INTO albums (title, artist_id, year, cover_art, folder_id, dr_value) VALUES (?, ?, ?, ?, ?, ?)")
             .bind(title)
             .bind(artist_id)
