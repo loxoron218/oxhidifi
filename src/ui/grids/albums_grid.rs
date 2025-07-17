@@ -3,10 +3,10 @@ use std::cell::{Cell, RefCell};
 
 use gdk_pixbuf::{InterpType, PixbufLoader};
 use glib::{MainContext, markup_escape_text};
-use gtk4::{Align, Box, Button, Fixed, FlowBox, FlowBoxChild, GestureClick, Label, Orientation, Overlay, Picture, PolicyType, ScrolledWindow, SelectionMode, Spinner, Stack, StackTransitionType, Widget};
+use gtk4::{Align, Box, Button, Fixed, FlowBox, FlowBoxChild, GestureClick, Label, Orientation, Overlay, Picture, PolicyType, ScrolledWindow, SelectionMode, Spinner, Stack, StackTransitionType};
 use gtk4::pango::{EllipsizeMode, WrapMode};
 use libadwaita::{ApplicationWindow, StatusPage, ViewStack};
-use libadwaita::prelude::{BoxExt, Cast, FixedExt, FlowBoxChildExt, IsA, ObjectExt, PixbufLoaderExt, WidgetExt};
+use libadwaita::prelude::{BoxExt, Cast, FixedExt, FlowBoxChildExt, ObjectExt, PixbufLoaderExt, WidgetExt};
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -89,7 +89,7 @@ fn create_dr_overlay(dr_value: Option<u8>) -> Option<Label> {
 /// Removes the existing 'albums' child, resets the albums_grid_cell, builds a new grid, and adds it to the stack.
 pub fn rebuild_albums_grid_for_window(
     stack: &ViewStack,
-    scanning_label_albums: &impl IsA<Widget>,
+    scanning_label_albums: &Label,
     cover_size_rc: &Rc<Cell<i32>>,
     tile_size_rc: &Rc<Cell<i32>>,
     albums_grid_cell: &Rc<RefCell<Option<FlowBox>>>,
@@ -118,11 +118,11 @@ pub fn rebuild_albums_grid_for_window(
 
 /// Build the albums grid and its containing stack.
 /// Returns (albums_stack, albums_grid).
-pub fn build_albums_grid<W: IsA<Widget>>(
-    _scanning_label: &W,
+pub fn build_albums_grid(
+    scanning_label: &Label,
     _cover_size: i32,
     _tile_size: i32,
-) -> (Stack, FlowBox) { // Changed return type
+) -> (Stack, FlowBox) {
 
     // Empty state
     let empty_state_status_page = StatusPage::builder()
@@ -185,7 +185,12 @@ pub fn build_albums_grid<W: IsA<Widget>>(
         .build();
     albums_stack.add_named(&loading_state_container, Some("loading_state"));
     albums_stack.add_named(&empty_state_container, Some("empty_state"));
-    albums_stack.add_named(&scrolled, Some("populated_grid"));
+    let albums_content_box = Box::builder()
+        .orientation(Orientation::Vertical)
+        .build();
+    albums_content_box.append(scanning_label);
+    albums_content_box.append(&scrolled);
+    albums_stack.add_named(&albums_content_box, Some("populated_grid"));
     (albums_stack, albums_grid)
 }
 

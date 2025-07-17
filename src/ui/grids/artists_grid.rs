@@ -2,10 +2,10 @@ use std::{rc::Rc, sync::Arc};
 use std::cell::{Cell, RefCell};
 
 use glib::{markup_escape_text, MainContext, WeakRef};
-use gtk4::{Align, Box, Button, FlowBox, FlowBoxChild, GestureClick, Image, Label, Orientation, PolicyType, ScrolledWindow, SelectionMode, Stack, StackTransitionType, Widget};
+use gtk4::{Align, Box, Button, FlowBox, FlowBoxChild, GestureClick, Image, Label, Orientation, PolicyType, ScrolledWindow, SelectionMode, Stack, StackTransitionType};
 use gtk4::pango::{EllipsizeMode, WrapMode};
 use libadwaita::{ApplicationWindow, Clamp, StatusPage, ViewStack};
-use libadwaita::prelude::{BoxExt, Cast, FlowBoxChildExt, IsA, ObjectExt, WidgetExt};
+use libadwaita::prelude::{BoxExt, Cast, FlowBoxChildExt, ObjectExt, WidgetExt};
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -19,7 +19,7 @@ use crate::utils::screen::{compute_cover_and_tile_size, get_primary_screen_size}
 /// Removes the existing 'artists' child, resets the artists_grid_cell, builds a new grid, and adds it to the stack.
 pub fn rebuild_artists_grid_for_window(
     stack: &ViewStack,
-    scanning_label_artists: &impl IsA<Widget>,
+    scanning_label_artists: &Label,
     artists_grid_cell: &Rc<RefCell<Option<FlowBox>>>,
     artists_stack_cell: &Rc<RefCell<Option<Stack>>>,
 ) {
@@ -38,7 +38,7 @@ pub fn rebuild_artists_grid_for_window(
 
 /// Build the artists grid and its containing stack.
 /// Returns (artists_stack, artists_grid).
-pub fn build_artists_grid<W: IsA<Widget>>(_scanning_label: &W) -> (Stack, FlowBox) {
+pub fn build_artists_grid(scanning_label: &Label) -> (Stack, FlowBox) {
 
     // Empty state
     let empty_state_status_page = StatusPage::builder()
@@ -88,7 +88,12 @@ pub fn build_artists_grid<W: IsA<Widget>>(_scanning_label: &W) -> (Stack, FlowBo
         .transition_type(StackTransitionType::None)
         .build();
     artists_stack.add_named(&empty_state_container, Some("empty_state"));
-    artists_stack.add_named(&scrolled, Some("populated_grid"));
+    let artists_content_box = Box::builder()
+        .orientation(Orientation::Vertical)
+        .build();
+    artists_content_box.append(scanning_label);
+    artists_content_box.append(&scrolled);
+    artists_stack.add_named(&artists_content_box, Some("populated_grid"));
     (artists_stack, artists_grid)
 }
 
