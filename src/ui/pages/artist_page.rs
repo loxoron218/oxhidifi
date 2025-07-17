@@ -2,7 +2,7 @@ use std::{cmp::Ordering, sync::Arc};
 
 use gdk_pixbuf::{InterpType, PixbufLoader};
 use gdk_pixbuf::prelude::PixbufLoaderExt;
-use glib::WeakRef;
+use glib::{markup_escape_text, WeakRef};
 use gtk4::{Align, Box, FlowBox, Justification, Label, Orientation, Picture, SelectionMode};
 use gtk4::pango::{EllipsizeMode, WrapMode};
 use libadwaita::{Clamp, ViewStack};
@@ -66,7 +66,7 @@ pub async fn artist_page(
 
     // Header with artist name, centered and consistent
     let header = Label::builder()
-        .label(&artist.name)
+        .label(&*markup_escape_text(&artist.name))
         .css_classes(["title-1"])
         .halign(Align::Center)
         .justify(Justification::Center)
@@ -139,7 +139,7 @@ fn build_album_card(album: &AlbumDisplayInfoWithYear, cover_size: i32, tile_size
 
     // Album title (bold)
     let title_label = Label::builder()
-        .label(&album.title)
+        .label(&*markup_escape_text(&album.title))
         .halign(Align::Start)
         .build();
     title_label.set_xalign(0.0);

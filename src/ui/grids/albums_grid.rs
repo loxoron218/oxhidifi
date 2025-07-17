@@ -2,6 +2,7 @@ use std::{cmp::Ordering, rc::Rc, sync::Arc};
 use std::cell::{Cell, RefCell};
 
 use gdk_pixbuf::{InterpType, PixbufLoader};
+use glib::markup_escape_text;
 use gtk4::{Align, Box, Button, Fixed, FlowBox, FlowBoxChild, Label, Orientation, Overlay, Picture, PolicyType, ScrolledWindow, SelectionMode, Widget};
 use gtk4::pango::{EllipsizeMode, WrapMode};
 use libadwaita::{ApplicationWindow, StatusPage, ViewStack};
@@ -17,7 +18,7 @@ use crate::utils::formatting::format_freq_khz;
 
 /// Helper to create a styled label for album metadata.
 fn create_album_label(text: &str, css_classes: &[&str], max_width: Option<i32>, ellipsize: Option<EllipsizeMode>, wrap: bool, wrap_mode: Option<WrapMode>, lines: Option<i32>) -> Label {
-    let builder = Label::builder().label(text).halign(Align::Start);
+    let builder = Label::builder().label(&*markup_escape_text(text)).halign(Align::Start);
     let label = builder.build();
     label.set_xalign(0.0);
     if let Some(width) = max_width {
