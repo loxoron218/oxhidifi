@@ -1,4 +1,5 @@
-use std::{cell::Cell, future::Future, rc::Rc, sync::Arc};
+use std::{future::Future, rc::Rc, sync::Arc};
+use std::cell::{Cell, RefCell};
 
 use glib::{MainContext, Propagation, WeakRef};
 use gtk4::{Button, CallbackAction, FlowBox, KeyvalTrigger, Shortcut, ShortcutController, ToggleButton};
@@ -17,6 +18,7 @@ pub fn connect_album_navigation<Fut, F>(
     db_pool: Arc<SqlitePool>,
     left_btn_stack: &ViewStack,
     right_btn_box: &Clamp,
+    nav_history: Rc<RefCell<Vec<String>>>,
     album_page: F,
 ) where
     F: Fn(
@@ -32,6 +34,7 @@ pub fn connect_album_navigation<Fut, F>(
     let db_pool = db_pool.clone();
     let left_btn_stack_weak = left_btn_stack.downgrade();
     let right_btn_box = right_btn_box.downgrade();
+    let nav_history = nav_history.clone();
     albums_grid.connect_child_activated(move |_, child| {
         let left_btn_stack = left_btn_stack_weak
             .upgrade()
@@ -39,6 +42,9 @@ pub fn connect_album_navigation<Fut, F>(
         let right_btn_box = right_btn_box.upgrade().expect("right_btn_box disappeared");
         if let Some(album_id_ptr) = unsafe { child.data::<i64>("album_id") } {
             let album_id = unsafe { *album_id_ptr.as_ref() };
+            if let Some(current_page) = stack_weak.upgrade().and_then(|s| s.visible_child_name()) {
+                nav_history.borrow_mut().push(current_page.to_string());
+            }
             left_btn_stack.set_visible_child_name("back");
             right_btn_box.set_visible(false.into());
             MainContext::default().spawn_local(album_page(
@@ -58,15 +64,24 @@ pub fn connect_back_button(
     left_btn_stack: &ViewStack,
     right_btn_box: &Clamp,
     last_tab: Rc<Cell<&'static str>>,
+    nav_history: Rc<RefCell<Vec<String>>>,
 ) {
     let stack_clone = stack.clone();
     let left_btn_stack_clone = left_btn_stack.clone();
     let right_btn_box_clone = right_btn_box.clone();
     back_button.connect_clicked(move |_| {
-        let tab = last_tab.get();
-        stack_clone.set_visible_child_name(tab);
-        left_btn_stack_clone.set_visible_child_name("main");
-        right_btn_box_clone.set_visible(true);
+        if let Some(prev_page) = nav_history.borrow_mut().pop() {
+            stack_clone.set_visible_child_name(&prev_page);
+            if prev_page.as_str() == "albums" || prev_page.as_str() == "artists" {
+                left_btn_stack_clone.set_visible_child_name("main");
+                right_btn_box_clone.set_visible(true);
+            }
+        } else {
+            let tab = last_tab.get();
+            stack_clone.set_visible_child_name(tab);
+            left_btn_stack_clone.set_visible_child_name("main");
+            right_btn_box_clone.set_visible(true);
+        }
     });
 }
 
@@ -76,14 +91,23 @@ pub fn handle_esc_navigation(
     left_btn_stack: ViewStack,
     right_btn_box: Clamp,
     last_tab: Rc<Cell<&'static str>>,
+    nav_history: Rc<RefCell<Vec<String>>>,
 ) -> impl Fn() {
     move || {
-        let page = stack.visible_child_name().unwrap_or_default();
-        if page != "albums" && page != "artists" {
-            let tab = last_tab.get();
-            stack.set_visible_child_name(tab);
-            left_btn_stack.set_visible_child_name("main");
-            right_btn_box.set_visible(true);
+        if let Some(prev_page) = nav_history.borrow_mut().pop() {
+            stack.set_visible_child_name(&prev_page);
+            if prev_page.as_str() == "albums" || prev_page.as_str() == "artists" {
+                left_btn_stack.set_visible_child_name("main");
+                right_btn_box.set_visible(true);
+            }
+        } else {
+            let page = stack.visible_child_name().unwrap_or_default();
+            if page != "albums" && page != "artists" {
+                let tab = last_tab.get();
+                stack.set_visible_child_name(tab);
+                left_btn_stack.set_visible_child_name("main");
+                right_btn_box.set_visible(true);
+            }
         }
     }
 }
@@ -242,6 +266,7 @@ pub fn setup_keyboard_shortcuts(
     left_btn_stack: &ViewStack,
     right_btn_box: &Clamp,
     last_tab: &Rc<Cell<&'static str>>,
+    nav_history: &Rc<RefCell<Vec<String>>>,
 ) {
     let accel_group = ShortcutController::new();
     let refresh_library_ui_esc = refresh_library_ui.clone();
@@ -254,6 +279,7 @@ pub fn setup_keyboard_shortcuts(
         left_btn_stack.clone(),
         right_btn_box.clone(),
         last_tab.clone(),
+        nav_history.clone(),
     );
     let esc_shortcut = Shortcut::builder()
         .trigger(&KeyvalTrigger::new(Key::Escape, ModifierType::empty()))

@@ -342,7 +342,8 @@ pub async fn populate_albums_grid(
                 let header_btn_stack_weak = header_btn_stack.downgrade();
                 let flow_child_clone = flow_child.clone(); // Clone Rc for the closure
                 let gesture = GestureClick::builder().build();
-                gesture.connect_pressed(move |_, _, _, _| {
+                let gesture_for_closure = gesture.clone(); // Clone for the closure
+                gesture_for_closure.connect_pressed(move |_, _, _, _| {
                     if let (Some(stack), Some(header_btn_stack)) = (stack_weak.upgrade(), header_btn_stack_weak.upgrade()) {
                         let album_id = unsafe { flow_child_clone.data::<i64>("album_id").map(|ptr| *ptr.as_ref()).unwrap_or_default() };
                         MainContext::default().spawn_local(
@@ -355,7 +356,7 @@ pub async fn populate_albums_grid(
                         );
                     }
                 });
-                flow_child.add_controller(gesture);
+                flow_child.add_controller(gesture); // Move original into add_controller
 
                 albums_grid.insert(&flow_child, -1);
             }

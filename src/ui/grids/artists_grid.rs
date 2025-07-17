@@ -76,6 +76,7 @@ fn create_artist_tile(
     db_pool: &Arc<SqlitePool>,
     left_btn_stack: &ViewStack,
     right_btn_box_weak: &WeakRef<Clamp>,
+    nav_history: Rc<RefCell<Vec<String>>>,
 ) -> FlowBoxChild {
     let (screen_width, _) = get_primary_screen_size();
     let (cover_size, _) = compute_cover_and_tile_size(screen_width);
@@ -109,13 +110,18 @@ fn create_artist_tile(
     let db_pool = Arc::clone(db_pool);
     let left_btn_stack_weak = left_btn_stack.downgrade();
     let right_btn_box_weak_inner = right_btn_box_weak.clone();
+    let nav_history = nav_history.clone();
     let gesture = GestureClick::builder().build();
+    let gesture_for_closure = gesture.clone();
     let flow_child_clone = flow_child.clone();
-    gesture.connect_pressed(move |_, _, _, _| {
+    gesture_for_closure.connect_pressed(move |_, _, _, _| {
         if let (Some(stack), Some(left_btn_stack)) =
             (stack_weak.upgrade(), left_btn_stack_weak.upgrade())
         {
             let artist_id = unsafe { flow_child_clone.data::<i64>("artist_id").map(|ptr| *ptr.as_ref()).unwrap_or_default() };
+            if let Some(current_page) = stack.visible_child_name() {
+                nav_history.borrow_mut().push(current_page.to_string());
+            }
             MainContext::default().spawn_local(
                 artist_page(
                     stack.downgrade(),
@@ -127,6 +133,7 @@ fn create_artist_tile(
                         left_btn_stack_weak
                     },
                     right_btn_box_weak_inner.clone(),
+                    nav_history.clone(),
                 ),
             );
         }
@@ -145,7 +152,8 @@ pub fn populate_artists_grid(
     right_btn_box: &Clamp,
     window: &ApplicationWindow,
     scanning_label: &Label,
-    sender: &UnboundedSender<()>,
+    sender: &UnboundedSender<()>, 
+    nav_history: Rc<RefCell<Vec<String>>>,
 ) {
     thread_local! {
         static BUSY: Cell<bool> = Cell::new(false);
@@ -216,6 +224,7 @@ pub fn populate_artists_grid(
                         &db_pool,
                         &left_btn_stack,
                         &right_btn_box_weak,
+                        nav_history.clone(),
                     );
                     artists_grid.insert(&tile, -1);
                 }

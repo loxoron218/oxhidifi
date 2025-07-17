@@ -30,6 +30,7 @@ pub fn setup_library_refresh_channel(
     scanning_label_artists: Label,
     stack: Rc<ViewStack>,
     header_btn_stack: Rc<ViewStack>,
+    nav_history: Rc<RefCell<Vec<String>>>,
 ) -> (
     UnboundedSender<()>, 
     UnboundedReceiver<()>, 
@@ -53,6 +54,7 @@ pub fn setup_library_refresh_channel(
         let sender_clone = sender.clone();
             let stack_clone = stack.clone();
             let header_btn_stack_clone = header_btn_stack.clone();
+            let nav_history_clone = nav_history.clone();
             Rc::new(move |sort_ascending: bool, sort_ascending_artists: bool| {
                 let db_pool = db_pool.clone();
                 let sort_orders = sort_orders.clone();
@@ -69,6 +71,7 @@ pub fn setup_library_refresh_channel(
                 let sender = sender_clone.clone();
                 let stack = stack_clone.clone();
                 let header_btn_stack = header_btn_stack_clone.clone();
+                let nav_history = nav_history_clone.clone();
                 MainContext::default().spawn_local(async move {
                     let current_tab = stack_rc.visible_child_name().unwrap_or_else(|| "albums".into());
                     if current_tab == "albums" {
@@ -100,6 +103,7 @@ pub fn setup_library_refresh_channel(
                             &window,
                             &scanning_label_artists,
                             &sender,
+                            nav_history.clone(),
                         );
                     }
                 }

@@ -60,6 +60,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     let stack_rc = Rc::new(stack.clone());
     let left_btn_stack_rc = Rc::new(left_btn_stack.clone());
     let last_tab = Rc::new(Cell::new("albums"));
+    let nav_history = Rc::new(RefCell::new(Vec::new()));
 
     // Navigation
     connect_back_button(
@@ -68,6 +69,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         &left_btn_stack,
         &right_btn_box,
         last_tab.clone(),
+        nav_history.clone(),
     );
 
     // Scanning indicators
@@ -126,6 +128,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         scanning_label_artists.clone(),
         stack.clone().into(),
         header.left_btn_stack.clone().into(),
+        nav_history.clone(),
     );
 
     setup_live_monitor_refresh(
@@ -146,6 +149,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
             db_pool.clone(),
             &left_btn_stack,
             &right_btn_box,
+            nav_history.clone(),
             |stack_weak, db_pool, album_id, left_btn_stack_weak| async move {
                 album_page(stack_weak, db_pool, album_id, left_btn_stack_weak).await;
             },
@@ -253,6 +257,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         stack.clone().into(),
         left_btn_stack.clone().into(),
         Rc::new(right_btn_box.clone()),
+        nav_history.clone(),
     );
 
     // Search bar focus out
@@ -265,6 +270,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         &left_btn_stack,
         &right_btn_box,
         last_tab.clone(),
+        nav_history.clone(),
     );
 
     // Window construction
@@ -293,6 +299,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         &left_btn_stack,
         &right_btn_box,
         &last_tab,
+        &nav_history,
     );
 
     // Add folder dialog

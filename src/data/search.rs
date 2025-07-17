@@ -1,4 +1,5 @@
-use std::{cell::Cell, rc::Rc, sync::Arc};
+use std::{rc::Rc, sync::Arc};
+use std::cell::{Cell, RefCell};
 
 use gdk_pixbuf::{InterpType, PixbufLoader};
 use gdk_pixbuf::prelude::PixbufLoaderExt;
@@ -28,6 +29,7 @@ pub fn connect_live_search(
     stack: Rc<ViewStack>,
     left_btn_stack: Rc<ViewStack>,
     right_btn_box: Rc<Clamp>,
+    nav_history: Rc<RefCell<Vec<String>>>,
 ) {
 
     // Compute dynamic sizes based on screen dimensions
@@ -44,6 +46,7 @@ pub fn connect_live_search(
     let stack_clone = stack.clone();
     let left_btn_stack_clone = left_btn_stack.clone();
     let right_btn_box_clone = right_btn_box.clone();
+    let nav_history = nav_history.clone();
 
     // Connect search entry changed signal
     search_entry.connect_changed(move |entry| {
@@ -70,6 +73,7 @@ pub fn connect_live_search(
         let stack_for_closure = stack_clone.clone();
         let left_btn_stack_for_closure = left_btn_stack_clone.clone();
         let right_btn_box_clone = right_btn_box_clone.clone();
+        let nav_history = nav_history.clone();
 
         // Spawn async task for search
         MainContext::default().spawn_local(async move {
@@ -212,10 +216,14 @@ pub fn connect_live_search(
                             let db_pool_clone = Arc::clone(&db_pool);
                             let header_btn_stack_weak = left_btn_stack_for_closure.downgrade();
                             let flow_child_clone = flow_child.clone(); // Clone Rc for the closure
+                            let nav_history_clone = nav_history.clone();
                             let gesture = GestureClick::builder().build();
                             gesture.connect_pressed(move |_, _, _, _| {
                                 if let (Some(stack), Some(header_btn_stack)) = (stack_weak.upgrade(), header_btn_stack_weak.upgrade()) {
                                     let album_id = unsafe { flow_child_clone.data::<i64>("album_id").map(|ptr| *ptr.as_ref()).unwrap_or_default() };
+                                    if let Some(current_page) = stack.visible_child_name() {
+                                        nav_history_clone.borrow_mut().push(current_page.to_string());
+                                    }
                                     MainContext::default().spawn_local(
                                         album_page(
                                             stack.downgrade(),
@@ -286,7 +294,7 @@ pub fn connect_live_search(
                             let stack_weak = stack_for_closure.downgrade();
                             let db_pool_clone = Arc::clone(&db_pool);
                             let left_btn_stack_weak = left_btn_stack_for_closure.downgrade();
-                            
+                            let nav_history_clone = nav_history.clone();
                             let gesture = GestureClick::builder().build();
                             let flow_child_clone = flow_child.clone();
                             let right_btn_box_weak_clone = right_btn_box_weak.clone();
@@ -295,6 +303,9 @@ pub fn connect_live_search(
                                     (stack_weak.upgrade(), left_btn_stack_weak.upgrade())
                                 {
                                     let artist_id = unsafe { flow_child_clone.data::<i64>("artist_id").map(|ptr| *ptr.as_ref()).unwrap_or_default() };
+                                    if let Some(current_page) = stack.visible_child_name() {
+                                        nav_history_clone.borrow_mut().push(current_page.to_string());
+                                    }
                                     MainContext::default().spawn_local(
                                         artist_page(
                                             stack.downgrade(),
@@ -302,6 +313,7 @@ pub fn connect_live_search(
                                             artist_id,
                                             left_btn_stack.downgrade(),
                                             right_btn_box_weak_clone.clone(),
+                                            nav_history_clone.clone(),
                                         ),
                                     );
                                 }

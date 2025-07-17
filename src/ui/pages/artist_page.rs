@@ -1,15 +1,17 @@
-use std::{cmp::Ordering, sync::Arc};
+use std::{cmp::Ordering, rc::Rc, sync::Arc};
+use std::{cell::RefCell};
 
 use gdk_pixbuf::{InterpType, PixbufLoader};
 use gdk_pixbuf::prelude::PixbufLoaderExt;
-use glib::{markup_escape_text, WeakRef};
-use gtk4::{Align, Box, FlowBox, Justification, Label, Orientation, Picture, SelectionMode};
+use glib::{MainContext, markup_escape_text, WeakRef};
+use gtk4::{Align, Box, FlowBox, GestureClick, Justification, Label, Orientation, Picture, SelectionMode};
 use gtk4::pango::{EllipsizeMode, WrapMode};
 use libadwaita::{Clamp, ViewStack};
 use libadwaita::prelude::{BoxExt, ObjectExt, WidgetExt};
 use sqlx::{Error, query, Row, SqlitePool};
 
 use crate::data::db::fetch_artist_by_id;
+use crate::ui::pages::album_page::album_page;
 use crate::utils::formatting::format_freq_khz;
 use crate::utils::screen::{compute_cover_and_tile_size, get_primary_screen_size};
 
@@ -21,6 +23,7 @@ pub async fn artist_page(
     artist_id: i64,
     header_btn_stack: WeakRef<ViewStack>,
     right_btn_box: WeakRef<Clamp>,
+    nav_history: Rc<RefCell<Vec<String>>>,
 ) {
 
     // Upgrade weak references
@@ -89,10 +92,15 @@ pub async fn artist_page(
         .build();
     flowbox.set_halign(Align::Center);
     for album in albums {
-        let album_card = build_album_card(&album, cover_size, tile_size);
-        unsafe {
-            album_card.set_data("album_id", album.id);
-        }
+        let album_card = build_album_card(
+            &album,
+            cover_size,
+            tile_size,
+            stack.downgrade(),
+            db_pool.clone(),
+            header_btn_stack.downgrade(),
+            nav_history.clone(),
+        );
         flowbox.insert(&album_card, -1);
     }
 
@@ -118,7 +126,16 @@ pub async fn artist_page(
 }
 
 /// Build an album card widget for the artist page, replacing artist name with album year.
-fn build_album_card(album: &AlbumDisplayInfoWithYear, cover_size: i32, tile_size: i32) -> Box {
+fn build_album_card(
+    album: &AlbumDisplayInfoWithYear,
+    cover_size: i32,
+    tile_size: i32,
+    stack: WeakRef<ViewStack>,
+    db_pool: Arc<SqlitePool>,
+    header_btn_stack: WeakRef<ViewStack>,
+    nav_history: Rc<RefCell<Vec<String>>>,
+) -> Box {
+
     // Cover (scaled to cover_size x cover_size)
     let cover = if let Some(ref art) = album.cover_art {
         let pixbuf_loader = PixbufLoader::new();
@@ -202,6 +219,31 @@ fn build_album_card(album: &AlbumDisplayInfoWithYear, cover_size: i32, tile_size
     box_.append(&year_label);
     box_.append(&format_label);
     box_.set_css_classes(&["album-tile"]);
+    unsafe {
+        box_.set_data("album_id", album.id);
+    }
+    let gesture = GestureClick::builder().build();
+    let stack_weak_for_closure = stack.clone();
+    let db_pool_clone_for_closure = db_pool.clone();
+    let header_btn_stack_weak_for_closure = header_btn_stack.clone();
+    let nav_history_clone_for_closure = nav_history.clone();
+    let album_id = album.id;
+    gesture.connect_pressed(move |_, _, _, _| {
+        if let (Some(stack), Some(header_btn_stack)) = (stack_weak_for_closure.upgrade(), header_btn_stack_weak_for_closure.upgrade()) {
+            if let Some(current_page) = stack.visible_child_name() {
+                nav_history_clone_for_closure.borrow_mut().push(current_page.to_string());
+            }
+            MainContext::default().spawn_local(
+                album_page(
+                    stack.downgrade(),
+                    db_pool_clone_for_closure.clone(),
+                    album_id,
+                    header_btn_stack.downgrade(),
+                )
+            );
+        }
+    });
+    box_.add_controller(gesture);
     box_
 }
 
