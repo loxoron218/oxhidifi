@@ -151,3 +151,8 @@
     min-height: 28px;
     padding: 0;
 }
+.dr-badge-label.dr-na {
+    background: var(--dim_color, #555);
+    color: var(--window_bg_color, #fff);
+    font-size: 18px;
+}

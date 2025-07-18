@@ -79,12 +79,23 @@ fn build_info_label(label: &str, css_class: Option<&str>) -> Label {
     }
 
 /// Build the DR badge widget for dynamic range value.
-fn build_dr_badge(dr: u8) -> Box {
+fn build_dr_badge(dr: Option<u8>) -> Box {
         let dr_box = Box::builder()
             .orientation(Orientation::Horizontal)
             .spacing(4)
             .build();
-        let dr_str = format!("{:02}", dr);
+        let (dr_str, tooltip_text, css_class) = match dr {
+            Some(value) => (
+                format!("{:02}", value),
+                Some("Official Dynamic Range Value"),
+                format!("dr-{:02}", value),
+            ),
+            None => (
+                "N/A".to_string(),
+                Some("Dynamic Range Value not available"),
+                "dr-na".to_string(),
+            ),
+        };
         let dr_label = Label::builder()
             .label(&dr_str)
             .halign(Align::Center)
@@ -92,8 +103,8 @@ fn build_dr_badge(dr: u8) -> Box {
             .build();
         dr_label.set_size_request(44, 44);
         dr_label.add_css_class("dr-badge-label");
-        dr_label.add_css_class(&format!("dr-{:02}", dr));
-        dr_label.set_tooltip_text(Some("Official Dynamic Range Value"));
+        dr_label.add_css_class(&css_class);
+        dr_label.set_tooltip_text(tooltip_text);
         dr_box.append(&dr_label);
         let dr_text_label = build_info_label("Official DR Value", Some("album-technical-label"));
         dr_box.append(&dr_text_label);
@@ -266,9 +277,7 @@ fn build_track_row(t: &crate::data::models::Track) -> ActionRow {
         outer_row.append(&lines_box);
         info_box.append(&outer_row);
     }
-    if let Some(dr) = album.dr_value {
-        info_box.append(&build_dr_badge(dr));
-    }
+    info_box.append(&build_dr_badge(album.dr_value));
     header.append(&info_box);
 
     // Track List
