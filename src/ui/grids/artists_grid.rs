@@ -10,7 +10,6 @@ use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::data::db::fetch_all_artists;
-use crate::data::search::clear_grid;
 use crate::ui::components::dialogs::connect_add_folder_dialog;
 use crate::ui::pages::artist_page::artist_page;
 use crate::utils::screen::{compute_cover_and_tile_size, get_primary_screen_size};
@@ -88,6 +87,18 @@ pub fn build_artists_grid(scanning_label: &Label) -> (Stack, FlowBox) {
         .transition_type(StackTransitionType::None)
         .build();
 
+    // Loading state
+    let loading_spinner = Spinner::builder().spinning(true).build();
+    loading_spinner.set_size_request(48, 48);
+    let loading_state_container = Box::builder()
+        .orientation(Orientation::Vertical)
+        .halign(Align::Center)
+        .valign(Align::Center)
+        .vexpand(true)
+        .hexpand(true)
+        .build();
+    loading_state_container.append(&loading_spinner);
+
     // Scanning state
     let scanning_spinner = Spinner::builder().spinning(true).build();
     scanning_spinner.set_size_request(48, 48);
@@ -98,8 +109,9 @@ pub fn build_artists_grid(scanning_label: &Label) -> (Stack, FlowBox) {
         .vexpand(true)
         .hexpand(true)
         .build();
-    scanning_state_container.append(scanning_label);
     scanning_state_container.append(&scanning_spinner);
+    scanning_state_container.append(scanning_label);
+    artists_stack.add_named(&loading_state_container, Some("loading_state"));
     artists_stack.add_named(&empty_state_container, Some("empty_state"));
     artists_stack.add_named(&scanning_state_container, Some("scanning_state"));
     let artists_content_box = Box::builder()
@@ -107,6 +119,7 @@ pub fn build_artists_grid(scanning_label: &Label) -> (Stack, FlowBox) {
         .build();
     artists_content_box.append(&scrolled);
     artists_stack.add_named(&artists_content_box, Some("populated_grid"));
+    artists_stack.set_visible_child_name("loading_state"); // Set initial state to loading
     (artists_stack, artists_grid)
 }
 
@@ -222,9 +235,6 @@ pub fn populate_artists_grid(
     let window = window.clone();
     let scanning_label = scanning_label.clone();
     let sender = sender.clone();
-
-    // Clear all children before repopulating to avoid duplicates
-    clear_grid(&artists_grid);
     MainContext::default().spawn_local(async move {
         let fetch_result = fetch_all_artists(&db_pool).await;
         match fetch_result {
@@ -236,7 +246,11 @@ pub fn populate_artists_grid(
             }
             Ok(mut artists) => {
                 if artists.is_empty() {
-                    artists_inner_stack.set_visible_child_name("empty_state");
+                    if scanning_label.is_visible() {
+                        artists_inner_stack.set_visible_child_name("scanning_state");
+                    } else {
+                        artists_inner_stack.set_visible_child_name("empty_state");
+                    }
 
                     // Retrieve the button from the empty_state
                     if let Some(empty_state_container) = artists_inner_stack.child_by_name("empty_state") {
@@ -269,7 +283,6 @@ pub fn populate_artists_grid(
                         cmp.reverse()
                     }
                 });
-                BUSY.with(|b| b.set(false));
                 for artist in artists {
                     let tile = create_artist_tile(
                         artist.id,
@@ -282,8 +295,9 @@ pub fn populate_artists_grid(
                     );
                     artists_grid.insert(&tile, -1);
                 }
+                artists_inner_stack.set_visible_child_name("populated_grid");
             }
         }
-        artists_inner_stack.set_visible(true);
+        BUSY.with(|b| b.set(false));
     });
 }

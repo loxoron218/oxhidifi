@@ -52,6 +52,7 @@ pub fn connect_add_folder_dialog<T: IsA<Window> + Clone + 'static>(
                         let folder_path_string = folder_path.to_string_lossy().to_string();
                         if let Some(stack) = albums_inner_stack_inner.clone() {
                             stack.set_visible_child_name("scanning_state");
+                            scanning_label.set_visible(true);
                         } else {
                             scanning_label.set_visible(true);
                         }

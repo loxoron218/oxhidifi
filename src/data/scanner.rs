@@ -96,15 +96,13 @@ pub fn connect_scanning_label_visibility(
 /// Listen for scan completion and update label/UI accordingly.
 pub fn spawn_scanning_label_refresh_task(
     receiver: Rc<RefCell<UnboundedReceiver<()>>>,
-    scanning_label_albums: Label,
-    scanning_label_artists: Label,
+    scanning_label_albums: Rc<Label>,
+    scanning_label_artists: Rc<Label>,
     stack: ViewStack,
     refresh_library_ui: Rc<dyn Fn(bool, bool)>,
     sort_ascending: Rc<Cell<bool>>,
     sort_ascending_artists: Rc<Cell<bool>>,
 ) {
-    let scanning_label_albums = scanning_label_albums.clone();
-    let scanning_label_artists = scanning_label_artists.clone();
     let refresh_library_ui_clone = refresh_library_ui.clone();
     let sort_ascending_for_refresh = sort_ascending.clone();
     let sort_ascending_artists = sort_ascending_artists.clone();

@@ -11,7 +11,6 @@ use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::data::db::fetch_album_display_info;
-use crate::data::search::clear_grid;
 use crate::ui::components::dialogs::connect_add_folder_dialog;
 use crate::ui::components::sorting::SortOrder;
 use crate::ui::pages::album_page::album_page;
@@ -202,8 +201,8 @@ pub fn build_albums_grid(
         .vexpand(true)
         .hexpand(true)
         .build();
-    scanning_state_container.append(scanning_label);
     scanning_state_container.append(&scanning_spinner);
+    scanning_state_container.append(scanning_label);
     albums_stack.add_named(&loading_state_container, Some("loading_state"));
     albums_stack.add_named(&empty_state_container, Some("empty_state"));
     albums_stack.add_named(&scanning_state_container, Some("scanning_state"));
@@ -212,6 +211,7 @@ pub fn build_albums_grid(
         .build();
     albums_content_box.append(&scrolled);
     albums_stack.add_named(&albums_content_box, Some("populated_grid"));
+    albums_stack.set_visible_child_name("loading_state"); // Set initial state to loading
     (albums_stack, albums_grid)
 }
 
@@ -244,9 +244,6 @@ pub async fn populate_albums_grid(
     if already_busy {
         return;
     }
-
-    // Clear all children before repopulating to avoid duplicates
-    clear_grid(albums_grid);
     let fetch_result = fetch_album_display_info(&db_pool).await;
     match fetch_result {
         Err(_) => {
@@ -257,7 +254,16 @@ pub async fn populate_albums_grid(
         }
         Ok(mut albums) => {
             if albums.is_empty() {
-                albums_inner_stack.set_visible_child_name("empty_state");
+                if scanning_label.is_visible() {
+                    albums_inner_stack.set_visible_child_name("scanning_state");
+                } else {
+                    albums_inner_stack.set_visible_child_name("empty_state");
+                }
+                if scanning_label.is_visible() {
+                    albums_inner_stack.set_visible_child_name("scanning_state");
+                } else {
+                    albums_inner_stack.set_visible_child_name("empty_state");
+                }
 
                 // Retrieve the button from the empty_state
                 if let Some(empty_state_container) = albums_inner_stack.child_by_name("empty_state") {

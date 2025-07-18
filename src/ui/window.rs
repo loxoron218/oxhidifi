@@ -204,8 +204,8 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     let receiver = Rc::new(RefCell::new(receiver));
     spawn_scanning_label_refresh_task(
         receiver,
-        scanning_label_albums.clone(),
-        scanning_label_artists.clone(),
+        Rc::new(scanning_label_albums.clone()),
+        Rc::new(scanning_label_artists.clone()),
         stack.clone(),
         refresh_library_ui.clone(),
         sort_ascending.clone(),
@@ -214,9 +214,25 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
 
     // Rescan button logic
     {
-        let scanning_label_albums = scanning_label_albums.clone();
-        let scanning_label_artists = scanning_label_artists.clone();
-        let stack = stack.clone();
+        let scanning_label_albums_clone = scanning_label_albums.clone();
+        let scanning_label_artists_clone = scanning_label_artists.clone();
+        let stack_clone = stack.clone(); // This is the ViewStack for albums/artists
+        let albums_stack_cell_clone = albums_stack_cell.clone();
+        let artists_stack_cell_clone = artists_stack_cell.clone();
+        rescan_button.connect_clicked(move |_| {
+            let current_page = stack_clone.visible_child_name().unwrap_or_default();
+            if current_page == "albums" {
+                if let Some(albums_inner_stack) = albums_stack_cell_clone.borrow().as_ref() {
+                    albums_inner_stack.set_visible_child_name("scanning_state");
+                }
+            } else if current_page == "artists" {
+                if let Some(artists_inner_stack) = artists_stack_cell_clone.borrow().as_ref() {
+                    artists_inner_stack.set_visible_child_name("scanning_state");
+                }
+            }
+        });
+
+        // Existing connections for rescan_button
         connect_rescan_button(
             &rescan_button,
             scanning_label_albums.clone(),
@@ -226,8 +242,8 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         connect_scanning_label_visibility(
             &rescan_button,
             &stack,
-            &scanning_label_albums,
-            &scanning_label_artists,
+            &scanning_label_albums_clone,
+            &scanning_label_artists_clone,
         );
     }
 
@@ -332,4 +348,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     // Present the main window and set its main content container for the UI layout
     window.present();
     window.set_content(Some(&vbox_inner));
+
+    // Initial refresh of the library UI after the window is presented
+    refresh_library_ui(sort_ascending.get(), sort_ascending_artists.get());
 }

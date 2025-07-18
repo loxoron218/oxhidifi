@@ -1,12 +1,13 @@
 use std::{rc::Rc, sync::Arc, time::Duration};
 use std::cell::{Cell, RefCell};
-use glib::{ControlFlow::Continue, MainContext};
+use glib::{ControlFlow::Continue, MainContext, source::timeout_add_local};
 use gtk4::{FlowBox, Label, Stack};
-use gtk4::glib::source::timeout_add_local;
 use libadwaita::{ApplicationWindow, Clamp, ViewStack};
+use libadwaita::prelude::WidgetExt;
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
+use crate::data::search::clear_grid;
 use crate::ui::components::sorting::SortOrder;
 use crate::ui::grids::albums_grid::populate_albums_grid;
 use crate::ui::grids::artists_grid::populate_artists_grid;
@@ -34,8 +35,8 @@ pub fn setup_library_refresh_channel(
     header_btn_stack: Rc<ViewStack>,
     nav_history: Rc<RefCell<Vec<String>>>,
 ) -> (
-    UnboundedSender<()>, 
-    UnboundedReceiver<()>, 
+    UnboundedSender<()>,
+    UnboundedReceiver<()>,
     Rc<dyn Fn(bool, bool)>
 ) {
     let (sender, receiver) = unbounded_channel::<()>();
@@ -59,7 +60,9 @@ pub fn setup_library_refresh_channel(
             let stack_clone = stack.clone();
             let header_btn_stack_clone = header_btn_stack.clone();
             let nav_history_clone = nav_history.clone();
-            Rc::new(move |sort_ascending: bool, sort_ascending_artists: bool| {
+            Rc::new(move |sort_ascending_param: bool, sort_ascending_artists_param: bool| {
+                sort_ascending.set(sort_ascending_param);
+                sort_ascending_artists.set(sort_ascending_artists_param);
                 let db_pool = db_pool.clone();
                 let sort_orders = sort_orders.clone();
                 let stack_rc = stack_rc.clone();
@@ -78,14 +81,22 @@ pub fn setup_library_refresh_channel(
                 let stack = stack_clone.clone();
                 let header_btn_stack = header_btn_stack_clone.clone();
                 let nav_history = nav_history_clone.clone();
+                let sort_ascending_clone_for_async = sort_ascending.clone();
+                let sort_ascending_artists_clone_for_async = sort_ascending_artists.clone();
                 MainContext::default().spawn_local(async move {
                     let current_tab = stack_rc.visible_child_name().unwrap_or_else(|| "albums".into());
                     if current_tab == "albums" {
                         if let (Some(albums_grid), Some(albums_inner_stack)) = (albums_grid_cell.borrow().as_ref(), albums_stack_cell.borrow().as_ref()) {
+                            clear_grid(albums_grid);
+                            if scanning_label_albums.is_visible() {
+                                albums_inner_stack.set_visible_child_name("scanning_state");
+                            } else {
+                                albums_inner_stack.set_visible_child_name("loading_state");
+                            }
                             populate_albums_grid(
                                 albums_grid,
                                 db_pool.clone(),
-                                sort_ascending,
+                                sort_ascending_clone_for_async.get(),
                                 sort_orders.clone(),
                                 cover_size_rc.get(),
                                 tile_size_rc.get(),
@@ -100,10 +111,16 @@ pub fn setup_library_refresh_channel(
                         }
                     } else if current_tab == "artists" {
                     if let (Some(artists_grid), Some(artists_inner_stack)) = (artists_grid_cell.borrow().as_ref(), artists_stack_cell.borrow().as_ref()) {
+                        clear_grid(artists_grid);
+                        if scanning_label_artists.is_visible() {
+                            artists_inner_stack.set_visible_child_name("scanning_state");
+                        } else {
+                            artists_inner_stack.set_visible_child_name("loading_state");
+                        }
                         populate_artists_grid(
                             artists_grid,
                             db_pool.clone(),
-                            sort_ascending_artists,
+                            sort_ascending_artists_clone_for_async.get(),
                             &stack_rc,
                             &left_btn_stack_rc,
                             &right_btn_box_clone,
@@ -118,7 +135,6 @@ pub fn setup_library_refresh_channel(
             });
         })
     };
-    refresh_library_ui(sort_ascending.get(), sort_ascending_artists.get());
     (sender, receiver, refresh_library_ui)
 }
 
