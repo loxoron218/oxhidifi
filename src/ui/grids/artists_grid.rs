@@ -243,6 +243,9 @@ pub fn populate_artists_grid(
                     return;
                 }
                 artists_inner_stack.set_visible_child_name("populated_grid");
+
+                // Filter out "Various Artists"
+                artists.retain(|artist| artist.name != "Various Artists");
                 artists.sort_by(|a, b| {
                     let cmp = a.name.to_lowercase().cmp(&b.name.to_lowercase());
                     if sort_ascending {

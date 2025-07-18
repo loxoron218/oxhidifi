@@ -62,9 +62,35 @@ pub async fn remove_album_and_tracks(pool: &SqlitePool, album_id: i64) -> Result
 
 /// Remove artists that have no albums left in the database.
 pub async fn remove_artists_with_no_albums(pool: &SqlitePool) -> Result<()> {
-    query("DELETE FROM artists WHERE id NOT IN (SELECT artist_id FROM albums)")
+    let _result = query("DELETE FROM artists WHERE id NOT IN (SELECT artist_id FROM albums)")
         .execute(pool)
         .await?;
+    Ok(())
+}
+
+/// Remove albums that have no tracks left in the database.
+pub async fn remove_albums_with_no_tracks(pool: &SqlitePool) -> Result<()> {
+    let _result = query("DELETE FROM albums WHERE id NOT IN (SELECT DISTINCT album_id FROM tracks)")
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// Remove tracks whose files no longer exist on disk.
+pub async fn remove_orphaned_tracks(pool: &SqlitePool) -> Result<()> {
+    let tracks_in_db = query("SELECT id, path FROM tracks")
+        .fetch_all(pool)
+        .await?;
+    for track_row in tracks_in_db {
+        let track_id: i64 = track_row.get("id");
+        let track_path: String = track_row.get("path");
+        if !std::path::Path::new(&track_path).exists() {
+            query("DELETE FROM tracks WHERE id = ?")
+                .bind(track_id)
+                .execute(pool)
+                .await?;
+        }
+    }
     Ok(())
 }
 
@@ -303,9 +329,9 @@ pub async fn insert_or_get_album(
     }
 }
 
-/// Fetch all artists in the database.
+/// Fetch all artists in the database that are associated with at least one album.
 pub async fn fetch_all_artists(pool: &SqlitePool) -> Result<Vec<Artist>> {
-    let rows = query("SELECT id, name FROM artists")
+    let rows = query("SELECT id, name FROM artists WHERE id IN (SELECT DISTINCT artist_id FROM albums)")
         .fetch_all(pool)
         .await?;
     Ok(rows
@@ -337,9 +363,10 @@ pub async fn insert_track(
         .fetch_optional(pool)
         .await?
     {
+        let track_id: i64 = row.get(0);
 
         // Track exists: update its metadata
-        query("UPDATE tracks SET title = ?, album_id = ?, artist_id = ?, duration = ?, track_no = ?, disc_no = ?, format = ?, bit_depth = ?, frequency = ? WHERE path = ?")
+        query("UPDATE tracks SET title = ?, album_id = ?, artist_id = ?, duration = ?, track_no = ?, disc_no = ?, format = ?, bit_depth = ?, frequency = ? WHERE id = ?")
             .bind(title)
             .bind(album_id)
             .bind(artist_id)
@@ -349,10 +376,10 @@ pub async fn insert_track(
             .bind(format)
             .bind(bit_depth)
             .bind(frequency)
-            .bind(path)
+            .bind(track_id)
             .execute(pool)
             .await?;
-        Ok(row.get(0))
+        Ok(track_id)
     } else {
         let res = query("INSERT INTO tracks (title, album_id, artist_id, path, duration, track_no, disc_no, format, bit_depth, frequency) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
             .bind(title)

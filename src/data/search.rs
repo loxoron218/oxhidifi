@@ -147,8 +147,8 @@ pub fn connect_live_search(
                             artist_label.set_max_width_chars(18);
                             artist_label.set_ellipsize(EllipsizeMode::End);
                             artist_label.set_css_classes(&["album-artist-label"]);
-                            let format_line = if let Some(ref format) = album.format {
-                                let format_caps = format.to_uppercase();
+                            let format_line = if let Some(format_str) = album.format.as_ref() {
+                                let format_caps = format_str.to_uppercase();
                                 match (album.bit_depth, album.frequency) {
                                     (Some(bit), Some(freq)) => format!(
                                         "{} {}/{}",
@@ -172,7 +172,7 @@ pub fn connect_live_search(
                                 .build();
                             format_label.set_xalign(0.0);
                             format_label.set_css_classes(&["album-format-label"]);
-                            let cover = if let Some(ref art) = album.cover_art {
+                            let cover = if let Some(art) = album.cover_art.as_ref() {
                                 let pixbuf_loader = PixbufLoader::new();
                                 pixbuf_loader.write(art).expect("Failed to load cover art");
                                 pixbuf_loader.close().expect("Failed to close loader");

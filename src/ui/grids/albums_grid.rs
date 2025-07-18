@@ -298,8 +298,8 @@ pub async fn populate_albums_grid(
                     None,
                     None,
                 );
-                let format_line = if let Some(ref format) = album.format {
-                    let format_caps = format.to_uppercase();
+                let format_line = if let Some(format_str) = album.format.as_ref() {
+                    let format_caps = format_str.to_uppercase();
                     match (album.bit_depth, album.frequency) {
                         (Some(bit), Some(freq)) => {
                             format!("{} {}/{}", format_caps, bit, format_freq_khz(freq))
