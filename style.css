@@ -154,5 +154,5 @@
 .dr-badge-label.dr-na {
     background: var(--dim_color, #555);
     color: var(--window_bg_color, #fff);
-    font-size: 18px;
+    font-size: 14px;
 }

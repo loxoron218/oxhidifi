@@ -70,19 +70,27 @@ fn create_album_cover(cover_art: Option<&Vec<u8>>, cover_size: i32) -> Picture {
 
 /// Helper to create the DR badge overlay if present.
 fn create_dr_overlay(dr_value: Option<u8>) -> Option<Label> {
-    dr_value.map(|dr| {
-        let dr_str = format!("{:02}", dr);
-        let dr_label = Label::builder().label(&dr_str).build();
-        dr_label.add_css_class("dr-badge-label");
-        dr_label.add_css_class("dr-badge-label-grid");
-        dr_label.set_size_request(28, 28);
-        let dr_value_class = format!("dr-{:02}", dr);
-        dr_label.add_css_class(&dr_value_class);
-        dr_label.set_tooltip_text(Some("Official Dynamic Range Value"));
-        dr_label.set_halign(Align::End);
-        dr_label.set_valign(Align::End);
-        dr_label
-    })
+    let (dr_str, tooltip_text, css_class) = match dr_value {
+        Some(value) => (
+            format!("{:02}", value),
+            Some("Official Dynamic Range Value"),
+            format!("dr-{:02}", value),
+        ),
+        None => (
+            "N/A".to_string(),
+            Some("Dynamic Range Value not available"),
+            "dr-na".to_string(),
+        ),
+    };
+    let dr_label = Label::builder().label(&dr_str).build();
+    dr_label.add_css_class("dr-badge-label");
+    dr_label.add_css_class("dr-badge-label-grid");
+    dr_label.set_size_request(28, 28);
+    dr_label.add_css_class(&css_class);
+    dr_label.set_tooltip_text(tooltip_text);
+    dr_label.set_halign(Align::End);
+    dr_label.set_valign(Align::End);
+    Some(dr_label)
 }
 
 /// Rebuild the albums grid in the main window.
@@ -347,9 +355,8 @@ pub async fn populate_albums_grid(
                 overlay.set_child(Some(&cover_container));
                 overlay.set_halign(Align::Start);
                 overlay.set_valign(Align::Start);
-                if let Some(dr_label) = create_dr_overlay(album._dr_value) {
-                    overlay.add_overlay(&dr_label);
-                }
+                let dr_label = create_dr_overlay(album._dr_value).unwrap();
+                overlay.add_overlay(&dr_label);
 
                 // Overlay (cover) at the top
                 // Use GtkFixed for a pixel-perfect 192px cover area
