@@ -315,6 +315,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         scanning_label_albums.clone(),
         db_pool.clone(),
         sender.clone(),
+        albums_stack_cell.borrow().as_ref().cloned(),
     );
 
     // Settings dialog

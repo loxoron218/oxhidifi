@@ -191,12 +191,25 @@ pub fn build_albums_grid(
     let albums_stack = Stack::builder()
         .transition_type(StackTransitionType::None)
         .build();
+
+    // Scanning state
+    let scanning_spinner = Spinner::builder().spinning(true).build();
+    scanning_spinner.set_size_request(48, 48);
+    let scanning_state_container = Box::builder()
+        .orientation(Orientation::Vertical)
+        .halign(Align::Center)
+        .valign(Align::Center)
+        .vexpand(true)
+        .hexpand(true)
+        .build();
+    scanning_state_container.append(scanning_label);
+    scanning_state_container.append(&scanning_spinner);
     albums_stack.add_named(&loading_state_container, Some("loading_state"));
     albums_stack.add_named(&empty_state_container, Some("empty_state"));
+    albums_stack.add_named(&scanning_state_container, Some("scanning_state"));
     let albums_content_box = Box::builder()
         .orientation(Orientation::Vertical)
         .build();
-    albums_content_box.append(scanning_label);
     albums_content_box.append(&scrolled);
     albums_stack.add_named(&albums_content_box, Some("populated_grid"));
     (albums_stack, albums_grid)
@@ -250,12 +263,14 @@ pub async fn populate_albums_grid(
                 if let Some(empty_state_container) = albums_inner_stack.child_by_name("empty_state") {
                     if let Some(status_page) = empty_state_container.downcast::<Box>().ok().and_then(|b| b.first_child().and_then(|c| c.downcast::<StatusPage>().ok())) {
                         if let Some(add_music_button) = status_page.child().and_then(|c| c.downcast::<Button>().ok()) {
+                            let albums_inner_stack_clone = albums_inner_stack.clone();
                             connect_add_folder_dialog(
                                     &add_music_button,
                                 window.clone(),
                                 scanning_label.clone(),
                                 db_pool.clone(),
                                 sender.clone(),
+                                Some(albums_inner_stack_clone),
                             );
                         }
                     }

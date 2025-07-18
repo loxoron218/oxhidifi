@@ -18,12 +18,14 @@ pub fn connect_add_folder_dialog<T: IsA<Window> + Clone + 'static>(
     parent_window: T,
     scanning_label: Label,
     db_pool: Arc<SqlitePool>,
-    sender: UnboundedSender<()>,
+    sender: UnboundedSender<()>, 
+    albums_inner_stack: Option<gtk4::Stack>,
 ) {
     let scanning_label = scanning_label.clone();
     let db_pool = db_pool.clone();
     let sender = sender.clone();
     let parent_window = parent_window.clone();
+    let albums_inner_stack_outer = albums_inner_stack.clone(); // Clone for the outer closure
     add_button.connect_clicked(move |_| {
         let dialog = FileChooserDialog::new(
             Some("Open Folder"),
@@ -39,6 +41,7 @@ pub fn connect_add_folder_dialog<T: IsA<Window> + Clone + 'static>(
         let scanning_label = scanning_label.clone();
         let db_pool = db_pool.clone();
         let sender = sender.clone();
+        let albums_inner_stack_inner = albums_inner_stack_outer.clone(); // Clone for the inner closure
         dialog.connect_response(move |dialog, resp| {
             let scanning_label = scanning_label.clone();
             let db_pool = db_pool.clone();
@@ -47,7 +50,11 @@ pub fn connect_add_folder_dialog<T: IsA<Window> + Clone + 'static>(
                 if let Some(folder) = dialog.file() {
                     if let Some(folder_path) = folder.path() {
                         let folder_path_string = folder_path.to_string_lossy().to_string();
-                        scanning_label.set_visible(true);
+                        if let Some(stack) = albums_inner_stack_inner.clone() {
+                            stack.set_visible_child_name("scanning_state");
+                        } else {
+                            scanning_label.set_visible(true);
+                        }
                         let db_pool_thread = db_pool.clone();
                         let folder_path_string2 = folder_path_string.clone();
                         let sender_clone = sender.clone();

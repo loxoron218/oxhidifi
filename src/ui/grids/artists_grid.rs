@@ -2,7 +2,7 @@ use std::{rc::Rc, sync::Arc};
 use std::cell::{Cell, RefCell};
 
 use glib::{markup_escape_text, MainContext, WeakRef};
-use gtk4::{Align, Box, Button, FlowBox, FlowBoxChild, GestureClick, Image, Label, Orientation, PolicyType, ScrolledWindow, SelectionMode, Stack, StackTransitionType};
+use gtk4::{Align, Box, Button, FlowBox, FlowBoxChild, GestureClick, Image, Label, Orientation, PolicyType, ScrolledWindow, SelectionMode, Spinner, Stack, StackTransitionType};
 use gtk4::pango::{EllipsizeMode, WrapMode};
 use libadwaita::{ApplicationWindow, Clamp, StatusPage, ViewStack};
 use libadwaita::prelude::{BoxExt, Cast, FlowBoxChildExt, ObjectExt, WidgetExt};
@@ -87,11 +87,24 @@ pub fn build_artists_grid(scanning_label: &Label) -> (Stack, FlowBox) {
     let artists_stack = Stack::builder()
         .transition_type(StackTransitionType::None)
         .build();
+
+    // Scanning state
+    let scanning_spinner = Spinner::builder().spinning(true).build();
+    scanning_spinner.set_size_request(48, 48);
+    let scanning_state_container = Box::builder()
+        .orientation(Orientation::Vertical)
+        .halign(Align::Center)
+        .valign(Align::Center)
+        .vexpand(true)
+        .hexpand(true)
+        .build();
+    scanning_state_container.append(scanning_label);
+    scanning_state_container.append(&scanning_spinner);
     artists_stack.add_named(&empty_state_container, Some("empty_state"));
+    artists_stack.add_named(&scanning_state_container, Some("scanning_state"));
     let artists_content_box = Box::builder()
         .orientation(Orientation::Vertical)
         .build();
-    artists_content_box.append(scanning_label);
     artists_content_box.append(&scrolled);
     artists_stack.add_named(&artists_content_box, Some("populated_grid"));
     (artists_stack, artists_grid)
@@ -229,12 +242,14 @@ pub fn populate_artists_grid(
                     if let Some(empty_state_container) = artists_inner_stack.child_by_name("empty_state") {
                         if let Some(status_page) = empty_state_container.downcast::<Box>().ok().and_then(|b| b.first_child().and_then(|c| c.downcast::<StatusPage>().ok())) {
                             if let Some(add_music_button) = status_page.child().and_then(|c| c.downcast::<Button>().ok()) {
-                                connect_add_folder_dialog(
+                                let artists_inner_stack_clone = artists_inner_stack.clone();
+                            connect_add_folder_dialog(
                                     &add_music_button,
                                     window,
                                     scanning_label,
                                     db_pool.clone(),
                                     sender,
+                                    Some(artists_inner_stack_clone),
                                 );
                             }
                         }
