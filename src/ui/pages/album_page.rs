@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use gdk_pixbuf::{InterpType, Pixbuf, PixbufLoader};
 use gdk_pixbuf::prelude::PixbufLoaderExt;
-use glib::{markup_escape_text, WeakRef};
+use glib::WeakRef;
 use gtk4::{Align, Box, Button, Image, Label, Orientation, Overlay, Picture, ScrolledWindow};
 use gtk4::pango::{EllipsizeMode, WrapMode};
 use libadwaita::{ActionRow, Clamp, PreferencesGroup, ViewStack};
@@ -125,8 +125,8 @@ fn build_track_row(t: &crate::data::models::Track) -> ActionRow {
         }
         let subtitle = subtitle_fields.join(" · ");
         let row = ActionRow::builder()
-            .title(&*markup_escape_text(&t.title))
-            .subtitle(&*markup_escape_text(&subtitle))
+            .title(&t.title)
+            .subtitle(&subtitle)
             .build();
         let disc = t.disc_no.unwrap_or(1);
         let track = t.track_no.unwrap_or(0);
@@ -191,7 +191,7 @@ fn build_track_row(t: &crate::data::models::Track) -> ActionRow {
         .css_classes(["album-info-box"])
         .build();
     let title_label = Label::builder()
-        .label(&*markup_escape_text(&album.title))
+        .label(&album.title)
         .halign(Align::Start)
         .wrap(true)
         .wrap_mode(WrapMode::Word)
@@ -204,7 +204,7 @@ fn build_track_row(t: &crate::data::models::Track) -> ActionRow {
 
     // Artist name (regular)
     let artist_label = Label::builder()
-        .label(&*markup_escape_text(&artist.name))
+        .label(&artist.name)
         .halign(Align::Start)
         .wrap(true)
         .wrap_mode(WrapMode::Word)

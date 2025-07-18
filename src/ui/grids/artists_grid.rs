@@ -1,7 +1,7 @@
 use std::{rc::Rc, sync::Arc};
 use std::cell::{Cell, RefCell};
 
-use glib::{markup_escape_text, MainContext, WeakRef};
+use glib::{MainContext, WeakRef};
 use gtk4::{Align, Box, Button, FlowBox, FlowBoxChild, GestureClick, Image, Label, Orientation, PolicyType, ScrolledWindow, SelectionMode, Spinner, Stack, StackTransitionType};
 use gtk4::pango::{EllipsizeMode, WrapMode};
 use libadwaita::{ApplicationWindow, Clamp, StatusPage, ViewStack};
@@ -125,7 +125,7 @@ fn create_artist_tile(
     let (cover_size, _) = compute_cover_and_tile_size(screen_width);
     let icon = Image::from_icon_name("avatar-default-symbolic");
     icon.set_pixel_size(cover_size);
-    let label = Label::builder().label(&*markup_escape_text(artist_name)).build();
+    let label = Label::builder().label(artist_name).build();
     label.set_halign(Align::Start);
     label.set_xalign(0.0);
     label.set_ellipsize(EllipsizeMode::End);
