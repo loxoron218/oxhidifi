@@ -1,14 +1,17 @@
 use std::{rc::Rc, sync::Arc};
 use std::cell::{Cell, RefCell};
+use std::thread::spawn;
 
 use glib::WeakRef;
 use gtk4::{Box, FlowBox, Orientation, Stack};
 use libadwaita::{Application, ApplicationWindow, Clamp, ViewStack};
 use libadwaita::prelude::{AdwApplicationWindowExt, BoxExt, ButtonExt, GtkWindowExt};
 use sqlx::SqlitePool;
+use tokio::runtime::Runtime;
 
-use crate::data::scanner::{connect_rescan_button, create_scanning_label, connect_scanning_label_visibility, spawn_scanning_label_refresh_task};
+use crate::data::scanner::{create_scanning_label, spawn_scanning_label_refresh_task, run_full_scan};
 use crate::data::search::connect_live_search;
+use crate::data::watcher::start_watching_library;
 use crate::ui::components::config::load_settings;
 use crate::ui::components::dialogs::{connect_add_folder_dialog, connect_settings_dialog};
 use crate::ui::components::navigation::{connect_album_navigation, connect_back_button, connect_sort_button, connect_tab_navigation, setup_keyboard_shortcuts};
@@ -32,7 +35,6 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     left_btn_stack_weak.set(Some(&left_btn_stack));
     let right_btn_box = header.right_btn_box.clone();
     let add_button = header.add_button.clone();
-    let rescan_button = header.rescan_button.clone();
     let back_button = header.back_button.clone();
     let settings_button = header.settings_button.clone();
     let search_bar = header.search_bar.clone();
@@ -144,6 +146,9 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         screen_width,
     );
 
+    // Start the library watcher
+    start_watching_library(db_pool.clone(), sender.clone());
+
     // Navigation logic
     // Initial connect for album navigation (will also be called after grid rebuild)
     if let Some(albums_grid) = albums_grid_cell.borrow().as_ref() {
@@ -211,41 +216,6 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         sort_ascending.clone(),
         sort_ascending_artists.clone(),
     );
-
-    // Rescan button logic
-    {
-        let scanning_label_albums_clone = scanning_label_albums.clone();
-        let scanning_label_artists_clone = scanning_label_artists.clone();
-        let stack_clone = stack.clone(); // This is the ViewStack for albums/artists
-        let albums_stack_cell_clone = albums_stack_cell.clone();
-        let artists_stack_cell_clone = artists_stack_cell.clone();
-        rescan_button.connect_clicked(move |_| {
-            let current_page = stack_clone.visible_child_name().unwrap_or_default();
-            if current_page == "albums" {
-                if let Some(albums_inner_stack) = albums_stack_cell_clone.borrow().as_ref() {
-                    albums_inner_stack.set_visible_child_name("scanning_state");
-                }
-            } else if current_page == "artists" {
-                if let Some(artists_inner_stack) = artists_stack_cell_clone.borrow().as_ref() {
-                    artists_inner_stack.set_visible_child_name("scanning_state");
-                }
-            }
-        });
-
-        // Existing connections for rescan_button
-        connect_rescan_button(
-            &rescan_button,
-            scanning_label_albums.clone(),
-            sender.clone(),
-            db_pool.clone(),
-        );
-        connect_scanning_label_visibility(
-            &rescan_button,
-            &stack,
-            &scanning_label_albums_clone,
-            &scanning_label_artists_clone,
-        );
-    }
 
     // Center box for tabs
     let center_inner = Box::builder()
@@ -349,6 +319,15 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     window.present();
     window.set_content(Some(&vbox_inner));
 
-    // Initial refresh of the library UI after the window is presented
-    refresh_library_ui(sort_ascending.get(), sort_ascending_artists.get());
+    // Initial scan on startup, non-blocking
+    let db_pool_startup_scan = db_pool.clone();
+    let sender_startup_scan = sender.clone();
+    spawn(move || {
+        let rt = Runtime::new().unwrap();
+        rt.block_on(async {
+            println!("Performing initial library scan on startup...");
+            run_full_scan(&db_pool_startup_scan, &sender_startup_scan).await;
+            println!("Initial library scan complete.");
+        });
+    });
 }

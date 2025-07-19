@@ -17,9 +17,6 @@ pub struct AppHeaderBar {
     /// Add button.
     pub add_button: Button,
 
-    /// Rescan button.
-    pub rescan_button: Button,
-
     /// Back button.
     pub back_button: Button,
 
@@ -39,9 +36,6 @@ pub fn build_header_bar() -> AppHeaderBar {
     // Create buttons
     let add_button = Button::builder()
         .icon_name("list-add")
-        .build();
-    let rescan_button = Button::builder()
-        .icon_name("view-refresh")
         .build();
     let search_bar = SearchBar::new();
     let settings_button = Button::builder()
@@ -63,7 +57,6 @@ pub fn build_header_bar() -> AppHeaderBar {
         .orientation(Orientation::Horizontal)
         .build();
     add_btn_inner.append(&add_button);
-    add_btn_inner.append(&rescan_button);
     let add_btn_box = Clamp::builder()
         .child(&add_btn_inner)
         .build();
@@ -100,7 +93,6 @@ pub fn build_header_bar() -> AppHeaderBar {
         left_btn_stack,
         right_btn_box,
         add_button,
-        rescan_button,
         back_button,
         settings_button,
         search_bar,

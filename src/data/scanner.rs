@@ -1,15 +1,16 @@
-use std::{borrow::Cow, error::Error, future::Future, path::Path, pin::Pin, rc::Rc, sync::Arc, thread::spawn};
+use std::{borrow::Cow, error::Error, future::Future, path::Path, pin::Pin, rc::Rc, sync::Arc};
 use std::cell::{Cell, RefCell};
 
 use glib::MainContext;
-use gtk4::{Button, Label};
+use gtk4::Label;
 use libadwaita::ViewStack;
-use libadwaita::prelude::{ButtonExt, WidgetExt};
+use libadwaita::prelude::WidgetExt;
 use lofty::{probe::Probe, tag::Tag};
 use lofty::prelude::{Accessor, AudioFile, TaggedFileExt};
 use regex::Regex;
 use sqlx::{query, Row, SqlitePool};
-use tokio::{fs::File, fs::read_dir, io::AsyncBufReadExt, io::BufReader, runtime::Runtime};
+use tokio::fs::{File, read_dir};
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use crate::data::album_artists::get_album_artist;
@@ -66,33 +67,6 @@ pub fn create_scanning_label() -> Label {
         .build()
 }
 
-/// Connect the rescan button to update scanning labels based on the visible tab.
-pub fn connect_scanning_label_visibility(
-    rescan_button: &Button,
-    stack: &ViewStack,
-    scanning_label_albums: &Label,
-    scanning_label_artists: &Label,
-) {
-    let scanning_label_albums = scanning_label_albums.clone();
-    let scanning_label_artists = scanning_label_artists.clone();
-    let stack = stack.clone();
-    rescan_button.connect_clicked(move |_| {
-        let page = stack.visible_child_name().unwrap_or_default();
-        if page == "albums" {
-            scanning_label_albums.set_visible(true);
-            scanning_label_artists.set_visible(false);
-        } else if page == "artists" {
-            scanning_label_albums.set_visible(false);
-            scanning_label_artists.set_visible(true);
-        } else {
-
-            // Hide both by default
-            scanning_label_albums.set_visible(false);
-            scanning_label_artists.set_visible(false);
-        }
-    });
-}
-
 /// Listen for scan completion and update label/UI accordingly.
 pub fn spawn_scanning_label_refresh_task(
     receiver: Rc<RefCell<UnboundedReceiver<()>>>,
@@ -128,85 +102,64 @@ pub fn spawn_scanning_label_refresh_task(
 }
 
 /// Connect the rescan button to trigger scanning and update the UI.
-pub fn connect_rescan_button(
-    rescan_button: &Button,
-    scanning_label: Label,
-    sender: UnboundedSender<()>,
-    db_pool: Arc<SqlitePool>,
-) {
-    let scanning_label_rescan = scanning_label.clone();
-    let db_pool_rescan = db_pool.clone();
-    let sender_rescan = sender.clone();
-    rescan_button.connect_clicked(move |_| {
-        scanning_label_rescan.set_visible(true);
-        let db_pool = db_pool_rescan.clone();
-        let sender = sender_rescan.clone();
-        spawn(move || {
-            let rt = Runtime::new().unwrap();
-            rt.block_on(async {
+/// Performs a full library scan, including cleanup of orphaned data.
+pub async fn run_full_scan(db_pool: &Arc<SqlitePool>, sender: &UnboundedSender<()>) {
 
-                // Clear all DR values before re-scanning
-                if let Err(_) = clear_all_dr_values(&db_pool).await {}
-                match fetch_all_folders(&db_pool).await {
-                    Ok(folders) => {
+    // Clear all DR values before re-scanning
+    if let Err(_) = clear_all_dr_values(db_pool).await {}
+    match fetch_all_folders(db_pool).await {
+        Ok(folders) => {
 
-                        // Scan all folders on record
-                        for folder in &folders {
-                            let _ = scan_folder(&db_pool, &folder.path, folder.id).await;
-                        }
+            // Scan all folders on record
+            for folder in &folders {
+                let _ = scan_folder(db_pool, &folder.path, folder.id).await;
+            }
 
-                        // Get current folder paths on disk
-                        let mut folders_on_disk = Vec::new();
-                        for folder in &folders {
-                            let exists = Path::new(&folder.path).exists();
-                            if exists {
-                                folders_on_disk.push(folder.id);
-                            }
-                        }
-
-                        // Remove folders from DB that no longer exist on disk
-                        for folder in &folders {
-                            if !Path::new(&folder.path).exists() {
-                                remove_folder_and_albums(&db_pool, folder.id).await.ok();
-                            }
-                        }
-
-                        // Remove albums whose folder is missing
-                        let albums = query("SELECT id FROM albums").fetch_all(&*db_pool).await.unwrap_or_default();
-                        for album in albums {
-                            let album_id: i64 = album.get("id");
-
-                            // Fetch all track paths for this album
-                            let tracks = query("SELECT path FROM tracks WHERE album_id = ?")
-                                .bind(album_id)
-                                .fetch_all(&*db_pool)
-                                .await
-                                .unwrap_or_default();
-                            let mut any_track_exists = false;
-                            for track in &tracks {
-                                let path: String = track.get("path");
-                                let exists = Path::new(&path).exists();
-                                if exists {
-                                    any_track_exists = true;
-                                    break;
-                                }
-                            }
-                            if tracks.is_empty() || !any_track_exists {
-                                remove_album_and_tracks(&*db_pool, album_id).await.ok();
-                            }
-                        }
-                    }
-                    Err(_) => {}
+            // Get current folder paths on disk
+            let mut folders_on_disk = Vec::new();
+            for folder in &folders {
+                if Path::new(&folder.path).exists() {
+                    folders_on_disk.push(folder.id);
                 }
-                remove_orphaned_tracks(&db_pool).await.ok();
-                remove_albums_with_no_tracks(&db_pool).await.ok();
-                remove_artists_with_no_albums(&db_pool).await.ok();
-                sender.send(()).ok();
+            }
 
-                // UI refresh happens on main thread after receiving signal
-            });
-        });
-    });
+            // Remove folders from DB that no longer exist on disk
+            for folder in &folders {
+                if !Path::new(&folder.path).exists() {
+                    remove_folder_and_albums(db_pool, folder.id).await.ok();
+                }
+            }
+
+            // Remove albums whose folder is missing
+            let albums = query("SELECT id FROM albums").fetch_all(&**db_pool).await.unwrap_or_default();
+            for album in albums {
+                let album_id: i64 = album.get("id");
+
+                // Fetch all track paths for this album
+                let tracks = query("SELECT path FROM tracks WHERE album_id = ?")
+                    .bind(album_id)
+                    .fetch_all(&**db_pool)
+                    .await
+                    .unwrap_or_default();
+                let mut any_track_exists = false;
+                for track in &tracks {
+                    let path: String = track.get("path");
+                    if Path::new(&path).exists() {
+                        any_track_exists = true;
+                        break;
+                    }
+                }
+                if tracks.is_empty() || !any_track_exists {
+                    remove_album_and_tracks(db_pool, album_id).await.ok();
+                }
+            }
+        }
+        Err(_) => {}
+    }
+    remove_orphaned_tracks(db_pool).await.ok();
+    remove_albums_with_no_tracks(db_pool).await.ok();
+    remove_artists_with_no_albums(db_pool).await.ok();
+    sender.send(()).ok();
 }
 
 /// Scan for DR value in .txt/.log files in a folder.
