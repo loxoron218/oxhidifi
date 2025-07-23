@@ -345,17 +345,17 @@ pub async fn populate_albums_grid(
                 );
 
                 // Album box creation
-                let box_ = Box::builder()
+                let album_tile_box = Box::builder()
                     .orientation(Orientation::Vertical)
                     .spacing(2)
                     .build();
 
                 // tile_size + room for text
-                box_.set_size_request(tile_size, tile_size + 80);
-                box_.set_hexpand(false);
-                box_.set_vexpand(false);
-                box_.set_halign(Align::Start);
-                box_.set_valign(Align::Start);
+                album_tile_box.set_size_request(tile_size, tile_size + 80);
+                album_tile_box.set_hexpand(false);
+                album_tile_box.set_vexpand(false);
+                album_tile_box.set_halign(Align::Start);
+                album_tile_box.set_valign(Align::Start);
 
                 // Fixed-size container for cover (new instance per tile)
                 let cover_container = Box::new(Orientation::Vertical, 0);
@@ -365,7 +365,7 @@ pub async fn populate_albums_grid(
                 let cover = create_album_cover(album.cover_art.as_ref(), cover_size);
                 cover_container.append(&cover);
 
-                // Overlay for DR badge (new instance per tile)
+                // Overlay for DR badge
                 let overlay = Overlay::new();
                 overlay.set_size_request(cover_size, cover_size);
                 overlay.set_child(Some(&cover_container));
@@ -374,26 +374,28 @@ pub async fn populate_albums_grid(
                 let dr_label = create_dr_overlay(album._dr_value, album.dr_completed).unwrap();
                 overlay.add_overlay(&dr_label);
 
-                // Overlay (cover) at the top
-                // Use GtkFixed for a pixel-perfect 192px cover area
+                // Fixed-size container for the cover area to ensure consistent sizing
                 let cover_fixed = Fixed::new();
                 cover_fixed.set_size_request(-1, cover_size);
                 cover_fixed.put(&overlay, 0.0, 0.0);
-                box_.append(&cover_fixed);
-                let title_box = Box::new(Orientation::Vertical, 0);
-                title_box.set_size_request(-1, 36);
-                title_box.set_valign(Align::Start);
-                title_box.set_margin_top(12);
-                title_label.set_valign(Align::Start);
-                title_box.append(&title_label);
-                box_.append(&title_box);
-                box_.append(&artist_label);
-                box_.append(&format_label);
-                box_.set_css_classes(&["album-tile"]);
+                album_tile_box.append(&cover_fixed);
+
+                // Box to ensure consistent height for the title area (2 lines)
+                let title_area_box = Box::builder()
+                    .orientation(Orientation::Vertical)
+                    .height_request(40) // Explicitly request height for two lines of text + extra buffer
+                    .margin_top(12)     // Keep the margin from the cover
+                    .build();
+                title_label.set_valign(Align::End);
+                title_area_box.append(&title_label);
+                album_tile_box.append(&title_area_box);
+                album_tile_box.append(&artist_label);
+                album_tile_box.append(&format_label);
+                album_tile_box.set_css_classes(&["album-tile"]);
 
                 // Set album_id as widget data for double-click navigation
                 let flow_child = FlowBoxChild::builder().build();
-                flow_child.set_child(Some(&box_));
+                flow_child.set_child(Some(&album_tile_box));
                 flow_child.set_hexpand(false);
                 flow_child.set_vexpand(false);
                 flow_child.set_halign(Align::Fill);
@@ -401,8 +403,8 @@ pub async fn populate_albums_grid(
                 unsafe {
                     flow_child.set_data::<i64>("album_id", album.id);
                 }
-                box_.set_hexpand(true);
-                box_.set_halign(Align::Fill);
+                album_tile_box.set_hexpand(true);
+                album_tile_box.set_halign(Align::Fill);
 
                 // Add click gesture for navigation
                 let stack_weak = stack.downgrade();

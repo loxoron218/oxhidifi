@@ -262,15 +262,15 @@ pub fn connect_live_search(
                                 None,
                             );
                             let cover = create_album_cover(album.cover_art.as_ref(), cover_size);
-                            let box_ = Box::builder()
+                            let album_tile_box = Box::builder()
                                 .orientation(Orientation::Vertical)
                                 .spacing(2)
                                 .build();
-                            box_.set_size_request(tile_size, tile_size + 80);
-                            box_.set_hexpand(false);
-                            box_.set_vexpand(false);
-                            box_.set_halign(Align::Start);
-                            box_.set_valign(Align::Start);
+                            album_tile_box.set_size_request(tile_size, tile_size + 80);
+                            album_tile_box.set_hexpand(false);
+                            album_tile_box.set_vexpand(false);
+                            album_tile_box.set_halign(Align::Start);
+                            album_tile_box.set_valign(Align::Start);
                             let cover_container = Box::new(Orientation::Vertical, 0);
                             cover_container.set_size_request(cover_size, cover_size);
                             cover_container.set_halign(Align::Start);
@@ -286,19 +286,20 @@ pub fn connect_live_search(
                             let cover_fixed = Fixed::new();
                             cover_fixed.set_size_request(-1, cover_size);
                             cover_fixed.put(&overlay, 0.0, 0.0);
-                            box_.append(&cover_fixed);
-                            let title_box = Box::new(Orientation::Vertical, 0);
-                            title_box.set_size_request(-1, 36);
-                            title_box.set_valign(Align::Start);
-                            title_box.set_margin_top(12);
-                            title_label.set_valign(Align::Start);
-                            title_box.append(&title_label);
-                            box_.append(&title_box);
-                            box_.append(&artist_label);
-                            box_.append(&format_label);
-                            box_.set_css_classes(&["album-tile"]);
+                            album_tile_box.append(&cover_fixed);
+                            let title_area_box = Box::builder()
+                                .orientation(Orientation::Vertical)
+                                .height_request(40) // Explicitly request height for two lines of text + extra buffer
+                                .margin_top(12)     // Keep the margin from the cover
+                                .build();
+                            title_label.set_valign(Align::End);
+                            title_area_box.append(&title_label);
+                            album_tile_box.append(&title_area_box);
+                            album_tile_box.append(&artist_label);
+                            album_tile_box.append(&format_label);
+                            album_tile_box.set_css_classes(&["album-tile"]);
                             let flow_child = Rc::new(FlowBoxChild::new());
-                            flow_child.set_child(Some(&box_));
+                            flow_child.set_child(Some(&album_tile_box));
                             flow_child.set_hexpand(false);
                             flow_child.set_vexpand(false);
                             flow_child.set_halign(Align::Fill);

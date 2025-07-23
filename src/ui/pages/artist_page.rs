@@ -235,28 +235,31 @@ fn build_album_card(
     format_label.set_size_request(cover_size - 16, -1);
 
     // Album box creation
-    let box_ = Box::builder()
+    let album_tile_box = Box::builder()
         .orientation(Orientation::Vertical)
         .spacing(2) // Changed spacing to 2 for consistency with albums_grid
         .build();
-    box_.set_size_request(tile_size, tile_size + 80);
-    box_.set_hexpand(true);
-    box_.set_vexpand(false);
-    box_.set_halign(Align::Fill);
-    box_.set_valign(Align::Start);
-    box_.append(&cover);
-    let title_box = Box::new(Orientation::Vertical, 0);
-    title_box.set_size_request(-1, 36);
-    title_box.set_valign(Align::Start);
-    title_box.set_margin_top(12);
-    title_label.set_valign(Align::Start); // Ensure label is aligned within its box
-    title_box.append(&title_label);
-    box_.append(&title_box);
-    box_.append(&year_label);
-    box_.append(&format_label);
-    box_.set_css_classes(&["album-tile"]);
+    album_tile_box.set_size_request(tile_size, tile_size + 80);
+    album_tile_box.set_hexpand(true);
+    album_tile_box.set_vexpand(false);
+    album_tile_box.set_halign(Align::Fill);
+    album_tile_box.set_valign(Align::Start);
+    album_tile_box.append(&cover);
+
+    // Box to ensure consistent height for the title area (2 lines)
+    let title_area_box = Box::builder()
+        .orientation(Orientation::Vertical)
+        .height_request(40) // Explicitly request height for two lines of text + extra buffer
+        .margin_top(12)     // Keep the margin from the cover
+        .build();
+    title_label.set_valign(Align::End); // Align label to the end of its box
+    title_area_box.append(&title_label);
+    album_tile_box.append(&title_area_box);
+    album_tile_box.append(&year_label);
+    album_tile_box.append(&format_label);
+    album_tile_box.set_css_classes(&["album-tile"]);
     unsafe {
-        box_.set_data("album_id", album.id);
+        album_tile_box.set_data("album_id", album.id);
     }
     let gesture = GestureClick::builder().build();
     let stack_weak_for_closure = stack.clone();
@@ -280,8 +283,8 @@ fn build_album_card(
             );
         }
     });
-    box_.add_controller(gesture);
-    box_
+    album_tile_box.add_controller(gesture);
+    album_tile_box
 }
 
 /// Fetch all albums by a given artist, with display info and year.
