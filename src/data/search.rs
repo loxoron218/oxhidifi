@@ -10,6 +10,7 @@ use gtk4::pango::EllipsizeMode;
 use libadwaita::{Clamp, ViewStack};
 use libadwaita::prelude::{BoxExt, EditableExt, FlowBoxChildExt, WidgetExt};
 use sqlx::SqlitePool;
+use tokio::sync::mpsc::UnboundedSender;
 
 use crate::data::db::{search_album_display_info, search_artists};
 use crate::ui::pages::album_page::album_page;
@@ -32,6 +33,7 @@ pub fn connect_live_search(
     left_btn_stack: Rc<ViewStack>,
     right_btn_box: Rc<Clamp>,
     nav_history: Rc<RefCell<Vec<String>>>,
+    sender: UnboundedSender<()>,
 ) {
 
     // Compute dynamic sizes based on screen dimensions
@@ -82,6 +84,7 @@ pub fn connect_live_search(
         let left_btn_stack_for_closure = left_btn_stack_clone.clone();
         let right_btn_box_clone = right_btn_box_clone.clone();
         let nav_history = nav_history.clone();
+        let sender = sender.clone();
 
         // Spawn async task for search
         MainContext::default().spawn_local(async move {
@@ -131,7 +134,7 @@ pub fn connect_live_search(
                         for album in albums {
                             let title_label = Label::builder()
                                 .use_markup(true)
-                                .label(&highlight(&album.title, &text))
+                                .label(&highlight(&markup_escape_text(&album.title).to_string(), &text))
                                 .halign(Align::Start)
                                 .build();
                             title_label.set_xalign(0.0);
@@ -140,7 +143,7 @@ pub fn connect_live_search(
                             title_label.set_css_classes(&["album-title-label"]);
                             let artist_label = Label::builder()
                                 .use_markup(true)
-                                .label(&highlight(&album.artist, &text))
+                                .label(&highlight(&markup_escape_text(&album.artist).to_string(), &text))
                                 .halign(Align::Start)
                                 .build();
                             artist_label.set_xalign(0.0);
@@ -220,8 +223,9 @@ pub fn connect_live_search(
                             let stack_weak = stack_for_closure.downgrade();
                             let db_pool_clone = Arc::clone(&db_pool);
                             let header_btn_stack_weak = left_btn_stack_for_closure.downgrade();
-                            let flow_child_clone = flow_child.clone(); // Clone Rc for the closure
+                            let flow_child_clone = flow_child.clone();
                             let nav_history_clone = nav_history.clone();
+                            let sender_clone = sender.clone();
                             let gesture = GestureClick::builder().build();
                             gesture.connect_pressed(move |_, _, _, _| {
                                 if let (Some(stack), Some(header_btn_stack)) = (stack_weak.upgrade(), header_btn_stack_weak.upgrade()) {
@@ -235,6 +239,7 @@ pub fn connect_live_search(
                                             db_pool_clone.clone(),
                                             album_id,
                                             header_btn_stack.downgrade(),
+                                            sender_clone.clone(),
                                         )
                                     );
                                 }
@@ -296,6 +301,7 @@ pub fn connect_live_search(
                             let db_pool_clone = Arc::clone(&db_pool);
                             let left_btn_stack_weak = left_btn_stack_for_closure.downgrade();
                             let nav_history_clone = nav_history.clone();
+                            let sender_clone = sender.clone();
                             let gesture = GestureClick::builder().build();
                             let flow_child_clone = flow_child.clone();
                             let right_btn_box_weak_clone = right_btn_box_clone.clone();
@@ -315,6 +321,7 @@ pub fn connect_live_search(
                                             left_btn_stack.downgrade(),
                                             right_btn_box_weak_clone.clone().downgrade(),
                                             nav_history_clone.clone(),
+                                            sender_clone.clone(),
                                         ),
                                     );
                                 }

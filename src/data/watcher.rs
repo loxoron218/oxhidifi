@@ -17,9 +17,7 @@ pub fn start_watching_library(pool: Arc<SqlitePool>, sender: UnboundedSender<()>
         let folders_to_watch = rt.block_on(async {
             fetch_all_folders(&pool).await.unwrap_or_default()
         });
-
         if folders_to_watch.is_empty() {
-            println!("No folders configured to watch.");
             return;
         }
 
@@ -52,7 +50,6 @@ pub fn start_watching_library(pool: Arc<SqlitePool>, sender: UnboundedSender<()>
                         // If another event comes in, the old handle will be dropped
                         // and a new timer will start.
                         thread::sleep(Duration::from_secs(3));
-                        println!("Debounced file system event processed. Triggering full scan.");
                         let rt = Runtime::new().unwrap();
                         rt.block_on(async {
                             run_full_scan(&pool_clone, &sender_clone).await;
@@ -65,17 +62,14 @@ pub fn start_watching_library(pool: Arc<SqlitePool>, sender: UnboundedSender<()>
         // Create a watcher instance.
         let mut watcher: RecommendedWatcher = match recommended_watcher(event_handler) {
             Ok(w) => w,
-            Err(e) => {
-                eprintln!("Failed to create file watcher: {}", e);
+            Err(_e) => {
                 return;
             }
         };
 
         // Add each folder to the watcher.
         for folder in folders_to_watch {
-            println!("Watching folder for changes: {}", folder.path);
-            if let Err(e) = watcher.watch(Path::new(&folder.path), RecursiveMode::Recursive) {
-                eprintln!("Failed to watch {}: {}", folder.path, e);
+            if let Err(_e) = watcher.watch(Path::new(&folder.path), RecursiveMode::Recursive) {
             }
         }
 

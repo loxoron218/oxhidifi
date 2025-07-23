@@ -13,6 +13,7 @@ pub struct Settings {
     pub sort_orders: Vec<SortOrder>,
     pub sort_ascending_albums: bool,
     pub sort_ascending_artists: bool,
+    pub completed_albums: std::collections::HashMap<i64, bool>,
 }
 
 /// Provides default values for Settings (default sort order and ascending state).
@@ -27,6 +28,7 @@ impl Default for Settings {
             ],
             sort_ascending_albums: true,
             sort_ascending_artists: true,
+            completed_albums: std::collections::HashMap::new(),
         }
     }
 }

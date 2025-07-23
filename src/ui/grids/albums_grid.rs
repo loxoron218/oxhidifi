@@ -68,24 +68,29 @@ fn create_album_cover(cover_art: Option<&Vec<u8>>, cover_size: i32) -> Picture {
 }
 
 /// Helper to create the DR badge overlay if present.
-fn create_dr_overlay(dr_value: Option<u8>) -> Option<Label> {
-    let (dr_str, tooltip_text, css_class) = match dr_value {
+fn create_dr_overlay(dr_value: Option<u8>, dr_completed: bool) -> Option<Label> {
+    let (dr_str, tooltip_text, mut css_classes) = match dr_value {
         Some(value) => (
             format!("{:02}", value),
             Some("Official Dynamic Range Value"),
-            format!("dr-{:02}", value),
+            vec![format!("dr-{:02}", value)],
         ),
         None => (
             "N/A".to_string(),
             Some("Dynamic Range Value not available"),
-            "dr-na".to_string(),
+            vec!["dr-na".to_string()],
         ),
     };
     let dr_label = Label::builder().label(&dr_str).build();
     dr_label.add_css_class("dr-badge-label");
     dr_label.add_css_class("dr-badge-label-grid");
     dr_label.set_size_request(28, 28);
-    dr_label.add_css_class(&css_class);
+    if dr_completed {
+        css_classes.push("dr-completed".to_string());
+    }
+    for class in css_classes {
+        dr_label.add_css_class(&class);
+    }
     dr_label.set_tooltip_text(tooltip_text);
     dr_label.set_halign(Align::End);
     dr_label.set_valign(Align::End);
@@ -225,7 +230,7 @@ pub async fn populate_albums_grid(
     tile_size: i32,
     window: &ApplicationWindow,
     scanning_label: &Label,
-    sender: &UnboundedSender<()>,
+    sender: UnboundedSender<()>,
     stack: &ViewStack,
     header_btn_stack: &ViewStack,
     albums_inner_stack: &Stack,
@@ -376,7 +381,7 @@ pub async fn populate_albums_grid(
                 overlay.set_child(Some(&cover_container));
                 overlay.set_halign(Align::Start);
                 overlay.set_valign(Align::Start);
-                let dr_label = create_dr_overlay(album._dr_value).unwrap();
+                let dr_label = create_dr_overlay(album._dr_value, album.dr_completed).unwrap();
                 overlay.add_overlay(&dr_label);
 
                 // Overlay (cover) at the top
@@ -413,9 +418,10 @@ pub async fn populate_albums_grid(
                 let stack_weak = stack.downgrade();
                 let db_pool_clone = Arc::clone(&db_pool);
                 let header_btn_stack_weak = header_btn_stack.downgrade();
-                let flow_child_clone = flow_child.clone(); // Clone Rc for the closure
+                let flow_child_clone = flow_child.clone();
+                let sender_clone = sender.clone();
                 let gesture = GestureClick::builder().build();
-                let gesture_for_closure = gesture.clone(); // Clone for the closure
+                let gesture_for_closure = gesture.clone();
                 gesture_for_closure.connect_pressed(move |_, _, _, _| {
                     if let (Some(stack), Some(header_btn_stack)) = (stack_weak.upgrade(), header_btn_stack_weak.upgrade()) {
                         let album_id = unsafe { flow_child_clone.data::<i64>("album_id").map(|ptr| *ptr.as_ref()).unwrap_or_default() };
@@ -425,6 +431,7 @@ pub async fn populate_albums_grid(
                                 db_pool_clone.clone(),
                                 album_id,
                                 header_btn_stack.downgrade(),
+                                sender_clone.clone(),
                             )
                         );
                     }

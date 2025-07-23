@@ -9,6 +9,7 @@ use gtk4::pango::{EllipsizeMode, WrapMode};
 use libadwaita::{Clamp, ViewStack};
 use libadwaita::prelude::{BoxExt, ObjectExt, WidgetExt};
 use sqlx::{Error, query, Row, SqlitePool};
+use tokio::sync::mpsc::UnboundedSender;
 
 use crate::data::db::fetch_artist_by_id;
 use crate::ui::pages::album_page::album_page;
@@ -24,6 +25,7 @@ pub async fn artist_page(
     header_btn_stack: WeakRef<ViewStack>,
     right_btn_box: WeakRef<Clamp>,
     nav_history: Rc<RefCell<Vec<String>>>,
+    sender: UnboundedSender<()>,
 ) {
 
     // Upgrade weak references
@@ -100,6 +102,7 @@ pub async fn artist_page(
             db_pool.clone(),
             header_btn_stack.downgrade(),
             nav_history.clone(),
+            sender.clone(),
         );
         flowbox.insert(&album_card, -1);
     }
@@ -134,6 +137,7 @@ fn build_album_card(
     db_pool: Arc<SqlitePool>,
     header_btn_stack: WeakRef<ViewStack>,
     nav_history: Rc<RefCell<Vec<String>>>,
+    sender: UnboundedSender<()>,
 ) -> Box {
 
     // Cover (scaled to cover_size x cover_size)
@@ -239,6 +243,7 @@ fn build_album_card(
                     db_pool_clone_for_closure.clone(),
                     album_id,
                     header_btn_stack.downgrade(),
+                    sender.clone(),
                 )
             );
         }

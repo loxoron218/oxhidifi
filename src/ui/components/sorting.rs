@@ -232,6 +232,7 @@ pub fn make_sort_row(
                                             sort_orders: new_orders,
                                             sort_ascending_albums: prev.sort_ascending_albums,
                                             sort_ascending_artists: prev.sort_ascending_artists,
+                                            completed_albums: prev.completed_albums,
                                         });
 
                                         // Update numbering in ActionRow titles
@@ -299,6 +300,7 @@ pub fn connect_sort_reorder_handler(
                         sort_orders: new_orders,
                         sort_ascending_albums: prev.sort_ascending_albums,
                         sort_ascending_artists: prev.sort_ascending_artists,
+                        completed_albums: prev.completed_albums,
                     });
                     refresh_library_ui_cb(sort_ascending.get(), sort_ascending_artists.get());
                 }

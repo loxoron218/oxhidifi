@@ -7,6 +7,7 @@ use gtk4::gdk::{Key, ModifierType};
 use libadwaita::{ApplicationWindow, Clamp, ViewStack};
 use libadwaita::prelude::{ButtonExt, ObjectExt, ToggleButtonExt, WidgetExt};
 use sqlx::SqlitePool;
+use tokio::sync::mpsc::UnboundedSender;
 
 use crate::ui::components::config::{load_settings, save_settings};
 use crate::ui::search_bar::SearchBar;
@@ -19,6 +20,7 @@ pub fn connect_album_navigation<Fut, F>(
     left_btn_stack: &ViewStack,
     right_btn_box: &Clamp,
     nav_history: Rc<RefCell<Vec<String>>>,
+    sender: UnboundedSender<()>,
     album_page: F,
 ) where
     F: Fn(
@@ -26,6 +28,7 @@ pub fn connect_album_navigation<Fut, F>(
         Arc<SqlitePool>,
         i64,
         WeakRef<ViewStack>,
+        UnboundedSender<()>,
     ) -> Fut
         + 'static,
     Fut: Future<Output = ()> + 'static,
@@ -47,11 +50,13 @@ pub fn connect_album_navigation<Fut, F>(
             }
             left_btn_stack.set_visible_child_name("back");
             right_btn_box.set_visible(false.into());
+            let sender_clone = sender.clone(); // Clone sender for the async block
             MainContext::default().spawn_local(album_page(
                 stack_weak.clone(),
                 db_pool.clone(),
                 album_id,
                 left_btn_stack_weak.clone(),
+                sender_clone, // Pass the cloned sender
             ));
         }
     });
@@ -65,22 +70,34 @@ pub fn connect_back_button(
     right_btn_box: &Clamp,
     last_tab: Rc<Cell<&'static str>>,
     nav_history: Rc<RefCell<Vec<String>>>,
+    refresh_library_ui: Rc<dyn Fn(bool, bool)>,
+    sort_ascending: Rc<Cell<bool>>,
+    sort_ascending_artists: Rc<Cell<bool>>,
 ) {
     let stack_clone = stack.clone();
     let left_btn_stack_clone = left_btn_stack.clone();
     let right_btn_box_clone = right_btn_box.clone();
+    let refresh_library_ui_clone = refresh_library_ui.clone(); // Clone for closure
+    let sort_ascending_clone = sort_ascending.clone();       // Clone for closure
+    let sort_ascending_artists_clone = sort_ascending_artists.clone(); // Clone for closure
     back_button.connect_clicked(move |_| {
         if let Some(prev_page) = nav_history.borrow_mut().pop() {
             stack_clone.set_visible_child_name(&prev_page);
             if prev_page.as_str() == "albums" || prev_page.as_str() == "artists" {
                 left_btn_stack_clone.set_visible_child_name("main");
                 right_btn_box_clone.set_visible(true);
+
+                // Trigger refresh when navigating back to albums or artists grid
+                refresh_library_ui_clone(sort_ascending_clone.get(), sort_ascending_artists_clone.get());
             }
         } else {
             let tab = last_tab.get();
             stack_clone.set_visible_child_name(tab);
             left_btn_stack_clone.set_visible_child_name("main");
             right_btn_box_clone.set_visible(true);
+
+            // Trigger refresh when navigating back to albums or artists grid
+            refresh_library_ui_clone(sort_ascending_clone.get(), sort_ascending_artists_clone.get());
         }
     });
 }
@@ -92,6 +109,9 @@ pub fn handle_esc_navigation(
     right_btn_box: Clamp,
     last_tab: Rc<Cell<&'static str>>,
     nav_history: Rc<RefCell<Vec<String>>>,
+    refresh_library_ui: Rc<dyn Fn(bool, bool)>,
+    sort_ascending: Rc<Cell<bool>>,
+    sort_ascending_artists: Rc<Cell<bool>>,
 ) -> impl Fn() {
     move || {
         if let Some(prev_page) = nav_history.borrow_mut().pop() {
@@ -99,6 +119,9 @@ pub fn handle_esc_navigation(
             if prev_page.as_str() == "albums" || prev_page.as_str() == "artists" {
                 left_btn_stack.set_visible_child_name("main");
                 right_btn_box.set_visible(true);
+
+                // Trigger refresh when navigating back to albums or artists grid
+                refresh_library_ui(sort_ascending.get(), sort_ascending_artists.get());
             }
         } else {
             let page = stack.visible_child_name().unwrap_or_default();
@@ -107,6 +130,9 @@ pub fn handle_esc_navigation(
                 stack.set_visible_child_name(tab);
                 left_btn_stack.set_visible_child_name("main");
                 right_btn_box.set_visible(true);
+
+                // Trigger refresh when navigating back to albums or artists grid
+                refresh_library_ui(sort_ascending.get(), sort_ascending_artists.get());
             }
         }
     }
@@ -271,15 +297,18 @@ pub fn setup_keyboard_shortcuts(
     let accel_group = ShortcutController::new();
     let refresh_library_ui_esc = refresh_library_ui.clone();
     let sort_ascending_esc = sort_ascending.clone();
+    let sort_ascending_artists_for_esc = sort_ascending_artists.clone();
     let search_revealer_esc = search_bar.revealer.clone();
     let search_button_esc = search_bar.button.clone();
-    let sort_ascending_artists_for_esc = sort_ascending_artists.clone();
     let esc_nav = handle_esc_navigation(
         stack.clone(),
         left_btn_stack.clone(),
         right_btn_box.clone(),
         last_tab.clone(),
         nav_history.clone(),
+        refresh_library_ui.clone(),
+        sort_ascending.clone(),
+        sort_ascending_artists.clone(),
     );
     let esc_shortcut = Shortcut::builder()
         .trigger(&KeyvalTrigger::new(Key::Escape, ModifierType::empty()))

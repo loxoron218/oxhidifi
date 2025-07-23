@@ -102,7 +102,7 @@ pub fn setup_library_refresh_channel(
                                 tile_size_rc.get(),
                                 &window,
                                 &scanning_label_albums,
-                                &sender,
+                                sender,
                                 &stack,
                                 &header_btn_stack,
                                 albums_inner_stack,
@@ -126,7 +126,7 @@ pub fn setup_library_refresh_channel(
                             &right_btn_box_clone,
                             &window,
                             &scanning_label_artists,
-                            &sender,
+                            sender,
                             nav_history.clone(),
                             artists_inner_stack,
                         );

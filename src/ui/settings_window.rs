@@ -242,6 +242,7 @@ remove_btn.connect_clicked(move |_| {
             sort_orders: current_orders,
             sort_ascending_albums: prev.sort_ascending_albums,
             sort_ascending_artists: prev.sort_ascending_artists,
+            completed_albums: prev.completed_albums,
         });
         Propagation::Proceed
     });

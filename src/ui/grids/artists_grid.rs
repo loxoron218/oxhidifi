@@ -21,6 +21,7 @@ pub fn rebuild_artists_grid_for_window(
     scanning_label_artists: &Label,
     artists_grid_cell: &Rc<RefCell<Option<FlowBox>>>,
     artists_stack_cell: &Rc<RefCell<Option<Stack>>>,
+    _sender: UnboundedSender<()>,
 ) {
 
     // Always remove existing "artists" child before adding a new one
@@ -133,6 +134,7 @@ fn create_artist_tile(
     left_btn_stack: &ViewStack,
     right_btn_box_weak: &WeakRef<Clamp>,
     nav_history: Rc<RefCell<Vec<String>>>,
+    sender: UnboundedSender<()>,
 ) -> FlowBoxChild {
     let (screen_width, _) = get_primary_screen_size();
     let (cover_size, _) = compute_cover_and_tile_size(screen_width);
@@ -190,6 +192,7 @@ fn create_artist_tile(
                     },
                     right_btn_box_weak_inner.clone(),
                     nav_history.clone(),
+                    sender.clone(),
                 ),
             );
         }
@@ -208,7 +211,7 @@ pub fn populate_artists_grid(
     right_btn_box: &Clamp,
     window: &ApplicationWindow,
     scanning_label: &Label,
-    sender: &UnboundedSender<()>, 
+    sender: UnboundedSender<()>,
     nav_history: Rc<RefCell<Vec<String>>>,
     artists_inner_stack: &Stack,
 ) {
@@ -292,6 +295,7 @@ pub fn populate_artists_grid(
                         &left_btn_stack,
                         &right_btn_box_weak,
                         nav_history.clone(),
+                        sender.clone(),
                     );
                     artists_grid.insert(&tile, -1);
                 }

@@ -21,6 +21,7 @@ pub struct Album {
     pub cover_art: Option<Vec<u8>>,
     pub folder_id: i64,
     pub dr_value: Option<u8>,
+    pub dr_completed: bool,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

@@ -64,16 +64,6 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     let last_tab = Rc::new(Cell::new("albums"));
     let nav_history = Rc::new(RefCell::new(Vec::new()));
 
-    // Navigation
-    connect_back_button(
-        &back_button,
-        &stack,
-        &left_btn_stack,
-        &right_btn_box,
-        last_tab.clone(),
-        nav_history.clone(),
-    );
-
     // Scanning indicators
     let scanning_label_albums = create_scanning_label();
     let scanning_label_artists = create_scanning_label();
@@ -89,24 +79,6 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     let albums_stack_cell: Rc<RefCell<Option<Stack>>> = Rc::new(RefCell::new(None));
     let artists_grid_cell: Rc<RefCell<Option<FlowBox>>> = Rc::new(RefCell::new(None));
     let artists_stack_cell: Rc<RefCell<Option<Stack>>> = Rc::new(RefCell::new(None));
-
-    // Albums grid (modularized)
-    rebuild_albums_grid_for_window(
-        &stack,
-        &scanning_label_albums,
-        &cover_size_rc,
-        &tile_size_rc,
-        &albums_grid_cell,
-        &albums_stack_cell,
-    );
-
-    // Artists grid (modularized)
-    rebuild_artists_grid_for_window(
-        &stack,
-        &scanning_label_artists,
-        &artists_grid_cell,
-        &artists_stack_cell,
-    );
     let window = ApplicationWindow::builder()
         .application(app)
         .title("oxhidifi")
@@ -137,6 +109,38 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         header.left_btn_stack.clone().into(),
         nav_history.clone(),
     );
+
+    // Navigation
+    connect_back_button(
+        &back_button,
+        &stack,
+        &left_btn_stack,
+        &right_btn_box,
+        last_tab.clone(),
+        nav_history.clone(),
+        refresh_library_ui.clone(),
+        sort_ascending.clone(),
+        sort_ascending_artists.clone(),
+    );
+
+    // Albums grid (modularized)
+    rebuild_albums_grid_for_window(
+        &stack,
+        &scanning_label_albums,
+        &cover_size_rc,
+        &tile_size_rc,
+        &albums_grid_cell,
+        &albums_stack_cell,
+    );
+
+    // Artists grid (modularized)
+    rebuild_artists_grid_for_window(
+        &stack,
+        &scanning_label_artists,
+        &artists_grid_cell,
+        &artists_stack_cell,
+        sender.clone(),
+    );
     setup_live_monitor_refresh(
         sort_ascending.clone(),
         sort_ascending_artists.clone(),
@@ -159,8 +163,9 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
             &left_btn_stack,
             &right_btn_box,
             nav_history.clone(),
-            |stack_weak, db_pool, album_id, left_btn_stack_weak| async move {
-                album_page(stack_weak, db_pool, album_id, left_btn_stack_weak).await;
+            sender.clone(),
+            |stack_weak, db_pool, album_id, left_btn_stack_weak, sender| async move {
+                album_page(stack_weak, db_pool, album_id, left_btn_stack_weak, sender).await;
             },
         );
     }
@@ -250,6 +255,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         left_btn_stack.clone().into(),
         Rc::new(right_btn_box.clone()),
         nav_history.clone(),
+        sender.clone(),
     );
 
     // Search bar focus out
@@ -263,6 +269,9 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         &right_btn_box,
         last_tab.clone(),
         nav_history.clone(),
+        refresh_library_ui.clone(),
+        sort_ascending.clone(),
+        sort_ascending_artists.clone(),
     );
 
     // Window construction
@@ -325,9 +334,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     spawn(move || {
         let rt = Runtime::new().unwrap();
         rt.block_on(async {
-            println!("Performing initial library scan on startup...");
             run_full_scan(&db_pool_startup_scan, &sender_startup_scan).await;
-            println!("Initial library scan complete.");
         });
     });
 }

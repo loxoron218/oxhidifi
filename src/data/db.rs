@@ -32,7 +32,7 @@ pub async fn remove_folder_and_albums(pool: &SqlitePool, folder_id: i64) -> Resu
 
 /// Fetch a single album by its ID.
 pub async fn fetch_album_by_id(pool: &SqlitePool, album_id: i64) -> Result<Album> {
-    let row = query("SELECT id, title, artist_id, year, cover_art, folder_id, dr_value FROM albums WHERE id = ?")
+    let row = query("SELECT id, title, artist_id, year, cover_art, folder_id, dr_value, dr_completed FROM albums WHERE id = ?")
         .bind(album_id)
         .fetch_one(pool)
         .await?;
@@ -44,6 +44,7 @@ pub async fn fetch_album_by_id(pool: &SqlitePool, album_id: i64) -> Result<Album
         cover_art: row.get("cover_art"),
         folder_id: row.get("folder_id"),
         dr_value: row.get("dr_value"),
+        dr_completed: row.get("dr_completed"),
     })
 }
 
@@ -164,13 +165,14 @@ pub struct AlbumDisplayInfo {
     pub bit_depth: Option<u32>,
     pub frequency: Option<u32>,
     pub _dr_value: Option<u8>,
+    pub dr_completed: bool,
 }
 
 /// Fetch all albums with display info, joining artist and track format data.
 pub async fn fetch_album_display_info(pool: &SqlitePool) -> Result<Vec<AlbumDisplayInfo>> {
     let rows = query(
         r#"SELECT albums.id, albums.title, artists.name as artist, albums.year, albums.cover_art,
-                     tracks.format, tracks.bit_depth, tracks.frequency, albums.dr_value
+                     tracks.format, tracks.bit_depth, tracks.frequency, albums.dr_value, albums.dr_completed
             FROM albums
             JOIN artists ON albums.artist_id = artists.id
             LEFT JOIN tracks ON tracks.album_id = albums.id
@@ -191,8 +193,19 @@ pub async fn fetch_album_display_info(pool: &SqlitePool) -> Result<Vec<AlbumDisp
             bit_depth: row.get("bit_depth"),
             frequency: row.get("frequency"),
             _dr_value: row.get("dr_value"),
+            dr_completed: row.get("dr_completed"),
         })
         .collect())
+}
+
+/// Update the DR completion status for an album.
+pub async fn update_album_dr_completed(pool: &SqlitePool, album_id: i64, completed: bool) -> Result<()> {
+    query("UPDATE albums SET dr_completed = ? WHERE id = ?")
+        .bind(completed)
+        .bind(album_id)
+        .execute(pool)
+        .await?;
+    Ok(())
 }
 
 /// Initialize the database schema if not present.
@@ -222,7 +235,8 @@ pub async fn init_db(pool: &SqlitePool) -> Result<()> {
             year INTEGER,
             cover_art BLOB,
             folder_id INTEGER NOT NULL,
-            dr_value INTEGER
+            dr_value INTEGER,
+            dr_completed BOOLEAN DEFAULT FALSE
         )",
     )
     .execute(pool)
@@ -406,7 +420,7 @@ pub async fn search_album_display_info(
     let pattern = format!("%{}%", search_term.to_lowercase());
     let rows = query(
         r#"SELECT albums.id, albums.title, artists.name as artist, albums.year, albums.cover_art,
-                     tracks.format, tracks.bit_depth, tracks.frequency, albums.dr_value
+                     tracks.format, tracks.bit_depth, tracks.frequency, albums.dr_value, albums.dr_completed
             FROM albums
             JOIN artists ON albums.artist_id = artists.id
             LEFT JOIN tracks ON tracks.album_id = albums.id
@@ -430,6 +444,7 @@ pub async fn search_album_display_info(
             bit_depth: row.get("bit_depth"),
             frequency: row.get("frequency"),
             _dr_value: row.get("dr_value"),
+            dr_completed: row.get("dr_completed"),
         })
         .collect())
 }

@@ -1,15 +1,17 @@
-use std::sync::Arc;
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use gdk_pixbuf::{InterpType, Pixbuf, PixbufLoader};
 use gdk_pixbuf::prelude::PixbufLoaderExt;
-use glib::WeakRef;
-use gtk4::{Align, Box, Button, Image, Label, Orientation, Overlay, Picture, ScrolledWindow};
+use glib::{MainContext, WeakRef};
+use gtk4::{Align, Box, Button, CheckButton, EventControllerMotion, Image, Label, Orientation, Overlay, Picture, ScrolledWindow, Stack, StackTransitionType};
 use gtk4::pango::{EllipsizeMode, WrapMode};
 use libadwaita::{ActionRow, Clamp, PreferencesGroup, ViewStack};
-use libadwaita::prelude::{ActionRowExt, BoxExt, PreferencesGroupExt, WidgetExt};
+use libadwaita::prelude::{ActionRowExt, BoxExt, CheckButtonExt, PreferencesGroupExt, WidgetExt};
 use sqlx::SqlitePool;
+use tokio::sync::mpsc::UnboundedSender;
 
-use crate::data::db::{fetch_album_by_id, fetch_artist_by_id, fetch_tracks_by_album};
+use crate::data::db::{fetch_album_by_id, fetch_artist_by_id, fetch_tracks_by_album, update_album_dr_completed};
+use crate::ui::components::config::{load_settings, save_settings};
 use crate::utils::formatting::{format_bit_freq, format_duration_hms, format_duration_mmss, format_freq_khz};
 
 /// Build and present the album detail page for a given album ID.
@@ -19,6 +21,7 @@ pub async fn album_page(
     db_pool: Arc<SqlitePool>,
     album_id: i64,
     header_btn_stack: WeakRef<ViewStack>,
+    sender: UnboundedSender<()>,
 ) {
     let stack = match stack.upgrade() {
         Some(s) => s,
@@ -79,37 +82,111 @@ fn build_info_label(label: &str, css_class: Option<&str>) -> Label {
     }
 
 /// Build the DR badge widget for dynamic range value.
-fn build_dr_badge(dr: Option<u8>) -> Box {
-        let dr_box = Box::builder()
-            .orientation(Orientation::Horizontal)
-            .spacing(4)
-            .build();
-        let (dr_str, tooltip_text, css_class) = match dr {
-            Some(value) => (
-                format!("{:02}", value),
-                Some("Official Dynamic Range Value"),
-                format!("dr-{:02}", value),
-            ),
-            None => (
-                "N/A".to_string(),
-                Some("Dynamic Range Value not available"),
-                "dr-na".to_string(),
-            ),
-        };
-        let dr_label = Label::builder()
-            .label(&dr_str)
-            .halign(Align::Center)
-            .valign(Align::Center)
-            .build();
-        dr_label.set_size_request(44, 44);
-        dr_label.add_css_class("dr-badge-label");
-        dr_label.add_css_class(&css_class);
-        dr_label.set_tooltip_text(tooltip_text);
-        dr_box.append(&dr_label);
-        let dr_text_label = build_info_label("Official DR Value", Some("album-technical-label"));
-        dr_box.append(&dr_text_label);
-        dr_box
-    }
+fn build_dr_badge(
+    album_id: i64,
+    dr: Option<u8>,
+    dr_completed: bool,
+    db_pool: Arc<SqlitePool>,
+    sender: UnboundedSender<()>,
+) -> Box {
+    let dr_box = Box::builder()
+        .orientation(Orientation::Horizontal)
+        .spacing(4)
+        .build();
+    let (dr_str, tooltip_text, css_class) = match dr {
+        Some(value) => (
+            format!("{:02}", value),
+            Some("Official Dynamic Range Value"),
+            format!("dr-{:02}", value),
+        ),
+        None => (
+            "N/A".to_string(),
+            Some("Dynamic Range Value not available"),
+            "dr-na".to_string(),
+        ),
+    };
+    let dr_label = Label::builder()
+        .label(&dr_str)
+        .halign(Align::Center)
+        .valign(Align::Center)
+        .build();
+    dr_label.set_size_request(44, 44);
+    dr_label.add_css_class("dr-badge-label");
+    dr_label.add_css_class(&css_class);
+    let dr_text_label = build_info_label("Official DR Value", Some("album-technical-label"));
+    dr_text_label.set_width_chars(18); // Set a fixed width to prevent UI movement
+    let checkbox = CheckButton::builder()
+        .active(dr_completed)
+        .halign(Align::Center)
+        .valign(Align::Center)
+        .css_classes(vec!["dr-completion-checkbox"])
+        .build();
+    let stack = Stack::builder()
+        .transition_type(StackTransitionType::None)
+        .build();
+    stack.add_named(&dr_label, Some("dr_label"));
+    stack.add_named(&checkbox, Some("checkbox"));
+    stack.set_visible_child_name("dr_label"); // Initially show the label
+    let overlay = Overlay::new();
+    overlay.set_child(Some(&stack)); // Set the stack as the child of the overlay
+    overlay.set_tooltip_text(tooltip_text);
+    dr_box.append(&overlay);
+    dr_box.append(&dr_text_label);
+    let checkbox_weak = Rc::new(RefCell::new(checkbox));
+    let dr_text_label_weak = Rc::new(RefCell::new(dr_text_label));
+    let stack_weak = Rc::new(RefCell::new(stack));
+
+    // Event controller for hover
+    let motion_controller = EventControllerMotion::new();
+    motion_controller.connect_enter({
+        let dr_text_label_weak = dr_text_label_weak.clone();
+        let stack_weak = stack_weak.clone();
+        move |_, _, _| {
+            stack_weak.borrow().set_visible_child_name("checkbox");
+            dr_text_label_weak.borrow().set_label("Best DR Value");
+        }
+    });
+    motion_controller.connect_leave({
+        let dr_text_label_weak = dr_text_label_weak.clone();
+        let stack_weak = stack_weak.clone();
+        move |_| {
+            stack_weak.borrow().set_visible_child_name("dr_label");
+            dr_text_label_weak.borrow().set_label("Official DR Value"); // Revert to original on leave
+        }
+    });
+    overlay.add_controller(motion_controller);
+
+    // Connect checkbox toggled signal
+    checkbox_weak.borrow().connect_toggled({
+        let db_pool = db_pool.clone();
+        let sender = sender.clone();
+        move |btn| {
+            let is_completed = btn.is_active();
+            let current_db_pool = db_pool.clone();
+            let sender = sender.clone();
+            MainContext::default().spawn_local(async move {
+                if let Err(_e) = update_album_dr_completed(&*current_db_pool, album_id, is_completed).await {
+                }
+                if let Err(_e) = sender.send(()) {
+
+                    // Handle error if sending fails, e.g., receiver dropped
+                }
+
+                // Update settings for persistence
+                let mut settings = load_settings();
+                if is_completed {
+                    settings.completed_albums.insert(album_id, true);
+                } else {
+                    settings.completed_albums.remove(&album_id);
+                }
+                if let Err(_e) = save_settings(&settings) {
+                }
+            });
+        }
+    });
+
+    dr_box
+}
 
 /// Build a track row for the album tracklist.
 fn build_track_row(t: &crate::data::models::Track) -> ActionRow {
@@ -125,8 +202,8 @@ fn build_track_row(t: &crate::data::models::Track) -> ActionRow {
         }
         let subtitle = subtitle_fields.join(" · ");
         let row = ActionRow::builder()
-            .title(&t.title)
-            .subtitle(&subtitle)
+            .title(glib::markup_escape_text(&t.title))
+            .subtitle(glib::markup_escape_text(&subtitle))
             .build();
         let disc = t.disc_no.unwrap_or(1);
         let track = t.track_no.unwrap_or(0);
@@ -277,7 +354,9 @@ fn build_track_row(t: &crate::data::models::Track) -> ActionRow {
         outer_row.append(&lines_box);
         info_box.append(&outer_row);
     }
-    info_box.append(&build_dr_badge(album.dr_value));
+    let settings = load_settings();
+    let is_completed = settings.completed_albums.contains_key(&album_id);
+    info_box.append(&build_dr_badge(album.id, album.dr_value, is_completed, db_pool.clone(), sender.clone()));
     header.append(&info_box);
 
     // Track List

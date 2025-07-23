@@ -151,8 +151,17 @@
     min-height: 28px;
     padding: 0;
 }
+.dr-badge-label.dr-completed {
+    border: 2px solid #000;
+    color: #000;
+    opacity: 1.0;
+}
 .dr-badge-label.dr-na {
     background: var(--dim_color, #555);
     color: var(--window_bg_color, #fff);
     font-size: 14px;
+    opacity: 1.0;
+}
+.dr-badge-label:not(.dr-completed) {
+    opacity: 0.4;
 }
