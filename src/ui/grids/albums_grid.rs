@@ -11,6 +11,7 @@ use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::data::db::fetch_album_display_info;
+use crate::data::scanner::create_scanning_label;
 use crate::ui::components::sorting::SortOrder;
 use crate::ui::pages::album_page::album_page;
 use crate::utils::formatting::format_freq_khz;
@@ -170,6 +171,9 @@ pub fn build_albums_grid(
         .hexpand(true)
         .build();
     loading_state_container.append(&loading_spinner);
+    let scanning_label_widget = create_scanning_label();
+    loading_state_container.append(&scanning_label_widget);
+    scanning_label_widget.set_visible(true);
 
     // Albums grid
     let albums_grid = FlowBox::builder()

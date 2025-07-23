@@ -10,6 +10,7 @@ use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::data::db::fetch_all_artists;
+use crate::data::scanner::create_scanning_label;
 use crate::ui::pages::artist_page::artist_page;
 use crate::utils::screen::{compute_cover_and_tile_size, get_primary_screen_size};
 
@@ -103,6 +104,9 @@ pub fn build_artists_grid(scanning_label: &Label, add_music_button: &Button) -> 
         .hexpand(true)
         .build();
     loading_state_container.append(&loading_spinner);
+    let scanning_label_widget = create_scanning_label();
+    loading_state_container.append(&scanning_label_widget);
+    scanning_label_widget.set_visible(true);
 
     // Scanning state
     let scanning_spinner = Spinner::builder().spinning(true).build();
