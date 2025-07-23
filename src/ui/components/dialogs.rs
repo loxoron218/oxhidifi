@@ -1,7 +1,8 @@
-use std::{rc::Rc, sync::Arc, thread::spawn};
+use std::{rc::Rc, result::Result::Ok, sync::Arc, thread::spawn};
 use std::cell::{Cell, RefCell};
 
-use gtk4::{Button, FileChooserAction, FileChooserDialog, Label, ResponseType, Window};
+use gtk4::{Button, ButtonsType::OkCancel, FileChooserAction::SelectFolder, FileChooserDialog, Label, MessageDialog, MessageType::Warning, Stack, Window};
+use gtk4::ResponseType::{Accept, Cancel, Ok as GtkOk};
 use glib::MainContext;
 use libadwaita::prelude::{ButtonExt, DialogExt, FileChooserExt, FileExt, GtkWindowExt, IsA, WidgetExt};
 use sqlx::SqlitePool;
@@ -19,7 +20,7 @@ pub fn connect_add_folder_dialog<T: IsA<Window> + Clone + 'static>(
     scanning_label: Label,
     db_pool: Arc<SqlitePool>,
     sender: UnboundedSender<()>, 
-    albums_inner_stack: Option<gtk4::Stack>,
+    albums_inner_stack: Option<Stack>,
 ) {
     let scanning_label = scanning_label.clone();
     let db_pool = db_pool.clone();
@@ -30,10 +31,10 @@ pub fn connect_add_folder_dialog<T: IsA<Window> + Clone + 'static>(
         let dialog = FileChooserDialog::new(
             Some("Open Folder"),
             Some(&parent_window),
-            FileChooserAction::SelectFolder,
+            SelectFolder,
             &[
-                ("Cancel", ResponseType::Cancel),
-                ("Open", ResponseType::Accept),
+                ("Cancel", Cancel),
+                ("Open", Accept),
             ],
         );
         dialog.set_modal(true);
@@ -46,7 +47,7 @@ pub fn connect_add_folder_dialog<T: IsA<Window> + Clone + 'static>(
             let scanning_label = scanning_label.clone();
             let db_pool = db_pool.clone();
             let sender = sender.clone();
-            if resp == ResponseType::Accept {
+            if resp == Accept {
                 if let Some(folder) = dialog.file() {
                     if let Some(folder_path) = folder.path() {
                         let folder_path_string = folder_path.to_string_lossy().to_string();
@@ -125,4 +126,30 @@ pub fn connect_settings_dialog(
             );
         });
     });
+}
+
+/// Shows a confirmation dialog for removing a folder.
+/// The `on_confirm` closure is called if the user confirms the removal.
+pub fn show_remove_folder_confirmation_dialog<F: FnOnce() + 'static>(
+    parent: &impl IsA<Window>,
+    on_confirm: F,
+) where F: FnOnce() + 'static {
+    let on_confirm_rc = Rc::new(RefCell::new(Some(on_confirm)));
+    let dialog = MessageDialog::builder()
+        .transient_for(parent)
+        .modal(true)
+        .buttons(OkCancel)
+        .message_type(Warning)
+        .text("Remove Folder?")
+        .secondary_text("Removing this folder will delete all custom metadata associated with your music, including Best DR values. This action cannot be undone.")
+        .build();
+    dialog.connect_response(move |dialog, response| {
+        if response == GtkOk {
+            if let Some(f) = on_confirm_rc.borrow_mut().take() {
+                f();
+            }
+        }
+        dialog.close();
+    });
+    dialog.show();
 }
