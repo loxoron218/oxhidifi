@@ -16,6 +16,32 @@ use crate::ui::pages::album_page::album_page;
 use crate::utils::formatting::format_freq_khz;
 use crate::utils::screen::{compute_cover_and_tile_size, get_primary_screen_size};
 
+/// Helper to create a styled label for album metadata.
+fn create_album_label(text: &str, css_classes: &[&str], max_width: Option<i32>, ellipsize: Option<EllipsizeMode>, wrap: bool, wrap_mode: Option<WrapMode>, lines: Option<i32>) -> Label {
+    let builder = Label::builder().label(text).halign(Align::Start);
+    let label = builder.build();
+    label.set_xalign(0.0);
+    if let Some(width) = max_width {
+        label.set_max_width_chars(width);
+    }
+    if let Some(mode) = ellipsize {
+        label.set_ellipsize(mode);
+    }
+    if wrap {
+        label.set_wrap(true);
+    }
+    if let Some(mode) = wrap_mode {
+        label.set_wrap_mode(mode);
+    }
+    if let Some(l) = lines {
+        label.set_lines(l);
+    }
+    for class in css_classes {
+        label.add_css_class(class);
+    }
+    label
+}
+
 /// Build and present the artist page for a given artist ID.
 /// Shows all albums by the artist in a grid, replacing artist name with album year.
 pub async fn artist_page(
@@ -159,32 +185,31 @@ fn build_album_card(
     };
 
     // Album title (bold)
-    let title_label = Label::builder()
-        .label(&album.title)
-        .halign(Align::Start)
-        .build();
-    title_label.set_xalign(0.0);
-    title_label.set_max_width_chars(((cover_size - 16) / 10).max(8));
-    title_label.set_ellipsize(EllipsizeMode::End);
-    title_label.set_wrap(true);
-    title_label.set_wrap_mode(WrapMode::WordChar);
-    title_label.set_lines(2);
+    let title_label = create_album_label(
+        &album.title,
+        &["album-title-label"],
+        Some(((cover_size - 16) / 10).max(8)),
+        Some(EllipsizeMode::End),
+        true,
+        Some(WrapMode::WordChar),
+        Some(2),
+    );
     title_label.set_size_request(cover_size - 16, -1);
-    title_label.set_css_classes(&["album-title-label"]);
 
     // Year (replace artist name)
     let year = album
         .year
         .map(|y| y.to_string())
         .unwrap_or_else(|| "?".into());
-    let year_label = Label::builder()
-        .label(&year)
-        .halign(Align::Start)
-        .build();
-    year_label.set_xalign(0.0);
-    year_label.set_max_width_chars(((cover_size - 16) / 10).max(8));
-    year_label.set_ellipsize(EllipsizeMode::End);
-    year_label.set_css_classes(&["album-artist-label"]);
+    let year_label = create_album_label(
+        &year,
+        &["album-artist-label"],
+        Some(((cover_size - 16) / 10).max(8)),
+        Some(EllipsizeMode::End),
+        false,
+        None,
+        None,
+    );
     year_label.set_size_request(cover_size - 16, -1);
 
     // Format line (small)
@@ -198,20 +223,21 @@ fn build_album_card(
     } else {
         String::new()
     };
-    let format_label = Label::builder()
-        .label(&format_line)
-        .halign(Align::Start)
-        .build();
-    format_label.set_xalign(0.0);
-    format_label.set_css_classes(&["album-format-label"]);
-    format_label.set_max_width_chars(((cover_size - 16) / 10).max(8));
-    format_label.set_ellipsize(EllipsizeMode::End);
+    let format_label = create_album_label(
+        &format_line,
+        &["album-format-label"],
+        Some(((cover_size - 16) / 10).max(8)),
+        Some(EllipsizeMode::End),
+        false,
+        None,
+        None,
+    );
     format_label.set_size_request(cover_size - 16, -1);
 
     // Album box creation
     let box_ = Box::builder()
         .orientation(Orientation::Vertical)
-        .spacing(4)
+        .spacing(2) // Changed spacing to 2 for consistency with albums_grid
         .build();
     box_.set_size_request(tile_size, tile_size + 80);
     box_.set_hexpand(true);
@@ -219,7 +245,13 @@ fn build_album_card(
     box_.set_halign(Align::Fill);
     box_.set_valign(Align::Start);
     box_.append(&cover);
-    box_.append(&title_label);
+    let title_box = Box::new(Orientation::Vertical, 0);
+    title_box.set_size_request(-1, 36);
+    title_box.set_valign(Align::Start);
+    title_box.set_margin_top(12);
+    title_label.set_valign(Align::Start); // Ensure label is aligned within its box
+    title_box.append(&title_label);
+    box_.append(&title_box);
     box_.append(&year_label);
     box_.append(&format_label);
     box_.set_css_classes(&["album-tile"]);
