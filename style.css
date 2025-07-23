@@ -165,3 +165,6 @@
 .dr-badge-label:not(.dr-completed) {
     opacity: 0.4;
 }
+.album-detail-page .dr-badge-label {
+    opacity: 1.0;
+}
