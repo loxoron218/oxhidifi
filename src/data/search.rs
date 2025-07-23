@@ -5,10 +5,10 @@ use gdk_pixbuf::{InterpType, PixbufLoader};
 use gdk_pixbuf::prelude::PixbufLoaderExt;
 use glib::{MainContext, markup_escape_text};
 use glib::prelude::ObjectExt;
-use gtk4::{Align, Box, Entry, FlowBox, FlowBoxChild, GestureClick, Image, Label, Orientation, Picture, Stack};
-use gtk4::pango::EllipsizeMode;
+use gtk4::{Align, Box, Entry, Fixed, FlowBox, FlowBoxChild, GestureClick, Image, Label, Orientation, Overlay, Picture, Stack};
+use gtk4::pango::{EllipsizeMode, WrapMode};
 use libadwaita::{Clamp, ViewStack};
-use libadwaita::prelude::{BoxExt, EditableExt, FlowBoxChildExt, WidgetExt};
+use libadwaita::prelude::{BoxExt, EditableExt, FixedExt, FlowBoxChildExt, WidgetExt};
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -17,6 +17,87 @@ use crate::ui::pages::album_page::album_page;
 use crate::ui::pages::artist_page::artist_page;
 use crate::utils::formatting::format_freq_khz;
 use crate::utils::screen::{compute_cover_and_tile_size, get_primary_screen_size};
+
+/// Helper to create the album cover as a Picture widget.
+fn create_album_cover(cover_art: Option<&Vec<u8>>, cover_size: i32) -> Picture {
+    if let Some(art) = cover_art {
+        let loader = PixbufLoader::new();
+        loader.write(art).expect("Failed to load cover art");
+        loader.close().expect("Failed to close loader");
+        let pixbuf = loader.pixbuf().expect("No pixbuf loaded");
+        let (w, h) = (pixbuf.width(), pixbuf.height());
+        let side = w.min(h);
+        let cropped = pixbuf.new_subpixbuf((w - side) / 2, (h - side) / 2, side, side);
+        let scaled = cropped.scale_simple(cover_size, cover_size, InterpType::Bilinear).unwrap();
+        let picture = Picture::for_pixbuf(&scaled);
+        picture.set_size_request(cover_size, cover_size);
+        picture.set_halign(Align::Start);
+        picture.set_valign(Align::Start);
+        picture
+    } else {
+        let pic = Picture::new();
+        pic.set_size_request(cover_size, cover_size);
+        pic.set_halign(Align::Start);
+        pic.set_valign(Align::Start);
+        pic
+    }
+}
+
+/// Helper to create the DR badge overlay if present.
+fn create_dr_overlay(dr_value: Option<u8>, dr_completed: bool) -> Option<Label> {
+    let (dr_str, tooltip_text, mut css_classes) = match dr_value {
+        Some(value) => (
+            format!("{:02}", value),
+            Some("Official Dynamic Range Value"),
+            vec![format!("dr-{:02}", value)],
+        ),
+        None => (
+            "N/A".to_string(),
+            Some("Dynamic Range Value not available"),
+            vec!["dr-na".to_string()],
+        ),
+    };
+    let dr_label = Label::builder().label(&dr_str).build();
+    dr_label.add_css_class("dr-badge-label");
+    dr_label.add_css_class("dr-badge-label-grid");
+    dr_label.set_size_request(28, 28);
+    if dr_completed {
+        css_classes.push("dr-completed".to_string());
+    }
+    for class in css_classes {
+        dr_label.add_css_class(&class);
+    }
+    dr_label.set_tooltip_text(tooltip_text);
+    dr_label.set_halign(Align::End);
+    dr_label.set_valign(Align::End);
+    Some(dr_label)
+}
+
+/// Helper to create a styled label for album metadata.
+fn create_album_label(text: &str, css_classes: &[&str], max_width: Option<i32>, ellipsize: Option<EllipsizeMode>, wrap: bool, wrap_mode: Option<WrapMode>, lines: Option<i32>) -> Label {
+    let builder = Label::builder().label(text).halign(Align::Start).use_markup(true);
+    let label = builder.build();
+    label.set_xalign(0.0);
+    if let Some(width) = max_width {
+        label.set_max_width_chars(width);
+    }
+    if let Some(mode) = ellipsize {
+        label.set_ellipsize(mode);
+    }
+    if wrap {
+        label.set_wrap(true);
+    }
+    if let Some(mode) = wrap_mode {
+        label.set_wrap_mode(mode);
+    }
+    if let Some(l) = lines {
+        label.set_lines(l);
+    }
+    for class in css_classes {
+        label.add_css_class(class);
+    }
+    label
+}
 
 /// Connects live search logic to the given search entry, updating albums and artists grids as the user types.
 pub fn connect_live_search(
@@ -132,80 +213,87 @@ pub fn connect_live_search(
 
                         // Create album tiles
                         for album in albums {
-                            let title_label = Label::builder()
-                                .use_markup(true)
-                                .label(&highlight(&markup_escape_text(&album.title).to_string(), &text))
-                                .halign(Align::Start)
-                                .build();
-                            title_label.set_xalign(0.0);
-                            title_label.set_max_width_chars(18);
-                            title_label.set_ellipsize(EllipsizeMode::End);
-                            title_label.set_css_classes(&["album-title-label"]);
-                            let artist_label = Label::builder()
-                                .use_markup(true)
-                                .label(&highlight(&markup_escape_text(&album.artist).to_string(), &text))
-                                .halign(Align::Start)
-                                .build();
-                            artist_label.set_xalign(0.0);
-                            artist_label.set_max_width_chars(18);
-                            artist_label.set_ellipsize(EllipsizeMode::End);
-                            artist_label.set_css_classes(&["album-artist-label"]);
+                            let title_label = {
+                                let label = create_album_label(
+                                    &highlight(&markup_escape_text(&album.title).to_string(), &text),
+                                    &["album-title-label"],
+                                    Some(((cover_size - 16) / 10).max(8)),
+                                    Some(EllipsizeMode::End),
+                                    true,
+                                    Some(WrapMode::WordChar),
+                                    Some(2),
+                                );
+                                label.set_markup(&highlight(&markup_escape_text(&album.title).to_string(), &text));
+                                label.set_size_request(cover_size - 16, -1);
+                                label
+                            };
+                            let artist_label = {
+                                let label = create_album_label(
+                                    &highlight(&markup_escape_text(&album.artist).to_string(), &text),
+                                    &["album-artist-label"],
+                                    Some(18),
+                                    Some(EllipsizeMode::End),
+                                    false,
+                                    None,
+                                    None,
+                                );
+                                label.set_markup(&highlight(&markup_escape_text(&album.artist).to_string(), &text));
+                                label
+                            };
                             let format_line = if let Some(format_str) = album.format.as_ref() {
                                 let format_caps = format_str.to_uppercase();
                                 match (album.bit_depth, album.frequency) {
-                                    (Some(bit), Some(freq)) => format!(
-                                        "{} {}/{}",
-                                        format_caps,
-                                        bit,
-                                        format_freq_khz(freq)
-                                    ),
-                                    (None, Some(freq)) => format!(
-                                        "{} {}",
-                                        format_caps,
-                                        format_freq_khz(freq)
-                                    ),
+                                    (Some(bit), Some(freq)) => {
+                                        format!("{} {}/{}", format_caps, bit, format_freq_khz(freq))
+                                    }
+                                    (None, Some(freq)) => format!("{} {}", format_caps, format_freq_khz(freq)),
                                     _ => format_caps,
                                 }
                             } else {
                                 String::new()
                             };
-                            let format_label = Label::builder()
-                                .label(&format_line)
-                                .halign(Align::Start)
-                                .build();
-                            format_label.set_xalign(0.0);
-                            format_label.set_css_classes(&["album-format-label"]);
-                            let cover = if let Some(art) = album.cover_art.as_ref() {
-                                let pixbuf_loader = PixbufLoader::new();
-                                pixbuf_loader.write(art).expect("Failed to load cover art");
-                                pixbuf_loader.close().expect("Failed to close loader");
-                                let pixbuf = pixbuf_loader.pixbuf().expect("No pixbuf loaded");
-                                let scaled = pixbuf
-                                    .scale_simple(cover_size, cover_size, InterpType::Bilinear)
-                                    .unwrap();
-                                let picture = Picture::for_pixbuf(&scaled);
-                                picture.set_size_request(cover_size, cover_size);
-                                picture
-                            } else {
-                                let pic = Picture::new();
-                                pic.set_size_request(cover_size, cover_size);
-                                pic
-                            };
+                            let format_label = create_album_label(
+                                &format_line,
+                                &["album-format-label"],
+                                None,
+                                None,
+                                false,
+                                None,
+                                None,
+                            );
+                            let cover = create_album_cover(album.cover_art.as_ref(), cover_size);
                             let box_ = Box::builder()
                                 .orientation(Orientation::Vertical)
-                                .spacing(4)
+                                .spacing(2)
                                 .build();
-                            box_.set_size_request(tile_size, (tile_size as f32 * 1.44) as i32);
+                            box_.set_size_request(tile_size, tile_size + 80);
                             box_.set_hexpand(false);
                             box_.set_vexpand(false);
-                            box_.set_halign(Align::Fill);
+                            box_.set_halign(Align::Start);
                             box_.set_valign(Align::Start);
-                            box_.set_margin_top(8);
-                            box_.set_margin_bottom(8);
-                            box_.set_margin_start(8);
-                            box_.set_margin_end(8);
-                            box_.append(&cover);
-                            box_.append(&title_label);
+                            let cover_container = Box::new(Orientation::Vertical, 0);
+                            cover_container.set_size_request(cover_size, cover_size);
+                            cover_container.set_halign(Align::Start);
+                            cover_container.set_valign(Align::Start);
+                            cover_container.append(&cover);
+                            let overlay = Overlay::new();
+                            overlay.set_size_request(cover_size, cover_size);
+                            overlay.set_child(Some(&cover_container));
+                            overlay.set_halign(Align::Start);
+                            overlay.set_valign(Align::Start);
+                            let dr_label = create_dr_overlay(album._dr_value, album.dr_completed).unwrap();
+                            overlay.add_overlay(&dr_label);
+                            let cover_fixed = Fixed::new();
+                            cover_fixed.set_size_request(-1, cover_size);
+                            cover_fixed.put(&overlay, 0.0, 0.0);
+                            box_.append(&cover_fixed);
+                            let title_box = Box::new(Orientation::Vertical, 0);
+                            title_box.set_size_request(-1, 36);
+                            title_box.set_valign(Align::Start);
+                            title_box.set_margin_top(12);
+                            title_label.set_valign(Align::Start);
+                            title_box.append(&title_label);
+                            box_.append(&title_box);
                             box_.append(&artist_label);
                             box_.append(&format_label);
                             box_.set_css_classes(&["album-tile"]);
