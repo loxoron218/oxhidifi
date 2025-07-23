@@ -319,11 +319,12 @@ fn build_track_row(t: &crate::data::models::Track) -> ActionRow {
             .orientation(Orientation::Horizontal)
             .spacing(8)
             .halign(Align::Start)
+            .margin_start(3)
             .build();
 
         // Hi-Res or CD icon (tall, left)
         if show_hires {
-            if let Ok(pixbuf) = Pixbuf::from_file_at_scale("assets/hires.png", -1, 44, true) {
+            if let Ok(pixbuf) = Pixbuf::from_file_at_scale("assets/hires.png", -1, 40, true) {
                 let hires_pic = Picture::for_pixbuf(&pixbuf);
                 hires_pic.set_halign(Align::Start);
                 outer_row.append(&hires_pic);
@@ -342,6 +343,8 @@ fn build_track_row(t: &crate::data::models::Track) -> ActionRow {
             .orientation(Orientation::Vertical)
             .spacing(0)
             .halign(Align::Start)
+            .valign(Align::Center)
+            .margin_start(12)
             .build();
         if !bit_freq_str.is_empty() {
             lines_box.append(&build_info_label(&bit_freq_str, Some("album-technical-label")));
