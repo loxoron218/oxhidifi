@@ -5,12 +5,11 @@ use glib::{MainContext, WeakRef};
 use gtk4::{Align, Box, Button, FlowBox, FlowBoxChild, GestureClick, Image, Label, Orientation, PolicyType, ScrolledWindow, SelectionMode, Spinner, Stack, StackTransitionType};
 use gtk4::pango::{EllipsizeMode, WrapMode};
 use libadwaita::{ApplicationWindow, Clamp, StatusPage, ViewStack};
-use libadwaita::prelude::{BoxExt, Cast, FlowBoxChildExt, ObjectExt, WidgetExt};
+use libadwaita::prelude::{BoxExt, FlowBoxChildExt, ObjectExt, WidgetExt};
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::data::db::fetch_all_artists;
-use crate::ui::components::dialogs::connect_add_folder_dialog;
 use crate::ui::pages::artist_page::artist_page;
 use crate::utils::screen::{compute_cover_and_tile_size, get_primary_screen_size};
 
@@ -22,6 +21,7 @@ pub fn rebuild_artists_grid_for_window(
     artists_grid_cell: &Rc<RefCell<Option<FlowBox>>>,
     artists_stack_cell: &Rc<RefCell<Option<Stack>>>,
     _sender: UnboundedSender<()>,
+    _add_music_button: &Button, // Prefix with _ to mark as intentionally unused
 ) {
 
     // Always remove existing "artists" child before adding a new one
@@ -30,7 +30,10 @@ pub fn rebuild_artists_grid_for_window(
     }
     *artists_grid_cell.borrow_mut() = None;
     *artists_stack_cell.borrow_mut() = None;
-    let (artists_stack, artists_grid) = build_artists_grid(scanning_label_artists);
+    let (artists_stack, artists_grid) = build_artists_grid(
+        scanning_label_artists,
+        _add_music_button, // Use the passed button
+    );
     stack.add_titled(&artists_stack, Some("artists"), "Artists");
     *artists_grid_cell.borrow_mut() = Some(artists_grid.clone());
     *artists_stack_cell.borrow_mut() = Some(artists_stack.clone());
@@ -38,7 +41,7 @@ pub fn rebuild_artists_grid_for_window(
 
 /// Build the artists grid and its containing stack.
 /// Returns (artists_stack, artists_grid).
-pub fn build_artists_grid(scanning_label: &Label) -> (Stack, FlowBox) {
+pub fn build_artists_grid(scanning_label: &Label, add_music_button: &Button) -> (Stack, FlowBox) {
 
     // Empty state
     let empty_state_status_page = StatusPage::builder()
@@ -48,9 +51,10 @@ pub fn build_artists_grid(scanning_label: &Label) -> (Stack, FlowBox) {
         .vexpand(true)
         .hexpand(true)
         .build();
-    let add_music_button = Button::with_label("Add Music");
+
+    // The add_music_button is now passed in, not created here
     add_music_button.add_css_class("suggested-action");
-    empty_state_status_page.set_child(Some(&add_music_button));
+    empty_state_status_page.set_child(Some(add_music_button)); // Use the passed button
     let empty_state_container = Box::builder()
         .orientation(Orientation::Vertical)
         .halign(Align::Center)
@@ -209,7 +213,7 @@ pub fn populate_artists_grid(
     stack: &ViewStack,
     left_btn_stack: &ViewStack,
     right_btn_box: &Clamp,
-    window: &ApplicationWindow,
+    _window: &ApplicationWindow, // Prefix with _ to mark as intentionally unused
     scanning_label: &Label,
     sender: UnboundedSender<()>,
     nav_history: Rc<RefCell<Vec<String>>>,
@@ -235,7 +239,6 @@ pub fn populate_artists_grid(
     let artists_grid = artists_grid.clone();
     let artists_inner_stack = artists_inner_stack.clone();
     let db_pool = Arc::clone(&db_pool);
-    let window = window.clone();
     let scanning_label = scanning_label.clone();
     let sender = sender.clone();
     MainContext::default().spawn_local(async move {
@@ -253,23 +256,6 @@ pub fn populate_artists_grid(
                         artists_inner_stack.set_visible_child_name("scanning_state");
                     } else {
                         artists_inner_stack.set_visible_child_name("empty_state");
-                    }
-
-                    // Retrieve the button from the empty_state
-                    if let Some(empty_state_container) = artists_inner_stack.child_by_name("empty_state") {
-                        if let Some(status_page) = empty_state_container.downcast::<Box>().ok().and_then(|b| b.first_child().and_then(|c| c.downcast::<StatusPage>().ok())) {
-                            if let Some(add_music_button) = status_page.child().and_then(|c| c.downcast::<Button>().ok()) {
-                                let artists_inner_stack_clone = artists_inner_stack.clone();
-                            connect_add_folder_dialog(
-                                    &add_music_button,
-                                    window,
-                                    scanning_label,
-                                    db_pool.clone(),
-                                    sender,
-                                    Some(artists_inner_stack_clone),
-                                );
-                            }
-                        }
                     }
                     BUSY.with(|b| b.set(false));
                     return;

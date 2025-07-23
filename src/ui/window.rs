@@ -3,7 +3,7 @@ use std::cell::{Cell, RefCell};
 use std::thread::spawn;
 
 use glib::WeakRef;
-use gtk4::{Box, FlowBox, Orientation, Stack};
+use gtk4::{Box, Button, FlowBox, Orientation, Stack};
 use libadwaita::{Application, ApplicationWindow, Clamp, ViewStack};
 use libadwaita::prelude::{AdwApplicationWindowExt, BoxExt, ButtonExt, GtkWindowExt};
 use sqlx::SqlitePool;
@@ -13,7 +13,7 @@ use crate::data::scanner::{create_scanning_label, spawn_scanning_label_refresh_t
 use crate::data::search::connect_live_search;
 use crate::data::watcher::start_watching_library;
 use crate::ui::components::config::load_settings;
-use crate::ui::components::dialogs::{connect_add_folder_dialog, connect_settings_dialog};
+use crate::ui::components::dialogs::{connect_settings_dialog, create_add_folder_dialog_handler};
 use crate::ui::components::navigation::{connect_album_navigation, connect_back_button, connect_sort_button, connect_tab_navigation, setup_keyboard_shortcuts};
 use crate::ui::components::refresh::{setup_library_refresh_channel, setup_live_monitor_refresh};
 use crate::ui::components::sorting::{connect_sort_icon_update_on_tab_switch, connect_tab_sort_refresh, set_initial_sort_icon_state};
@@ -123,6 +123,28 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         sort_ascending_artists.clone(),
     );
 
+    // Create the "Add Music" buttons for the empty states once
+    let add_music_button_albums = Button::with_label("Add Music");
+    let add_music_button_artists = Button::with_label("Add Music");
+
+    // Connect the handlers for the "Add Music" buttons here
+    let albums_add_folder_handler = create_add_folder_dialog_handler(
+        window.clone(),
+        scanning_label_albums.clone(),
+        db_pool.clone(),
+        sender.clone(),
+        albums_stack_cell.clone(), // Pass the Rc<RefCell<Option<Stack>>> directly
+    );
+    add_music_button_albums.connect_clicked(move |_| albums_add_folder_handler());
+    let artists_add_folder_handler = create_add_folder_dialog_handler(
+        window.clone(),
+        scanning_label_artists.clone(),
+        db_pool.clone(),
+        sender.clone(),
+        artists_stack_cell.clone(), // Pass the Rc<RefCell<Option<Stack>>> directly
+    );
+    add_music_button_artists.connect_clicked(move |_| artists_add_folder_handler());
+
     // Albums grid (modularized)
     rebuild_albums_grid_for_window(
         &stack,
@@ -131,6 +153,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         &tile_size_rc,
         &albums_grid_cell,
         &albums_stack_cell,
+        &add_music_button_albums,
     );
 
     // Artists grid (modularized)
@@ -140,6 +163,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         &artists_grid_cell,
         &artists_stack_cell,
         sender.clone(),
+        &add_music_button_artists,
     );
     setup_live_monitor_refresh(
         sort_ascending.clone(),
@@ -304,14 +328,14 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     );
 
     // Add folder dialog
-    connect_add_folder_dialog(
-        &add_button,
+    let add_folder_handler = create_add_folder_dialog_handler(
         window.clone(),
         scanning_label_albums.clone(),
         db_pool.clone(),
         sender.clone(),
-        albums_stack_cell.borrow().as_ref().cloned(),
+        albums_stack_cell.clone(),
     );
+    add_button.connect_clicked(move |_| add_folder_handler());
 
     // Settings dialog
     connect_settings_dialog(

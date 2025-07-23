@@ -14,20 +14,19 @@ use crate::ui::components::sorting::SortOrder;
 use crate::ui::settings_window::show_settings_dialog;
 
 /// Connects the add folder button to show a folder chooser dialog and trigger scanning.
-pub fn connect_add_folder_dialog<T: IsA<Window> + Clone + 'static>(
-    add_button: &Button,
+pub fn create_add_folder_dialog_handler<T: IsA<Window> + Clone + 'static>(
     parent_window: T,
     scanning_label: Label,
     db_pool: Arc<SqlitePool>,
-    sender: UnboundedSender<()>, 
-    albums_inner_stack: Option<Stack>,
-) {
+    sender: UnboundedSender<()>,
+    albums_inner_stack: Rc<RefCell<Option<Stack>>>,
+) -> Box<dyn Fn() + 'static> {
     let scanning_label = scanning_label.clone();
     let db_pool = db_pool.clone();
     let sender = sender.clone();
     let parent_window = parent_window.clone();
-    let albums_inner_stack_outer = albums_inner_stack.clone(); // Clone for the outer closure
-    add_button.connect_clicked(move |_| {
+    let albums_inner_stack = albums_inner_stack.clone(); // This clone is now a clone of the Rc
+    Box::new(move || {
         let dialog = FileChooserDialog::new(
             Some("Open Folder"),
             Some(&parent_window),
@@ -39,27 +38,24 @@ pub fn connect_add_folder_dialog<T: IsA<Window> + Clone + 'static>(
         );
         dialog.set_modal(true);
         dialog.set_transient_for(Some(&parent_window));
-        let scanning_label = scanning_label.clone();
-        let db_pool = db_pool.clone();
-        let sender = sender.clone();
-        let albums_inner_stack_inner = albums_inner_stack_outer.clone(); // Clone for the inner closure
+        let scanning_label_clone = scanning_label.clone();
+        let db_pool_clone = db_pool.clone();
+        let sender_clone = sender.clone();
+        let albums_inner_stack_clone = albums_inner_stack.clone();
         dialog.connect_response(move |dialog, resp| {
-            let scanning_label = scanning_label.clone();
-            let db_pool = db_pool.clone();
-            let sender = sender.clone();
             if resp == Accept {
                 if let Some(folder) = dialog.file() {
                     if let Some(folder_path) = folder.path() {
                         let folder_path_string = folder_path.to_string_lossy().to_string();
-                        if let Some(stack) = albums_inner_stack_inner.clone() {
+                        if let Some(stack) = albums_inner_stack_clone.borrow().as_ref() { // Borrow the RefCell and then get the Option
                             stack.set_visible_child_name("scanning_state");
-                            scanning_label.set_visible(true);
+                            scanning_label_clone.set_visible(true);
                         } else {
-                            scanning_label.set_visible(true);
+                            scanning_label_clone.set_visible(true);
                         }
-                        let db_pool_thread = db_pool.clone();
+                        let db_pool_thread = db_pool_clone.clone();
                         let folder_path_string2 = folder_path_string.clone();
-                        let sender_clone = sender.clone();
+                        let sender_for_spawn = sender_clone.clone(); // Clone for the spawned thread
                         spawn(move || {
                             let rt = Runtime::new().unwrap();
                             rt.block_on(async {
@@ -80,7 +76,7 @@ pub fn connect_add_folder_dialog<T: IsA<Window> + Clone + 'static>(
                                 .await;
 
                                 // Notify main thread to update UI
-                                sender_clone.send(()).ok();
+                                sender_for_spawn.send(()).ok();
                             });
                         });
                     }
@@ -89,7 +85,7 @@ pub fn connect_add_folder_dialog<T: IsA<Window> + Clone + 'static>(
             dialog.close();
         });
         dialog.show();
-    });
+    })
 }
 
 /// Connects the settings button to open the settings dialog asynchronously.

@@ -6,12 +6,11 @@ use glib::MainContext;
 use gtk4::{Align, Box, Button, Fixed, FlowBox, FlowBoxChild, GestureClick, Label, Orientation, Overlay, Picture, PolicyType, ScrolledWindow, SelectionMode, Spinner, Stack, StackTransitionType};
 use gtk4::pango::{EllipsizeMode, WrapMode};
 use libadwaita::{ApplicationWindow, StatusPage, ViewStack};
-use libadwaita::prelude::{BoxExt, Cast, FixedExt, FlowBoxChildExt, ObjectExt, PixbufLoaderExt, WidgetExt};
+use libadwaita::prelude::{BoxExt, FixedExt, FlowBoxChildExt, ObjectExt, PixbufLoaderExt, WidgetExt};
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::data::db::fetch_album_display_info;
-use crate::ui::components::dialogs::connect_add_folder_dialog;
 use crate::ui::components::sorting::SortOrder;
 use crate::ui::pages::album_page::album_page;
 use crate::utils::formatting::format_freq_khz;
@@ -106,6 +105,7 @@ pub fn rebuild_albums_grid_for_window(
     tile_size_rc: &Rc<Cell<i32>>,
     albums_grid_cell: &Rc<RefCell<Option<FlowBox>>>,
     albums_stack_cell: &Rc<RefCell<Option<Stack>>>,
+    _add_music_button: &Button, // Prefix with _ to mark as intentionally unused
 ) {
 
     // Remove old grid widget if present
@@ -122,6 +122,7 @@ pub fn rebuild_albums_grid_for_window(
         scanning_label_albums,
         cover_size_rc.get(),
         tile_size_rc.get(),
+        _add_music_button, // Use the passed button
     );
     stack.add_titled(&albums_stack, Some("albums"), "Albums");
     *albums_grid_cell.borrow_mut() = Some(albums_grid.clone());
@@ -134,6 +135,7 @@ pub fn build_albums_grid(
     scanning_label: &Label,
     _cover_size: i32,
     _tile_size: i32,
+    add_music_button: &Button, // Add this parameter
 ) -> (Stack, FlowBox) {
 
     // Empty state
@@ -144,9 +146,10 @@ pub fn build_albums_grid(
         .vexpand(true)
         .hexpand(true)
         .build();
-    let add_music_button = Button::with_label("Add Music");
+
+    // The add_music_button is now passed in, not created here
     add_music_button.add_css_class("suggested-action");
-    empty_state_status_page.set_child(Some(&add_music_button));
+    empty_state_status_page.set_child(Some(add_music_button)); // Use the passed button
     let empty_state_container = Box::builder()
         .orientation(Orientation::Vertical)
         .halign(Align::Center)
@@ -228,7 +231,7 @@ pub async fn populate_albums_grid(
     sort_orders: Rc<RefCell<Vec<SortOrder>>>,
     cover_size: i32,
     tile_size: i32,
-    window: &ApplicationWindow,
+    _window: &ApplicationWindow, // Prefix with _ to mark as intentionally unused
     scanning_label: &Label,
     sender: UnboundedSender<()>,
     stack: &ViewStack,
@@ -268,23 +271,6 @@ pub async fn populate_albums_grid(
                     albums_inner_stack.set_visible_child_name("scanning_state");
                 } else {
                     albums_inner_stack.set_visible_child_name("empty_state");
-                }
-
-                // Retrieve the button from the empty_state
-                if let Some(empty_state_container) = albums_inner_stack.child_by_name("empty_state") {
-                    if let Some(status_page) = empty_state_container.downcast::<Box>().ok().and_then(|b| b.first_child().and_then(|c| c.downcast::<StatusPage>().ok())) {
-                        if let Some(add_music_button) = status_page.child().and_then(|c| c.downcast::<Button>().ok()) {
-                            let albums_inner_stack_clone = albums_inner_stack.clone();
-                            connect_add_folder_dialog(
-                                    &add_music_button,
-                                window.clone(),
-                                scanning_label.clone(),
-                                db_pool.clone(),
-                                sender.clone(),
-                                Some(albums_inner_stack_clone),
-                            );
-                        }
-                    }
                 }
                 BUSY.with(|b| b.set(false));
                 return;
