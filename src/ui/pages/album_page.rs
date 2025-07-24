@@ -417,6 +417,7 @@ fn build_track_row(t: &crate::data::models::Track) -> ActionRow {
         .build();
     page.append(&clamp);
     page.append(&group);
+    page.set_margin_bottom(32); // Add margin to the bottom of the page
 
     // Create a ScrolledWindow for the entire page
     let page_scrolled_window = ScrolledWindow::builder()
