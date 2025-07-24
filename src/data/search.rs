@@ -261,6 +261,26 @@ pub fn connect_live_search(
                                 None,
                                 None,
                             );
+                            format_label.set_halign(Align::Start);
+                            format_label.set_hexpand(true);
+                            let year_text = if let Some(original_release_date_str) = album.original_release_date {
+                                original_release_date_str.split('-').next().unwrap_or("N/A").to_string()
+                            } else if let Some(year) = album.year {
+                                format!("{}", year)
+                            } else {
+                                String::new()
+                            };
+                            let year_label = create_album_label(
+                                &year_text,
+                                &["album-year-label"],
+                                None,
+                                None,
+                                false,
+                                None,
+                                None,
+                            );
+                            year_label.set_halign(Align::End);
+                            year_label.set_hexpand(false);
                             let cover = create_album_cover(album.cover_art.as_ref(), cover_size);
                             let album_tile_box = Box::builder()
                                 .orientation(Orientation::Vertical)
@@ -296,7 +316,16 @@ pub fn connect_live_search(
                             title_area_box.append(&title_label);
                             album_tile_box.append(&title_area_box);
                             album_tile_box.append(&artist_label);
-                            album_tile_box.append(&format_label);
+
+                            // Create a horizontal box to hold format and year labels
+                            let metadata_box = Box::builder()
+                                .orientation(Orientation::Horizontal)
+                                .spacing(0) // No spacing between the two labels
+                                .hexpand(true)
+                                .build();
+                            metadata_box.append(&format_label);
+                            metadata_box.append(&year_label);
+                            album_tile_box.append(&metadata_box);
                             album_tile_box.set_css_classes(&["album-tile"]);
                             let flow_child = Rc::new(FlowBoxChild::new());
                             flow_child.set_child(Some(&album_tile_box));

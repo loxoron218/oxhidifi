@@ -487,11 +487,11 @@ pub async fn search_album_display_info(
     let rows = query(
         r#"SELECT albums.id, albums.title, artists.name as artist, albums.year, albums.cover_art,
                      tracks.format, tracks.bit_depth, tracks.frequency, albums.dr_value, albums.dr_completed, albums.original_release_date,
-                     folders.path as folder_path -- Add this line
+                     folders.path as folder_path
             FROM albums
             JOIN artists ON albums.artist_id = artists.id
             LEFT JOIN tracks ON tracks.album_id = albums.id
-            JOIN folders ON albums.folder_id = folders.id -- Add this join
+            JOIN folders ON albums.folder_id = folders.id
             WHERE lower(albums.title) LIKE ? OR lower(artists.name) LIKE ?
             GROUP BY albums.id
             ORDER BY artists.name COLLATE NOCASE, albums.title COLLATE NOCASE"#,

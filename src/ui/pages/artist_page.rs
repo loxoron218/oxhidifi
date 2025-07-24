@@ -196,21 +196,36 @@ fn build_album_card(
     );
     title_label.set_size_request(cover_size - 16, -1);
 
-    // Year (replace artist name)
-    let year = album
-        .year
-        .map(|y| y.to_string())
-        .unwrap_or_else(|| "?".into());
-    let year_label = create_album_label(
-        &year,
+    // Album artist label
+    let artist_label = create_album_label(
+        &album._artist,
         &["album-artist-label"],
-        Some(((cover_size - 16) / 10).max(8)),
+        Some(18),
         Some(EllipsizeMode::End),
         false,
         None,
         None,
     );
-    year_label.set_size_request(cover_size - 16, -1);
+
+    // Year label
+    let year_text = if let Some(original_release_date_str) = album.original_release_date.clone() {
+        original_release_date_str.split('-').next().unwrap_or("N/A").to_string()
+    } else if let Some(year) = album.year {
+        format!("{}", year)
+    } else {
+        String::new()
+    };
+    let year_label = create_album_label(
+        &year_text,
+        &["album-year-label"],
+        None,
+        None,
+        false,
+        None,
+        None,
+    );
+    year_label.set_halign(Align::End);
+    year_label.set_hexpand(false);
 
     // Format line (small)
     let format_line = if let Some(ref format) = album.format {
@@ -255,8 +270,17 @@ fn build_album_card(
     title_label.set_valign(Align::End); // Align label to the end of its box
     title_area_box.append(&title_label);
     album_tile_box.append(&title_area_box);
-    album_tile_box.append(&year_label);
-    album_tile_box.append(&format_label);
+    album_tile_box.append(&artist_label);
+
+    // Create a horizontal box to hold format and year labels
+    let metadata_box = Box::builder()
+        .orientation(Orientation::Horizontal)
+        .spacing(0) // No spacing between the two labels
+        .hexpand(true)
+        .build();
+    metadata_box.append(&format_label);
+    metadata_box.append(&year_label);
+    album_tile_box.append(&metadata_box);
     album_tile_box.set_css_classes(&["album-tile"]);
     unsafe {
         album_tile_box.set_data("album_id", album.id);
@@ -294,7 +318,7 @@ pub async fn fetch_album_display_info_by_artist(
 ) -> Result<Vec<AlbumDisplayInfoWithYear>, Error> {
     let rows = query(
         r#"SELECT albums.id, albums.title, albums.year, artists.name as artist, albums.cover_art,
-                     tracks.format, tracks.bit_depth, tracks.frequency, albums.dr_value
+                     tracks.format, tracks.bit_depth, tracks.frequency, albums.dr_value, albums.original_release_date
             FROM albums
             JOIN artists ON albums.artist_id = artists.id
             LEFT JOIN tracks ON tracks.album_id = albums.id
@@ -317,6 +341,7 @@ pub async fn fetch_album_display_info_by_artist(
             bit_depth: row.get("bit_depth"),
             frequency: row.get("frequency"),
             _dr_value: row.get("dr_value"),
+            original_release_date: row.get("original_release_date"),
         })
         .collect())
 }
@@ -333,4 +358,5 @@ pub struct AlbumDisplayInfoWithYear {
     pub bit_depth: Option<u32>,
     pub frequency: Option<u32>,
     pub _dr_value: Option<u8>,
+    pub original_release_date: Option<String>,
 }
