@@ -338,12 +338,17 @@ fn build_track_row(t: &crate::data::models::Track) -> ActionRow {
     let (most_common_bit_depth, most_common_freq, most_common_format_opt) =
         get_most_common_track_properties(&tracks);
 
-    // Calculate if the album is mainly in MP3 format
+    // Helper to determine if a format is considered "lossy"
+    fn is_lossy_format(format: &Option<String>) -> bool {
+        matches!(format.as_deref(), Some("mp3") | Some("aac") | Some("ogg") | Some("wma"))
+    }
+
+    // Calculate if the album is mainly in a lossy format
     let total_tracks = tracks.len();
-    let mp3_tracks_count = tracks.iter()
-        .filter(|t| t.format.as_deref() == Some("mp3"))
+    let lossy_tracks_count = tracks.iter()
+        .filter(|t| is_lossy_format(&t.format))
         .count();
-    let is_mp3_album = total_tracks > 0 && (mp3_tracks_count as f64 / total_tracks as f64) > 0.5;
+    let is_lossy_album = total_tracks > 0 && (lossy_tracks_count as f64 / total_tracks as f64) > 0.5;
 
     // Calculate if the album is mainly Hi-Res
     let hires_tracks_count = tracks.iter()
@@ -355,7 +360,7 @@ fn build_track_row(t: &crate::data::models::Track) -> ActionRow {
     let bit_freq_str = format_bit_freq(most_common_bit_depth, most_common_freq);
 
     // Only build this row if any content
-    if show_hires || !bit_freq_str.is_empty() || most_common_format_opt.is_some() {
+    if show_hires || is_lossy_album || !bit_freq_str.is_empty() || most_common_format_opt.is_some() {
         let outer_row = Box::builder()
             .orientation(Orientation::Horizontal)
             .spacing(8)
@@ -363,20 +368,20 @@ fn build_track_row(t: &crate::data::models::Track) -> ActionRow {
             .margin_start(3)
             .build();
 
-        // Hi-Res, MP3, or CD icon (tall, left)
+        // Hi-Res, Lossy, or CD icon (tall, left)
         if show_hires {
             if let Ok(pixbuf) = Pixbuf::from_file_at_scale("assets/hires.png", -1, 40, true) {
                 let hires_pic = Picture::for_pixbuf(&pixbuf);
                 hires_pic.set_halign(Align::Start);
                 outer_row.append(&hires_pic);
             }
-        } else if is_mp3_album {
+        } else if is_lossy_album {
 
-            // Use musical note icon for MP3 albums
-            let mp3_icon = Image::from_icon_name("audio-x-generic-symbolic"); // Or another suitable icon
-            mp3_icon.set_pixel_size(44);
-            mp3_icon.set_halign(Align::Start);
-            outer_row.append(&mp3_icon);
+            // Use musical note icon for lossy albums
+            let lossy_icon = Image::from_icon_name("audio-x-generic-symbolic");
+            lossy_icon.set_pixel_size(44);
+            lossy_icon.set_halign(Align::Start);
+            outer_row.append(&lossy_icon);
         }
         else {
 
