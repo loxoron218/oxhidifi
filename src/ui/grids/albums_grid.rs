@@ -179,12 +179,13 @@ pub fn build_albums_grid(
     let albums_grid = FlowBox::builder()
         .valign(Align::Start)
         .max_children_per_line(128)
-        .row_spacing(1)
-        .column_spacing(0)
+        .row_spacing(8)
+        .column_spacing(8)
         .selection_mode(SelectionMode::None)
         .homogeneous(true)
         .build();
-    albums_grid.set_halign(Align::Center);
+    albums_grid.set_hexpand(true);
+    albums_grid.set_halign(Align::Fill);
     let scrolled = ScrolledWindow::builder()
         .hscrollbar_policy(PolicyType::Automatic)
         .vscrollbar_policy(PolicyType::Automatic)
@@ -192,10 +193,10 @@ pub fn build_albums_grid(
         .min_content_height(400)
         .min_content_width(400)
         .vexpand(true)
-        .margin_start(8)
-        .margin_end(8)
-        .margin_top(8)
-        .margin_bottom(8)
+        .margin_start(24)
+        .margin_end(24)
+        .margin_top(24)
+        .margin_bottom(24)
         .build();
     scrolled.set_hexpand(true);
     scrolled.set_halign(Align::Fill);
@@ -432,13 +433,13 @@ pub async fn populate_albums_grid(
                 flow_child.set_child(Some(&album_tile_box));
                 flow_child.set_hexpand(false);
                 flow_child.set_vexpand(false);
-                flow_child.set_halign(Align::Fill);
+                flow_child.set_halign(Align::Start);
                 flow_child.set_valign(Align::Start);
                 unsafe {
                     flow_child.set_data::<i64>("album_id", album.id);
                 }
-                album_tile_box.set_hexpand(true);
-                album_tile_box.set_halign(Align::Fill);
+                album_tile_box.set_hexpand(false);
+                album_tile_box.set_halign(Align::Center);
 
                 // Add click gesture for navigation
                 let stack_weak = stack.downgrade();
