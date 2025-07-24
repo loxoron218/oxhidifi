@@ -10,9 +10,9 @@ use libadwaita::prelude::{ActionRowExt, BoxExt, CheckButtonExt, PreferencesGroup
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::data::db::{fetch_album_by_id, fetch_artist_by_id, fetch_tracks_by_album, update_album_dr_completed};
+use crate::data::db::{fetch_album_by_id, fetch_artist_by_id, fetch_folder_by_id, fetch_tracks_by_album, update_album_dr_completed};
 use crate::data::models::Track;
-use crate::ui::components::config::{load_settings, save_settings};
+use crate::utils::best_dr_persistence::{AlbumKey, DrValueStore};
 use crate::utils::formatting::{format_bit_freq, format_duration_hms, format_duration_mmss, format_freq_khz};
 
 /// Build and present the album detail page for a given album ID.
@@ -34,8 +34,9 @@ pub async fn album_page(
     };
 
     // Fetch album, artist, and tracks asynchronously
-    let album = fetch_album_by_id(&*db_pool, album_id).await.unwrap();
-    let artist = fetch_artist_by_id(&*db_pool, album.artist_id).await.unwrap();
+    let album: Rc<crate::data::models::Album> = Rc::new(fetch_album_by_id(&*db_pool, album_id).await.unwrap());
+    let artist: Rc<crate::data::models::Artist> = Rc::new(fetch_artist_by_id(&*db_pool, album.artist_id).await.unwrap());
+    let folder: Rc<crate::data::models::Folder> = Rc::new(fetch_folder_by_id(&*db_pool, album.folder_id).await.unwrap()); // Fetch folder
     let tracks = fetch_tracks_by_album(&*db_pool, album_id).await.unwrap();
     let horizontal_margin = 32;
     let page = Box::builder()
@@ -89,6 +90,9 @@ fn build_dr_badge(
     dr_completed: bool,
     db_pool: Arc<SqlitePool>,
     sender: UnboundedSender<()>,
+    album: Rc<crate::data::models::Album>,
+    artist: Rc<crate::data::models::Artist>,
+    folder: Rc<crate::data::models::Folder>,
 ) -> Box {
     let dr_box = Box::builder()
         .orientation(Orientation::Horizontal)
@@ -158,32 +162,38 @@ fn build_dr_badge(
     overlay.add_controller(motion_controller);
 
     // Connect checkbox toggled signal
-    checkbox_weak.borrow().connect_toggled({
+    checkbox_weak.borrow().connect_toggled(move |btn| {
         let db_pool = db_pool.clone();
         let sender = sender.clone();
-        move |btn| {
-            let is_completed = btn.is_active();
-            let current_db_pool = db_pool.clone();
-            let sender = sender.clone();
-            MainContext::default().spawn_local(async move {
-                if let Err(_e) = update_album_dr_completed(&*current_db_pool, album_id, is_completed).await {
-                }
-                if let Err(_e) = sender.send(()) {
+        let is_completed = btn.is_active();
+        let current_db_pool = db_pool.clone();
+        let sender = sender.clone();
+        let album_rc = album.clone();
+        let artist_rc = artist.clone();
+        let folder_rc = folder.clone();
+        MainContext::default().spawn_local(async move {
+            if let Err(_e) = update_album_dr_completed(&*current_db_pool, album_id, is_completed).await {
+            }
+            if let Err(_e) = sender.send(()) {
 
-                    // Handle error if sending fails, e.g., receiver dropped
-                }
+                // Handle error if sending fails, e.g., receiver dropped
+            }
 
-                // Update settings for persistence
-                let mut settings = load_settings();
-                if is_completed {
-                    settings.completed_albums.insert(album_id, true);
-                } else {
-                    settings.completed_albums.remove(&album_id);
-                }
-                if let Err(_e) = save_settings(&settings) {
-                }
-            });
-        }
+            // Update DrValueStore for persistence
+            let mut dr_store = DrValueStore::load();
+            let album_key = AlbumKey {
+                title: album_rc.title.clone(),
+                artist: artist_rc.name.clone(),
+                folder_path: folder_rc.path.clone(),
+            };
+            if is_completed {
+                dr_store.add_dr_value(album_key, dr.unwrap_or(0)); // Store DR value if completed
+            } else {
+                dr_store.remove_dr_value(&album_key);
+            }
+            if let Err(_e) = dr_store.save() {
+            }
+        });
     });
 
     dr_box
@@ -396,9 +406,23 @@ fn build_track_row(t: &crate::data::models::Track) -> ActionRow {
         outer_row.append(&lines_box);
         info_box.append(&outer_row);
     }
-    let settings = load_settings();
-    let is_completed = settings.completed_albums.contains_key(&album_id);
-    info_box.append(&build_dr_badge(album.id, album.dr_value, is_completed, db_pool.clone(), sender.clone()));
+    let dr_store = DrValueStore::load();
+    let album_key = AlbumKey {
+        title: album.title.clone(),
+        artist: artist.name.clone(),
+        folder_path: folder.path.clone(),
+    };
+    let is_completed = dr_store.contains(&album_key);
+    info_box.append(&build_dr_badge(
+        album.id,
+        album.dr_value,
+        is_completed,
+        db_pool.clone(),
+        sender.clone(),
+        Rc::clone(&album),
+        Rc::clone(&artist),
+        Rc::clone(&folder),
+    ));
     header.append(&info_box);
 
     // Track List

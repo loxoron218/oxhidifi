@@ -15,7 +15,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use crate::data::album_artists::get_album_artist;
-use crate::data::db::{clear_all_dr_values, fetch_all_folders, insert_or_get_album, insert_or_get_artist, insert_track, remove_album_and_tracks, remove_artists_with_no_albums, remove_folder_and_albums, remove_albums_with_no_tracks, remove_orphaned_tracks};
+use crate::data::db::{fetch_all_folders, insert_or_get_album, insert_or_get_artist, insert_track, remove_album_and_tracks, remove_albums_with_no_tracks, remove_artists_with_no_albums, remove_folder_and_albums, remove_orphaned_tracks, synchronize_dr_completed_from_store};
 
 /// Recursively scan a folder for supported audio files and subfolders.
 /// For each audio file, extract tags and insert into the database.
@@ -105,9 +105,6 @@ pub fn spawn_scanning_label_refresh_task(
 /// Connect the rescan button to trigger scanning and update the UI.
 /// Performs a full library scan, including cleanup of orphaned data.
 pub async fn run_full_scan(db_pool: &Arc<SqlitePool>, sender: &UnboundedSender<()>) {
-
-    // Clear all DR values before re-scanning
-    if let Err(_) = clear_all_dr_values(db_pool).await {}
     match fetch_all_folders(db_pool).await {
         Ok(folders) => {
 
@@ -160,6 +157,7 @@ pub async fn run_full_scan(db_pool: &Arc<SqlitePool>, sender: &UnboundedSender<(
     remove_orphaned_tracks(db_pool).await.ok();
     remove_albums_with_no_tracks(db_pool).await.ok();
     remove_artists_with_no_albums(db_pool).await.ok();
+    synchronize_dr_completed_from_store(db_pool).await.ok();
     sender.send(()).ok();
 }
 

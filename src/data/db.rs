@@ -1,6 +1,7 @@
 use sqlx::{query, Result, Row, SqlitePool};
 
 use crate::data::models::{Album, Artist, Folder, Track};
+use crate::utils::best_dr_persistence::{DrValueStore, AlbumKey};
 
 /// Remove a folder and all its albums and tracks by folder ID.
 pub async fn remove_folder_and_albums(pool: &SqlitePool, folder_id: i64) -> Result<()> {
@@ -48,6 +49,39 @@ pub async fn fetch_album_by_id(pool: &SqlitePool, album_id: i64) -> Result<Album
         original_release_date: row.get("original_release_date"),
     })
 }
+
+// Helper struct to return album details including artist name and folder path
+pub struct AlbumDetails {
+    pub _id: i64,
+    pub title: String,
+    pub artist_name: String,
+    pub folder_path: String,
+}
+
+/// Fetches album details (title, artist name, folder path) by album ID.
+pub async fn fetch_album_details_by_id(pool: &SqlitePool, album_id: i64) -> Result<AlbumDetails> {
+    let row = query(
+        r#"SELECT
+            a.id,
+            a.title,
+            ar.name AS artist_name,
+            f.path AS folder_path
+        FROM albums AS a
+        JOIN artists AS ar ON a.artist_id = ar.id
+        JOIN folders AS f ON a.folder_id = f.id
+        WHERE a.id = ?"#,
+    )
+    .bind(album_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(AlbumDetails {
+        _id: row.get("id"),
+        title: row.get("title"),
+        artist_name: row.get("artist_name"),
+        folder_path: row.get("folder_path"),
+    })
+}
+
 
 /// Remove an album and all its tracks by album ID.
 pub async fn remove_album_and_tracks(pool: &SqlitePool, album_id: i64) -> Result<()> {
@@ -97,7 +131,7 @@ pub async fn remove_orphaned_tracks(pool: &SqlitePool) -> Result<()> {
 }
 
 /// Clear all DR values from the albums table.
-pub async fn clear_all_dr_values(pool: &SqlitePool) -> Result<()> {
+pub async fn _clear_all_dr_values(pool: &SqlitePool) -> Result<()> {
     query("UPDATE albums SET dr_value = NULL")
         .execute(pool)
         .await?;
@@ -154,6 +188,18 @@ pub async fn fetch_all_folders(pool: &SqlitePool) -> Result<Vec<Folder>> {
         .collect())
 }
 
+/// Fetch a single folder by its ID.
+pub async fn fetch_folder_by_id(pool: &SqlitePool, folder_id: i64) -> Result<Folder> {
+    let row = query("SELECT id, path FROM folders WHERE id = ?")
+        .bind(folder_id)
+        .fetch_one(pool)
+        .await?;
+    Ok(Folder {
+        id: row.get("id"),
+        path: row.get("path"),
+    })
+}
+
 /// Struct for displaying album info in the UI, including artist and format details.
 #[derive(Clone)]
 pub struct AlbumDisplayInfo {
@@ -168,16 +214,19 @@ pub struct AlbumDisplayInfo {
     pub _dr_value: Option<u8>,
     pub dr_completed: bool,
     pub original_release_date: Option<String>,
+    pub folder_path: String, // Add this line
 }
 
 /// Fetch all albums with display info, joining artist and track format data.
 pub async fn fetch_album_display_info(pool: &SqlitePool) -> Result<Vec<AlbumDisplayInfo>> {
     let rows = query(
         r#"SELECT albums.id, albums.title, artists.name as artist, albums.year, albums.cover_art,
-                     tracks.format, tracks.bit_depth, tracks.frequency, albums.dr_value, albums.dr_completed, albums.original_release_date
+                     tracks.format, tracks.bit_depth, tracks.frequency, albums.dr_value, albums.dr_completed, albums.original_release_date,
+                     folders.path as folder_path -- Add this line
             FROM albums
             JOIN artists ON albums.artist_id = artists.id
             LEFT JOIN tracks ON tracks.album_id = albums.id
+            JOIN folders ON albums.folder_id = folders.id -- Add this join
             GROUP BY albums.id
             ORDER BY artists.name COLLATE NOCASE, albums.title COLLATE NOCASE"#,
     )
@@ -197,6 +246,7 @@ pub async fn fetch_album_display_info(pool: &SqlitePool) -> Result<Vec<AlbumDisp
             _dr_value: row.get("dr_value"),
             dr_completed: row.get("dr_completed"),
             original_release_date: row.get("original_release_date"),
+            folder_path: row.get("folder_path"),
         })
         .collect())
 }
@@ -245,6 +295,10 @@ pub async fn init_db(pool: &SqlitePool) -> Result<()> {
     )
     .execute(pool)
     .await?;
+    query("ALTER TABLE albums ADD COLUMN dr_completed BOOLEAN DEFAULT FALSE")
+        .execute(pool)
+        .await
+        .ok();
     query("ALTER TABLE albums ADD COLUMN original_release_date TEXT")
         .execute(pool)
         .await
@@ -340,13 +394,14 @@ pub async fn insert_or_get_album(
     } else {
 
         // Album doesn't exist, insert it
-        let res = query("INSERT INTO albums (title, artist_id, year, cover_art, folder_id, dr_value, original_release_date) VALUES (?, ?, ?, ?, ?, ?, ?)")
+        let res = query("INSERT INTO albums (title, artist_id, year, cover_art, folder_id, dr_value, dr_completed, original_release_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
             .bind(title)
             .bind(artist_id)
             .bind(year)
             .bind(cover_art)
             .bind(folder_id)
             .bind(dr_value)
+            .bind(false)
             .bind(original_release_date)
             .execute(pool)
             .await?;
@@ -431,10 +486,12 @@ pub async fn search_album_display_info(
     let pattern = format!("%{}%", search_term.to_lowercase());
     let rows = query(
         r#"SELECT albums.id, albums.title, artists.name as artist, albums.year, albums.cover_art,
-                     tracks.format, tracks.bit_depth, tracks.frequency, albums.dr_value, albums.dr_completed, albums.original_release_date
+                     tracks.format, tracks.bit_depth, tracks.frequency, albums.dr_value, albums.dr_completed, albums.original_release_date,
+                     folders.path as folder_path -- Add this line
             FROM albums
             JOIN artists ON albums.artist_id = artists.id
             LEFT JOIN tracks ON tracks.album_id = albums.id
+            JOIN folders ON albums.folder_id = folders.id -- Add this join
             WHERE lower(albums.title) LIKE ? OR lower(artists.name) LIKE ?
             GROUP BY albums.id
             ORDER BY artists.name COLLATE NOCASE, albums.title COLLATE NOCASE"#,
@@ -457,6 +514,7 @@ pub async fn search_album_display_info(
             _dr_value: row.get("dr_value"),
             dr_completed: row.get("dr_completed"),
             original_release_date: row.get("original_release_date"),
+            folder_path: row.get("folder_path"), // Add this line
         })
         .collect())
 }
@@ -475,4 +533,47 @@ pub async fn search_artists(pool: &SqlitePool, search_term: &str) -> Result<Vec<
             name: row.get("name"),
         })
         .collect())
+}
+
+/// Synchronizes the `dr_completed` status in the database with the JSON store.
+pub async fn synchronize_dr_completed_from_store(pool: &SqlitePool) -> Result<()> {
+    let dr_store = DrValueStore::load();
+
+    // Fetch all albums from the database to ensure we can update all their dr_completed statuses
+    let all_albums = query("SELECT id, title, artist_id, folder_id, dr_completed FROM albums")
+        .fetch_all(pool)
+        .await?;
+    for album_row in all_albums {
+        let album_id: i64 = album_row.get("id");
+        let title: String = album_row.get("title");
+        let artist_id: i64 = album_row.get("artist_id");
+        let folder_id: i64 = album_row.get("folder_id");
+        let current_dr_completed: bool = album_row.get("dr_completed");
+
+        // Fetch artist name and folder path to construct AlbumKey
+        let artist_name_row = query("SELECT name FROM artists WHERE id = ?")
+            .bind(artist_id)
+            .fetch_one(pool)
+            .await?;
+        let artist_name: String = artist_name_row.get("name");
+        let folder_path_row = query("SELECT path FROM folders WHERE id = ?")
+            .bind(folder_id)
+            .fetch_one(pool)
+            .await?;
+        let folder_path: String = folder_path_row.get("path");
+        let album_key = AlbumKey {
+            title,
+            artist: artist_name,
+            folder_path,
+        };
+
+        // Determine if the album should be marked as DR completed based on the DrValueStore
+        let should_be_completed = dr_store.contains(&album_key);
+
+        // Update the database only if the status needs to change
+        if should_be_completed != current_dr_completed {
+            update_album_dr_completed(pool, album_id, should_be_completed).await?;
+        }
+    }
+    Ok(())
 }

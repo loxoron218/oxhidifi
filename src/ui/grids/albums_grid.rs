@@ -14,6 +14,7 @@ use crate::data::db::fetch_album_display_info;
 use crate::data::scanner::create_scanning_label;
 use crate::ui::components::sorting::SortOrder;
 use crate::ui::pages::album_page::album_page;
+use crate::utils::best_dr_persistence::{AlbumKey, DrValueStore};
 use crate::utils::formatting::format_freq_khz;
 
 /// Helper to create a styled label for album metadata.
@@ -258,6 +259,7 @@ pub async fn populate_albums_grid(
         return;
     }
     let fetch_result = fetch_album_display_info(&db_pool).await;
+    let dr_store = DrValueStore::load(); // Load the DR store once
     match fetch_result {
         Err(_) => {
             BUSY.with(|b| b.set(false));
@@ -397,7 +399,15 @@ pub async fn populate_albums_grid(
                 overlay.set_child(Some(&cover_container));
                 overlay.set_halign(Align::Start);
                 overlay.set_valign(Align::Start);
-                let dr_label = create_dr_overlay(album._dr_value, album.dr_completed).unwrap();
+
+                // Construct AlbumKey for lookup in DrValueStore
+                let album_key = AlbumKey {
+                    title: album.title.clone(),
+                    artist: album.artist.clone(),
+                    folder_path: album.folder_path.clone(),
+                };
+                let is_dr_completed_from_store = dr_store.contains(&album_key);
+                let dr_label = create_dr_overlay(album._dr_value, is_dr_completed_from_store).unwrap();
                 overlay.add_overlay(&dr_label);
 
                 // Fixed-size container for the cover area to ensure consistent sizing

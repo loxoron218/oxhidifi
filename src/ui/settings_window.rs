@@ -3,17 +3,18 @@ use std::cell::{Cell, RefCell};
 
 use glib::{MainContext, Propagation};
 use glib::source::idle_add_local_once;
-use gtk4::{Align, Button, EventControllerKey, ListBox, SelectionMode, Window};
+use gtk4::{Align, Button, Entry, EventControllerKey, ListBox, SelectionMode, Window};
 use gtk4::gdk::Key;
 use libadwaita::{ActionRow, PreferencesGroup, PreferencesPage, PreferencesWindow};
-use libadwaita::prelude::{ActionRowExt, ButtonExt, Cast, GtkWindowExt, IsA, ObjectExt, ObjectType, PreferencesGroupExt, PreferencesPageExt, PreferencesWindowExt, StaticType, WidgetExt};
+use libadwaita::prelude::{ActionRowExt, ButtonExt, Cast, EditableExt, GtkWindowExt, IsA, ObjectExt, ObjectType, PreferencesGroupExt, PreferencesPageExt, PreferencesWindowExt, StaticType, WidgetExt};
 use sqlx::SqlitePool;
 
-use crate::data::db::{fetch_all_folders, remove_folder_and_albums};
+use crate::data::db::{fetch_album_details_by_id, fetch_all_folders, remove_album_and_tracks, remove_folder_and_albums};
 use crate::data::models::Folder;
 use crate::ui::components::config::{load_settings, save_settings, Settings};
 use crate::ui::components::dialogs::show_remove_folder_confirmation_dialog;
 use crate::ui::components::sorting::{connect_sort_reorder_handler, make_sort_row, update_sorting_row_numbers, SortOrder};
+use crate::utils::best_dr_persistence::{AlbumKey, DrValueStore};
 
 /// Show the settings dialog. Call from your settings button handler.
 /// Accepts a shared SortOrder state and a callback to refresh the albums grid.
@@ -276,9 +277,58 @@ remove_btn.connect_clicked(move |btn| {
         .title("Library")
         .icon_name("folder-music-symbolic")
         .build();
-    let library_group = PreferencesGroup::builder().build();
-    ("library_group ptr: {:?}", library_group.as_ptr());
-    library_page.add(&library_group);
+
+    // Group for individual album deletion
+    let individual_deletion_group = PreferencesGroup::builder()
+        .title("Delete Individual Albums")
+        .description("WARNING: This will permanently delete the album from your library and its DR value from your preferences.")
+        .build();
+    let album_id_entry = Entry::builder()
+        .placeholder_text("Enter Album ID to delete")
+        .build();
+    individual_deletion_group.add(&album_id_entry);
+    let delete_album_button = Button::builder()
+        .label("Delete Album")
+        .css_classes(vec!["destructive-action"])
+        .build();
+    individual_deletion_group.add(&delete_album_button);
+    let db_pool_clone_for_delete = db_pool.clone();
+    let refresh_library_ui_clone_for_delete = refresh_library_ui.clone();
+    let sort_ascending_clone_for_delete = sort_ascending.clone();
+    let sort_ascending_artists_clone_for_delete = sort_ascending_artists.clone();
+    delete_album_button.connect_clicked(move |_| {
+        let album_id_str = album_id_entry.text().to_string();
+        if let Ok(album_id) = album_id_str.parse::<i64>() {
+            let db_pool = db_pool_clone_for_delete.clone();
+            let refresh_library_ui = refresh_library_ui_clone_for_delete.clone();
+            let sort_ascending = sort_ascending_clone_for_delete.clone();
+            let sort_ascending_artists = sort_ascending_artists_clone_for_delete.clone();
+            MainContext::default().spawn_local(async move {
+
+                // Remove from database
+                if let Err(_e) = remove_album_and_tracks(&db_pool, album_id).await {
+                } else {
+
+                    // Remove from JSON store
+                    let mut dr_store = DrValueStore::load();
+                    if let Ok(album_details) = fetch_album_details_by_id(&db_pool, album_id).await {
+                        let album_key = AlbumKey {
+                            title: album_details.title,
+                            artist: album_details.artist_name,
+                            folder_path: album_details.folder_path,
+                        };
+                        dr_store.remove_dr_value(&album_key);
+                        if let Err(_e) = dr_store.save() {
+                        }
+                    } else {
+                    }
+                    (refresh_library_ui)(sort_ascending.get(), sort_ascending_artists.get());
+                }
+            });
+        } else {
+        }
+    });
+    library_page.add(&individual_deletion_group);
 
     // Audio page
     let audio_page = PreferencesPage::builder()
