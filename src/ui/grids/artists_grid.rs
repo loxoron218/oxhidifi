@@ -22,7 +22,7 @@ pub fn rebuild_artists_grid_for_window(
     artists_grid_cell: &Rc<RefCell<Option<FlowBox>>>,
     artists_stack_cell: &Rc<RefCell<Option<Stack>>>,
     _sender: UnboundedSender<()>,
-    _add_music_button: &Button, // Prefix with _ to mark as intentionally unused
+    _add_music_button: &Button,
 ) {
 
     // Always remove existing "artists" child before adding a new one
@@ -33,7 +33,7 @@ pub fn rebuild_artists_grid_for_window(
     *artists_stack_cell.borrow_mut() = None;
     let (artists_stack, artists_grid) = build_artists_grid(
         scanning_label_artists,
-        _add_music_button, // Use the passed button
+        _add_music_button,
     );
     stack.add_titled(&artists_stack, Some("artists"), "Artists");
     *artists_grid_cell.borrow_mut() = Some(artists_grid.clone());
@@ -55,7 +55,7 @@ pub fn build_artists_grid(scanning_label: &Label, add_music_button: &Button) -> 
 
     // The add_music_button is now passed in, not created here
     add_music_button.add_css_class("suggested-action");
-    empty_state_status_page.set_child(Some(add_music_button)); // Use the passed button
+    empty_state_status_page.set_child(Some(add_music_button));
     let empty_state_container = Box::builder()
         .orientation(Orientation::Vertical)
         .halign(Align::Center)
@@ -240,7 +240,7 @@ pub fn populate_artists_grid(
     stack: &ViewStack,
     left_btn_stack: &ViewStack,
     right_btn_box: &Clamp,
-    _window: &ApplicationWindow, // Prefix with _ to mark as intentionally unused
+    _window: &ApplicationWindow,
     scanning_label: &Label,
     sender: UnboundedSender<()>,
     nav_history: Rc<RefCell<Vec<String>>>,
