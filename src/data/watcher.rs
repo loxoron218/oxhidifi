@@ -34,7 +34,9 @@ pub fn start_watching_library(pool: Arc<SqlitePool>, sender: UnboundedSender<()>
                     event.kind,
                     EventKind::Create(_) |
                     EventKind::Remove(_) |
-                    EventKind::Modify(ModifyKind::Name(_))
+                    EventKind::Modify(ModifyKind::Name(_)) |
+                    EventKind::Modify(ModifyKind::Data(_)) |
+                    EventKind::Modify(ModifyKind::Metadata(_))
                 ) {
 
                     // When a relevant event occurs, we trigger the debouncer.
