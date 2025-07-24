@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc, sync::Arc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
 
 use gdk_pixbuf::{InterpType, Pixbuf, PixbufLoader};
 use gdk_pixbuf::prelude::PixbufLoaderExt;
@@ -11,6 +11,7 @@ use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::data::db::{fetch_album_by_id, fetch_artist_by_id, fetch_tracks_by_album, update_album_dr_completed};
+use crate::data::models::Track;
 use crate::ui::components::config::{load_settings, save_settings};
 use crate::utils::formatting::{format_bit_freq, format_duration_hms, format_duration_mmss, format_freq_khz};
 
@@ -304,17 +305,27 @@ fn build_track_row(t: &crate::data::models::Track) -> ActionRow {
     // Duration as HH:MM:SS
     let total_length: u32 = tracks.iter().filter_map(|t| t.duration).sum();
     info_box.append(&build_info_label(&format_duration_hms(total_length), Some("album-meta-label")));
-    let (bit_depth, freq, format_opt) = tracks
-        .iter()
-        .find_map(|t| Some((t.bit_depth, t.frequency, t.format.as_ref())))
-        .unwrap_or((None, None, None));
+    let (most_common_bit_depth, most_common_freq, most_common_format_opt) =
+        get_most_common_track_properties(&tracks);
+
+    // Calculate if the album is mainly in MP3 format
+    let total_tracks = tracks.len();
+    let mp3_tracks_count = tracks.iter()
+        .filter(|t| t.format.as_deref() == Some("mp3"))
+        .count();
+    let is_mp3_album = total_tracks > 0 && (mp3_tracks_count as f64 / total_tracks as f64) > 0.5;
+
+    // Calculate if the album is mainly Hi-Res
+    let hires_tracks_count = tracks.iter()
+        .filter(|t| matches!((t.bit_depth, t.frequency), (Some(bd), Some(fq)) if bd >= 24 && fq >= 88_200))
+        .count();
+    let show_hires = total_tracks > 0 && (hires_tracks_count as f64 / total_tracks as f64) > 0.5;
 
     // Bit depth / Freq and Format, with Hi-Res icon aligned to both lines
-    let bit_freq_str = format_bit_freq(bit_depth, freq);
-    let show_hires = matches!((bit_depth, freq), (Some(bd), Some(fq)) if bd >= 24 && fq >= 88_200);
+    let bit_freq_str = format_bit_freq(most_common_bit_depth, most_common_freq);
 
     // Only build this row if any content
-    if show_hires || !bit_freq_str.is_empty() || format_opt.is_some() {
+    if show_hires || !bit_freq_str.is_empty() || most_common_format_opt.is_some() {
         let outer_row = Box::builder()
             .orientation(Orientation::Horizontal)
             .spacing(8)
@@ -322,14 +333,22 @@ fn build_track_row(t: &crate::data::models::Track) -> ActionRow {
             .margin_start(3)
             .build();
 
-        // Hi-Res or CD icon (tall, left)
+        // Hi-Res, MP3, or CD icon (tall, left)
         if show_hires {
             if let Ok(pixbuf) = Pixbuf::from_file_at_scale("assets/hires.png", -1, 40, true) {
                 let hires_pic = Picture::for_pixbuf(&pixbuf);
                 hires_pic.set_halign(Align::Start);
                 outer_row.append(&hires_pic);
             }
-        } else {
+        } else if is_mp3_album {
+
+            // Use musical note icon for MP3 albums
+            let mp3_icon = Image::from_icon_name("audio-x-generic-symbolic"); // Or another suitable icon
+            mp3_icon.set_pixel_size(44);
+            mp3_icon.set_halign(Align::Start);
+            outer_row.append(&mp3_icon);
+        }
+        else {
 
             // Use symbolic CD icon from system theme
             let cd_icon = Image::from_icon_name("media-optical-symbolic");
@@ -349,7 +368,7 @@ fn build_track_row(t: &crate::data::models::Track) -> ActionRow {
         if !bit_freq_str.is_empty() {
             lines_box.append(&build_info_label(&bit_freq_str, Some("album-technical-label")));
         }
-        if let Some(format) = format_opt {
+        if let Some(format) = most_common_format_opt {
             if !format.is_empty() {
                 lines_box.append(&build_info_label(&format.to_uppercase(), Some("album-technical-label")));
             }
@@ -394,4 +413,37 @@ fn build_track_row(t: &crate::data::models::Track) -> ActionRow {
     stack.add_titled(&page, Some("album_detail"), "Album");
     stack.set_visible_child_name("album_detail");
     header_btn_stack.set_visible_child_name("back");
+}
+
+/// Helper function to get the most common bit depth, frequency, and format from a list of tracks.
+fn get_most_common_track_properties(
+    tracks: &[Track],
+) -> (Option<u32>, Option<u32>, Option<String>) {
+    let mut bit_depth_counts: HashMap<u32, usize> = HashMap::new();
+    let mut freq_counts: HashMap<u32, usize> = HashMap::new();
+    let mut format_counts: HashMap<String, usize> = HashMap::new();
+    for track in tracks {
+        if let Some(bd) = track.bit_depth {
+            *bit_depth_counts.entry(bd).or_insert(0) += 1;
+        }
+        if let Some(fq) = track.frequency {
+            *freq_counts.entry(fq).or_insert(0) += 1;
+        }
+        if let Some(fmt) = &track.format {
+            *format_counts.entry(fmt.clone()).or_insert(0) += 1;
+        }
+    }
+    let most_common_bit_depth = bit_depth_counts
+        .into_iter()
+        .max_by_key(|&(_, count)| count)
+        .map(|(bd, _)| bd);
+    let most_common_freq = freq_counts
+        .into_iter()
+        .max_by_key(|&(_, count)| count)
+        .map(|(fq, _)| fq);
+    let most_common_format = format_counts
+        .into_iter()
+        .max_by_key(|&(_, count)| count)
+        .map(|(fmt, _)| fmt);
+    (most_common_bit_depth, most_common_freq, most_common_format)
 }
