@@ -211,7 +211,8 @@ fn build_track_row(t: &crate::data::models::Track) -> ActionRow {
         let number_label = Label::builder()
             .label(&format!("{}-{:02}", disc, track))
             .css_classes(["dim-label"])
-            .xalign(1.0)
+            .xalign(0.0)
+            .width_chars(5)
             .build();
         number_label.set_margin_end(16);
         row.add_prefix(&number_label);
