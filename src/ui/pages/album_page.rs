@@ -3,7 +3,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
 use gdk_pixbuf::{InterpType, Pixbuf, PixbufLoader};
 use gdk_pixbuf::prelude::PixbufLoaderExt;
 use glib::{MainContext, WeakRef};
-use gtk4::{Align, Box, Button, CheckButton, EventControllerMotion, Image, Label, Orientation, Overlay, Picture, ScrolledWindow, Stack, StackTransitionType};
+use gtk4::{Align, Box, Button, CheckButton, EventControllerMotion, Image, Label, Orientation, Overlay, Picture, PolicyType::Never, ScrolledWindow, Stack, StackTransitionType};
 use gtk4::pango::{EllipsizeMode, WrapMode};
 use libadwaita::{ActionRow, Clamp, PreferencesGroup, ViewStack};
 use libadwaita::prelude::{ActionRowExt, BoxExt, CheckButtonExt, PreferencesGroupExt, WidgetExt};
@@ -397,21 +397,21 @@ fn build_track_row(t: &crate::data::models::Track) -> ActionRow {
         .child(&header)
         .build();
     page.append(&clamp);
-    let scrolled = ScrolledWindow::builder()
-        .child(&group)
-        .min_content_height(200)
-        .max_content_height(500)
+    page.append(&group);
+
+    // Create a ScrolledWindow for the entire page
+    let page_scrolled_window = ScrolledWindow::builder()
+        .child(&page)
         .vexpand(true)
         .hexpand(true)
+        .hscrollbar_policy(Never) // Disable horizontal scrollbar
         .build();
-    scrolled.set_css_classes(&["track-list-container"]);
-    page.append(&scrolled);
 
     // Stack Management
     if let Some(existing) = stack.child_by_name("album_detail") {
         stack.remove(&existing);
     }
-    stack.add_titled(&page, Some("album_detail"), "Album");
+    stack.add_titled(&page_scrolled_window, Some("album_detail"), "Album"); // Add the new scrolled window to stack
     stack.set_visible_child_name("album_detail");
     header_btn_stack.set_visible_child_name("back");
 }
