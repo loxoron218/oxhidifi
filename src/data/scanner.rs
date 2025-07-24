@@ -6,7 +6,8 @@ use gtk4::Label;
 use libadwaita::ViewStack;
 use libadwaita::prelude::WidgetExt;
 use lofty::{probe::Probe, tag::Tag};
-use lofty::prelude::{Accessor, AudioFile, TaggedFileExt};
+use lofty::prelude::{Accessor, AudioFile, TaggedFileExt, ItemKey};
+use lofty::tag::items::Timestamp;
 use regex::Regex;
 use sqlx::{query, Row, SqlitePool};
 use tokio::fs::{File, read_dir};
@@ -308,6 +309,14 @@ async fn process_album_folder(
         cover_art,
         folder_id,
         dr_value,
+        tags_in_album.first().and_then(|t| {
+            if let Some(original_release_date_str) = t.get_string(&ItemKey::OriginalReleaseDate) {
+                if let Ok(original_release_date) = original_release_date_str.parse::<Timestamp>() {
+                    return Some(original_release_date.to_string());
+                }
+            }
+            None
+        }),
     )
     .await?;
     for path in &audio_files_in_folder {

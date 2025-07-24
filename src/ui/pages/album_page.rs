@@ -294,10 +294,29 @@ fn build_track_row(t: &crate::data::models::Track) -> ActionRow {
     artist_label.set_css_classes(&["album-artist-label"]);
     info_box.append(&artist_label);
 
-    // Year (no label)
-    if let Some(year) = album.year {
+    // Year
+    let mut year_display_text = String::new();
+    let release_year = album.year;
+    let original_release_year = album.original_release_date.as_ref().and_then(|s| s.split('-').next().map(|y| y.to_string()));
+    match (release_year, original_release_year) {
+        (Some(r_year), Some(o_year)) => {
+            if r_year.to_string() == o_year {
+                year_display_text = format!("{}", r_year);
+            } else {
+                year_display_text = format!("{} / {}", o_year, r_year);
+            }
+        },
+        (Some(r_year), None) => {
+            year_display_text = format!("{}", r_year);
+        },
+        (None, Some(o_year)) => {
+            year_display_text = format!("{}", o_year);
+        },
+        (None, None) => {}
+    }
+    if !year_display_text.is_empty() {
         let year_label = Label::builder()
-            .label(&format!("{}", year))
+            .label(&year_display_text)
             .halign(Align::Start)
             .build();
         info_box.append(&year_label);

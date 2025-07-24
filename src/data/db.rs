@@ -32,7 +32,7 @@ pub async fn remove_folder_and_albums(pool: &SqlitePool, folder_id: i64) -> Resu
 
 /// Fetch a single album by its ID.
 pub async fn fetch_album_by_id(pool: &SqlitePool, album_id: i64) -> Result<Album> {
-    let row = query("SELECT id, title, artist_id, year, cover_art, folder_id, dr_value, dr_completed FROM albums WHERE id = ?")
+    let row = query("SELECT id, title, artist_id, year, cover_art, folder_id, dr_value, dr_completed, original_release_date FROM albums WHERE id = ?")
         .bind(album_id)
         .fetch_one(pool)
         .await?;
@@ -45,6 +45,7 @@ pub async fn fetch_album_by_id(pool: &SqlitePool, album_id: i64) -> Result<Album
         folder_id: row.get("folder_id"),
         dr_value: row.get("dr_value"),
         dr_completed: row.get("dr_completed"),
+        original_release_date: row.get("original_release_date"),
     })
 }
 
@@ -166,13 +167,14 @@ pub struct AlbumDisplayInfo {
     pub frequency: Option<u32>,
     pub _dr_value: Option<u8>,
     pub dr_completed: bool,
+    pub original_release_date: Option<String>,
 }
 
 /// Fetch all albums with display info, joining artist and track format data.
 pub async fn fetch_album_display_info(pool: &SqlitePool) -> Result<Vec<AlbumDisplayInfo>> {
     let rows = query(
         r#"SELECT albums.id, albums.title, artists.name as artist, albums.year, albums.cover_art,
-                     tracks.format, tracks.bit_depth, tracks.frequency, albums.dr_value, albums.dr_completed
+                     tracks.format, tracks.bit_depth, tracks.frequency, albums.dr_value, albums.dr_completed, albums.original_release_date
             FROM albums
             JOIN artists ON albums.artist_id = artists.id
             LEFT JOIN tracks ON tracks.album_id = albums.id
@@ -194,6 +196,7 @@ pub async fn fetch_album_display_info(pool: &SqlitePool) -> Result<Vec<AlbumDisp
             frequency: row.get("frequency"),
             _dr_value: row.get("dr_value"),
             dr_completed: row.get("dr_completed"),
+            original_release_date: row.get("original_release_date"),
         })
         .collect())
 }
@@ -236,11 +239,16 @@ pub async fn init_db(pool: &SqlitePool) -> Result<()> {
             cover_art BLOB,
             folder_id INTEGER NOT NULL,
             dr_value INTEGER,
-            dr_completed BOOLEAN DEFAULT FALSE
+            dr_completed BOOLEAN DEFAULT FALSE,
+            original_release_date TEXT
         )",
     )
     .execute(pool)
     .await?;
+    query("ALTER TABLE albums ADD COLUMN original_release_date TEXT")
+        .execute(pool)
+        .await
+        .ok();
     query(
         "CREATE TABLE IF NOT EXISTS tracks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -307,6 +315,7 @@ pub async fn insert_or_get_album(
     cover_art: Option<Vec<u8>>,
     folder_id: i64,
     dr_value: Option<u8>,
+    original_release_date: Option<String>,
 ) -> Result<i64> {
     if let Some(row) =
         query("SELECT id FROM albums WHERE title = ? AND artist_id = ? AND folder_id = ?")
@@ -319,10 +328,11 @@ pub async fn insert_or_get_album(
         let album_id: i64 = row.get(0);
 
         // Album exists, update it
-        query("UPDATE albums SET year = ?, cover_art = ?, dr_value = ? WHERE id = ?")
+        query("UPDATE albums SET year = ?, cover_art = ?, dr_value = ?, original_release_date = ? WHERE id = ?")
             .bind(year)
             .bind(cover_art)
             .bind(dr_value)
+            .bind(original_release_date)
             .bind(album_id)
             .execute(pool)
             .await?;
@@ -330,13 +340,14 @@ pub async fn insert_or_get_album(
     } else {
 
         // Album doesn't exist, insert it
-        let res = query("INSERT INTO albums (title, artist_id, year, cover_art, folder_id, dr_value) VALUES (?, ?, ?, ?, ?, ?)")
+        let res = query("INSERT INTO albums (title, artist_id, year, cover_art, folder_id, dr_value, original_release_date) VALUES (?, ?, ?, ?, ?, ?, ?)")
             .bind(title)
             .bind(artist_id)
             .bind(year)
             .bind(cover_art)
             .bind(folder_id)
             .bind(dr_value)
+            .bind(original_release_date)
             .execute(pool)
             .await?;
         Ok(res.last_insert_rowid())
@@ -420,7 +431,7 @@ pub async fn search_album_display_info(
     let pattern = format!("%{}%", search_term.to_lowercase());
     let rows = query(
         r#"SELECT albums.id, albums.title, artists.name as artist, albums.year, albums.cover_art,
-                     tracks.format, tracks.bit_depth, tracks.frequency, albums.dr_value, albums.dr_completed
+                     tracks.format, tracks.bit_depth, tracks.frequency, albums.dr_value, albums.dr_completed, albums.original_release_date
             FROM albums
             JOIN artists ON albums.artist_id = artists.id
             LEFT JOIN tracks ON tracks.album_id = albums.id
@@ -445,6 +456,7 @@ pub async fn search_album_display_info(
             frequency: row.get("frequency"),
             _dr_value: row.get("dr_value"),
             dr_completed: row.get("dr_completed"),
+            original_release_date: row.get("original_release_date"),
         })
         .collect())
 }

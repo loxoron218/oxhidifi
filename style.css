@@ -2,9 +2,15 @@
    General Grid Styles
    ===================== */
 .album-artist-label {
-    color: var(--window_fg_color, #666);
+    color: var(--window_fg_color, #AAA);
     font-size: 0.95em;
     font-weight: 400;
+}
+.album-format-label {
+    color: var(--window_fg_color, #666);
+    font-size: 0.9em;
+    font-style: italic;
+    margin-top: 2px;
 }
 .album-meta-label {
     color: var(--window_fg_color, #888);
@@ -30,6 +36,12 @@
 .album-title-label {
     font-weight: 700;
     font-size: 1.1em;
+}
+.album-year-label {
+    color: var(--window_fg_color, #666);
+    font-size: 0.9em;
+    font-style: italic;
+    font-weight: 400;
 }
 
 /* =====================
@@ -73,12 +85,6 @@
 }
 .album-cover-play:hover {
     background: rgba(0,0,0,0.9);
-}
-.album-format-label {
-    color: var(--window_fg_color, #888);
-    font-size: 0.9em;
-    font-style: italic;
-    margin-top: 2px;
 }
 .track-list-container {
     padding: 24px;

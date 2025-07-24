@@ -18,6 +18,7 @@ pub struct Album {
     pub title: String,
     pub artist_id: i64,
     pub year: Option<i32>,
+    pub original_release_date: Option<String>,
     pub cover_art: Option<Vec<u8>>,
     pub folder_id: i64,
     pub dr_value: Option<u8>,

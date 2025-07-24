@@ -291,7 +291,11 @@ pub async fn populate_albums_grid(
                     let cmp = match order {
                         SortOrder::Artist => a.artist.to_lowercase().cmp(&b.artist.to_lowercase()),
                         SortOrder::Album => a.title.to_lowercase().cmp(&b.title.to_lowercase()),
-                        SortOrder::Year => a.year.cmp(&b.year),
+                        SortOrder::Year => {
+                            let a_year = a.original_release_date.as_ref().and_then(|s| s.split('-').next().and_then(|y| y.parse::<i32>().ok()));
+                            let b_year = b.original_release_date.as_ref().and_then(|s| s.split('-').next().and_then(|y| y.parse::<i32>().ok()));
+                            a_year.cmp(&b_year)
+                        },
                         SortOrder::Format => a.format.cmp(&b.format),
                     };
                     if cmp != Ordering::Equal {
@@ -322,18 +326,19 @@ pub async fn populate_albums_grid(
                     None,
                     None,
                 );
-                let format_line = if let Some(format_str) = album.format.as_ref() {
+                artist_label.add_css_class("album-artist-label"); // Ensure this class is applied
+                let mut format_fields = Vec::new();
+                if let Some(format_str) = album.format.as_ref() {
                     let format_caps = format_str.to_uppercase();
                     match (album.bit_depth, album.frequency) {
                         (Some(bit), Some(freq)) => {
-                            format!("{} {}/{}", format_caps, bit, format_freq_khz(freq))
+                            format_fields.push(format!("{} {}/{}", format_caps, bit, format_freq_khz(freq)));
                         }
-                        (None, Some(freq)) => format!("{} {}", format_caps, format_freq_khz(freq)),
-                        _ => format_caps,
+                        (None, Some(freq)) => format_fields.push(format!("{} {}", format_caps, format_freq_khz(freq))),
+                        _ => format_fields.push(format_caps),
                     }
-                } else {
-                    String::new()
-                };
+                }
+                let format_line = format_fields.join(" · ");
                 let format_label = create_album_label(
                     &format_line,
                     &["album-format-label"],
@@ -343,6 +348,26 @@ pub async fn populate_albums_grid(
                     None,
                     None,
                 );
+                format_label.set_halign(Align::Start);
+                format_label.set_hexpand(true); // Allow format label to expand
+                let year_text = if let Some(original_release_date_str) = album.original_release_date {
+                    original_release_date_str.split('-').next().unwrap_or("N/A").to_string()
+                } else if let Some(year) = album.year {
+                    format!("{}", year)
+                } else {
+                    String::new()
+                };
+                let year_label = create_album_label(
+                    &year_text,
+                    &["album-year-label"], // Use the new class for year label
+                    None,
+                    None,
+                    false,
+                    None,
+                    None,
+                );
+                year_label.set_halign(Align::End);
+                year_label.set_hexpand(false); // Do not allow year label to expand
 
                 // Album box creation
                 let album_tile_box = Box::builder()
@@ -390,7 +415,16 @@ pub async fn populate_albums_grid(
                 title_area_box.append(&title_label);
                 album_tile_box.append(&title_area_box);
                 album_tile_box.append(&artist_label);
-                album_tile_box.append(&format_label);
+
+                // Create a horizontal box to hold format and year labels
+                let metadata_box = Box::builder()
+                    .orientation(Orientation::Horizontal)
+                    .spacing(0) // No spacing between the two labels
+                    .hexpand(true)
+                    .build();
+                metadata_box.append(&format_label);
+                metadata_box.append(&year_label);
+                album_tile_box.append(&metadata_box);
                 album_tile_box.set_css_classes(&["album-tile"]);
 
                 // Set album_id as widget data for double-click navigation
