@@ -332,6 +332,12 @@ fn build_track_row(t: &crate::data::models::Track) -> ActionRow {
         info_box.append(&year_label);
     }
 
+    // Number of songs in the album
+    let total_songs_count = tracks.len();
+    if total_songs_count > 0 {
+        info_box.append(&build_info_label(&format!("{} Songs", total_songs_count), Some("album-meta-label")));
+    }
+
     // Duration as HH:MM:SS
     let total_length: u32 = tracks.iter().filter_map(|t| t.duration).sum();
     info_box.append(&build_info_label(&format_duration_hms(total_length), Some("album-meta-label")));
@@ -372,6 +378,7 @@ fn build_track_row(t: &crate::data::models::Track) -> ActionRow {
         if show_hires {
             if let Ok(pixbuf) = Pixbuf::from_file_at_scale("assets/hires.png", -1, 40, true) {
                 let hires_pic = Picture::for_pixbuf(&pixbuf);
+                hires_pic.set_size_request(40, 40);
                 hires_pic.set_halign(Align::Start);
                 outer_row.append(&hires_pic);
             }
