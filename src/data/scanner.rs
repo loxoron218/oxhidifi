@@ -5,16 +5,15 @@ use glib::MainContext;
 use gtk4::Label;
 use libadwaita::ViewStack;
 use libadwaita::prelude::WidgetExt;
-use lofty::{probe::Probe, tag::Tag};
-use lofty::prelude::{Accessor, AudioFile, TaggedFileExt, ItemKey};
-use lofty::tag::items::Timestamp;
+use lofty::{probe::Probe, tag::items::Timestamp};
+use lofty::prelude::{Accessor, AudioFile, TaggedFileExt};
+use lofty::prelude::ItemKey::{AlbumArtist, OriginalReleaseDate};
 use regex::Regex;
 use sqlx::{query, Row, SqlitePool};
 use tokio::fs::{File, read_dir};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
-use crate::data::various_artists::get_album_artist;
 use crate::data::db::{fetch_all_folders, insert_or_get_album, insert_or_get_artist, insert_track, remove_album_and_tracks, remove_albums_with_no_tracks, remove_artists_with_no_albums, remove_folder_and_albums, remove_orphaned_tracks, synchronize_dr_completed_from_store};
 
 /// Recursively scan a folder for supported audio files and subfolders.
@@ -24,8 +23,7 @@ pub fn scan_folder<'a>(
     pool: &'a SqlitePool,
     folder_path: &'a str,
     folder_id: i64,
-) -> Pin<Box<dyn Future<Output = Result<(), Box<dyn Error>>> + 'a>>
-{
+) -> Pin<Box<dyn Future<Output = Result<(), Box<dyn Error>>> + 'a>> {
     Box::pin(async move {
 
         // Scan for DR value in .txt/.log files in this folder
@@ -41,19 +39,17 @@ pub fn scan_folder<'a>(
             if path.is_dir() {
 
                 // Recurse into subdirectories
-                if let Err(_) =
-                    scan_folder(pool, path.to_str().unwrap_or("INVALID UTF-8"), folder_id).await
-                {
+                if let Some(path_str) = path.to_str() {
+                    if let Err(_) = scan_folder(pool, path_str, folder_id).await {
+                    }
                 }
             } else if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
                 let supported_extensions = ["mp3", "flac", "ogg", "wav", "m4a", "opus", "aiff"];
                 if supported_extensions.contains(&ext.to_lowercase().as_str()) {
+                    if let Err(_) = process_file(pool, &path, folder_id, dr_value).await {
+                    }
                 }
             }
-        }
-
-        // After scanning all entries in a folder, process it as an album
-        if let Err(_e) = process_album_folder(pool, Path::new(folder_path), folder_id, dr_value).await {
         }
         Ok(())
     })
@@ -220,128 +216,112 @@ async fn scan_dr_value(folder_path: &str) -> Result<Option<u8>, Box<dyn Error>> 
     Ok(highest_dr)
 }
 
-/// Process a single audio file: extract tags and return relevant data.
-async fn process_audio_file(
-    path: &Path,
-) -> Result<Option<(Tag, String, Option<u32>, Option<u32>, Option<String>, u32, Option<u32>, Option<u32>)>, Box<dyn Error>> {
-    let tagged_file = Probe::open(path)?.read()?;
-    let tag = tagged_file.primary_tag().cloned();
-    if let Some(tag) = tag {
-        let title = tag
-            .title()
-            .map(Cow::into_owned)
-            .unwrap_or_else(|| {
-                path.file_stem()
-                    .and_then(|s| s.to_str())
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| "Unknown Title".to_string())
-            });
-        let track_no = tag.track();
-        let disc_no = tag.disk();
-        let duration = tagged_file.properties().duration().as_secs() as u32;
-        let format = path
-            .extension()
-            .and_then(|e| e.to_str())
-            .map(|s| s.to_lowercase());
-        let bit_depth = tagged_file.properties().bit_depth();
-        let frequency = tagged_file.properties().sample_rate();
-        Ok(Some((tag, title, track_no, disc_no, format, duration, bit_depth.map(|b| b as u32), frequency)))
-    } else {
-        Ok(None)
-    }
-}
-
-/// Process an album folder: extract tags from all files, determine album artist, and insert/update DB.
-async fn process_album_folder(
+/// Process a single audio file: extract tags, handle missing metadata, and insert into the database.
+async fn process_file(
     pool: &SqlitePool,
-    folder_path: &Path,
+    path: &Path,
     folder_id: i64,
     dr_value: Option<u8>,
 ) -> Result<(), Box<dyn Error>> {
-    let mut audio_files_in_folder = Vec::new();
-    let mut dir_entries = read_dir(folder_path).await?;
-    while let Some(entry) = dir_entries.next_entry().await? {
-        let path = entry.path();
-        if path.is_file() {
-            if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-                let supported_extensions = ["mp3", "flac", "ogg", "wav", "m4a", "opus", "aiff"];
-                if supported_extensions.contains(&ext.to_lowercase().as_str()) {
-                    audio_files_in_folder.push(path);
-                }
+
+    // Probe the file to read metadata. If it fails, we can't process it.
+    let tagged_file = match Probe::open(path) {
+        Ok(probe) => match probe.read() {
+            Ok(tf) => tf,
+            Err(_) => {
+                return Ok(());
             }
+        },
+        Err(_) => {
+            return Ok(());
         }
-    }
-    if audio_files_in_folder.is_empty() {
-        return Ok(());
-    }
-    let mut tags_in_album = Vec::new();
-    let mut album_title: Option<String> = None;
-    let mut cover_art: Option<Vec<u8>> = None;
-    for path in &audio_files_in_folder {
-        if let Ok(tagged_file) = Probe::open(path)?.read() {
-            if let Some(tag) = tagged_file.primary_tag() {
-                tags_in_album.push(tag.clone());
-                if album_title.is_none() {
-                    album_title = tag.album().map(Cow::into_owned);
-                }
-                if cover_art.is_none() {
-                    cover_art = tag.pictures().first().map(|pic| pic.data().to_vec());
-                }
-            }
-        }
-    }
-    let album_title = album_title.unwrap_or_else(|| {
-        folder_path
-            .file_name()
-            .and_then(|s| s.to_str())
-            .map(|s| s.to_string())
-            .unwrap_or_else(|| "Unknown Album".to_string())
+    };
+    let tag = tagged_file.primary_tag(); // This is an Option<&Tag>
+    let properties = tagged_file.properties();
+
+    // --- Extract metadata with fallbacks ---
+    // Title: use filename if tag is missing.
+    let title = tag
+        .and_then(|t| t.title())
+        .map(Cow::into_owned)
+        .unwrap_or_else(|| {
+            path.file_stem()
+                .and_then(|s| s.to_str())
+                .map(String::from)
+                .unwrap_or_else(|| "Unknown Title".to_string())
+        });
+
+    // Artist: use "Unknown Artist" if tag is missing.
+    let artist_name = tag
+        .and_then(|t| t.artist())
+        .map(Cow::into_owned)
+        .unwrap_or_else(|| "Unknown Artist".to_string());
+
+    // Album: use "Unknown Album" if tag is missing.
+    let album_title = tag
+        .and_then(|t| t.album())
+        .map(Cow::into_owned)
+        .unwrap_or_else(|| "Unknown Album".to_string());
+
+    // Album Artist: use the dedicated tag, fallback to track artist.
+    let album_artist_name = tag
+        .and_then(|t| t.get_string(&AlbumArtist))
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| artist_name.clone());
+
+    // Other metadata fields with fallbacks to None.
+    let year = tag.and_then(|t| t.year()).map(|y| y as i32);
+    let track_no = tag.and_then(|t| t.track());
+    let disc_no = tag.and_then(|t| t.disk());
+    let cover_art = tag.and_then(|t| t.pictures().first().map(|pic| pic.data().to_vec()));
+    let original_release_date = tag.and_then(|t| {
+        t.get_string(&OriginalReleaseDate)
+            .and_then(|date_str| date_str.parse::<Timestamp>().ok())
+            .map(|ts| ts.to_string())
     });
-    let album_artist_name = get_album_artist(&tags_in_album.iter().collect::<Vec<_>>());
+
+    // Extract properties from the file.
+    let duration = properties.duration().as_secs() as u32;
+    let format = path
+        .extension()
+        .and_then(|s| s.to_str())
+        .map(str::to_lowercase);
+    let bit_depth = properties.bit_depth().map(|b| b as u32);
+    let frequency = properties.sample_rate();
+
+    // --- Database Operations ---
+    // Insert artists and get their IDs.
+    let artist_id = insert_or_get_artist(pool, &artist_name).await?;
     let album_artist_id = insert_or_get_artist(pool, &album_artist_name).await?;
+
+    // Insert album and get its ID.
     let album_id = insert_or_get_album(
         pool,
         &album_title,
         album_artist_id,
-        tags_in_album.first().and_then(|t| t.year()).map(|y| y as i32),
+        year,
         cover_art,
         folder_id,
         dr_value,
-        tags_in_album.first().and_then(|t| {
-            if let Some(original_release_date_str) = t.get_string(&ItemKey::OriginalReleaseDate) {
-                if let Ok(original_release_date) = original_release_date_str.parse::<Timestamp>() {
-                    return Some(original_release_date.to_string());
-                }
-            }
-            None
-        }),
+        original_release_date,
     )
     .await?;
-    for path in &audio_files_in_folder {
-        if let Some((tag, title, track_no, disc_no, format, duration, bit_depth, frequency)) =
-            process_audio_file(path).await?
-        {
-            let artist_name = tag
-                .artist()
-                .map(Cow::into_owned)
-                .unwrap_or_else(|| "Unknown Artist".to_string());
-            let artist_id = insert_or_get_artist(pool, &artist_name).await?;
-            insert_track(
-                pool,
-                &title,
-                album_id,
-                artist_id,
-                path.to_string_lossy().as_ref(),
-                duration,
-                track_no,
-                disc_no,
-                format,
-                bit_depth,
-                frequency,
-            )
-            .await?;
-        }
-    }
+
+    // Insert the track, linking it to the album and artist.
+    insert_track(
+        pool,
+        &title,
+        album_id,
+        artist_id,
+        path.to_string_lossy().as_ref(),
+        duration,
+        track_no,
+        disc_no,
+        format,
+        bit_depth,
+        frequency,
+    )
+    .await?;
 
     Ok(())
 }
