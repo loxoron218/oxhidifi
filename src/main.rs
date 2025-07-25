@@ -2,8 +2,8 @@ mod ui;
 mod data;
 mod utils;
 
-use std::{fs::OpenOptions, path::PathBuf, sync::Arc};
-use std::env::{current_exe, var_os};
+use std::{fs::create_dir_all, path::PathBuf, sync::Arc};
+use std::env::var;
 
 use gtk4::{CssProvider, STYLE_PROVIDER_PRIORITY_APPLICATION, StyleContext};
 use gtk4::gdk::Display;
@@ -32,27 +32,23 @@ async fn main() {
         STYLE_PROVIDER_PRIORITY_APPLICATION,
     );
 
-    // Find a project-local path for the DB
-    let exe_dir = current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-        .unwrap_or_else(|| PathBuf::from("."));
-    let mut db_path = exe_dir.join("music_library.db");
+    // Determine the configuration directory
+    const CONFIG_DIR: &str = ".config/oxhidifi";
+    let home_dir = var("HOME")
+        .expect("HOME environment variable not set");
+    let config_dir = PathBuf::from(home_dir).join(CONFIG_DIR);
 
-    // If not writable, use home directory
-    let test = OpenOptions::new().write(true).create(true).open(&db_path);
-    if test.is_err() {
-        let home_dir = var_os("HOME").or_else(|| var_os("USERPROFILE"));
-        if let Some(home) = home_dir {
-            db_path = PathBuf::from(home).join("music_library.db");
-        }
-    }
-    let db_url = format!("sqlite://{}", db_path.to_string_lossy());
+    // Ensure the configuration directory exists
+    create_dir_all(&config_dir).expect(&format!("Failed to create config directory at {}: {}", config_dir.display(), "Error creating directory"));
+
+    // Construct the database path within the configuration directory
+    let db_path = config_dir.join("music_library.db");
+    let db_url = format!("sqlite://{}?mode=rwc", db_path.to_string_lossy());
 
     // Set up DB pool and run migrations
     let pool = SqlitePool::connect(&db_url)
         .await
-        .expect("Failed to connect to DB");
+        .expect(&format!("Failed to connect to DB at {}: {}", db_path.display(), "Error connecting to database"));
     init_db(&pool).await.expect("Failed to initialize DB");
     let pool = Arc::new(pool);
 
