@@ -5,29 +5,31 @@ use crate::utils::best_dr_persistence::{DrValueStore, AlbumKey};
 
 /// Remove a folder and all its albums and tracks by folder ID.
 pub async fn remove_folder_and_albums(pool: &SqlitePool, folder_id: i64) -> Result<()> {
+    let mut tx = pool.begin().await?;
 
     // Remove tracks belonging to albums in this folder
     query("DELETE FROM tracks WHERE album_id IN (SELECT id FROM albums WHERE folder_id = ?)")
         .bind(folder_id)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
 
     // Remove albums in this folder
     query("DELETE FROM albums WHERE folder_id = ?")
         .bind(folder_id)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
 
-    // Remove orphaned artists (no albums left)
-    query("DELETE FROM artists WHERE id NOT IN (SELECT artist_id FROM albums)")
-        .execute(pool)
+    // Remove orphaned artists (no albums or tracks left)
+    query("DELETE FROM artists WHERE id NOT IN (SELECT artist_id FROM albums) AND id NOT IN (SELECT artist_id FROM tracks)")
+        .execute(&mut *tx)
         .await?;
 
     // Remove the folder itself
     query("DELETE FROM folders WHERE id = ?")
         .bind(folder_id)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
+    tx.commit().await?;
     Ok(())
 }
 
@@ -98,7 +100,7 @@ pub async fn remove_album_and_tracks(pool: &SqlitePool, album_id: i64) -> Result
 
 /// Remove artists that have no albums left in the database.
 pub async fn remove_artists_with_no_albums(pool: &SqlitePool) -> Result<()> {
-    let _result = query("DELETE FROM artists WHERE id NOT IN (SELECT artist_id FROM albums)")
+    let _result = query("DELETE FROM artists WHERE id NOT IN (SELECT artist_id FROM albums) AND id NOT IN (SELECT artist_id FROM tracks)")
         .execute(pool)
         .await?;
     Ok(())

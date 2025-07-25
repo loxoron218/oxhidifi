@@ -83,10 +83,8 @@ pub fn show_settings_dialog(
         }
 
         // Remove all children from the ListBox
-        let mut child = list_box.first_child();
-        while let Some(widget) = child {
-            child = widget.next_sibling();
-            list_box.remove(&widget);
+        while let Some(child) = list_box.first_child() {
+            list_box.remove(&child);
         }
 
         // Sort folders alphabetically by path before displaying
