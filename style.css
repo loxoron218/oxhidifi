@@ -37,12 +37,6 @@
     font-weight: 700;
     font-size: 1.1em;
 }
-.album-year-label {
-    color: var(--window_fg_color, #666);
-    font-size: 0.9em;
-    font-style: italic;
-    font-weight: 400;
-}
 
 /* =====================
    Album Detail Page Styles
@@ -50,7 +44,7 @@
 .album-detail-page .album-artist-label {
     font-size: 20px;
     font-weight: 500;
-    color: #888;
+    color: var(--window_fg_color, #AAA);
     margin-bottom: 6px;
 }
 .album-detail-page .album-meta-label {

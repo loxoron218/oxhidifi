@@ -328,6 +328,7 @@ fn build_track_row(t: &crate::data::models::Track) -> ActionRow {
         let year_label = Label::builder()
             .label(&year_display_text)
             .halign(Align::Start)
+            .css_classes(vec!["album-meta-label"])
             .build();
         info_box.append(&year_label);
     }
