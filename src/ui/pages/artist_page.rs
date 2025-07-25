@@ -219,7 +219,7 @@ fn build_album_card(
     };
     let year_label = create_album_label(
         &year_text,
-        &["album-year-label"],
+        &["album-format-label"],
         None,
         None,
         false,

@@ -274,7 +274,7 @@ pub fn connect_live_search(
                             };
                             let year_label = create_album_label(
                                 &year_text,
-                                &["album-year-label"],
+                                &["album-format-label"],
                                 None,
                                 None,
                                 false,

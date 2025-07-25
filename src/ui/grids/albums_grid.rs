@@ -364,7 +364,7 @@ pub async fn populate_albums_grid(
                 };
                 let year_label = create_album_label(
                     &year_text,
-                    &["album-year-label"], // Use the new class for year label
+                    &["album-format-label"],
                     None,
                     None,
                     false,
