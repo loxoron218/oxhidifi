@@ -1,8 +1,9 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
+use std::{cell::RefCell, rc::Rc, sync::Arc};
+use std::collections::{HashMap, HashSet};
 
 use gdk_pixbuf::{InterpType, Pixbuf, PixbufLoader};
 use gdk_pixbuf::prelude::PixbufLoaderExt;
-use glib::{MainContext, WeakRef};
+use glib::{MainContext, markup_escape_text, WeakRef};
 use gtk4::{Align, Box, Button, CheckButton, EventControllerMotion, Image, Label, Orientation, Overlay, Picture, PolicyType::Never, ScrolledWindow, Stack, StackTransitionType};
 use gtk4::pango::{EllipsizeMode, WrapMode};
 use libadwaita::{ActionRow, Clamp, PreferencesGroup, ViewStack};
@@ -38,6 +39,20 @@ pub async fn album_page(
     let artist: Rc<crate::data::models::Artist> = Rc::new(fetch_artist_by_id(&*db_pool, album.artist_id).await.unwrap());
     let folder: Rc<crate::data::models::Folder> = Rc::new(fetch_folder_by_id(&*db_pool, album.folder_id).await.unwrap()); // Fetch folder
     let tracks = fetch_tracks_by_album(&*db_pool, album_id).await.unwrap();
+    let is_various_artists_album = tracks.iter().any(|t| t.artist_id != album.artist_id);
+
+    // Fetch unique artists for tracks
+    let mut track_artist_ids: HashSet<i64> = HashSet::new();
+    for track in &tracks {
+        track_artist_ids.insert(track.artist_id);
+    }
+    let mut track_artists: HashMap<i64, String> = HashMap::new();
+    for artist_id in track_artist_ids {
+        if let Some(art) = fetch_artist_by_id(&*db_pool, artist_id).await.ok() {
+            track_artists.insert(artist_id, art.name);
+        }
+    }
+
     let horizontal_margin = 32;
     let page = Box::builder()
         .orientation(Orientation::Vertical)
@@ -200,49 +215,61 @@ fn build_dr_badge(
 }
 
 /// Build a track row for the album tracklist.
-fn build_track_row(t: &crate::data::models::Track) -> ActionRow {
-        let mut subtitle_fields = Vec::new();
-        if let Some(fmt) = &t.format {
-            subtitle_fields.push(fmt.to_uppercase());
+fn build_track_row(
+    t: &Track,
+    album_artist_id: i64,
+    track_artists: &HashMap<i64, String>,
+    is_various_artists_album: bool,
+) -> ActionRow {
+    let mut subtitle_fields = Vec::new();
+
+    // Add track artist if different from album artist OR if it's a "Various Artists" album
+    if t.artist_id != album_artist_id || is_various_artists_album {
+        if let Some(artist_name) = track_artists.get(&t.artist_id) {
+            subtitle_fields.push(artist_name.clone());
         }
-        if let Some(bit) = t.bit_depth {
-            subtitle_fields.push(format!("{}-Bit", bit));
-        }
-        if let Some(freq) = t.frequency {
-            subtitle_fields.push(format!("{} kHz", format_freq_khz(freq)));
-        }
-        let subtitle = subtitle_fields.join(" · ");
-        let row = ActionRow::builder()
-            .title(glib::markup_escape_text(&t.title))
-            .subtitle(glib::markup_escape_text(&subtitle))
-            .build();
-        let disc = t.disc_no.unwrap_or(1);
-        let track = t.track_no.unwrap_or(0);
-        let number_label = Label::builder()
-            .label(&format!("{}-{:02}", disc, track))
-            .css_classes(["dim-label"])
-            .xalign(0.0)
-            .width_chars(5)
-            .build();
-        number_label.set_margin_end(16);
-        row.add_prefix(&number_label);
-        if let Some(length) = t.duration.map(format_duration_mmss) {
-            let length_label = Label::builder()
-                .label(&length)
-                .css_classes(["dim-label"])
-                .xalign(1.0)
-                .build();
-            length_label.set_margin_end(8);
-            row.add_suffix(&length_label);
-        }
-        let play_pause_button = Button::builder()
-            .icon_name("media-playback-start")
-            .css_classes(["flat"])
-            .halign(Align::End)
-            .build();
-        row.add_suffix(&play_pause_button);
-        row
     }
+    if let Some(fmt) = &t.format {
+        subtitle_fields.push(fmt.to_uppercase());
+    }
+    if let Some(bit) = t.bit_depth {
+        subtitle_fields.push(format!("{}-Bit", bit));
+    }
+    if let Some(freq) = t.frequency {
+        subtitle_fields.push(format!("{} kHz", format_freq_khz(freq)));
+    }
+    let subtitle = subtitle_fields.join(" · ");
+    let row = ActionRow::builder()
+        .title(markup_escape_text(&t.title))
+        .subtitle(markup_escape_text(&subtitle))
+        .build();
+    let disc = t.disc_no.unwrap_or(1);
+    let track = t.track_no.unwrap_or(0);
+    let number_label = Label::builder()
+        .label(&format!("{}-{:02}", disc, track))
+        .css_classes(["dim-label"])
+        .xalign(0.0)
+        .width_chars(5)
+        .build();
+    number_label.set_margin_end(16);
+    row.add_prefix(&number_label);
+    if let Some(length) = t.duration.map(format_duration_mmss) {
+        let length_label = Label::builder()
+            .label(&length)
+            .css_classes(["dim-label"])
+            .xalign(1.0)
+            .build();
+        length_label.set_margin_end(8);
+        row.add_suffix(&length_label);
+    }
+    let play_pause_button = Button::builder()
+        .icon_name("media-playback-start")
+        .css_classes(["flat"])
+        .halign(Align::End)
+        .build();
+    row.add_suffix(&play_pause_button);
+    row
+}
 
     // Header
     let header = Box::builder()
@@ -444,7 +471,12 @@ fn build_track_row(t: &crate::data::models::Track) -> ActionRow {
         .margin_end(horizontal_margin)
         .build();
     for t in &tracks {
-        group.add(&build_track_row(t));
+        group.add(&build_track_row(
+            t,
+            album.artist_id,
+            &track_artists,
+            is_various_artists_album,
+        ));
     }
 
     // Layout
