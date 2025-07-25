@@ -76,6 +76,7 @@ fn build_album_cover(art: &Option<Vec<u8>>) -> Picture {
                     if let Some(scaled) = pixbuf.scale_simple(new_width, new_height, InterpType::Bilinear) {
                         let pic = Picture::for_pixbuf(&scaled);
                         pic.set_size_request(300, 300);
+                        pic.add_css_class("album-cover-border");
                         return pic;
                     }
                 }
@@ -83,6 +84,7 @@ fn build_album_cover(art: &Option<Vec<u8>>) -> Picture {
         }
         let pic = Picture::new();
         pic.set_size_request(300, 300);
+        pic.add_css_class("album-cover-border");
         pic
     }
 

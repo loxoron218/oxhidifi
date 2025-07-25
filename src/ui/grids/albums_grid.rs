@@ -58,12 +58,14 @@ fn create_album_cover(cover_art: Option<&Vec<u8>>, cover_size: i32) -> Picture {
         picture.set_size_request(cover_size, cover_size);
         picture.set_halign(Align::Start);
         picture.set_valign(Align::Start);
+        picture.add_css_class("album-cover-border");
         picture
     } else {
         let pic = Picture::new();
         pic.set_size_request(cover_size, cover_size);
         pic.set_halign(Align::Start);
         pic.set_valign(Align::Start);
+        pic.add_css_class("album-cover-border");
         pic
     }
 }

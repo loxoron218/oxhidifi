@@ -177,10 +177,12 @@ fn build_album_card(
             .unwrap();
         let picture = Picture::for_pixbuf(&scaled);
         picture.set_size_request(cover_size, cover_size);
+        picture.add_css_class("album-cover-border");
         picture
     } else {
         let pic = Picture::new();
         pic.set_size_request(cover_size, cover_size);
+        pic.add_css_class("album-cover-border");
         pic
     };
 
