@@ -25,6 +25,7 @@ pub fn show_settings_dialog(
     sort_ascending: Rc<Cell<bool>>,
     sort_ascending_artists: Rc<Cell<bool>>,
     db_pool: Arc<SqlitePool>,
+    is_settings_open: Rc<Cell<bool>>,
 ) {
 
     // Create the settings window (acts as a modal dialog)
@@ -34,6 +35,7 @@ pub fn show_settings_dialog(
         .default_height(700)
         .modal(true)
         .build();
+    is_settings_open.set(true);
 
     // Add margin to match Bottles spacing
     dialog.set_margin_top(32);
@@ -239,6 +241,7 @@ remove_btn.connect_clicked(move |btn| {
 
     // Save sort order on settings window close
     let sort_orders_rc = sort_orders.clone();
+    let is_settings_open_clone = is_settings_open.clone();
     dialog.connect_close_request(move |_| {
         let current_orders = sort_orders_rc.borrow().clone();
         let prev = load_settings();
@@ -248,6 +251,7 @@ remove_btn.connect_clicked(move |btn| {
             sort_ascending_artists: prev.sort_ascending_artists,
             completed_albums: prev.completed_albums,
         });
+        is_settings_open_clone.set(false);
         Propagation::Proceed
     });
 

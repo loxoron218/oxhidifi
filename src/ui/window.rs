@@ -86,6 +86,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         .default_height(800)
         .maximized(false)
         .build();
+    let is_settings_open = Rc::new(Cell::new(false));
 
     // Library refresh logic is now modularized in refresh.rs
     let (sender, receiver, refresh_library_ui) = setup_library_refresh_channel(
@@ -172,6 +173,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         tile_size_rc.clone(),
         refresh_library_ui.clone(),
         screen_width,
+        is_settings_open.clone(),
     );
 
     // Start the library watcher
@@ -346,6 +348,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         sort_ascending.clone(),
         sort_ascending_artists.clone(),
         db_pool.clone(),
+        is_settings_open.clone(),
     );
 
     // Present the main window and set its main content container for the UI layout

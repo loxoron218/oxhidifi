@@ -97,6 +97,7 @@ pub fn connect_settings_dialog(
     sort_ascending: Rc<Cell<bool>>,
     sort_ascending_artists: Rc<Cell<bool>>,
     db_pool: Arc<SqlitePool>,
+    is_settings_open: Rc<Cell<bool>>,
 ) {
     let window_clone = parent_window.clone();
     let sort_orders2 = sort_orders.clone();
@@ -104,6 +105,7 @@ pub fn connect_settings_dialog(
     let sort_ascending = sort_ascending.clone();
     let sort_ascending_artists = sort_ascending_artists.clone();
     let db_pool2 = db_pool.clone();
+    let is_settings_open_for_closure = is_settings_open.clone();
     settings_button.connect_clicked(move |_| {
         let db_pool = db_pool2.clone();
         let refresh_library_ui_clone = refresh_library_ui.clone();
@@ -111,6 +113,7 @@ pub fn connect_settings_dialog(
         let sort_ascending_artists_clone = sort_ascending_artists.clone();
         let window_clone_inner = window_clone.clone();
         let sort_orders_clone = sort_orders2.clone();
+        let is_settings_open_for_async = is_settings_open_for_closure.clone();
         MainContext::default().spawn_local(async move {
             show_settings_dialog(
                 &window_clone_inner,
@@ -119,6 +122,7 @@ pub fn connect_settings_dialog(
                 sort_ascending_clone,
                 sort_ascending_artists_clone,
                 db_pool.clone(),
+                is_settings_open_for_async,
             );
         });
     });

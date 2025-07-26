@@ -146,6 +146,7 @@ pub fn setup_live_monitor_refresh(
     tile_size_rc: Rc<Cell<i32>>,
     refresh_library_ui: Rc<dyn Fn(bool, bool)>,
     screen_width: i32,
+    is_settings_open: Rc<Cell<bool>>,
 ) {
     let last_width = Rc::new(Cell::new(screen_width));
     timeout_add_local(Duration::from_secs(1), move || {
@@ -155,7 +156,9 @@ pub fn setup_live_monitor_refresh(
             cover_size_rc.set(new_cover_size);
             tile_size_rc.set(new_tile_size);
             last_width.set(cur_width);
-            refresh_library_ui(sort_ascending.get(), sort_ascending_artists.get());
+            if !is_settings_open.get() {
+                refresh_library_ui(sort_ascending.get(), sort_ascending_artists.get());
+            }
         }
         Continue
     });
