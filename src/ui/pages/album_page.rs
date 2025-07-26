@@ -6,7 +6,7 @@ use gdk_pixbuf::prelude::PixbufLoaderExt;
 use glib::{MainContext, markup_escape_text, WeakRef};
 use gtk4::{Align, Box, Button, CheckButton, EventControllerMotion, Image, Label, Orientation, Overlay, Picture, PolicyType::Never, ScrolledWindow, Stack, StackTransitionType};
 use gtk4::pango::{EllipsizeMode, WrapMode};
-use libadwaita::{ActionRow, Clamp, PreferencesGroup, ViewStack};
+use libadwaita::{ActionRow, PreferencesGroup, ViewStack};
 use libadwaita::prelude::{ActionRowExt, BoxExt, CheckButtonExt, PreferencesGroupExt, WidgetExt};
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
@@ -277,9 +277,8 @@ fn build_track_row(
     let header = Box::builder()
         .orientation(Orientation::Horizontal)
         .spacing(32)
-        .margin_start(horizontal_margin)
-        .margin_end(horizontal_margin)
         .css_classes(["album-header"])
+        .hexpand(true)
         .build();
     if album.cover_art.is_some() {
         header.set_margin_top(32);
@@ -304,7 +303,7 @@ fn build_track_row(
         .orientation(Orientation::Vertical)
         .spacing(12)
         .halign(Align::Start)
-        .valign(Align::End)
+        .valign(Align::Start)
         .hexpand(true)
         .css_classes(["album-info-box"])
         .build();
@@ -313,7 +312,8 @@ fn build_track_row(
         .halign(Align::Start)
         .wrap(true)
         .wrap_mode(WrapMode::Word)
-        .ellipsize(EllipsizeMode::None)
+        .ellipsize(EllipsizeMode::End)
+        .lines(3)
         .hexpand(true)
         .build();
     title_label.set_xalign(0.0);
@@ -326,7 +326,8 @@ fn build_track_row(
         .halign(Align::Start)
         .wrap(true)
         .wrap_mode(WrapMode::Word)
-        .ellipsize(EllipsizeMode::None)
+        .ellipsize(EllipsizeMode::End)
+        .lines(1)
         .hexpand(true)
         .build();
     artist_label.set_xalign(0.0);
@@ -354,23 +355,31 @@ fn build_track_row(
         (None, None) => {}
     }
     if !year_display_text.is_empty() {
-        let year_label = Label::builder()
-            .label(&year_display_text)
-            .halign(Align::Start)
-            .css_classes(vec!["album-meta-label"])
-            .build();
-        info_box.append(&year_label);
+    let meta_box = Box::builder()
+        .orientation(Orientation::Horizontal)
+        .spacing(8)
+        .halign(Align::Start)
+        .build();
+    let mut meta_fields = Vec::new();
+    if !year_display_text.is_empty() {
+        meta_fields.push(year_display_text);
     }
 
     // Number of songs in the album
     let total_songs_count = tracks.len();
     if total_songs_count > 0 {
-        info_box.append(&build_info_label(&format!("{} Songs", total_songs_count), Some("album-meta-label")));
+        meta_fields.push(format!("{} Songs", total_songs_count));
     }
 
     // Duration as HH:MM:SS
     let total_length: u32 = tracks.iter().filter_map(|t| t.duration).sum();
-    info_box.append(&build_info_label(&format_duration_hms(total_length), Some("album-meta-label")));
+    meta_fields.push(format_duration_hms(total_length));
+    let meta_text = meta_fields.join(" · ");
+    if !meta_text.is_empty() {
+        meta_box.append(&build_info_label(&meta_text, Some("album-meta-label")));
+    }
+    info_box.append(&meta_box);
+    } // Close the if !year_display_text.is_empty() block
     let (most_common_bit_depth, most_common_freq, most_common_format_opt) =
         get_most_common_track_properties(&tracks);
 
@@ -469,8 +478,6 @@ fn build_track_row(
 
     // Track List
     let group = PreferencesGroup::builder()
-        .margin_start(horizontal_margin)
-        .margin_end(horizontal_margin)
         .build();
     for t in &tracks {
         group.add(&build_track_row(
@@ -482,27 +489,21 @@ fn build_track_row(
     }
 
     // Layout
-    let clamp = Clamp::builder()
-        .maximum_size(1000)
-        .child(&header)
-        .build();
-    page.append(&clamp);
-    page.append(&group);
-    page.set_margin_bottom(32); // Add margin to the bottom of the page
-
-    // Create a ScrolledWindow for the entire page
-    let page_scrolled_window = ScrolledWindow::builder()
-        .child(&page)
+    page.append(&header);
+    let group_scrolled_window = ScrolledWindow::builder()
+        .child(&group)
         .vexpand(true)
         .hexpand(true)
-        .hscrollbar_policy(Never) // Disable horizontal scrollbar
+        .hscrollbar_policy(Never)
         .build();
+    page.append(&group_scrolled_window);
+    page.set_margin_bottom(32);
 
     // Stack Management
     if let Some(existing) = stack.child_by_name("album_detail") {
         stack.remove(&existing);
     }
-    stack.add_titled(&page_scrolled_window, Some("album_detail"), "Album"); // Add the new scrolled window to stack
+    stack.add_titled(&page, Some("album_detail"), "Album");
     stack.set_visible_child_name("album_detail");
     header_btn_stack.set_visible_child_name("back");
 }

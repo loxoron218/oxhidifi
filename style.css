@@ -70,8 +70,7 @@
     margin-bottom: 24px;
 }
 .album-info-box {
-    margin-left: 32px;
-    padding: 8px 0;
+    padding: 0 0 8px 0;
 }
 .album-cover-play {
     background: rgba(0,0,0,0.6);
