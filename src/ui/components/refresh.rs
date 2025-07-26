@@ -34,6 +34,7 @@ pub fn setup_library_refresh_channel(
     stack: Rc<ViewStack>,
     header_btn_stack: Rc<ViewStack>,
     nav_history: Rc<RefCell<Vec<String>>>,
+    is_settings_open: Rc<Cell<bool>>,
 ) -> (
     UnboundedSender<()>,
     UnboundedReceiver<()>,
@@ -60,6 +61,7 @@ pub fn setup_library_refresh_channel(
             let stack_clone = stack.clone();
             let header_btn_stack_clone = header_btn_stack.clone();
             let nav_history_clone = nav_history.clone();
+            let is_settings_open_clone = is_settings_open.clone();
             Rc::new(move |sort_ascending_param: bool, sort_ascending_artists_param: bool| {
                 sort_ascending.set(sort_ascending_param);
                 sort_ascending_artists.set(sort_ascending_artists_param);
@@ -83,7 +85,11 @@ pub fn setup_library_refresh_channel(
                 let nav_history = nav_history_clone.clone();
                 let sort_ascending_clone_for_async = sort_ascending.clone();
                 let sort_ascending_artists_clone_for_async = sort_ascending_artists.clone();
+                let is_settings_open_for_async = is_settings_open_clone.clone();
                 MainContext::default().spawn_local(async move {
+                    if is_settings_open_for_async.get() {
+                        return;
+                    }
                     let current_tab = stack_rc.visible_child_name().unwrap_or_else(|| "albums".into());
                     if current_tab == "albums" {
                         if let (Some(albums_grid), Some(albums_inner_stack)) = (albums_grid_cell.borrow().as_ref(), albums_stack_cell.borrow().as_ref()) {

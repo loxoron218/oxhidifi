@@ -52,39 +52,6 @@ pub async fn fetch_album_by_id(pool: &SqlitePool, album_id: i64) -> Result<Album
     })
 }
 
-// Helper struct to return album details including artist name and folder path
-pub struct AlbumDetails {
-    pub _id: i64,
-    pub title: String,
-    pub artist_name: String,
-    pub folder_path: String,
-}
-
-/// Fetches album details (title, artist name, folder path) by album ID.
-pub async fn fetch_album_details_by_id(pool: &SqlitePool, album_id: i64) -> Result<AlbumDetails> {
-    let row = query(
-        r#"SELECT
-            a.id,
-            a.title,
-            ar.name AS artist_name,
-            f.path AS folder_path
-        FROM albums AS a
-        JOIN artists AS ar ON a.artist_id = ar.id
-        JOIN folders AS f ON a.folder_id = f.id
-        WHERE a.id = ?"#,
-    )
-    .bind(album_id)
-    .fetch_one(pool)
-    .await?;
-    Ok(AlbumDetails {
-        _id: row.get("id"),
-        title: row.get("title"),
-        artist_name: row.get("artist_name"),
-        folder_path: row.get("folder_path"),
-    })
-}
-
-
 /// Remove an album and all its tracks by album ID.
 pub async fn remove_album_and_tracks(pool: &SqlitePool, album_id: i64) -> Result<()> {
     query("DELETE FROM tracks WHERE album_id = ?")

@@ -109,6 +109,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         stack.clone().into(),
         header.left_btn_stack.clone().into(),
         nav_history.clone(),
+        is_settings_open.clone(),
     );
 
     // Navigation
