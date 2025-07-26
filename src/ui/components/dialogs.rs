@@ -143,6 +143,11 @@ pub fn show_remove_folder_confirmation_dialog<F: FnOnce() + 'static>(
         .text("Remove Folder?")
         .secondary_text("Removing this folder will delete all custom metadata associated with your music, including Best DR values. This action cannot be undone.")
         .build();
+
+    // Make the "OK" button red to indicate a destructive action
+    if let Some(ok_button) = dialog.widget_for_response(GtkOk) {
+        ok_button.add_css_class("destructive-action");
+    }
     dialog.connect_response(move |dialog, response| {
         if response == GtkOk {
             if let Some(f) = on_confirm_rc.borrow_mut().take() {
