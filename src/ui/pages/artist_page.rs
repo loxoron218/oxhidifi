@@ -11,7 +11,7 @@ use libadwaita::prelude::{BoxExt, ObjectExt, WidgetExt};
 use sqlx::{Error, query, Row, SqlitePool};
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::data::db::fetch_artist_by_id;
+use crate::data::db::db_crud::fetch_artist_by_id;
 use crate::ui::pages::album_page::album_page;
 use crate::utils::formatting::format_freq_khz;
 use crate::utils::screen::{compute_cover_and_tile_size, get_primary_screen_size};

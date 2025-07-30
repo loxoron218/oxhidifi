@@ -14,7 +14,10 @@ use tokio::fs::{File, read_dir};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
-use crate::data::db::{fetch_all_folders, insert_or_get_album, insert_or_get_artist, insert_track, remove_album_and_tracks, remove_albums_with_no_tracks, remove_artists_with_no_albums, remove_folder_and_albums, remove_orphaned_tracks, synchronize_dr_completed_from_store};
+use crate::data::db::db_dr_sync::synchronize_dr_completed_from_store;
+use crate::data::db::db_cleanup::{remove_album_and_tracks, remove_albums_with_no_tracks, remove_artists_with_no_albums, remove_folder_and_albums, remove_orphaned_tracks};
+use crate::data::db::db_crud::{insert_track, insert_or_get_album, insert_or_get_artist};
+use crate::data::db::db_query::fetch_all_folders;
 
 /// Recursively scan a folder for supported audio files and subfolders.
 /// For each audio file, extract tags and insert into the database.

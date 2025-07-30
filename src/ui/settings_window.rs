@@ -9,7 +9,8 @@ use libadwaita::{ActionRow, PreferencesGroup, PreferencesPage, PreferencesWindow
 use libadwaita::prelude::{ActionRowExt, ButtonExt, Cast, GtkWindowExt, IsA, ObjectExt, ObjectType, PreferencesGroupExt, PreferencesPageExt, PreferencesWindowExt, StaticType, WidgetExt};
 use sqlx::SqlitePool;
 
-use crate::data::db::{fetch_all_folders, remove_folder_and_albums};
+use crate::data::db::db_cleanup::remove_folder_and_albums;
+use crate::data::db::db_query::fetch_all_folders;
 use crate::data::models::Folder;
 use crate::ui::components::config::{load_settings, save_settings, Settings};
 use crate::ui::components::dialogs::show_remove_folder_confirmation_dialog;

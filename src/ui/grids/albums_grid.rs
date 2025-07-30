@@ -10,7 +10,7 @@ use libadwaita::prelude::{BoxExt, FixedExt, FlowBoxChildExt, ObjectExt, PixbufLo
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::data::db::fetch_album_display_info;
+use crate::data::db::db_query::fetch_album_display_info;
 use crate::data::scanner::create_scanning_label;
 use crate::ui::components::sorting::SortOrder;
 use crate::ui::pages::album_page::album_page;

@@ -11,8 +11,8 @@ use libadwaita::prelude::{ActionRowExt, BoxExt, CheckButtonExt, PreferencesGroup
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::data::db::{fetch_album_by_id, fetch_artist_by_id, fetch_folder_by_id, fetch_tracks_by_album, update_album_dr_completed};
-use crate::data::models::Track;
+use crate::data::db::db_crud::{fetch_album_by_id, fetch_artist_by_id, fetch_folder_by_id, fetch_tracks_by_album, update_album_dr_completed};
+use crate::data::models::{Album, Artist, Folder, Track};
 use crate::utils::best_dr_persistence::{AlbumKey, DrValueStore};
 use crate::utils::formatting::{format_bit_freq, format_duration_hms, format_duration_mmss, format_freq_khz};
 
@@ -35,9 +35,9 @@ pub async fn album_page(
     };
 
     // Fetch album, artist, and tracks asynchronously
-    let album: Rc<crate::data::models::Album> = Rc::new(fetch_album_by_id(&*db_pool, album_id).await.unwrap());
-    let artist: Rc<crate::data::models::Artist> = Rc::new(fetch_artist_by_id(&*db_pool, album.artist_id).await.unwrap());
-    let folder: Rc<crate::data::models::Folder> = Rc::new(fetch_folder_by_id(&*db_pool, album.folder_id).await.unwrap()); // Fetch folder
+    let album: Rc<Album> = Rc::new(fetch_album_by_id(&*db_pool, album_id).await.unwrap());
+    let artist: Rc<Artist> = Rc::new(fetch_artist_by_id(&*db_pool, album.artist_id).await.unwrap());
+    let folder: Rc<Folder> = Rc::new(fetch_folder_by_id(&*db_pool, album.folder_id).await.unwrap());
     let tracks = fetch_tracks_by_album(&*db_pool, album_id).await.unwrap();
     let is_various_artists_album = tracks.iter().any(|t| t.artist_id != album.artist_id);
 

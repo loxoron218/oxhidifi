@@ -5,7 +5,7 @@ use notify::{event::ModifyKind, Event, EventKind, RecommendedWatcher, recommende
 use sqlx::SqlitePool;
 use tokio::{runtime::Runtime, sync::mpsc::UnboundedSender};
 
-use crate::data::db::fetch_all_folders;
+use crate::data::db::db_query::fetch_all_folders;
 use crate::data::scanner::run_full_scan;
 
 /// Spawns a new thread that watches the library folders for changes.

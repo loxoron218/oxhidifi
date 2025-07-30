@@ -12,8 +12,8 @@ use libadwaita::prelude::ApplicationExtManual;
 use sqlx::SqlitePool;
 use tokio::main;
 
+use crate::data::db::db_schema::init_db;
 use crate::ui::MyApp;
-use crate::data::db::init_db;
 
 /// Entry point: initializes the app, sets up CSS, and launches the main event loop.
 #[main]

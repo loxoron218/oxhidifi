@@ -9,7 +9,7 @@ use libadwaita::prelude::{BoxExt, FlowBoxChildExt, ObjectExt, WidgetExt};
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::data::db::fetch_all_artists;
+use crate::data::db::db_query::fetch_all_artists;
 use crate::data::scanner::create_scanning_label;
 use crate::ui::pages::artist_page::artist_page;
 use crate::utils::screen::{compute_cover_and_tile_size, get_primary_screen_size};

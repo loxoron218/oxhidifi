@@ -12,7 +12,7 @@ use libadwaita::prelude::{BoxExt, EditableExt, FixedExt, FlowBoxChildExt, Widget
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::data::db::{search_album_display_info, search_artists};
+use crate::data::db::db_query::{search_album_display_info, search_artists};
 use crate::ui::pages::album_page::album_page;
 use crate::ui::pages::artist_page::artist_page;
 use crate::utils::formatting::format_freq_khz;
