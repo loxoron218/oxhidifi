@@ -9,13 +9,14 @@ use libadwaita::prelude::{AdwApplicationWindowExt, BoxExt, ButtonExt, GtkWindowE
 use sqlx::SqlitePool;
 use tokio::runtime::Runtime;
 
-use crate::data::scanner::{create_scanning_label, spawn_scanning_label_refresh_task, run_full_scan};
+use crate::data::scanner::library_ops::run_full_scan;
 use crate::data::search::connect_live_search;
 use crate::data::watcher::start_watching_library;
 use crate::ui::components::config::load_settings;
 use crate::ui::components::dialogs::{connect_settings_dialog, create_add_folder_dialog_handler};
 use crate::ui::components::navigation::{connect_album_navigation, connect_back_button, connect_sort_button, connect_tab_navigation, setup_keyboard_shortcuts};
 use crate::ui::components::refresh::{setup_library_refresh_channel, setup_live_monitor_refresh};
+use crate::ui::components::scan_feedback::{create_scanning_label, spawn_scanning_label_refresh_task};
 use crate::ui::components::sorting::{connect_sort_icon_update_on_tab_switch, connect_tab_sort_refresh, set_initial_sort_icon_state};
 use crate::ui::grids::albums_grid::rebuild_albums_grid_for_window;
 use crate::ui::grids::artists_grid::rebuild_artists_grid_for_window;

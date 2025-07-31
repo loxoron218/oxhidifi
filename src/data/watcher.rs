@@ -6,7 +6,7 @@ use sqlx::SqlitePool;
 use tokio::{runtime::Runtime, sync::mpsc::UnboundedSender};
 
 use crate::data::db::db_query::fetch_all_folders;
-use crate::data::scanner::run_full_scan;
+use crate::data::scanner::library_ops::run_full_scan;
 
 /// Spawns a new thread that watches the library folders for changes.
 /// Upon detecting a change, it sends a message through the provided channel
