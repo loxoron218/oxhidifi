@@ -3,6 +3,7 @@ pub mod grids;
 pub mod header;
 pub mod my_app;
 pub mod pages;
+pub mod search;
 pub mod search_bar;
 pub mod settings_window;
 pub mod window;

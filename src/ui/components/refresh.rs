@@ -7,10 +7,10 @@ use libadwaita::prelude::WidgetExt;
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
-use crate::data::search::clear_grid;
 use crate::ui::components::sorting::SortOrder;
 use crate::ui::grids::albums_grid::populate_albums_grid;
 use crate::ui::grids::artists_grid::populate_artists_grid;
+use crate::ui::search::clear_grid;
 use crate::utils::screen::{compute_cover_and_tile_size, get_primary_screen_size};
 
 /// Returns a tuple with (sender, receiver, refresh_library_ui) for library refresh logic.

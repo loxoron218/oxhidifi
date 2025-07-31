@@ -4,3 +4,4 @@ pub mod navigation;
 pub mod refresh;
 pub mod scan_feedback;
 pub mod sorting;
+pub mod tiles;

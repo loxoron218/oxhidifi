@@ -10,7 +10,6 @@ use sqlx::SqlitePool;
 use tokio::runtime::Runtime;
 
 use crate::data::scanner::library_ops::run_full_scan;
-use crate::data::search::connect_live_search;
 use crate::data::watcher::start_watching_library;
 use crate::ui::components::config::load_settings;
 use crate::ui::components::dialogs::{connect_settings_dialog, create_add_folder_dialog_handler};
@@ -22,6 +21,7 @@ use crate::ui::grids::albums_grid::rebuild_albums_grid_for_window;
 use crate::ui::grids::artists_grid::rebuild_artists_grid_for_window;
 use crate::ui::header::{build_header_bar, build_main_headerbar, build_tab_bar};
 use crate::ui::pages::album_page::album_page;
+use crate::ui::search::connect_live_search;
 use crate::ui::search_bar::{connect_searchbar_focus_out, setup_searchbar_all};
 use crate::utils::screen::{compute_cover_and_tile_size, get_primary_screen_size};
 
