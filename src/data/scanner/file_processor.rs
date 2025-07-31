@@ -1,4 +1,7 @@
-use std::{borrow::Cow, error::Error, path::Path};
+use std::{
+    borrow::Cow,
+    error::Error,
+    path::Path};
 
 use lofty::{
     probe::Probe,

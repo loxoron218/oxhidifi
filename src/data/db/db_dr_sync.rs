@@ -1,8 +1,12 @@
 use std::collections::HashMap;
 
-use sqlx::{query, Result, Row, SqlitePool};
+use sqlx::{
+    query,
+    Result,
+    Row,
+    SqlitePool};
 
-use crate::utils::best_dr_persistence::{DrValueStore, AlbumKey};
+use crate::utils::best_dr_persistence::{AlbumKey, DrValueStore};
 
 /// Synchronizes the `dr_completed` status in the database with the JSON store.
 /// This function optimizes database queries by fetching all artists and folders once,

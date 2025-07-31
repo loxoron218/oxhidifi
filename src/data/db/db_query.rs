@@ -1,4 +1,9 @@
-use sqlx::{query, Result, Row, sqlite::SqliteRow, SqlitePool};
+use sqlx::{
+    query,
+    Result,
+    Row,
+    sqlite::SqliteRow,
+    SqlitePool};
 
 use crate::data::models::{Artist, Folder};
 

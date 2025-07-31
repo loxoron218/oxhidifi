@@ -1,6 +1,10 @@
 use std::path::Path;
 
-use sqlx::{query, Result, Row, SqlitePool};
+use sqlx::{
+    query,
+    Result,
+    Row,
+    SqlitePool};
 
 /// Removes a folder and all associated albums and tracks from the database.
 /// Also removes any artists that become orphaned (no remaining albums or tracks)

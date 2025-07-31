@@ -1,6 +1,14 @@
-use sqlx::{query, Result, Row, SqlitePool};
+use sqlx::{
+    query,
+    Result,
+    Row,
+    SqlitePool};
 
-use crate::data::models::{Album, Artist, Folder, Track};
+use crate::data::models::{
+    Album,
+    Artist,
+    Folder,
+    Track};
 
 /// Inserts a new folder into the database if it doesn't already exist,
 /// or returns the ID of the existing folder if a matching path is found.

@@ -1,4 +1,6 @@
-use std::{path::Path, sync::Arc};
+use std::{
+    path::Path,
+    sync::Arc};
 
 use sqlx::{query, Row, SqlitePool};
 use tokio::sync::mpsc::UnboundedSender;
