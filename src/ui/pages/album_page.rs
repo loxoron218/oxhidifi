@@ -490,20 +490,19 @@ fn build_track_row(
 
     // Layout
     page.append(&header);
-    let group_scrolled_window = ScrolledWindow::builder()
-        .child(&group)
-        .vexpand(true)
-        .hexpand(true)
-        .hscrollbar_policy(Never)
-        .build();
-    page.append(&group_scrolled_window);
+    page.append(&group);
     page.set_margin_bottom(32);
 
     // Stack Management
     if let Some(existing) = stack.child_by_name("album_detail") {
         stack.remove(&existing);
     }
-    stack.add_titled(&page, Some("album_detail"), "Album");
+    let album_scrolled_window = ScrolledWindow::builder()
+        .child(&page)
+        .vexpand(true)
+        .hscrollbar_policy(Never)
+        .build();
+    stack.add_titled(&album_scrolled_window, Some("album_detail"), "Album");
     stack.set_visible_child_name("album_detail");
     header_btn_stack.set_visible_child_name("back");
 }
