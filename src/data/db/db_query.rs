@@ -189,7 +189,7 @@ pub async fn search_album_display_info(
 /// or an `sqlx::Error` on failure.
 pub async fn search_artists(pool: &SqlitePool, search_term: &str) -> Result<Vec<Artist>> {
     let pattern = format!("%{}%", search_term.to_lowercase());
-    let rows = query("SELECT id, name FROM artists WHERE lower(name) LIKE ?")
+    let rows = query("SELECT id, name FROM artists WHERE lower(name) LIKE ? AND id IN (SELECT DISTINCT artist_id FROM albums)")
         .bind(&pattern)
         .fetch_all(pool)
         .await?;
