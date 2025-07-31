@@ -257,21 +257,12 @@ pub fn make_sort_row(
 pub fn connect_sort_reorder_handler(
     sort_listbox: &ListBox,
     sort_orders: Rc<RefCell<Vec<SortOrder>>>,
-    refresh_library_ui: Rc<dyn Fn(bool, bool)>,
-    sort_ascending: Rc<Cell<bool>>,
-    sort_ascending_artists: Rc<Cell<bool>>,
 ) {
     let sort_orders_rc = sort_orders.clone();
-    let refresh_library_ui_cb = refresh_library_ui.clone();
     let sort_listbox_weak = sort_listbox.downgrade();
-    let sort_ascending_clone = sort_ascending.clone();
-    let sort_ascending_artists_clone = sort_ascending_artists.clone();
     sort_listbox.connect_map(move |_listbox| {
         let sort_orders_rc = sort_orders_rc.clone();
-        let refresh_library_ui_cb = refresh_library_ui_cb.clone();
         let sort_listbox_weak = sort_listbox_weak.clone();
-        let sort_ascending = sort_ascending_clone.clone();
-        let sort_ascending_artists = sort_ascending_artists_clone.clone();
         idle_add_local_once(move || {
             if let Some(listbox) = sort_listbox_weak.upgrade() {
                 let mut new_orders = Vec::new();
@@ -302,7 +293,6 @@ pub fn connect_sort_reorder_handler(
                         sort_ascending_artists: prev.sort_ascending_artists,
                         completed_albums: prev.completed_albums,
                     });
-                    refresh_library_ui_cb(sort_ascending.get(), sort_ascending_artists.get());
                 }
             }
         });

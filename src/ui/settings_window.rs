@@ -234,9 +234,6 @@ remove_btn.connect_clicked(move |btn| {
     connect_sort_reorder_handler(
         &sort_listbox,
         sort_orders.clone(),
-        refresh_library_ui.clone(),
-        sort_ascending.clone(),
-        sort_ascending_artists.clone(),
     );
 
     // Save sort order on settings window close
