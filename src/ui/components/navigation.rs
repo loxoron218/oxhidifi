@@ -210,6 +210,8 @@ pub fn connect_tab_navigation(
     artists_btn: &ToggleButton,
     stack: &ViewStack,
     sort_button: &Button,
+    left_btn_stack: &ViewStack,
+    right_btn_box: &Clamp,
     last_tab: Rc<Cell<&'static str>>,
     sort_ascending: Rc<Cell<bool>>,
     sort_ascending_artists: Rc<Cell<bool>>,
@@ -226,9 +228,14 @@ pub fn connect_tab_navigation(
         let last_tab = last_tab.clone();
         let albums_btn = albums_btn.clone();
         let artists_btn = artists_btn.clone();
+        let left_btn_stack_clone = left_btn_stack.clone(); // Clone for closure
+        let right_btn_box_clone = right_btn_box.clone(); // Clone for closure
         albums_btn.clone().connect_clicked(move |_| {
             last_tab.set("albums");
             stack.set_visible_child_name("albums");
+            // Reset header to main view
+            left_btn_stack_clone.set_visible_child_name("main");
+            right_btn_box_clone.set_visible(true);
 
             // Restore last used or persistent sort direction for albums
             let ascending = sort_ascending.get();
@@ -253,6 +260,8 @@ pub fn connect_tab_navigation(
         let last_tab = last_tab.clone();
         let albums_btn = albums_btn.clone();
         let artists_btn = artists_btn.clone();
+        let left_btn_stack_clone = left_btn_stack.clone(); // Clone for closure
+        let right_btn_box_clone = right_btn_box.clone(); // Clone for closure
         artists_btn.clone().connect_clicked(move |_| {
             last_tab.set("artists");
 
@@ -267,6 +276,10 @@ pub fn connect_tab_navigation(
                     stack.set_visible_child_name("artists");
                 }
             }
+            // Reset header to main view
+            left_btn_stack_clone.set_visible_child_name("main");
+            right_btn_box_clone.set_visible(true);
+
             // Restore last used or persistent sort direction for artists
             let ascending = sort_ascending_artists.get();
             sort_button.set_icon_name(if ascending {

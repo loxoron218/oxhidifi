@@ -209,6 +209,8 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         &artists_btn,
         &stack,
         &sort_button,
+        &left_btn_stack,
+        &right_btn_box,
         last_tab.clone(),
         sort_ascending.clone(),
         sort_ascending_artists.clone(),
