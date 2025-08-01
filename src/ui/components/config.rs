@@ -1,6 +1,6 @@
-use std::{env::var_os, path::PathBuf}; 
-use std::fs::{create_dir_all, File, read_to_string};
-use std::io::{self, Write}; 
+use std::fs::{File, create_dir_all, read_to_string};
+use std::io::{self, Write};
+use std::{env::var_os, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{from_str, to_string_pretty};

@@ -1,11 +1,14 @@
-use std::{rc::Rc, sync::Arc};
 use std::cell::{Cell, RefCell};
+use std::{rc::Rc, sync::Arc};
 
 use glib::{MainContext, WeakRef};
-use gtk4::{Align, Box, Button, FlowBox, FlowBoxChild, GestureClick, Image, Label, Orientation, PolicyType, ScrolledWindow, SelectionMode, Spinner, Stack, StackTransitionType};
 use gtk4::pango::{EllipsizeMode, WrapMode};
-use libadwaita::{ApplicationWindow, Clamp, StatusPage, ViewStack};
+use gtk4::{
+    Align, Box, Button, FlowBox, FlowBoxChild, GestureClick, Image, Label, Orientation, PolicyType,
+    ScrolledWindow, SelectionMode, Spinner, Stack, StackTransitionType,
+};
 use libadwaita::prelude::{BoxExt, FlowBoxChildExt, ObjectExt, WidgetExt};
+use libadwaita::{ApplicationWindow, Clamp, StatusPage, ViewStack};
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -24,17 +27,14 @@ pub fn rebuild_artists_grid_for_window(
     _sender: UnboundedSender<()>,
     _add_music_button: &Button,
 ) {
-
     // Always remove existing "artists" child before adding a new one
     if let Some(child) = stack.child_by_name("artists") {
         stack.remove(&child);
     }
     *artists_grid_cell.borrow_mut() = None;
     *artists_stack_cell.borrow_mut() = None;
-    let (artists_stack, artists_grid) = build_artists_grid(
-        scanning_label_artists,
-        _add_music_button,
-    );
+    let (artists_stack, artists_grid) =
+        build_artists_grid(scanning_label_artists, _add_music_button);
     stack.add_titled(&artists_stack, Some("artists"), "Artists");
     *artists_grid_cell.borrow_mut() = Some(artists_grid.clone());
     *artists_stack_cell.borrow_mut() = Some(artists_stack.clone());
@@ -43,7 +43,6 @@ pub fn rebuild_artists_grid_for_window(
 /// Build the artists grid and its containing stack.
 /// Returns (artists_stack, artists_grid).
 pub fn build_artists_grid(scanning_label: &Label, add_music_button: &Button) -> (Stack, FlowBox) {
-
     // Empty state
     let empty_state_status_page = StatusPage::builder()
         .icon_name("avatar-default-symbolic")
@@ -123,9 +122,7 @@ pub fn build_artists_grid(scanning_label: &Label, add_music_button: &Button) -> 
     artists_stack.add_named(&loading_state_container, Some("loading_state"));
     artists_stack.add_named(&empty_state_container, Some("empty_state"));
     artists_stack.add_named(&scanning_state_container, Some("scanning_state"));
-    let artists_content_box = Box::builder()
-        .orientation(Orientation::Vertical)
-        .build();
+    let artists_content_box = Box::builder().orientation(Orientation::Vertical).build();
     artists_content_box.append(&scrolled);
     artists_stack.add_named(&artists_content_box, Some("populated_grid"));
     artists_stack.set_visible_child_name("loading_state"); // Set initial state to loading
@@ -207,25 +204,28 @@ fn create_artist_tile(
         if let (Some(stack), Some(left_btn_stack)) =
             (stack_weak.upgrade(), left_btn_stack_weak.upgrade())
         {
-            let artist_id = unsafe { flow_child_clone.data::<i64>("artist_id").map(|ptr| *ptr.as_ref()).unwrap_or_default() };
+            let artist_id = unsafe {
+                flow_child_clone
+                    .data::<i64>("artist_id")
+                    .map(|ptr| *ptr.as_ref())
+                    .unwrap_or_default()
+            };
             if let Some(current_page) = stack.visible_child_name() {
                 nav_history.borrow_mut().push(current_page.to_string());
             }
-            MainContext::default().spawn_local(
-                artist_page(
-                    stack.downgrade(),
-                    db_pool.clone(),
-                    artist_id,
-                    {
-                        let left_btn_stack_weak = WeakRef::<ViewStack>::new();
-                        left_btn_stack_weak.set(Some(&left_btn_stack));
-                        left_btn_stack_weak
-                    },
-                    right_btn_box_weak_inner.clone(),
-                    nav_history.clone(),
-                    sender.clone(),
-                ),
-            );
+            MainContext::default().spawn_local(artist_page(
+                stack.downgrade(),
+                db_pool.clone(),
+                artist_id,
+                {
+                    let left_btn_stack_weak = WeakRef::<ViewStack>::new();
+                    left_btn_stack_weak.set(Some(&left_btn_stack));
+                    left_btn_stack_weak
+                },
+                right_btn_box_weak_inner.clone(),
+                nav_history.clone(),
+                sender.clone(),
+            ));
         }
     });
     flow_child.add_controller(gesture);
@@ -293,11 +293,7 @@ pub fn populate_artists_grid(
                 artists.retain(|artist| artist.name != "Various Artists");
                 artists.sort_by(|a, b| {
                     let cmp = a.name.to_lowercase().cmp(&b.name.to_lowercase());
-                    if sort_ascending {
-                        cmp
-                    } else {
-                        cmp.reverse()
-                    }
+                    if sort_ascending { cmp } else { cmp.reverse() }
                 });
                 for artist in artists {
                     let tile = create_artist_tile(

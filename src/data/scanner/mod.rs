@@ -1,7 +1,4 @@
-use std::{
-    error::Error,
-    future::Future,
-    pin::Pin};
+use std::{error::Error, future::Future, pin::Pin};
 
 use sqlx::SqlitePool;
 use tokio::fs::read_dir;
@@ -38,7 +35,6 @@ pub fn scan_folder<'a>(
     folder_id: i64,
 ) -> Pin<Box<dyn Future<Output = Result<(), Box<dyn Error>>> + 'a>> {
     Box::pin(async move {
-
         // Scan for DR value in .txt/.log files in this folder.
         // If an error occurs during DR value scanning, it's propagated.
         let dr_value = scan_dr_value(folder_path).await?;
@@ -57,22 +53,18 @@ pub fn scan_folder<'a>(
         while let Some(entry) = entries.next_entry().await? {
             let path = entry.path();
             if path.is_dir() {
-
                 // If the entry is a directory, recursively call `scan_folder`.
                 // Convert PathBuf to &str, handle potential conversion errors.
                 if let Some(path_str) = path.to_str() {
-
                     // Log errors during recursive calls but don't halt the main scan.
                     if let Err(e) = scan_folder(pool, path_str, folder_id).await {
                         eprintln!("Error scanning subfolder {}: {}", path_str, e);
                     }
                 }
             } else if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-
                 // If the entry is a file, check if its extension is supported.
                 let supported_extensions = ["mp3", "flac", "ogg", "wav", "m4a", "opus", "aiff"];
                 if supported_extensions.contains(&ext.to_lowercase().as_str()) {
-
                     // Process the audio file. Log errors but don't halt the main scan.
                     if let Err(e) = process_file(pool, &path, folder_id, dr_value).await {
                         eprintln!("Error processing file {}: {}", path.display(), e);

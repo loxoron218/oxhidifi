@@ -1,10 +1,10 @@
-use std::{rc::Rc, sync::Arc, time::Duration};
-use std::cell::{Cell, RefCell};
 use glib::{ControlFlow::Continue, MainContext, source::timeout_add_local};
 use gtk4::{FlowBox, Label, Stack};
-use libadwaita::{ApplicationWindow, Clamp, ViewStack};
 use libadwaita::prelude::WidgetExt;
+use libadwaita::{ApplicationWindow, Clamp, ViewStack};
 use sqlx::SqlitePool;
+use std::cell::{Cell, RefCell};
+use std::{rc::Rc, sync::Arc, time::Duration};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
 use crate::ui::components::sorting::SortOrder;
@@ -37,7 +37,7 @@ pub fn setup_library_refresh_channel(
 ) -> (
     UnboundedSender<()>,
     UnboundedReceiver<()>,
-    Rc<dyn Fn(bool, bool)>
+    Rc<dyn Fn(bool, bool)>,
 ) {
     let (sender, receiver) = unbounded_channel::<()>();
     let sort_orders_for_refresh = sort_orders.clone();
@@ -57,10 +57,11 @@ pub fn setup_library_refresh_channel(
         let scanning_label_albums = scanning_label_albums.clone();
         let scanning_label_artists = scanning_label_artists.clone();
         let sender_clone = sender.clone();
-            let stack_clone = stack.clone();
-            let header_btn_stack_clone = header_btn_stack.clone();
-            let nav_history_clone = nav_history.clone();
-            Rc::new(move |sort_ascending_param: bool, sort_ascending_artists_param: bool| {
+        let stack_clone = stack.clone();
+        let header_btn_stack_clone = header_btn_stack.clone();
+        let nav_history_clone = nav_history.clone();
+        Rc::new(
+            move |sort_ascending_param: bool, sort_ascending_artists_param: bool| {
                 sort_ascending.set(sort_ascending_param);
                 sort_ascending_artists.set(sort_ascending_artists_param);
                 let db_pool = db_pool.clone();
@@ -84,9 +85,14 @@ pub fn setup_library_refresh_channel(
                 let sort_ascending_clone_for_async = sort_ascending.clone();
                 let sort_ascending_artists_clone_for_async = sort_ascending_artists.clone();
                 MainContext::default().spawn_local(async move {
-                    let current_tab = stack_rc.visible_child_name().unwrap_or_else(|| "albums".into());
+                    let current_tab = stack_rc
+                        .visible_child_name()
+                        .unwrap_or_else(|| "albums".into());
                     if current_tab == "albums" {
-                        if let (Some(albums_grid), Some(albums_inner_stack)) = (albums_grid_cell.borrow().as_ref(), albums_stack_cell.borrow().as_ref()) {
+                        if let (Some(albums_grid), Some(albums_inner_stack)) = (
+                            albums_grid_cell.borrow().as_ref(),
+                            albums_stack_cell.borrow().as_ref(),
+                        ) {
                             clear_grid(albums_grid);
                             if scanning_label_albums.is_visible() {
                                 albums_inner_stack.set_visible_child_name("scanning_state");
@@ -110,30 +116,34 @@ pub fn setup_library_refresh_channel(
                             .await;
                         }
                     } else if current_tab == "artists" {
-                    if let (Some(artists_grid), Some(artists_inner_stack)) = (artists_grid_cell.borrow().as_ref(), artists_stack_cell.borrow().as_ref()) {
-                        clear_grid(artists_grid);
-                        if scanning_label_artists.is_visible() {
-                            artists_inner_stack.set_visible_child_name("scanning_state");
-                        } else {
-                            artists_inner_stack.set_visible_child_name("loading_state");
+                        if let (Some(artists_grid), Some(artists_inner_stack)) = (
+                            artists_grid_cell.borrow().as_ref(),
+                            artists_stack_cell.borrow().as_ref(),
+                        ) {
+                            clear_grid(artists_grid);
+                            if scanning_label_artists.is_visible() {
+                                artists_inner_stack.set_visible_child_name("scanning_state");
+                            } else {
+                                artists_inner_stack.set_visible_child_name("loading_state");
+                            }
+                            populate_artists_grid(
+                                artists_grid,
+                                db_pool.clone(),
+                                sort_ascending_artists_clone_for_async.get(),
+                                &stack_rc,
+                                &left_btn_stack_rc,
+                                &right_btn_box_clone,
+                                &window,
+                                &scanning_label_artists,
+                                sender,
+                                nav_history.clone(),
+                                artists_inner_stack,
+                            );
                         }
-                        populate_artists_grid(
-                            artists_grid,
-                            db_pool.clone(),
-                            sort_ascending_artists_clone_for_async.get(),
-                            &stack_rc,
-                            &left_btn_stack_rc,
-                            &right_btn_box_clone,
-                            &window,
-                            &scanning_label_artists,
-                            sender,
-                            nav_history.clone(),
-                            artists_inner_stack,
-                        );
                     }
-                }
-            });
-        })
+                });
+            },
+        )
     };
     (sender, receiver, refresh_library_ui)
 }

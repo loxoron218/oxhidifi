@@ -1,16 +1,18 @@
-use std::{rc::Rc, str::FromStr};
 use std::cell::{Cell, RefCell};
+use std::{rc::Rc, str::FromStr};
 
-use glib::{Type, Value};
 use glib::source::idle_add_local_once;
-use gtk4::{Button, DragSource, DropTarget, ListBox, ListBoxRow, ToggleButton, Widget};
-use gtk4::prelude::{ButtonExt, ToggleButtonExt};
+use glib::{Type, Value};
 use gtk4::gdk::{ContentProvider, DragAction};
+use gtk4::prelude::{ButtonExt, ToggleButtonExt};
+use gtk4::{Button, DragSource, DropTarget, ListBox, ListBoxRow, ToggleButton, Widget};
+use libadwaita::prelude::{
+    Cast, ListBoxRowExt, ObjectExt, ObjectType, PreferencesRowExt, WidgetExt,
+};
 use libadwaita::{ActionRow, ViewStack};
-use libadwaita::prelude::{Cast, ListBoxRowExt, ObjectExt, ObjectType, PreferencesRowExt, WidgetExt};
 use serde::{Deserialize, Serialize};
 
-use crate::ui::components::config::{load_settings, save_settings, Settings};
+use crate::ui::components::config::{Settings, load_settings, save_settings};
 
 /// Connect toggled handlers for albums and artists tab buttons to refresh sorting.
 pub fn connect_tab_sort_refresh(
@@ -25,7 +27,10 @@ pub fn connect_tab_sort_refresh(
     let sort_ascending_artists_albums = sort_ascending_artists.clone();
     albums_btn.connect_toggled(move |btn| {
         if btn.is_active() {
-            refresh_library_ui_albums(sort_ascending_albums.get(), sort_ascending_artists_albums.get());
+            refresh_library_ui_albums(
+                sort_ascending_albums.get(),
+                sort_ascending_artists_albums.get(),
+            );
         }
     });
     let refresh_library_ui_artists = refresh_library_ui.clone();
@@ -33,7 +38,10 @@ pub fn connect_tab_sort_refresh(
     let sort_ascending_artists_val = sort_ascending_artists.clone();
     artists_btn.connect_toggled(move |btn| {
         if btn.is_active() {
-            refresh_library_ui_artists(sort_ascending_artists_btn.get(), sort_ascending_artists_val.get());
+            refresh_library_ui_artists(
+                sort_ascending_artists_btn.get(),
+                sort_ascending_artists_val.get(),
+            );
         }
     });
 }
@@ -77,7 +85,7 @@ pub enum SortOrder {
 
 /// Allows parsing a SortOrder from a string ("Artist", "Year", etc). Useful for persistence and drag-and-drop.
 impl FromStr for SortOrder {
-    type Err = (); 
+    type Err = ();
 
     // Allows conversion from string to SortOrder for persistence, drag-and-drop, and UI.
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -86,7 +94,7 @@ impl FromStr for SortOrder {
             "Year" => Ok(SortOrder::Year),
             "Album" => Ok(SortOrder::Album),
             "Format" => Ok(SortOrder::Format),
-            _ => Err(())
+            _ => Err(()),
         }
     }
 }
@@ -134,10 +142,10 @@ pub fn make_sort_row(
 ) -> ListBoxRow {
     let sort_ascending = sort_ascending.clone();
     let sort_ascending_artists = sort_ascending_artists.clone();
-    let row = ActionRow::builder()
-        .title(sort_order_label(order))
-        .build();
-    unsafe { row.set_data("sort-order", sort_order_label(order).to_string()); }
+    let row = ActionRow::builder().title(sort_order_label(order)).build();
+    unsafe {
+        row.set_data("sort-order", sort_order_label(order).to_string());
+    }
     let list_row = ListBoxRow::new();
     list_row.set_child(Some(&row));
 
@@ -163,10 +171,12 @@ pub fn make_sort_row(
             let refresh_library_ui_cb = refresh_library_ui.clone();
             if let Ok(_order_str) = value.get::<String>() {
                 if let Some(target_row) = list_row_weak.upgrade() {
-                    let listbox_weak = target_row.parent().and_then(|p| p.downcast::<ListBox>().ok()).map(|lb| lb.downgrade());
+                    let listbox_weak = target_row
+                        .parent()
+                        .and_then(|p| p.downcast::<ListBox>().ok())
+                        .map(|lb| lb.downgrade());
                     if let Some(listbox_weak) = listbox_weak {
                         if let Some(listbox) = listbox_weak.upgrade() {
-
                             // Collect all children
                             let mut rows: Vec<Widget> = Vec::new();
                             let mut child = listbox.first_child();
@@ -181,8 +191,13 @@ pub fn make_sort_row(
                                     target_idx = Some(idx);
                                 }
                                 if let Some(list_row) = row.downcast_ref::<ListBoxRow>() {
-                                    if let Some(action_row) = list_row.child().and_then(|c| c.downcast::<ActionRow>().ok()) {
-                                        if let Some(order_str_nn) = unsafe { action_row.data::<String>("sort-order") } {
+                                    if let Some(action_row) = list_row
+                                        .child()
+                                        .and_then(|c| c.downcast::<ActionRow>().ok())
+                                    {
+                                        if let Some(order_str_nn) =
+                                            unsafe { action_row.data::<String>("sort-order") }
+                                        {
                                             let order_str = unsafe { order_str_nn.as_ref() };
                                             if *order_str == _order_str {
                                                 source_idx = Some(idx);
@@ -214,10 +229,18 @@ pub fn make_sort_row(
                                     let mut child = listbox.first_child();
                                     while let Some(row) = child {
                                         if let Some(list_row) = row.downcast_ref::<ListBoxRow>() {
-                                            if let Some(action_row) = list_row.child().and_then(|c| c.downcast::<ActionRow>().ok()) {
-                                                if let Some(order_str_nn) = unsafe { action_row.data::<String>("sort-order") } {
-                                                    let order_str = unsafe { order_str_nn.as_ref() };
-                                                    if let Ok(order) = SortOrder::from_str(order_str) {
+                                            if let Some(action_row) = list_row
+                                                .child()
+                                                .and_then(|c| c.downcast::<ActionRow>().ok())
+                                            {
+                                                if let Some(order_str_nn) = unsafe {
+                                                    action_row.data::<String>("sort-order")
+                                                } {
+                                                    let order_str =
+                                                        unsafe { order_str_nn.as_ref() };
+                                                    if let Ok(order) =
+                                                        SortOrder::from_str(order_str)
+                                                    {
                                                         new_orders.push(order);
                                                     }
                                                 }
@@ -237,7 +260,10 @@ pub fn make_sort_row(
 
                                         // Update numbering in ActionRow titles
                                         update_sorting_row_numbers(&listbox);
-                                        (refresh_library_ui_cb)(sort_ascending.get(), sort_ascending_artists.get());
+                                        (refresh_library_ui_cb)(
+                                            sort_ascending.get(),
+                                            sort_ascending_artists.get(),
+                                        );
                                     }
                                 }
                             }
@@ -274,8 +300,13 @@ pub fn connect_sort_reorder_handler(
                 }
                 for row in rows {
                     if let Some(list_row) = row.downcast_ref::<ListBoxRow>() {
-                        if let Some(action_row) = list_row.child().and_then(|c| c.downcast::<ActionRow>().ok()) {
-                            if let Some(order_str_nn) = unsafe { action_row.data::<String>("sort-order") } {
+                        if let Some(action_row) = list_row
+                            .child()
+                            .and_then(|c| c.downcast::<ActionRow>().ok())
+                        {
+                            if let Some(order_str_nn) =
+                                unsafe { action_row.data::<String>("sort-order") }
+                            {
                                 let order_str = unsafe { order_str_nn.as_ref() };
                                 if let Ok(order) = SortOrder::from_str(order_str) {
                                     new_orders.push(order);
@@ -305,7 +336,10 @@ pub fn update_sorting_row_numbers(listbox: &ListBox) {
     let mut idx = 1;
     while let Some(row) = child {
         if let Some(list_row) = row.downcast_ref::<ListBoxRow>() {
-            if let Some(action_row) = list_row.child().and_then(|c| c.downcast::<ActionRow>().ok()) {
+            if let Some(action_row) = list_row
+                .child()
+                .and_then(|c| c.downcast::<ActionRow>().ok())
+            {
                 if let Some(order_str_nn) = unsafe { action_row.data::<String>("sort-order") } {
                     let order_str = unsafe { order_str_nn.as_ref() };
                     let label = format!("{}. {}", idx, order_str);

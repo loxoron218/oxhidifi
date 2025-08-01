@@ -1,11 +1,13 @@
-use std::{future::Future, rc::Rc, sync::Arc};
 use std::cell::{Cell, RefCell};
+use std::{future::Future, rc::Rc, sync::Arc};
 
 use glib::{MainContext, Propagation, WeakRef};
-use gtk4::{Button, CallbackAction, FlowBox, KeyvalTrigger, Shortcut, ShortcutController, ToggleButton};
 use gtk4::gdk::{Key, ModifierType};
-use libadwaita::{ApplicationWindow, Clamp, ViewStack};
+use gtk4::{
+    Button, CallbackAction, FlowBox, KeyvalTrigger, Shortcut, ShortcutController, ToggleButton,
+};
 use libadwaita::prelude::{ButtonExt, ObjectExt, ToggleButtonExt, WidgetExt};
+use libadwaita::{ApplicationWindow, Clamp, ViewStack};
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -23,13 +25,7 @@ pub fn connect_album_navigation<Fut, F>(
     sender: UnboundedSender<()>,
     album_page: F,
 ) where
-    F: Fn(
-        WeakRef<ViewStack>,
-        Arc<SqlitePool>,
-        i64,
-        WeakRef<ViewStack>,
-        UnboundedSender<()>,
-    ) -> Fut
+    F: Fn(WeakRef<ViewStack>, Arc<SqlitePool>, i64, WeakRef<ViewStack>, UnboundedSender<()>) -> Fut
         + 'static,
     Fut: Future<Output = ()> + 'static,
 {
@@ -78,7 +74,7 @@ pub fn connect_back_button(
     let left_btn_stack_clone = left_btn_stack.clone();
     let right_btn_box_clone = right_btn_box.clone();
     let refresh_library_ui_clone = refresh_library_ui.clone(); // Clone for closure
-    let sort_ascending_clone = sort_ascending.clone();       // Clone for closure
+    let sort_ascending_clone = sort_ascending.clone(); // Clone for closure
     let sort_ascending_artists_clone = sort_ascending_artists.clone(); // Clone for closure
     back_button.connect_clicked(move |_| {
         if let Some(prev_page) = nav_history.borrow_mut().pop() {
@@ -88,7 +84,10 @@ pub fn connect_back_button(
                 right_btn_box_clone.set_visible(true);
 
                 // Trigger refresh when navigating back to albums or artists grid
-                refresh_library_ui_clone(sort_ascending_clone.get(), sort_ascending_artists_clone.get());
+                refresh_library_ui_clone(
+                    sort_ascending_clone.get(),
+                    sort_ascending_artists_clone.get(),
+                );
             }
         } else {
             let tab = last_tab.get();
@@ -97,7 +96,10 @@ pub fn connect_back_button(
             right_btn_box_clone.set_visible(true);
 
             // Trigger refresh when navigating back to albums or artists grid
-            refresh_library_ui_clone(sort_ascending_clone.get(), sort_ascending_artists_clone.get());
+            refresh_library_ui_clone(
+                sort_ascending_clone.get(),
+                sort_ascending_artists_clone.get(),
+            );
         }
     });
 }
@@ -146,7 +148,6 @@ pub fn connect_sort_button(
     sort_ascending_artists: Rc<Cell<bool>>,
     refresh_library_ui: Rc<dyn Fn(bool, bool)>,
 ) {
-
     // Sort button click handler
     let sort_button_clone = sort_button.clone();
     let refresh_library_ui_clone = refresh_library_ui.clone();
@@ -215,7 +216,6 @@ pub fn connect_tab_navigation(
     refresh_library_ui: Rc<dyn Fn(bool, bool)>,
     rebuild_artists_grid_opt: Option<impl Fn() + 'static>,
 ) {
-
     // Albums button logic
     {
         let stack = stack.clone();

@@ -1,10 +1,11 @@
 use std::{
     cell::{Cell, RefCell},
-    rc::Rc};
+    rc::Rc,
+};
 
 use glib::MainContext;
 use gtk4::Label;
-use libadwaita::{prelude::WidgetExt, ViewStack};
+use libadwaita::{ViewStack, prelude::WidgetExt};
 use tokio::sync::mpsc::UnboundedReceiver;
 
 /// Creates a new `gtk4::Label` widget configured for displaying scanning feedback.
@@ -64,7 +65,6 @@ pub fn spawn_scanning_label_refresh_task(
             } else if page == "artists" {
                 scanning_label_artists.set_visible(false);
             } else {
-
                 // If neither albums nor artists page is visible, hide both labels defensively.
                 scanning_label_albums.set_visible(false);
                 scanning_label_artists.set_visible(false);

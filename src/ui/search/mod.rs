@@ -1,17 +1,15 @@
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,
-    sync::Arc};
+    sync::Arc,
+};
 
 use glib::MainContext;
-use gtk4::{
-    Entry,
-    FlowBox,
-    Stack};
+use gtk4::{Entry, FlowBox, Stack};
 use libadwaita::{
-    Clamp,
-    ViewStack,
-    prelude::{EditableExt, WidgetExt}};
+    Clamp, ViewStack,
+    prelude::{EditableExt, WidgetExt},
+};
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -42,7 +40,6 @@ pub fn connect_live_search(
     nav_history: Rc<RefCell<Vec<String>>>,
     sender: UnboundedSender<()>,
 ) {
-
     // Compute dynamic sizes based on screen dimensions
     let (screen_width, _) = get_primary_screen_size();
     let (cover_size, tile_size) = compute_cover_and_tile_size(screen_width);
@@ -73,7 +70,10 @@ pub fn connect_live_search(
 
         // If the search query is empty, refresh the library UI to show all albums/artists
         if text.trim().is_empty() {
-            refresh_library_ui_cloned(sort_ascending_cloned.get(), sort_ascending_artists_cloned.get());
+            refresh_library_ui_cloned(
+                sort_ascending_cloned.get(),
+                sort_ascending_artists_cloned.get(),
+            );
 
             // Ensure stacks are set to populated_grid, as refresh_library_ui will handle empty state if needed
             albums_stack_cloned.set_visible_child_name("populated_grid");
@@ -99,16 +99,13 @@ pub fn connect_live_search(
 
         // Spawn an asynchronous task to perform the search and update the UI
         MainContext::default().spawn_local(async move {
-
             // Perform album search
             match search_album_display_info(&db_pool, &text).await {
                 Err(e) => {
-
                     // Log the error for debugging purposes
                     eprintln!("Error searching albums: {:?}", e);
                 }
                 Ok(mut albums) => {
-
                     // Sort albums based on relevance to the search query and then by artist/title
                     albums.sort_by(|a, b| {
                         let a_title = a.title.to_lowercase();
@@ -170,12 +167,10 @@ pub fn connect_live_search(
             clear_grid(&artists_grid); // Clear artist grid before populating
             match search_artists(&db_pool, &text).await {
                 Err(e) => {
-
                     // Log the error for debugging purposes
                     eprintln!("Error searching artists: {:?}", e);
                 }
                 Ok(artists) => {
-
                     // Update the artist UI based on search results
                     if artists.is_empty() {
                         artists_stack.set_visible_child_name("empty_state");

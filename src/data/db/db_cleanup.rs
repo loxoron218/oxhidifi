@@ -1,10 +1,6 @@
 use std::path::Path;
 
-use sqlx::{
-    query,
-    Result,
-    Row,
-    SqlitePool};
+use sqlx::{Result, Row, SqlitePool, query};
 
 /// Removes a folder and all associated albums and tracks from the database.
 /// Also removes any artists that become orphaned (no remaining albums or tracks)
@@ -107,9 +103,7 @@ pub async fn remove_albums_with_no_tracks(pool: &SqlitePool) -> Result<()> {
 /// # Returns
 /// A `Result` indicating success or an `sqlx::Error` on failure.
 pub async fn remove_orphaned_tracks(pool: &SqlitePool) -> Result<()> {
-    let tracks_in_db = query("SELECT id, path FROM tracks")
-        .fetch_all(pool)
-        .await?;
+    let tracks_in_db = query("SELECT id, path FROM tracks").fetch_all(pool).await?;
     for track_row in tracks_in_db {
         let track_id: i64 = track_row.get("id");
         let track_path: String = track_row.get("path");

@@ -1,7 +1,10 @@
 use std::{cell::Cell, rc::Rc};
 
 use glib::Propagation;
-use gtk4::{Box, Button, Entry, EventControllerFocus, EventControllerKey, GestureClick, Revealer, RevealerTransitionType};
+use gtk4::{
+    Box, Button, Entry, EventControllerFocus, EventControllerKey, GestureClick, Revealer,
+    RevealerTransitionType,
+};
 use libadwaita::ApplicationWindow;
 use libadwaita::prelude::{ButtonExt, EditableExt, WidgetExt};
 
@@ -14,7 +17,6 @@ pub struct SearchBar {
 }
 
 impl SearchBar {
-
     /// Construct a new SearchBar widget.
     pub fn new() -> Self {
         let entry = Entry::builder()
@@ -148,7 +150,6 @@ pub fn setup_searchbar_all(
     sort_ascending: Rc<Cell<bool>>,
     sort_ascending_artists: Rc<Cell<bool>>,
 ) {
-
     // GestureClick for closing search bar
     let search_entry_for_click = search_bar.entry.clone();
     let search_button_for_click = search_bar.button.clone();

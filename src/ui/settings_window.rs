@@ -1,20 +1,25 @@
-use std::{rc::Rc, sync::Arc};
 use std::cell::{Cell, RefCell};
+use std::{rc::Rc, sync::Arc};
 
-use glib::{MainContext, Propagation};
 use glib::source::idle_add_local_once;
-use gtk4::{Align, Button, EventControllerKey, ListBox, SelectionMode, Window};
+use glib::{MainContext, Propagation};
 use gtk4::gdk::Key;
+use gtk4::{Align, Button, EventControllerKey, ListBox, SelectionMode, Window};
+use libadwaita::prelude::{
+    ActionRowExt, ButtonExt, Cast, GtkWindowExt, IsA, ObjectExt, ObjectType, PreferencesGroupExt,
+    PreferencesPageExt, PreferencesWindowExt, StaticType, WidgetExt,
+};
 use libadwaita::{ActionRow, PreferencesGroup, PreferencesPage, PreferencesWindow};
-use libadwaita::prelude::{ActionRowExt, ButtonExt, Cast, GtkWindowExt, IsA, ObjectExt, ObjectType, PreferencesGroupExt, PreferencesPageExt, PreferencesWindowExt, StaticType, WidgetExt};
 use sqlx::SqlitePool;
 
 use crate::data::db::db_cleanup::remove_folder_and_albums;
 use crate::data::db::db_query::fetch_all_folders;
 use crate::data::models::Folder;
-use crate::ui::components::config::{load_settings, save_settings, Settings};
+use crate::ui::components::config::{Settings, load_settings, save_settings};
 use crate::ui::components::dialogs::show_remove_folder_confirmation_dialog;
-use crate::ui::components::sorting::{connect_sort_reorder_handler, make_sort_row, update_sorting_row_numbers, SortOrder};
+use crate::ui::components::sorting::{
+    SortOrder, connect_sort_reorder_handler, make_sort_row, update_sorting_row_numbers,
+};
 
 /// Show the settings dialog. Call from your settings button handler.
 /// Accepts a shared SortOrder state and a callback to refresh the albums grid.
@@ -27,7 +32,6 @@ pub fn show_settings_dialog(
     db_pool: Arc<SqlitePool>,
     is_settings_open: Rc<Cell<bool>>,
 ) {
-
     // Create the settings window (acts as a modal dialog)
     let dialog = PreferencesWindow::builder()
         .transient_for(parent)
@@ -75,12 +79,15 @@ pub fn show_settings_dialog(
         main_context: Rc<MainContext>,
         list_box: Rc<ListBox>,
     ) {
-
         // Print all direct children before removal
         let mut child = folders_group.as_ref().first_child();
         ("--- Direct children of folders_group before removal ---");
         while let Some(widget) = child {
-            ("Direct child: {} (ptr: {:?})", widget.type_().name(), widget.as_ptr());
+            (
+                "Direct child: {} (ptr: {:?})",
+                widget.type_().name(),
+                widget.as_ptr(),
+            );
             child = widget.next_sibling();
         }
 
@@ -108,9 +115,7 @@ pub fn show_settings_dialog(
                 if folder.path.trim().is_empty() {
                     continue;
                 }
-                let row = ActionRow::builder()
-                    .title(folder.path.clone())
-                    .build();
+                let row = ActionRow::builder().title(folder.path.clone()).build();
                 let remove_btn = Button::builder()
                     .icon_name("window-close-symbolic")
                     .valign(Align::Center)
@@ -118,62 +123,70 @@ pub fn show_settings_dialog(
                     .build();
                 let folder_id = folder.id;
 
-// Explicitly clone variables for closure capture
-let db_pool_c = db_pool.clone();
-let refresh_library_ui_c = refresh_library_ui.clone();
-let sort_ascending_c = sort_ascending.clone();
-let sort_ascending_artists_c = sort_ascending_artists.clone();
-let folders_group_c = folders_group.clone();
-let main_context_c = main_context.clone();
-let list_box_c = list_box.clone();
-remove_btn.connect_clicked(move |btn| {
-    let parent_widget = btn.ancestor(Window::static_type()).expect("Should be in a window");
-    let parent_window = parent_widget.downcast_ref::<Window>().expect("Should be a window");
-    let db_pool = db_pool_c.clone();
-    let refresh_library_ui = refresh_library_ui_c.clone();
-    let sort_ascending = sort_ascending_c.clone();
-    let sort_ascending_artists = sort_ascending_artists_c.clone();
-    let folders_group = folders_group_c.clone();
-    let main_context = main_context_c.clone();
-    let list_box = list_box_c.clone();
-    let folder_id = folder_id;
-    show_remove_folder_confirmation_dialog(parent_window, move || {
-        main_context.spawn_local({
-            let db_pool = db_pool.clone();
-            let refresh_library_ui = refresh_library_ui.clone();
-            let sort_ascending = sort_ascending.clone();
-            let sort_ascending_artists = sort_ascending_artists.clone();
-            let folders_group = folders_group.clone();
-            let list_box = list_box.clone();
-            let main_context = main_context.clone();
-            let folder_id = folder_id;
-            async move {
-                let _ = remove_folder_and_albums(&db_pool, folder_id).await;
-                (refresh_library_ui)(sort_ascending.get(), sort_ascending_artists.get());
-                let folders = fetch_all_folders(&db_pool).await.unwrap_or_else(|_| vec![]);
-                let folders_group = folders_group.clone();
-                let db_pool = db_pool.clone();
-                let refresh_library_ui = refresh_library_ui.clone();
-                let sort_ascending = sort_ascending.clone();
-                let sort_ascending_artists = sort_ascending_artists.clone();
-                let main_context = main_context.clone();
-                let list_box = list_box.clone();
-                idle_add_local_once(move || {
-                    refresh_folder_display(
-                        folders_group,
-                        &folders,
-                        db_pool,
-                        refresh_library_ui,
-                        sort_ascending,
-                        sort_ascending_artists,
-                        main_context,
-                        list_box,
-                    );
+                // Explicitly clone variables for closure capture
+                let db_pool_c = db_pool.clone();
+                let refresh_library_ui_c = refresh_library_ui.clone();
+                let sort_ascending_c = sort_ascending.clone();
+                let sort_ascending_artists_c = sort_ascending_artists.clone();
+                let folders_group_c = folders_group.clone();
+                let main_context_c = main_context.clone();
+                let list_box_c = list_box.clone();
+                remove_btn.connect_clicked(move |btn| {
+                    let parent_widget = btn
+                        .ancestor(Window::static_type())
+                        .expect("Should be in a window");
+                    let parent_window = parent_widget
+                        .downcast_ref::<Window>()
+                        .expect("Should be a window");
+                    let db_pool = db_pool_c.clone();
+                    let refresh_library_ui = refresh_library_ui_c.clone();
+                    let sort_ascending = sort_ascending_c.clone();
+                    let sort_ascending_artists = sort_ascending_artists_c.clone();
+                    let folders_group = folders_group_c.clone();
+                    let main_context = main_context_c.clone();
+                    let list_box = list_box_c.clone();
+                    let folder_id = folder_id;
+                    show_remove_folder_confirmation_dialog(parent_window, move || {
+                        main_context.spawn_local({
+                            let db_pool = db_pool.clone();
+                            let refresh_library_ui = refresh_library_ui.clone();
+                            let sort_ascending = sort_ascending.clone();
+                            let sort_ascending_artists = sort_ascending_artists.clone();
+                            let folders_group = folders_group.clone();
+                            let list_box = list_box.clone();
+                            let main_context = main_context.clone();
+                            let folder_id = folder_id;
+                            async move {
+                                let _ = remove_folder_and_albums(&db_pool, folder_id).await;
+                                (refresh_library_ui)(
+                                    sort_ascending.get(),
+                                    sort_ascending_artists.get(),
+                                );
+                                let folders =
+                                    fetch_all_folders(&db_pool).await.unwrap_or_else(|_| vec![]);
+                                let folders_group = folders_group.clone();
+                                let db_pool = db_pool.clone();
+                                let refresh_library_ui = refresh_library_ui.clone();
+                                let sort_ascending = sort_ascending.clone();
+                                let sort_ascending_artists = sort_ascending_artists.clone();
+                                let main_context = main_context.clone();
+                                let list_box = list_box.clone();
+                                idle_add_local_once(move || {
+                                    refresh_folder_display(
+                                        folders_group,
+                                        &folders,
+                                        db_pool,
+                                        refresh_library_ui,
+                                        sort_ascending,
+                                        sort_ascending_artists,
+                                        main_context,
+                                        list_box,
+                                    );
+                                });
+                            }
+                        });
+                    });
                 });
-            }
-        });
-    });
-});
                 row.add_suffix(&remove_btn);
                 list_box.append(&row);
             }
@@ -190,7 +203,9 @@ remove_btn.connect_clicked(move |btn| {
     let sort_ascending_artists_clone = sort_ascending_artists.clone();
     let main_context_clone = main_context.clone();
     main_context.spawn_local(async move {
-        let folders = fetch_all_folders(&db_pool_clone).await.unwrap_or_else(|_| vec![]);
+        let folders = fetch_all_folders(&db_pool_clone)
+            .await
+            .unwrap_or_else(|_| vec![]);
         idle_add_local_once(move || {
             refresh_folder_display(
                 folders_group_clone,
@@ -231,10 +246,7 @@ remove_btn.connect_clicked(move |btn| {
     update_sorting_row_numbers(&sort_listbox);
 
     // On reorder, update shared sort_orders, persist, and refresh
-    connect_sort_reorder_handler(
-        &sort_listbox,
-        sort_orders.clone(),
-    );
+    connect_sort_reorder_handler(&sort_listbox, sort_orders.clone());
 
     // Save sort order on settings window close
     let sort_orders_rc = sort_orders.clone();

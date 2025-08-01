@@ -1,4 +1,4 @@
-use sqlx::{query, Result, SqlitePool};
+use sqlx::{Result, SqlitePool, query};
 
 /// Initializes the database schema, creating tables if they do not already exist.
 /// This function ensures that the `folders`, `artists`, `albums`, and `tracks` tables
@@ -10,7 +10,6 @@ use sqlx::{query, Result, SqlitePool};
 /// # Returns
 /// A `Result` indicating success or an `sqlx::Error` on failure.
 pub async fn init_db(pool: &SqlitePool) -> Result<()> {
-
     // Create folders table if it doesn't exist
     query(
         "CREATE TABLE IF NOT EXISTS folders (

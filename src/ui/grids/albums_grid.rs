@@ -1,12 +1,17 @@
-use std::{cmp::Ordering, rc::Rc, sync::Arc};
 use std::cell::{Cell, RefCell};
+use std::{cmp::Ordering, rc::Rc, sync::Arc};
 
 use gdk_pixbuf::{InterpType, PixbufLoader};
 use glib::MainContext;
-use gtk4::{Align, Box, Button, Fixed, FlowBox, FlowBoxChild, GestureClick, Label, Orientation, Overlay, Picture, PolicyType, ScrolledWindow, SelectionMode, Spinner, Stack, StackTransitionType};
 use gtk4::pango::{EllipsizeMode, WrapMode};
+use gtk4::{
+    Align, Box, Button, Fixed, FlowBox, FlowBoxChild, GestureClick, Label, Orientation, Overlay,
+    Picture, PolicyType, ScrolledWindow, SelectionMode, Spinner, Stack, StackTransitionType,
+};
+use libadwaita::prelude::{
+    BoxExt, FixedExt, FlowBoxChildExt, ObjectExt, PixbufLoaderExt, WidgetExt,
+};
 use libadwaita::{ApplicationWindow, StatusPage, ViewStack};
-use libadwaita::prelude::{BoxExt, FixedExt, FlowBoxChildExt, ObjectExt, PixbufLoaderExt, WidgetExt};
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -18,7 +23,15 @@ use crate::utils::best_dr_persistence::{AlbumKey, DrValueStore};
 use crate::utils::formatting::format_freq_khz;
 
 /// Helper to create a styled label for album metadata.
-fn create_album_label(text: &str, css_classes: &[&str], max_width: Option<i32>, ellipsize: Option<EllipsizeMode>, wrap: bool, wrap_mode: Option<WrapMode>, lines: Option<i32>) -> Label {
+fn create_album_label(
+    text: &str,
+    css_classes: &[&str],
+    max_width: Option<i32>,
+    ellipsize: Option<EllipsizeMode>,
+    wrap: bool,
+    wrap_mode: Option<WrapMode>,
+    lines: Option<i32>,
+) -> Label {
     let builder = Label::builder().label(text).halign(Align::Start);
     let label = builder.build();
     label.set_xalign(0.0);
@@ -53,7 +66,9 @@ fn create_album_cover(cover_art: Option<&Vec<u8>>, cover_size: i32) -> Picture {
         let (w, h) = (pixbuf.width(), pixbuf.height());
         let side = w.min(h);
         let cropped = pixbuf.new_subpixbuf((w - side) / 2, (h - side) / 2, side, side);
-        let scaled = cropped.scale_simple(cover_size, cover_size, InterpType::Bilinear).unwrap();
+        let scaled = cropped
+            .scale_simple(cover_size, cover_size, InterpType::Bilinear)
+            .unwrap();
         let picture = Picture::for_pixbuf(&scaled);
         picture.set_size_request(cover_size, cover_size);
         picture.set_halign(Align::Start);
@@ -111,7 +126,6 @@ pub fn rebuild_albums_grid_for_window(
     albums_stack_cell: &Rc<RefCell<Option<Stack>>>,
     _add_music_button: &Button, // Prefix with _ to mark as intentionally unused
 ) {
-
     // Remove old grid widget if present
     if let Some(child) = stack.child_by_name("albums") {
         stack.remove(&child);
@@ -141,7 +155,6 @@ pub fn build_albums_grid(
     _tile_size: i32,
     add_music_button: &Button, // Add this parameter
 ) -> (Stack, FlowBox) {
-
     // Empty state
     let empty_state_status_page = StatusPage::builder()
         .icon_name("folder-music-symbolic")
@@ -222,9 +235,7 @@ pub fn build_albums_grid(
     albums_stack.add_named(&loading_state_container, Some("loading_state"));
     albums_stack.add_named(&empty_state_container, Some("empty_state"));
     albums_stack.add_named(&scanning_state_container, Some("scanning_state"));
-    let albums_content_box = Box::builder()
-        .orientation(Orientation::Vertical)
-        .build();
+    let albums_content_box = Box::builder().orientation(Orientation::Vertical).build();
     albums_content_box.append(&scrolled);
     albums_stack.add_named(&albums_content_box, Some("populated_grid"));
     albums_stack.set_visible_child_name("loading_state"); // Set initial state to loading
@@ -297,10 +308,14 @@ pub async fn populate_albums_grid(
                         SortOrder::Artist => a.artist.to_lowercase().cmp(&b.artist.to_lowercase()),
                         SortOrder::Album => a.title.to_lowercase().cmp(&b.title.to_lowercase()),
                         SortOrder::Year => {
-                            let a_year = a.original_release_date.as_ref().and_then(|s| s.split('-').next().and_then(|y| y.parse::<i32>().ok()));
-                            let b_year = b.original_release_date.as_ref().and_then(|s| s.split('-').next().and_then(|y| y.parse::<i32>().ok()));
+                            let a_year = a.original_release_date.as_ref().and_then(|s| {
+                                s.split('-').next().and_then(|y| y.parse::<i32>().ok())
+                            });
+                            let b_year = b.original_release_date.as_ref().and_then(|s| {
+                                s.split('-').next().and_then(|y| y.parse::<i32>().ok())
+                            });
                             a_year.cmp(&b_year)
-                        },
+                        }
                         SortOrder::Format => a.format.cmp(&b.format),
                     };
                     if cmp != Ordering::Equal {
@@ -337,9 +352,16 @@ pub async fn populate_albums_grid(
                     let format_caps = format_str.to_uppercase();
                     match (album.bit_depth, album.frequency) {
                         (Some(bit), Some(freq)) => {
-                            format_fields.push(format!("{} {}/{}", format_caps, bit, format_freq_khz(freq)));
+                            format_fields.push(format!(
+                                "{} {}/{}",
+                                format_caps,
+                                bit,
+                                format_freq_khz(freq)
+                            ));
                         }
-                        (None, Some(freq)) => format_fields.push(format!("{} {}", format_caps, format_freq_khz(freq))),
+                        (None, Some(freq)) => {
+                            format_fields.push(format!("{} {}", format_caps, format_freq_khz(freq)))
+                        }
                         _ => format_fields.push(format_caps),
                     }
                 }
@@ -355,8 +377,13 @@ pub async fn populate_albums_grid(
                 );
                 format_label.set_halign(Align::Start);
                 format_label.set_hexpand(true); // Allow format label to expand
-                let year_text = if let Some(original_release_date_str) = album.original_release_date {
-                    original_release_date_str.split('-').next().unwrap_or("N/A").to_string()
+                let year_text = if let Some(original_release_date_str) = album.original_release_date
+                {
+                    original_release_date_str
+                        .split('-')
+                        .next()
+                        .unwrap_or("N/A")
+                        .to_string()
                 } else if let Some(year) = album.year {
                     format!("{}", year)
                 } else {
@@ -409,7 +436,8 @@ pub async fn populate_albums_grid(
                     folder_path: album.folder_path.clone(),
                 };
                 let is_dr_completed_from_store = dr_store.contains(&album_key);
-                let dr_label = create_dr_overlay(album._dr_value, is_dr_completed_from_store).unwrap();
+                let dr_label =
+                    create_dr_overlay(album._dr_value, is_dr_completed_from_store).unwrap();
                 overlay.add_overlay(&dr_label);
 
                 // Fixed-size container for the cover area to ensure consistent sizing
@@ -422,7 +450,7 @@ pub async fn populate_albums_grid(
                 let title_area_box = Box::builder()
                     .orientation(Orientation::Vertical)
                     .height_request(40) // Explicitly request height for two lines of text + extra buffer
-                    .margin_top(12)     // Keep the margin from the cover
+                    .margin_top(12) // Keep the margin from the cover
                     .build();
                 title_label.set_valign(Align::End);
                 title_area_box.append(&title_label);
@@ -462,17 +490,22 @@ pub async fn populate_albums_grid(
                 let gesture = GestureClick::builder().build();
                 let gesture_for_closure = gesture.clone();
                 gesture_for_closure.connect_pressed(move |_, _, _, _| {
-                    if let (Some(stack), Some(header_btn_stack)) = (stack_weak.upgrade(), header_btn_stack_weak.upgrade()) {
-                        let album_id = unsafe { flow_child_clone.data::<i64>("album_id").map(|ptr| *ptr.as_ref()).unwrap_or_default() };
-                        MainContext::default().spawn_local(
-                            album_page(
-                                stack.downgrade(),
-                                db_pool_clone.clone(),
-                                album_id,
-                                header_btn_stack.downgrade(),
-                                sender_clone.clone(),
-                            )
-                        );
+                    if let (Some(stack), Some(header_btn_stack)) =
+                        (stack_weak.upgrade(), header_btn_stack_weak.upgrade())
+                    {
+                        let album_id = unsafe {
+                            flow_child_clone
+                                .data::<i64>("album_id")
+                                .map(|ptr| *ptr.as_ref())
+                                .unwrap_or_default()
+                        };
+                        MainContext::default().spawn_local(album_page(
+                            stack.downgrade(),
+                            db_pool_clone.clone(),
+                            album_id,
+                            header_btn_stack.downgrade(),
+                            sender_clone.clone(),
+                        ));
                     }
                 });
                 flow_child.add_controller(gesture); // Move original into add_controller

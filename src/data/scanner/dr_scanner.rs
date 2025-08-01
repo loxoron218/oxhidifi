@@ -3,7 +3,8 @@ use std::error::Error;
 use regex::Regex;
 use tokio::{
     fs::{File, read_dir},
-    io::{AsyncBufReadExt, BufReader}};
+    io::{AsyncBufReadExt, BufReader},
+};
 
 /// Scans `.txt` and `.log` files within a specified folder for Dynamic Range (DR) values.
 /// It parses various common DR value formats and returns the highest valid DR value found.
@@ -36,7 +37,6 @@ pub async fn scan_dr_value(folder_path: &str) -> Result<Option<u8>, Box<dyn Erro
             if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
                 let ext = ext.to_lowercase();
                 if ext == "txt" || ext == "log" {
-
                     // Attempt to open and read the file. If it fails, print error and continue.
                     let file = match File::open(&path).await {
                         Ok(f) => f,
@@ -50,12 +50,12 @@ pub async fn scan_dr_value(folder_path: &str) -> Result<Option<u8>, Box<dyn Erro
                     loop {
                         buffer.clear(); // Clear buffer for each new line
                         let bytes_read = reader.read_until(b'\n', &mut buffer).await?;
-                        if bytes_read == 0 { // EOF
+                        if bytes_read == 0 {
+                            // EOF
                             break;
                         }
                         let line = String::from_utf8_lossy(&buffer).into_owned();
                         if let Some(caps) = dr_regex.captures(&line) {
-
                             // Iterate through all possible capture groups (1 to 4 for this regex).
                             // The first successful capture will be used.
                             for i in 1..=4 {
@@ -65,14 +65,14 @@ pub async fn scan_dr_value(folder_path: &str) -> Result<Option<u8>, Box<dyn Erro
                                     // Only parse if the captured string is not "ERR".
                                     if dr_str.to_uppercase() != "ERR" {
                                         if let Ok(dr) = dr_str.parse::<u8>() {
-
                                             // Validate DR value is within the typical range [1, 20].
                                             if (1..=20).contains(&dr) {
-
                                                 // Update `highest_dr` if the current `dr` is higher
                                                 // or if `highest_dr` is currently `None`.
                                                 highest_dr = match highest_dr {
-                                                    Some(current_max) if dr > current_max => Some(dr),
+                                                    Some(current_max) if dr > current_max => {
+                                                        Some(dr)
+                                                    }
                                                     None => Some(dr),
                                                     _ => highest_dr, // Keep current max
                                                 };

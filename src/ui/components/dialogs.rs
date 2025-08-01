@@ -1,10 +1,15 @@
-use std::{rc::Rc, result::Result::Ok, sync::Arc, thread::spawn};
 use std::cell::{Cell, RefCell};
+use std::{rc::Rc, result::Result::Ok, sync::Arc, thread::spawn};
 
-use gtk4::{Button, ButtonsType::OkCancel, FileChooserAction::SelectFolder, FileChooserDialog, Label, MessageDialog, MessageType::Warning, Stack, Window};
-use gtk4::ResponseType::{Accept, Cancel, Ok as GtkOk};
 use glib::MainContext;
-use libadwaita::prelude::{ButtonExt, DialogExt, FileChooserExt, FileExt, GtkWindowExt, IsA, WidgetExt};
+use gtk4::ResponseType::{Accept, Cancel, Ok as GtkOk};
+use gtk4::{
+    Button, ButtonsType::OkCancel, FileChooserAction::SelectFolder, FileChooserDialog, Label,
+    MessageDialog, MessageType::Warning, Stack, Window,
+};
+use libadwaita::prelude::{
+    ButtonExt, DialogExt, FileChooserExt, FileExt, GtkWindowExt, IsA, WidgetExt,
+};
 use sqlx::SqlitePool;
 use tokio::{runtime::Runtime, sync::mpsc::UnboundedSender};
 
@@ -31,10 +36,7 @@ pub fn create_add_folder_dialog_handler<T: IsA<Window> + Clone + 'static>(
             Some("Open Folder"),
             Some(&parent_window),
             SelectFolder,
-            &[
-                ("Cancel", Cancel),
-                ("Open", Accept),
-            ],
+            &[("Cancel", Cancel), ("Open", Accept)],
         );
         dialog.set_modal(true);
         dialog.set_transient_for(Some(&parent_window));
@@ -47,7 +49,8 @@ pub fn create_add_folder_dialog_handler<T: IsA<Window> + Clone + 'static>(
                 if let Some(folder) = dialog.file() {
                     if let Some(folder_path) = folder.path() {
                         let folder_path_string = folder_path.to_string_lossy().to_string();
-                        if let Some(stack) = albums_inner_stack_clone.borrow().as_ref() { // Borrow the RefCell and then get the Option
+                        if let Some(stack) = albums_inner_stack_clone.borrow().as_ref() {
+                            // Borrow the RefCell and then get the Option
                             stack.set_visible_child_name("scanning_state");
                             scanning_label_clone.set_visible(true);
                         } else {
@@ -68,12 +71,9 @@ pub fn create_add_folder_dialog_handler<T: IsA<Window> + Clone + 'static>(
                                     Ok(id) => id,
                                     Err(_) => return,
                                 };
-                                let _ = scan_folder(
-                                    &db_pool_thread,
-                                    &folder_path_string2,
-                                    folder_id,
-                                )
-                                .await;
+                                let _ =
+                                    scan_folder(&db_pool_thread, &folder_path_string2, folder_id)
+                                        .await;
 
                                 // Notify main thread to update UI
                                 sender_for_spawn.send(()).ok();
@@ -133,7 +133,9 @@ pub fn connect_settings_dialog(
 pub fn show_remove_folder_confirmation_dialog<F: FnOnce() + 'static>(
     parent: &impl IsA<Window>,
     on_confirm: F,
-) where F: FnOnce() + 'static {
+) where
+    F: FnOnce() + 'static,
+{
     let on_confirm_rc = Rc::new(RefCell::new(Some(on_confirm)));
     let dialog = MessageDialog::builder()
         .transient_for(parent)

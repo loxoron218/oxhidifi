@@ -1,10 +1,6 @@
 use std::collections::HashMap;
 
-use sqlx::{
-    query,
-    Result,
-    Row,
-    SqlitePool};
+use sqlx::{Result, Row, SqlitePool, query};
 
 use crate::utils::best_dr_persistence::{AlbumKey, DrValueStore};
 
@@ -54,7 +50,6 @@ pub async fn synchronize_dr_completed_from_store(pool: &SqlitePool) -> Result<()
 
         // Update the database only if the status needs to change
         if should_be_completed != current_dr_completed {
-
             // This function is still in db.rs, will be moved to crud.rs later.
             // For now, it's called directly from here.
             query("UPDATE albums SET dr_completed = ? WHERE id = ?")

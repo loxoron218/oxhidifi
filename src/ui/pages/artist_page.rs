@@ -1,14 +1,16 @@
+use std::cell::RefCell;
 use std::{cmp::Ordering, rc::Rc, sync::Arc};
-use std::{cell::RefCell};
 
-use gdk_pixbuf::{InterpType, PixbufLoader};
 use gdk_pixbuf::prelude::PixbufLoaderExt;
+use gdk_pixbuf::{InterpType, PixbufLoader};
 use glib::{MainContext, WeakRef};
-use gtk4::{Align, Box, FlowBox, GestureClick, Justification, Label, Orientation, Picture, SelectionMode};
 use gtk4::pango::{EllipsizeMode, WrapMode};
-use libadwaita::{Clamp, ViewStack};
+use gtk4::{
+    Align, Box, FlowBox, GestureClick, Justification, Label, Orientation, Picture, SelectionMode,
+};
 use libadwaita::prelude::{BoxExt, ObjectExt, WidgetExt};
-use sqlx::{Error, query, Row, SqlitePool};
+use libadwaita::{Clamp, ViewStack};
+use sqlx::{Error, Row, SqlitePool, query};
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::data::db::db_crud::fetch_artist_by_id;
@@ -17,7 +19,15 @@ use crate::utils::formatting::format_freq_khz;
 use crate::utils::screen::{compute_cover_and_tile_size, get_primary_screen_size};
 
 /// Helper to create a styled label for album metadata.
-fn create_album_label(text: &str, css_classes: &[&str], max_width: Option<i32>, ellipsize: Option<EllipsizeMode>, wrap: bool, wrap_mode: Option<WrapMode>, lines: Option<i32>) -> Label {
+fn create_album_label(
+    text: &str,
+    css_classes: &[&str],
+    max_width: Option<i32>,
+    ellipsize: Option<EllipsizeMode>,
+    wrap: bool,
+    wrap_mode: Option<WrapMode>,
+    lines: Option<i32>,
+) -> Label {
     let builder = Label::builder().label(text).halign(Align::Start);
     let label = builder.build();
     label.set_xalign(0.0);
@@ -53,7 +63,6 @@ pub async fn artist_page(
     nav_history: Rc<RefCell<Vec<String>>>,
     sender: UnboundedSender<()>,
 ) {
-
     // Upgrade weak references
     let stack = match stack.upgrade() {
         Some(s) => s,
@@ -165,7 +174,6 @@ fn build_album_card(
     nav_history: Rc<RefCell<Vec<String>>>,
     sender: UnboundedSender<()>,
 ) -> Box {
-
     // Cover (scaled to cover_size x cover_size)
     let cover = if let Some(ref art) = album.cover_art {
         let pixbuf_loader = PixbufLoader::new();
@@ -211,7 +219,11 @@ fn build_album_card(
 
     // Year label
     let year_text = if let Some(original_release_date_str) = album.original_release_date.clone() {
-        original_release_date_str.split('-').next().unwrap_or("N/A").to_string()
+        original_release_date_str
+            .split('-')
+            .next()
+            .unwrap_or("N/A")
+            .to_string()
     } else if let Some(year) = album.year {
         format!("{}", year)
     } else {
@@ -267,7 +279,7 @@ fn build_album_card(
     let title_area_box = Box::builder()
         .orientation(Orientation::Vertical)
         .height_request(40) // Explicitly request height for two lines of text + extra buffer
-        .margin_top(12)     // Keep the margin from the cover
+        .margin_top(12) // Keep the margin from the cover
         .build();
     title_label.set_valign(Align::End); // Align label to the end of its box
     title_area_box.append(&title_label);
@@ -294,19 +306,22 @@ fn build_album_card(
     let nav_history_clone_for_closure = nav_history.clone();
     let album_id = album.id;
     gesture.connect_pressed(move |_, _, _, _| {
-        if let (Some(stack), Some(header_btn_stack)) = (stack_weak_for_closure.upgrade(), header_btn_stack_weak_for_closure.upgrade()) {
+        if let (Some(stack), Some(header_btn_stack)) = (
+            stack_weak_for_closure.upgrade(),
+            header_btn_stack_weak_for_closure.upgrade(),
+        ) {
             if let Some(current_page) = stack.visible_child_name() {
-                nav_history_clone_for_closure.borrow_mut().push(current_page.to_string());
+                nav_history_clone_for_closure
+                    .borrow_mut()
+                    .push(current_page.to_string());
             }
-            MainContext::default().spawn_local(
-                album_page(
-                    stack.downgrade(),
-                    db_pool_clone_for_closure.clone(),
-                    album_id,
-                    header_btn_stack.downgrade(),
-                    sender.clone(),
-                )
-            );
+            MainContext::default().spawn_local(album_page(
+                stack.downgrade(),
+                db_pool_clone_for_closure.clone(),
+                album_id,
+                header_btn_stack.downgrade(),
+                sender.clone(),
+            ));
         }
     });
     album_tile_box.add_controller(gesture);

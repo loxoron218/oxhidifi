@@ -7,7 +7,10 @@ pub fn get_primary_screen_size() -> (i32, i32) {
 
     // Use the first monitor in the ListModel as the primary
     let monitors = display.monitors();
-    let monitor = monitors.item(0).and_then(|obj| obj.downcast::<Monitor>().ok()).expect("No monitor found");
+    let monitor = monitors
+        .item(0)
+        .and_then(|obj| obj.downcast::<Monitor>().ok())
+        .expect("No monitor found");
     let geometry = monitor.geometry();
     (geometry.width(), geometry.height())
 }

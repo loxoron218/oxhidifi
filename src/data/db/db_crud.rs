@@ -1,14 +1,6 @@
-use sqlx::{
-    query,
-    Result,
-    Row,
-    SqlitePool};
+use sqlx::{Result, Row, SqlitePool, query};
 
-use crate::data::models::{
-    Album,
-    Artist,
-    Folder,
-    Track};
+use crate::data::models::{Album, Artist, Folder, Track};
 
 /// Inserts a new folder into the database if it doesn't already exist,
 /// or returns the ID of the existing folder if a matching path is found.
@@ -112,7 +104,6 @@ pub async fn insert_or_get_album(
             .await?;
         Ok(album_id)
     } else {
-
         // Album doesn't exist, insert it as a new record
         let res = query("INSERT INTO albums (title, artist_id, year, cover_art, folder_id, dr_value, dr_completed, original_release_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
             .bind(title)
@@ -279,7 +270,6 @@ pub async fn fetch_tracks_by_album(pool: &SqlitePool, album_id: i64) -> Result<V
         .collect())
 }
 
-
 /// Fetches a single folder from the database by its unique ID.
 ///
 /// # Arguments
@@ -312,7 +302,11 @@ pub async fn fetch_folder_by_id(pool: &SqlitePool, folder_id: i64) -> Result<Fol
 ///
 /// # Returns
 /// A `Result` indicating success or an `sqlx::Error` on failure.
-pub async fn update_album_dr_completed(pool: &SqlitePool, album_id: i64, completed: bool) -> Result<()> {
+pub async fn update_album_dr_completed(
+    pool: &SqlitePool,
+    album_id: i64,
+    completed: bool,
+) -> Result<()> {
     query("UPDATE albums SET dr_completed = ? WHERE id = ?")
         .bind(completed)
         .bind(album_id)

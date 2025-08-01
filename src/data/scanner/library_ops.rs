@@ -1,16 +1,16 @@
-use std::{
-    path::Path,
-    sync::Arc};
+use std::{path::Path, sync::Arc};
 
-use sqlx::{query, Row, SqlitePool};
+use sqlx::{Row, SqlitePool, query};
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::data::db::{
     db_cleanup::{
-    remove_album_and_tracks, remove_albums_with_no_tracks, remove_artists_with_no_albums,
-    remove_folder_and_albums, remove_orphaned_tracks},
+        remove_album_and_tracks, remove_albums_with_no_tracks, remove_artists_with_no_albums,
+        remove_folder_and_albums, remove_orphaned_tracks,
+    },
     db_dr_sync::synchronize_dr_completed_from_store,
-    db_query::fetch_all_folders};
+    db_query::fetch_all_folders,
+};
 use crate::data::scanner::scan_folder;
 
 /// Initiates a full scan of all configured music folders, updates the database,
@@ -31,7 +31,6 @@ use crate::data::scanner::scan_folder;
 /// * `db_pool` - An `Arc` reference to the SQLite database connection pool.
 /// * `sender` - An `UnboundedSender` to send a signal to the UI upon scan completion.
 pub async fn run_full_scan(db_pool: &Arc<SqlitePool>, sender: &UnboundedSender<()>) {
-
     // Fetch all folders from the database.
     let folders = match fetch_all_folders(db_pool).await {
         Ok(f) => f,
@@ -60,7 +59,10 @@ pub async fn run_full_scan(db_pool: &Arc<SqlitePool>, sender: &UnboundedSender<(
     for folder in &folders {
         if !Path::new(&folder.path).exists() {
             if let Err(e) = remove_folder_and_albums(db_pool, folder.id).await {
-                eprintln!("Error removing folder and albums for {}: {}", folder.path, e);
+                eprintln!(
+                    "Error removing folder and albums for {}: {}",
+                    folder.path, e
+                );
             }
         }
     }
@@ -82,7 +84,9 @@ pub async fn run_full_scan(db_pool: &Arc<SqlitePool>, sender: &UnboundedSender<(
             .fetch_all(&**db_pool)
             .await
         {
-            Ok(tracks) => tracks.into_iter().any(|r| Path::new(&r.get::<String, _>("path")).exists()),
+            Ok(tracks) => tracks
+                .into_iter()
+                .any(|r| Path::new(&r.get::<String, _>("path")).exists()),
             Err(e) => {
                 eprintln!("Error checking tracks for album {}: {}", album_id, e);
                 false // Assume tracks don't exist if we can't query them.
@@ -90,7 +94,10 @@ pub async fn run_full_scan(db_pool: &Arc<SqlitePool>, sender: &UnboundedSender<(
         };
         if !tracks_exist {
             if let Err(e) = remove_album_and_tracks(db_pool, album_id).await {
-                eprintln!("Error removing album and tracks for album {}: {}", album_id, e);
+                eprintln!(
+                    "Error removing album and tracks for album {}: {}",
+                    album_id, e
+                );
             }
         }
     }

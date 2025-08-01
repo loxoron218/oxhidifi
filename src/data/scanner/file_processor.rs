@@ -1,13 +1,11 @@
-use std::{
-    borrow::Cow,
-    error::Error,
-    path::Path};
+use std::{borrow::Cow, error::Error, path::Path};
 
 use lofty::{
+    prelude::ItemKey::{AlbumArtist, OriginalReleaseDate},
+    prelude::{Accessor, AudioFile, TaggedFileExt},
     probe::Probe,
     tag::items::Timestamp,
-    prelude::{Accessor, AudioFile, TaggedFileExt},
-    prelude::ItemKey::{AlbumArtist, OriginalReleaseDate}};
+};
 use sqlx::SqlitePool;
 
 use crate::data::db::db_crud::{insert_or_get_album, insert_or_get_artist, insert_track};
@@ -35,7 +33,6 @@ pub async fn process_file(
     folder_id: i64,
     dr_value: Option<u8>,
 ) -> Result<(), Box<dyn Error>> {
-
     // Probe the file to read its metadata. If probing or reading fails, skip this file.
     let tagged_file = match Probe::open(path) {
         Ok(probe) => match probe.read() {

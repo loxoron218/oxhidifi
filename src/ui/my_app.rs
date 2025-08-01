@@ -10,7 +10,6 @@ use super::window::build_main_window;
 pub struct MyApp;
 
 impl MyApp {
-
     /// Create a new Libadwaita Application and connect activation to main window builder.
     pub fn new(db_pool: Arc<SqlitePool>) -> Application {
         let app = Application::builder()

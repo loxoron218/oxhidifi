@@ -1,39 +1,21 @@
-use std::{
-    cell::RefCell,
-    rc::Rc,
-    sync::Arc};
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 
-use gdk_pixbuf::{
-    InterpType,
-    PixbufLoader,
-    prelude::PixbufLoaderExt};
-use glib::{
-    MainContext,
-    markup_escape_text,
-    prelude::ObjectExt};
+use gdk_pixbuf::{InterpType, PixbufLoader, prelude::PixbufLoaderExt};
+use glib::{MainContext, markup_escape_text, prelude::ObjectExt};
 use gtk4::{
-    Align, Box, Fixed, FlowBoxChild, GestureClick, Image, Label, Orientation,
-    Overlay, Picture,
-    pango::{EllipsizeMode, WrapMode}};
+    Align, Box, Fixed, FlowBoxChild, GestureClick, Image, Label, Orientation, Overlay, Picture,
+    pango::{EllipsizeMode, WrapMode},
+};
 use libadwaita::{
-    Clamp,
-    ViewStack,
-    prelude::{
-    BoxExt,
-    FixedExt,
-    FlowBoxChildExt,
-    WidgetExt}};
+    Clamp, ViewStack,
+    prelude::{BoxExt, FixedExt, FlowBoxChildExt, WidgetExt},
+};
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::data::{
-    db::db_query::AlbumDisplayInfo,
-    models::Artist,
-};
-use crate::ui::pages::{
-    album_page::album_page,
-    artist_page::artist_page};
-use crate::utils::{formatting::format_freq_khz};
+use crate::data::{db::db_query::AlbumDisplayInfo, models::Artist};
+use crate::ui::pages::{album_page::album_page, artist_page::artist_page};
+use crate::utils::formatting::format_freq_khz;
 
 /// Helper to create the album cover as a Picture widget.
 ///
@@ -49,7 +31,9 @@ pub fn create_album_cover(cover_art: Option<&Vec<u8>>, cover_size: i32) -> Pictu
         let (w, h) = (pixbuf.width(), pixbuf.height());
         let side = w.min(h);
         let cropped = pixbuf.new_subpixbuf((w - side) / 2, (h - side) / 2, side, side);
-        let scaled = cropped.scale_simple(cover_size, cover_size, InterpType::Bilinear).unwrap();
+        let scaled = cropped
+            .scale_simple(cover_size, cover_size, InterpType::Bilinear)
+            .unwrap();
         let picture = Picture::for_pixbuf(&scaled);
         picture.set_size_request(cover_size, cover_size);
         picture.set_halign(Align::Start);
@@ -114,7 +98,10 @@ pub fn create_album_label(
     wrap_mode: Option<WrapMode>,
     lines: Option<i32>,
 ) -> Label {
-    let builder = Label::builder().label(text).halign(Align::Start).use_markup(true);
+    let builder = Label::builder()
+        .label(text)
+        .halign(Align::Start)
+        .use_markup(true);
     let label = builder.build();
     label.set_xalign(0.0);
     if let Some(width) = max_width {
@@ -202,7 +189,10 @@ pub fn create_album_tile(
             Some(WrapMode::WordChar),
             Some(2),
         );
-        label.set_markup(&highlight(&markup_escape_text(&album.title).to_string(), search_text));
+        label.set_markup(&highlight(
+            &markup_escape_text(&album.title).to_string(),
+            search_text,
+        ));
         label.set_size_request(cover_size - 16, -1);
         label.set_valign(Align::End); // Align to the bottom of its allocated space
         label
@@ -219,7 +209,10 @@ pub fn create_album_tile(
             None,
             None,
         );
-        label.set_markup(&highlight(&markup_escape_text(&album.artist).to_string(), search_text));
+        label.set_markup(&highlight(
+            &markup_escape_text(&album.artist).to_string(),
+            search_text,
+        ));
         label
     };
 
@@ -252,7 +245,11 @@ pub fn create_album_tile(
 
     // Extract and format the release year
     let year_text = if let Some(original_release_date_str) = album.original_release_date {
-        original_release_date_str.split('-').next().unwrap_or("N/A").to_string()
+        original_release_date_str
+            .split('-')
+            .next()
+            .unwrap_or("N/A")
+            .to_string()
     } else if let Some(year) = album.year {
         format!("{}", year)
     } else {
@@ -312,7 +309,7 @@ pub fn create_album_tile(
     let title_area_box = Box::builder()
         .orientation(Orientation::Vertical)
         .height_request(40) // Explicitly request height for two lines of text + extra buffer
-        .margin_top(12)     // Keep the margin from the cover
+        .margin_top(12) // Keep the margin from the cover
         .build();
     title_area_box.append(&title_label);
     album_tile_box.append(&title_area_box);
@@ -349,20 +346,26 @@ pub fn create_album_tile(
     let gesture = GestureClick::builder().build(); // Declare gesture here
 
     gesture.connect_pressed(move |_, _, _, _| {
-        if let (Some(stack), Some(header_btn_stack)) = (stack_weak.upgrade(), left_btn_stack_for_closure.downgrade().upgrade()) {
-            let album_id = unsafe { flow_child_for_closure.data::<i64>("album_id").map(|ptr| *ptr.as_ref()).unwrap_or_default() };
+        if let (Some(stack), Some(header_btn_stack)) = (
+            stack_weak.upgrade(),
+            left_btn_stack_for_closure.downgrade().upgrade(),
+        ) {
+            let album_id = unsafe {
+                flow_child_for_closure
+                    .data::<i64>("album_id")
+                    .map(|ptr| *ptr.as_ref())
+                    .unwrap_or_default()
+            };
             if let Some(current_page) = stack.visible_child_name() {
                 nav_history.borrow_mut().push(current_page.to_string());
             }
-            MainContext::default().spawn_local(
-                album_page(
-                    stack.downgrade(),
-                    db_pool.clone(),
-                    album_id,
-                    header_btn_stack.downgrade(),
-                    sender.clone(),
-                )
-            );
+            MainContext::default().spawn_local(album_page(
+                stack.downgrade(),
+                db_pool.clone(),
+                album_id,
+                header_btn_stack.downgrade(),
+                sender.clone(),
+            ));
         }
     });
     flow_child_rc.add_controller(gesture); // gesture is moved here.
@@ -433,24 +436,28 @@ pub fn create_artist_tile(
     let gesture = GestureClick::builder().build(); // Declare gesture here
 
     gesture.connect_pressed(move |_, _, _, _| {
-        if let (Some(stack), Some(left_btn_stack)) =
-            (stack_for_closure.downgrade().upgrade(), left_btn_stack_for_closure.downgrade().upgrade())
-        {
-            let artist_id = unsafe { flow_child_for_closure.data::<i64>("artist_id").map(|ptr| *ptr.as_ref()).unwrap_or_default() };
+        if let (Some(stack), Some(left_btn_stack)) = (
+            stack_for_closure.downgrade().upgrade(),
+            left_btn_stack_for_closure.downgrade().upgrade(),
+        ) {
+            let artist_id = unsafe {
+                flow_child_for_closure
+                    .data::<i64>("artist_id")
+                    .map(|ptr| *ptr.as_ref())
+                    .unwrap_or_default()
+            };
             if let Some(current_page) = stack.visible_child_name() {
                 nav_history.borrow_mut().push(current_page.to_string());
             }
-            MainContext::default().spawn_local(
-                artist_page(
-                    stack.downgrade(),
-                    db_pool.clone(),
-                    artist_id,
-                    left_btn_stack.downgrade(),
-                    right_btn_box_clone.clone().downgrade(),
-                    nav_history.clone(),
-                    sender.clone(),
-                ),
-            );
+            MainContext::default().spawn_local(artist_page(
+                stack.downgrade(),
+                db_pool.clone(),
+                artist_id,
+                left_btn_stack.downgrade(),
+                right_btn_box_clone.clone().downgrade(),
+                nav_history.clone(),
+                sender.clone(),
+            ));
         }
     });
     flow_child_rc.add_controller(gesture);

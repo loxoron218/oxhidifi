@@ -2,19 +2,17 @@ use std::{
     path::Path,
     sync::{Arc, Mutex},
     thread,
-    time::Duration};
+    time::Duration,
+};
 
 use notify::{
-    event::ModifyKind, Event, EventKind, recommended_watcher, 
-    RecommendedWatcher, RecursiveMode::Recursive, Watcher};
+    Event, EventKind, RecommendedWatcher, RecursiveMode::Recursive, Watcher, event::ModifyKind,
+    recommended_watcher,
+};
 use sqlx::SqlitePool;
-use tokio::{
-    runtime::Runtime,
-    sync::mpsc::UnboundedSender};
+use tokio::{runtime::Runtime, sync::mpsc::UnboundedSender};
 
-use crate::data::{
-    db::db_query::fetch_all_folders,
-    scanner::library_ops::run_full_scan};
+use crate::data::{db::db_query::fetch_all_folders, scanner::library_ops::run_full_scan};
 
 /// Spawns a new thread that watches the library folders for changes.
 ///
@@ -32,7 +30,6 @@ use crate::data::{
 /// * `sender` - An `UnboundedSender` to send a signal to the UI to refresh.
 ///              This is typically a channel connected to the main application loop.
 pub fn start_watching_library(pool: Arc<SqlitePool>, sender: UnboundedSender<()>) {
-
     // Spawn a new thread to run the file system watcher.
     // This thread will manage its own Tokio runtime for async operations.
     thread::spawn(move || {
@@ -40,12 +37,10 @@ pub fn start_watching_library(pool: Arc<SqlitePool>, sender: UnboundedSender<()>
 
         // Fetch all library folders from the database that need to be watched.
         let folders_to_watch = rt.block_on(async {
-            fetch_all_folders(&pool)
-                .await
-                .unwrap_or_else(|e| {
-                    eprintln!("Error fetching folders for watcher: {}", e);
-                    Vec::new()
-                })
+            fetch_all_folders(&pool).await.unwrap_or_else(|e| {
+                eprintln!("Error fetching folders for watcher: {}", e);
+                Vec::new()
+            })
         });
 
         // If no folders are configured, there's nothing to watch, so the thread can exit.
@@ -63,7 +58,6 @@ pub fn start_watching_library(pool: Arc<SqlitePool>, sender: UnboundedSender<()>
         let event_handler = move |res: Result<Event, notify::Error>| {
             match res {
                 Ok(event) => {
-
                     // We are interested in events that signify a change in the library's content
                     // (e.g., file creation, deletion, or modification of name/data/metadata).
                     if matches!(
@@ -74,7 +68,6 @@ pub fn start_watching_library(pool: Arc<SqlitePool>, sender: UnboundedSender<()>
                             | EventKind::Modify(ModifyKind::Data(_))
                             | EventKind::Modify(ModifyKind::Metadata(_))
                     ) {
-
                         // Clone necessary Arcs for the debounced thread.
                         let sender_clone = sender.clone();
                         let debouncer_clone = debouncer.clone();
@@ -88,7 +81,6 @@ pub fn start_watching_library(pool: Arc<SqlitePool>, sender: UnboundedSender<()>
                         // Spawn a new thread for the debounced operation.
                         // The previous `JoinHandle` (if any) is dropped here, cancelling the old timer.
                         *guard = Some(thread::spawn(move || {
-
                             // Wait for a short period to debounce events.
                             // If another relevant event occurs within this duration,
                             // the current timer will be cancelled (by dropping this thread's handle)
@@ -112,14 +104,13 @@ pub fn start_watching_library(pool: Arc<SqlitePool>, sender: UnboundedSender<()>
         };
 
         // Create a new file system watcher instance with the defined event handler.
-        let mut watcher: RecommendedWatcher =
-            match recommended_watcher(event_handler) {
-                Ok(w) => w,
-                Err(e) => {
-                    eprintln!("Failed to create watcher: {}", e);
-                    return; // Exit the thread if watcher creation fails.
-                }
-            };
+        let mut watcher: RecommendedWatcher = match recommended_watcher(event_handler) {
+            Ok(w) => w,
+            Err(e) => {
+                eprintln!("Failed to create watcher: {}", e);
+                return; // Exit the thread if watcher creation fails.
+            }
+        };
 
         // Add each configured folder to the watcher for recursive monitoring.
         for folder in folders_to_watch {

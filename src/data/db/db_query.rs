@@ -1,9 +1,4 @@
-use sqlx::{
-    query,
-    Result,
-    Row,
-    sqlite::SqliteRow,
-    SqlitePool};
+use sqlx::{Result, Row, SqlitePool, query, sqlite::SqliteRow};
 
 use crate::data::models::{Artist, Folder};
 
@@ -75,7 +70,10 @@ pub async fn fetch_album_display_info(pool: &SqlitePool) -> Result<Vec<AlbumDisp
     )
     .fetch_all(pool)
     .await?;
-    Ok(rows.into_iter().map(map_row_to_album_display_info).collect())
+    Ok(rows
+        .into_iter()
+        .map(map_row_to_album_display_info)
+        .collect())
 }
 
 /// Helper function to map a SQLX Row to an AlbumDisplayInfo struct.
@@ -104,9 +102,10 @@ fn map_row_to_album_display_info(row: SqliteRow) -> AlbumDisplayInfo {
 /// # Returns
 /// A `Result` containing a `Vec<Artist>` on success, or an `sqlx::Error` on failure.
 pub async fn fetch_all_artists(pool: &SqlitePool) -> Result<Vec<Artist>> {
-    let rows = query("SELECT id, name FROM artists WHERE id IN (SELECT DISTINCT artist_id FROM albums)")
-        .fetch_all(pool)
-        .await?;
+    let rows =
+        query("SELECT id, name FROM artists WHERE id IN (SELECT DISTINCT artist_id FROM albums)")
+            .fetch_all(pool)
+            .await?;
     Ok(rows
         .into_iter()
         .map(|row| Artist {
@@ -180,7 +179,10 @@ pub async fn search_album_display_info(
     .bind(&pattern)
     .fetch_all(pool)
     .await?;
-    Ok(rows.into_iter().map(map_row_to_album_display_info).collect())
+    Ok(rows
+        .into_iter()
+        .map(map_row_to_album_display_info)
+        .collect())
 }
 
 /// Searches for artists by matching a substring in their name (case-insensitive).

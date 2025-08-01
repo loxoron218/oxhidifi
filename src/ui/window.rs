@@ -1,11 +1,11 @@
-use std::{rc::Rc, sync::Arc};
 use std::cell::{Cell, RefCell};
 use std::thread::spawn;
+use std::{rc::Rc, sync::Arc};
 
 use glib::WeakRef;
 use gtk4::{Box, Button, FlowBox, Orientation, Stack};
-use libadwaita::{Application, ApplicationWindow, Clamp, ViewStack};
 use libadwaita::prelude::{AdwApplicationWindowExt, BoxExt, ButtonExt, GtkWindowExt};
+use libadwaita::{Application, ApplicationWindow, Clamp, ViewStack};
 use sqlx::SqlitePool;
 use tokio::runtime::Runtime;
 
@@ -13,10 +13,17 @@ use crate::data::scanner::library_ops::run_full_scan;
 use crate::data::watcher::start_watching_library;
 use crate::ui::components::config::load_settings;
 use crate::ui::components::dialogs::{connect_settings_dialog, create_add_folder_dialog_handler};
-use crate::ui::components::navigation::{connect_album_navigation, connect_back_button, connect_sort_button, connect_tab_navigation, setup_keyboard_shortcuts};
+use crate::ui::components::navigation::{
+    connect_album_navigation, connect_back_button, connect_sort_button, connect_tab_navigation,
+    setup_keyboard_shortcuts,
+};
 use crate::ui::components::refresh::{setup_library_refresh_channel, setup_live_monitor_refresh};
-use crate::ui::components::scan_feedback::{create_scanning_label, spawn_scanning_label_refresh_task};
-use crate::ui::components::sorting::{connect_sort_icon_update_on_tab_switch, connect_tab_sort_refresh, set_initial_sort_icon_state};
+use crate::ui::components::scan_feedback::{
+    create_scanning_label, spawn_scanning_label_refresh_task,
+};
+use crate::ui::components::sorting::{
+    connect_sort_icon_update_on_tab_switch, connect_tab_sort_refresh, set_initial_sort_icon_state,
+};
 use crate::ui::grids::albums_grid::rebuild_albums_grid_for_window;
 use crate::ui::grids::artists_grid::rebuild_artists_grid_for_window;
 use crate::ui::header::{build_header_bar, build_main_headerbar, build_tab_bar};
@@ -28,7 +35,6 @@ use crate::utils::screen::{compute_cover_and_tile_size, get_primary_screen_size}
 /// Build and present the main application window, including all UI widgets, search, and navigation.
 /// Handles all top-level UI logic, event connections, and async refresh flows.
 pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
-
     // Header bar and state
     let header = build_header_bar();
     let left_btn_stack = header.left_btn_stack.clone();
@@ -56,10 +62,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     );
 
     // Main content stack
-    let stack = ViewStack::builder()
-        .vexpand(true)
-        .hexpand(true)
-        .build();
+    let stack = ViewStack::builder().vexpand(true).hexpand(true).build();
     let stack_rc = Rc::new(stack.clone());
     let left_btn_stack_rc = Rc::new(left_btn_stack.clone());
     let last_tab = Rc::new(Cell::new("albums"));
@@ -261,11 +264,8 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     artists_btn.set_has_frame(false);
 
     // Build header bar
-    let header_bar = build_main_headerbar(
-        &header.left_btn_stack,
-        &header.right_btn_box,
-        &center_box,
-    );
+    let header_bar =
+        build_main_headerbar(&header.left_btn_stack, &header.right_btn_box, &center_box);
 
     // Live search
     connect_live_search(
