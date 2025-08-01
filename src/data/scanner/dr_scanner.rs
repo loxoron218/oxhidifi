@@ -45,11 +45,15 @@ pub async fn scan_dr_value(folder_path: &str) -> Result<Option<u8>, Box<dyn Erro
                             continue; // Skip to the next entry
                         }
                     };
-                    let reader = BufReader::new(file);
-                    let mut lines = reader.lines();
-
-                    // Read lines until EOF or an error occurs.
-                    while let Some(line) = lines.next_line().await? {
+                    let mut reader = BufReader::new(file);
+                    let mut buffer = Vec::new();
+                    loop {
+                        buffer.clear(); // Clear buffer for each new line
+                        let bytes_read = reader.read_until(b'\n', &mut buffer).await?;
+                        if bytes_read == 0 { // EOF
+                            break;
+                        }
+                        let line = String::from_utf8_lossy(&buffer).into_owned();
                         if let Some(caps) = dr_regex.captures(&line) {
 
                             // Iterate through all possible capture groups (1 to 4 for this regex).
