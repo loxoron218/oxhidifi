@@ -288,19 +288,6 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     // Search bar focus out
     connect_searchbar_focus_out(&search_bar);
 
-    // Back button navigation (again, for redundancy)
-    connect_back_button(
-        &back_button,
-        &stack,
-        &left_btn_stack,
-        &right_btn_box,
-        last_tab.clone(),
-        nav_history.clone(),
-        refresh_library_ui.clone(),
-        sort_ascending.clone(),
-        sort_ascending_artists.clone(),
-    );
-
     // Window construction
     let vbox_inner = Box::new(Orientation::Vertical, 0);
     vbox_inner.append(&header_bar);

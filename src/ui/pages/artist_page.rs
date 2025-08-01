@@ -63,6 +63,7 @@ pub async fn artist_page(
     nav_history: Rc<RefCell<Vec<String>>>,
     sender: UnboundedSender<()>,
 ) {
+    let page_name = format!("artist_{}", artist_id);
     // Upgrade weak references
     let stack = match stack.upgrade() {
         Some(s) => s,
@@ -138,6 +139,7 @@ pub async fn artist_page(
             header_btn_stack.downgrade(),
             nav_history.clone(),
             sender.clone(),
+            page_name.clone(), // Pass the artist_page_name
         );
         flowbox.insert(&album_card, -1);
     }
@@ -173,6 +175,7 @@ fn build_album_card(
     header_btn_stack: WeakRef<ViewStack>,
     nav_history: Rc<RefCell<Vec<String>>>,
     sender: UnboundedSender<()>,
+    artist_page_name: String, // New parameter for the artist page name
 ) -> Box {
     // Cover (scaled to cover_size x cover_size)
     let cover = if let Some(ref art) = album.cover_art {
@@ -310,11 +313,11 @@ fn build_album_card(
             stack_weak_for_closure.upgrade(),
             header_btn_stack_weak_for_closure.upgrade(),
         ) {
-            if let Some(current_page) = stack.visible_child_name() {
-                nav_history_clone_for_closure
-                    .borrow_mut()
-                    .push(current_page.to_string());
-            }
+            // Use the explicitly passed artist_page_name instead of stack.visible_child_name()
+            nav_history_clone_for_closure
+                .borrow_mut()
+                .push(artist_page_name.clone());
+
             MainContext::default().spawn_local(album_page(
                 stack.downgrade(),
                 db_pool_clone_for_closure.clone(),
