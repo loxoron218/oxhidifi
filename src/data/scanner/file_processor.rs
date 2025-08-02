@@ -1,8 +1,11 @@
 use std::{borrow::Cow, error::Error, path::Path};
 
 use lofty::{
-    prelude::ItemKey::{AlbumArtist, OriginalReleaseDate},
-    prelude::{Accessor, AudioFile, TaggedFileExt},
+    prelude::{
+        Accessor, AudioFile,
+        ItemKey::{AlbumArtist, OriginalReleaseDate},
+        TaggedFileExt,
+    },
     probe::Probe,
     tag::items::Timestamp,
 };
