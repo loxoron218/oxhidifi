@@ -1,56 +1,23 @@
-use std::cell::RefCell;
-use std::{cmp::Ordering, rc::Rc, sync::Arc};
+use std::{cell::RefCell, cmp::Ordering, rc::Rc, sync::Arc};
 
-use gdk_pixbuf::prelude::PixbufLoaderExt;
-use gdk_pixbuf::{InterpType, PixbufLoader};
 use glib::{MainContext, WeakRef};
-use gtk4::pango::{EllipsizeMode, WrapMode};
 use gtk4::{
-    Align, Box, FlowBox, GestureClick, Justification, Label, Orientation, Picture, SelectionMode,
+    Align, Box, Fixed, FlowBox, FlowBoxChild, GestureClick, Justification, Label, Orientation,
+    Overlay, SelectionMode,
+    pango::{EllipsizeMode, WrapMode},
 };
-use libadwaita::prelude::{BoxExt, ObjectExt, WidgetExt};
-use libadwaita::{Clamp, ViewStack};
+use libadwaita::{
+    Clamp, ViewStack,
+    prelude::{BoxExt, FixedExt, FlowBoxChildExt, ObjectExt, WidgetExt},
+};
 use sqlx::{Error, Row, SqlitePool, query};
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::data::db::db_crud::fetch_artist_by_id;
+use crate::ui::components::tiles::{create_album_cover, create_album_label, create_dr_overlay};
 use crate::ui::pages::album_page::album_page;
 use crate::utils::formatting::format_freq_khz;
 use crate::utils::screen::{compute_cover_and_tile_size, get_primary_screen_size};
-
-/// Helper to create a styled label for album metadata.
-fn create_album_label(
-    text: &str,
-    css_classes: &[&str],
-    max_width: Option<i32>,
-    ellipsize: Option<EllipsizeMode>,
-    wrap: bool,
-    wrap_mode: Option<WrapMode>,
-    lines: Option<i32>,
-) -> Label {
-    let builder = Label::builder().label(text).halign(Align::Start);
-    let label = builder.build();
-    label.set_xalign(0.0);
-    if let Some(width) = max_width {
-        label.set_max_width_chars(width);
-    }
-    if let Some(mode) = ellipsize {
-        label.set_ellipsize(mode);
-    }
-    if wrap {
-        label.set_wrap(true);
-    }
-    if let Some(mode) = wrap_mode {
-        label.set_wrap_mode(mode);
-    }
-    if let Some(l) = lines {
-        label.set_lines(l);
-    }
-    for class in css_classes {
-        label.add_css_class(class);
-    }
-    label
-}
 
 /// Build and present the artist page for a given artist ID.
 /// Shows all albums by the artist in a grid, replacing artist name with album year.
@@ -176,28 +143,7 @@ fn build_album_card(
     nav_history: Rc<RefCell<Vec<String>>>,
     sender: UnboundedSender<()>,
     artist_page_name: String, // New parameter for the artist page name
-) -> Box {
-    // Cover (scaled to cover_size x cover_size)
-    let cover = if let Some(ref art) = album.cover_art {
-        let pixbuf_loader = PixbufLoader::new();
-        pixbuf_loader.write(art).expect("Failed to load cover art");
-        pixbuf_loader.close().expect("Failed to close loader");
-        let pixbuf = pixbuf_loader.pixbuf().expect("No pixbuf loaded");
-        let scaled = pixbuf
-            .scale_simple(cover_size, cover_size, InterpType::Bilinear)
-            .unwrap();
-        let picture = Picture::for_pixbuf(&scaled);
-        picture.set_size_request(cover_size, cover_size);
-        picture.add_css_class("album-cover-border");
-        picture
-    } else {
-        let pic = Picture::new();
-        pic.set_size_request(cover_size, cover_size);
-        pic.add_css_class("album-cover-border");
-        pic
-    };
-
-    // Album title (bold)
+) -> FlowBoxChild {
     let title_label = create_album_label(
         &album.title,
         &["album-title-label"],
@@ -208,8 +154,9 @@ fn build_album_card(
         Some(2),
     );
     title_label.set_size_request(cover_size - 16, -1);
+    title_label.set_halign(Align::Start);
+    title_label.set_xalign(0.0);
 
-    // Album artist label
     let artist_label = create_album_label(
         &album._artist,
         &["album-artist-label"],
@@ -219,8 +166,34 @@ fn build_album_card(
         None,
         None,
     );
+    artist_label.add_css_class("album-artist-label"); // Ensure this class is applied
 
-    // Year label
+    let mut format_fields = Vec::new();
+    if let Some(format_str) = album.format.as_ref() {
+        let format_caps = format_str.to_uppercase();
+        match (album.bit_depth, album.frequency) {
+            (Some(bit), Some(freq)) => {
+                format_fields.push(format!("{} {}/{}", format_caps, bit, format_freq_khz(freq)));
+            }
+            (None, Some(freq)) => {
+                format_fields.push(format!("{} {}", format_caps, format_freq_khz(freq)))
+            }
+            _ => format_fields.push(format_caps),
+        }
+    }
+    let format_line = format_fields.join(" · ");
+    let format_label = create_album_label(
+        &format_line,
+        &["album-format-label"],
+        None,
+        None,
+        false,
+        None,
+        None,
+    );
+    format_label.set_halign(Align::Start);
+    format_label.set_hexpand(true); // Allow format label to expand
+
     let year_text = if let Some(original_release_date_str) = album.original_release_date.clone() {
         original_release_date_str
             .split('-')
@@ -244,39 +217,42 @@ fn build_album_card(
     year_label.set_halign(Align::End);
     year_label.set_hexpand(false);
 
-    // Format line (small)
-    let format_line = if let Some(ref format) = album.format {
-        let format_caps = format.to_uppercase();
-        match (album.bit_depth, album.frequency) {
-            (Some(bit), Some(freq)) => format!("{} {}/{}", format_caps, bit, format_freq_khz(freq)),
-            (None, Some(freq)) => format!("{} {}", format_caps, format_freq_khz(freq)),
-            _ => format_caps,
-        }
-    } else {
-        String::new()
-    };
-    let format_label = create_album_label(
-        &format_line,
-        &["album-format-label"],
-        Some(((cover_size - 16) / 10).max(8)),
-        Some(EllipsizeMode::End),
-        false,
-        None,
-        None,
-    );
-    format_label.set_size_request(cover_size - 16, -1);
-
     // Album box creation
     let album_tile_box = Box::builder()
         .orientation(Orientation::Vertical)
-        .spacing(2) // Changed spacing to 2 for consistency with albums_grid
+        .spacing(2)
         .build();
+
+    // tile_size + room for text
     album_tile_box.set_size_request(tile_size, tile_size + 80);
-    album_tile_box.set_hexpand(true);
+    album_tile_box.set_hexpand(false);
     album_tile_box.set_vexpand(false);
-    album_tile_box.set_halign(Align::Fill);
+    album_tile_box.set_halign(Align::Start);
     album_tile_box.set_valign(Align::Start);
-    album_tile_box.append(&cover);
+
+    // Fixed-size container for cover (new instance per tile)
+    let cover_container = Box::new(Orientation::Vertical, 0);
+    cover_container.set_size_request(cover_size, cover_size);
+    cover_container.set_halign(Align::Start);
+    cover_container.set_valign(Align::Start);
+    let cover = create_album_cover(album.cover_art.as_ref(), cover_size);
+    cover_container.append(&cover);
+
+    // Overlay for DR badge
+    let overlay = Overlay::new();
+    overlay.set_size_request(cover_size, cover_size);
+    overlay.set_child(Some(&cover_container));
+    overlay.set_halign(Align::Start);
+    overlay.set_valign(Align::Start);
+
+    let dr_label = create_dr_overlay(album._dr_value, album.dr_completed).unwrap();
+    overlay.add_overlay(&dr_label);
+
+    // Fixed-size container for the cover area to ensure consistent sizing
+    let cover_fixed = Fixed::new();
+    cover_fixed.set_size_request(-1, cover_size);
+    cover_fixed.put(&overlay, 0.0, 0.0);
+    album_tile_box.append(&cover_fixed);
 
     // Box to ensure consistent height for the title area (2 lines)
     let title_area_box = Box::builder()
@@ -284,7 +260,7 @@ fn build_album_card(
         .height_request(40) // Explicitly request height for two lines of text + extra buffer
         .margin_top(12) // Keep the margin from the cover
         .build();
-    title_label.set_valign(Align::End); // Align label to the end of its box
+    title_label.set_valign(Align::End);
     title_area_box.append(&title_label);
     album_tile_box.append(&title_area_box);
     album_tile_box.append(&artist_label);
@@ -299,36 +275,49 @@ fn build_album_card(
     metadata_box.append(&year_label);
     album_tile_box.append(&metadata_box);
     album_tile_box.set_css_classes(&["album-tile"]);
-    unsafe {
-        album_tile_box.set_data("album_id", album.id);
-    }
-    let gesture = GestureClick::builder().build();
-    let stack_weak_for_closure = stack.clone();
-    let db_pool_clone_for_closure = db_pool.clone();
-    let header_btn_stack_weak_for_closure = header_btn_stack.clone();
-    let nav_history_clone_for_closure = nav_history.clone();
-    let album_id = album.id;
-    gesture.connect_pressed(move |_, _, _, _| {
-        if let (Some(stack), Some(header_btn_stack)) = (
-            stack_weak_for_closure.upgrade(),
-            header_btn_stack_weak_for_closure.upgrade(),
-        ) {
-            // Use the explicitly passed artist_page_name instead of stack.visible_child_name()
-            nav_history_clone_for_closure
-                .borrow_mut()
-                .push(artist_page_name.clone());
 
+    // Set album_id as widget data for double-click navigation
+    let flow_child = FlowBoxChild::builder().build();
+    flow_child.set_child(Some(&album_tile_box));
+    flow_child.set_hexpand(false);
+    flow_child.set_vexpand(false);
+    flow_child.set_halign(Align::Start);
+    flow_child.set_valign(Align::Start);
+    unsafe {
+        flow_child.set_data::<i64>("album_id", album.id);
+    }
+
+    // Add click gesture for navigation
+    let stack_weak = stack.clone();
+    let db_pool_clone = Arc::clone(&db_pool);
+    let header_btn_stack_weak = header_btn_stack.clone();
+    let flow_child_clone = flow_child.clone();
+    let sender_clone = sender.clone();
+    let gesture = GestureClick::builder().build();
+    let gesture_for_closure = gesture.clone();
+    gesture_for_closure.connect_pressed(move |_, _, _, _| {
+        if let (Some(stack), Some(header_btn_stack)) =
+            (stack_weak.upgrade(), header_btn_stack_weak.upgrade())
+        {
+            let album_id = unsafe {
+                flow_child_clone
+                    .data::<i64>("album_id")
+                    .map(|ptr| *ptr.as_ref())
+                    .unwrap_or_default()
+            };
+            nav_history.borrow_mut().push(artist_page_name.clone()); // Use the explicitly passed artist_page_name instead of stack.visible_child_name()
             MainContext::default().spawn_local(album_page(
                 stack.downgrade(),
-                db_pool_clone_for_closure.clone(),
+                db_pool_clone.clone(),
                 album_id,
                 header_btn_stack.downgrade(),
-                sender.clone(),
+                sender_clone.clone(),
             ));
         }
     });
-    album_tile_box.add_controller(gesture);
-    album_tile_box
+    flow_child.add_controller(gesture); // Move original into add_controller
+
+    flow_child
 }
 
 /// Fetch all albums by a given artist, with display info and year.
@@ -338,17 +327,17 @@ pub async fn fetch_album_display_info_by_artist(
 ) -> Result<Vec<AlbumDisplayInfoWithYear>, Error> {
     let rows = query(
         r#"SELECT albums.id, albums.title, albums.year, artists.name as artist, albums.cover_art,
-                     tracks.format, tracks.bit_depth, tracks.frequency, albums.dr_value, albums.original_release_date
-            FROM albums
-            JOIN artists ON albums.artist_id = artists.id
-            LEFT JOIN tracks ON tracks.album_id = albums.id
-            WHERE albums.artist_id = ?
-            GROUP BY albums.id
-            ORDER BY albums.year DESC, albums.title COLLATE NOCASE"#,
-    )
-    .bind(artist_id)
-    .fetch_all(pool)
-    .await?;
+                     tracks.format, tracks.bit_depth, tracks.frequency, albums.dr_value, albums.dr_completed, albums.original_release_date
+           FROM albums
+           JOIN artists ON albums.artist_id = artists.id
+           LEFT JOIN tracks ON tracks.album_id = albums.id
+           WHERE albums.artist_id = ?
+           GROUP BY albums.id
+           ORDER BY albums.year DESC, albums.title COLLATE NOCASE"#,
+   )
+   .bind(artist_id)
+   .fetch_all(pool)
+   .await?;
     Ok(rows
         .into_iter()
         .map(|row| AlbumDisplayInfoWithYear {
@@ -361,6 +350,7 @@ pub async fn fetch_album_display_info_by_artist(
             bit_depth: row.get("bit_depth"),
             frequency: row.get("frequency"),
             _dr_value: row.get("dr_value"),
+            dr_completed: row.get("dr_completed"),
             original_release_date: row.get("original_release_date"),
         })
         .collect())
@@ -378,5 +368,6 @@ pub struct AlbumDisplayInfoWithYear {
     pub bit_depth: Option<u32>,
     pub frequency: Option<u32>,
     pub _dr_value: Option<u8>,
+    pub dr_completed: bool,
     pub original_release_date: Option<String>,
 }
