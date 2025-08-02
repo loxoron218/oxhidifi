@@ -13,10 +13,10 @@ use crate::data::scanner::library_ops::run_full_scan;
 use crate::data::watcher::start_watching_library;
 use crate::ui::components::config::load_settings;
 use crate::ui::components::dialogs::{connect_settings_dialog, create_add_folder_dialog_handler};
-use crate::ui::components::navigation::{
-    connect_album_navigation, connect_back_button, connect_sort_button, connect_tab_navigation,
-    setup_keyboard_shortcuts,
-};
+use crate::ui::components::navigation::nav_core::{connect_album_navigation, connect_back_button};
+use crate::ui::components::navigation::nav_shortcuts::setup_keyboard_shortcuts;
+use crate::ui::components::navigation::nav_sorting::connect_sort_button;
+use crate::ui::components::navigation::nav_tabs::connect_tab_navigation;
 use crate::ui::components::refresh::{setup_library_refresh_channel, setup_live_monitor_refresh};
 use crate::ui::components::scan_feedback::{
     create_scanning_label, spawn_scanning_label_refresh_task,
@@ -212,6 +212,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         &left_btn_stack,
         &right_btn_box,
         last_tab.clone(),
+        nav_history.clone(),
         sort_ascending.clone(),
         sort_ascending_artists.clone(),
         refresh_library_ui.clone(),
