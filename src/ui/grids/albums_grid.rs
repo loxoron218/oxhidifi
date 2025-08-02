@@ -8,8 +8,9 @@ use std::{
 use gdk_pixbuf::{InterpType, PixbufLoader};
 use glib::MainContext;
 use gtk4::{
-    Align, Box, Button, Fixed, FlowBox, FlowBoxChild, GestureClick, Label, Orientation, Overlay,
-    Picture, PolicyType, ScrolledWindow, SelectionMode, Spinner, Stack, StackTransitionType,
+    Align, Box, Button, EventControllerMotion, Fixed, FlowBox, FlowBoxChild, GestureClick, Label,
+    Orientation, Overlay, Picture, PolicyType, ScrolledWindow, SelectionMode, Spinner, Stack,
+    StackTransitionType,
     pango::{EllipsizeMode, WrapMode},
 };
 use libadwaita::{
@@ -443,6 +444,33 @@ pub async fn populate_albums_grid(
                 let dr_label =
                     create_dr_overlay(album._dr_value, is_dr_completed_from_store).unwrap();
                 overlay.add_overlay(&dr_label);
+
+                // Play button overlay
+                let play_button = Button::builder()
+                    .icon_name("media-playback-start")
+                    .css_classes(&["play-pause-button", "album-cover-play"][..])
+                    .build();
+                play_button.set_size_request(56, 56);
+                play_button.set_halign(Align::Center);
+                play_button.set_valign(Align::Center);
+                play_button.set_visible(false);
+                overlay.add_overlay(&play_button);
+
+                // Event controller for hover
+                let motion_controller = EventControllerMotion::new();
+                let play_button_weak = play_button.downgrade();
+                motion_controller.connect_enter(move |_, _, _| {
+                    if let Some(btn) = play_button_weak.upgrade() {
+                        btn.set_visible(true);
+                    }
+                });
+                let play_button_weak = play_button.downgrade(); // Re-clone for the leave handler
+                motion_controller.connect_leave(move |_| {
+                    if let Some(btn) = play_button_weak.upgrade() {
+                        btn.set_visible(false);
+                    }
+                });
+                overlay.add_controller(motion_controller);
 
                 // Fixed-size container for the cover area to ensure consistent sizing
                 let cover_fixed = Fixed::new();
