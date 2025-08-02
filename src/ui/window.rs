@@ -93,7 +93,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     let is_settings_open = Rc::new(Cell::new(false));
 
     // Library refresh logic is now modularized in refresh.rs
-    let (sender, receiver, refresh_library_ui) = setup_library_refresh_channel(
+    let (sender, receiver, refresh_library_ui, refresh_service) = setup_library_refresh_channel(
         db_pool.clone(),
         albums_grid_cell.clone(),
         albums_stack_cell.clone(),
@@ -110,8 +110,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         window.clone(),
         scanning_label_albums.clone(),
         scanning_label_artists.clone(),
-        stack.clone().into(),
-        header.left_btn_stack.clone().into(),
+        Rc::new(header.left_btn_stack.clone()),
         nav_history.clone(),
     );
 
@@ -171,11 +170,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         &add_music_button_artists,
     );
     setup_live_monitor_refresh(
-        sort_ascending.clone(),
-        sort_ascending_artists.clone(),
-        cover_size_rc.clone(),
-        tile_size_rc.clone(),
-        refresh_library_ui.clone(),
+        refresh_service.clone(),
         screen_width,
         is_settings_open.clone(),
     );
