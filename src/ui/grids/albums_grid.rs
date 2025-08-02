@@ -1,23 +1,27 @@
-use std::cell::{Cell, RefCell};
-use std::{cmp::Ordering, rc::Rc, sync::Arc};
+use std::{
+    cell::{Cell, RefCell},
+    cmp::Ordering,
+    rc::Rc,
+    sync::Arc,
+};
 
 use gdk_pixbuf::{InterpType, PixbufLoader};
 use glib::MainContext;
-use gtk4::pango::{EllipsizeMode, WrapMode};
 use gtk4::{
     Align, Box, Button, Fixed, FlowBox, FlowBoxChild, GestureClick, Label, Orientation, Overlay,
     Picture, PolicyType, ScrolledWindow, SelectionMode, Spinner, Stack, StackTransitionType,
+    pango::{EllipsizeMode, WrapMode},
 };
-use libadwaita::prelude::{
-    BoxExt, FixedExt, FlowBoxChildExt, ObjectExt, PixbufLoaderExt, WidgetExt,
+use libadwaita::{
+    ApplicationWindow, StatusPage, ViewStack,
+    prelude::{BoxExt, FixedExt, FlowBoxChildExt, ObjectExt, PixbufLoaderExt, WidgetExt},
 };
-use libadwaita::{ApplicationWindow, StatusPage, ViewStack};
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::data::db::db_query::fetch_album_display_info;
 use crate::ui::components::scan_feedback::create_scanning_label;
-use crate::ui::components::sorting::SortOrder;
+use crate::ui::components::sorting::sorting_types::SortOrder;
 use crate::ui::pages::album_page::album_page;
 use crate::utils::best_dr_persistence::{AlbumKey, DrValueStore};
 use crate::utils::formatting::format_freq_khz;

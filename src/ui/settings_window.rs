@@ -1,15 +1,18 @@
-use std::cell::{Cell, RefCell};
-use std::{rc::Rc, sync::Arc};
-
-use glib::source::idle_add_local_once;
-use glib::{MainContext, Propagation};
-use gtk4::gdk::Key;
-use gtk4::{Align, Button, EventControllerKey, ListBox, SelectionMode, Window};
-use libadwaita::prelude::{
-    ActionRowExt, ButtonExt, Cast, GtkWindowExt, IsA, ObjectExt, ObjectType, PreferencesGroupExt,
-    PreferencesPageExt, PreferencesWindowExt, StaticType, WidgetExt,
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+    sync::Arc,
 };
-use libadwaita::{ActionRow, PreferencesGroup, PreferencesPage, PreferencesWindow};
+
+use glib::{MainContext, Propagation, source::idle_add_local_once};
+use gtk4::{Align, Button, EventControllerKey, ListBox, SelectionMode, Window, gdk::Key};
+use libadwaita::{
+    ActionRow, PreferencesGroup, PreferencesPage, PreferencesWindow,
+    prelude::{
+        ActionRowExt, ButtonExt, Cast, GtkWindowExt, IsA, ObjectExt, ObjectType,
+        PreferencesGroupExt, PreferencesPageExt, PreferencesWindowExt, StaticType, WidgetExt,
+    },
+};
 use sqlx::SqlitePool;
 
 use crate::data::db::db_cleanup::remove_folder_and_albums;
@@ -17,9 +20,10 @@ use crate::data::db::db_query::fetch_all_folders;
 use crate::data::models::Folder;
 use crate::ui::components::config::{Settings, load_settings, save_settings};
 use crate::ui::components::dialogs::show_remove_folder_confirmation_dialog;
-use crate::ui::components::sorting::{
-    SortOrder, connect_sort_reorder_handler, make_sort_row, update_sorting_row_numbers,
+use crate::ui::components::sorting::sorting_preferences::{
+    connect_sort_reorder_handler, make_sort_row, update_sorting_row_numbers,
 };
+use crate::ui::components::sorting::sorting_types::SortOrder;
 
 /// Show the settings dialog. Call from your settings button handler.
 /// Accepts a shared SortOrder state and a callback to refresh the albums grid.

@@ -9,7 +9,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 use serde_json::{from_str, to_string_pretty};
 
-use crate::ui::components::sorting::SortOrder;
+use crate::ui::components::sorting::sorting_types::SortOrder;
 
 /// Manages application settings, including sorting preferences and completed albums.
 ///

@@ -23,7 +23,7 @@ use tokio::{runtime::Runtime, sync::mpsc::UnboundedSender};
 
 use crate::data::db::db_crud::insert_or_get_folder;
 use crate::data::scanner::scan_folder;
-use crate::ui::components::sorting::SortOrder;
+use crate::ui::components::sorting::sorting_types::SortOrder;
 use crate::ui::settings_window::show_settings_dialog;
 
 /// Handles the logic for displaying a folder chooser dialog and initiating a library scan.

@@ -7,6 +7,7 @@ use libadwaita::{
 };
 
 use crate::ui::components::config::{load_settings, save_settings};
+use crate::ui::components::sorting::sorting_ui_utils::get_sort_icon_name;
 
 use super::{VIEW_STACK_ALBUMS, VIEW_STACK_ARTISTS};
 
@@ -30,6 +31,7 @@ use super::{VIEW_STACK_ALBUMS, VIEW_STACK_ARTISTS};
 /// * `sort_ascending_artists` - `Rc<Cell<bool>>` representing the ascending/descending state for artists.
 /// * `refresh_library_ui` - A closure that refreshes the main library UI (albums/artists grid)
 ///   with the updated sort order.
+#[allow(clippy::too_many_arguments)]
 pub fn connect_sort_button(
     sort_button: &Button,
     stack: &ViewStack,
@@ -70,20 +72,9 @@ pub fn connect_sort_button(
         }
         let _ = save_settings(&settings); // Attempt to save the updated settings.
 
-        // Update the sort button's icon to reflect the new sort state.
-        let icon_name = if page == VIEW_STACK_ALBUMS {
-            if current_sort_ascending {
-                "view-sort-descending-symbolic" // Icon for descending order.
-            } else {
-                "view-sort-ascending-symbolic" // Icon for ascending order.
-            }
-        } else {
-            if current_sort_ascending_artists {
-                "view-sort-descending-symbolic"
-            } else {
-                "view-sort-ascending-symbolic"
-            }
-        };
+        // Update the sort button's icon to reflect the new sort state using the helper function.
+        let icon_name =
+            get_sort_icon_name(&page, &sort_ascending_clone, &sort_ascending_artists_clone);
         sort_button_clone.set_icon_name(icon_name);
 
         // Trigger a refresh of the library UI with the updated sort orders.
@@ -96,21 +87,12 @@ pub fn connect_sort_button(
     let sort_ascending_artists_for_notify = sort_ascending_artists.clone();
     stack.connect_notify_local(Some("visible-child-name"), move |stack, _| {
         let page = stack.visible_child_name().unwrap_or_default();
-        let icon_name = if page == VIEW_STACK_ARTISTS {
-            // If on the artists page, use the artists' sort state.
-            if sort_ascending_artists_for_notify.get() {
-                "view-sort-descending-symbolic"
-            } else {
-                "view-sort-ascending-symbolic"
-            }
-        } else {
-            // Otherwise (e.g., on albums page or any other page), default to albums' sort state.
-            if sort_ascending_for_notify.get() {
-                "view-sort-descending-symbolic"
-            } else {
-                "view-sort-ascending-symbolic"
-            }
-        };
+        // Use the helper function to determine the icon name.
+        let icon_name = get_sort_icon_name(
+            &page,
+            &sort_ascending_for_notify,
+            &sort_ascending_artists_for_notify,
+        );
         sort_button_for_notify.set_icon_name(icon_name);
     });
 }

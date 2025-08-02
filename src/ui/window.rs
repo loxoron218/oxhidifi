@@ -21,7 +21,7 @@ use crate::ui::components::refresh::{setup_library_refresh_channel, setup_live_m
 use crate::ui::components::scan_feedback::{
     create_scanning_label, spawn_scanning_label_refresh_task,
 };
-use crate::ui::components::sorting::{
+use crate::ui::components::sorting::sorting_ui_utils::{
     connect_sort_icon_update_on_tab_switch, connect_tab_sort_refresh, set_initial_sort_icon_state,
 };
 use crate::ui::grids::albums_grid::rebuild_albums_grid_for_window;

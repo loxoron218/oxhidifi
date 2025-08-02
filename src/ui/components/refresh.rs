@@ -10,7 +10,7 @@ use std::{
 };
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
-use crate::ui::components::sorting::SortOrder;
+use crate::ui::components::sorting::sorting_types::SortOrder;
 use crate::ui::grids::albums_grid::populate_albums_grid;
 use crate::ui::grids::artists_grid::populate_artists_grid;
 use crate::ui::search::clear_grid;
