@@ -3,7 +3,8 @@ use std::{cell::RefCell, rc::Rc, sync::Arc};
 use gdk_pixbuf::{InterpType, PixbufLoader, prelude::PixbufLoaderExt};
 use glib::{MainContext, markup_escape_text, prelude::ObjectExt};
 use gtk4::{
-    Align, Box, Fixed, FlowBoxChild, GestureClick, Image, Label, Orientation, Overlay, Picture,
+    Align, Box, Button, EventControllerMotion, Fixed, FlowBoxChild, GestureClick, Image, Label,
+    Orientation, Overlay, Picture,
     pango::{EllipsizeMode, WrapMode},
 };
 use libadwaita::{
@@ -298,6 +299,33 @@ pub fn create_album_tile(
     overlay.set_valign(Align::Start);
     let dr_label = create_dr_overlay(album._dr_value, album.dr_completed).unwrap();
     overlay.add_overlay(&dr_label);
+
+    // Play button overlay
+    let play_button = Button::builder()
+        .icon_name("media-playback-start")
+        .css_classes(&["play-pause-button", "album-cover-play"][..])
+        .build();
+    play_button.set_size_request(56, 56);
+    play_button.set_halign(Align::Center);
+    play_button.set_valign(Align::Center);
+    play_button.set_visible(false);
+    overlay.add_overlay(&play_button);
+
+    // Event controller for hover
+    let motion_controller = EventControllerMotion::new();
+    let play_button_weak = play_button.downgrade();
+    motion_controller.connect_enter(move |_, _, _| {
+        if let Some(btn) = play_button_weak.upgrade() {
+            btn.set_visible(true);
+        }
+    });
+    let play_button_weak = play_button.downgrade(); // Re-clone for the leave handler
+    motion_controller.connect_leave(move |_| {
+        if let Some(btn) = play_button_weak.upgrade() {
+            btn.set_visible(false);
+        }
+    });
+    overlay.add_controller(motion_controller);
 
     // Fixed container for the overlay, ensuring correct positioning
     let cover_fixed = Fixed::new();
