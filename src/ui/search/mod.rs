@@ -142,7 +142,7 @@ pub fn connect_live_search(
 
                     // Update the album UI based on search results
                     if albums.is_empty() {
-                        albums_stack.set_visible_child_name("empty_state");
+                        albums_stack.set_visible_child_name("no_results_state");
                     } else {
                         albums_stack.set_visible_child_name("populated_grid");
                         for album in albums {
@@ -173,7 +173,7 @@ pub fn connect_live_search(
                 Ok(artists) => {
                     // Update the artist UI based on search results
                     if artists.is_empty() {
-                        artists_stack.set_visible_child_name("empty_state");
+                        artists_stack.set_visible_child_name("no_results_state");
                     } else {
                         artists_stack.set_visible_child_name("populated_grid");
                         for artist in artists {

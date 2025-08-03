@@ -64,6 +64,23 @@ pub fn build_artists_grid(scanning_label: &Label, add_music_button: &Button) -> 
         .build();
     empty_state_container.append(&empty_state_status_page);
 
+    // No results state
+    let no_results_status_page = StatusPage::builder()
+        .icon_name("system-search-symbolic")
+        .title("No Artists Found")
+        .description("Try a different search query.")
+        .vexpand(true)
+        .hexpand(true)
+        .build();
+    let no_results_container = Box::builder()
+        .orientation(Orientation::Vertical)
+        .halign(Align::Center)
+        .valign(Align::Center)
+        .vexpand(true)
+        .hexpand(true)
+        .build();
+    no_results_container.append(&no_results_status_page);
+
     // Artists grid
     let artists_grid = FlowBox::builder()
         .valign(Align::Start)
@@ -121,6 +138,7 @@ pub fn build_artists_grid(scanning_label: &Label, add_music_button: &Button) -> 
     scanning_state_container.append(scanning_label);
     artists_stack.add_named(&loading_state_container, Some("loading_state"));
     artists_stack.add_named(&empty_state_container, Some("empty_state"));
+    artists_stack.add_named(&no_results_container, Some("no_results_state"));
     artists_stack.add_named(&scanning_state_container, Some("scanning_state"));
     let artists_content_box = Box::builder().orientation(Orientation::Vertical).build();
     artists_content_box.append(&scrolled);

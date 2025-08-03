@@ -181,6 +181,23 @@ pub fn build_albums_grid(
         .build();
     empty_state_container.append(&empty_state_status_page);
 
+    // No results state
+    let no_results_status_page = StatusPage::builder()
+        .icon_name("system-search-symbolic")
+        .title("No Albums Found")
+        .description("Try a different search query.")
+        .vexpand(true)
+        .hexpand(true)
+        .build();
+    let no_results_container = Box::builder()
+        .orientation(Orientation::Vertical)
+        .halign(Align::Center)
+        .valign(Align::Center)
+        .vexpand(true)
+        .hexpand(true)
+        .build();
+    no_results_container.append(&no_results_status_page);
+
     // Loading state
     let loading_spinner = Spinner::builder().spinning(true).build();
     loading_spinner.set_size_request(48, 48);
@@ -239,6 +256,7 @@ pub fn build_albums_grid(
     scanning_state_container.append(scanning_label);
     albums_stack.add_named(&loading_state_container, Some("loading_state"));
     albums_stack.add_named(&empty_state_container, Some("empty_state"));
+    albums_stack.add_named(&no_results_container, Some("no_results_state"));
     albums_stack.add_named(&scanning_state_container, Some("scanning_state"));
     let albums_content_box = Box::builder().orientation(Orientation::Vertical).build();
     albums_content_box.append(&scrolled);
