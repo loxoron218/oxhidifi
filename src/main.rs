@@ -13,7 +13,7 @@ use sqlx::SqlitePool;
 use tokio::main;
 
 use crate::data::db::db_schema::init_db;
-use crate::ui::MyApp;
+use crate::ui::App;
 
 /// Entry point: initializes the app, sets up CSS, and launches the main event loop.
 #[main]
@@ -57,6 +57,6 @@ async fn main() {
     let pool = Arc::new(pool);
 
     // Create a new application instance and run the application
-    let app = MyApp::new(pool.clone());
+    let app = App::new(pool.clone());
     app.run();
 }
