@@ -6,7 +6,7 @@ use std::{
 };
 
 use gdk_pixbuf::{InterpType, PixbufLoader};
-use glib::MainContext;
+use glib::{ControlFlow, MainContext, timeout_add_local};
 use gtk4::{
     Align, Box, Button, EventControllerMotion, Fixed, FlowBox, FlowBoxChild, GestureClick, Label,
     Orientation, Overlay, Picture, PolicyType, ScrolledWindow, SelectionMode, Spinner, Stack,
@@ -321,12 +321,12 @@ pub async fn populate_albums_grid(
             albums_inner_stack.set_visible_child_name("populated_grid");
 
             // Multi-level sort albums according to sort_orders
-            let sort_orders = sort_orders.borrow();
+            let current_sort_orders = sort_orders.borrow();
 
             // ... rest of population logic ...
             BUSY.with(|b| b.set(false));
             albums.sort_by(|a, b| {
-                for order in &*sort_orders {
+                for order in &*current_sort_orders {
                     let cmp = match order {
                         SortOrder::Artist => a.artist.to_lowercase().cmp(&b.artist.to_lowercase()),
                         SortOrder::Album => a.title.to_lowercase().cmp(&b.title.to_lowercase()),
@@ -347,6 +347,14 @@ pub async fn populate_albums_grid(
                 }
                 Ordering::Equal
             });
+
+            // BATCH_SIZE: The number of album tiles to process before yielding control
+            // back to the GTK main thread. This helps prevent UI freezes during large
+            // grid population operations. A larger batch size means fewer yields but
+            // potentially longer individual UI blocking.
+            const BATCH_SIZE: usize = 50;
+            let mut processed_count = 0;
+
             for album in albums {
                 let title_label = create_album_label(
                     &album.title,
@@ -561,6 +569,17 @@ pub async fn populate_albums_grid(
                 flow_child.add_controller(gesture); // Move original into add_controller
 
                 albums_grid.insert(&flow_child, -1);
+
+                processed_count += 1;
+                // Yield control to the GTK main thread periodically.
+                // This allows the UI to update and remain responsive during long-running
+                // grid population tasks. `ControlFlow::Continue` ensures the timer
+                // does not repeat, as we only need a single yield.
+                if processed_count % BATCH_SIZE == 0 {
+                    timeout_add_local(std::time::Duration::from_millis(1), || {
+                        ControlFlow::Continue
+                    });
+                }
             }
         }
     }

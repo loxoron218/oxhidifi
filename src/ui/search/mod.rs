@@ -74,10 +74,6 @@ pub fn connect_live_search(
                 sort_ascending_cloned.get(),
                 sort_ascending_artists_cloned.get(),
             );
-
-            // Ensure stacks are set to populated_grid, as refresh_library_ui will handle empty state if needed
-            albums_stack_cloned.set_visible_child_name("populated_grid");
-            artists_stack_cloned.set_visible_child_name("populated_grid");
             return;
         }
 

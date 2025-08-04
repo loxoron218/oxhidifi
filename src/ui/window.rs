@@ -29,7 +29,6 @@ use crate::ui::grids::artists_grid::rebuild_artists_grid_for_window;
 use crate::ui::header::{build_header_bar, build_main_headerbar, build_tab_bar};
 use crate::ui::pages::album_page::album_page;
 use crate::ui::search::connect_live_search;
-use crate::ui::search_bar::{connect_searchbar_focus_out, setup_searchbar_all};
 use crate::utils::screen::{compute_cover_and_tile_size, get_primary_screen_size};
 
 /// Build and present the main application window, including all UI widgets, search, and navigation.
@@ -283,23 +282,13 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         sender.clone(),
     );
 
-    // Search bar focus out
-    connect_searchbar_focus_out(&search_bar);
-
     // Window construction
     let vbox_inner = Box::new(Orientation::Vertical, 0);
     vbox_inner.append(&header_bar);
     vbox_inner.append(&stack);
 
     // Set up all search bar UI logic (gesture, show/hide, focus, keys)
-    setup_searchbar_all(
-        &search_bar,
-        &window,
-        &vbox_inner,
-        refresh_library_ui.clone(),
-        sort_ascending.clone(),
-        sort_ascending_artists.clone(),
-    );
+    search_bar.setup_logic(&window, &vbox_inner);
 
     // Keyboard shortcuts and ESC navigation
     setup_keyboard_shortcuts(
