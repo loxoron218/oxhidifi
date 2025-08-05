@@ -24,7 +24,7 @@ use crate::{
             },
         },
         grids::{
-            albums_grid::rebuild_albums_grid_for_window,
+            album_grid_rebuilder::rebuild_albums_grid_for_window,
             artists_grid::rebuild_artists_grid_for_window,
         },
         pages::album_page::album_page,
@@ -102,7 +102,6 @@ pub fn connect_all_handlers(
         widgets.albums_stack_cell.clone(),
     );
     add_music_button_albums.connect_clicked(move |_| albums_add_folder_handler());
-
     let artists_add_folder_handler = create_add_folder_dialog_handler(
         widgets.window.clone(),
         widgets.scanning_label_artists.clone(),
@@ -124,7 +123,6 @@ pub fn connect_all_handlers(
         &widgets.albums_stack_cell,
         &add_music_button_albums,
     );
-
     rebuild_artists_grid_for_window(
         &widgets.stack,
         &widgets.scanning_label_artists,

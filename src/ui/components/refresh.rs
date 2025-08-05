@@ -13,7 +13,8 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
 use crate::{
     ui::{
-        components::sorting::sorting_types::SortOrder, grids::albums_grid::populate_albums_grid,
+        components::sorting::sorting_types::SortOrder,
+        grids::album_grid_population::populate_albums_grid,
         grids::artists_grid::populate_artists_grid, search::clear_grid,
     },
     utils::screen::ScreenInfo,
@@ -133,9 +134,8 @@ impl RefreshService {
                                 albums_grid,
                                 service_clone.db_pool.clone(),
                                 service_clone.sort_ascending.get(),
-                                service_clone.sort_orders.clone(),
+                                Rc::clone(&service_clone.sort_orders),
                                 &service_clone.screen_info,
-                                &service_clone.window,
                                 &service_clone.scanning_label_albums,
                                 service_clone.sender.clone(),
                                 &service_clone.stack,
