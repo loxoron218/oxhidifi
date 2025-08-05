@@ -68,11 +68,15 @@ pub fn connect_tab_navigation(
     let left_btn_stack_albums_clone = left_btn_stack.clone();
     let right_btn_box_albums_clone = right_btn_box.clone();
     let nav_history_albums_clone = nav_history.clone();
-
     albums_btn.connect_clicked(move |_| {
+        let current_visible_child = stack_albums_clone.visible_child_name().unwrap_or_default();
+        // If the albums grid is already the visible child, do nothing to prevent unnecessary refreshes.
+        if current_visible_child == VIEW_STACK_ALBUMS {
+            return;
+        }
+
         // If currently on a detail page, clear history. This ensures that when the user
         // navigates back from a detail page, they return to the correct main tab (Albums).
-        let current_visible_child = stack_albums_clone.visible_child_name().unwrap_or_default();
         if current_visible_child == VIEW_STACK_ALBUM_DETAIL
             || current_visible_child == VIEW_STACK_ARTIST_DETAIL
         {
@@ -121,11 +125,15 @@ pub fn connect_tab_navigation(
     let left_btn_stack_artists_clone = left_btn_stack.clone();
     let right_btn_box_artists_clone = right_btn_box.clone();
     let nav_history_artists_clone = nav_history.clone();
-
     artists_btn.connect_clicked(move |_| {
+        let current_visible_child = stack_artists_clone.visible_child_name().unwrap_or_default();
+        // If the artists grid is already the visible child, do nothing to prevent unnecessary refreshes.
+        if current_visible_child == VIEW_STACK_ARTISTS {
+            return;
+        }
+
         // If currently on a detail page, clear history. Similar to albums tab, this ensures
         // back navigation from a detail page returns to the main Artists tab.
-        let current_visible_child = stack_artists_clone.visible_child_name().unwrap_or_default();
         if current_visible_child == VIEW_STACK_ALBUM_DETAIL
             || current_visible_child == VIEW_STACK_ARTIST_DETAIL
         {

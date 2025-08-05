@@ -191,6 +191,7 @@ pub fn connect_all_handlers(
         refresh_library_ui.clone(),
         shared_state.sort_ascending.clone(),
         shared_state.sort_ascending_artists.clone(),
+        Rc::new(widgets.stack.clone()), // Pass the ViewStack here
     );
     connect_sort_icon_update_on_tab_switch(
         &widgets.sort_button,
