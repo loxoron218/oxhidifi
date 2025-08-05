@@ -57,7 +57,7 @@ pub fn connect_all_handlers(
     refresh_service: Rc<RefreshService>,
     vbox_inner: &Box,
 ) {
-    // 8. Set initial sort icon state based on loaded settings.
+    // Set initial sort icon state based on loaded settings.
     // This ensures the sort button's icon correctly reflects the default or saved sort order
     // when the application starts.
     set_initial_sort_icon_state(
@@ -67,7 +67,7 @@ pub fn connect_all_handlers(
         "albums", // Initial page is albums
     );
 
-    // 9. Connect back button functionality.
+    // Connect back button functionality.
     // The back button uses the `nav_history` to navigate to previous views, providing
     // a consistent navigation experience throughout the application.
     connect_back_button(
@@ -82,7 +82,7 @@ pub fn connect_all_handlers(
         shared_state.sort_ascending_artists.clone(),
     );
 
-    // 10. Create and connect "Add Music" buttons for empty states.
+    // Create and connect "Add Music" buttons for empty states.
     // These buttons are displayed when the library is empty, prompting the user to add music.
     let add_music_button_albums = Button::with_label("Add Music");
     let add_music_button_artists = Button::with_label("Add Music");
@@ -108,7 +108,7 @@ pub fn connect_all_handlers(
     );
     add_music_button_artists.connect_clicked(move |_| artists_add_folder_handler());
 
-    // 11. Rebuild and populate initial grids for albums and artists.
+    // Rebuild and populate initial grids for albums and artists.
     // These functions create the `FlowBox` grids and their containing `Stack`s,
     // and then populate them with initial data or empty states. This ensures the UI
     // is ready to display content as soon as the application launches.
@@ -130,7 +130,7 @@ pub fn connect_all_handlers(
         &add_music_button_artists,
     );
 
-    // 12. Setup live monitor refresh to adapt UI to screen size changes.
+    // Setup live monitor refresh to adapt UI to screen size changes.
     // This periodically checks screen dimensions and recalculates cover/tile sizes if needed,
     // ensuring the UI remains aesthetically pleasing and functional across different display
     // configurations without requiring an application restart.
@@ -140,12 +140,12 @@ pub fn connect_all_handlers(
         shared_state.is_settings_open.clone(),
     );
 
-    // 13. Start the library watcher for real-time file system changes.
+    // Start the library watcher for real-time file system changes.
     // This background task monitors the music library folders for new, modified, or deleted files,
     // automatically triggering UI updates to keep the library synchronized with the file system.
     start_watching_library(db_pool.clone(), sender.clone());
 
-    // 14. Initial connection for album navigation (clicking on an album tile).
+    // Initial connection for album navigation (clicking on an album tile).
     // This handler enables users to click on an album tile to navigate to its detailed page.
     // This handler will be re-connected whenever the albums grid is rebuilt to ensure
     // all dynamically created album tiles are interactive.
@@ -164,7 +164,7 @@ pub fn connect_all_handlers(
         );
     }
 
-    // 15. Connect tab navigation (Albums/Artists buttons in the header).
+    // Connect tab navigation (Albums/Artists buttons in the header).
     // This handles switching between the main Albums and Artists views.
     connect_tab_navigation(
         &widgets.albums_btn,
@@ -181,7 +181,7 @@ pub fn connect_all_handlers(
         None::<fn()>, // Optional closure for artists grid rebuild, currently handled by `rebuild_artists_grid_for_window`
     );
 
-    // 16. Connect sorting logic for tab toggles and sort icon updates.
+    // Connect sorting logic for tab toggles and sort icon updates.
     // Ensures that when tabs are switched or sort preferences change, the UI reflects
     // the correct sort icon and triggers a refresh of the displayed content.
     connect_tab_sort_refresh(
@@ -198,7 +198,7 @@ pub fn connect_all_handlers(
         shared_state.sort_ascending_artists.clone(),
     );
 
-    // 17. Connect sort button logic to toggle sort order and refresh UI.
+    // Connect sort button logic to toggle sort order and refresh UI.
     // This allows users to change the sorting direction (ascending/descending) for the
     // currently active library view and updates the UI to reflect the new order.
     connect_sort_button(
@@ -209,7 +209,7 @@ pub fn connect_all_handlers(
         refresh_library_ui.clone(),
     );
 
-    // 18. Spawn scanning label refresh task to hide labels after scan completion.
+    // Spawn scanning label refresh task to hide labels after scan completion.
     // This listens for signals from the library scanner (e.g., when a scan finishes)
     // and hides the "Scanning..." labels, providing clear visual feedback to the user.
     let receiver = Rc::new(RefCell::new(receiver)); // Wrap receiver in Rc<RefCell> for shared mutable access
@@ -223,7 +223,7 @@ pub fn connect_all_handlers(
         shared_state.sort_ascending_artists.clone(),
     );
 
-    // 20. Connect live search functionality to the search entry.
+    // Connect live search functionality to the search entry.
     // As the user types, this triggers real-time searches in the database and dynamically
     // updates the displayed album and artist grids with matching results.
     connect_live_search(
@@ -250,7 +250,7 @@ pub fn connect_all_handlers(
         .search_bar
         .setup_logic(&widgets.window, vbox_inner);
 
-    // 22. Setup global keyboard shortcuts.
+    // Setup global keyboard shortcuts.
     // Configures keyboard shortcuts for common actions, such as using the Escape key
     // for back navigation or to close the search bar, enhancing user accessibility.
     setup_keyboard_shortcuts(
@@ -266,7 +266,7 @@ pub fn connect_all_handlers(
         &shared_state.nav_history,
     );
 
-    // 23. Connect "Add Folder" dialog to its button.
+    // Connect "Add Folder" dialog to its button.
     // This allows users to add new music folders to their library via a file chooser dialog.
     let add_folder_handler = create_add_folder_dialog_handler(
         widgets.window.clone(),
@@ -279,7 +279,7 @@ pub fn connect_all_handlers(
         .add_button
         .connect_clicked(move |_| add_folder_handler());
 
-    // 24. Connect settings dialog to its button.
+    // Connect settings dialog to its button.
     // This opens the application's settings dialog, allowing users to configure preferences
     // such as sorting orders and other application behaviors.
     connect_settings_dialog(

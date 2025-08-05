@@ -38,7 +38,7 @@ use super::widgets::WindowWidgets;
 /// * `app` - The `libadwaita::Application` instance, representing the GTK application.
 /// * `db_pool` - An `Arc<SqlitePool>` for database operations, shared across the application.
 pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
-    // 1. Initialize core GTK widgets and application window
+    // Initialize core GTK widgets and application window
     // The `ApplicationWindow` is the top-level window for the application.
     let window = ApplicationWindow::builder()
         .application(app)
@@ -48,19 +48,19 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         .maximized(false)
         .build();
 
-    // 2. Build header bar components: main header bar and tab bar (Albums/Artists)
+    // Build header bar components: main header bar and tab bar (Albums/Artists)
     // The `AppHeaderBar` struct contains all the buttons and search bar.
     // The tab bar contains the Albums and Artists toggle buttons.
     let app_header_bar_widgets = build_header_bar();
     let (tab_bar, albums_btn, artists_btn) = build_tab_bar();
 
-    // 3. Initialize main content `ViewStack` and scanning indicators
+    // Initialize main content `ViewStack` and scanning indicators
     // The `ViewStack` allows switching between different main views (e.g., Albums grid, Artists grid).
     let stack = ViewStack::builder().vexpand(true).hexpand(true).build();
     let scanning_label_albums = create_scanning_label();
     let scanning_label_artists = create_scanning_label();
 
-    // 4. Initialize shared state for sorting, navigation, and dynamic sizing
+    // Initialize shared state for sorting, navigation, and dynamic sizing
     // Load persistent user settings for initial sort orders.
     let settings = load_settings();
     // Get primary screen dimensions to calculate optimal cover and tile sizes dynamically.
@@ -78,7 +78,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         is_settings_open: Rc::new(Cell::new(false)), // Flag to prevent UI refresh while settings dialog is open.
     };
 
-    // 5. Initialize `Rc<RefCell<Option<FlowBox>>>` and `Rc<RefCell<Option<Stack>>>` for grids and stacks
+    // Initialize `Rc<RefCell<Option<FlowBox>>>` and `Rc<RefCell<Option<Stack>>>` for grids and stacks
     // These `Rc<RefCell<Option<...>>>` are used to hold references to the `FlowBox` (grids) and
     // their containing `Stack` widgets. This allows them to be dynamically updated and
     // passed around in a thread-safe manner within the GTK main context.
@@ -87,7 +87,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     let artists_grid_cell: Rc<RefCell<Option<FlowBox>>> = Rc::new(RefCell::new(None));
     let artists_stack_cell: Rc<RefCell<Option<Stack>>> = Rc::new(RefCell::new(None));
 
-    // 6. Bundle all static widgets into `WindowWidgets` struct for cleaner passing
+    // Bundle all static widgets into `WindowWidgets` struct for cleaner passing
     // This struct holds references to all the GTK widgets that are created once and
     // remain static throughout the application's lifetime.
     let widgets = WindowWidgets {
@@ -110,7 +110,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         artists_stack_cell: artists_stack_cell.clone(),
     };
 
-    // 7. Setup library refresh channel and service
+    // Setup library refresh channel and service
     // `setup_library_refresh_channel` creates an MPSC channel for triggering UI refreshes
     // and returns a `RefreshService` instance that encapsulates the refresh logic
     // and all necessary UI components.
@@ -134,7 +134,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         shared_state.nav_history.clone(),
     );
 
-    // 19. Build the main `gtk4::HeaderBar` by composing its left, center (tab bar), and right sections.
+    // Build the main `gtk4::HeaderBar` by composing its left, center (tab bar), and right sections.
     // The header bar provides primary navigation and actions for the application.
     let center_inner = Box::builder()
         .orientation(Orientation::Horizontal)
@@ -174,7 +174,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     widgets.window.present();
     widgets.window.set_content(Some(&vbox_inner));
 
-    // 25. Initiate an initial full scan on application startup in a separate thread.
+    // Initiate an initial full scan on application startup in a separate thread.
     // This is a non-blocking operation that populates the library with existing music files,
     // ensuring the UI remains responsive during the initial data loading process.
     let db_pool_startup_scan = db_pool.clone();
