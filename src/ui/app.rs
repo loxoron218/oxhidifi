@@ -3,7 +3,7 @@ use std::sync::Arc;
 use libadwaita::{Application, prelude::ApplicationExt};
 use sqlx::SqlitePool;
 
-use super::window::build_main_window;
+use super::main_window::builder::build_main_window;
 
 /// `App` struct represents the main application entry point and configuration.
 ///
