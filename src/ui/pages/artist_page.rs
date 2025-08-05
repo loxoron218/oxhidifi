@@ -17,7 +17,7 @@ use crate::data::db::crud::fetch_artist_by_id;
 use crate::ui::components::tiles::{create_album_cover, create_album_label, create_dr_overlay};
 use crate::ui::pages::album_page::album_page;
 use crate::utils::formatting::format_freq_khz;
-use crate::utils::screen::{compute_cover_and_tile_size, get_primary_screen_size};
+use crate::utils::screen::ScreenInfo;
 
 /// Build and present the artist page for a given artist ID.
 /// Shows all albums by the artist in a grid, replacing artist name with album year.
@@ -84,8 +84,9 @@ pub async fn artist_page(
     vbox.append(&header);
 
     // Compute dynamic cover and tile size
-    let (screen_width, _) = get_primary_screen_size();
-    let (cover_size, tile_size) = compute_cover_and_tile_size(screen_width);
+    let screen_info = ScreenInfo::new();
+    let cover_size = screen_info.get_cover_size();
+    let tile_size = screen_info.get_tile_size();
 
     // Albums grid (match main albums grid and album_page)
     let flowbox = FlowBox::builder()

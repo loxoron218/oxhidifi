@@ -4,6 +4,7 @@ use std::{
 };
 
 use crate::ui::components::sorting::sorting_types;
+use crate::utils::screen::ScreenInfo;
 
 /// `WindowSharedState` struct encapsulates all the `Rc<Cell<T>>` and `Rc<RefCell<T>>` managed
 /// shared state that is passed around and mutated by different parts of the UI logic.
@@ -28,9 +29,7 @@ pub struct WindowSharedState {
     pub nav_history: Rc<RefCell<Vec<String>>>,
     /// Stores the calculated cover art size for live updates.
     /// This size can change if the window is resized or moved to a different monitor.
-    pub cover_size_rc: Rc<Cell<i32>>,
-    /// Stores the calculated tile size for live updates.
-    pub tile_size_rc: Rc<Cell<i32>>,
+    pub screen_info: Rc<RefCell<ScreenInfo>>,
     /// Flag to indicate if the settings dialog is currently open.
     /// Used to prevent unnecessary UI refreshes while a modal dialog is active.
     pub is_settings_open: Rc<Cell<bool>>,

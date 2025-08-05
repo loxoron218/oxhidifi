@@ -26,6 +26,7 @@ use crate::ui::components::sorting::sorting_types::SortOrder;
 use crate::ui::pages::album_page::album_page;
 use crate::utils::best_dr_persistence::{AlbumKey, DrValueStore};
 use crate::utils::formatting::format_freq_khz;
+use crate::utils::screen::ScreenInfo;
 
 /// Helper to create a styled label for album metadata.
 fn create_album_label(
@@ -125,8 +126,7 @@ fn create_dr_overlay(dr_value: Option<u8>, dr_completed: bool) -> Option<Label> 
 pub fn rebuild_albums_grid_for_window(
     stack: &ViewStack,
     scanning_label_albums: &Label,
-    cover_size_rc: &Rc<Cell<i32>>,
-    tile_size_rc: &Rc<Cell<i32>>,
+    screen_info: &Rc<RefCell<ScreenInfo>>,
     albums_grid_cell: &Rc<RefCell<Option<FlowBox>>>,
     albums_stack_cell: &Rc<RefCell<Option<Stack>>>,
     _add_music_button: &Button, // Prefix with _ to mark as intentionally unused
@@ -143,8 +143,8 @@ pub fn rebuild_albums_grid_for_window(
     // Create new grid and stack
     let (albums_stack, albums_grid) = build_albums_grid(
         scanning_label_albums,
-        cover_size_rc.get(),
-        tile_size_rc.get(),
+        screen_info.borrow().cover_size,
+        screen_info.borrow().tile_size,
         _add_music_button, // Use the passed button
     );
     stack.add_titled(&albums_stack, Some("albums"), "Albums");
@@ -271,8 +271,7 @@ pub async fn populate_albums_grid(
     db_pool: Arc<SqlitePool>,
     sort_ascending: bool,
     sort_orders: Rc<RefCell<Vec<SortOrder>>>,
-    cover_size: i32,
-    tile_size: i32,
+    screen_info: &Rc<RefCell<ScreenInfo>>,
     _window: &ApplicationWindow, // Prefix with _ to mark as intentionally unused
     scanning_label: &Label,
     sender: UnboundedSender<()>,
@@ -354,7 +353,8 @@ pub async fn populate_albums_grid(
             // potentially longer individual UI blocking.
             const BATCH_SIZE: usize = 50;
             let mut processed_count = 0;
-
+            let cover_size = screen_info.borrow().cover_size;
+            let tile_size = screen_info.borrow().tile_size;
             for album in albums {
                 let title_label = create_album_label(
                     &album.title,

@@ -46,7 +46,7 @@ use super::widgets::WindowWidgets;
 /// * `receiver` - An `UnboundedReceiver<()>` to receive signals for scan feedback.
 /// * `refresh_library_ui` - A closure to trigger a full UI refresh.
 /// * `refresh_service` - An `Rc<refresh::RefreshService>` for managing live UI updates.
-/// * `screen_width` - The current width of the primary screen, used for dynamic sizing.
+/// * `screen_info` - The `ScreenInfo` struct containing primary screen dimensions and calculated UI element sizes.
 pub fn connect_all_handlers(
     widgets: &WindowWidgets,
     shared_state: &WindowSharedState,
@@ -55,7 +55,6 @@ pub fn connect_all_handlers(
     receiver: UnboundedReceiver<()>, // Pass receiver here
     refresh_library_ui: Rc<dyn Fn(bool, bool)>,
     refresh_service: Rc<RefreshService>,
-    screen_width: i32,
     vbox_inner: &Box,
 ) {
     // 8. Set initial sort icon state based on loaded settings.
@@ -116,8 +115,7 @@ pub fn connect_all_handlers(
     rebuild_albums_grid_for_window(
         &widgets.stack,
         &widgets.scanning_label_albums,
-        &shared_state.cover_size_rc,
-        &shared_state.tile_size_rc,
+        &shared_state.screen_info,
         &widgets.albums_grid_cell,
         &widgets.albums_stack_cell,
         &add_music_button_albums,
@@ -138,7 +136,7 @@ pub fn connect_all_handlers(
     // configurations without requiring an application restart.
     setup_live_monitor_refresh(
         refresh_service.clone(),
-        screen_width,
+        shared_state.screen_info.clone(),
         shared_state.is_settings_open.clone(),
     );
 

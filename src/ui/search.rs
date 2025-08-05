@@ -15,7 +15,7 @@ use tokio::sync::mpsc::UnboundedSender;
 
 use crate::data::db::query::{search_album_display_info, search_artists};
 use crate::ui::components::tiles::{create_album_tile, create_artist_tile};
-use crate::utils::screen::{compute_cover_and_tile_size, get_primary_screen_size};
+use crate::utils::screen::ScreenInfo;
 
 /// Connects live search logic to the given search entry, updating albums and artists grids as the user types.
 ///
@@ -41,8 +41,9 @@ pub fn connect_live_search(
     sender: UnboundedSender<()>,
 ) {
     // Compute dynamic sizes based on screen dimensions
-    let (screen_width, _) = get_primary_screen_size();
-    let (cover_size, tile_size) = compute_cover_and_tile_size(screen_width);
+    let screen_info = ScreenInfo::new();
+    let cover_size = screen_info.get_cover_size();
+    let tile_size = screen_info.get_tile_size();
 
     // Clone shared resources for the closure to avoid moving them into the closure
     // and allow them to be used across multiple async operations.

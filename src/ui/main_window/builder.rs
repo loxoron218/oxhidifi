@@ -19,7 +19,7 @@ use crate::ui::components::{
     scan_feedback::create_scanning_label,
 };
 use crate::ui::header::{build_header_bar, build_main_headerbar, build_tab_bar};
-use crate::utils::screen::{compute_cover_and_tile_size, get_primary_screen_size};
+use crate::utils::screen::ScreenInfo;
 
 use super::handlers::connect_all_handlers;
 use super::state::WindowSharedState;
@@ -64,8 +64,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     // Load persistent user settings for initial sort orders.
     let settings = load_settings();
     // Get primary screen dimensions to calculate optimal cover and tile sizes dynamically.
-    let (screen_width, _screen_height) = get_primary_screen_size();
-    let (cover_size, tile_size) = compute_cover_and_tile_size(screen_width);
+    let screen_info = ScreenInfo::new();
 
     // `WindowSharedState` aggregates all `Rc<Cell<T>>` and `Rc<RefCell<T>>` managed state.
     // This centralizes mutable state management, making it easier to reason about data flow.
@@ -75,8 +74,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         sort_ascending_artists: Rc::new(Cell::new(settings.sort_ascending_artists)),
         last_tab: Rc::new(Cell::new("albums")), // Tracks the last active main tab (Albums or Artists).
         nav_history: Rc::new(RefCell::new(Vec::new())), // Stores navigation history for back functionality.
-        cover_size_rc: Rc::new(Cell::new(cover_size)),  // Dynamically updated cover art size.
-        tile_size_rc: Rc::new(Cell::new(tile_size)),    // Dynamically updated tile size.
+        screen_info: Rc::new(RefCell::new(screen_info)),
         is_settings_open: Rc::new(Cell::new(false)), // Flag to prevent UI refresh while settings dialog is open.
     };
 
@@ -126,8 +124,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         Rc::new(widgets.stack.clone()),
         Rc::new(widgets.left_btn_stack.clone()),
         widgets.right_btn_box.clone(),
-        shared_state.cover_size_rc.clone(),
-        shared_state.tile_size_rc.clone(),
+        shared_state.screen_info.clone(),
         shared_state.sort_ascending.clone(),
         shared_state.sort_ascending_artists.clone(),
         widgets.window.clone(),
@@ -169,7 +166,6 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         receiver, // receiver is moved here
         refresh_library_ui.clone(),
         refresh_service.clone(),
-        screen_width,
         &vbox_inner,
     );
 

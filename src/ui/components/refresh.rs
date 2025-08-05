@@ -14,7 +14,7 @@ use crate::ui::components::sorting::sorting_types::SortOrder;
 use crate::ui::grids::albums_grid::populate_albums_grid;
 use crate::ui::grids::artists_grid::populate_artists_grid;
 use crate::ui::search::clear_grid;
-use crate::utils::screen::{compute_cover_and_tile_size, get_primary_screen_size};
+use crate::utils::screen::ScreenInfo;
 
 /// A service struct that encapsulates all the shared state and logic required for refreshing
 /// the library UI. This centralizes the management of UI components and data, simplifying
@@ -29,8 +29,7 @@ pub struct RefreshService {
     stack: Rc<ViewStack>, // Main content stack
     left_btn_stack: Rc<ViewStack>,
     right_btn_box: Clamp,
-    cover_size_rc: Rc<Cell<i32>>,
-    tile_size_rc: Rc<Cell<i32>>,
+    screen_info: Rc<RefCell<ScreenInfo>>,
     sort_ascending: Rc<Cell<bool>>,
     sort_ascending_artists: Rc<Cell<bool>>,
     window: ApplicationWindow,
@@ -55,8 +54,7 @@ impl RefreshService {
         stack: Rc<ViewStack>,
         left_btn_stack: Rc<ViewStack>,
         right_btn_box: Clamp,
-        cover_size_rc: Rc<Cell<i32>>,
-        tile_size_rc: Rc<Cell<i32>>,
+        screen_info: Rc<RefCell<ScreenInfo>>,
         sort_ascending: Rc<Cell<bool>>,
         sort_ascending_artists: Rc<Cell<bool>>,
         window: ApplicationWindow,
@@ -76,8 +74,7 @@ impl RefreshService {
             stack,
             left_btn_stack,
             right_btn_box,
-            cover_size_rc,
-            tile_size_rc,
+            screen_info,
             sort_ascending,
             sort_ascending_artists,
             window,
@@ -134,8 +131,7 @@ impl RefreshService {
                                 service_clone.db_pool.clone(),
                                 service_clone.sort_ascending.get(),
                                 service_clone.sort_orders.clone(),
-                                service_clone.cover_size_rc.get(),
-                                service_clone.tile_size_rc.get(),
+                                &service_clone.screen_info,
                                 &service_clone.window,
                                 &service_clone.scanning_label_albums,
                                 service_clone.sender.clone(),
@@ -194,8 +190,7 @@ pub fn setup_library_refresh_channel(
     stack: Rc<ViewStack>,
     left_btn_stack: Rc<ViewStack>,
     right_btn_box: Clamp,
-    cover_size_rc: Rc<Cell<i32>>,
-    tile_size_rc: Rc<Cell<i32>>,
+    screen_info: Rc<RefCell<ScreenInfo>>,
     sort_ascending: Rc<Cell<bool>>,
     sort_ascending_artists: Rc<Cell<bool>>,
     window: ApplicationWindow,
@@ -222,8 +217,7 @@ pub fn setup_library_refresh_channel(
         stack.clone(),
         left_btn_stack,
         right_btn_box,
-        cover_size_rc,
-        tile_size_rc,
+        screen_info,
         sort_ascending,
         sort_ascending_artists,
         window,
@@ -250,21 +244,16 @@ pub fn setup_library_refresh_channel(
 ///                        The UI will not refresh if settings are open to prevent visual glitches.
 pub fn setup_live_monitor_refresh(
     refresh_service: Rc<RefreshService>,
-    screen_width: i32,
+    screen_info: Rc<RefCell<ScreenInfo>>,
     is_settings_open: Rc<Cell<bool>>,
 ) {
-    let last_width = Rc::new(Cell::new(screen_width));
+    let is_settings_open_cloned = is_settings_open.clone();
     timeout_add_local(Duration::from_secs(1), move || {
-        let (cur_width, _) = get_primary_screen_size();
-        if cur_width != last_width.get() {
-            let (new_cover_size, new_tile_size) = compute_cover_and_tile_size(cur_width);
-            refresh_service.cover_size_rc.set(new_cover_size);
-            refresh_service.tile_size_rc.set(new_tile_size);
-            last_width.set(cur_width);
-            if !is_settings_open.get() {
-                // Call the refresh closure stored within the service
+        if !is_settings_open_cloned.get() {
+            let new_screen_info = ScreenInfo::new();
+            if new_screen_info.width != screen_info.borrow().width {
+                *screen_info.borrow_mut() = new_screen_info;
                 (refresh_service.clone().create_refresh_closure())(
-                    // Clone refresh_service here
                     refresh_service.sort_ascending.get(),
                     refresh_service.sort_ascending_artists.get(),
                 );

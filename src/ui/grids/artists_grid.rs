@@ -15,7 +15,7 @@ use tokio::sync::mpsc::UnboundedSender;
 use crate::data::db::query::fetch_all_artists;
 use crate::ui::components::scan_feedback::create_scanning_label;
 use crate::ui::pages::artist_page::artist_page;
-use crate::utils::screen::{compute_cover_and_tile_size, get_primary_screen_size};
+use crate::utils::screen::ScreenInfo;
 
 /// Rebuild the artists grid in the main window.
 /// Removes the existing 'artists' child, resets the artists_grid_cell, builds a new grid, and adds it to the stack.
@@ -159,8 +159,8 @@ fn create_artist_tile(
     nav_history: Rc<RefCell<Vec<String>>>,
     sender: UnboundedSender<()>,
 ) -> FlowBoxChild {
-    let (screen_width, _) = get_primary_screen_size();
-    let (cover_size, _) = compute_cover_and_tile_size(screen_width);
+    let screen_info = ScreenInfo::new();
+    let cover_size = screen_info.get_cover_size();
     let icon = Image::from_icon_name("avatar-default-symbolic");
     icon.set_pixel_size(cover_size);
     let label = Label::builder().label(artist_name).build();
