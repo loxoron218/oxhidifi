@@ -145,7 +145,7 @@ pub fn connect_live_search(
                     } else {
                         albums_stack.set_visible_child_name("populated_grid");
                         for album in albums {
-                            let flow_child = create_album_tile(
+                            let flow_child = Rc::new(create_album_tile(
                                 album,
                                 cover_size,
                                 tile_size,
@@ -155,7 +155,7 @@ pub fn connect_live_search(
                                 left_btn_stack_for_closure.clone(),
                                 nav_history.clone(),
                                 sender.clone(),
-                            );
+                            ));
                             albums_grid.insert(&*flow_child, -1);
                         }
                     }
@@ -176,18 +176,18 @@ pub fn connect_live_search(
                     } else {
                         artists_stack.set_visible_child_name("populated_grid");
                         for artist in artists {
-                            let flow_child = create_artist_tile(
-                                artist,
+                            let flow_child = Rc::new(create_artist_tile(
+                                artist.id,
+                                &artist.name,
                                 cover_size,
                                 tile_size,
-                                &text,
                                 stack_for_closure.clone(),
                                 db_pool.clone(),
                                 left_btn_stack_for_closure.clone(),
                                 right_btn_box_clone.clone(),
                                 nav_history.clone(),
                                 sender.clone(),
-                            );
+                            ));
                             artists_grid.insert(&*flow_child, -1);
                         }
                     }

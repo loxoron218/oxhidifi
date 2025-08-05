@@ -25,7 +25,7 @@ use crate::{
         },
         grids::{
             album_grid_rebuilder::rebuild_albums_grid_for_window,
-            artists_grid::rebuild_artists_grid_for_window,
+            artists_grid_rebuilder::rebuild_artists_grid_for_window,
         },
         pages::album_page::album_page,
         search::connect_live_search,
@@ -128,7 +128,6 @@ pub fn connect_all_handlers(
         &widgets.scanning_label_artists,
         &widgets.artists_grid_cell,
         &widgets.artists_stack_cell,
-        sender.clone(),
         &add_music_button_artists,
     );
 

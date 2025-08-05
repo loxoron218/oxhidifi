@@ -15,7 +15,7 @@ use crate::{
     ui::{
         components::sorting::sorting_types::SortOrder,
         grids::album_grid_population::populate_albums_grid,
-        grids::artists_grid::populate_artists_grid, search::clear_grid,
+        grids::artists_grid_population::populate_artists_grid, search::clear_grid,
     },
     utils::screen::ScreenInfo,
 };

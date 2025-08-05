@@ -1,11 +1,14 @@
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
-use gdk_pixbuf::{InterpType, PixbufLoader, prelude::PixbufLoaderExt};
+use gdk_pixbuf::{InterpType::Bilinear, PixbufLoader, prelude::PixbufLoaderExt};
 use glib::{MainContext, markup_escape_text, prelude::ObjectExt};
 use gtk4::{
     Align, Box, Button, EventControllerMotion, Fixed, FlowBoxChild, GestureClick, Image, Label,
     Orientation, Overlay, Picture,
-    pango::{EllipsizeMode, WrapMode},
+    pango::{
+        EllipsizeMode::{self, End},
+        WrapMode::{self, WordChar},
+    },
 };
 use libadwaita::{
     Clamp, ViewStack,
@@ -15,7 +18,7 @@ use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::{
-    data::{db::query::AlbumDisplayInfo, models::Artist},
+    data::db::query::AlbumDisplayInfo,
     ui::pages::{album_page::album_page, artist_page::artist_page},
     utils::formatting::format_freq_khz,
 };
@@ -35,7 +38,7 @@ pub fn create_album_cover(cover_art: Option<&Vec<u8>>, cover_size: i32) -> Pictu
         let side = w.min(h);
         let cropped = pixbuf.new_subpixbuf((w - side) / 2, (h - side) / 2, side, side);
         let scaled = cropped
-            .scale_simple(cover_size, cover_size, InterpType::Bilinear)
+            .scale_simple(cover_size, cover_size, Bilinear)
             .unwrap();
         let picture = Picture::for_pixbuf(&scaled);
         picture.set_size_request(cover_size, cover_size);
@@ -180,16 +183,16 @@ pub fn create_album_tile(
     left_btn_stack_for_closure: Rc<ViewStack>,
     nav_history: Rc<RefCell<Vec<String>>>,
     sender: UnboundedSender<()>,
-) -> Rc<FlowBoxChild> {
+) -> FlowBoxChild {
     // Create and style the album title label
     let title_label = {
         let label = create_album_label(
             &highlight(&markup_escape_text(&album.title).to_string(), search_text),
             &["album-title-label"],
             Some(((cover_size - 16) / 10).max(8)),
-            Some(EllipsizeMode::End),
+            Some(End),
             true,
-            Some(WrapMode::WordChar),
+            Some(WordChar),
             Some(2),
         );
         label.set_markup(&highlight(
@@ -207,7 +210,7 @@ pub fn create_album_tile(
             &highlight(&markup_escape_text(&album.artist).to_string(), search_text),
             &["album-artist-label"],
             Some(18),
-            Some(EllipsizeMode::End),
+            Some(End),
             false,
             None,
             None,
@@ -371,8 +374,7 @@ pub fn create_album_tile(
 
     // Add click gesture for navigation to album page
     let stack_weak = stack_for_closure.downgrade();
-    let flow_child_rc = Rc::new(flow_child);
-    let flow_child_for_closure = flow_child_rc.clone(); // Clone for use in closure
+    let flow_child_for_closure = flow_child.clone(); // Clone for use in closure
     let gesture = GestureClick::builder().build(); // Declare gesture here
 
     gesture.connect_pressed(move |_, _, _, _| {
@@ -398,8 +400,8 @@ pub fn create_album_tile(
             ));
         }
     });
-    flow_child_rc.add_controller(gesture); // gesture is moved here.
-    flow_child_rc
+    flow_child.add_controller(gesture); // gesture is moved here.
+    flow_child
 }
 
 /// Creates a `FlowBoxChild` containing the UI representation of an artist.
@@ -408,70 +410,80 @@ pub fn create_album_tile(
 /// avatar and name. It also attaches a click gesture to navigate to the
 /// artist's dedicated page.
 pub fn create_artist_tile(
-    artist: Artist,
+    artist_id: i64,
+    artist_name: &str,
     cover_size: i32,
-    tile_size: i32,
-    search_text: &str,
-    stack_for_closure: Rc<ViewStack>,
+    _tile_size: i32,
+    stack: Rc<ViewStack>,
     db_pool: Arc<SqlitePool>,
-    left_btn_stack_for_closure: Rc<ViewStack>,
-    right_btn_box_clone: Rc<Clamp>,
+    left_btn_stack: Rc<ViewStack>,
+    right_btn_box: Rc<Clamp>,
     nav_history: Rc<RefCell<Vec<String>>>,
     sender: UnboundedSender<()>,
-) -> Rc<FlowBoxChild> {
-    // Create and style the artist avatar
-    let picture = Image::from_icon_name("avatar-default-symbolic");
-    picture.set_pixel_size(cover_size);
-
-    // Create and style the artist name label
-    let label = Label::builder()
-        .use_markup(true)
-        .label(&highlight(&artist.name, search_text))
-        .build();
-
-    // Main vertical box for the artist tile
-    let box_ = Box::builder()
+) -> FlowBoxChild {
+    let icon = Image::from_icon_name("avatar-default-symbolic");
+    icon.set_pixel_size(cover_size);
+    let label = Label::builder().label(artist_name).build();
+    label.set_halign(Align::Start);
+    label.set_xalign(0.0);
+    label.set_ellipsize(End);
+    label.set_wrap(true);
+    label.set_wrap_mode(WordChar);
+    label.set_lines(2);
+    label.set_size_request(cover_size - 16, -1);
+    let tile = Box::builder()
         .orientation(Orientation::Vertical)
-        .spacing(4)
+        .spacing(2)
         .build();
-    box_.set_size_request(tile_size, (tile_size as f32 * 1.44) as i32); // Adjusted height for artist name
-    box_.set_hexpand(false);
-    box_.set_vexpand(false);
-    box_.set_halign(Align::Fill);
-    box_.set_valign(Align::Start);
-    box_.set_margin_top(8);
-    box_.set_margin_bottom(8);
-    box_.set_margin_start(8);
-    box_.set_margin_end(8);
-    box_.append(&picture);
-    box_.append(&label);
-    box_.set_css_classes(&["artist-tile"]);
 
-    // Create the FlowBoxChild and set its properties
-    let flow_child = FlowBoxChild::new();
-    flow_child.set_child(Some(&box_));
+    // tile_size + room for text
+    tile.set_size_request(cover_size, cover_size + 80);
+    tile.set_hexpand(false);
+    tile.set_vexpand(false);
+    tile.set_halign(Align::Start);
+    tile.set_valign(Align::Start);
+
+    // Fixed-size container for icon (new instance per tile)
+    let icon_container = Box::new(Orientation::Vertical, 0);
+    icon_container.set_size_request(cover_size, cover_size);
+    icon_container.set_halign(Align::Start);
+    icon_container.set_valign(Align::Start);
+    icon_container.append(&icon);
+    tile.append(&icon_container);
+
+    // Box to ensure consistent height for the label area (2 lines)
+    let label_area_box = Box::builder()
+        .orientation(Orientation::Vertical)
+        .height_request(40)
+        .margin_top(12)
+        .build();
+    label.set_valign(Align::End);
+    label_area_box.append(&label);
+    tile.append(&label_area_box);
+    tile.set_css_classes(&["artist-tile"]);
+    let flow_child = FlowBoxChild::builder().build();
+    flow_child.set_child(Some(&tile));
     flow_child.set_hexpand(false);
     flow_child.set_vexpand(false);
-    flow_child.set_halign(Align::Fill);
+    flow_child.set_halign(Align::Center);
     flow_child.set_valign(Align::Start);
-
-    // Store artist ID for later retrieval
     unsafe {
-        flow_child.set_data::<i64>("artist_id", artist.id);
+        flow_child.set_data::<i64>("artist_id", artist_id);
     }
-
-    // Add click gesture for navigation to artist page
-    let flow_child_rc = Rc::new(flow_child);
-    let flow_child_for_closure = flow_child_rc.clone(); // Clone for use in closure
-    let gesture = GestureClick::builder().build(); // Declare gesture here
-
-    gesture.connect_pressed(move |_, _, _, _| {
-        if let (Some(stack), Some(left_btn_stack)) = (
-            stack_for_closure.downgrade().upgrade(),
-            left_btn_stack_for_closure.downgrade().upgrade(),
-        ) {
+    let stack_weak = stack.downgrade();
+    let db_pool = db_pool.clone();
+    let left_btn_stack_weak = left_btn_stack.downgrade();
+    let right_btn_box_weak = right_btn_box.downgrade();
+    let nav_history = nav_history.clone();
+    let gesture = GestureClick::builder().build();
+    let gesture_for_closure = gesture.clone();
+    let flow_child_clone = flow_child.clone();
+    gesture_for_closure.connect_pressed(move |_, _, _, _| {
+        if let (Some(stack), Some(left_btn_stack)) =
+            (stack_weak.upgrade(), left_btn_stack_weak.upgrade())
+        {
             let artist_id = unsafe {
-                flow_child_for_closure
+                flow_child_clone
                     .data::<i64>("artist_id")
                     .map(|ptr| *ptr.as_ref())
                     .unwrap_or_default()
@@ -484,12 +496,12 @@ pub fn create_artist_tile(
                 db_pool.clone(),
                 artist_id,
                 left_btn_stack.downgrade(),
-                right_btn_box_clone.clone().downgrade(),
+                right_btn_box_weak.clone(),
                 nav_history.clone(),
                 sender.clone(),
             ));
         }
     });
-    flow_child_rc.add_controller(gesture);
-    flow_child_rc
+    flow_child.add_controller(gesture);
+    flow_child
 }
