@@ -125,7 +125,11 @@ pub fn load_settings() -> Settings {
         Ok(data) => match from_str(&data) {
             Ok(settings) => settings,
             Err(e) => {
-                eprintln!("Failed to parse settings from {}: {}", settings_path.display(), e);
+                eprintln!(
+                    "Failed to parse settings from {}: {}",
+                    settings_path.display(),
+                    e
+                );
                 let default_settings = Settings::default();
                 if let Err(save_err) = save_settings(&default_settings) {
                     eprintln!("Failed to save default settings: {}", save_err);
@@ -134,7 +138,11 @@ pub fn load_settings() -> Settings {
             }
         },
         Err(e) => {
-            eprintln!("Failed to read settings file {}: {}", settings_path.display(), e);
+            eprintln!(
+                "Failed to read settings file {}: {}",
+                settings_path.display(),
+                e
+            );
             let default_settings = Settings::default();
             if let Err(save_err) = save_settings(&default_settings) {
                 eprintln!("Failed to save default settings: {}", save_err);

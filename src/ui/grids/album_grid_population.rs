@@ -13,7 +13,7 @@ use gtk4::{
     pango::{EllipsizeMode::End, WrapMode::WordChar},
 };
 use libadwaita::{
-    ViewStack,
+    Clamp, ViewStack,
     prelude::{BoxExt, FixedExt, ObjectExt, WidgetExt},
 };
 use sqlx::SqlitePool;
@@ -64,6 +64,7 @@ pub async fn populate_albums_grid(
     sender: UnboundedSender<()>,
     stack: &ViewStack,
     header_btn_stack: &ViewStack,
+    header_right_btn_box: &Clamp,
     albums_inner_stack: &Stack,
 ) {
     // A thread-local static to prevent multiple simultaneous population calls,
@@ -345,13 +346,20 @@ pub async fn populate_albums_grid(
                 let stack_weak = stack.downgrade();
                 let db_pool_clone = Arc::clone(&db_pool);
                 let header_btn_stack_weak = header_btn_stack.downgrade();
+                let header_right_btn_box_weak = header_right_btn_box.downgrade();
                 let flow_child_clone = flow_child.clone();
                 let sender_clone = sender.clone();
                 let gesture = GestureClick::builder().build();
                 gesture.connect_pressed(move |_, _, _, _| {
-                    if let (Some(stack_strong), Some(header_btn_stack_strong)) =
-                        (stack_weak.upgrade(), header_btn_stack_weak.upgrade())
-                    {
+                    if let (
+                        Some(stack_strong),
+                        Some(header_btn_stack_strong),
+                        Some(header_right_btn_box_strong),
+                    ) = (
+                        stack_weak.upgrade(),
+                        header_btn_stack_weak.upgrade(),
+                        header_right_btn_box_weak.upgrade(),
+                    ) {
                         let album_id = unsafe {
                             flow_child_clone
                                 .data::<i64>("album_id")
@@ -363,6 +371,7 @@ pub async fn populate_albums_grid(
                             db_pool_clone.clone(),
                             album_id,
                             header_btn_stack_strong.downgrade(),
+                            header_right_btn_box_strong.downgrade(),
                             sender_clone.clone(),
                         ));
                     }

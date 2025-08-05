@@ -159,8 +159,16 @@ pub fn connect_all_handlers(
             &widgets.right_btn_box,
             shared_state.nav_history.clone(),
             sender.clone(),
-            |stack_weak, db_pool, album_id, left_btn_stack_weak, sender| async move {
-                album_page(stack_weak, db_pool, album_id, left_btn_stack_weak, sender).await;
+            |stack_weak, db_pool, album_id, left_btn_stack_weak, right_btn_box_weak, sender| async move {
+                album_page(
+                    stack_weak,
+                    db_pool,
+                    album_id,
+                    left_btn_stack_weak,
+                    right_btn_box_weak,
+                    sender,
+                )
+                .await;
             },
         );
     }

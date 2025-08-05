@@ -140,6 +140,7 @@ impl RefreshService {
                                 service_clone.sender.clone(),
                                 &service_clone.stack,
                                 &service_clone.header_btn_stack,
+                                &service_clone.right_btn_box,
                                 albums_inner_stack,
                             )
                             .await;

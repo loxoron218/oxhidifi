@@ -153,6 +153,7 @@ pub fn connect_live_search(
                                 stack_for_closure.clone(),
                                 db_pool.clone(),
                                 left_btn_stack_for_closure.clone(),
+                                right_btn_box_clone.clone(),
                                 nav_history.clone(),
                                 sender.clone(),
                             ));

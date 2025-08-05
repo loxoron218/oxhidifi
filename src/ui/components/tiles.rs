@@ -181,6 +181,7 @@ pub fn create_album_tile(
     stack_for_closure: Rc<ViewStack>,
     db_pool: Arc<SqlitePool>,
     left_btn_stack_for_closure: Rc<ViewStack>,
+    right_btn_box_for_closure: Rc<Clamp>,
     nav_history: Rc<RefCell<Vec<String>>>,
     sender: UnboundedSender<()>,
 ) -> FlowBoxChild {
@@ -396,6 +397,7 @@ pub fn create_album_tile(
                 db_pool.clone(),
                 album_id,
                 header_btn_stack.downgrade(),
+                right_btn_box_for_closure.downgrade(),
                 sender.clone(),
             ));
         }

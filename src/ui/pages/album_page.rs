@@ -15,7 +15,7 @@ use gtk4::{
     pango::{EllipsizeMode, WrapMode},
 };
 use libadwaita::{
-    ActionRow, PreferencesGroup, ViewStack,
+    ActionRow, Clamp, PreferencesGroup, ViewStack,
     prelude::{ActionRowExt, BoxExt, CheckButtonExt, PreferencesGroupExt, WidgetExt},
 };
 use sqlx::SqlitePool;
@@ -42,6 +42,7 @@ pub async fn album_page(
     db_pool: Arc<SqlitePool>,
     album_id: i64,
     header_btn_stack: WeakRef<ViewStack>,
+    header_right_btn_box: WeakRef<Clamp>,
     sender: UnboundedSender<()>,
 ) {
     let stack = match stack.upgrade() {
@@ -49,6 +50,10 @@ pub async fn album_page(
         None => return,
     };
     let header_btn_stack = match header_btn_stack.upgrade() {
+        Some(s) => s,
+        None => return,
+    };
+    let header_right_btn_box = match header_right_btn_box.upgrade() {
         Some(s) => s,
         None => return,
     };
@@ -540,6 +545,7 @@ pub async fn album_page(
     stack.add_titled(&album_scrolled_window, Some("album_detail"), "Album");
     stack.set_visible_child_name("album_detail");
     header_btn_stack.set_visible_child_name("back");
+    header_right_btn_box.set_visible(false);
 }
 
 /// Helper function to get the most common bit depth, frequency, and format from a list of tracks.

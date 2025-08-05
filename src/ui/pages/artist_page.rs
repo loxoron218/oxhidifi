@@ -108,6 +108,7 @@ pub async fn artist_page(
             stack.downgrade(),
             db_pool.clone(),
             header_btn_stack.downgrade(),
+            right_btn_box.clone(), // Pass the right_btn_box weak reference directly
             nav_history.clone(),
             sender.clone(),
             page_name.clone(), // Pass the artist_page_name
@@ -144,6 +145,7 @@ fn build_album_card(
     stack: WeakRef<ViewStack>,
     db_pool: Arc<SqlitePool>,
     header_btn_stack: WeakRef<ViewStack>,
+    right_btn_box: WeakRef<Clamp>,
     nav_history: Rc<RefCell<Vec<String>>>,
     sender: UnboundedSender<()>,
     artist_page_name: String, // New parameter for the artist page name
@@ -322,6 +324,7 @@ fn build_album_card(
     let stack_weak = stack.clone();
     let db_pool_clone = Arc::clone(&db_pool);
     let header_btn_stack_weak = header_btn_stack.clone();
+    let right_btn_box_weak = right_btn_box.clone(); // Clone the weak reference for the closure
     let flow_child_clone = flow_child.clone();
     let sender_clone = sender.clone();
     let gesture = GestureClick::builder().build();
@@ -342,6 +345,7 @@ fn build_album_card(
                 db_pool_clone.clone(),
                 album_id,
                 header_btn_stack.downgrade(),
+                right_btn_box_weak.clone(), // Pass the weak reference
                 sender_clone.clone(),
             ));
         }

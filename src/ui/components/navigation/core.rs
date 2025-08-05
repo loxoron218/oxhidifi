@@ -81,7 +81,14 @@ pub fn connect_album_navigation<Fut, F>(
     sender: UnboundedSender<()>,
     album_page: F,
 ) where
-    F: Fn(WeakRef<ViewStack>, Arc<SqlitePool>, i64, WeakRef<ViewStack>, UnboundedSender<()>) -> Fut
+    F: Fn(
+            WeakRef<ViewStack>,
+            Arc<SqlitePool>,
+            i64,
+            WeakRef<ViewStack>,
+            WeakRef<Clamp>,
+            UnboundedSender<()>,
+        ) -> Fut
         + 'static,
     Fut: Future<Output = ()> + 'static,
 {
@@ -123,6 +130,7 @@ pub fn connect_album_navigation<Fut, F>(
                 db_pool_clone.clone(),
                 album_id,
                 left_btn_stack_weak.clone(),
+                right_btn_box_weak.clone(),
                 sender_clone_for_closure.clone(),
             ));
         }
