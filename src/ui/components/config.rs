@@ -109,23 +109,37 @@ fn get_settings_path() -> Result<PathBuf> {
 ///
 /// The loaded `Settings` struct, or `Settings::default()` if loading fails.
 pub fn load_settings() -> Settings {
-    match get_settings_path() {
-        Ok(path) => match read_to_string(&path) {
-            Ok(data) => match from_str(&data) {
-                Ok(settings) => settings,
-                Err(e) => {
-                    eprintln!("Failed to parse settings from {}: {}", path.display(), e);
-                    Settings::default()
-                }
-            },
+    let settings_path = match get_settings_path() {
+        Ok(path) => path,
+        Err(e) => {
+            eprintln!("Failed to get settings path: {}", e);
+            let default_settings = Settings::default();
+            if let Err(save_err) = save_settings(&default_settings) {
+                eprintln!("Failed to save default settings: {}", save_err);
+            }
+            return default_settings;
+        }
+    };
+
+    match read_to_string(&settings_path) {
+        Ok(data) => match from_str(&data) {
+            Ok(settings) => settings,
             Err(e) => {
-                eprintln!("Failed to read settings file {}: {}", path.display(), e);
-                Settings::default()
+                eprintln!("Failed to parse settings from {}: {}", settings_path.display(), e);
+                let default_settings = Settings::default();
+                if let Err(save_err) = save_settings(&default_settings) {
+                    eprintln!("Failed to save default settings: {}", save_err);
+                }
+                default_settings
             }
         },
         Err(e) => {
-            eprintln!("Failed to get settings path: {}", e);
-            Settings::default()
+            eprintln!("Failed to read settings file {}: {}", settings_path.display(), e);
+            let default_settings = Settings::default();
+            if let Err(save_err) = save_settings(&default_settings) {
+                eprintln!("Failed to save default settings: {}", save_err);
+            }
+            default_settings
         }
     }
 }
