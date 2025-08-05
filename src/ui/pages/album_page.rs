@@ -265,7 +265,7 @@ pub async fn album_page(
             subtitle_fields.push(format!("{}-Bit", bit));
         }
         if let Some(freq) = t.frequency {
-            subtitle_fields.push(format!("{} kHz", format_freq_khz(freq)));
+            subtitle_fields.push(format_freq_khz(freq));
         }
         let subtitle = subtitle_fields.join(" · ");
         let row = ActionRow::builder()
