@@ -1,27 +1,38 @@
-use std::collections::{HashMap, HashSet};
-use std::{cell::RefCell, rc::Rc, sync::Arc};
+use std::{
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+    rc::Rc,
+    sync::Arc,
+};
 
-use gdk_pixbuf::prelude::PixbufLoaderExt;
-use gdk_pixbuf::{InterpType, Pixbuf, PixbufLoader};
+use gdk_pixbuf::{InterpType, Pixbuf, PixbufLoader, prelude::PixbufLoaderExt};
 use glib::{MainContext, WeakRef, markup_escape_text};
-use gtk4::pango::{EllipsizeMode, WrapMode};
 use gtk4::{
     Align, Box, Button, CheckButton, EventControllerMotion, Image, Label, Orientation, Overlay,
-    Picture, PolicyType::Never, ScrolledWindow, Stack, StackTransitionType,
+    Picture,
+    PolicyType::Never,
+    ScrolledWindow, Stack, StackTransitionType,
+    pango::{EllipsizeMode, WrapMode},
 };
-use libadwaita::prelude::{ActionRowExt, BoxExt, CheckButtonExt, PreferencesGroupExt, WidgetExt};
-use libadwaita::{ActionRow, PreferencesGroup, ViewStack};
+use libadwaita::{
+    ActionRow, PreferencesGroup, ViewStack,
+    prelude::{ActionRowExt, BoxExt, CheckButtonExt, PreferencesGroupExt, WidgetExt},
+};
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::data::db::crud::{
-    fetch_album_by_id, fetch_artist_by_id, fetch_folder_by_id, fetch_tracks_by_album,
-    update_album_dr_completed,
-};
-use crate::data::models::{Album, Artist, Folder, Track};
-use crate::utils::best_dr_persistence::{AlbumKey, DrValueStore};
-use crate::utils::formatting::{
-    format_bit_freq, format_duration_hms, format_duration_mmss, format_freq_khz,
+use crate::{
+    data::{
+        db::crud::{
+            fetch_album_by_id, fetch_artist_by_id, fetch_folder_by_id, fetch_tracks_by_album,
+            update_album_dr_completed,
+        },
+        models::{Album, Artist, Folder, Track},
+    },
+    utils::{
+        best_dr_persistence::{AlbumKey, DrValueStore},
+        formatting::{format_bit_freq, format_duration_hms, format_duration_mmss, format_freq_khz},
+    },
 };
 
 /// Build and present the album detail page for a given album ID.

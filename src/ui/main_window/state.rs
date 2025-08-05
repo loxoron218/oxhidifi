@@ -3,8 +3,7 @@ use std::{
     rc::Rc,
 };
 
-use crate::ui::components::sorting::sorting_types;
-use crate::utils::screen::ScreenInfo;
+use crate::{ui::components::sorting::sorting_types, utils::screen::ScreenInfo};
 
 /// `WindowSharedState` struct encapsulates all the `Rc<Cell<T>>` and `Rc<RefCell<T>>` managed
 /// shared state that is passed around and mutated by different parts of the UI logic.

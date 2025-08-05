@@ -20,13 +20,18 @@ use libadwaita::{
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::data::db::query::fetch_album_display_info;
-use crate::ui::components::scan_feedback::create_scanning_label;
-use crate::ui::components::sorting::sorting_types::SortOrder;
-use crate::ui::pages::album_page::album_page;
-use crate::utils::best_dr_persistence::{AlbumKey, DrValueStore};
-use crate::utils::formatting::format_freq_khz;
-use crate::utils::screen::ScreenInfo;
+use crate::{
+    data::db::query::fetch_album_display_info,
+    ui::{
+        components::{scan_feedback::create_scanning_label, sorting::sorting_types::SortOrder},
+        pages::album_page::album_page,
+    },
+    utils::{
+        best_dr_persistence::{AlbumKey, DrValueStore},
+        formatting::format_freq_khz,
+        screen::ScreenInfo,
+    },
+};
 
 /// Helper to create a styled label for album metadata.
 fn create_album_label(

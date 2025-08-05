@@ -13,17 +13,19 @@ use libadwaita::{
 use sqlx::SqlitePool;
 use tokio::runtime::Runtime;
 
-use crate::data::scanner::library_ops::run_full_scan;
-use crate::ui::components::{
-    config::load_settings, refresh::setup_library_refresh_channel,
-    scan_feedback::create_scanning_label,
+use crate::{
+    data::scanner::library_ops::run_full_scan,
+    ui::{
+        components::{
+            config::load_settings, refresh::setup_library_refresh_channel,
+            scan_feedback::create_scanning_label,
+        },
+        header::{build_header_bar, build_main_headerbar, build_tab_bar},
+    },
+    utils::screen::ScreenInfo,
 };
-use crate::ui::header::{build_header_bar, build_main_headerbar, build_tab_bar};
-use crate::utils::screen::ScreenInfo;
 
-use super::handlers::connect_all_handlers;
-use super::state::WindowSharedState;
-use super::widgets::WindowWidgets;
+use super::{handlers::connect_all_handlers, state::WindowSharedState, widgets::WindowWidgets};
 
 /// Build and present the main application window, including all UI widgets, search, and navigation.
 /// Handles all top-level UI logic, event connections, and async refresh flows.

@@ -6,11 +6,11 @@ use std::{
 };
 
 use glib::{MainContext, WeakRef};
-use gtk4::{
-    Button, FlowBox,
+use gtk4::{Button, FlowBox};
+use libadwaita::{
+    Clamp, ViewStack,
     prelude::{ButtonExt, ObjectExt, WidgetExt},
 };
-use libadwaita::{Clamp, ViewStack};
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 

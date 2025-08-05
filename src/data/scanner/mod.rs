@@ -1,15 +1,14 @@
-use std::{error::Error, future::Future, pin::Pin};
-
-use sqlx::SqlitePool;
-use tokio::fs::read_dir;
-
 mod dr_scanner;
 mod file_processor;
 
 pub mod library_ops;
 
-pub use self::dr_scanner::scan_dr_value;
-pub use self::file_processor::process_file;
+use std::{error::Error, future::Future, pin::Pin};
+
+use sqlx::SqlitePool;
+use tokio::fs::read_dir;
+
+pub use self::{dr_scanner::scan_dr_value, file_processor::process_file};
 
 /// Recursively scans a folder for supported audio files and subfolders,
 /// extracting metadata and inserting it into the database.

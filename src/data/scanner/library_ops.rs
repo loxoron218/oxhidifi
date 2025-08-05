@@ -3,15 +3,17 @@ use std::{path::Path, sync::Arc};
 use sqlx::{Row, SqlitePool, query};
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::data::db::{
-    cleanup::{
-        remove_album_and_tracks, remove_albums_with_no_tracks, remove_artists_with_no_albums,
-        remove_folder_and_albums, remove_orphaned_tracks,
+use crate::data::{
+    db::{
+        cleanup::{
+            remove_album_and_tracks, remove_albums_with_no_tracks, remove_artists_with_no_albums,
+            remove_folder_and_albums, remove_orphaned_tracks,
+        },
+        dr_sync::synchronize_dr_completed_from_store,
+        query::fetch_all_folders,
     },
-    dr_sync::synchronize_dr_completed_from_store,
-    query::fetch_all_folders,
+    scanner::scan_folder,
 };
-use crate::data::scanner::scan_folder;
 
 /// Initiates a full scan of all configured music folders, updates the database,
 /// and performs necessary cleanup operations.

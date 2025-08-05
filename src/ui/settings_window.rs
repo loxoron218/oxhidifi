@@ -20,14 +20,19 @@ use libadwaita::{
 };
 use sqlx::SqlitePool;
 
-use crate::data::db::cleanup::remove_folder_and_albums;
-use crate::data::db::query::fetch_all_folders;
-use crate::ui::components::config::{Settings, load_settings, save_settings};
-use crate::ui::components::dialogs::show_remove_folder_confirmation_dialog;
-use crate::ui::components::sorting::sorting_preferences::{
-    connect_sort_reorder_handler, make_sort_row, update_sorting_row_numbers,
+use crate::{
+    data::db::{cleanup::remove_folder_and_albums, query::fetch_all_folders},
+    ui::components::{
+        config::{Settings, load_settings, save_settings},
+        dialogs::show_remove_folder_confirmation_dialog,
+        sorting::{
+            sorting_preferences::{
+                connect_sort_reorder_handler, make_sort_row, update_sorting_row_numbers,
+            },
+            sorting_types::SortOrder,
+        },
+    },
 };
-use crate::ui::components::sorting::sorting_types::SortOrder;
 
 /// Manages the UI and logic for the "Library Folders" section within the settings dialog.
 ///

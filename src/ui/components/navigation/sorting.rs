@@ -6,8 +6,10 @@ use libadwaita::{
     prelude::{ButtonExt, ObjectExt},
 };
 
-use crate::ui::components::config::{load_settings, save_settings};
-use crate::ui::components::sorting::sorting_ui_utils::get_sort_icon_name;
+use crate::ui::components::{
+    config::{load_settings, save_settings},
+    sorting::sorting_ui_utils::get_sort_icon_name,
+};
 
 use super::{VIEW_STACK_ALBUMS, VIEW_STACK_ARTISTS};
 

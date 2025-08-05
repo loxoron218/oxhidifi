@@ -13,9 +13,11 @@ use libadwaita::{
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::data::db::query::{search_album_display_info, search_artists};
-use crate::ui::components::tiles::{create_album_tile, create_artist_tile};
-use crate::utils::screen::ScreenInfo;
+use crate::{
+    data::db::query::{search_album_display_info, search_artists},
+    ui::components::tiles::{create_album_tile, create_artist_tile},
+    utils::screen::ScreenInfo,
+};
 
 /// Connects live search logic to the given search entry, updating albums and artists grids as the user types.
 ///

@@ -1,8 +1,7 @@
-use glib::prelude::IsA;
 use gtk4::{Align, Box, Button, HeaderBar, Image, Label, Orientation, ToggleButton};
 use libadwaita::{
     Clamp, ViewStack,
-    prelude::{BoxExt, ButtonExt, WidgetExt},
+    prelude::{BoxExt, ButtonExt, IsA, WidgetExt},
 };
 
 use crate::ui::search_bar::SearchBar;

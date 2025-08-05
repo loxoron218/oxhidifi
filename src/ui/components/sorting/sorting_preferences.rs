@@ -5,19 +5,19 @@ use std::{
 };
 
 use glib::{Type, Value, source::idle_add_local_once};
-use gtk4::{
-    DragSource, DropTarget, ListBox, ListBoxRow, Widget,
-    gdk::{ContentProvider, DragAction},
-};
+use gtk4::{DragSource, DropTarget, ListBox, ListBoxRow, Widget};
 use libadwaita::{
     ActionRow,
+    gdk::{ContentProvider, DragAction},
     prelude::{Cast, ListBoxRowExt, ObjectExt, ObjectType, PreferencesRowExt, WidgetExt},
 };
 
 use crate::ui::components::config::{Settings, load_settings, save_settings};
 
-use super::sorting_types::{SortOrder, sort_order_label};
-use super::sorting_ui_utils::get_sort_icon_name;
+use super::{
+    sorting_types::{SortOrder, sort_order_label},
+    sorting_ui_utils::get_sort_icon_name,
+};
 
 /// Helper: create a `ListBoxRow` with DnD enabled
 ///

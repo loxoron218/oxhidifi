@@ -5,30 +5,34 @@ use libadwaita::prelude::ButtonExt;
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
-use crate::data::watcher::start_watching_library;
-use crate::ui::components::navigation::{
-    core::{connect_album_navigation, connect_back_button},
-    shortcuts::setup_keyboard_shortcuts,
-    sorting::connect_sort_button,
-    tabs::connect_tab_navigation,
-};
-use crate::ui::components::{
-    dialogs::{connect_settings_dialog, create_add_folder_dialog_handler},
-    refresh::{RefreshService, setup_live_monitor_refresh},
-    scan_feedback::spawn_scanning_label_refresh_task,
-    sorting::sorting_ui_utils::{
-        connect_sort_icon_update_on_tab_switch, connect_tab_sort_refresh,
-        set_initial_sort_icon_state,
+use crate::{
+    data::watcher::start_watching_library,
+    ui::{
+        components::{
+            dialogs::{connect_settings_dialog, create_add_folder_dialog_handler},
+            navigation::{
+                core::{connect_album_navigation, connect_back_button},
+                shortcuts::setup_keyboard_shortcuts,
+                sorting::connect_sort_button,
+                tabs::connect_tab_navigation,
+            },
+            refresh::{RefreshService, setup_live_monitor_refresh},
+            scan_feedback::spawn_scanning_label_refresh_task,
+            sorting::sorting_ui_utils::{
+                connect_sort_icon_update_on_tab_switch, connect_tab_sort_refresh,
+                set_initial_sort_icon_state,
+            },
+        },
+        grids::{
+            albums_grid::rebuild_albums_grid_for_window,
+            artists_grid::rebuild_artists_grid_for_window,
+        },
+        pages::album_page::album_page,
+        search::connect_live_search,
     },
 };
-use crate::ui::grids::{
-    albums_grid::rebuild_albums_grid_for_window, artists_grid::rebuild_artists_grid_for_window,
-};
-use crate::ui::pages::album_page::album_page;
-use crate::ui::search::connect_live_search;
 
-use super::state::WindowSharedState;
-use super::widgets::WindowWidgets;
+use super::{state::WindowSharedState, widgets::WindowWidgets};
 
 /// Connects all UI event handlers and initializes various components of the main window.
 ///

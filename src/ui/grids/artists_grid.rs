@@ -1,21 +1,27 @@
-use std::cell::{Cell, RefCell};
-use std::{rc::Rc, sync::Arc};
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+    sync::Arc,
+};
 
 use glib::{MainContext, WeakRef};
-use gtk4::pango::{EllipsizeMode, WrapMode};
 use gtk4::{
     Align, Box, Button, FlowBox, FlowBoxChild, GestureClick, Image, Label, Orientation, PolicyType,
     ScrolledWindow, SelectionMode, Spinner, Stack, StackTransitionType,
+    pango::{EllipsizeMode, WrapMode},
 };
-use libadwaita::prelude::{BoxExt, FlowBoxChildExt, ObjectExt, WidgetExt};
-use libadwaita::{ApplicationWindow, Clamp, StatusPage, ViewStack};
+use libadwaita::{
+    ApplicationWindow, Clamp, StatusPage, ViewStack,
+    prelude::{BoxExt, FlowBoxChildExt, ObjectExt, WidgetExt},
+};
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::data::db::query::fetch_all_artists;
-use crate::ui::components::scan_feedback::create_scanning_label;
-use crate::ui::pages::artist_page::artist_page;
-use crate::utils::screen::ScreenInfo;
+use crate::{
+    data::db::query::fetch_all_artists,
+    ui::{components::scan_feedback::create_scanning_label, pages::artist_page::artist_page},
+    utils::screen::ScreenInfo,
+};
 
 /// Rebuild the artists grid in the main window.
 /// Removes the existing 'artists' child, resets the artists_grid_cell, builds a new grid, and adds it to the stack.

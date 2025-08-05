@@ -14,9 +14,11 @@ use libadwaita::{
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::data::{db::query::AlbumDisplayInfo, models::Artist};
-use crate::ui::pages::{album_page::album_page, artist_page::artist_page};
-use crate::utils::formatting::format_freq_khz;
+use crate::{
+    data::{db::query::AlbumDisplayInfo, models::Artist},
+    ui::pages::{album_page::album_page, artist_page::artist_page},
+    utils::formatting::format_freq_khz,
+};
 
 /// Helper to create the album cover as a Picture widget.
 ///

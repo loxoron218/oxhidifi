@@ -1,20 +1,23 @@
-use glib::{ControlFlow::Continue, MainContext, source::timeout_add_local};
-use gtk4::{FlowBox, Label, Stack};
-use libadwaita::{ApplicationWindow, Clamp, ViewStack, prelude::WidgetExt};
-use sqlx::SqlitePool;
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,
     sync::Arc,
     time::Duration,
 };
+
+use glib::{ControlFlow::Continue, MainContext, source::timeout_add_local};
+use gtk4::{FlowBox, Label, Stack};
+use libadwaita::{ApplicationWindow, Clamp, ViewStack, prelude::WidgetExt};
+use sqlx::SqlitePool;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
-use crate::ui::components::sorting::sorting_types::SortOrder;
-use crate::ui::grids::albums_grid::populate_albums_grid;
-use crate::ui::grids::artists_grid::populate_artists_grid;
-use crate::ui::search::clear_grid;
-use crate::utils::screen::ScreenInfo;
+use crate::{
+    ui::{
+        components::sorting::sorting_types::SortOrder, grids::albums_grid::populate_albums_grid,
+        grids::artists_grid::populate_artists_grid, search::clear_grid,
+    },
+    utils::screen::ScreenInfo,
+};
 
 /// A service struct that encapsulates all the shared state and logic required for refreshing
 /// the library UI. This centralizes the management of UI components and data, simplifying

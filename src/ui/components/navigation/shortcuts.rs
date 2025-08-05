@@ -4,12 +4,12 @@ use std::{
 };
 
 use glib::Propagation::Stop;
-use gtk4::{
-    CallbackAction, KeyvalTrigger, Shortcut, ShortcutController,
+use gtk4::{CallbackAction, KeyvalTrigger, Shortcut, ShortcutController};
+use libadwaita::{
+    ApplicationWindow, Clamp, ViewStack,
     gdk::{Key, ModifierType},
     prelude::WidgetExt,
 };
-use libadwaita::{ApplicationWindow, Clamp, ViewStack};
 
 use crate::ui::search_bar::SearchBar;
 

@@ -2,18 +2,14 @@ mod data;
 mod ui;
 mod utils;
 
-use std::env::var;
-use std::{fs::create_dir_all, path::PathBuf, sync::Arc};
+use std::{env::var, fs::create_dir_all, path::PathBuf, sync::Arc};
 
-use gtk4::gdk::Display;
 use gtk4::{CssProvider, STYLE_PROVIDER_PRIORITY_APPLICATION, StyleContext};
-use libadwaita::init;
-use libadwaita::prelude::ApplicationExtManual;
+use libadwaita::{gdk::Display, init, prelude::ApplicationExtManual};
 use sqlx::SqlitePool;
 use tokio::main;
 
-use crate::data::db::schema::init_db;
-use crate::ui::App;
+use crate::{data::db::schema::init_db, ui::App};
 
 /// Entry point: initializes the app, sets up CSS, and launches the main event loop.
 #[main]
