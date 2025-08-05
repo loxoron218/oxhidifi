@@ -4,20 +4,24 @@ use std::{
     sync::Arc,
 };
 
-use glib::{MainContext, Propagation, source::idle_add_local_once};
-use gtk4::{Align, Button, EventControllerKey, ListBox, SelectionMode, Window, gdk::Key};
+use glib::{
+    MainContext,
+    Propagation::{Proceed, Stop},
+    source::idle_add_local_once,
+};
+use gtk4::{Align, Button, EventControllerKey, ListBox, SelectionMode::None, Window};
 use libadwaita::{
     ActionRow, PreferencesGroup, PreferencesPage, PreferencesWindow,
+    gdk::Key,
     prelude::{
-        ActionRowExt, ButtonExt, Cast, GtkWindowExt, IsA, ObjectExt, ObjectType,
-        PreferencesGroupExt, PreferencesPageExt, PreferencesWindowExt, StaticType, WidgetExt,
+        ActionRowExt, ButtonExt, Cast, GtkWindowExt, IsA, PreferencesGroupExt, PreferencesPageExt,
+        PreferencesWindowExt, StaticType, WidgetExt,
     },
 };
 use sqlx::SqlitePool;
 
 use crate::data::db::db_cleanup::remove_folder_and_albums;
 use crate::data::db::db_query::fetch_all_folders;
-use crate::data::models::Folder;
 use crate::ui::components::config::{Settings, load_settings, save_settings};
 use crate::ui::components::dialogs::show_remove_folder_confirmation_dialog;
 use crate::ui::components::sorting::sorting_preferences::{
@@ -25,8 +29,193 @@ use crate::ui::components::sorting::sorting_preferences::{
 };
 use crate::ui::components::sorting::sorting_types::SortOrder;
 
-/// Show the settings dialog. Call from your settings button handler.
-/// Accepts a shared SortOrder state and a callback to refresh the albums grid.
+/// Manages the UI and logic for the "Library Folders" section within the settings dialog.
+///
+/// This struct encapsulates the `PreferencesGroup` and `ListBox` responsible for
+/// displaying and allowing the removal of library folders. It holds references to
+/// shared application state necessary for interacting with the database and
+/// refreshing the main library UI.
+struct FolderSettingsPage {
+    folders_group: Rc<PreferencesGroup>,
+    list_box: Rc<ListBox>,
+    db_pool: Arc<SqlitePool>,
+    refresh_library_ui: Rc<dyn Fn(bool, bool)>,
+    sort_ascending: Rc<Cell<bool>>,
+    sort_ascending_artists: Rc<Cell<bool>>,
+    main_context: Rc<MainContext>,
+}
+
+impl FolderSettingsPage {
+    /// Creates a new `FolderSettingsPage` instance, initializing its UI components
+    /// and holding necessary shared state.
+    ///
+    /// # Arguments
+    ///
+    /// * `db_pool` - The database connection pool.
+    /// * `refresh_library_ui` - Callback to refresh the main library UI.
+    /// * `sort_ascending` - Shared state for album sort direction.
+    /// * `sort_ascending_artists` - Shared state for artist sort direction.
+    /// * `main_context` - The GLib main context for spawning UI tasks.
+    ///
+    /// # Returns
+    ///
+    /// A new `FolderSettingsPage` instance.
+    fn new(
+        db_pool: Arc<SqlitePool>,
+        refresh_library_ui: Rc<dyn Fn(bool, bool)>,
+        sort_ascending: Rc<Cell<bool>>,
+        sort_ascending_artists: Rc<Cell<bool>>,
+        main_context: Rc<MainContext>,
+    ) -> Self {
+        let folders_group = PreferencesGroup::builder()
+            .title("Library Folders")
+            .description("Remove folders to exclude their music from your library.")
+            .build();
+        let list_box = ListBox::new();
+        list_box.set_selection_mode(None);
+        folders_group.add(&list_box);
+        Self {
+            folders_group: Rc::new(folders_group),
+            list_box: Rc::new(list_box),
+            db_pool,
+            refresh_library_ui,
+            sort_ascending,
+            sort_ascending_artists,
+            main_context,
+        }
+    }
+
+    /// Returns a reference to the `PreferencesGroup` for this page, allowing it to be added
+    /// to a `PreferencesPage`.
+    fn group(&self) -> &PreferencesGroup {
+        &self.folders_group
+    }
+
+    /// Refreshes the display of library folders by fetching them from the database
+    /// and updating the `ListBox`.
+    ///
+    /// This method is asynchronous as it performs database queries. It handles
+    /// the UI update on the main thread using `idle_add_local_once`.
+    async fn refresh_display(&self) {
+        let folders = fetch_all_folders(&self.db_pool).await.unwrap_or_else(|e| {
+            eprintln!("Failed to fetch folders: {}", e);
+            vec![]
+        });
+
+        // Clone references for the `idle_add_local_once` closure.
+        let folders_group_c = self.folders_group.clone();
+        let list_box_c = self.list_box.clone();
+        let db_pool_c = self.db_pool.clone();
+        let refresh_library_ui_c = self.refresh_library_ui.clone();
+        let sort_ascending_c = self.sort_ascending.clone();
+        let sort_ascending_artists_c = self.sort_ascending_artists.clone();
+        let main_context_c = self.main_context.clone();
+        let folders_c = folders.clone(); // Clone the fetched folders for the closure
+
+        idle_add_local_once(move || {
+            // Clear all existing children from the ListBox before repopulating.
+            while let Some(child) = list_box_c.first_child() {
+                list_box_c.remove(&child);
+            }
+
+            // Sort folders alphabetically by path for consistent display.
+            let mut sorted_folders = folders_c;
+            sorted_folders.sort_by(|a, b| a.path.to_lowercase().cmp(&b.path.to_lowercase()));
+            if sorted_folders.is_empty() {
+                // Display a message if no folders are added.
+                let empty_row = ActionRow::builder()
+                    .title("No folders added.")
+                    .activatable(false)
+                    .selectable(false)
+                    .build();
+                empty_row.add_css_class("dim-label"); // Apply styling for dimmed text
+                list_box_c.append(&empty_row);
+            } else {
+                // Populate the ListBox with an ActionRow for each folder.
+                for folder in &sorted_folders {
+                    if folder.path.trim().is_empty() {
+                        continue;
+                    }
+                    let row = ActionRow::builder().title(folder.path.clone()).build();
+                    let remove_btn = Button::builder()
+                        .icon_name("window-close-symbolic")
+                        .valign(Align::Center)
+                        .css_classes(["flat"])
+                        .build();
+                    let folder_id = folder.id;
+
+                    // Capture a clone of `self` (the FolderSettingsPage instance) for the closure.
+                    // This allows the closure to access all the shared state (db_pool, refresh_library_ui, etc.)
+                    // without needing to clone each field individually.
+                    let self_c = Rc::new(Self {
+                        folders_group: folders_group_c.clone(),
+                        list_box: list_box_c.clone(),
+                        db_pool: db_pool_c.clone(),
+                        refresh_library_ui: refresh_library_ui_c.clone(),
+                        sort_ascending: sort_ascending_c.clone(),
+                        sort_ascending_artists: sort_ascending_artists_c.clone(),
+                        main_context: main_context_c.clone(),
+                    });
+                    remove_btn.connect_clicked(move |btn| {
+                        let parent_widget = btn
+                            .ancestor(Window::static_type())
+                            .expect("Button should be within a window heirarchy.");
+                        let parent_window = parent_widget
+                            .downcast_ref::<Window>()
+                            .expect("Parent widget should be a window.");
+
+                        // Clone `self_c` for the `on_confirm` closure of the dialog.
+                        let self_dialog = self_c.clone();
+                        show_remove_folder_confirmation_dialog(parent_window, move || {
+                            // Spawn an asynchronous task on the main context.
+                            self_dialog.main_context.spawn_local({
+                                // Clone `self_dialog` for the async block itself.
+                                let self_async = self_dialog.clone();
+                                async move {
+                                    // Perform database deletion.
+                                    let _ =
+                                        remove_folder_and_albums(&self_async.db_pool, folder_id)
+                                            .await;
+                                    // Refresh main library UI.
+                                    (self_async.refresh_library_ui)(
+                                        self_async.sort_ascending.get(),
+                                        self_async.sort_ascending_artists.get(),
+                                    );
+                                    // Refresh the folder display in the settings dialog.
+                                    self_async.refresh_display().await;
+                                }
+                            });
+                        });
+                    });
+                    row.add_suffix(&remove_btn); // Add the remove button to the right of the row
+                    list_box_c.append(&row); // Add the folder row to the ListBox
+                }
+            }
+            // Request re-allocation and re-drawing of the ListBox.
+            list_box_c.queue_allocate();
+            list_box_c.queue_draw();
+        });
+    }
+}
+
+/// Shows the settings dialog, providing an interface for users to manage application preferences.
+///
+/// This function constructs a `PreferencesWindow` and populates it with various settings
+/// pages and groups, including library folder management and sorting preferences.
+/// It interacts with shared application state to reflect and persist user choices.
+///
+/// # Arguments
+///
+/// * `parent` - The parent `gtk4::Window` for the settings dialog, making it modal.
+/// * `sort_orders` - An `Rc<RefCell<Vec<SortOrder>>>` holding the current sort order preferences.
+///                   Changes made in the dialog are reflected in this shared state.
+/// * `refresh_library_ui` - A callback `Rc<dyn Fn(bool, bool)>` to trigger a refresh of the
+///                          main library UI after settings changes (e.g., folder removal, sort order change).
+/// * `sort_ascending` - An `Rc<Cell<bool>>` indicating the current sort direction for albums.
+/// * `sort_ascending_artists` - An `Rc<Cell<bool>>` indicating the current sort direction for artists.
+/// * `db_pool` - An `Arc<SqlitePool>` for database operations, particularly for managing library folders.
+/// * `is_settings_open` - An `Rc<Cell<bool>>` flag used to track whether the settings dialog is
+///                        currently open, preventing multiple instances.
 pub fn show_settings_dialog(
     parent: &impl IsA<Window>,
     sort_orders: Rc<RefCell<Vec<SortOrder>>>,
@@ -36,207 +225,57 @@ pub fn show_settings_dialog(
     db_pool: Arc<SqlitePool>,
     is_settings_open: Rc<Cell<bool>>,
 ) {
-    // Create the settings window (acts as a modal dialog)
+    // Create the settings window, configured as a modal dialog.
     let dialog = PreferencesWindow::builder()
         .transient_for(parent)
         .default_width(900)
         .default_height(700)
         .modal(true)
         .build();
+    // Set flag to indicate settings dialog is open.
     is_settings_open.set(true);
 
-    // Add margin to match Bottles spacing
+    // Apply margins for consistent spacing, matching GNOME HIG.
     dialog.set_margin_top(32);
     dialog.set_margin_bottom(32);
     dialog.set_margin_start(32);
     dialog.set_margin_end(32);
 
-    // General page
-    let general_page = PreferencesPage::builder()
-        .title("General")
-        .icon_name("preferences-system-symbolic")
+    // --- Library Page: Contains folder management and sorting preferences ---
+    // Library page definition
+    let library_page = PreferencesPage::builder()
+        .title("Library")
+        .icon_name("folder-music-symbolic")
         .build();
-    let general_group = PreferencesGroup::builder().build();
-    ("general_group ptr: {:?}", general_group.as_ptr());
 
-    // Folders group (before sorting)
-    let folders_group = PreferencesGroup::builder()
-        .title("Library Folders")
-        .description("Remove folders to exclude their music from your library.")
-        .build();
-    let list_box = ListBox::new();
-    list_box.set_selection_mode(SelectionMode::None);
-    folders_group.add(&list_box);
-    let folders_group = Rc::new(folders_group);
-    let list_box = Rc::new(list_box);
-    ("folders_group ptr: {:?}", folders_group.as_ref().as_ptr());
-    let main_context = Rc::new(MainContext::default());
+    let main_context = Rc::new(MainContext::default()); // Main GLib context for UI updates
 
-    // Helper to update the folders group UI
-    fn refresh_folder_display(
-        folders_group: Rc<PreferencesGroup>,
-        folders: &[Folder],
-        db_pool: Arc<SqlitePool>,
-        refresh_library_ui: Rc<dyn Fn(bool, bool)>,
-        sort_ascending: Rc<Cell<bool>>,
-        sort_ascending_artists: Rc<Cell<bool>>,
-        main_context: Rc<MainContext>,
-        list_box: Rc<ListBox>,
-    ) {
-        // Print all direct children before removal
-        let mut child = folders_group.as_ref().first_child();
-        ("--- Direct children of folders_group before removal ---");
-        while let Some(widget) = child {
-            (
-                "Direct child: {} (ptr: {:?})",
-                widget.type_().name(),
-                widget.as_ptr(),
-            );
-            child = widget.next_sibling();
-        }
+    // Initialize the FolderSettingsPage
+    let folder_settings_page = Rc::new(FolderSettingsPage::new(
+        db_pool.clone(),
+        refresh_library_ui.clone(),
+        sort_ascending.clone(),
+        sort_ascending_artists.clone(),
+        main_context.clone(),
+    ));
 
-        // Remove all children from the ListBox
-        while let Some(child) = list_box.first_child() {
-            list_box.remove(&child);
-        }
-
-        // Sort folders alphabetically by path before displaying
-        let mut sorted_folders = folders.to_vec();
-        sorted_folders.sort_by(|a, b| a.path.to_lowercase().cmp(&b.path.to_lowercase()));
-        if sorted_folders.is_empty() {
-            let empty_row = ActionRow::builder()
-                .title("No folders added.")
-                .activatable(false)
-                .selectable(false)
-                .build();
-            empty_row.add_css_class("dim-label");
-            list_box.append(&empty_row);
-            list_box.queue_allocate();
-            list_box.queue_draw();
-            return;
-        } else {
-            for folder in &sorted_folders {
-                if folder.path.trim().is_empty() {
-                    continue;
-                }
-                let row = ActionRow::builder().title(folder.path.clone()).build();
-                let remove_btn = Button::builder()
-                    .icon_name("window-close-symbolic")
-                    .valign(Align::Center)
-                    .css_classes(["flat"])
-                    .build();
-                let folder_id = folder.id;
-
-                // Explicitly clone variables for closure capture
-                let db_pool_c = db_pool.clone();
-                let refresh_library_ui_c = refresh_library_ui.clone();
-                let sort_ascending_c = sort_ascending.clone();
-                let sort_ascending_artists_c = sort_ascending_artists.clone();
-                let folders_group_c = folders_group.clone();
-                let main_context_c = main_context.clone();
-                let list_box_c = list_box.clone();
-                remove_btn.connect_clicked(move |btn| {
-                    let parent_widget = btn
-                        .ancestor(Window::static_type())
-                        .expect("Should be in a window");
-                    let parent_window = parent_widget
-                        .downcast_ref::<Window>()
-                        .expect("Should be a window");
-                    let db_pool = db_pool_c.clone();
-                    let refresh_library_ui = refresh_library_ui_c.clone();
-                    let sort_ascending = sort_ascending_c.clone();
-                    let sort_ascending_artists = sort_ascending_artists_c.clone();
-                    let folders_group = folders_group_c.clone();
-                    let main_context = main_context_c.clone();
-                    let list_box = list_box_c.clone();
-                    let folder_id = folder_id;
-                    show_remove_folder_confirmation_dialog(parent_window, move || {
-                        main_context.spawn_local({
-                            let db_pool = db_pool.clone();
-                            let refresh_library_ui = refresh_library_ui.clone();
-                            let sort_ascending = sort_ascending.clone();
-                            let sort_ascending_artists = sort_ascending_artists.clone();
-                            let folders_group = folders_group.clone();
-                            let list_box = list_box.clone();
-                            let main_context = main_context.clone();
-                            let folder_id = folder_id;
-                            async move {
-                                let _ = remove_folder_and_albums(&db_pool, folder_id).await;
-                                (refresh_library_ui)(
-                                    sort_ascending.get(),
-                                    sort_ascending_artists.get(),
-                                );
-                                let folders =
-                                    fetch_all_folders(&db_pool).await.unwrap_or_else(|_| vec![]);
-                                let folders_group = folders_group.clone();
-                                let db_pool = db_pool.clone();
-                                let refresh_library_ui = refresh_library_ui.clone();
-                                let sort_ascending = sort_ascending.clone();
-                                let sort_ascending_artists = sort_ascending_artists.clone();
-                                let main_context = main_context.clone();
-                                let list_box = list_box.clone();
-                                idle_add_local_once(move || {
-                                    refresh_folder_display(
-                                        folders_group,
-                                        &folders,
-                                        db_pool,
-                                        refresh_library_ui,
-                                        sort_ascending,
-                                        sort_ascending_artists,
-                                        main_context,
-                                        list_box,
-                                    );
-                                });
-                            }
-                        });
-                    });
-                });
-                row.add_suffix(&remove_btn);
-                list_box.append(&row);
-            }
-            list_box.queue_allocate();
-            list_box.queue_draw();
-        }
-    }
-
-    // Initial population of the folders group
-    let folders_group_clone = folders_group.clone();
-    let db_pool_clone = db_pool.clone();
-    let refresh_library_ui_clone = refresh_library_ui.clone();
-    let sort_ascending_clone = sort_ascending.clone();
-    let sort_ascending_artists_clone = sort_ascending_artists.clone();
-    let main_context_clone = main_context.clone();
+    // Initial population of the folders group when the settings dialog opens.
+    let folder_settings_page_clone = folder_settings_page.clone();
     main_context.spawn_local(async move {
-        let folders = fetch_all_folders(&db_pool_clone)
-            .await
-            .unwrap_or_else(|_| vec![]);
-        idle_add_local_once(move || {
-            refresh_folder_display(
-                folders_group_clone,
-                &folders,
-                db_pool_clone,
-                refresh_library_ui_clone,
-                sort_ascending_clone,
-                sort_ascending_artists_clone,
-                main_context_clone,
-                list_box.clone(),
-            );
-        });
+        folder_settings_page_clone.refresh_display().await;
     });
 
-    // Sorting group with title
+    // Sorting group: Allows users to reorder sorting preferences.
     let sorting_group = PreferencesGroup::builder()
         .title("Sorting")
         .description("Albums will be sorted according to the order below. Drag to reorder.")
         .build();
-    ("sorting_group ptr: {:?}", sorting_group.as_ptr());
 
-    // Restore the declaration of sort_listbox before use
     let sort_listbox = ListBox::new();
-    sort_listbox.set_selection_mode(SelectionMode::None);
+    sort_listbox.set_selection_mode(None); // Disable selection for sort rows
     sorting_group.add(&sort_listbox);
 
-    // Populate the ListBox with ActionRows for each sort order
+    // Populate the ListBox with ActionRows for each sort order.
     for order in sort_orders.borrow().iter() {
         let list_row = make_sort_row(
             order,
@@ -247,65 +286,62 @@ pub fn show_settings_dialog(
         );
         sort_listbox.append(&list_row);
     }
+    // Update numbering (1., 2., etc.) for sort order rows.
     update_sorting_row_numbers(&sort_listbox);
 
-    // On reorder, update shared sort_orders, persist, and refresh
+    // Connect handler for reordering sort preferences via drag-and-drop.
     connect_sort_reorder_handler(&sort_listbox, sort_orders.clone());
 
-    // Save sort order on settings window close
+    // Connect `close-request` signal to save sort order when the settings window is closed.
     let sort_orders_rc = sort_orders.clone();
     let is_settings_open_clone = is_settings_open.clone();
     dialog.connect_close_request(move |_| {
         let current_orders = sort_orders_rc.borrow().clone();
-        let prev = load_settings();
+        let prev_settings = load_settings(); // Load existing settings to preserve other preferences
         let _ = save_settings(&Settings {
             sort_orders: current_orders,
-            sort_ascending_albums: prev.sort_ascending_albums,
-            sort_ascending_artists: prev.sort_ascending_artists,
-            completed_albums: prev.completed_albums,
+            sort_ascending_albums: prev_settings.sort_ascending_albums,
+            sort_ascending_artists: prev_settings.sort_ascending_artists,
+            completed_albums: prev_settings.completed_albums,
         });
-        is_settings_open_clone.set(false);
-        Propagation::Proceed
+        is_settings_open_clone.set(false); // Set flag to indicate settings dialog is closed.
+        Proceed // Allow the close request to proceed
     });
 
-    // Add groups to the general page
-    general_page.add(&general_group);
+    // Add folder and sorting groups to the Library page.
+    library_page.add(folder_settings_page.group());
+    library_page.add(&sorting_group);
 
-    // ESC key closes dialog
+    // --- General Page (Currently empty, but kept for potential future use) ---
+    let general_page = PreferencesPage::builder()
+        .title("General")
+        .icon_name("preferences-system-symbolic")
+        .build();
+
+    // --- Audio Page (Currently empty, but kept for potential future use) ---
+    let audio_page = PreferencesPage::builder()
+        .title("Audio")
+        .icon_name("audio-speakers-symbolic")
+        .build();
+
+    // --- Window-level interactions ---
+    // Connect ESC key to close the dialog.
     let key_controller = EventControllerKey::new();
     {
         let dialog = dialog.clone();
         key_controller.connect_key_pressed(move |_, keyval, _, _| {
             if keyval == Key::Escape {
-                dialog.close();
-                return true.into();
+                dialog.close(); // Close the dialog
+                return Stop; // Stop further propagation of the event
             }
-            false.into()
+            Proceed // Allow other key events to propagate
         });
     }
-    dialog.add_controller(key_controller);
+    dialog.add_controller(key_controller); // Add the key controller to the dialog
 
-    // Library page
-    let library_page = PreferencesPage::builder()
-        .title("Library")
-        .icon_name("folder-music-symbolic")
-        .build();
-
-    library_page.add(folders_group.as_ref());
-    library_page.add(&sorting_group);
-
-    // Audio page
-    let audio_page = PreferencesPage::builder()
-        .title("Audio")
-        .icon_name("audio-speakers-symbolic")
-        .build();
-    let audio_group = PreferencesGroup::builder().build();
-    ("audio_group ptr: {:?}", audio_group.as_ptr());
-    audio_page.add(&audio_group);
-
-    // Add pages to the window
+    // Add all defined pages to the preferences window.
     dialog.add(&general_page);
     dialog.add(&library_page);
     dialog.add(&audio_page);
-    dialog.present();
+    dialog.present(); // Display the settings dialog to the user
 }
