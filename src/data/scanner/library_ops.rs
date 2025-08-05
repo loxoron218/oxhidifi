@@ -4,12 +4,12 @@ use sqlx::{Row, SqlitePool, query};
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::data::db::{
-    db_cleanup::{
+    cleanup::{
         remove_album_and_tracks, remove_albums_with_no_tracks, remove_artists_with_no_albums,
         remove_folder_and_albums, remove_orphaned_tracks,
     },
-    db_dr_sync::synchronize_dr_completed_from_store,
-    db_query::fetch_all_folders,
+    dr_sync::synchronize_dr_completed_from_store,
+    query::fetch_all_folders,
 };
 use crate::data::scanner::scan_folder;
 

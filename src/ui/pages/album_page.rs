@@ -14,7 +14,7 @@ use libadwaita::{ActionRow, PreferencesGroup, ViewStack};
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::data::db::db_crud::{
+use crate::data::db::crud::{
     fetch_album_by_id, fetch_artist_by_id, fetch_folder_by_id, fetch_tracks_by_album,
     update_album_dr_completed,
 };

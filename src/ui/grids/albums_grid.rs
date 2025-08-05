@@ -20,7 +20,7 @@ use libadwaita::{
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::data::db::db_query::fetch_album_display_info;
+use crate::data::db::query::fetch_album_display_info;
 use crate::ui::components::scan_feedback::create_scanning_label;
 use crate::ui::components::sorting::sorting_types::SortOrder;
 use crate::ui::pages::album_page::album_page;

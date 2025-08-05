@@ -11,7 +11,7 @@ use lofty::{
 };
 use sqlx::SqlitePool;
 
-use crate::data::db::db_crud::{insert_or_get_album, insert_or_get_artist, insert_track};
+use crate::data::db::crud::{insert_or_get_album, insert_or_get_artist, insert_track};
 
 /// Processes a single audio file by extracting its metadata (tags and properties)
 /// and inserting or updating the corresponding entries in the database.

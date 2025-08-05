@@ -20,8 +20,8 @@ use libadwaita::{
 };
 use sqlx::SqlitePool;
 
-use crate::data::db::db_cleanup::remove_folder_and_albums;
-use crate::data::db::db_query::fetch_all_folders;
+use crate::data::db::cleanup::remove_folder_and_albums;
+use crate::data::db::query::fetch_all_folders;
 use crate::ui::components::config::{Settings, load_settings, save_settings};
 use crate::ui::components::dialogs::show_remove_folder_confirmation_dialog;
 use crate::ui::components::sorting::sorting_preferences::{

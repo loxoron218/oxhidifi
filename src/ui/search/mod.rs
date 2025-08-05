@@ -13,7 +13,7 @@ use libadwaita::{
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::data::db::db_query::{search_album_display_info, search_artists};
+use crate::data::db::query::{search_album_display_info, search_artists};
 use crate::ui::components::tiles::{create_album_tile, create_artist_tile};
 use crate::utils::screen::{compute_cover_and_tile_size, get_primary_screen_size};
 

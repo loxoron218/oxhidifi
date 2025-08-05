@@ -12,7 +12,7 @@ use libadwaita::{ApplicationWindow, Clamp, StatusPage, ViewStack};
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::data::db::db_query::fetch_all_artists;
+use crate::data::db::query::fetch_all_artists;
 use crate::ui::components::scan_feedback::create_scanning_label;
 use crate::ui::pages::artist_page::artist_page;
 use crate::utils::screen::{compute_cover_and_tile_size, get_primary_screen_size};

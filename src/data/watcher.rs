@@ -12,7 +12,7 @@ use notify::{
 use sqlx::SqlitePool;
 use tokio::{runtime::Runtime, sync::mpsc::UnboundedSender};
 
-use crate::data::{db::db_query::fetch_all_folders, scanner::library_ops::run_full_scan};
+use crate::data::{db::query::fetch_all_folders, scanner::library_ops::run_full_scan};
 
 /// Spawns a new thread that watches the library folders for changes.
 ///

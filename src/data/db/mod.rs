@@ -1,5 +1,5 @@
-pub mod db_cleanup;
-pub mod db_crud;
-pub mod db_dr_sync;
-pub mod db_query;
-pub mod db_schema;
+pub mod cleanup;
+pub mod crud;
+pub mod dr_sync;
+pub mod query;
+pub mod schema;

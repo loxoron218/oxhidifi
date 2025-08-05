@@ -14,7 +14,7 @@ use libadwaita::{
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::data::{db::db_query::AlbumDisplayInfo, models::Artist};
+use crate::data::{db::query::AlbumDisplayInfo, models::Artist};
 use crate::ui::pages::{album_page::album_page, artist_page::artist_page};
 use crate::utils::formatting::format_freq_khz;
 

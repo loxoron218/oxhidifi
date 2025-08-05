@@ -13,7 +13,7 @@ use libadwaita::{
 use sqlx::{Error, Row, SqlitePool, query};
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::data::db::db_crud::fetch_artist_by_id;
+use crate::data::db::crud::fetch_artist_by_id;
 use crate::ui::components::tiles::{create_album_cover, create_album_label, create_dr_overlay};
 use crate::ui::pages::album_page::album_page;
 use crate::utils::formatting::format_freq_khz;
