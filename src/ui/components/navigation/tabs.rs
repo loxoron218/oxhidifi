@@ -9,7 +9,7 @@ use libadwaita::{
     prelude::{ButtonExt, ToggleButtonExt},
 };
 
-use super::nav_core::navigate_back_to_main_grid;
+use super::core::navigate_back_to_main_grid;
 use super::{
     VIEW_STACK_ALBUM_DETAIL, VIEW_STACK_ALBUMS, VIEW_STACK_ARTIST_DETAIL, VIEW_STACK_ARTISTS,
 };

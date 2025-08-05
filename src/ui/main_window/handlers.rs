@@ -7,10 +7,10 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use crate::data::watcher::start_watching_library;
 use crate::ui::components::navigation::{
-    nav_core::{connect_album_navigation, connect_back_button},
-    nav_shortcuts::setup_keyboard_shortcuts,
-    nav_sorting::connect_sort_button,
-    nav_tabs::connect_tab_navigation,
+    core::{connect_album_navigation, connect_back_button},
+    shortcuts::setup_keyboard_shortcuts,
+    sorting::connect_sort_button,
+    tabs::connect_tab_navigation,
 };
 use crate::ui::components::{
     dialogs::{connect_settings_dialog, create_add_folder_dialog_handler},

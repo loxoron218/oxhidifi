@@ -1,7 +1,7 @@
-pub mod nav_core;
-pub mod nav_shortcuts;
-pub mod nav_sorting;
-pub mod nav_tabs;
+pub mod core;
+pub mod shortcuts;
+pub mod sorting;
+pub mod tabs;
 
 /// Constants for `ViewStack` child names, improving readability and reducing magic strings.
 /// These constants are used to identify different UI pages or header states within the application's

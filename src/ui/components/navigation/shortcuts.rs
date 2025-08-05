@@ -13,7 +13,7 @@ use libadwaita::{ApplicationWindow, Clamp, ViewStack};
 
 use crate::ui::search_bar::SearchBar;
 
-use super::nav_core::handle_back_navigation;
+use super::core::handle_back_navigation;
 
 /// Sets up keyboard shortcuts for the main application window.
 ///
@@ -55,7 +55,7 @@ pub fn setup_keyboard_shortcuts(
     let search_button = search_bar.button.clone();
 
     // Create the back navigation action, which will be reused by the Escape key.
-    // This leverages the shared logic from `nav_core` to ensure consistency.
+    // This leverages the shared logic from `core` to ensure consistency.
     let back_nav_action = handle_back_navigation(
         stack.clone(),
         left_btn_stack.clone(),
