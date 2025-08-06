@@ -19,13 +19,13 @@ use crate::{
 ///
 /// This asynchronous function fetches all artists from the database, filters out
 /// "Various Artists", sorts them based on the `sort_ascending` flag, and then
-/// creates and inserts `FlowBoxChild` tiles for each artist into the `artists_grid`.
+/// creates and inserts `FlowBoxChild` tiles for each artist into the `artist_grid`.
 /// It also manages the visibility of the `artists_inner_stack` to show appropriate
 /// states (loading, empty, scanning, populated).
 ///
 /// # Arguments
 ///
-/// * `artists_grid` - The `gtk4::FlowBox` where artist tiles will be displayed.
+/// * `artist_grid` - The `gtk4::FlowBox` where artist tiles will be displayed.
 /// * `db_pool` - An `Arc<SqlitePool>` for database operations.
 /// * `sort_ascending` - A `bool` indicating whether artists should be sorted in ascending order.
 /// * `stack` - The main `ViewStack` of the application (used for navigating to artist pages).
@@ -37,8 +37,8 @@ use crate::{
 /// * `sender` - An `UnboundedSender<()>` for sending signals (e.g., for UI refreshes).
 /// * `nav_history` - A `Rc<RefCell<Vec<String>>>` to manage navigation history.
 /// * `artists_inner_stack` - The `gtk4::Stack` that manages the states of the artists view.
-pub fn populate_artists_grid(
-    artists_grid: &FlowBox,
+pub fn populate_artist_grid(
+    artist_grid: &FlowBox,
     db_pool: Arc<SqlitePool>,
     sort_ascending: bool,
     stack: &ViewStack,
@@ -71,7 +71,7 @@ pub fn populate_artists_grid(
     let stack_rc = Rc::new(stack.clone());
     let left_btn_stack_rc = Rc::new(left_btn_stack.clone());
     let right_btn_box_rc = Rc::new(right_btn_box.clone()); // Clone as Rc directly
-    let artists_grid = artists_grid.clone();
+    let artist_grid = artist_grid.clone();
     let artists_inner_stack = artists_inner_stack.clone();
     let db_pool = Arc::clone(&db_pool);
     let scanning_label = scanning_label.clone();
@@ -118,8 +118,8 @@ pub fn populate_artists_grid(
                 let tile_size = screen_info.get_tile_size();
 
                 // Clear existing children from the grid before adding new ones.
-                while let Some(child) = artists_grid.first_child() {
-                    artists_grid.remove(&child);
+                while let Some(child) = artist_grid.first_child() {
+                    artist_grid.remove(&child);
                 }
 
                 // Create and insert a tile for each artist.
@@ -136,7 +136,7 @@ pub fn populate_artists_grid(
                         nav_history.clone(),
                         sender.clone(),
                     ));
-                    artists_grid.insert(&*tile, -1); // Insert at the end.
+                    artist_grid.insert(&*tile, -1); // Insert at the end.
                 }
                 // Ensure the populated grid is visible after adding tiles.
                 artists_inner_stack.set_visible_child_name("populated_grid");

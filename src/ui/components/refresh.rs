@@ -15,7 +15,7 @@ use crate::{
     ui::{
         components::sorting::sorting_types::SortOrder,
         grids::album_grid_population::populate_albums_grid,
-        grids::artists_grid_population::populate_artists_grid, search::clear_grid,
+        grids::artist_grid_population::populate_artist_grid, search::clear_grid,
     },
     utils::screen::ScreenInfo,
 };
@@ -27,7 +27,7 @@ pub struct RefreshService {
     db_pool: Arc<SqlitePool>,
     albums_grid_cell: Rc<RefCell<Option<FlowBox>>>,
     albums_stack_cell: Rc<RefCell<Option<Stack>>>,
-    artists_grid_cell: Rc<RefCell<Option<FlowBox>>>,
+    artist_grid_cell: Rc<RefCell<Option<FlowBox>>>,
     artists_stack_cell: Rc<RefCell<Option<Stack>>>,
     sort_orders: Rc<RefCell<Vec<SortOrder>>>,
     stack: Rc<ViewStack>, // Main content stack
@@ -52,7 +52,7 @@ impl RefreshService {
         db_pool: Arc<SqlitePool>,
         albums_grid_cell: Rc<RefCell<Option<FlowBox>>>,
         albums_stack_cell: Rc<RefCell<Option<Stack>>>,
-        artists_grid_cell: Rc<RefCell<Option<FlowBox>>>,
+        artist_grid_cell: Rc<RefCell<Option<FlowBox>>>,
         artists_stack_cell: Rc<RefCell<Option<Stack>>>,
         sort_orders: Rc<RefCell<Vec<SortOrder>>>,
         stack: Rc<ViewStack>,
@@ -72,7 +72,7 @@ impl RefreshService {
             db_pool,
             albums_grid_cell,
             albums_stack_cell,
-            artists_grid_cell,
+            artist_grid_cell,
             artists_stack_cell,
             sort_orders,
             stack,
@@ -146,17 +146,17 @@ impl RefreshService {
                             .await;
                         }
                     } else if current_tab == "artists" {
-                        if let (Some(artists_grid), Some(artists_inner_stack)) = (
-                            service_clone.artists_grid_cell.borrow().as_ref(),
+                        if let (Some(artist_grid), Some(artists_inner_stack)) = (
+                            service_clone.artist_grid_cell.borrow().as_ref(),
                             service_clone.artists_stack_cell.borrow().as_ref(),
                         ) {
-                            clear_grid(artists_grid);
+                            clear_grid(artist_grid);
                             service_clone.set_inner_stack_state(
                                 artists_inner_stack,
                                 service_clone.scanning_label_artists.is_visible(),
                             );
-                            populate_artists_grid(
-                                artists_grid,
+                            populate_artist_grid(
+                                artist_grid,
                                 service_clone.db_pool.clone(),
                                 service_clone.sort_ascending_artists.get(),
                                 &service_clone.stack,
@@ -188,7 +188,7 @@ pub fn setup_library_refresh_channel(
     db_pool: Arc<SqlitePool>,
     albums_grid_cell: Rc<RefCell<Option<FlowBox>>>,
     albums_stack_cell: Rc<RefCell<Option<Stack>>>,
-    artists_grid_cell: Rc<RefCell<Option<FlowBox>>>,
+    artist_grid_cell: Rc<RefCell<Option<FlowBox>>>,
     artists_stack_cell: Rc<RefCell<Option<Stack>>>,
     sort_orders: Rc<RefCell<Vec<SortOrder>>>,
     stack: Rc<ViewStack>,
@@ -215,7 +215,7 @@ pub fn setup_library_refresh_channel(
         db_pool,
         albums_grid_cell,
         albums_stack_cell,
-        artists_grid_cell,
+        artist_grid_cell,
         artists_stack_cell,
         sort_orders,
         stack.clone(),

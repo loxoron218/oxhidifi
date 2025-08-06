@@ -30,7 +30,7 @@ pub fn connect_live_search(
     search_entry: &Entry,
     albums_grid: &FlowBox,
     albums_stack: &Stack,
-    artists_grid: &FlowBox,
+    artist_grid: &FlowBox,
     artists_stack: &Stack,
     db_pool: Arc<SqlitePool>,
     sort_ascending: Rc<Cell<bool>>,
@@ -52,7 +52,7 @@ pub fn connect_live_search(
     let db_pool_cloned = db_pool.clone();
     let albums_grid_cloned = albums_grid.clone();
     let albums_stack_cloned = albums_stack.clone();
-    let artists_grid_cloned = artists_grid.clone();
+    let artist_grid_cloned = artist_grid.clone();
     let artists_stack_cloned = artists_stack.clone();
     let sort_ascending_cloned = sort_ascending.clone();
     let refresh_library_ui_cloned = refresh_library_ui.clone();
@@ -69,7 +69,7 @@ pub fn connect_live_search(
 
         // Clear grids before performing a new search
         clear_grid(&albums_grid_cloned);
-        clear_grid(&artists_grid_cloned);
+        clear_grid(&artist_grid_cloned);
 
         // If the search query is empty, refresh the library UI to show all albums/artists
         if text.trim().is_empty() {
@@ -87,7 +87,7 @@ pub fn connect_live_search(
         let db_pool = db_pool_cloned.clone();
         let albums_grid = albums_grid_cloned.clone();
         let albums_stack = albums_stack_cloned.clone();
-        let artists_grid = artists_grid_cloned.clone();
+        let artist_grid = artist_grid_cloned.clone();
         let artists_stack = artists_stack_cloned.clone();
         let sort_ascending = sort_ascending_cloned.clone();
         let stack_for_closure = stack_cloned.clone();
@@ -164,7 +164,7 @@ pub fn connect_live_search(
             }
 
             // Perform artist search
-            clear_grid(&artists_grid); // Clear artist grid before populating
+            clear_grid(&artist_grid); // Clear artist grid before populating
             match search_artists(&db_pool, &text).await {
                 Err(e) => {
                     // Log the error for debugging purposes
@@ -189,7 +189,7 @@ pub fn connect_live_search(
                                 nav_history.clone(),
                                 sender.clone(),
                             ));
-                            artists_grid.insert(&*flow_child, -1);
+                            artist_grid.insert(&*flow_child, -1);
                         }
                     }
                 }

@@ -86,7 +86,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     // passed around in a thread-safe manner within the GTK main context.
     let albums_grid_cell: Rc<RefCell<Option<FlowBox>>> = Rc::new(RefCell::new(None));
     let albums_stack_cell: Rc<RefCell<Option<Stack>>> = Rc::new(RefCell::new(None));
-    let artists_grid_cell: Rc<RefCell<Option<FlowBox>>> = Rc::new(RefCell::new(None));
+    let artist_grid_cell: Rc<RefCell<Option<FlowBox>>> = Rc::new(RefCell::new(None));
     let artists_stack_cell: Rc<RefCell<Option<Stack>>> = Rc::new(RefCell::new(None));
 
     // Bundle all static widgets into `WindowWidgets` struct for cleaner passing
@@ -108,7 +108,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         scanning_label_artists: scanning_label_artists.clone(),
         albums_grid_cell: albums_grid_cell.clone(),
         albums_stack_cell: albums_stack_cell.clone(),
-        artists_grid_cell: artists_grid_cell.clone(),
+        artist_grid_cell: artist_grid_cell.clone(),
         artists_stack_cell: artists_stack_cell.clone(),
     };
 
@@ -120,7 +120,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         db_pool.clone(),
         widgets.albums_grid_cell.clone(),
         widgets.albums_stack_cell.clone(),
-        widgets.artists_grid_cell.clone(),
+        widgets.artist_grid_cell.clone(),
         widgets.artists_stack_cell.clone(),
         shared_state.sort_orders.clone(),
         Rc::new(widgets.stack.clone()),

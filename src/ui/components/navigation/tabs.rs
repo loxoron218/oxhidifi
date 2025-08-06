@@ -39,7 +39,7 @@ use super::{
 /// * `sort_ascending` - `Rc<Cell<bool>>` indicating the current sort direction for albums.
 /// * `sort_ascending_artists` - `Rc<Cell<bool>>` indicating the current sort direction for artists.
 /// * `refresh_library_ui` - A closure to refresh the main library UI (albums/artists grid).
-/// * `rebuild_artists_grid_opt` - An optional closure to rebuild the artists grid. This is used
+/// * `rebuild_artist_grid_opt` - An optional closure to rebuild the artists grid. This is used
 ///   if the artists grid hasn't been built yet (e.g., first time visiting artists tab).
 pub fn connect_tab_navigation(
     albums_btn: &ToggleButton,
@@ -53,7 +53,7 @@ pub fn connect_tab_navigation(
     sort_ascending: Rc<Cell<bool>>,
     sort_ascending_artists: Rc<Cell<bool>>,
     refresh_library_ui: Rc<dyn Fn(bool, bool)>,
-    rebuild_artists_grid_opt: Option<impl Fn() + 'static>,
+    rebuild_artist_grid_opt: Option<impl Fn() + 'static>,
 ) {
     // --- Albums button logic ---
     // Clone all necessary Rc's for the albums button's closure.
@@ -144,15 +144,15 @@ pub fn connect_tab_navigation(
         last_tab_artists_clone.set(VIEW_STACK_ARTISTS);
 
         // Check if the Artists view is already present in the ViewStack.
-        // If not, and a `rebuild_artists_grid_opt` closure is provided, call it to build the grid.
+        // If not, and a `rebuild_artist_grid_opt` closure is provided, call it to build the grid.
         if stack_artists_clone
             .child_by_name(VIEW_STACK_ARTISTS)
             .is_some()
         {
             // If already exists, just switch to it.
             stack_artists_clone.set_visible_child_name(VIEW_STACK_ARTISTS);
-        } else if let Some(ref rebuild_artists_grid) = rebuild_artists_grid_opt {
-            rebuild_artists_grid(); // Build the artists grid.
+        } else if let Some(ref rebuild_artist_grid) = rebuild_artist_grid_opt {
+            rebuild_artist_grid(); // Build the artists grid.
             // After rebuilding, the child should now be present, so set it visible.
             if stack_artists_clone
                 .child_by_name(VIEW_STACK_ARTISTS)

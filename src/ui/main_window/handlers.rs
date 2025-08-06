@@ -25,7 +25,7 @@ use crate::{
         },
         grids::{
             album_grid_rebuilder::rebuild_albums_grid_for_window,
-            artists_grid_rebuilder::rebuild_artists_grid_for_window,
+            artist_grid_rebuilder::rebuild_artist_grid_for_window,
         },
         pages::album_page::album_page,
         search::connect_live_search,
@@ -123,10 +123,10 @@ pub fn connect_all_handlers(
         &widgets.albums_stack_cell,
         &add_music_button_albums,
     );
-    rebuild_artists_grid_for_window(
+    rebuild_artist_grid_for_window(
         &widgets.stack,
         &widgets.scanning_label_artists,
-        &widgets.artists_grid_cell,
+        &widgets.artist_grid_cell,
         &widgets.artists_stack_cell,
         &add_music_button_artists,
     );
@@ -187,7 +187,7 @@ pub fn connect_all_handlers(
         shared_state.sort_ascending.clone(),
         shared_state.sort_ascending_artists.clone(),
         refresh_library_ui.clone(),
-        None::<fn()>, // Optional closure for artists grid rebuild, currently handled by `rebuild_artists_grid_for_window`
+        None::<fn()>, // Optional closure for artists grid rebuild, currently handled by `rebuild_artist_grid_for_window`
     );
 
     // Connect sorting logic for tab toggles and sort icon updates.
@@ -240,7 +240,7 @@ pub fn connect_all_handlers(
         &widgets.search_bar.search_bar.entry,
         widgets.albums_grid_cell.borrow().as_ref().unwrap(),
         widgets.albums_stack_cell.borrow().as_ref().unwrap(),
-        widgets.artists_grid_cell.borrow().as_ref().unwrap(),
+        widgets.artist_grid_cell.borrow().as_ref().unwrap(),
         widgets.artists_stack_cell.borrow().as_ref().unwrap(),
         db_pool.clone(),
         shared_state.sort_ascending.clone(),

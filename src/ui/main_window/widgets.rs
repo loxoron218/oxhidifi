@@ -49,7 +49,7 @@ pub struct WindowWidgets {
     /// Used to switch between loading, empty, and populated states for the albums view.
     pub albums_stack_cell: Rc<RefCell<Option<Stack>>>,
     /// `Rc<RefCell<Option<FlowBox>>>` holding the artists grid for dynamic updates.
-    pub artists_grid_cell: Rc<RefCell<Option<FlowBox>>>,
+    pub artist_grid_cell: Rc<RefCell<Option<FlowBox>>>,
     /// `Rc<RefCell<Option<Stack>>>` holding the artists inner stack for dynamic updates.
     /// Used to switch between loading, empty, and populated states for the artists view.
     pub artists_stack_cell: Rc<RefCell<Option<Stack>>>,

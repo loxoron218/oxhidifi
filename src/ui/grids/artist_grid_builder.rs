@@ -28,7 +28,7 @@ use crate::ui::components::scan_feedback::create_scanning_label;
 /// * `Stack`: The `gtk4::Stack` widget that manages the different display states
 ///   (loading, empty, no results, scanning, populated grid).
 /// * `FlowBox`: The `gtk4::FlowBox` widget where individual artist tiles will be added.
-pub fn build_artists_grid(scanning_label: &Label, add_music_button: &Button) -> (Stack, FlowBox) {
+pub fn build_artist_grid(scanning_label: &Label, add_music_button: &Button) -> (Stack, FlowBox) {
     // --- Empty State ---
     // This state is shown when no artists are found in the library and no scan is in progress.
     let empty_state_status_page = StatusPage::builder()
@@ -72,7 +72,7 @@ pub fn build_artists_grid(scanning_label: &Label, add_music_button: &Button) -> 
 
     // --- Artists Grid (Populated State) ---
     // This is the actual `FlowBox` where artist tiles will be dynamically added.
-    let artists_grid = FlowBox::builder()
+    let artist_grid = FlowBox::builder()
         .valign(Align::Start)
         .max_children_per_line(128) // Set a high number to allow dynamic resizing by CSS/Adwaita.
         .row_spacing(8)
@@ -80,13 +80,13 @@ pub fn build_artists_grid(scanning_label: &Label, add_music_button: &Button) -> 
         .selection_mode(SelectionMode::None) // Artists are clickable, but not selectable.
         .homogeneous(true) // All children have the same size.
         .build();
-    artists_grid.set_halign(Align::Center); // Center the flowbox within its allocated space.
+    artist_grid.set_halign(Align::Center); // Center the flowbox within its allocated space.
 
     // Wrap the `FlowBox` in a `ScrolledWindow` to enable scrolling if content overflows.
     let scrolled = ScrolledWindow::builder()
         .hscrollbar_policy(Automatic)
         .vscrollbar_policy(Automatic)
-        .child(&artists_grid)
+        .child(&artist_grid)
         .min_content_height(400) // Ensure a minimum height for the scrollable area.
         .min_content_width(400) // Ensure a minimum width for the scrollable area.
         .vexpand(true) // Allow the scrolled window to expand vertically.
@@ -148,5 +148,5 @@ pub fn build_artists_grid(scanning_label: &Label, add_music_button: &Button) -> 
     // Set the initial visible child of the stack to the loading state.
     artists_stack.set_visible_child_name("loading_state");
 
-    (artists_stack, artists_grid)
+    (artists_stack, artist_grid)
 }
