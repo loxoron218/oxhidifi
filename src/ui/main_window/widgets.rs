@@ -41,6 +41,10 @@ pub struct WindowWidgets {
     pub scanning_label_albums: Label,
     /// Label indicating scanning progress for artists.
     pub scanning_label_artists: Label,
+    /// Label for displaying the count of currently displayed albums.
+    pub album_count_label: Rc<Label>,
+    /// Label for displaying the count of currently displayed artists.
+    pub artist_count_label: Rc<Label>,
     /// `Rc<RefCell<Option<FlowBox>>>` holding the albums grid for dynamic updates.
     /// This pattern allows for safe, mutable interior access to the grid from multiple
     /// parts of the application, particularly when the grid needs to be rebuilt or cleared.

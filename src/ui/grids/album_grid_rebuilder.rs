@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use gtk4::{Button, FlowBox, Label, Stack};
+use gtk4::{FlowBox, Label, Stack};
 use libadwaita::ViewStack;
 
 use crate::{ui::grids::album_grid_builder::build_albums_grid, utils::screen::ScreenInfo};
@@ -25,7 +25,8 @@ pub fn rebuild_albums_grid_for_window(
     screen_info: &Rc<RefCell<ScreenInfo>>,
     albums_grid_cell: &Rc<RefCell<Option<FlowBox>>>,
     albums_stack_cell: &Rc<RefCell<Option<Stack>>>,
-    add_music_button: &Button,
+    add_music_button: &gtk4::Button,
+    album_count_label: Rc<Label>,
 ) {
     // Remove old grid widget from the stack if it exists to prevent duplicates.
     if let Some(child) = stack.child_by_name("albums") {
@@ -43,6 +44,7 @@ pub fn rebuild_albums_grid_for_window(
         screen_info.borrow().cover_size, // Pass cover_size from screen_info
         screen_info.borrow().tile_size,  // Pass tile_size from screen_info
         add_music_button,
+        album_count_label.clone(), // Pass album_count_label
     );
 
     // Add the newly created albums stack to the main ViewStack.

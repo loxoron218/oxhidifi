@@ -5,7 +5,7 @@ use std::{
     thread,
 };
 
-use gtk4::{Box, FlowBox, Orientation, Stack};
+use gtk4::{Align, Box, Button, FlowBox, Label, Orientation, Stack};
 use libadwaita::{
     Application, ApplicationWindow, Clamp, ViewStack,
     prelude::{AdwApplicationWindowExt, BoxExt, ButtonExt, GtkWindowExt},
@@ -20,6 +20,7 @@ use crate::{
             config::load_settings, refresh::setup_library_refresh_channel,
             scan_feedback::create_scanning_label,
         },
+        grids::{album_grid_builder::build_albums_grid, artist_grid_builder::build_artist_grid},
         header::{build_header_bar, build_main_headerbar, build_tab_bar},
     },
     utils::screen::ScreenInfo,
@@ -61,6 +62,28 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     let stack = ViewStack::builder().vexpand(true).hexpand(true).build();
     let scanning_label_albums = create_scanning_label();
     let scanning_label_artists = create_scanning_label();
+
+    // Create "Add Music" buttons for empty states.
+    let add_music_button_albums = Button::with_label("Add Music");
+    let add_music_button_artists = Button::with_label("Add Music");
+
+    // Create the labels for displaying album and artist counts.
+    let album_count_label = Rc::new(
+        Label::builder()
+            .label("0 Albums")
+            .halign(Align::Center)
+            .margin_top(12)
+            .css_classes(&*["dim-label"].as_ref())
+            .build(),
+    );
+    let artist_count_label = Rc::new(
+        Label::builder()
+            .label("0 Artists")
+            .halign(Align::Center)
+            .margin_top(12)
+            .css_classes(&*["dim-label"].as_ref())
+            .build(),
+    );
 
     // Initialize shared state for sorting, navigation, and dynamic sizing
     // Load persistent user settings for initial sort orders.
@@ -106,6 +129,8 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         artists_btn: artists_btn.clone(),
         scanning_label_albums: scanning_label_albums.clone(),
         scanning_label_artists: scanning_label_artists.clone(),
+        album_count_label: album_count_label.clone(),
+        artist_count_label: artist_count_label.clone(),
         albums_grid_cell: albums_grid_cell.clone(),
         albums_stack_cell: albums_stack_cell.clone(),
         artist_grid_cell: artist_grid_cell.clone(),
@@ -132,9 +157,42 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         widgets.window.clone(),
         widgets.scanning_label_albums.clone(),
         widgets.scanning_label_artists.clone(),
+        widgets.album_count_label.clone(), // Pass album_count_label
+        widgets.artist_count_label.clone(), // Pass artist_count_label
         Rc::new(app_header_bar_widgets.left_btn_stack.clone()), // Use from the original header struct
         shared_state.nav_history.clone(),
     );
+
+    // Build the album and artist grids, passing the count labels to them.
+    // The grid builders are responsible for constructing the FlowBox and Stack.
+    let (albums_stack, albums_grid) = build_albums_grid(
+        &widgets.scanning_label_albums,
+        shared_state.screen_info.borrow().cover_size,
+        shared_state.screen_info.borrow().tile_size,
+        &add_music_button_albums,
+        widgets.album_count_label.clone(), // Pass album_count_label
+    );
+    let (artists_stack, artist_grid) = build_artist_grid(
+        &widgets.scanning_label_artists,
+        &add_music_button_artists,
+        widgets.artist_count_label.clone(), // Pass artist_count_label
+    );
+
+    // Set the initial children of the `ViewStack` to the newly built album and artist stacks.
+    widgets
+        .stack
+        .add_titled(&albums_stack, Some("albums"), "Albums");
+    widgets
+        .stack
+        .add_titled(&artists_stack, Some("artists"), "Artists");
+
+    // Store the built grids and stacks in the `Rc<RefCell<Option<...>>>` cells.
+    // This allows them to be accessed and manipulated by other parts of the application,
+    // particularly during UI refresh operations.
+    albums_grid_cell.borrow_mut().replace(albums_grid);
+    albums_stack_cell.borrow_mut().replace(albums_stack);
+    artist_grid_cell.borrow_mut().replace(artist_grid);
+    artists_stack_cell.borrow_mut().replace(artists_stack);
 
     // Build the main `gtk4::HeaderBar` by composing its left, center (tab bar), and right sections.
     // The header bar provides primary navigation and actions for the application.
@@ -169,6 +227,8 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         refresh_library_ui.clone(),
         refresh_service.clone(),
         &vbox_inner,
+        &add_music_button_albums,  // Pass the button here
+        &add_music_button_artists, // Pass the button here
     );
 
     // Present the window to make it visible and set its content.

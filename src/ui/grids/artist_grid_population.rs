@@ -49,6 +49,7 @@ pub fn populate_artist_grid(
     sender: UnboundedSender<()>,
     nav_history: Rc<RefCell<Vec<String>>>,
     artists_inner_stack: &Stack,
+    artist_count_label: Rc<Label>,
 ) {
     // `thread_local!` is used to prevent multiple concurrent calls to this function,
     // which could lead to race conditions or unnecessary re-population of the grid.
@@ -76,16 +77,18 @@ pub fn populate_artist_grid(
     let db_pool = Arc::clone(&db_pool);
     let scanning_label = scanning_label.clone();
     let sender = sender.clone();
+    let artist_count_label = artist_count_label.clone();
 
     // Spawn a local asynchronous task on the GLib main context.
     // This allows UI updates to happen on the main thread after data fetching.
     MainContext::default().spawn_local(async move {
         let fetch_result = fetch_all_artists(&db_pool).await; // Fetch artists from the database.
         match fetch_result {
-            Err(_) => {
-                // On error, set busy to false and show the empty state.
+            Err(e) => {
+                eprintln!("Error fetching artist info: {:?}", e);
                 BUSY.with(|b| b.set(false));
                 artists_inner_stack.set_visible_child_name("empty_state");
+                artist_count_label.set_text("0 Artists"); // Update count on error
             }
             Ok(mut artists) => {
                 // If no artists are found after fetching:
@@ -96,15 +99,19 @@ pub fn populate_artist_grid(
                     } else {
                         artists_inner_stack.set_visible_child_name("empty_state");
                     }
+                    artist_count_label.set_text("0 Artists"); // Update count if no artists
                     BUSY.with(|b| b.set(false)); // Set busy to false.
                     return; // Exit the function.
                 }
 
-                // If artists are found, set the stack to show the populated grid.
-                artists_inner_stack.set_visible_child_name("populated_grid");
-
                 // Filter out "Various Artists" as per application logic.
                 artists.retain(|artist| artist.name != "Various Artists");
+
+                // Artists fetched: {}
+                artist_count_label.set_text(&format!("{} Artists", artists.len())); // Update count with actual number
+
+                // If artists are found, set the stack to show the populated grid.
+                artists_inner_stack.set_visible_child_name("populated_grid");
 
                 // Sort artists based on the `sort_ascending` flag.
                 artists.sort_by(|a, b| {

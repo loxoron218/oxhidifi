@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use gtk4::{Button, FlowBox, Label, Stack};
+use gtk4::{FlowBox, Label, Stack};
 use libadwaita::ViewStack;
 
 use crate::ui::grids::artist_grid_builder::build_artist_grid;
@@ -28,7 +28,8 @@ pub fn rebuild_artist_grid_for_window(
     scanning_label_artists: &Label,
     artist_grid_cell: &Rc<RefCell<Option<FlowBox>>>,
     artists_stack_cell: &Rc<RefCell<Option<Stack>>>,
-    add_music_button: &Button,
+    add_music_button: &gtk4::Button,
+    artist_count_label: Rc<Label>,
 ) {
     // Always remove existing "artists" child before adding a new one to prevent duplicates
     // and ensure a fresh build.
@@ -40,8 +41,11 @@ pub fn rebuild_artist_grid_for_window(
     *artists_stack_cell.borrow_mut() = None;
 
     // Build the new artists grid and its containing stack.
-    let (artists_stack, artist_grid) =
-        build_artist_grid(scanning_label_artists, add_music_button);
+    let (artists_stack, artist_grid) = build_artist_grid(
+        scanning_label_artists,
+        add_music_button,
+        artist_count_label.clone(),
+    );
 
     // Add the newly built artists stack to the main ViewStack.
     stack.add_titled(&artists_stack, Some("artists"), "Artists");

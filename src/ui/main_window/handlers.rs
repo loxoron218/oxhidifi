@@ -60,6 +60,8 @@ pub fn connect_all_handlers(
     refresh_library_ui: Rc<dyn Fn(bool, bool)>,
     refresh_service: Rc<RefreshService>,
     vbox_inner: &Box,
+    add_music_button_albums: &Button,
+    add_music_button_artists: &Button,
 ) {
     // Set initial sort icon state based on loaded settings.
     // This ensures the sort button's icon correctly reflects the default or saved sort order
@@ -85,11 +87,6 @@ pub fn connect_all_handlers(
         shared_state.sort_ascending.clone(),
         shared_state.sort_ascending_artists.clone(),
     );
-
-    // Create and connect "Add Music" buttons for empty states.
-    // These buttons are displayed when the library is empty, prompting the user to add music.
-    let add_music_button_albums = Button::with_label("Add Music");
-    let add_music_button_artists = Button::with_label("Add Music");
 
     // Handlers for opening the folder selection dialog and initiating scanning.
     // These handlers are connected to the "Add Music" buttons for both albums and artists,
@@ -122,6 +119,7 @@ pub fn connect_all_handlers(
         &widgets.albums_grid_cell,
         &widgets.albums_stack_cell,
         &add_music_button_albums,
+        widgets.album_count_label.clone(),
     );
     rebuild_artist_grid_for_window(
         &widgets.stack,
@@ -129,6 +127,7 @@ pub fn connect_all_handlers(
         &widgets.artist_grid_cell,
         &widgets.artists_stack_cell,
         &add_music_button_artists,
+        widgets.artist_count_label.clone(),
     );
 
     // Setup live monitor refresh to adapt UI to screen size changes.

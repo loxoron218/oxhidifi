@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use gtk4::{
     Align, Box, Button, FlowBox, Label, Orientation, PolicyType::Automatic, ScrolledWindow,
     SelectionMode, Spinner, Stack, StackTransitionType,
@@ -28,7 +30,11 @@ use crate::ui::components::scan_feedback::create_scanning_label;
 /// * `Stack`: The `gtk4::Stack` widget that manages the different display states
 ///   (loading, empty, no results, scanning, populated grid).
 /// * `FlowBox`: The `gtk4::FlowBox` widget where individual artist tiles will be added.
-pub fn build_artist_grid(scanning_label: &Label, add_music_button: &Button) -> (Stack, FlowBox) {
+pub fn build_artist_grid(
+    scanning_label: &Label,
+    add_music_button: &Button,
+    artist_count_label: Rc<Label>,
+) -> (Stack, FlowBox) {
     // --- Empty State ---
     // This state is shown when no artists are found in the library and no scan is in progress.
     let empty_state_status_page = StatusPage::builder()
@@ -42,7 +48,6 @@ pub fn build_artist_grid(scanning_label: &Label, add_music_button: &Button) -> (
     // The add_music_button is passed in from `main_window/handlers.rs` and styled here.
     add_music_button.add_css_class("suggested-action");
     empty_state_status_page.set_child(Some(add_music_button)); // Set the button as the child of the StatusPage.
-
     let empty_state_container = Box::builder()
         .orientation(Orientation::Vertical)
         .halign(Align::Center)
@@ -142,6 +147,9 @@ pub fn build_artist_grid(scanning_label: &Label, add_music_button: &Button) -> (
 
     // The populated grid is wrapped in a vertical box.
     let artists_content_box = Box::builder().orientation(Orientation::Vertical).build();
+    artists_content_box.prepend(&*artist_count_label);
+
+    // The artist_count_label is now passed from main_window/builder.rs
     artists_content_box.append(&scrolled);
     artists_stack.add_named(&artists_content_box, Some("populated_grid"));
 

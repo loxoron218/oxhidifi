@@ -39,6 +39,8 @@ pub struct RefreshService {
     window: ApplicationWindow,
     scanning_label_albums: Label,
     scanning_label_artists: Label,
+    album_count_label: Rc<Label>,
+    artist_count_label: Rc<Label>,
     header_btn_stack: Rc<ViewStack>,
     nav_history: Rc<RefCell<Vec<String>>>,
     sender: UnboundedSender<()>, // Channel sender for scan feedback
@@ -64,6 +66,8 @@ impl RefreshService {
         window: ApplicationWindow,
         scanning_label_albums: Label,
         scanning_label_artists: Label,
+        album_count_label: Rc<Label>,
+        artist_count_label: Rc<Label>,
         header_btn_stack: Rc<ViewStack>,
         nav_history: Rc<RefCell<Vec<String>>>,
         sender: UnboundedSender<()>,
@@ -84,6 +88,8 @@ impl RefreshService {
             window,
             scanning_label_albums,
             scanning_label_artists,
+            album_count_label,
+            artist_count_label,
             header_btn_stack,
             nav_history,
             sender,
@@ -142,6 +148,7 @@ impl RefreshService {
                                 &service_clone.header_btn_stack,
                                 &service_clone.right_btn_box,
                                 albums_inner_stack,
+                                &service_clone.album_count_label,
                             )
                             .await;
                         }
@@ -167,6 +174,7 @@ impl RefreshService {
                                 service_clone.sender.clone(),
                                 service_clone.nav_history.clone(),
                                 artists_inner_stack,
+                                service_clone.artist_count_label.clone(),
                             );
                         }
                     }
@@ -200,6 +208,8 @@ pub fn setup_library_refresh_channel(
     window: ApplicationWindow,
     scanning_label_albums: Label,
     scanning_label_artists: Label,
+    album_count_label: Rc<Label>,
+    artist_count_label: Rc<Label>,
     header_btn_stack: Rc<ViewStack>,
     nav_history: Rc<RefCell<Vec<String>>>,
 ) -> (
@@ -227,6 +237,8 @@ pub fn setup_library_refresh_channel(
         window,
         scanning_label_albums,
         scanning_label_artists,
+        album_count_label,
+        artist_count_label,
         header_btn_stack,
         nav_history,
         sender.clone(),

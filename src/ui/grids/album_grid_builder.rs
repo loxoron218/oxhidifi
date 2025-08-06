@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use gtk4::{
     Align, Box, Button, FlowBox, Label, Orientation, PolicyType::Automatic, ScrolledWindow,
     SelectionMode, Spinner, Stack, StackTransitionType,
@@ -28,9 +30,10 @@ use crate::ui::{
 /// where individual album tiles will be added.
 pub fn build_albums_grid(
     scanning_label: &Label,
-    _cover_size: i32, // These parameters are currently unused but kept for potential future use.
-    _tile_size: i32,  // They indicate that `build_albums_grid` can be sensitive to UI sizing.
+    _cover_size: i32,
+    _tile_size: i32,
     add_music_button: &Button,
+    album_count_label: Rc<Label>,
 ) -> (Stack, FlowBox) {
     // --- Empty State (No Music Found) ---
     // This state is shown when the library is completely empty.
@@ -155,6 +158,9 @@ pub fn build_albums_grid(
     // The actual populated grid is placed inside another Box for potential future additions
     // like a search bar or filters above the grid.
     let albums_content_box = Box::builder().orientation(Orientation::Vertical).build();
+    albums_content_box.prepend(&*album_count_label);
+
+    // The album_count_label is now passed from main_window/builder.rs
     albums_content_box.append(&scrolled_window);
     albums_stack.add_named(
         &albums_content_box,

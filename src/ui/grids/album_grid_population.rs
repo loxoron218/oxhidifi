@@ -66,6 +66,7 @@ pub async fn populate_albums_grid(
     header_btn_stack: &ViewStack,
     header_right_btn_box: &Clamp,
     albums_inner_stack: &Stack,
+    album_count_label: &Label,
 ) {
     // A thread-local static to prevent multiple simultaneous population calls,
     // ensuring data consistency and preventing redundant work.
@@ -95,10 +96,11 @@ pub async fn populate_albums_grid(
     match fetch_result {
         Err(e) => {
             // Log the error for debugging purposes.
-            eprintln!("Error fetching album display info: {}", e);
+            eprintln!("Error fetching album display info: {:?}", e);
             // On error, revert busy state and show an empty state.
             IS_BUSY.with(|cell| cell.set(false));
             albums_inner_stack.set_visible_child_name(AlbumGridState::Empty.as_str());
+            album_count_label.set_text("0 Albums"); // Update count on error
         }
         Ok(mut albums) => {
             // Determine the appropriate state to show if no albums are found.
@@ -109,9 +111,13 @@ pub async fn populate_albums_grid(
                     AlbumGridState::Empty
                 };
                 albums_inner_stack.set_visible_child_name(state_to_show.as_str());
+                album_count_label.set_text("0 Albums"); // Update count if no albums
                 IS_BUSY.with(|cell| cell.set(false));
                 return;
             }
+
+            // Albums fetched: {}
+            album_count_label.set_text(&format!("{} Albums", albums.len())); // Update count with actual number
 
             // If albums are found, transition to the populated grid state.
             albums_inner_stack.set_visible_child_name(AlbumGridState::Populated.as_str());
