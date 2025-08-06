@@ -103,11 +103,12 @@ pub fn create_album_label(
     wrap: bool,
     wrap_mode: Option<WrapMode>,
     lines: Option<i32>,
+    use_markup: bool,
 ) -> Label {
     let builder = Label::builder()
         .label(text)
         .halign(Align::Start)
-        .use_markup(true);
+        .use_markup(use_markup);
     let label = builder.build();
     label.set_xalign(0.0);
     if let Some(width) = max_width {
@@ -195,11 +196,8 @@ pub fn create_album_tile(
             true,
             Some(WordChar),
             Some(2),
+            true, // use_markup: true because highlight is used
         );
-        label.set_markup(&highlight(
-            &markup_escape_text(&album.title).to_string(),
-            search_text,
-        ));
         label.set_size_request(cover_size - 16, -1);
         label.set_valign(Align::End); // Align to the bottom of its allocated space
         label
@@ -215,11 +213,8 @@ pub fn create_album_tile(
             false,
             None,
             None,
+            true, // use_markup: true because highlight is used
         );
-        label.set_markup(&highlight(
-            &markup_escape_text(&album.artist).to_string(),
-            search_text,
-        ));
         label
     };
 
@@ -246,6 +241,7 @@ pub fn create_album_tile(
         false,
         None,
         None,
+        false, // use_markup: false for plain text
     );
     format_label.set_halign(Align::Start);
     format_label.set_hexpand(true);
@@ -272,6 +268,7 @@ pub fn create_album_tile(
         false,
         None,
         None,
+        false, // use_markup: false for plain text
     );
     year_label.set_halign(Align::End);
     year_label.set_hexpand(false);

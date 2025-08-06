@@ -158,6 +158,7 @@ fn build_album_card(
         true,
         Some(WrapMode::WordChar),
         Some(2),
+        false, // use_markup: false for plain text
     );
     title_label.set_size_request(cover_size - 16, -1);
     title_label.set_halign(Align::Start);
@@ -171,6 +172,7 @@ fn build_album_card(
         false,
         None,
         None,
+        false, // Explicitly set use_markup to false
     );
     artist_label.add_css_class("album-artist-label"); // Ensure this class is applied
 
@@ -196,6 +198,7 @@ fn build_album_card(
         false,
         None,
         None,
+        false, // use_markup: false for plain text
     );
     format_label.set_halign(Align::Start);
     format_label.set_hexpand(true); // Allow format label to expand
@@ -219,6 +222,7 @@ fn build_album_card(
         false,
         None,
         None,
+        false, // Explicitly set use_markup to false
     );
     year_label.set_halign(Align::End);
     year_label.set_hexpand(false);
