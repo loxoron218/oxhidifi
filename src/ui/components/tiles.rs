@@ -439,13 +439,13 @@ pub fn create_artist_tile(
     tile.set_size_request(cover_size, cover_size + 80);
     tile.set_hexpand(false);
     tile.set_vexpand(false);
-    tile.set_halign(Align::Start);
+    tile.set_halign(Align::Center);
     tile.set_valign(Align::Start);
 
     // Fixed-size container for icon (new instance per tile)
     let icon_container = Box::new(Orientation::Vertical, 0);
     icon_container.set_size_request(cover_size, cover_size);
-    icon_container.set_halign(Align::Start);
+    icon_container.set_halign(Align::Center);
     icon_container.set_valign(Align::Start);
     icon_container.append(&icon);
     tile.append(&icon_container);
@@ -456,6 +456,7 @@ pub fn create_artist_tile(
         .height_request(40)
         .margin_top(12)
         .build();
+    label_area_box.set_halign(Align::Center);
     label.set_valign(Align::End);
     label_area_box.append(&label);
     tile.append(&label_area_box);
