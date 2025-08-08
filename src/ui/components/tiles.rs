@@ -413,6 +413,7 @@ pub fn create_artist_tile(
     artist_name: &str,
     cover_size: i32,
     _tile_size: i32,
+    search_text: &str,
     stack: Rc<ViewStack>,
     db_pool: Arc<SqlitePool>,
     left_btn_stack: Rc<ViewStack>,
@@ -422,13 +423,16 @@ pub fn create_artist_tile(
 ) -> FlowBoxChild {
     let icon = Image::from_icon_name("avatar-default-symbolic");
     icon.set_pixel_size(cover_size);
-    let label = Label::builder().label(artist_name).build();
-    label.set_halign(Align::Start);
-    label.set_xalign(0.0);
-    label.set_ellipsize(End);
-    label.set_wrap(true);
-    label.set_wrap_mode(WordChar);
-    label.set_lines(2);
+    let label = create_album_label(
+        &highlight(&markup_escape_text(artist_name).to_string(), search_text),
+        &[],
+        None,
+        Some(End),
+        true,
+        Some(WordChar),
+        Some(2),
+        true,
+    );
     label.set_size_request(cover_size - 16, -1);
     let tile = Box::builder()
         .orientation(Orientation::Vertical)

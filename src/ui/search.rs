@@ -182,6 +182,7 @@ pub fn connect_live_search(
                                 &artist.name,
                                 cover_size,
                                 tile_size,
+                                &text,
                                 stack_for_closure.clone(),
                                 db_pool.clone(),
                                 left_btn_stack_for_closure.clone(),

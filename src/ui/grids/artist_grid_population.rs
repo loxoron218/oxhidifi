@@ -136,6 +136,7 @@ pub fn populate_artist_grid(
                         &artist.name,
                         cover_size,
                         tile_size,
+                        "",
                         stack_rc.clone(),
                         db_pool.clone(),
                         left_btn_stack_rc.clone(),
