@@ -189,7 +189,7 @@ pub fn create_album_tile(
     // Create and style the album title label
     let title_label = {
         let label = create_album_label(
-            &highlight(&markup_escape_text(&album.title).to_string(), search_text),
+            &highlight(&album.title, search_text),
             &["album-title-label"],
             Some(((cover_size - 16) / 10).max(8)),
             Some(End),
@@ -206,7 +206,7 @@ pub fn create_album_tile(
     // Create and style the artist label
     let artist_label = {
         let label = create_album_label(
-            &highlight(&markup_escape_text(&album.artist).to_string(), search_text),
+            &highlight(&album.artist, search_text),
             &["album-artist-label"],
             Some(18),
             Some(End),
@@ -424,7 +424,7 @@ pub fn create_artist_tile(
     let icon = Image::from_icon_name("avatar-default-symbolic");
     icon.set_pixel_size(cover_size);
     let label = create_album_label(
-        &highlight(&markup_escape_text(artist_name).to_string(), search_text),
+        &highlight(artist_name, search_text),
         &[],
         None,
         Some(End),
