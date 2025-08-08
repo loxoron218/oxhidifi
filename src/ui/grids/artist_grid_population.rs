@@ -44,7 +44,7 @@ pub fn populate_artist_grid(
     stack: &ViewStack,
     left_btn_stack: &ViewStack,
     right_btn_box: &Clamp,
-    _window: &ApplicationWindow,
+    screen_info: &Rc<RefCell<ScreenInfo>>,
     scanning_label: &Label,
     sender: UnboundedSender<()>,
     nav_history: Rc<RefCell<Vec<String>>>,
@@ -75,6 +75,7 @@ pub fn populate_artist_grid(
     let artist_grid = artist_grid.clone();
     let artists_inner_stack = artists_inner_stack.clone();
     let db_pool = Arc::clone(&db_pool);
+    let screen_info = Rc::clone(screen_info);
     let scanning_label = scanning_label.clone();
     let sender = sender.clone();
     let artist_count_label = artist_count_label.clone();
@@ -120,9 +121,8 @@ pub fn populate_artist_grid(
                 });
 
                 // Get screen info for tile sizing.
-                let screen_info = ScreenInfo::new();
-                let cover_size = screen_info.get_cover_size();
-                let tile_size = screen_info.get_tile_size();
+                let cover_size = screen_info.borrow().cover_size;
+                let tile_size = screen_info.borrow().tile_size;
 
                 // Clear existing children from the grid before adding new ones.
                 while let Some(child) = artist_grid.first_child() {

@@ -84,8 +84,9 @@ pub fn build_artist_grid(
         .column_spacing(8)
         .selection_mode(SelectionMode::None) // Artists are clickable, but not selectable.
         .homogeneous(true) // All children have the same size.
+        .hexpand(true)
+        .halign(Align::Fill)
         .build();
-    artist_grid.set_halign(Align::Center); // Center the flowbox within its allocated space.
 
     // Wrap the `FlowBox` in a `ScrolledWindow` to enable scrolling if content overflows.
     let scrolled = ScrolledWindow::builder()

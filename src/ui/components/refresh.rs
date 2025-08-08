@@ -169,7 +169,7 @@ impl RefreshService {
                                 &service_clone.stack,
                                 &service_clone.left_btn_stack,
                                 &service_clone.right_btn_box,
-                                &service_clone.window,
+                                &service_clone.screen_info,
                                 &service_clone.scanning_label_artists,
                                 service_clone.sender.clone(),
                                 service_clone.nav_history.clone(),

@@ -426,7 +426,7 @@ pub fn create_artist_tile(
     let label = create_album_label(
         &highlight(artist_name, search_text),
         &[],
-        None,
+        Some(18),
         Some(End),
         true,
         Some(WordChar),
@@ -443,14 +443,15 @@ pub fn create_artist_tile(
     tile.set_size_request(cover_size, cover_size + 80);
     tile.set_hexpand(false);
     tile.set_vexpand(false);
-    tile.set_halign(Align::Center);
+    tile.set_halign(Align::Start);
     tile.set_valign(Align::Start);
 
     // Fixed-size container for icon (new instance per tile)
     let icon_container = Box::new(Orientation::Vertical, 0);
     icon_container.set_size_request(cover_size, cover_size);
-    icon_container.set_halign(Align::Center);
+    icon_container.set_halign(Align::Start);
     icon_container.set_valign(Align::Start);
+    icon_container.add_css_class("album-cover-border");
     icon_container.append(&icon);
     tile.append(&icon_container);
 
@@ -464,12 +465,12 @@ pub fn create_artist_tile(
     label.set_valign(Align::End);
     label_area_box.append(&label);
     tile.append(&label_area_box);
-    tile.set_css_classes(&["artist-tile"]);
+    tile.set_css_classes(&["album-tile"]);
     let flow_child = FlowBoxChild::builder().build();
     flow_child.set_child(Some(&tile));
     flow_child.set_hexpand(false);
     flow_child.set_vexpand(false);
-    flow_child.set_halign(Align::Center);
+    flow_child.set_halign(Align::Fill);
     flow_child.set_valign(Align::Start);
     unsafe {
         flow_child.set_data::<i64>("artist_id", artist_id);
