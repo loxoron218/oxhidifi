@@ -6,7 +6,7 @@ use std::{
 
 use glib::MainContext;
 use gtk4::{FlowBox, Label, Stack};
-use libadwaita::{ApplicationWindow, Clamp, ViewStack, prelude::WidgetExt};
+use libadwaita::{Clamp, ViewStack, prelude::WidgetExt};
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
