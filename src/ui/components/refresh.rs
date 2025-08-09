@@ -7,7 +7,7 @@ use std::{
 
 use glib::{ControlFlow::Continue, MainContext, source::timeout_add_local};
 use gtk4::{FlowBox, Label, Stack};
-use libadwaita::{ApplicationWindow, Clamp, ViewStack, prelude::WidgetExt};
+use libadwaita::{Clamp, ViewStack, prelude::WidgetExt};
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
@@ -36,7 +36,6 @@ pub struct RefreshService {
     screen_info: Rc<RefCell<ScreenInfo>>,
     sort_ascending: Rc<Cell<bool>>,
     sort_ascending_artists: Rc<Cell<bool>>,
-    window: ApplicationWindow,
     scanning_label_albums: Label,
     scanning_label_artists: Label,
     album_count_label: Rc<Label>,
@@ -63,7 +62,6 @@ impl RefreshService {
         screen_info: Rc<RefCell<ScreenInfo>>,
         sort_ascending: Rc<Cell<bool>>,
         sort_ascending_artists: Rc<Cell<bool>>,
-        window: ApplicationWindow,
         scanning_label_albums: Label,
         scanning_label_artists: Label,
         album_count_label: Rc<Label>,
@@ -85,7 +83,6 @@ impl RefreshService {
             screen_info,
             sort_ascending,
             sort_ascending_artists,
-            window,
             scanning_label_albums,
             scanning_label_artists,
             album_count_label,
@@ -205,7 +202,6 @@ pub fn setup_library_refresh_channel(
     screen_info: Rc<RefCell<ScreenInfo>>,
     sort_ascending: Rc<Cell<bool>>,
     sort_ascending_artists: Rc<Cell<bool>>,
-    window: ApplicationWindow,
     scanning_label_albums: Label,
     scanning_label_artists: Label,
     album_count_label: Rc<Label>,
@@ -234,7 +230,6 @@ pub fn setup_library_refresh_channel(
         screen_info,
         sort_ascending,
         sort_ascending_artists,
-        window,
         scanning_label_albums,
         scanning_label_artists,
         album_count_label,

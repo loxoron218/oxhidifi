@@ -154,7 +154,6 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         shared_state.screen_info.clone(),
         shared_state.sort_ascending.clone(),
         shared_state.sort_ascending_artists.clone(),
-        widgets.window.clone(),
         widgets.scanning_label_albums.clone(),
         widgets.scanning_label_artists.clone(),
         widgets.album_count_label.clone(), // Pass album_count_label
