@@ -426,7 +426,7 @@ pub fn create_artist_tile(
     let label = create_album_label(
         &highlight(artist_name, search_text),
         &[],
-        Some(18),
+        Some(((cover_size - 16) / 10).max(8)),
         Some(End),
         true,
         Some(WordChar),
