@@ -52,7 +52,7 @@ impl Default for Settings {
                 SortOrder::Artist,
                 SortOrder::Year,
                 SortOrder::Album,
-                SortOrder::Format,
+                SortOrder::DrValue,
             ],
             sort_ascending_albums: true,
             sort_ascending_artists: true,

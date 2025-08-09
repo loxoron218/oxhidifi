@@ -12,7 +12,7 @@ pub enum SortOrder {
     Artist,
     Album,
     Year,
-    Format,
+    DrValue,
 }
 
 /// Allows parsing a `SortOrder` from a string ("Artist", "Year", etc). Useful for persistence and drag-and-drop.
@@ -29,7 +29,7 @@ impl FromStr for SortOrder {
             "Artist" => Ok(SortOrder::Artist),
             "Year" => Ok(SortOrder::Year),
             "Album" => Ok(SortOrder::Album),
-            "Format" => Ok(SortOrder::Format),
+            "DR Value" => Ok(SortOrder::DrValue),
             _ => Err(()),
         }
     }
@@ -53,6 +53,6 @@ pub fn sort_order_label(order: &SortOrder) -> &'static str {
         SortOrder::Artist => "Artist",
         SortOrder::Year => "Year",
         SortOrder::Album => "Album",
-        SortOrder::Format => "Format",
+        SortOrder::DrValue => "DR Value",
     }
 }

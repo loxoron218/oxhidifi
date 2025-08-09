@@ -60,7 +60,7 @@ pub fn make_sort_row(
     drag_source.connect_prepare({
         let order_clone = order.clone();
         move |_, _, _| {
-            let order_str = format!("{:?}", order_clone);
+            let order_str = sort_order_label(&order_clone).to_string();
             let value = Value::from(order_str);
             Some(ContentProvider::for_value(&value))
         }

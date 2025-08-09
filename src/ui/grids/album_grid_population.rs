@@ -145,7 +145,7 @@ pub async fn populate_albums_grid(
                                 .or(b.year); // Fallback to `year` field
                             a_year.cmp(&b_year)
                         }
-                        SortOrder::Format => a.format.cmp(&b.format),
+                        SortOrder::DrValue => a._dr_value.cmp(&b._dr_value),
                     };
                     // If comparison is not equal, return the result, applying ascending/descending.
                     if cmp != Equal {
