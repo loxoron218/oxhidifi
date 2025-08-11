@@ -1,5 +1,5 @@
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     collections::{HashMap, HashSet},
     rc::Rc,
     sync::Arc,
@@ -44,6 +44,7 @@ pub async fn album_page(
     header_btn_stack: WeakRef<ViewStack>,
     header_right_btn_box: WeakRef<Clamp>,
     sender: UnboundedSender<()>,
+    show_dr_badges: Rc<Cell<bool>>,
 ) {
     let stack = match stack.upgrade() {
         Some(s) => s,
@@ -505,16 +506,18 @@ pub async fn album_page(
         folder_path: folder.path.clone(),
     };
     let is_completed = dr_store.contains(&album_key);
-    info_box.append(&build_dr_badge(
-        album.id,
-        album.dr_value,
-        is_completed,
-        db_pool.clone(),
-        sender.clone(),
-        Rc::clone(&album),
-        Rc::clone(&artist),
-        Rc::clone(&folder),
-    ));
+    if show_dr_badges.get() {
+        info_box.append(&build_dr_badge(
+            album.id,
+            album.dr_value,
+            is_completed,
+            db_pool.clone(),
+            sender.clone(),
+            Rc::clone(&album),
+            Rc::clone(&artist),
+            Rc::clone(&folder),
+        ));
+    }
     header.append(&info_box);
 
     // Track List

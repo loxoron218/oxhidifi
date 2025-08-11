@@ -32,4 +32,6 @@ pub struct WindowSharedState {
     /// Flag to indicate if the settings dialog is currently open.
     /// Used to prevent unnecessary UI refreshes while a modal dialog is active.
     pub is_settings_open: Rc<Cell<bool>>,
+    /// Indicates whether DR Value badges should be displayed.
+    pub show_dr_badges: Rc<Cell<bool>>,
 }

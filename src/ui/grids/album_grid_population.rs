@@ -67,6 +67,7 @@ pub async fn populate_albums_grid(
     header_right_btn_box: &Clamp,
     albums_inner_stack: &Stack,
     album_count_label: &Label,
+    show_dr_badges: Rc<Cell<bool>>,
 ) {
     // A thread-local static to prevent multiple simultaneous population calls,
     // ensuring data consistency and preventing redundant work.
@@ -164,6 +165,7 @@ pub async fn populate_albums_grid(
             let mut processed_count = 0;
             let cover_size = screen_info.borrow().cover_size;
             let tile_size = screen_info.borrow().tile_size;
+            let show_dr_badges_clone_for_loop = show_dr_badges.clone();
             for album_info in albums {
                 // Create album title label.
                 let title_label = create_styled_label(
@@ -271,16 +273,18 @@ pub async fn populate_albums_grid(
                 overlay.set_halign(Align::Start);
                 overlay.set_valign(Align::Start);
 
-                // Add DR badge to overlay.
-                let album_key = AlbumKey {
-                    title: album_info.title.clone(),
-                    artist: album_info.artist.clone(),
-                    folder_path: album_info.folder_path.clone(),
-                };
-                let is_dr_completed_from_store = dr_store.contains(&album_key);
-                let dr_label =
-                    create_dr_badge_label(album_info._dr_value, is_dr_completed_from_store);
-                overlay.add_overlay(&dr_label);
+                // Add DR badge to overlay, if enabled in settings.
+                if show_dr_badges.get() {
+                    let album_key = AlbumKey {
+                        title: album_info.title.clone(),
+                        artist: album_info.artist.clone(),
+                        folder_path: album_info.folder_path.clone(),
+                    };
+                    let is_dr_completed_from_store = dr_store.contains(&album_key);
+                    let dr_label =
+                        create_dr_badge_label(album_info._dr_value, is_dr_completed_from_store);
+                    overlay.add_overlay(&dr_label);
+                }
 
                 // Add play button to overlay with hover effect.
                 let play_button = Button::builder()
@@ -356,6 +360,7 @@ pub async fn populate_albums_grid(
                 let flow_child_clone = flow_child.clone();
                 let sender_clone = sender.clone();
                 let gesture = GestureClick::builder().build();
+                let show_dr_badges_clone_for_closure = show_dr_badges_clone_for_loop.clone();
                 gesture.connect_pressed(move |_, _, _, _| {
                     if let (
                         Some(stack_strong),
@@ -379,6 +384,7 @@ pub async fn populate_albums_grid(
                             header_btn_stack_strong.downgrade(),
                             header_right_btn_box_strong.downgrade(),
                             sender_clone.clone(),
+                            show_dr_badges_clone_for_closure.clone(),
                         ));
                     }
                 });

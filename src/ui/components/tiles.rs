@@ -1,4 +1,8 @@
-use std::{cell::RefCell, rc::Rc, sync::Arc};
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+    sync::Arc,
+};
 
 use gdk_pixbuf::{InterpType::Bilinear, PixbufLoader, prelude::PixbufLoaderExt};
 use glib::{MainContext, markup_escape_text, prelude::ObjectExt};
@@ -185,6 +189,7 @@ pub fn create_album_tile(
     right_btn_box_for_closure: Rc<Clamp>,
     nav_history: Rc<RefCell<Vec<String>>>,
     sender: UnboundedSender<()>,
+    show_dr_badges: Rc<Cell<bool>>,
 ) -> FlowBoxChild {
     // Create and style the album title label
     let title_label = {
@@ -300,8 +305,11 @@ pub fn create_album_tile(
     overlay.set_child(Some(&cover_container));
     overlay.set_halign(Align::Start);
     overlay.set_valign(Align::Start);
-    let dr_label = create_dr_overlay(album._dr_value, album.dr_completed).unwrap();
-    overlay.add_overlay(&dr_label);
+    if show_dr_badges.get() {
+        if let Some(dr_label) = create_dr_overlay(album._dr_value, album.dr_completed) {
+            overlay.add_overlay(&dr_label);
+        }
+    }
 
     // Play button overlay
     let play_button = Button::builder()
@@ -396,10 +404,11 @@ pub fn create_album_tile(
                 header_btn_stack.downgrade(),
                 right_btn_box_for_closure.downgrade(),
                 sender.clone(),
+                show_dr_badges.clone(),
             ));
         }
     });
-    flow_child.add_controller(gesture); // gesture is moved here.
+    flow_child.add_controller(gesture);
     flow_child
 }
 
@@ -420,6 +429,7 @@ pub fn create_artist_tile(
     right_btn_box: Rc<Clamp>,
     nav_history: Rc<RefCell<Vec<String>>>,
     sender: UnboundedSender<()>,
+    show_dr_badges: Rc<Cell<bool>>,
 ) -> FlowBoxChild {
     let icon = Image::from_icon_name("avatar-default-symbolic");
     icon.set_pixel_size(cover_size);
@@ -504,6 +514,7 @@ pub fn create_artist_tile(
                 right_btn_box_weak.clone(),
                 nav_history.clone(),
                 sender.clone(),
+                show_dr_badges.clone(),
             ));
         }
     });

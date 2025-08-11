@@ -50,6 +50,7 @@ pub fn populate_artist_grid(
     nav_history: Rc<RefCell<Vec<String>>>,
     artists_inner_stack: &Stack,
     artist_count_label: Rc<Label>,
+    show_dr_badges: Rc<Cell<bool>>,
 ) {
     // `thread_local!` is used to prevent multiple concurrent calls to this function,
     // which could lead to race conditions or unnecessary re-population of the grid.
@@ -79,6 +80,7 @@ pub fn populate_artist_grid(
     let scanning_label = scanning_label.clone();
     let sender = sender.clone();
     let artist_count_label = artist_count_label.clone();
+    let show_dr_badges = show_dr_badges.clone();
 
     // Spawn a local asynchronous task on the GLib main context.
     // This allows UI updates to happen on the main thread after data fetching.
@@ -143,8 +145,9 @@ pub fn populate_artist_grid(
                         right_btn_box_rc.clone(),
                         nav_history.clone(),
                         sender.clone(),
+                        show_dr_badges.clone(),
                     ));
-                    artist_grid.insert(&*tile, -1); // Insert at the end.
+                    artist_grid.insert(&*tile, -1);
                 }
                 // Ensure the populated grid is visible after adding tiles.
                 artists_inner_stack.set_visible_child_name("populated_grid");

@@ -165,6 +165,7 @@ pub fn connect_settings_dialog(
     sort_ascending_artists: Rc<Cell<bool>>,
     db_pool: Arc<SqlitePool>,
     is_settings_open: Rc<Cell<bool>>,
+    show_dr_badges_setting: Rc<Cell<bool>>,
 ) {
     // Clone all necessary `Rc` and `Arc` variables once for the `connect_clicked` closure.
     // These clones will be moved into the outer closure.
@@ -175,7 +176,7 @@ pub fn connect_settings_dialog(
     let sort_ascending_artists_cloned = sort_ascending_artists;
     let db_pool_cloned = db_pool;
     let is_settings_open_cloned = is_settings_open;
-
+    let show_dr_badges_setting_cloned = show_dr_badges_setting;
     settings_button.connect_clicked(move |_| {
         // Clone variables again for the `spawn_local` async block.
         // These clones will be moved into the inner async closure.
@@ -186,7 +187,7 @@ pub fn connect_settings_dialog(
         let window_for_async = window_clone.clone();
         let sort_orders_for_async = sort_orders_cloned.clone();
         let is_settings_open_for_async = is_settings_open_cloned.clone();
-
+        let show_dr_badges_setting_for_async = show_dr_badges_setting_cloned.clone();
         MainContext::default().spawn_local(async move {
             show_settings_dialog(
                 &window_for_async,
@@ -196,6 +197,7 @@ pub fn connect_settings_dialog(
                 sort_ascending_artists_for_async,
                 db_pool_for_async,
                 is_settings_open_for_async,
+                show_dr_badges_setting_for_async,
             );
         });
     });

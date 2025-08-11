@@ -229,6 +229,7 @@ pub fn show_settings_dialog(
     sort_ascending_artists: Rc<Cell<bool>>,
     db_pool: Arc<SqlitePool>,
     is_settings_open: Rc<Cell<bool>>,
+    show_dr_badges_setting: Rc<Cell<bool>>,
 ) {
     // Create the settings window, configured as a modal dialog.
     let dialog = PreferencesWindow::builder()
@@ -300,6 +301,7 @@ pub fn show_settings_dialog(
     // Connect `close-request` signal to save sort order when the settings window is closed.
     let sort_orders_rc = sort_orders.clone();
     let is_settings_open_clone = is_settings_open.clone();
+    let show_dr_badges_setting_clone_for_close = show_dr_badges_setting.clone();
     dialog.connect_close_request(move |_| {
         let current_orders = sort_orders_rc.borrow().clone();
         let prev_settings = load_settings(); // Load existing settings to preserve other preferences
@@ -308,6 +310,7 @@ pub fn show_settings_dialog(
             sort_ascending_albums: prev_settings.sort_ascending_albums,
             sort_ascending_artists: prev_settings.sort_ascending_artists,
             completed_albums: prev_settings.completed_albums,
+            show_dr_badges: show_dr_badges_setting_clone_for_close.get(),
         });
         is_settings_open_clone.set(false); // Set flag to indicate settings dialog is closed.
         Proceed // Allow the close request to proceed
@@ -322,6 +325,37 @@ pub fn show_settings_dialog(
         .title("General")
         .icon_name("preferences-system-symbolic")
         .build();
+
+    // Group for General settings
+    let general_group = PreferencesGroup::builder().title("Display").build();
+
+    // Toggle switch for DR Value badges
+    let dr_badges_row = ActionRow::builder()
+        .title("Show DR Value Badges")
+        .subtitle("Toggle the visibility of Dynamic Range (DR) Value badges.")
+        .activatable(false)
+        .build();
+    let dr_badges_switch = gtk4::Switch::builder()
+        .valign(gtk4::Align::Center)
+        .active(show_dr_badges_setting.get())
+        .build();
+    dr_badges_row.add_suffix(&dr_badges_switch);
+    dr_badges_row.set_activatable_widget(Some(&dr_badges_switch));
+    let show_dr_badges_setting_clone = show_dr_badges_setting.clone();
+    let refresh_library_ui_clone = refresh_library_ui.clone();
+    let sort_ascending_clone = sort_ascending.clone();
+    let sort_ascending_artists_clone = sort_ascending_artists.clone();
+    dr_badges_switch.connect_active_notify(move |switch| {
+        show_dr_badges_setting_clone.set(switch.is_active());
+
+        // Trigger a UI refresh to update the visibility of DR badges
+        (refresh_library_ui_clone)(
+            sort_ascending_clone.get(),
+            sort_ascending_artists_clone.get(),
+        );
+    });
+    general_group.add(&dr_badges_row);
+    general_page.add(&general_group);
 
     // --- Audio Page (Currently empty, but kept for potential future use) ---
     let audio_page = PreferencesPage::builder()

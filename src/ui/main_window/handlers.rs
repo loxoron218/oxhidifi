@@ -150,6 +150,7 @@ pub fn connect_all_handlers(
     // This handler will be re-connected whenever the albums grid is rebuilt to ensure
     // all dynamically created album tiles are interactive.
     if let Some(albums_grid) = widgets.albums_grid_cell.borrow().as_ref() {
+        let show_dr_badges_clone = shared_state.show_dr_badges.clone();
         connect_album_navigation(
             albums_grid,
             &widgets.stack,
@@ -158,16 +159,25 @@ pub fn connect_all_handlers(
             &widgets.right_btn_box,
             shared_state.nav_history.clone(),
             sender.clone(),
-            |stack_weak, db_pool, album_id, left_btn_stack_weak, right_btn_box_weak, sender| async move {
-                album_page(
-                    stack_weak,
-                    db_pool,
-                    album_id,
-                    left_btn_stack_weak,
-                    right_btn_box_weak,
-                    sender,
-                )
-                .await;
+            move |stack_weak,
+                  db_pool,
+                  album_id,
+                  left_btn_stack_weak,
+                  right_btn_box_weak,
+                  sender| {
+                let show_dr_badges_clone_for_closure = show_dr_badges_clone.clone();
+                async move {
+                    album_page(
+                        stack_weak,
+                        db_pool,
+                        album_id,
+                        left_btn_stack_weak,
+                        right_btn_box_weak,
+                        sender,
+                        show_dr_badges_clone_for_closure.clone(),
+                    )
+                    .await;
+                }
             },
         );
     }
@@ -250,6 +260,7 @@ pub fn connect_all_handlers(
         Rc::new(widgets.right_btn_box.clone()),
         shared_state.nav_history.clone(),
         sender.clone(),
+        shared_state.show_dr_badges.clone(),
     );
 
     // Set up search bar UI logic (e.g., showing/hiding, focus management).
@@ -300,5 +311,6 @@ pub fn connect_all_handlers(
         shared_state.sort_ascending_artists.clone(),
         db_pool.clone(),
         shared_state.is_settings_open.clone(),
+        shared_state.show_dr_badges.clone(),
     );
 }

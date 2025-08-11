@@ -101,6 +101,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         nav_history: Rc::new(RefCell::new(Vec::new())), // Stores navigation history for back functionality.
         screen_info: Rc::new(RefCell::new(screen_info)),
         is_settings_open: Rc::new(Cell::new(false)), // Flag to prevent UI refresh while settings dialog is open.
+        show_dr_badges: Rc::new(Cell::new(settings.show_dr_badges)), // Initialize with setting
     };
 
     // Initialize `Rc<RefCell<Option<FlowBox>>>` and `Rc<RefCell<Option<Stack>>>` for grids and stacks
@@ -156,10 +157,11 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         shared_state.sort_ascending_artists.clone(),
         widgets.scanning_label_albums.clone(),
         widgets.scanning_label_artists.clone(),
-        widgets.album_count_label.clone(), // Pass album_count_label
-        widgets.artist_count_label.clone(), // Pass artist_count_label
-        Rc::new(app_header_bar_widgets.left_btn_stack.clone()), // Use from the original header struct
+        widgets.album_count_label.clone(),
+        widgets.artist_count_label.clone(),
+        Rc::new(app_header_bar_widgets.left_btn_stack.clone()),
         shared_state.nav_history.clone(),
+        shared_state.show_dr_badges.clone(),
     );
 
     // Build the album and artist grids, passing the count labels to them.

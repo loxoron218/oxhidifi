@@ -30,7 +30,7 @@ pub struct RefreshService {
     artist_grid_cell: Rc<RefCell<Option<FlowBox>>>,
     artists_stack_cell: Rc<RefCell<Option<Stack>>>,
     sort_orders: Rc<RefCell<Vec<SortOrder>>>,
-    stack: Rc<ViewStack>, // Main content stack
+    stack: Rc<ViewStack>,
     left_btn_stack: Rc<ViewStack>,
     right_btn_box: Clamp,
     screen_info: Rc<RefCell<ScreenInfo>>,
@@ -42,7 +42,8 @@ pub struct RefreshService {
     artist_count_label: Rc<Label>,
     header_btn_stack: Rc<ViewStack>,
     nav_history: Rc<RefCell<Vec<String>>>,
-    sender: UnboundedSender<()>, // Channel sender for scan feedback
+    sender: UnboundedSender<()>,
+    pub show_dr_badges: Rc<Cell<bool>>,
 }
 
 impl RefreshService {
@@ -69,6 +70,7 @@ impl RefreshService {
         header_btn_stack: Rc<ViewStack>,
         nav_history: Rc<RefCell<Vec<String>>>,
         sender: UnboundedSender<()>,
+        show_dr_badges: Rc<Cell<bool>>,
     ) -> Self {
         Self {
             db_pool,
@@ -90,6 +92,7 @@ impl RefreshService {
             header_btn_stack,
             nav_history,
             sender,
+            show_dr_badges,
         }
     }
 
@@ -109,10 +112,17 @@ impl RefreshService {
     pub fn create_refresh_closure(self: Rc<Self>) -> Rc<dyn Fn(bool, bool)> {
         Rc::new(
             move |sort_ascending_param: bool, sort_ascending_artists_param: bool| {
-                // Update the sort direction cells
-                self.sort_ascending.set(sort_ascending_param);
-                self.sort_ascending_artists
-                    .set(sort_ascending_artists_param);
+                // Update the sort direction cells based on the current tab
+                let current_tab = self
+                    .stack
+                    .visible_child_name()
+                    .unwrap_or_else(|| "albums".into());
+                if current_tab == "albums" {
+                    self.sort_ascending.set(sort_ascending_param);
+                } else if current_tab == "artists" {
+                    self.sort_ascending_artists
+                        .set(sort_ascending_artists_param);
+                }
 
                 // Clone `self` for the async block to ensure ownership is transferred correctly
                 let service_clone = Rc::clone(&self);
@@ -146,6 +156,7 @@ impl RefreshService {
                                 &service_clone.right_btn_box,
                                 albums_inner_stack,
                                 &service_clone.album_count_label,
+                                service_clone.show_dr_badges.clone(),
                             )
                             .await;
                         }
@@ -172,6 +183,7 @@ impl RefreshService {
                                 service_clone.nav_history.clone(),
                                 artists_inner_stack,
                                 service_clone.artist_count_label.clone(),
+                                service_clone.show_dr_badges.clone(),
                             );
                         }
                     }
@@ -208,11 +220,12 @@ pub fn setup_library_refresh_channel(
     artist_count_label: Rc<Label>,
     header_btn_stack: Rc<ViewStack>,
     nav_history: Rc<RefCell<Vec<String>>>,
+    show_dr_badges: Rc<Cell<bool>>,
 ) -> (
     UnboundedSender<()>,
     UnboundedReceiver<()>,
     Rc<dyn Fn(bool, bool)>,
-    Rc<RefreshService>, // Also return the service instance
+    Rc<RefreshService>,
 ) {
     let (sender, receiver) = unbounded_channel::<()>();
 
@@ -237,6 +250,7 @@ pub fn setup_library_refresh_channel(
         header_btn_stack,
         nav_history,
         sender.clone(),
+        show_dr_badges,
     ));
 
     // Create the refresh UI closure from the service

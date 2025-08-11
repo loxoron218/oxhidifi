@@ -1,4 +1,9 @@
-use std::{cell::RefCell, cmp::Ordering, rc::Rc, sync::Arc};
+use std::{
+    cell::{Cell, RefCell},
+    cmp::Ordering,
+    rc::Rc,
+    sync::Arc,
+};
 
 use glib::{MainContext, WeakRef};
 use gtk4::{
@@ -32,6 +37,7 @@ pub async fn artist_page(
     right_btn_box: WeakRef<Clamp>,
     nav_history: Rc<RefCell<Vec<String>>>,
     sender: UnboundedSender<()>,
+    show_dr_badges: Rc<Cell<bool>>,
 ) {
     let page_name = format!("artist_{}", artist_id);
     // Upgrade weak references
@@ -108,10 +114,11 @@ pub async fn artist_page(
             stack.downgrade(),
             db_pool.clone(),
             header_btn_stack.downgrade(),
-            right_btn_box.clone(), // Pass the right_btn_box weak reference directly
+            right_btn_box.clone(),
             nav_history.clone(),
             sender.clone(),
-            page_name.clone(), // Pass the artist_page_name
+            page_name.clone(),
+            show_dr_badges.clone(),
         );
         flowbox.insert(&album_card, -1);
     }
@@ -148,7 +155,8 @@ fn build_album_card(
     right_btn_box: WeakRef<Clamp>,
     nav_history: Rc<RefCell<Vec<String>>>,
     sender: UnboundedSender<()>,
-    artist_page_name: String, // New parameter for the artist page name
+    artist_page_name: String,
+    show_dr_badges: Rc<Cell<bool>>,
 ) -> FlowBoxChild {
     let title_label = create_album_label(
         &album.title,
@@ -255,8 +263,11 @@ fn build_album_card(
     overlay.set_halign(Align::Start);
     overlay.set_valign(Align::Start);
 
-    let dr_label = create_dr_overlay(album._dr_value, album.dr_completed).unwrap();
-    overlay.add_overlay(&dr_label);
+    // Conditionally add DR badge to overlay, if enabled in settings.
+    if show_dr_badges.get() {
+        let dr_label = create_dr_overlay(album._dr_value, album.dr_completed).unwrap();
+        overlay.add_overlay(&dr_label);
+    }
 
     // Play button overlay
     let play_button = Button::builder()
@@ -328,7 +339,7 @@ fn build_album_card(
     let stack_weak = stack.clone();
     let db_pool_clone = Arc::clone(&db_pool);
     let header_btn_stack_weak = header_btn_stack.clone();
-    let right_btn_box_weak = right_btn_box.clone(); // Clone the weak reference for the closure
+    let right_btn_box_weak = right_btn_box.clone();
     let flow_child_clone = flow_child.clone();
     let sender_clone = sender.clone();
     let gesture = GestureClick::builder().build();
@@ -343,14 +354,15 @@ fn build_album_card(
                     .map(|ptr| *ptr.as_ref())
                     .unwrap_or_default()
             };
-            nav_history.borrow_mut().push(artist_page_name.clone()); // Use the explicitly passed artist_page_name instead of stack.visible_child_name()
+            nav_history.borrow_mut().push(artist_page_name.clone());
             MainContext::default().spawn_local(album_page(
                 stack.downgrade(),
                 db_pool_clone.clone(),
                 album_id,
                 header_btn_stack.downgrade(),
-                right_btn_box_weak.clone(), // Pass the weak reference
+                right_btn_box_weak.clone(),
                 sender_clone.clone(),
+                show_dr_badges.clone(),
             ));
         }
     });

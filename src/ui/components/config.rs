@@ -39,6 +39,8 @@ pub struct Settings {
     /// A map of completed album IDs to a boolean indicating their completion status.
     /// The `i64` key represents the album ID.
     pub completed_albums: HashMap<i64, bool>,
+    /// Indicates whether DR Value badges should be displayed.
+    pub show_dr_badges: bool,
 }
 
 /// Provides default values for `Settings`.
@@ -57,6 +59,7 @@ impl Default for Settings {
             sort_ascending_albums: true,
             sort_ascending_artists: true,
             completed_albums: HashMap::new(),
+            show_dr_badges: true,
         }
     }
 }

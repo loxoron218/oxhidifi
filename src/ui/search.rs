@@ -41,6 +41,7 @@ pub fn connect_live_search(
     right_btn_box: Rc<Clamp>,
     nav_history: Rc<RefCell<Vec<String>>>,
     sender: UnboundedSender<()>,
+    show_dr_badges: Rc<Cell<bool>>,
 ) {
     // Compute dynamic sizes based on screen dimensions
     let screen_info = ScreenInfo::new();
@@ -62,6 +63,7 @@ pub fn connect_live_search(
     let right_btn_box_cloned = right_btn_box.clone();
     let nav_history_cloned = nav_history.clone();
     let sender_cloned = sender.clone();
+    let show_dr_badges_cloned = show_dr_badges.clone();
 
     // Connect search entry changed signal
     search_entry.connect_changed(move |entry| {
@@ -95,6 +97,7 @@ pub fn connect_live_search(
         let right_btn_box_clone = right_btn_box_cloned.clone();
         let nav_history = nav_history_cloned.clone();
         let sender = sender_cloned.clone();
+        let show_dr_badges = show_dr_badges_cloned.clone();
 
         // Spawn an asynchronous task to perform the search and update the UI
         MainContext::default().spawn_local(async move {
@@ -156,6 +159,7 @@ pub fn connect_live_search(
                                 right_btn_box_clone.clone(),
                                 nav_history.clone(),
                                 sender.clone(),
+                                show_dr_badges.clone(),
                             ));
                             albums_grid.insert(&*flow_child, -1);
                         }
@@ -189,6 +193,7 @@ pub fn connect_live_search(
                                 right_btn_box_clone.clone(),
                                 nav_history.clone(),
                                 sender.clone(),
+                                show_dr_badges.clone(),
                             ));
                             artist_grid.insert(&*flow_child, -1);
                         }
