@@ -38,6 +38,7 @@ pub async fn artist_page(
     nav_history: Rc<RefCell<Vec<String>>>,
     sender: UnboundedSender<()>,
     show_dr_badges: Rc<Cell<bool>>,
+    use_original_year: Rc<Cell<bool>>,
 ) {
     let page_name = format!("artist_{}", artist_id);
     // Upgrade weak references
@@ -119,6 +120,7 @@ pub async fn artist_page(
             sender.clone(),
             page_name.clone(),
             show_dr_badges.clone(),
+            use_original_year.clone(),
         );
         flowbox.insert(&album_card, -1);
     }
@@ -157,6 +159,7 @@ fn build_album_card(
     sender: UnboundedSender<()>,
     artist_page_name: String,
     show_dr_badges: Rc<Cell<bool>>,
+    use_original_year: Rc<Cell<bool>>,
 ) -> FlowBoxChild {
     let title_label = create_album_label(
         &album.title,
@@ -209,18 +212,31 @@ fn build_album_card(
         false, // use_markup: false for plain text
     );
     format_label.set_halign(Align::Start);
-    format_label.set_hexpand(true); // Allow format label to expand
-
-    let year_text = if let Some(original_release_date_str) = album.original_release_date.clone() {
-        original_release_date_str
-            .split('-')
-            .next()
-            .unwrap_or("N/A")
-            .to_string()
-    } else if let Some(year) = album.year {
-        format!("{}", year)
+    format_label.set_hexpand(true);
+    let year_text = if use_original_year.get() {
+        if let Some(original_release_date_str) = album.original_release_date.clone() {
+            original_release_date_str
+                .split('-')
+                .next()
+                .unwrap_or("N/A")
+                .to_string()
+        } else if let Some(year) = album.year {
+            format!("{}", year)
+        } else {
+            String::new()
+        }
     } else {
-        String::new()
+        if let Some(year) = album.year {
+            format!("{}", year)
+        } else if let Some(original_release_date_str) = album.original_release_date.clone() {
+            original_release_date_str
+                .split('-')
+                .next()
+                .unwrap_or("N/A")
+                .to_string()
+        } else {
+            String::new()
+        }
     };
     let year_label = create_album_label(
         &year_text,
@@ -366,8 +382,7 @@ fn build_album_card(
             ));
         }
     });
-    flow_child.add_controller(gesture); // Move original into add_controller
-
+    flow_child.add_controller(gesture);
     flow_child
 }
 

@@ -51,6 +51,7 @@ pub fn populate_artist_grid(
     artists_inner_stack: &Stack,
     artist_count_label: Rc<Label>,
     show_dr_badges: Rc<Cell<bool>>,
+    use_original_year: Rc<Cell<bool>>,
 ) {
     // `thread_local!` is used to prevent multiple concurrent calls to this function,
     // which could lead to race conditions or unnecessary re-population of the grid.
@@ -72,7 +73,7 @@ pub fn populate_artist_grid(
     // Clone necessary `Rc` and `Arc` references for use within the `spawn_local` closure.
     let stack_rc = Rc::new(stack.clone());
     let left_btn_stack_rc = Rc::new(left_btn_stack.clone());
-    let right_btn_box_rc = Rc::new(right_btn_box.clone()); // Clone as Rc directly
+    let right_btn_box_rc = Rc::new(right_btn_box.clone());
     let artist_grid = artist_grid.clone();
     let artists_inner_stack = artists_inner_stack.clone();
     let db_pool = Arc::clone(&db_pool);
@@ -81,6 +82,7 @@ pub fn populate_artist_grid(
     let sender = sender.clone();
     let artist_count_label = artist_count_label.clone();
     let show_dr_badges = show_dr_badges.clone();
+    let use_original_year = use_original_year.clone();
 
     // Spawn a local asynchronous task on the GLib main context.
     // This allows UI updates to happen on the main thread after data fetching.
@@ -146,6 +148,7 @@ pub fn populate_artist_grid(
                         nav_history.clone(),
                         sender.clone(),
                         show_dr_badges.clone(),
+                        use_original_year.clone(),
                     ));
                     artist_grid.insert(&*tile, -1);
                 }

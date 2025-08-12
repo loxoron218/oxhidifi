@@ -41,6 +41,8 @@ pub struct Settings {
     pub completed_albums: HashMap<i64, bool>,
     /// Indicates whether DR Value badges should be displayed.
     pub show_dr_badges: bool,
+    /// Indicates whether the original release year should be used for display.
+    pub use_original_year: bool,
 }
 
 /// Provides default values for `Settings`.
@@ -60,6 +62,7 @@ impl Default for Settings {
             sort_ascending_artists: true,
             completed_albums: HashMap::new(),
             show_dr_badges: true,
+            use_original_year: true,
         }
     }
 }

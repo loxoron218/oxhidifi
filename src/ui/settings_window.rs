@@ -9,7 +9,7 @@ use glib::{
     Propagation::{Proceed, Stop},
     source::idle_add_local_once,
 };
-use gtk4::{Align, Button, EventControllerKey, ListBox, SelectionMode::None, Window};
+use gtk4::{Align, Button, EventControllerKey, ListBox, SelectionMode::None, Switch, Window};
 use libadwaita::{
     ActionRow, PreferencesGroup, PreferencesPage, PreferencesWindow,
     gdk::Key,
@@ -230,6 +230,7 @@ pub fn show_settings_dialog(
     db_pool: Arc<SqlitePool>,
     is_settings_open: Rc<Cell<bool>>,
     show_dr_badges_setting: Rc<Cell<bool>>,
+    use_original_year_setting: Rc<Cell<bool>>, // New parameter
 ) {
     // Create the settings window, configured as a modal dialog.
     let dialog = PreferencesWindow::builder()
@@ -302,18 +303,20 @@ pub fn show_settings_dialog(
     let sort_orders_rc = sort_orders.clone();
     let is_settings_open_clone = is_settings_open.clone();
     let show_dr_badges_setting_clone_for_close = show_dr_badges_setting.clone();
+    let use_original_year_setting_clone_for_close = use_original_year_setting.clone();
     dialog.connect_close_request(move |_| {
         let current_orders = sort_orders_rc.borrow().clone();
-        let prev_settings = load_settings(); // Load existing settings to preserve other preferences
+        let prev_settings = load_settings();
         let _ = save_settings(&Settings {
             sort_orders: current_orders,
             sort_ascending_albums: prev_settings.sort_ascending_albums,
             sort_ascending_artists: prev_settings.sort_ascending_artists,
             completed_albums: prev_settings.completed_albums,
             show_dr_badges: show_dr_badges_setting_clone_for_close.get(),
+            use_original_year: use_original_year_setting_clone_for_close.get(),
         });
-        is_settings_open_clone.set(false); // Set flag to indicate settings dialog is closed.
-        Proceed // Allow the close request to proceed
+        is_settings_open_clone.set(false);
+        Proceed
     });
 
     // Add folder and sorting groups to the Library page.
@@ -335,8 +338,8 @@ pub fn show_settings_dialog(
         .subtitle("Toggle the visibility of Dynamic Range (DR) Value badges.")
         .activatable(false)
         .build();
-    let dr_badges_switch = gtk4::Switch::builder()
-        .valign(gtk4::Align::Center)
+    let dr_badges_switch = Switch::builder()
+        .valign(Align::Center)
         .active(show_dr_badges_setting.get())
         .build();
     dr_badges_row.add_suffix(&dr_badges_switch);
@@ -355,6 +358,33 @@ pub fn show_settings_dialog(
         );
     });
     general_group.add(&dr_badges_row);
+
+    // Toggle switch for "Use Original Year"
+    let use_original_year_row = ActionRow::builder()
+        .title("Use Original Year for Albums")
+        .subtitle("Display the original release year instead of the release year.")
+        .activatable(false)
+        .build();
+    let use_original_year_switch = Switch::builder()
+        .valign(Align::Center)
+        .active(use_original_year_setting.get())
+        .build();
+    use_original_year_row.add_suffix(&use_original_year_switch);
+    use_original_year_row.set_activatable_widget(Some(&use_original_year_switch));
+    let use_original_year_setting_clone = use_original_year_setting.clone();
+    let refresh_library_ui_clone_for_year = refresh_library_ui.clone();
+    let sort_ascending_clone_for_year = sort_ascending.clone();
+    let sort_ascending_artists_clone_for_year = sort_ascending_artists.clone();
+    use_original_year_switch.connect_active_notify(move |switch| {
+        use_original_year_setting_clone.set(switch.is_active());
+
+        // Trigger a UI refresh to update the year display
+        (refresh_library_ui_clone_for_year)(
+            sort_ascending_clone_for_year.get(),
+            sort_ascending_artists_clone_for_year.get(),
+        );
+    });
+    general_group.add(&use_original_year_row);
     general_page.add(&general_group);
 
     // --- Audio Page (Currently empty, but kept for potential future use) ---

@@ -164,6 +164,7 @@ pub fn make_sort_row(
                                         sort_ascending_artists: prev.sort_ascending_artists,
                                         completed_albums: prev.completed_albums,
                                         show_dr_badges: prev.show_dr_badges,
+                                        use_original_year: prev.use_original_year,
                                     });
 
                                     // Update numbering in ActionRow titles
@@ -246,6 +247,7 @@ pub fn connect_sort_reorder_handler(
                         sort_ascending_artists: prev.sort_ascending_artists,
                         completed_albums: prev.completed_albums,
                         show_dr_badges: prev.show_dr_badges,
+                        use_original_year: prev.use_original_year,
                     });
                 }
             }

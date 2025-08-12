@@ -68,6 +68,7 @@ pub async fn populate_albums_grid(
     albums_inner_stack: &Stack,
     album_count_label: &Label,
     show_dr_badges: Rc<Cell<bool>>,
+    use_original_year: Rc<Cell<bool>>,
 ) {
     // A thread-local static to prevent multiple simultaneous population calls,
     // ensuring data consistency and preventing redundant work.
@@ -166,6 +167,7 @@ pub async fn populate_albums_grid(
             let cover_size = screen_info.borrow().cover_size;
             let tile_size = screen_info.borrow().tile_size;
             let show_dr_badges_clone_for_loop = show_dr_badges.clone();
+            let use_original_year_clone_for_loop = use_original_year.clone();
             for album_info in albums {
                 // Create album title label.
                 let title_label = create_styled_label(
@@ -222,8 +224,8 @@ pub async fn populate_albums_grid(
                 format_label.set_halign(Align::Start);
                 format_label.set_hexpand(true); // Allow format label to expand
 
-                // Extract and format year.
-                let year_text =
+                // Extract and format year based on setting.
+                let year_text = if use_original_year_clone_for_loop.get() {
                     if let Some(original_release_date_str) = album_info.original_release_date {
                         original_release_date_str
                             .split('-')
@@ -234,7 +236,22 @@ pub async fn populate_albums_grid(
                         format!("{}", year)
                     } else {
                         String::new()
-                    };
+                    }
+                } else {
+                    if let Some(year) = album_info.year {
+                        format!("{}", year)
+                    } else if let Some(original_release_date_str) = album_info.original_release_date
+                    {
+                        original_release_date_str
+                            .split('-')
+                            .next()
+                            .unwrap_or("N/A")
+                            .to_string()
+                    } else {
+                        String::new()
+                    }
+                };
+
                 let year_label = create_styled_label(
                     &year_text,
                     &["album-format-label"],

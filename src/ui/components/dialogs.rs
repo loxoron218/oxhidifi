@@ -166,6 +166,7 @@ pub fn connect_settings_dialog(
     db_pool: Arc<SqlitePool>,
     is_settings_open: Rc<Cell<bool>>,
     show_dr_badges_setting: Rc<Cell<bool>>,
+    use_original_year_setting: Rc<Cell<bool>>,
 ) {
     // Clone all necessary `Rc` and `Arc` variables once for the `connect_clicked` closure.
     // These clones will be moved into the outer closure.
@@ -188,6 +189,7 @@ pub fn connect_settings_dialog(
         let sort_orders_for_async = sort_orders_cloned.clone();
         let is_settings_open_for_async = is_settings_open_cloned.clone();
         let show_dr_badges_setting_for_async = show_dr_badges_setting_cloned.clone();
+        let use_original_year_setting_for_async = use_original_year_setting.clone();
         MainContext::default().spawn_local(async move {
             show_settings_dialog(
                 &window_for_async,
@@ -198,6 +200,7 @@ pub fn connect_settings_dialog(
                 db_pool_for_async,
                 is_settings_open_for_async,
                 show_dr_badges_setting_for_async,
+                use_original_year_setting_for_async,
             );
         });
     });

@@ -44,6 +44,7 @@ pub struct RefreshService {
     nav_history: Rc<RefCell<Vec<String>>>,
     sender: UnboundedSender<()>,
     pub show_dr_badges: Rc<Cell<bool>>,
+    pub use_original_year: Rc<Cell<bool>>,
 }
 
 impl RefreshService {
@@ -71,6 +72,7 @@ impl RefreshService {
         nav_history: Rc<RefCell<Vec<String>>>,
         sender: UnboundedSender<()>,
         show_dr_badges: Rc<Cell<bool>>,
+        use_original_year: Rc<Cell<bool>>,
     ) -> Self {
         Self {
             db_pool,
@@ -93,6 +95,7 @@ impl RefreshService {
             nav_history,
             sender,
             show_dr_badges,
+            use_original_year,
         }
     }
 
@@ -157,6 +160,7 @@ impl RefreshService {
                                 albums_inner_stack,
                                 &service_clone.album_count_label,
                                 service_clone.show_dr_badges.clone(),
+                                service_clone.use_original_year.clone(),
                             )
                             .await;
                         }
@@ -184,6 +188,7 @@ impl RefreshService {
                                 artists_inner_stack,
                                 service_clone.artist_count_label.clone(),
                                 service_clone.show_dr_badges.clone(),
+                                service_clone.use_original_year.clone(),
                             );
                         }
                     }
@@ -221,6 +226,7 @@ pub fn setup_library_refresh_channel(
     header_btn_stack: Rc<ViewStack>,
     nav_history: Rc<RefCell<Vec<String>>>,
     show_dr_badges: Rc<Cell<bool>>,
+    use_original_year: Rc<Cell<bool>>,
 ) -> (
     UnboundedSender<()>,
     UnboundedReceiver<()>,
@@ -251,6 +257,7 @@ pub fn setup_library_refresh_channel(
         nav_history,
         sender.clone(),
         show_dr_badges,
+        use_original_year,
     ));
 
     // Create the refresh UI closure from the service

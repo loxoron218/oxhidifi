@@ -34,4 +34,6 @@ pub struct WindowSharedState {
     pub is_settings_open: Rc<Cell<bool>>,
     /// Indicates whether DR Value badges should be displayed.
     pub show_dr_badges: Rc<Cell<bool>>,
+    /// Indicates whether the original release year should be used for display.
+    pub use_original_year: Rc<Cell<bool>>,
 }

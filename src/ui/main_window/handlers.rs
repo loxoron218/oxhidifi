@@ -63,14 +63,24 @@ pub fn connect_all_handlers(
     add_music_button_albums: &Button,
     add_music_button_artists: &Button,
 ) {
+    let sort_orders_cloned = shared_state.sort_orders.clone();
+    let sort_ascending_cloned = shared_state.sort_ascending.clone();
+    let sort_ascending_artists_cloned = shared_state.sort_ascending_artists.clone();
+    let last_tab_cloned = shared_state.last_tab.clone();
+    let nav_history_cloned = shared_state.nav_history.clone();
+    let screen_info_cloned = shared_state.screen_info.clone();
+    let is_settings_open_cloned = shared_state.is_settings_open.clone();
+    let show_dr_badges_cloned = shared_state.show_dr_badges.clone();
+    let use_original_year_cloned = shared_state.use_original_year.clone();
+
     // Set initial sort icon state based on loaded settings.
     // This ensures the sort button's icon correctly reflects the default or saved sort order
     // when the application starts.
     set_initial_sort_icon_state(
         &widgets.sort_button,
-        &shared_state.sort_ascending,
-        &shared_state.sort_ascending_artists,
-        "albums", // Initial page is albums
+        &sort_ascending_cloned,
+        &sort_ascending_artists_cloned,
+        "albums",
     );
 
     // Connect back button functionality.
@@ -81,11 +91,11 @@ pub fn connect_all_handlers(
         &widgets.stack,
         &widgets.left_btn_stack,
         &widgets.right_btn_box,
-        shared_state.last_tab.clone(),
-        shared_state.nav_history.clone(),
+        last_tab_cloned.clone(),
+        nav_history_cloned.clone(),
         refresh_library_ui.clone(),
-        shared_state.sort_ascending.clone(),
-        shared_state.sort_ascending_artists.clone(),
+        sort_ascending_cloned.clone(),
+        sort_ascending_artists_cloned.clone(),
     );
 
     // Handlers for opening the folder selection dialog and initiating scanning.
@@ -115,7 +125,7 @@ pub fn connect_all_handlers(
     rebuild_albums_grid_for_window(
         &widgets.stack,
         &widgets.scanning_label_albums,
-        &shared_state.screen_info,
+        &screen_info_cloned,
         &widgets.albums_grid_cell,
         &widgets.albums_stack_cell,
         &add_music_button_albums,
@@ -136,8 +146,8 @@ pub fn connect_all_handlers(
     // configurations without requiring an application restart.
     setup_live_monitor_refresh(
         refresh_service.clone(),
-        shared_state.screen_info.clone(),
-        shared_state.is_settings_open.clone(),
+        screen_info_cloned.clone(),
+        is_settings_open_cloned.clone(),
     );
 
     // Start the library watcher for real-time file system changes.
@@ -150,14 +160,14 @@ pub fn connect_all_handlers(
     // This handler will be re-connected whenever the albums grid is rebuilt to ensure
     // all dynamically created album tiles are interactive.
     if let Some(albums_grid) = widgets.albums_grid_cell.borrow().as_ref() {
-        let show_dr_badges_clone = shared_state.show_dr_badges.clone();
+        let show_dr_badges_clone = show_dr_badges_cloned.clone();
         connect_album_navigation(
             albums_grid,
             &widgets.stack,
             db_pool.clone(),
             &widgets.left_btn_stack,
             &widgets.right_btn_box,
-            shared_state.nav_history.clone(),
+            nav_history_cloned.clone(),
             sender.clone(),
             move |stack_weak,
                   db_pool,
@@ -191,10 +201,10 @@ pub fn connect_all_handlers(
         &widgets.sort_button,
         &widgets.left_btn_stack,
         &widgets.right_btn_box,
-        shared_state.last_tab.clone(),
-        shared_state.nav_history.clone(),
-        shared_state.sort_ascending.clone(),
-        shared_state.sort_ascending_artists.clone(),
+        last_tab_cloned.clone(),
+        nav_history_cloned.clone(),
+        sort_ascending_cloned.clone(),
+        sort_ascending_artists_cloned.clone(),
         refresh_library_ui.clone(),
         None::<fn()>, // Optional closure for artists grid rebuild, currently handled by `rebuild_artist_grid_for_window`
     );
@@ -206,15 +216,15 @@ pub fn connect_all_handlers(
         &widgets.albums_btn,
         &widgets.artists_btn,
         refresh_library_ui.clone(),
-        shared_state.sort_ascending.clone(),
-        shared_state.sort_ascending_artists.clone(),
-        Rc::new(widgets.stack.clone()), // Pass the ViewStack here
+        sort_ascending_cloned.clone(),
+        sort_ascending_artists_cloned.clone(),
+        Rc::new(widgets.stack.clone()),
     );
     connect_sort_icon_update_on_tab_switch(
         &widgets.sort_button,
         &widgets.stack,
-        shared_state.sort_ascending.clone(),
-        shared_state.sort_ascending_artists.clone(),
+        sort_ascending_cloned.clone(),
+        sort_ascending_artists_cloned.clone(),
     );
 
     // Connect sort button logic to toggle sort order and refresh UI.
@@ -223,8 +233,8 @@ pub fn connect_all_handlers(
     connect_sort_button(
         &widgets.sort_button,
         &widgets.stack,
-        shared_state.sort_ascending.clone(),
-        shared_state.sort_ascending_artists.clone(),
+        sort_ascending_cloned.clone(),
+        sort_ascending_artists_cloned.clone(),
         refresh_library_ui.clone(),
     );
 
@@ -238,8 +248,8 @@ pub fn connect_all_handlers(
         Rc::new(widgets.scanning_label_artists.clone()),
         widgets.stack.clone(),
         refresh_library_ui.clone(),
-        shared_state.sort_ascending.clone(),
-        shared_state.sort_ascending_artists.clone(),
+        sort_ascending_cloned.clone(),
+        sort_ascending_artists_cloned.clone(),
     );
 
     // Connect live search functionality to the search entry.
@@ -252,15 +262,16 @@ pub fn connect_all_handlers(
         widgets.artist_grid_cell.borrow().as_ref().unwrap(),
         widgets.artists_stack_cell.borrow().as_ref().unwrap(),
         db_pool.clone(),
-        shared_state.sort_ascending.clone(),
-        shared_state.sort_ascending_artists.clone(),
+        sort_ascending_cloned.clone(),
+        sort_ascending_artists_cloned.clone(),
         refresh_library_ui.clone(),
         Rc::new(widgets.stack.clone()),
         Rc::new(widgets.left_btn_stack.clone()),
         Rc::new(widgets.right_btn_box.clone()),
-        shared_state.nav_history.clone(),
+        nav_history_cloned.clone(),
         sender.clone(),
-        shared_state.show_dr_badges.clone(),
+        show_dr_badges_cloned.clone(),
+        use_original_year_cloned.clone(),
     );
 
     // Set up search bar UI logic (e.g., showing/hiding, focus management).
@@ -277,13 +288,13 @@ pub fn connect_all_handlers(
         &widgets.window,
         &widgets.search_bar.search_bar,
         &refresh_library_ui,
-        &shared_state.sort_ascending,
-        &shared_state.sort_ascending_artists,
+        &sort_ascending_cloned,
+        &sort_ascending_artists_cloned,
         &widgets.stack,
         &widgets.left_btn_stack,
         &widgets.right_btn_box,
-        &shared_state.last_tab,
-        &shared_state.nav_history,
+        &last_tab_cloned,
+        &nav_history_cloned,
     );
 
     // Connect "Add Folder" dialog to its button.
@@ -305,12 +316,13 @@ pub fn connect_all_handlers(
     connect_settings_dialog(
         &widgets.settings_button,
         widgets.window.clone(),
-        shared_state.sort_orders.clone(),
+        sort_orders_cloned.clone(),
         refresh_library_ui.clone(),
-        shared_state.sort_ascending.clone(),
-        shared_state.sort_ascending_artists.clone(),
+        sort_ascending_cloned.clone(),
+        sort_ascending_artists_cloned.clone(),
         db_pool.clone(),
-        shared_state.is_settings_open.clone(),
-        shared_state.show_dr_badges.clone(),
+        is_settings_open_cloned.clone(),
+        show_dr_badges_cloned.clone(),
+        use_original_year_cloned.clone(),
     );
 }

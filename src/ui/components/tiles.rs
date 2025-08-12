@@ -190,6 +190,7 @@ pub fn create_album_tile(
     nav_history: Rc<RefCell<Vec<String>>>,
     sender: UnboundedSender<()>,
     show_dr_badges: Rc<Cell<bool>>,
+    use_original_year: Rc<Cell<bool>>,
 ) -> FlowBoxChild {
     // Create and style the album title label
     let title_label = {
@@ -251,17 +252,31 @@ pub fn create_album_tile(
     format_label.set_halign(Align::Start);
     format_label.set_hexpand(true);
 
-    // Extract and format the release year
-    let year_text = if let Some(original_release_date_str) = album.original_release_date {
-        original_release_date_str
-            .split('-')
-            .next()
-            .unwrap_or("N/A")
-            .to_string()
-    } else if let Some(year) = album.year {
-        format!("{}", year)
+    // Extract and format the release year based on setting
+    let year_text = if use_original_year.get() {
+        if let Some(original_release_date_str) = album.original_release_date {
+            original_release_date_str
+                .split('-')
+                .next()
+                .unwrap_or("N/A")
+                .to_string()
+        } else if let Some(year) = album.year {
+            format!("{}", year)
+        } else {
+            String::new()
+        }
     } else {
-        String::new()
+        if let Some(year) = album.year {
+            format!("{}", year)
+        } else if let Some(original_release_date_str) = album.original_release_date {
+            original_release_date_str
+                .split('-')
+                .next()
+                .unwrap_or("N/A")
+                .to_string()
+        } else {
+            String::new()
+        }
     };
 
     // Create and style the year label
@@ -430,6 +445,7 @@ pub fn create_artist_tile(
     nav_history: Rc<RefCell<Vec<String>>>,
     sender: UnboundedSender<()>,
     show_dr_badges: Rc<Cell<bool>>,
+    use_original_year: Rc<Cell<bool>>,
 ) -> FlowBoxChild {
     let icon = Image::from_icon_name("avatar-default-symbolic");
     icon.set_pixel_size(cover_size);
@@ -515,6 +531,7 @@ pub fn create_artist_tile(
                 nav_history.clone(),
                 sender.clone(),
                 show_dr_badges.clone(),
+                use_original_year.clone(),
             ));
         }
     });
