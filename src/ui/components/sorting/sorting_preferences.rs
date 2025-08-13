@@ -48,9 +48,7 @@ pub fn make_sort_row(
     let sort_ascending_clone = sort_ascending.clone();
     let sort_ascending_artists_clone = sort_ascending_artists.clone();
     let row = ActionRow::builder().title(sort_order_label(order)).build();
-    unsafe {
-        row.set_data("sort-order", sort_order_label(order).to_string());
-    }
+    row.set_widget_name(&sort_order_label(order));
     let list_row = ListBoxRow::new();
     list_row.set_child(Some(&row));
 
@@ -102,11 +100,9 @@ pub fn make_sort_row(
                                     .child()
                                     .and_then(|c| c.downcast::<ActionRow>().ok())
                                 {
-                                    if let Some(order_str_data) =
-                                        unsafe { action_row_ref.data::<String>("sort-order") }
-                                    {
-                                        let order_str_val = unsafe { order_str_data.as_ref() };
-                                        if *order_str_val == dragged_order_str {
+                                    let order_str_val = action_row_ref.widget_name();
+                                    if !order_str_val.is_empty() {
+                                        if order_str_val == dragged_order_str {
                                             source_idx = Some(idx);
                                         }
                                     }
@@ -138,13 +134,10 @@ pub fn make_sort_row(
                                             .child()
                                             .and_then(|c| c.downcast::<ActionRow>().ok())
                                         {
-                                            if let Some(order_str_data) = unsafe {
-                                                action_row_ref.data::<String>("sort-order")
-                                            } {
-                                                let order_str_val =
-                                                    unsafe { order_str_data.as_ref() };
+                                            let order_str_val = action_row_ref.widget_name();
+                                            if !order_str_val.is_empty() {
                                                 if let Ok(order) =
-                                                    SortOrder::from_str(order_str_val)
+                                                    SortOrder::from_str(&order_str_val)
                                                 {
                                                     new_orders.push(order);
                                                 }
@@ -226,11 +219,9 @@ pub fn connect_sort_reorder_handler(
                             .child()
                             .and_then(|c| c.downcast::<ActionRow>().ok())
                         {
-                            if let Some(order_str_nn) =
-                                unsafe { action_row.data::<String>("sort-order") }
-                            {
-                                let order_str = unsafe { order_str_nn.as_ref() };
-                                if let Ok(order) = SortOrder::from_str(order_str) {
+                            let order_str = action_row.widget_name();
+                            if !order_str.is_empty() {
+                                if let Ok(order) = SortOrder::from_str(&order_str) {
                                     new_orders.push(order);
                                 }
                             }
@@ -274,8 +265,8 @@ pub fn update_sorting_row_numbers(listbox: &ListBox) {
                 .child()
                 .and_then(|c| c.downcast::<ActionRow>().ok())
             {
-                if let Some(order_str_nn) = unsafe { action_row.data::<String>("sort-order") } {
-                    let order_str = unsafe { order_str_nn.as_ref() };
+                let order_str = action_row.widget_name();
+                if !order_str.is_empty() {
                     let label = format!("{}. {}", idx, order_str);
                     action_row.set_title(&label);
                 }

@@ -388,27 +388,18 @@ pub fn create_album_tile(
     flow_child.set_halign(Align::Fill);
     flow_child.set_valign(Align::Start);
 
-    // Store album ID for later retrieval
-    unsafe {
-        flow_child.set_data::<i64>("album_id", album.id);
-    }
-
     // Add click gesture for navigation to album page
     let stack_weak = stack_for_closure.downgrade();
-    let flow_child_for_closure = flow_child.clone(); // Clone for use in closure
-    let gesture = GestureClick::builder().build(); // Declare gesture here
+    let gesture = GestureClick::builder().build();
 
+    // The `move` keyword captures the needed variables safely.
     gesture.connect_pressed(move |_, _, _, _| {
+        // The album ID is now owned by the closure.
+        let album_id = album.id;
         if let (Some(stack), Some(header_btn_stack)) = (
             stack_weak.upgrade(),
             left_btn_stack_for_closure.downgrade().upgrade(),
         ) {
-            let album_id = unsafe {
-                flow_child_for_closure
-                    .data::<i64>("album_id")
-                    .map(|ptr| *ptr.as_ref())
-                    .unwrap_or_default()
-            };
             if let Some(current_page) = stack.visible_child_name() {
                 nav_history.borrow_mut().push(current_page.to_string());
             }
@@ -498,27 +489,14 @@ pub fn create_artist_tile(
     flow_child.set_vexpand(false);
     flow_child.set_halign(Align::Fill);
     flow_child.set_valign(Align::Start);
-    unsafe {
-        flow_child.set_data::<i64>("artist_id", artist_id);
-    }
     let stack_weak = stack.downgrade();
-    let db_pool = db_pool.clone();
     let left_btn_stack_weak = left_btn_stack.downgrade();
     let right_btn_box_weak = right_btn_box.downgrade();
-    let nav_history = nav_history.clone();
     let gesture = GestureClick::builder().build();
-    let gesture_for_closure = gesture.clone();
-    let flow_child_clone = flow_child.clone();
-    gesture_for_closure.connect_pressed(move |_, _, _, _| {
+    gesture.connect_pressed(move |_, _, _, _| {
         if let (Some(stack), Some(left_btn_stack)) =
             (stack_weak.upgrade(), left_btn_stack_weak.upgrade())
         {
-            let artist_id = unsafe {
-                flow_child_clone
-                    .data::<i64>("artist_id")
-                    .map(|ptr| *ptr.as_ref())
-                    .unwrap_or_default()
-            };
             if let Some(current_page) = stack.visible_child_name() {
                 nav_history.borrow_mut().push(current_page.to_string());
             }

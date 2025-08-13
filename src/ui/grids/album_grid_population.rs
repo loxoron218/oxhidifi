@@ -6,18 +6,14 @@ use std::{
     time,
 };
 
-use glib::{ControlFlow::Continue, MainContext, timeout_add_local};
+use glib::{ControlFlow::Continue, timeout_add_local};
 use gtk4::{
-    Align, Box, Button, EventControllerMotion, Fixed, FlowBox, FlowBoxChild, GestureClick, Label,
-    Orientation, Overlay, Stack,
+    Align, Box, Button, EventControllerMotion, Fixed, FlowBox, FlowBoxChild, Label, Orientation,
+    Overlay, Stack,
     pango::{EllipsizeMode::End, WrapMode::WordChar},
 };
-use libadwaita::{
-    Clamp, ViewStack,
-    prelude::{BoxExt, FixedExt, ObjectExt, WidgetExt},
-};
+use libadwaita::prelude::{BoxExt, FixedExt, ObjectExt, WidgetExt};
 use sqlx::SqlitePool;
-use tokio::sync::mpsc::UnboundedSender;
 
 use crate::{
     data::db::query::fetch_album_display_info,
@@ -27,7 +23,6 @@ use crate::{
         grids::album_grid_utils::{
             create_album_cover_picture, create_dr_badge_label, create_styled_label,
         },
-        pages::album_page::album_page,
     },
     utils::{
         best_dr_persistence::{AlbumKey, DrValueStore},
@@ -61,10 +56,6 @@ pub async fn populate_albums_grid(
     sort_orders: Rc<RefCell<Vec<SortOrder>>>,
     screen_info: &Rc<RefCell<ScreenInfo>>,
     scanning_label: &Label,
-    sender: UnboundedSender<()>,
-    stack: &ViewStack,
-    header_btn_stack: &ViewStack,
-    header_right_btn_box: &Clamp,
     albums_inner_stack: &Stack,
     album_count_label: &Label,
     show_dr_badges: Rc<Cell<bool>>,
@@ -166,7 +157,6 @@ pub async fn populate_albums_grid(
             let mut processed_count = 0;
             let cover_size = screen_info.borrow().cover_size;
             let tile_size = screen_info.borrow().tile_size;
-            let show_dr_badges_clone_for_loop = show_dr_badges.clone();
             let use_original_year_clone_for_loop = use_original_year.clone();
             for album_info in albums {
                 // Create album title label.
@@ -363,49 +353,7 @@ pub async fn populate_albums_grid(
                     .halign(Align::Start)
                     .valign(Align::Start)
                     .build();
-
-                // Store album_id as widget data for navigation.
-                unsafe {
-                    flow_child.set_data::<i64>("album_id", album_info.id);
-                }
-
-                // Add click gesture for navigation to album detail page.
-                let stack_weak = stack.downgrade();
-                let db_pool_clone = Arc::clone(&db_pool);
-                let header_btn_stack_weak = header_btn_stack.downgrade();
-                let header_right_btn_box_weak = header_right_btn_box.downgrade();
-                let flow_child_clone = flow_child.clone();
-                let sender_clone = sender.clone();
-                let gesture = GestureClick::builder().build();
-                let show_dr_badges_clone_for_closure = show_dr_badges_clone_for_loop.clone();
-                gesture.connect_pressed(move |_, _, _, _| {
-                    if let (
-                        Some(stack_strong),
-                        Some(header_btn_stack_strong),
-                        Some(header_right_btn_box_strong),
-                    ) = (
-                        stack_weak.upgrade(),
-                        header_btn_stack_weak.upgrade(),
-                        header_right_btn_box_weak.upgrade(),
-                    ) {
-                        let album_id = unsafe {
-                            flow_child_clone
-                                .data::<i64>("album_id")
-                                .map(|ptr| *ptr.as_ref())
-                                .unwrap_or_default()
-                        };
-                        MainContext::default().spawn_local(album_page(
-                            stack_strong.downgrade(),
-                            db_pool_clone.clone(),
-                            album_id,
-                            header_btn_stack_strong.downgrade(),
-                            header_right_btn_box_strong.downgrade(),
-                            sender_clone.clone(),
-                            show_dr_badges_clone_for_closure.clone(),
-                        ));
-                    }
-                });
-                flow_child.add_controller(gesture);
+                flow_child.set_widget_name(&album_info.id.to_string());
 
                 // Insert the new album tile into the FlowBox.
                 albums_grid.insert(&flow_child, -1); // -1 appends to the end

@@ -347,29 +347,19 @@ fn build_album_card(
     flow_child.set_vexpand(false);
     flow_child.set_halign(Align::Start);
     flow_child.set_valign(Align::Start);
-    unsafe {
-        flow_child.set_data::<i64>("album_id", album.id);
-    }
 
     // Add click gesture for navigation
     let stack_weak = stack.clone();
     let db_pool_clone = Arc::clone(&db_pool);
     let header_btn_stack_weak = header_btn_stack.clone();
     let right_btn_box_weak = right_btn_box.clone();
-    let flow_child_clone = flow_child.clone();
     let sender_clone = sender.clone();
+    let album_id = album.id;
     let gesture = GestureClick::builder().build();
-    let gesture_for_closure = gesture.clone();
-    gesture_for_closure.connect_pressed(move |_, _, _, _| {
+    gesture.connect_pressed(move |_, _, _, _| {
         if let (Some(stack), Some(header_btn_stack)) =
             (stack_weak.upgrade(), header_btn_stack_weak.upgrade())
         {
-            let album_id = unsafe {
-                flow_child_clone
-                    .data::<i64>("album_id")
-                    .map(|ptr| *ptr.as_ref())
-                    .unwrap_or_default()
-            };
             nav_history.borrow_mut().push(artist_page_name.clone());
             MainContext::default().spawn_local(album_page(
                 stack.downgrade(),

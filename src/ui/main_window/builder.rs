@@ -160,7 +160,6 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         widgets.scanning_label_artists.clone(),
         widgets.album_count_label.clone(),
         widgets.artist_count_label.clone(),
-        Rc::new(app_header_bar_widgets.left_btn_stack.clone()),
         shared_state.nav_history.clone(),
         shared_state.show_dr_badges.clone(),
         shared_state.use_original_year.clone(),

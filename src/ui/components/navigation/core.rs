@@ -110,30 +110,31 @@ pub fn connect_album_navigation<Fut, F>(
             .expect("right_btn_box disappeared");
 
         // Retrieve the `album_id` from the clicked child's data.
-        if let Some(album_id_ptr) = unsafe { child.data::<i64>("album_id") } {
-            let album_id = unsafe { *album_id_ptr.as_ref() };
+        let album_id = child
+            .widget_name()
+            .parse::<i64>()
+            .expect("FlowBoxChild widget name is not a valid i64 album_id");
 
-            // If there's a current visible page, push it onto the navigation history.
-            if let Some(current_page) = stack_weak.upgrade().and_then(|s| s.visible_child_name()) {
-                nav_history_clone
-                    .borrow_mut()
-                    .push(current_page.to_string());
-            }
-
-            // Update header visibility for the detail page.
-            left_btn_stack.set_visible_child_name(VIEW_STACK_BACK_HEADER);
-            right_btn_box.set_visible(false);
-
-            // Spawn an async task to load and display the album detail page.
-            MainContext::default().spawn_local(album_page(
-                stack_weak.clone(),
-                db_pool_clone.clone(),
-                album_id,
-                left_btn_stack_weak.clone(),
-                right_btn_box_weak.clone(),
-                sender_clone_for_closure.clone(),
-            ));
+        // If there's a current visible page, push it onto the navigation history.
+        if let Some(current_page) = stack_weak.upgrade().and_then(|s| s.visible_child_name()) {
+            nav_history_clone
+                .borrow_mut()
+                .push(current_page.to_string());
         }
+
+        // Update header visibility for the detail page.
+        left_btn_stack.set_visible_child_name(VIEW_STACK_BACK_HEADER);
+        right_btn_box.set_visible(false);
+
+        // Spawn an async task to load and display the album detail page.
+        MainContext::default().spawn_local(album_page(
+            stack_weak.clone(),
+            db_pool_clone.clone(),
+            album_id,
+            left_btn_stack_weak.clone(),
+            right_btn_box_weak.clone(),
+            sender_clone_for_closure.clone(),
+        ));
     });
 }
 
