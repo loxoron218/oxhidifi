@@ -1,6 +1,7 @@
 use gdk_pixbuf::{InterpType::Bilinear, PixbufLoader};
 use gtk4::{
-    Align, Label, Picture,
+    Align::{End, Start},
+    Label, Picture,
     pango::{EllipsizeMode, WrapMode},
 };
 use libadwaita::prelude::{PixbufLoaderExt, WidgetExt};
@@ -32,7 +33,7 @@ pub fn create_styled_label(
 ) -> Label {
     let label = Label::builder()
         .label(text)
-        .halign(Align::Start)
+        .halign(Start)
         .xalign(0.0) // Align text to the start (left) within the label's allocated space
         .build();
 
@@ -71,8 +72,8 @@ pub fn create_styled_label(
 pub fn create_album_cover_picture(cover_art: Option<&Vec<u8>>, cover_size: i32) -> Picture {
     let pic = Picture::new();
     pic.set_size_request(cover_size, cover_size);
-    pic.set_halign(Align::Start);
-    pic.set_valign(Align::Start);
+    pic.set_halign(Start);
+    pic.set_valign(Start);
     pic.add_css_class("album-cover-border");
 
     if let Some(art) = cover_art {
@@ -125,8 +126,8 @@ pub fn create_dr_badge_label(dr_value: Option<u8>, dr_completed: bool) -> Label 
                 .map(|s| s.to_string())
                 .unwrap_or_else(String::new),
         )
-        .halign(Align::End)
-        .valign(Align::End)
+        .halign(End)
+        .valign(End)
         .build();
     dr_label.set_size_request(28, 28); // Fixed size for the badge in the grid
 

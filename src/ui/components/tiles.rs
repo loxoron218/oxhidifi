@@ -7,10 +7,12 @@ use std::{
 use gdk_pixbuf::{InterpType::Bilinear, PixbufLoader, prelude::PixbufLoaderExt};
 use glib::{MainContext, markup_escape_text, prelude::ObjectExt};
 use gtk4::{
-    Align, Box, Button, EventControllerMotion, Fixed, FlowBoxChild, GestureClick, Image, Label,
-    Orientation, Overlay, Picture,
+    Align::{Center, End, Fill, Start},
+    Box, Button, EventControllerMotion, Fixed, FlowBoxChild, GestureClick, Image, Label,
+    Orientation::{Horizontal, Vertical},
+    Overlay, Picture,
     pango::{
-        EllipsizeMode::{self, End},
+        EllipsizeMode,
         WrapMode::{self, WordChar},
     },
 };
@@ -46,15 +48,15 @@ pub fn create_album_cover(cover_art: Option<&Vec<u8>>, cover_size: i32) -> Pictu
             .unwrap();
         let picture = Picture::for_pixbuf(&scaled);
         picture.set_size_request(cover_size, cover_size);
-        picture.set_halign(Align::Start);
-        picture.set_valign(Align::Start);
+        picture.set_halign(Start);
+        picture.set_valign(Start);
         picture.add_css_class("album-cover-border");
         picture
     } else {
         let pic = Picture::new();
         pic.set_size_request(cover_size, cover_size);
-        pic.set_halign(Align::Start);
-        pic.set_valign(Align::Start);
+        pic.set_halign(Start);
+        pic.set_valign(Start);
         pic.add_css_class("album-cover-border");
         pic
     }
@@ -89,8 +91,8 @@ pub fn create_dr_overlay(dr_value: Option<u8>, dr_completed: bool) -> Option<Lab
         dr_label.add_css_class(&class);
     }
     dr_label.set_tooltip_text(tooltip_text);
-    dr_label.set_halign(Align::End);
-    dr_label.set_valign(Align::End);
+    dr_label.set_halign(End);
+    dr_label.set_valign(End);
     Some(dr_label)
 }
 
@@ -111,7 +113,7 @@ pub fn create_album_label(
 ) -> Label {
     let builder = Label::builder()
         .label(text)
-        .halign(Align::Start)
+        .halign(Start)
         .use_markup(use_markup);
     let label = builder.build();
     label.set_xalign(0.0);
@@ -198,14 +200,14 @@ pub fn create_album_tile(
             &highlight(&album.title, search_text),
             &["album-title-label"],
             Some(((cover_size - 16) / 10).max(8)),
-            Some(End),
+            Some(EllipsizeMode::End),
             true,
             Some(WordChar),
             Some(2),
             true, // use_markup: true because highlight is used
         );
         label.set_size_request(cover_size - 16, -1);
-        label.set_valign(Align::End); // Align to the bottom of its allocated space
+        label.set_valign(End); // Align to the bottom of its allocated space
         label
     };
 
@@ -215,7 +217,7 @@ pub fn create_album_tile(
             &highlight(&album.artist, search_text),
             &["album-artist-label"],
             Some(18),
-            Some(End),
+            Some(EllipsizeMode::End),
             false,
             None,
             None,
@@ -249,7 +251,7 @@ pub fn create_album_tile(
         None,
         false, // use_markup: false for plain text
     );
-    format_label.set_halign(Align::Start);
+    format_label.set_halign(Start);
     format_label.set_hexpand(true);
 
     // Extract and format the release year based on setting
@@ -290,36 +292,33 @@ pub fn create_album_tile(
         None,
         false, // use_markup: false for plain text
     );
-    year_label.set_halign(Align::End);
+    year_label.set_halign(End);
     year_label.set_hexpand(false);
 
     // Create album cover picture
     let cover = create_album_cover(album.cover_art.as_ref(), cover_size);
 
     // Main vertical box for the album tile
-    let album_tile_box = Box::builder()
-        .orientation(Orientation::Vertical)
-        .spacing(2)
-        .build();
+    let album_tile_box = Box::builder().orientation(Vertical).spacing(2).build();
     album_tile_box.set_size_request(tile_size, tile_size + 80);
     album_tile_box.set_hexpand(false);
     album_tile_box.set_vexpand(false);
-    album_tile_box.set_halign(Align::Start);
-    album_tile_box.set_valign(Align::Start);
+    album_tile_box.set_halign(Start);
+    album_tile_box.set_valign(Start);
 
     // Container for the cover, to ensure fixed size
-    let cover_container = Box::new(Orientation::Vertical, 0);
+    let cover_container = Box::new(Vertical, 0);
     cover_container.set_size_request(cover_size, cover_size);
-    cover_container.set_halign(Align::Start);
-    cover_container.set_valign(Align::Start);
+    cover_container.set_halign(Start);
+    cover_container.set_valign(Start);
     cover_container.append(&cover);
 
     // Overlay for DR badge on the cover
     let overlay = Overlay::new();
     overlay.set_size_request(cover_size, cover_size);
     overlay.set_child(Some(&cover_container));
-    overlay.set_halign(Align::Start);
-    overlay.set_valign(Align::Start);
+    overlay.set_halign(Start);
+    overlay.set_valign(Start);
     if show_dr_badges.get() {
         if let Some(dr_label) = create_dr_overlay(album._dr_value, album.dr_completed) {
             overlay.add_overlay(&dr_label);
@@ -332,8 +331,8 @@ pub fn create_album_tile(
         .css_classes(&["play-pause-button", "album-cover-play"][..])
         .build();
     play_button.set_size_request(56, 56);
-    play_button.set_halign(Align::Center);
-    play_button.set_valign(Align::Center);
+    play_button.set_halign(Center);
+    play_button.set_valign(Center);
     play_button.set_visible(false);
     overlay.add_overlay(&play_button);
 
@@ -361,7 +360,7 @@ pub fn create_album_tile(
 
     // Box for title, with explicit height for two lines of text
     let title_area_box = Box::builder()
-        .orientation(Orientation::Vertical)
+        .orientation(Vertical)
         .height_request(40) // Explicitly request height for two lines of text + extra buffer
         .margin_top(12) // Keep the margin from the cover
         .build();
@@ -371,7 +370,7 @@ pub fn create_album_tile(
 
     // Horizontal box to hold format and year labels
     let metadata_box = Box::builder()
-        .orientation(Orientation::Horizontal)
+        .orientation(Horizontal)
         .spacing(0) // No spacing between the two labels
         .hexpand(true)
         .build();
@@ -385,8 +384,8 @@ pub fn create_album_tile(
     flow_child.set_child(Some(&album_tile_box));
     flow_child.set_hexpand(false);
     flow_child.set_vexpand(false);
-    flow_child.set_halign(Align::Fill);
-    flow_child.set_valign(Align::Start);
+    flow_child.set_halign(Fill);
+    flow_child.set_valign(Start);
 
     // Add click gesture for navigation to album page
     let stack_weak = stack_for_closure.downgrade();
@@ -444,42 +443,39 @@ pub fn create_artist_tile(
         &highlight(artist_name, search_text),
         &[],
         Some(((cover_size - 16) / 10).max(8)),
-        Some(End),
+        Some(EllipsizeMode::End),
         true,
         Some(WordChar),
         Some(2),
         true,
     );
     label.set_size_request(cover_size - 16, -1);
-    let tile = Box::builder()
-        .orientation(Orientation::Vertical)
-        .spacing(2)
-        .build();
+    let tile = Box::builder().orientation(Vertical).spacing(2).build();
 
     // tile_size + room for text
     tile.set_size_request(cover_size, cover_size + 80);
     tile.set_hexpand(false);
     tile.set_vexpand(false);
-    tile.set_halign(Align::Start);
-    tile.set_valign(Align::Start);
+    tile.set_halign(Start);
+    tile.set_valign(Start);
 
     // Fixed-size container for icon (new instance per tile)
-    let icon_container = Box::new(Orientation::Vertical, 0);
+    let icon_container = Box::new(Vertical, 0);
     icon_container.set_size_request(cover_size, cover_size);
-    icon_container.set_halign(Align::Start);
-    icon_container.set_valign(Align::Start);
+    icon_container.set_halign(Start);
+    icon_container.set_valign(Start);
     icon_container.add_css_class("album-cover-border");
     icon_container.append(&icon);
     tile.append(&icon_container);
 
     // Box to ensure consistent height for the label area (2 lines)
     let label_area_box = Box::builder()
-        .orientation(Orientation::Vertical)
+        .orientation(Vertical)
         .height_request(40)
         .margin_top(12)
         .build();
-    label_area_box.set_halign(Align::Center);
-    label.set_valign(Align::End);
+    label_area_box.set_halign(Center);
+    label.set_valign(End);
     label_area_box.append(&label);
     tile.append(&label_area_box);
     tile.set_css_classes(&["album-tile"]);
@@ -487,8 +483,8 @@ pub fn create_artist_tile(
     flow_child.set_child(Some(&tile));
     flow_child.set_hexpand(false);
     flow_child.set_vexpand(false);
-    flow_child.set_halign(Align::Fill);
-    flow_child.set_valign(Align::Start);
+    flow_child.set_halign(Fill);
+    flow_child.set_valign(Start);
     let stack_weak = stack.downgrade();
     let left_btn_stack_weak = left_btn_stack.downgrade();
     let right_btn_box_weak = right_btn_box.downgrade();

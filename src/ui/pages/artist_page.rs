@@ -7,8 +7,11 @@ use std::{
 
 use glib::{MainContext, WeakRef};
 use gtk4::{
-    Align, Box, Button, EventControllerMotion, Fixed, FlowBox, FlowBoxChild, GestureClick,
-    Justification, Label, Orientation, Overlay, SelectionMode,
+    Align::{Center, End, Start},
+    Box, Button, EventControllerMotion, Fixed, FlowBox, FlowBoxChild, GestureClick, Justification,
+    Label,
+    Orientation::{Horizontal, Vertical},
+    Overlay, SelectionMode,
     pango::{EllipsizeMode, WrapMode},
 };
 use libadwaita::{
@@ -74,7 +77,7 @@ pub async fn artist_page(
 
     // Build UI
     let vbox = Box::builder()
-        .orientation(Orientation::Vertical)
+        .orientation(Vertical)
         .spacing(24)
         .margin_top(32)
         .margin_bottom(32)
@@ -86,7 +89,7 @@ pub async fn artist_page(
     let header = Label::builder()
         .label(&artist.name)
         .css_classes(["title-1"])
-        .halign(Align::Center)
+        .halign(Center)
         .justify(Justification::Center)
         .margin_top(8)
         .margin_bottom(8)
@@ -100,13 +103,13 @@ pub async fn artist_page(
 
     // Albums grid (match main albums grid and album_page)
     let flowbox = FlowBox::builder()
-        .valign(Align::Start)
+        .valign(Start)
         .max_children_per_line(128)
         .selection_mode(SelectionMode::None)
         .row_spacing(1)
         .column_spacing(0)
         .build();
-    flowbox.set_halign(Align::Center);
+    flowbox.set_halign(Center);
     for album in albums {
         let album_card = build_album_card(
             &album,
@@ -172,7 +175,7 @@ fn build_album_card(
         false, // use_markup: false for plain text
     );
     title_label.set_size_request(cover_size - 16, -1);
-    title_label.set_halign(Align::Start);
+    title_label.set_halign(Start);
     title_label.set_xalign(0.0);
 
     let artist_label = create_album_label(
@@ -211,7 +214,7 @@ fn build_album_card(
         None,
         false, // use_markup: false for plain text
     );
-    format_label.set_halign(Align::Start);
+    format_label.set_halign(Start);
     format_label.set_hexpand(true);
     let year_text = if use_original_year.get() {
         if let Some(original_release_date_str) = album.original_release_date.clone() {
@@ -248,27 +251,24 @@ fn build_album_card(
         None,
         false, // Explicitly set use_markup to false
     );
-    year_label.set_halign(Align::End);
+    year_label.set_halign(End);
     year_label.set_hexpand(false);
 
     // Album box creation
-    let album_tile_box = Box::builder()
-        .orientation(Orientation::Vertical)
-        .spacing(2)
-        .build();
+    let album_tile_box = Box::builder().orientation(Vertical).spacing(2).build();
 
     // tile_size + room for text
     album_tile_box.set_size_request(tile_size, tile_size + 80);
     album_tile_box.set_hexpand(false);
     album_tile_box.set_vexpand(false);
-    album_tile_box.set_halign(Align::Start);
-    album_tile_box.set_valign(Align::Start);
+    album_tile_box.set_halign(Start);
+    album_tile_box.set_valign(Start);
 
     // Fixed-size container for cover (new instance per tile)
-    let cover_container = Box::new(Orientation::Vertical, 0);
+    let cover_container = Box::new(Vertical, 0);
     cover_container.set_size_request(cover_size, cover_size);
-    cover_container.set_halign(Align::Start);
-    cover_container.set_valign(Align::Start);
+    cover_container.set_halign(Start);
+    cover_container.set_valign(Start);
     let cover = create_album_cover(album.cover_art.as_ref(), cover_size);
     cover_container.append(&cover);
 
@@ -276,8 +276,8 @@ fn build_album_card(
     let overlay = Overlay::new();
     overlay.set_size_request(cover_size, cover_size);
     overlay.set_child(Some(&cover_container));
-    overlay.set_halign(Align::Start);
-    overlay.set_valign(Align::Start);
+    overlay.set_halign(Start);
+    overlay.set_valign(Start);
 
     // Conditionally add DR badge to overlay, if enabled in settings.
     if show_dr_badges.get() {
@@ -291,8 +291,8 @@ fn build_album_card(
         .css_classes(&["play-pause-button", "album-cover-play"][..])
         .build();
     play_button.set_size_request(56, 56);
-    play_button.set_halign(Align::Center);
-    play_button.set_valign(Align::Center);
+    play_button.set_halign(Center);
+    play_button.set_valign(Center);
     play_button.set_visible(false);
     overlay.add_overlay(&play_button);
 
@@ -320,18 +320,18 @@ fn build_album_card(
 
     // Box to ensure consistent height for the title area (2 lines)
     let title_area_box = Box::builder()
-        .orientation(Orientation::Vertical)
+        .orientation(Vertical)
         .height_request(40) // Explicitly request height for two lines of text + extra buffer
         .margin_top(12) // Keep the margin from the cover
         .build();
-    title_label.set_valign(Align::End);
+    title_label.set_valign(End);
     title_area_box.append(&title_label);
     album_tile_box.append(&title_area_box);
     album_tile_box.append(&artist_label);
 
     // Create a horizontal box to hold format and year labels
     let metadata_box = Box::builder()
-        .orientation(Orientation::Horizontal)
+        .orientation(Horizontal)
         .spacing(0) // No spacing between the two labels
         .hexpand(true)
         .build();
@@ -345,8 +345,8 @@ fn build_album_card(
     flow_child.set_child(Some(&album_tile_box));
     flow_child.set_hexpand(false);
     flow_child.set_vexpand(false);
-    flow_child.set_halign(Align::Start);
-    flow_child.set_valign(Align::Start);
+    flow_child.set_halign(Start);
+    flow_child.set_valign(Start);
 
     // Add click gesture for navigation
     let stack_weak = stack.clone();

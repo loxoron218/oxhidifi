@@ -5,7 +5,12 @@ use std::{
     thread,
 };
 
-use gtk4::{Align, Box, Button, FlowBox, Label, Orientation, Stack};
+use gtk4::{
+    Align::Center,
+    Box, Button, FlowBox, Label,
+    Orientation::{Horizontal, Vertical},
+    Stack,
+};
 use libadwaita::{
     Application, ApplicationWindow, Clamp, ViewStack,
     prelude::{AdwApplicationWindowExt, BoxExt, ButtonExt, GtkWindowExt},
@@ -71,7 +76,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     let album_count_label = Rc::new(
         Label::builder()
             .label("0 Albums")
-            .halign(Align::Center)
+            .halign(Center)
             .margin_top(12)
             .css_classes(&*["dim-label"].as_ref())
             .build(),
@@ -79,7 +84,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     let artist_count_label = Rc::new(
         Label::builder()
             .label("0 Artists")
-            .halign(Align::Center)
+            .halign(Center)
             .margin_top(12)
             .css_classes(&*["dim-label"].as_ref())
             .build(),
@@ -202,10 +207,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
 
     // Build the main `gtk4::HeaderBar` by composing its left, center (tab bar), and right sections.
     // The header bar provides primary navigation and actions for the application.
-    let center_inner = Box::builder()
-        .orientation(Orientation::Horizontal)
-        .spacing(6)
-        .build();
+    let center_inner = Box::builder().orientation(Horizontal).spacing(6).build();
     center_inner.append(&tab_bar);
     let center_box = Clamp::builder().child(&center_inner).build();
 
@@ -219,7 +221,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     );
 
     // The main vertical box arranges the header bar at the top and the content `ViewStack` below it.
-    let vbox_inner = Box::new(Orientation::Vertical, 0);
+    let vbox_inner = Box::new(Vertical, 0);
     vbox_inner.append(&header_bar);
     vbox_inner.append(&widgets.stack);
 

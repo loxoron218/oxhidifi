@@ -8,8 +8,10 @@ use std::{
 use gdk_pixbuf::{InterpType, Pixbuf, PixbufLoader, prelude::PixbufLoaderExt};
 use glib::{MainContext, WeakRef, markup_escape_text};
 use gtk4::{
-    Align, Box, Button, CheckButton, EventControllerMotion, Image, Label, Orientation, Overlay,
-    Picture,
+    Align::{Center, End, Start},
+    Box, Button, CheckButton, EventControllerMotion, Image, Label,
+    Orientation::{Horizontal, Vertical},
+    Overlay, Picture,
     PolicyType::Never,
     ScrolledWindow, Stack, StackTransitionType,
     pango::{EllipsizeMode, WrapMode},
@@ -87,7 +89,7 @@ pub async fn album_page(
     }
     let horizontal_margin = 32;
     let page = Box::builder()
-        .orientation(Orientation::Vertical)
+        .orientation(Vertical)
         .spacing(12)
         .margin_start(horizontal_margin)
         .margin_end(horizontal_margin)
@@ -124,7 +126,7 @@ pub async fn album_page(
 
     /// Build a GTK label with optional CSS class.
     fn build_info_label(label: &str, css_class: Option<&str>) -> Label {
-        let l = Label::builder().label(label).halign(Align::Start).build();
+        let l = Label::builder().label(label).halign(Start).build();
         if let Some(class) = css_class {
             l.add_css_class(class);
         }
@@ -142,10 +144,7 @@ pub async fn album_page(
         artist: Rc<Artist>,
         folder: Rc<Folder>,
     ) -> Box {
-        let dr_box = Box::builder()
-            .orientation(Orientation::Horizontal)
-            .spacing(4)
-            .build();
+        let dr_box = Box::builder().orientation(Horizontal).spacing(4).build();
         let (dr_str, tooltip_text, css_class) = match dr {
             Some(value) => (
                 format!("{:02}", value),
@@ -160,8 +159,8 @@ pub async fn album_page(
         };
         let dr_label = Label::builder()
             .label(&dr_str)
-            .halign(Align::Center)
-            .valign(Align::Center)
+            .halign(Center)
+            .valign(Center)
             .build();
         dr_label.set_size_request(44, 44);
         dr_label.add_css_class("dr-badge-label");
@@ -170,8 +169,8 @@ pub async fn album_page(
         dr_text_label.set_width_chars(18); // Set a fixed width to prevent UI movement
         let checkbox = CheckButton::builder()
             .active(dr_completed)
-            .halign(Align::Center)
-            .valign(Align::Center)
+            .halign(Center)
+            .valign(Center)
             .css_classes(vec!["dr-completion-checkbox"])
             .build();
         let stack = Stack::builder()
@@ -299,7 +298,7 @@ pub async fn album_page(
         let play_pause_button = Button::builder()
             .icon_name("media-playback-start")
             .css_classes(["flat"])
-            .halign(Align::End)
+            .halign(End)
             .build();
         row.add_suffix(&play_pause_button);
         row
@@ -307,7 +306,7 @@ pub async fn album_page(
 
     // Header
     let header = Box::builder()
-        .orientation(Orientation::Horizontal)
+        .orientation(Horizontal)
         .spacing(32)
         .css_classes(["album-header"])
         .hexpand(true)
@@ -317,31 +316,31 @@ pub async fn album_page(
     }
     let cover = build_album_cover(&album.cover_art);
     let overlay = Overlay::new();
-    overlay.set_halign(Align::Start);
-    overlay.set_valign(Align::Start);
+    overlay.set_halign(Start);
+    overlay.set_valign(Start);
     overlay.set_child(Some(&cover));
     let play_pause_button = Button::builder()
         .icon_name("media-playback-start")
         .css_classes(["play-pause-button", "album-cover-play"])
         .build();
     play_pause_button.set_size_request(56, 56);
-    play_pause_button.set_valign(Align::End);
-    play_pause_button.set_halign(Align::End);
+    play_pause_button.set_valign(End);
+    play_pause_button.set_halign(End);
     play_pause_button.set_margin_bottom(12);
     play_pause_button.set_margin_end(12);
     overlay.add_overlay(&play_pause_button);
     header.append(&overlay);
     let info_box = Box::builder()
-        .orientation(Orientation::Vertical)
+        .orientation(Vertical)
         .spacing(12)
-        .halign(Align::Start)
-        .valign(Align::Start)
+        .halign(Start)
+        .valign(Start)
         .hexpand(true)
         .css_classes(["album-info-box"])
         .build();
     let title_label = Label::builder()
         .label(&album.title)
-        .halign(Align::Start)
+        .halign(Start)
         .wrap(true)
         .wrap_mode(WrapMode::Word)
         .ellipsize(EllipsizeMode::End)
@@ -355,7 +354,7 @@ pub async fn album_page(
     // Artist name (regular)
     let artist_label = Label::builder()
         .label(&artist.name)
-        .halign(Align::Start)
+        .halign(Start)
         .wrap(true)
         .wrap_mode(WrapMode::Word)
         .ellipsize(EllipsizeMode::End)
@@ -391,9 +390,9 @@ pub async fn album_page(
     }
     if !year_display_text.is_empty() {
         let meta_box = Box::builder()
-            .orientation(Orientation::Horizontal)
+            .orientation(Horizontal)
             .spacing(8)
-            .halign(Align::Start)
+            .halign(Start)
             .build();
         let mut meta_fields = Vec::new();
         if !year_display_text.is_empty() {
@@ -445,9 +444,9 @@ pub async fn album_page(
     if show_hires || is_lossy_album || !bit_freq_str.is_empty() || most_common_format_opt.is_some()
     {
         let outer_row = Box::builder()
-            .orientation(Orientation::Horizontal)
+            .orientation(Horizontal)
             .spacing(8)
-            .halign(Align::Start)
+            .halign(Start)
             .margin_start(3)
             .build();
 
@@ -456,29 +455,29 @@ pub async fn album_page(
             if let Ok(pixbuf) = Pixbuf::from_file_at_scale("assets/hires.png", -1, 40, true) {
                 let hires_pic = Picture::for_pixbuf(&pixbuf);
                 hires_pic.set_size_request(40, 40);
-                hires_pic.set_halign(Align::Start);
+                hires_pic.set_halign(Start);
                 outer_row.append(&hires_pic);
             }
         } else if is_lossy_album {
             // Use musical note icon for lossy albums
             let lossy_icon = Image::from_icon_name("audio-x-generic-symbolic");
             lossy_icon.set_pixel_size(44);
-            lossy_icon.set_halign(Align::Start);
+            lossy_icon.set_halign(Start);
             outer_row.append(&lossy_icon);
         } else {
             // Use symbolic CD icon from system theme
             let cd_icon = Image::from_icon_name("media-optical-symbolic");
             cd_icon.set_pixel_size(44);
-            cd_icon.set_halign(Align::Start);
+            cd_icon.set_halign(Start);
             outer_row.append(&cd_icon);
         }
 
         // Right: vertical box with bit/freq and format
         let lines_box = Box::builder()
-            .orientation(Orientation::Vertical)
+            .orientation(Vertical)
             .spacing(0)
-            .halign(Align::Start)
-            .valign(Align::Center)
+            .halign(Start)
+            .valign(Center)
             .margin_start(12)
             .build();
         if !bit_freq_str.is_empty() {

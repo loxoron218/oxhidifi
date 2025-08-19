@@ -1,8 +1,11 @@
 use std::{cell::RefCell, rc::Rc};
 
 use gtk4::{
-    Align, Box, Button, FlowBox, Label, Orientation, PolicyType::Automatic, ScrolledWindow,
-    SelectionMode, Spinner, Stack, StackTransitionType,
+    Align::{Center, Fill, Start},
+    Box, Button, FlowBox, Label,
+    Orientation::Vertical,
+    PolicyType::Automatic,
+    ScrolledWindow, SelectionMode, Spinner, Stack, StackTransitionType,
 };
 use libadwaita::{
     StatusPage,
@@ -50,9 +53,9 @@ pub fn build_artist_grid(
     add_music_button.add_css_class("suggested-action");
     empty_state_status_page.set_child(Some(add_music_button)); // Set the button as the child of the StatusPage.
     let empty_state_container = Box::builder()
-        .orientation(Orientation::Vertical)
-        .halign(Align::Center)
-        .valign(Align::Center)
+        .orientation(Vertical)
+        .halign(Center)
+        .valign(Center)
         .vexpand(true)
         .hexpand(true)
         .build();
@@ -68,9 +71,9 @@ pub fn build_artist_grid(
         .hexpand(true)
         .build();
     let no_results_container = Box::builder()
-        .orientation(Orientation::Vertical)
-        .halign(Align::Center)
-        .valign(Align::Center)
+        .orientation(Vertical)
+        .halign(Center)
+        .valign(Center)
         .vexpand(true)
         .hexpand(true)
         .build();
@@ -79,14 +82,14 @@ pub fn build_artist_grid(
     // --- Artists Grid (Populated State) ---
     // This is the actual `FlowBox` where artist tiles will be dynamically added.
     let artist_grid = FlowBox::builder()
-        .valign(Align::Start)
+        .valign(Start)
         .max_children_per_line(128) // Set a high number to allow dynamic resizing by CSS/Adwaita.
         .row_spacing(8)
         .column_spacing(8)
         .selection_mode(SelectionMode::None) // Artists are clickable, but not selectable.
         .homogeneous(true) // All children have the same size.
         .hexpand(true)
-        .halign(Align::Fill)
+        .halign(Fill)
         .build();
 
     // Wrap the `FlowBox` in a `ScrolledWindow` to enable scrolling if content overflows.
@@ -103,7 +106,7 @@ pub fn build_artist_grid(
         .margin_bottom(24)
         .build();
     scrolled.set_hexpand(true); // Allow horizontal expansion.
-    scrolled.set_halign(Align::Fill); // Fill available horizontal space.
+    scrolled.set_halign(Fill); // Fill available horizontal space.
 
     // The main `Stack` to manage the different views (loading, empty, populated, etc.).
     let artists_stack = Stack::builder()
@@ -115,9 +118,9 @@ pub fn build_artist_grid(
     let loading_spinner = Spinner::builder().spinning(true).build();
     loading_spinner.set_size_request(48, 48); // Set a fixed size for the spinner.
     let loading_state_container = Box::builder()
-        .orientation(Orientation::Vertical)
-        .halign(Align::Center)
-        .valign(Align::Center)
+        .orientation(Vertical)
+        .halign(Center)
+        .valign(Center)
         .vexpand(true)
         .hexpand(true)
         .build();
@@ -132,9 +135,9 @@ pub fn build_artist_grid(
     let scanning_spinner = Spinner::builder().spinning(true).build();
     scanning_spinner.set_size_request(48, 48);
     let scanning_state_container = Box::builder()
-        .orientation(Orientation::Vertical)
-        .halign(Align::Center)
-        .valign(Align::Center)
+        .orientation(Vertical)
+        .halign(Center)
+        .valign(Center)
         .vexpand(true)
         .hexpand(true)
         .build();
@@ -148,7 +151,7 @@ pub fn build_artist_grid(
     artists_stack.add_named(&scanning_state_container, Some("scanning_state"));
 
     // The populated grid is wrapped in a vertical box.
-    let artists_content_box = Box::builder().orientation(Orientation::Vertical).build();
+    let artists_content_box = Box::builder().orientation(Vertical).build();
     artists_content_box.prepend(&*artist_count_label);
 
     // The artist_count_label is now passed from main_window/builder.rs

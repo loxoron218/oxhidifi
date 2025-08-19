@@ -1,8 +1,11 @@
 use std::{cell::RefCell, rc::Rc};
 
 use gtk4::{
-    Align, Box, Button, FlowBox, Label, Orientation, PolicyType::Automatic, ScrolledWindow,
-    SelectionMode, Spinner, Stack, StackTransitionType,
+    Align::{Center, Fill, Start},
+    Box, Button, FlowBox, Label,
+    Orientation::Vertical,
+    PolicyType::Automatic,
+    ScrolledWindow, SelectionMode, Spinner, Stack, StackTransitionType,
 };
 use libadwaita::{
     StatusPage,
@@ -49,9 +52,9 @@ pub fn build_albums_grid(
         .build();
 
     let empty_state_container = Box::builder()
-        .orientation(Orientation::Vertical)
-        .halign(Align::Center)
-        .valign(Align::Center)
+        .orientation(Vertical)
+        .halign(Center)
+        .valign(Center)
         .vexpand(true)
         .hexpand(true)
         .build();
@@ -68,9 +71,9 @@ pub fn build_albums_grid(
         .build();
 
     let no_results_container = Box::builder()
-        .orientation(Orientation::Vertical)
-        .halign(Align::Center)
-        .valign(Align::Center)
+        .orientation(Vertical)
+        .halign(Center)
+        .valign(Center)
         .vexpand(true)
         .hexpand(true)
         .build();
@@ -81,9 +84,9 @@ pub fn build_albums_grid(
     let loading_spinner = Spinner::builder().spinning(true).build();
     loading_spinner.set_size_request(48, 48);
     let loading_state_container = Box::builder()
-        .orientation(Orientation::Vertical)
-        .halign(Align::Center)
-        .valign(Align::Center)
+        .orientation(Vertical)
+        .halign(Center)
+        .valign(Center)
         .vexpand(true)
         .hexpand(true)
         .build();
@@ -97,9 +100,9 @@ pub fn build_albums_grid(
     let scanning_spinner = Spinner::builder().spinning(true).build();
     scanning_spinner.set_size_request(48, 48);
     let scanning_state_container = Box::builder()
-        .orientation(Orientation::Vertical)
-        .halign(Align::Center)
-        .valign(Align::Center)
+        .orientation(Vertical)
+        .halign(Center)
+        .valign(Center)
         .vexpand(true)
         .hexpand(true)
         .build();
@@ -109,14 +112,14 @@ pub fn build_albums_grid(
     // --- Albums Grid (Populated State) ---
     // The actual FlowBox where album tiles will be rendered.
     let albums_grid = FlowBox::builder()
-        .valign(Align::Start)
+        .valign(Start)
         .max_children_per_line(128) // Allow many children per line for flexible layout
         .row_spacing(8)
         .column_spacing(8)
         .selection_mode(SelectionMode::None) // Albums are not selectable in this grid
         .homogeneous(true) // All children are treated as having the same size for layout purposes
         .hexpand(true)
-        .halign(Align::Fill)
+        .halign(Fill)
         .build();
 
     // Scrolled window to allow scrolling if content overflows.
@@ -132,7 +135,7 @@ pub fn build_albums_grid(
         .margin_top(24)
         .margin_bottom(24)
         .hexpand(true)
-        .halign(Align::Fill)
+        .halign(Fill)
         .build();
 
     // --- Main Albums Stack ---
@@ -158,7 +161,7 @@ pub fn build_albums_grid(
 
     // The actual populated grid is placed inside another Box for potential future additions
     // like a search bar or filters above the grid.
-    let albums_content_box = Box::builder().orientation(Orientation::Vertical).build();
+    let albums_content_box = Box::builder().orientation(Vertical).build();
     albums_content_box.prepend(&*album_count_label);
 
     // The album_count_label is now passed from main_window/builder.rs

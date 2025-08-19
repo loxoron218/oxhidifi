@@ -1,4 +1,6 @@
-use gtk4::{Align, Box, Button, HeaderBar, Image, Label, Orientation, ToggleButton};
+use gtk4::{
+    Align::End, Box, Button, HeaderBar, Image, Label, Orientation::Horizontal, ToggleButton,
+};
 use libadwaita::{
     Clamp, ViewStack,
     prelude::{BoxExt, ButtonExt, IsA, WidgetExt},
@@ -14,7 +16,7 @@ fn create_icon_button(icon_name: &str) -> Button {
 /// Helper to create a horizontal Box and wrap it in a Clamp for ViewStack children.
 /// This pattern is common for adding widgets to a ViewStack, ensuring proper layout.
 fn create_view_stack_child_box(widget: &impl IsA<gtk4::Widget>) -> Clamp {
-    let inner_box = Box::builder().orientation(Orientation::Horizontal).build();
+    let inner_box = Box::builder().orientation(Horizontal).build();
     inner_box.append(widget);
     Clamp::builder().child(&inner_box).build()
 }
@@ -26,7 +28,7 @@ fn create_tab_toggle_button(icon_name: &str, label_text: &str, is_active: bool) 
     button.set_has_frame(false); // Remove the default button frame for a cleaner look.
 
     let content_box = Box::builder()
-        .orientation(Orientation::Horizontal)
+        .orientation(Horizontal)
         .spacing(4) // Small spacing between icon and label.
         .build();
     content_box.append(&Image::from_icon_name(icon_name));
@@ -105,7 +107,7 @@ pub fn build_header_bar() -> AppHeaderBar {
 
     // Right-aligned box containing search, sort, and settings buttons.
     let right_btn_inner = Box::builder()
-        .orientation(Orientation::Horizontal)
+        .orientation(Horizontal)
         .spacing(6) // Standard spacing between header elements.
         .build();
     right_btn_inner.append(&search_bar.button); // The search icon button.
@@ -115,7 +117,7 @@ pub fn build_header_bar() -> AppHeaderBar {
 
     let right_btn_box = Clamp::builder()
         .child(&right_btn_inner)
-        .halign(Align::End) // Align to the end (right) of the header bar.
+        .halign(End) // Align to the end (right) of the header bar.
         .build();
     right_btn_box.set_visible(true); // Ensure visibility by default.
 
@@ -174,7 +176,7 @@ pub fn build_tab_bar() -> (Box, ToggleButton, ToggleButton) {
 
     // Container for the tab buttons.
     let tab_bar = Box::builder()
-        .orientation(Orientation::Horizontal)
+        .orientation(Horizontal)
         .spacing(6) // Spacing between the two tab buttons.
         .build();
     tab_bar.append(&albums_btn);

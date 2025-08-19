@@ -10,8 +10,8 @@ use glib::{
     source::idle_add_local_once,
 };
 use gtk4::{
-    Align, Button, EventControllerKey, ListBox, SelectionMode::None, StringList, StringObject,
-    Switch, Window,
+    Align::Center, Button, EventControllerKey, ListBox, SelectionMode::None, StringList,
+    StringObject, Switch, Window,
 };
 use libadwaita::{
     ActionRow, ComboRow, PreferencesGroup, PreferencesPage, PreferencesWindow,
@@ -147,7 +147,7 @@ impl FolderSettingsPage {
                     let row = ActionRow::builder().title(folder.path.clone()).build();
                     let remove_btn = Button::builder()
                         .icon_name("window-close-symbolic")
-                        .valign(Align::Center)
+                        .valign(Center)
                         .css_classes(["flat"])
                         .build();
                     let folder_id = folder.id;
@@ -345,7 +345,7 @@ pub fn show_settings_dialog(
         .activatable(false)
         .build();
     let dr_badges_switch = Switch::builder()
-        .valign(Align::Center)
+        .valign(Center)
         .active(show_dr_badges_setting.get())
         .build();
     dr_badges_row.add_suffix(&dr_badges_switch);
@@ -372,7 +372,7 @@ pub fn show_settings_dialog(
         .activatable(false)
         .build();
     let use_original_year_switch = Switch::builder()
-        .valign(Align::Center)
+        .valign(Center)
         .active(use_original_year_setting.get())
         .build();
     use_original_year_row.add_suffix(&use_original_year_switch);

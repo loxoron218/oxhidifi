@@ -8,9 +8,11 @@ use std::{
 
 use glib::{ControlFlow::Continue, timeout_add_local};
 use gtk4::{
-    Align, Box, Button, EventControllerMotion, Fixed, FlowBox, FlowBoxChild, Label, Orientation,
+    Align::{Center, End, Start},
+    Box, Button, EventControllerMotion, Fixed, FlowBox, FlowBoxChild, Label,
+    Orientation::{Horizontal, Vertical},
     Overlay, Stack,
-    pango::{EllipsizeMode::End, WrapMode::WordChar},
+    pango::{EllipsizeMode, WrapMode::WordChar},
 };
 use libadwaita::prelude::{BoxExt, FixedExt, ObjectExt, WidgetExt};
 use sqlx::SqlitePool;
@@ -165,7 +167,7 @@ pub async fn populate_albums_grid(
                     &album_info.title,
                     &["album-title-label"],
                     Some(((cover_size - 16) / 10).max(8)), // Max width chars for title
-                    Some(End),
+                    Some(EllipsizeMode::End),
                     true, // Wrap text
                     Some(WordChar),
                     Some(2), // Max 2 lines
@@ -177,7 +179,7 @@ pub async fn populate_albums_grid(
                     &album_info.artist,
                     &["album-artist-label"],
                     Some(18), // Max width chars for artist
-                    Some(End),
+                    Some(EllipsizeMode::End),
                     false, // No wrapping
                     None,
                     None,
@@ -212,7 +214,7 @@ pub async fn populate_albums_grid(
                     None,
                     None,
                 );
-                format_label.set_halign(Align::Start);
+                format_label.set_halign(Start);
                 format_label.set_hexpand(true); // Allow format label to expand
 
                 // Extract and format year based on setting.
@@ -252,34 +254,34 @@ pub async fn populate_albums_grid(
                     None,
                     None,
                 );
-                year_label.set_halign(Align::End);
+                year_label.set_halign(End);
                 year_label.set_hexpand(false); // Do not allow year label to expand
 
                 // --- Album Tile Construction ---
                 let album_tile_box = Box::builder()
-                    .orientation(Orientation::Vertical)
+                    .orientation(Vertical)
                     .spacing(2)
                     .hexpand(false)
                     .vexpand(false)
-                    .halign(Align::Start)
-                    .valign(Align::Start)
+                    .halign(Start)
+                    .valign(Start)
                     .css_classes(&["album-tile"] as &[&str]) // Apply tile specific CSS
                     .build();
                 album_tile_box.set_size_request(tile_size, tile_size + 80); // Fixed size for the whole tile
 
                 // Cover container and overlay for DR badge and play button.
-                let cover_container = Box::new(Orientation::Vertical, 0);
+                let cover_container = Box::new(Vertical, 0);
                 cover_container.set_size_request(cover_size, cover_size);
-                cover_container.set_halign(Align::Start);
-                cover_container.set_valign(Align::Start);
+                cover_container.set_halign(Start);
+                cover_container.set_valign(Start);
                 let cover_picture =
                     create_album_cover_picture(album_info.cover_art.as_ref(), cover_size);
                 cover_container.append(&cover_picture);
                 let overlay = Overlay::new();
                 overlay.set_size_request(cover_size, cover_size);
                 overlay.set_child(Some(&cover_container));
-                overlay.set_halign(Align::Start);
-                overlay.set_valign(Align::Start);
+                overlay.set_halign(Start);
+                overlay.set_valign(Start);
 
                 // Add DR badge to overlay, if enabled in settings.
                 if show_dr_badges.get() {
@@ -298,8 +300,8 @@ pub async fn populate_albums_grid(
                 let play_button = Button::builder()
                     .icon_name("media-playback-start")
                     .css_classes(&["play-pause-button", "album-cover-play"] as &[&str])
-                    .halign(Align::Center)
-                    .valign(Align::Center)
+                    .halign(Center)
+                    .valign(Center)
                     .visible(false) // Initially hidden
                     .build();
                 play_button.set_size_request(56, 56);
@@ -329,16 +331,16 @@ pub async fn populate_albums_grid(
 
                 // Add title, artist, and metadata to the tile box.
                 let title_area_box = Box::builder()
-                    .orientation(Orientation::Vertical)
+                    .orientation(Vertical)
                     .height_request(40) // Explicitly request height for two lines of text + extra buffer
                     .margin_top(12) // Margin from the cover
                     .build();
-                title_label.set_valign(Align::End); // Align title to the bottom of its allocated space
+                title_label.set_valign(End); // Align title to the bottom of its allocated space
                 title_area_box.append(&title_label);
                 album_tile_box.append(&title_area_box);
                 album_tile_box.append(&artist_label);
                 let metadata_box = Box::builder()
-                    .orientation(Orientation::Horizontal)
+                    .orientation(Horizontal)
                     .spacing(0) // No spacing between the two labels
                     .hexpand(true)
                     .build();
@@ -351,8 +353,8 @@ pub async fn populate_albums_grid(
                     .child(&album_tile_box)
                     .hexpand(false)
                     .vexpand(false)
-                    .halign(Align::Start)
-                    .valign(Align::Start)
+                    .halign(Start)
+                    .valign(Start)
                     .build();
                 flow_child.set_widget_name(&album_info.id.to_string());
 
