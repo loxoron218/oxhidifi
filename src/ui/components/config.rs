@@ -9,7 +9,9 @@ use std::{
 use serde::{Deserialize, Serialize};
 use serde_json::{from_str, to_string_pretty};
 
-use crate::ui::components::sorting::sorting_types::SortOrder;
+use crate::ui::components::sorting::sorting_types::SortOrder::{
+    self, Album, Artist, DrValue, Year,
+};
 
 /// Manages application settings, including sorting preferences and completed albums.
 ///
@@ -54,12 +56,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            sort_orders: vec![
-                SortOrder::Artist,
-                SortOrder::Year,
-                SortOrder::Album,
-                SortOrder::DrValue,
-            ],
+            sort_orders: vec![Artist, Year, Album, DrValue],
             sort_ascending_albums: true,
             sort_ascending_artists: true,
             completed_albums: HashMap::new(),

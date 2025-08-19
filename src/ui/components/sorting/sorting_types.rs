@@ -2,6 +2,8 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
+use crate::ui::components::sorting::sorting_types::SortOrder::{Album, Artist, DrValue, Year};
+
 /// Represents the sorting order for library views.
 ///
 /// This `enum` defines the various criteria by which albums or artists can be sorted
@@ -26,10 +28,10 @@ impl FromStr for SortOrder {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "Artist" => Ok(SortOrder::Artist),
-            "Year" => Ok(SortOrder::Year),
-            "Album" => Ok(SortOrder::Album),
-            "DR Value" => Ok(SortOrder::DrValue),
+            "Artist" => Ok(Artist),
+            "Year" => Ok(Year),
+            "Album" => Ok(Album),
+            "DR Value" => Ok(DrValue),
             _ => Err(()),
         }
     }
@@ -50,9 +52,9 @@ impl FromStr for SortOrder {
 /// A `&'static str` containing the display label.
 pub fn sort_order_label(order: &SortOrder) -> &'static str {
     match order {
-        SortOrder::Artist => "Artist",
-        SortOrder::Year => "Year",
-        SortOrder::Album => "Album",
-        SortOrder::DrValue => "DR Value",
+        Artist => "Artist",
+        Year => "Year",
+        Album => "Album",
+        DrValue => "DR Value",
     }
 }

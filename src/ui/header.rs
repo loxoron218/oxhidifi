@@ -1,5 +1,5 @@
 use gtk4::{
-    Align::End, Box, Button, HeaderBar, Image, Label, Orientation::Horizontal, ToggleButton,
+    Align::End, Box, Button, HeaderBar, Image, Label, Orientation::Horizontal, ToggleButton, Widget,
 };
 use libadwaita::{
     Clamp, ViewStack,
@@ -15,7 +15,7 @@ fn create_icon_button(icon_name: &str) -> Button {
 
 /// Helper to create a horizontal Box and wrap it in a Clamp for ViewStack children.
 /// This pattern is common for adding widgets to a ViewStack, ensuring proper layout.
-fn create_view_stack_child_box(widget: &impl IsA<gtk4::Widget>) -> Clamp {
+fn create_view_stack_child_box(widget: &impl IsA<Widget>) -> Clamp {
     let inner_box = Box::builder().orientation(Horizontal).build();
     inner_box.append(widget);
     Clamp::builder().child(&inner_box).build()

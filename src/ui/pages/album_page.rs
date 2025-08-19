@@ -5,7 +5,7 @@ use std::{
     sync::Arc,
 };
 
-use gdk_pixbuf::{InterpType, Pixbuf, PixbufLoader, prelude::PixbufLoaderExt};
+use gdk_pixbuf::{InterpType::Bilinear, Pixbuf, PixbufLoader, prelude::PixbufLoaderExt};
 use glib::{MainContext, WeakRef, markup_escape_text};
 use gtk4::{
     Align::{Center, End, Start},
@@ -14,7 +14,7 @@ use gtk4::{
     Overlay, Picture,
     PolicyType::Never,
     ScrolledWindow, Stack, StackTransitionType,
-    pango::{EllipsizeMode, WrapMode},
+    pango::{EllipsizeMode, WrapMode::Word},
 };
 use libadwaita::{
     ActionRow, Clamp, PreferencesGroup, ViewStack,
@@ -107,9 +107,7 @@ pub async fn album_page(
                     let scale = f64::min(300.0 / width as f64, 300.0 / height as f64);
                     let new_width = (width as f64 * scale).round() as i32;
                     let new_height = (height as f64 * scale).round() as i32;
-                    if let Some(scaled) =
-                        pixbuf.scale_simple(new_width, new_height, InterpType::Bilinear)
-                    {
+                    if let Some(scaled) = pixbuf.scale_simple(new_width, new_height, Bilinear) {
                         let pic = Picture::for_pixbuf(&scaled);
                         pic.set_size_request(300, 300);
                         pic.add_css_class("album-cover-border");
@@ -342,7 +340,7 @@ pub async fn album_page(
         .label(&album.title)
         .halign(Start)
         .wrap(true)
-        .wrap_mode(WrapMode::Word)
+        .wrap_mode(Word)
         .ellipsize(EllipsizeMode::End)
         .lines(3)
         .hexpand(true)
@@ -356,7 +354,7 @@ pub async fn album_page(
         .label(&artist.name)
         .halign(Start)
         .wrap(true)
-        .wrap_mode(WrapMode::Word)
+        .wrap_mode(Word)
         .ellipsize(EllipsizeMode::End)
         .lines(1)
         .hexpand(true)

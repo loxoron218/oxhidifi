@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use gtk4::{FlowBox, Label, Stack};
+use gtk4::{Button, FlowBox, Label, Stack};
 use libadwaita::ViewStack;
 
 use crate::ui::grids::artist_grid_builder::build_artist_grid;
@@ -28,7 +28,7 @@ pub fn rebuild_artist_grid_for_window(
     scanning_label_artists: &Label,
     artist_grid_cell: &Rc<RefCell<Option<FlowBox>>>,
     artists_stack_cell: &Rc<RefCell<Option<Stack>>>,
-    add_music_button: &gtk4::Button,
+    add_music_button: &Button,
     artist_count_label: Rc<Label>,
     view_mode: Rc<RefCell<String>>,
 ) {

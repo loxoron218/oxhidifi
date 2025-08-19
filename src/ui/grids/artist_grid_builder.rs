@@ -5,7 +5,9 @@ use gtk4::{
     Box, Button, FlowBox, Label,
     Orientation::Vertical,
     PolicyType::Automatic,
-    ScrolledWindow, SelectionMode, Spinner, Stack, StackTransitionType,
+    ScrolledWindow,
+    SelectionMode::None,
+    Spinner, Stack, StackTransitionType,
 };
 use libadwaita::{
     StatusPage,
@@ -86,7 +88,7 @@ pub fn build_artist_grid(
         .max_children_per_line(128) // Set a high number to allow dynamic resizing by CSS/Adwaita.
         .row_spacing(8)
         .column_spacing(8)
-        .selection_mode(SelectionMode::None) // Artists are clickable, but not selectable.
+        .selection_mode(None) // Artists are clickable, but not selectable.
         .homogeneous(true) // All children have the same size.
         .hexpand(true)
         .halign(Fill)

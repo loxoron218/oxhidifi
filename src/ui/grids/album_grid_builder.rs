@@ -5,7 +5,9 @@ use gtk4::{
     Box, Button, FlowBox, Label,
     Orientation::Vertical,
     PolicyType::Automatic,
-    ScrolledWindow, SelectionMode, Spinner, Stack, StackTransitionType,
+    ScrolledWindow,
+    SelectionMode::None,
+    Spinner, Stack, StackTransitionType,
 };
 use libadwaita::{
     StatusPage,
@@ -13,7 +15,8 @@ use libadwaita::{
 };
 
 use crate::ui::{
-    components::scan_feedback::create_scanning_label, grids::album_grid_state::AlbumGridState,
+    components::scan_feedback::create_scanning_label,
+    grids::album_grid_state::AlbumGridState::{Empty, Loading, NoResults, Populated, Scanning},
 };
 
 /// Builds the main `gtk4::Stack` and `gtk4::FlowBox` for the albums grid.
@@ -116,7 +119,7 @@ pub fn build_albums_grid(
         .max_children_per_line(128) // Allow many children per line for flexible layout
         .row_spacing(8)
         .column_spacing(8)
-        .selection_mode(SelectionMode::None) // Albums are not selectable in this grid
+        .selection_mode(None) // Albums are not selectable in this grid
         .homogeneous(true) // All children are treated as having the same size for layout purposes
         .hexpand(true)
         .halign(Fill)
@@ -145,19 +148,10 @@ pub fn build_albums_grid(
         .build();
 
     // Add all state containers and the populated grid to the stack.
-    albums_stack.add_named(
-        &loading_state_container,
-        Some(AlbumGridState::Loading.as_str()),
-    );
-    albums_stack.add_named(&empty_state_container, Some(AlbumGridState::Empty.as_str()));
-    albums_stack.add_named(
-        &no_results_container,
-        Some(AlbumGridState::NoResults.as_str()),
-    );
-    albums_stack.add_named(
-        &scanning_state_container,
-        Some(AlbumGridState::Scanning.as_str()),
-    );
+    albums_stack.add_named(&loading_state_container, Some(Loading.as_str()));
+    albums_stack.add_named(&empty_state_container, Some(Empty.as_str()));
+    albums_stack.add_named(&no_results_container, Some(NoResults.as_str()));
+    albums_stack.add_named(&scanning_state_container, Some(Scanning.as_str()));
 
     // The actual populated grid is placed inside another Box for potential future additions
     // like a search bar or filters above the grid.
@@ -166,12 +160,9 @@ pub fn build_albums_grid(
 
     // The album_count_label is now passed from main_window/builder.rs
     albums_content_box.append(&scrolled_window);
-    albums_stack.add_named(
-        &albums_content_box,
-        Some(AlbumGridState::Populated.as_str()),
-    );
+    albums_stack.add_named(&albums_content_box, Some(Populated.as_str()));
 
     // Set the initial visible child to the loading state.
-    albums_stack.set_visible_child_name(AlbumGridState::Loading.as_str());
+    albums_stack.set_visible_child_name(Loading.as_str());
     (albums_stack, albums_grid)
 }

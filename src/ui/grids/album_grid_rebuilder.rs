@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use gtk4::{FlowBox, Label, Stack};
+use gtk4::{Button, FlowBox, Label, Stack};
 use libadwaita::ViewStack;
 
 use crate::{ui::grids::album_grid_builder::build_albums_grid, utils::screen::ScreenInfo};
@@ -25,7 +25,7 @@ pub fn rebuild_albums_grid_for_window(
     screen_info: &Rc<RefCell<ScreenInfo>>,
     albums_grid_cell: &Rc<RefCell<Option<FlowBox>>>,
     albums_stack_cell: &Rc<RefCell<Option<Stack>>>,
-    add_music_button: &gtk4::Button,
+    add_music_button: &Button,
     album_count_label: Rc<Label>,
     view_mode: Rc<RefCell<String>>,
 ) {

@@ -3,7 +3,7 @@ use std::{
     cmp::Ordering::Equal,
     rc::Rc,
     sync::Arc,
-    time,
+    time::Duration,
 };
 
 use glib::{ControlFlow::Continue, timeout_add_local};
@@ -20,8 +20,8 @@ use sqlx::SqlitePool;
 use crate::{
     data::db::query::fetch_album_display_info,
     ui::{
-        components::sorting::sorting_types::SortOrder,
-        grids::album_grid_state::AlbumGridState,
+        components::sorting::sorting_types::SortOrder::{self, Album, Artist, DrValue, Year},
+        grids::album_grid_state::AlbumGridState::{Empty, Populated, Scanning},
         grids::album_grid_utils::{
             create_album_cover_picture, create_dr_badge_label, create_styled_label,
         },
@@ -95,16 +95,16 @@ pub async fn populate_albums_grid(
             eprintln!("Error fetching album display info: {:?}", e);
             // On error, revert busy state and show an empty state.
             IS_BUSY.with(|cell| cell.set(false));
-            albums_inner_stack.set_visible_child_name(AlbumGridState::Empty.as_str());
+            albums_inner_stack.set_visible_child_name(Empty.as_str());
             album_count_label.set_text("0 Albums"); // Update count on error
         }
         Ok(mut albums) => {
             // Determine the appropriate state to show if no albums are found.
             if albums.is_empty() {
                 let state_to_show = if scanning_label.is_visible() {
-                    AlbumGridState::Scanning
+                    Scanning
                 } else {
-                    AlbumGridState::Empty
+                    Empty
                 };
                 albums_inner_stack.set_visible_child_name(state_to_show.as_str());
                 album_count_label.set_text("0 Albums"); // Update count if no albums
@@ -116,16 +116,16 @@ pub async fn populate_albums_grid(
             album_count_label.set_text(&format!("{} Albums", albums.len())); // Update count with actual number
 
             // If albums are found, transition to the populated grid state.
-            albums_inner_stack.set_visible_child_name(AlbumGridState::Populated.as_str());
+            albums_inner_stack.set_visible_child_name(Populated.as_str());
 
             // Multi-level sort albums according to user-defined sort orders.
             let current_sort_orders = sort_orders.borrow();
             albums.sort_by(|a, b| {
                 for order in &*current_sort_orders {
                     let cmp = match order {
-                        SortOrder::Artist => a.artist.to_lowercase().cmp(&b.artist.to_lowercase()),
-                        SortOrder::Album => a.title.to_lowercase().cmp(&b.title.to_lowercase()),
-                        SortOrder::Year => {
+                        Artist => a.artist.to_lowercase().cmp(&b.artist.to_lowercase()),
+                        Album => a.title.to_lowercase().cmp(&b.title.to_lowercase()),
+                        Year => {
                             // Extract year from original_release_date or year field.
                             let a_year = a
                                 .original_release_date
@@ -141,7 +141,7 @@ pub async fn populate_albums_grid(
                                 .or(b.year); // Fallback to `year` field
                             a_year.cmp(&b_year)
                         }
-                        SortOrder::DrValue => a._dr_value.cmp(&b._dr_value),
+                        DrValue => a._dr_value.cmp(&b._dr_value),
                     };
                     // If comparison is not equal, return the result, applying ascending/descending.
                     if cmp != Equal {
@@ -364,7 +364,7 @@ pub async fn populate_albums_grid(
                 processed_count += 1;
                 // Yield control to the GTK main thread periodically to keep the UI responsive.
                 if processed_count % BATCH_SIZE == 0 {
-                    timeout_add_local(time::Duration::from_millis(1), || Continue);
+                    timeout_add_local(Duration::from_millis(1), || Continue);
                 }
             }
             // Reset busy flag after all albums have been processed.

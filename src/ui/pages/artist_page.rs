@@ -1,6 +1,6 @@
 use std::{
     cell::{Cell, RefCell},
-    cmp::Ordering,
+    cmp::Ordering::{Equal, Greater, Less},
     rc::Rc,
     sync::Arc,
 };
@@ -12,7 +12,7 @@ use gtk4::{
     Label,
     Orientation::{Horizontal, Vertical},
     Overlay, SelectionMode,
-    pango::{EllipsizeMode, WrapMode},
+    pango::{EllipsizeMode, WrapMode::WordChar},
 };
 use libadwaita::{
     Clamp, ViewStack,
@@ -70,9 +70,9 @@ pub async fn artist_page(
     let mut albums = albums;
     albums.sort_by(|a, b| match (a.year, b.year) {
         (Some(ya), Some(yb)) => ya.cmp(&yb),
-        (Some(_), None) => Ordering::Less,
-        (None, Some(_)) => Ordering::Greater,
-        (None, None) => Ordering::Equal,
+        (Some(_), None) => Less,
+        (None, Some(_)) => Greater,
+        (None, None) => Equal,
     });
 
     // Build UI
@@ -170,7 +170,7 @@ fn build_album_card(
         Some(((cover_size - 16) / 10).max(8)),
         Some(EllipsizeMode::End),
         true,
-        Some(WrapMode::WordChar),
+        Some(WordChar),
         Some(2),
         false, // use_markup: false for plain text
     );

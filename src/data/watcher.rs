@@ -1,12 +1,17 @@
 use std::{
     path::Path,
     sync::{Arc, Mutex},
-    thread,
+    thread::{self, JoinHandle},
     time::Duration,
 };
 
 use notify::{
-    Event, EventKind, RecommendedWatcher, RecursiveMode::Recursive, Watcher, event::ModifyKind,
+    Error, Event,
+    EventKind::{Create, Modify, Remove},
+    RecommendedWatcher,
+    RecursiveMode::Recursive,
+    Watcher,
+    event::ModifyKind::{Data, Metadata, Name},
     recommended_watcher,
 };
 use sqlx::SqlitePool;
@@ -52,21 +57,21 @@ pub fn start_watching_library(pool: Arc<SqlitePool>, sender: UnboundedSender<()>
         // The debouncer state. A `JoinHandle` is stored in the `Option`.
         // When a new event arrives, the old timer (if any) is dropped by replacing
         // the `JoinHandle`, effectively cancelling the previous debounced operation.
-        let debouncer: Arc<Mutex<Option<thread::JoinHandle<()>>>> = Arc::new(Mutex::new(None));
+        let debouncer: Arc<Mutex<Option<JoinHandle<()>>>> = Arc::new(Mutex::new(None));
 
         // Define the event handler closure for the file system watcher.
-        let event_handler = move |res: Result<Event, notify::Error>| {
+        let event_handler = move |res: Result<Event, Error>| {
             match res {
                 Ok(event) => {
                     // We are interested in events that signify a change in the library's content
                     // (e.g., file creation, deletion, or modification of name/data/metadata).
                     if matches!(
                         event.kind,
-                        EventKind::Create(_)
-                            | EventKind::Remove(_)
-                            | EventKind::Modify(ModifyKind::Name(_))
-                            | EventKind::Modify(ModifyKind::Data(_))
-                            | EventKind::Modify(ModifyKind::Metadata(_))
+                        Create(_)
+                            | Remove(_)
+                            | Modify(Name(_))
+                            | Modify(Data(_))
+                            | Modify(Metadata(_))
                     ) {
                         // Clone necessary Arcs for the debounced thread.
                         let sender_clone = sender.clone();
