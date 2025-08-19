@@ -52,6 +52,7 @@ pub fn populate_artist_grid(
     artist_count_label: Rc<Label>,
     show_dr_badges: Rc<Cell<bool>>,
     use_original_year: Rc<Cell<bool>>,
+    _view_mode: Rc<RefCell<String>>,
 ) {
     // `thread_local!` is used to prevent multiple concurrent calls to this function,
     // which could lead to race conditions or unnecessary re-population of the grid.

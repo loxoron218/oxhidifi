@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 
 use gtk4::{
     Align, Box, Button, FlowBox, Label, Orientation, PolicyType::Automatic, ScrolledWindow,
@@ -34,6 +34,7 @@ pub fn build_albums_grid(
     _tile_size: i32,
     add_music_button: &Button,
     album_count_label: Rc<Label>,
+    _view_mode: Rc<RefCell<String>>,
 ) -> (Stack, FlowBox) {
     // --- Empty State (No Music Found) ---
     // This state is shown when the library is completely empty.

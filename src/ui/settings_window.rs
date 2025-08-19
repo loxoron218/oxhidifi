@@ -9,13 +9,16 @@ use glib::{
     Propagation::{Proceed, Stop},
     source::idle_add_local_once,
 };
-use gtk4::{Align, Button, EventControllerKey, ListBox, SelectionMode::None, Switch, Window};
+use gtk4::{
+    Align, Button, EventControllerKey, ListBox, SelectionMode::None, StringList, StringObject,
+    Switch, Window,
+};
 use libadwaita::{
-    ActionRow, PreferencesGroup, PreferencesPage, PreferencesWindow,
+    ActionRow, ComboRow, PreferencesGroup, PreferencesPage, PreferencesWindow,
     gdk::Key,
     prelude::{
-        ActionRowExt, ButtonExt, Cast, GtkWindowExt, IsA, PreferencesGroupExt, PreferencesPageExt,
-        PreferencesWindowExt, StaticType, WidgetExt,
+        ActionRowExt, ButtonExt, Cast, ComboRowExt, GtkWindowExt, IsA, ListModelExt,
+        PreferencesGroupExt, PreferencesPageExt, PreferencesWindowExt, StaticType, WidgetExt,
     },
 };
 use sqlx::SqlitePool;
@@ -230,7 +233,8 @@ pub fn show_settings_dialog(
     db_pool: Arc<SqlitePool>,
     is_settings_open: Rc<Cell<bool>>,
     show_dr_badges_setting: Rc<Cell<bool>>,
-    use_original_year_setting: Rc<Cell<bool>>, // New parameter
+    use_original_year_setting: Rc<Cell<bool>>,
+    view_mode_setting: Rc<RefCell<String>>,
 ) {
     // Create the settings window, configured as a modal dialog.
     let dialog = PreferencesWindow::builder()
@@ -304,6 +308,7 @@ pub fn show_settings_dialog(
     let is_settings_open_clone = is_settings_open.clone();
     let show_dr_badges_setting_clone_for_close = show_dr_badges_setting.clone();
     let use_original_year_setting_clone_for_close = use_original_year_setting.clone();
+    let view_mode_setting_clone_for_close = view_mode_setting.clone();
     dialog.connect_close_request(move |_| {
         let current_orders = sort_orders_rc.borrow().clone();
         let prev_settings = load_settings();
@@ -314,6 +319,7 @@ pub fn show_settings_dialog(
             completed_albums: prev_settings.completed_albums,
             show_dr_badges: show_dr_badges_setting_clone_for_close.get(),
             use_original_year: use_original_year_setting_clone_for_close.get(),
+            view_mode: view_mode_setting_clone_for_close.borrow().to_string(),
         });
         is_settings_open_clone.set(false);
         Proceed
@@ -385,6 +391,41 @@ pub fn show_settings_dialog(
         );
     });
     general_group.add(&use_original_year_row);
+
+    // ComboRow for View Mode
+    let view_mode_row = ComboRow::builder()
+        .title("View Mode")
+        .subtitle("Choose how albums and artists are displayed.")
+        .build();
+    let view_options = StringList::new(&["Grid View", "List View"]);
+    view_mode_row.set_model(Some(&view_options));
+
+    // Set default selection based on current setting
+    let initial_view_mode_index = if view_mode_setting.borrow().as_str() == "Grid View" {
+        0
+    } else {
+        1
+    };
+    view_mode_row.set_selected(initial_view_mode_index);
+    let view_mode_setting_clone = view_mode_setting.clone();
+    let refresh_library_ui_clone = refresh_library_ui.clone();
+    let sort_ascending_clone = sort_ascending.clone();
+    let sort_ascending_artists_clone = sort_ascending_artists.clone();
+    view_mode_row.connect_selected_notify(move |combo_row| {
+        let selected_index = combo_row.selected();
+        let selected_item = view_options
+            .item(selected_index)
+            .and_then(|obj| obj.downcast::<StringObject>().ok())
+            .map(|s_obj| s_obj.string().to_string());
+        if let Some(mode) = selected_item {
+            *view_mode_setting_clone.borrow_mut() = mode;
+            (refresh_library_ui_clone)(
+                sort_ascending_clone.get(),
+                sort_ascending_artists_clone.get(),
+            );
+        }
+    });
+    general_group.add(&view_mode_row);
     general_page.add(&general_group);
 
     // --- Audio Page (Currently empty, but kept for potential future use) ---

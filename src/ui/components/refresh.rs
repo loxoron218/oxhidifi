@@ -44,8 +44,8 @@ pub struct RefreshService {
     sender: UnboundedSender<()>,
     pub show_dr_badges: Rc<Cell<bool>>,
     pub use_original_year: Rc<Cell<bool>>,
+    pub view_mode: Rc<RefCell<String>>,
 }
-
 impl RefreshService {
     /// Creates a new `RefreshService` instance, initializing it with all necessary UI components
     /// and shared data.
@@ -71,6 +71,7 @@ impl RefreshService {
         sender: UnboundedSender<()>,
         show_dr_badges: Rc<Cell<bool>>,
         use_original_year: Rc<Cell<bool>>,
+        view_mode: Rc<RefCell<String>>,
     ) -> Self {
         Self {
             db_pool,
@@ -93,6 +94,7 @@ impl RefreshService {
             sender,
             show_dr_badges,
             use_original_year,
+            view_mode,
         }
     }
 
@@ -154,6 +156,7 @@ impl RefreshService {
                                 &service_clone.album_count_label,
                                 service_clone.show_dr_badges.clone(),
                                 service_clone.use_original_year.clone(),
+                                service_clone.view_mode.clone(),
                             )
                             .await;
                         }
@@ -182,6 +185,7 @@ impl RefreshService {
                                 service_clone.artist_count_label.clone(),
                                 service_clone.show_dr_badges.clone(),
                                 service_clone.use_original_year.clone(),
+                                service_clone.view_mode.clone(),
                             );
                         }
                     }
@@ -219,6 +223,7 @@ pub fn setup_library_refresh_channel(
     nav_history: Rc<RefCell<Vec<String>>>,
     show_dr_badges: Rc<Cell<bool>>,
     use_original_year: Rc<Cell<bool>>,
+    view_mode: Rc<RefCell<String>>,
 ) -> (
     UnboundedSender<()>,
     UnboundedReceiver<()>,
@@ -249,11 +254,11 @@ pub fn setup_library_refresh_channel(
         sender.clone(),
         show_dr_badges,
         use_original_year,
+        view_mode,
     ));
 
     // Create the refresh UI closure from the service
     let refresh_library_ui = service.clone().create_refresh_closure();
-
     (sender, receiver, refresh_library_ui, service)
 }
 

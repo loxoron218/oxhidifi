@@ -167,6 +167,7 @@ pub fn connect_settings_dialog(
     is_settings_open: Rc<Cell<bool>>,
     show_dr_badges_setting: Rc<Cell<bool>>,
     use_original_year_setting: Rc<Cell<bool>>,
+    view_mode_setting: Rc<RefCell<String>>,
 ) {
     // Clone all necessary `Rc` and `Arc` variables once for the `connect_clicked` closure.
     // These clones will be moved into the outer closure.
@@ -190,6 +191,7 @@ pub fn connect_settings_dialog(
         let is_settings_open_for_async = is_settings_open_cloned.clone();
         let show_dr_badges_setting_for_async = show_dr_badges_setting_cloned.clone();
         let use_original_year_setting_for_async = use_original_year_setting.clone();
+        let view_mode_setting_for_async = view_mode_setting.clone();
         MainContext::default().spawn_local(async move {
             show_settings_dialog(
                 &window_for_async,
@@ -201,6 +203,7 @@ pub fn connect_settings_dialog(
                 is_settings_open_for_async,
                 show_dr_badges_setting_for_async,
                 use_original_year_setting_for_async,
+                view_mode_setting_for_async,
             );
         });
     });

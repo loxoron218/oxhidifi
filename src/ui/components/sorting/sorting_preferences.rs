@@ -158,6 +158,7 @@ pub fn make_sort_row(
                                         completed_albums: prev.completed_albums,
                                         show_dr_badges: prev.show_dr_badges,
                                         use_original_year: prev.use_original_year,
+                                        view_mode: prev.view_mode.clone(),
                                     });
 
                                     // Update numbering in ActionRow titles
@@ -239,6 +240,7 @@ pub fn connect_sort_reorder_handler(
                         completed_albums: prev.completed_albums,
                         show_dr_badges: prev.show_dr_badges,
                         use_original_year: prev.use_original_year,
+                        view_mode: prev.view_mode.clone(),
                     });
                 }
             }

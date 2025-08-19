@@ -43,6 +43,8 @@ pub struct Settings {
     pub show_dr_badges: bool,
     /// Indicates whether the original release year should be used for display.
     pub use_original_year: bool,
+    /// Indicates the preferred view mode for albums and artists (e.g., "Grid View", "List View").
+    pub view_mode: String,
 }
 
 /// Provides default values for `Settings`.
@@ -63,6 +65,7 @@ impl Default for Settings {
             completed_albums: HashMap::new(),
             show_dr_badges: true,
             use_original_year: true,
+            view_mode: "Grid View".to_string(),
         }
     }
 }

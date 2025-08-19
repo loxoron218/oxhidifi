@@ -30,6 +30,7 @@ pub fn rebuild_artist_grid_for_window(
     artists_stack_cell: &Rc<RefCell<Option<Stack>>>,
     add_music_button: &gtk4::Button,
     artist_count_label: Rc<Label>,
+    view_mode: Rc<RefCell<String>>,
 ) {
     // Always remove existing "artists" child before adding a new one to prevent duplicates
     // and ensure a fresh build.
@@ -45,6 +46,7 @@ pub fn rebuild_artist_grid_for_window(
         scanning_label_artists,
         add_music_button,
         artist_count_label.clone(),
+        view_mode.clone(),
     );
 
     // Add the newly built artists stack to the main ViewStack.

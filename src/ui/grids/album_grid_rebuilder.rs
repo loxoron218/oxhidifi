@@ -27,6 +27,7 @@ pub fn rebuild_albums_grid_for_window(
     albums_stack_cell: &Rc<RefCell<Option<Stack>>>,
     add_music_button: &gtk4::Button,
     album_count_label: Rc<Label>,
+    view_mode: Rc<RefCell<String>>,
 ) {
     // Remove old grid widget from the stack if it exists to prevent duplicates.
     if let Some(child) = stack.child_by_name("albums") {
@@ -41,10 +42,11 @@ pub fn rebuild_albums_grid_for_window(
     // Build a new albums grid and its containing stack.
     let (albums_stack, albums_grid) = build_albums_grid(
         scanning_label_albums,
-        screen_info.borrow().cover_size, // Pass cover_size from screen_info
-        screen_info.borrow().tile_size,  // Pass tile_size from screen_info
+        screen_info.borrow().cover_size,
+        screen_info.borrow().tile_size,
         add_music_button,
-        album_count_label.clone(), // Pass album_count_label
+        album_count_label.clone(),
+        view_mode.clone(),
     );
 
     // Add the newly created albums stack to the main ViewStack.

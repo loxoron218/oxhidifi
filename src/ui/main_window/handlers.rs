@@ -72,6 +72,7 @@ pub fn connect_all_handlers(
     let is_settings_open_cloned = shared_state.is_settings_open.clone();
     let show_dr_badges_cloned = shared_state.show_dr_badges.clone();
     let use_original_year_cloned = shared_state.use_original_year.clone();
+    let view_mode_cloned = shared_state.view_mode.clone();
 
     // Set initial sort icon state based on loaded settings.
     // This ensures the sort button's icon correctly reflects the default or saved sort order
@@ -130,6 +131,7 @@ pub fn connect_all_handlers(
         &widgets.albums_stack_cell,
         &add_music_button_albums,
         widgets.album_count_label.clone(),
+        view_mode_cloned.clone(),
     );
     rebuild_artist_grid_for_window(
         &widgets.stack,
@@ -138,6 +140,7 @@ pub fn connect_all_handlers(
         &widgets.artists_stack_cell,
         &add_music_button_artists,
         widgets.artist_count_label.clone(),
+        view_mode_cloned.clone(),
     );
 
     // Setup live monitor refresh to adapt UI to screen size changes.
@@ -324,5 +327,6 @@ pub fn connect_all_handlers(
         is_settings_open_cloned.clone(),
         show_dr_badges_cloned.clone(),
         use_original_year_cloned.clone(),
+        view_mode_cloned.clone(),
     );
 }
