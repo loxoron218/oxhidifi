@@ -138,9 +138,9 @@ pub async fn album_page(
         dr_completed: bool,
         db_pool: Arc<SqlitePool>,
         sender: UnboundedSender<()>,
-        album: Rc<crate::data::models::Album>,
-        artist: Rc<crate::data::models::Artist>,
-        folder: Rc<crate::data::models::Folder>,
+        album: Rc<Album>,
+        artist: Rc<Artist>,
+        folder: Rc<Folder>,
     ) -> Box {
         let dr_box = Box::builder()
             .orientation(Orientation::Horizontal)
