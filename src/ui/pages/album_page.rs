@@ -85,7 +85,6 @@ pub async fn album_page(
             track_artists.insert(artist_id, art.name);
         }
     }
-
     let horizontal_margin = 32;
     let page = Box::builder()
         .orientation(Orientation::Vertical)
