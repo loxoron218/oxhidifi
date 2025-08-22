@@ -42,7 +42,6 @@ pub async fn artist_page(
     sender: UnboundedSender<()>,
     show_dr_badges: Rc<Cell<bool>>,
     use_original_year: Rc<Cell<bool>>,
-    refresh_library_ui: Rc<dyn Fn(bool, bool)>,
 ) {
     let page_name = format!("artist_{}", artist_id);
     // Upgrade weak references
@@ -54,9 +53,6 @@ pub async fn artist_page(
         Some(s) => s,
         None => return,
     };
-
-    // Refresh the library UI to ensure the artist page reflects the latest data
-    refresh_library_ui(false, false);
 
     // Fetch artist info
     let artist = match fetch_artist_by_id(&db_pool, artist_id).await {

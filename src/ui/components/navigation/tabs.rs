@@ -89,6 +89,7 @@ pub fn connect_tab_navigation(
 
         // Reset the header to the main view and refresh the UI.
         navigate_back_to_main_grid(
+            &stack_albums_clone, // Passed for consistency, but not used within navigate_back_to_main_grid
             &left_btn_stack_albums_clone,
             &right_btn_box_albums_clone,
             &refresh_library_ui_albums_clone,
@@ -163,6 +164,7 @@ pub fn connect_tab_navigation(
 
         // Reset the header to the main view and refresh the UI.
         navigate_back_to_main_grid(
+            &stack_artists_clone, // Passed for consistency, but not used within navigate_back_to_main_grid
             &left_btn_stack_artists_clone,
             &right_btn_box_artists_clone,
             &refresh_library_ui_artists_clone,
