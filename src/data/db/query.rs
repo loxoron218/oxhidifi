@@ -23,7 +23,7 @@ pub struct AlbumDisplayInfo {
     /// The sample rate frequency of the tracks (e.g., 44100, 96000, optional).
     pub frequency: Option<u32>,
     /// The calculated Dynamic Range (DR) value for the album (optional).
-    pub _dr_value: Option<u8>,
+    pub dr_value: Option<u8>,
     /// Indicates whether the DR value for this album has been manually marked as completed/verified.
     pub dr_completed: bool,
     /// The original release date of the album as a string (optional).
@@ -87,7 +87,7 @@ fn map_row_to_album_display_info(row: SqliteRow) -> AlbumDisplayInfo {
         format: row.get("format"),
         bit_depth: row.get("bit_depth"),
         frequency: row.get("frequency"),
-        _dr_value: row.get("dr_value"),
+        dr_value: row.get("dr_value"),
         dr_completed: row.get("dr_completed"),
         original_release_date: row.get("original_release_date"),
         folder_path: row.get("folder_path"),

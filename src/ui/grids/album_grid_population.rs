@@ -141,7 +141,7 @@ pub async fn populate_albums_grid(
                                 .or(b.year); // Fallback to `year` field
                             a_year.cmp(&b_year)
                         }
-                        DrValue => a._dr_value.cmp(&b._dr_value),
+                        DrValue => a.dr_value.cmp(&b.dr_value),
                     };
                     // If comparison is not equal, return the result, applying ascending/descending.
                     if cmp != Equal {
@@ -292,7 +292,7 @@ pub async fn populate_albums_grid(
                     };
                     let is_dr_completed_from_store = dr_store.contains(&album_key);
                     let dr_label =
-                        create_dr_badge_label(album_info._dr_value, is_dr_completed_from_store);
+                        create_dr_badge_label(album_info.dr_value, is_dr_completed_from_store);
                     overlay.add_overlay(&dr_label);
                 }
 

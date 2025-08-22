@@ -320,7 +320,7 @@ pub fn create_album_tile(
     overlay.set_halign(Start);
     overlay.set_valign(Start);
     if show_dr_badges.get() {
-        if let Some(dr_label) = create_dr_overlay(album._dr_value, album.dr_completed) {
+        if let Some(dr_label) = create_dr_overlay(album.dr_value, album.dr_completed) {
             overlay.add_overlay(&dr_label);
         }
     }

@@ -179,7 +179,7 @@ fn build_album_card(
     title_label.set_xalign(0.0);
 
     let artist_label = create_album_label(
-        &album._artist,
+        &album.artist,
         &["album-artist-label"],
         Some(18),
         Some(EllipsizeMode::End),
@@ -281,7 +281,7 @@ fn build_album_card(
 
     // Conditionally add DR badge to overlay, if enabled in settings.
     if show_dr_badges.get() {
-        let dr_label = create_dr_overlay(album._dr_value, album.dr_completed).unwrap();
+        let dr_label = create_dr_overlay(album.dr_value, album.dr_completed).unwrap();
         overlay.add_overlay(&dr_label);
     }
 
@@ -400,12 +400,12 @@ pub async fn fetch_album_display_info_by_artist(
             id: row.get("id"),
             title: row.get("title"),
             year: row.get("year"),
-            _artist: row.get("artist"),
+            artist: row.get("artist"),
             cover_art: row.get("cover_art"),
             format: row.get("format"),
             bit_depth: row.get("bit_depth"),
             frequency: row.get("frequency"),
-            _dr_value: row.get("dr_value"),
+            dr_value: row.get("dr_value"),
             dr_completed: row.get("dr_completed"),
             original_release_date: row.get("original_release_date"),
         })
@@ -418,12 +418,12 @@ pub struct AlbumDisplayInfoWithYear {
     pub id: i64,
     pub title: String,
     pub year: Option<i32>,
-    pub _artist: String,
+    pub artist: String,
     pub cover_art: Option<Vec<u8>>,
     pub format: Option<String>,
     pub bit_depth: Option<u32>,
     pub frequency: Option<u32>,
-    pub _dr_value: Option<u8>,
+    pub dr_value: Option<u8>,
     pub dr_completed: bool,
     pub original_release_date: Option<String>,
 }
