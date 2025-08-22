@@ -189,20 +189,18 @@ fn build_album_card(
         false, // Explicitly set use_markup to false
     );
     artist_label.add_css_class("album-artist-label"); // Ensure this class is applied
-    let mut format_fields = Vec::new();
-    if let Some(format_str) = album.format.as_ref() {
+    let format_line = if let Some(format_str) = album.format.as_ref() {
         let format_caps = format_str.to_uppercase();
         match (album.bit_depth, album.frequency) {
             (Some(bit), Some(freq)) => {
-                format_fields.push(format!("{} {}/{}", format_caps, bit, format_freq_khz(freq)));
+                format!("{} {}/{}", format_caps, bit, format_freq_khz(freq))
             }
-            (None, Some(freq)) => {
-                format_fields.push(format!("{} {}", format_caps, format_freq_khz(freq)))
-            }
-            _ => format_fields.push(format_caps),
+            (None, Some(freq)) => format!("{} {}", format_caps, format_freq_khz(freq)),
+            _ => format_caps,
         }
-    }
-    let format_line = format_fields.join(" · ");
+    } else {
+        String::new()
+    };
     let format_label = create_album_label(
         &format_line,
         &["album-format-label"],

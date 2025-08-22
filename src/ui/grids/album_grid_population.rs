@@ -197,25 +197,18 @@ pub async fn populate_albums_grid(
                 );
 
                 // Format audio details (format, bit depth, frequency).
-                let mut format_fields = Vec::new();
-                if let Some(format_str) = album_info.format.as_ref() {
+                let format_line = if let Some(format_str) = album_info.format.as_ref() {
                     let format_caps = format_str.to_uppercase();
                     match (album_info.bit_depth, album_info.frequency) {
                         (Some(bit), Some(freq)) => {
-                            format_fields.push(format!(
-                                "{} {}/{}",
-                                format_caps,
-                                bit,
-                                format_freq_khz(freq)
-                            ));
+                            format!("{} {}/{}", format_caps, bit, format_freq_khz(freq))
                         }
-                        (None, Some(freq)) => {
-                            format_fields.push(format!("{} {}", format_caps, format_freq_khz(freq)))
-                        }
-                        _ => format_fields.push(format_caps),
+                        (None, Some(freq)) => format!("{} {}", format_caps, format_freq_khz(freq)),
+                        _ => format_caps,
                     }
-                }
-                let format_line = format_fields.join(" · ");
+                } else {
+                    String::new()
+                };
                 let format_label = create_styled_label(
                     &format_line,
                     &["album-format-label"],

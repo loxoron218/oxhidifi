@@ -79,7 +79,13 @@ pub fn make_sort_row(
                         .and_then(|p| p.downcast::<ListBox>().ok())
                     {
                         // Find the source and target indices for reordering
-                        let mut children_widgets: Vec<Widget> = Vec::new();
+                        let mut count = 0;
+                        let mut current_child = listbox.first_child();
+                        while let Some(child) = current_child {
+                            count += 1;
+                            current_child = child.next_sibling();
+                        }
+                        let mut children_widgets: Vec<Widget> = Vec::with_capacity(count);
                         let mut current_child = listbox.first_child();
                         while let Some(child) = current_child {
                             children_widgets.push(child.clone());
@@ -124,7 +130,7 @@ pub fn make_sort_row(
                                 }
 
                                 // Update sort_orders, persist, and refresh UI after reorder
-                                let mut new_orders = Vec::new();
+                                let mut new_orders = Vec::with_capacity(children_widgets.len());
                                 let mut current_child_after_reorder = listbox.first_child();
                                 while let Some(child_after_reorder) = current_child_after_reorder {
                                     if let Some(list_row_ref) =
@@ -212,7 +218,13 @@ pub fn connect_sort_reorder_handler(
         let sort_listbox_weak_clone = sort_listbox_weak.clone();
         idle_add_local_once(move || {
             if let Some(listbox) = sort_listbox_weak_clone.upgrade() {
-                let mut new_orders = Vec::new();
+                let mut count = 0;
+                let mut current_child = listbox.first_child();
+                while let Some(child) = current_child {
+                    count += 1;
+                    current_child = child.next_sibling();
+                }
+                let mut new_orders = Vec::with_capacity(count);
                 let mut current_child = listbox.first_child();
                 while let Some(row) = current_child {
                     if let Some(list_row) = row.downcast_ref::<ListBoxRow>() {

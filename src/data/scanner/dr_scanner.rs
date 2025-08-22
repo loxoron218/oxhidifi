@@ -1,4 +1,4 @@
-use std::error::{Error, OnceLock};
+use std::{error::Error, sync::OnceLock};
 
 use regex::Regex;
 use tokio::{
@@ -61,7 +61,7 @@ pub async fn scan_dr_value(folder_path: &str) -> Result<Option<u8>, Box<dyn Erro
                         }
                     };
                     let mut reader = BufReader::new(file);
-                    let mut buffer = Vec::new();
+                    let mut buffer = Vec::with_capacity(256);
                     loop {
                         buffer.clear(); // Clear buffer for each new line
                         let bytes_read = reader.read_until(b'\n', &mut buffer).await?;

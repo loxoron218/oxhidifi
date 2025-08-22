@@ -242,7 +242,7 @@ pub async fn album_page(
         track_artists: &HashMap<i64, String>,
         is_various_artists_album: bool,
     ) -> ActionRow {
-        let mut subtitle_fields = Vec::new();
+        let mut subtitle_fields = Vec::with_capacity(4);
 
         // Add track artist if different from album artist OR if it's a "Various Artists" album
         if t.artist_id != album_artist_id || is_various_artists_album {
@@ -382,7 +382,7 @@ pub async fn album_page(
             .spacing(8)
             .halign(Start)
             .build();
-        let mut meta_fields = Vec::new();
+            let mut meta_fields = Vec::with_capacity(3);
         if !year_display_text.is_empty() {
             meta_fields.push(year_display_text);
         }
