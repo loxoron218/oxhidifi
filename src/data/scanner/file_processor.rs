@@ -11,7 +11,10 @@ use lofty::{
 };
 use sqlx::SqlitePool;
 
-use crate::data::db::crud::{insert_or_get_album, insert_or_get_artist, insert_track};
+use crate::{
+    data::db::crud::{insert_or_get_album, insert_or_get_artist, insert_track},
+    utils::image_cache,
+};
 
 /// Processes a single audio file by extracting its metadata (tags and properties)
 /// and inserting or updating the corresponding entries in the database.
@@ -83,13 +86,35 @@ pub async fn process_file(
         .map(|s| s.to_string())
         .unwrap_or_else(|| artist_name.clone());
 
+    // --- Cover Art Handling ---
+    // Extract cover art data, process it into a thumbnail, and cache it.
+    // This returns a path to the cached image.
+    let cover_art_path = if let Some(t) = tag {
+        if let Some(picture) = t.pictures().first() {
+            let image_data = picture.data();
+            match image_cache::get_or_create_thumbnail(image_data, &album_title, &album_artist_name)
+                .await
+            {
+                Ok(path) => Some(path.to_string_lossy().into_owned()),
+                Err(e) => {
+                    eprintln!(
+                        "Could not process cover art for album {}: {}",
+                        album_title, e
+                    );
+                    None
+                }
+            }
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     // Other metadata fields, defaulting to None if not present.
     let year = tag.and_then(|t| t.year()).map(|y| y as i32);
     let track_no = tag.and_then(|t| t.track());
     let disc_no = tag.and_then(|t| t.disk());
-
-    // Extract cover art as Vec<u8> from the first picture found in the tag.
-    let cover_art = tag.and_then(|t| t.pictures().first().map(|pic| pic.data().to_vec()));
 
     // Parse original release date from string to Timestamp, then back to String for storage.
     let original_release_date = tag.and_then(|t| {
@@ -119,7 +144,7 @@ pub async fn process_file(
         &album_title,
         album_artist_id,
         year,
-        cover_art,
+        cover_art_path,
         folder_id,
         dr_value,
         original_release_date,

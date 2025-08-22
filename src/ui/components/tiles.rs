@@ -4,7 +4,7 @@ use std::{
     sync::Arc,
 };
 
-use gdk_pixbuf::{InterpType::Bilinear, PixbufLoader, prelude::PixbufLoaderExt};
+use gdk_pixbuf::Pixbuf;
 use glib::{MainContext, markup_escape_text, prelude::ObjectExt};
 use gtk4::{
     Align::{Center, End, Fill, Start},
@@ -31,35 +31,21 @@ use crate::{
 
 /// Helper to create the album cover as a Picture widget.
 ///
-/// This function takes optional cover art bytes and a desired size,
-/// then creates a `Picture` widget displaying the scaled and cropped
-/// album cover. If no cover art is provided, an empty `Picture` is returned.
-pub fn create_album_cover(cover_art: Option<&Vec<u8>>, cover_size: i32) -> Picture {
-    if let Some(art) = cover_art {
-        let loader = PixbufLoader::new();
-        loader.write(art).expect("Failed to load cover art");
-        loader.close().expect("Failed to close loader");
-        let pixbuf = loader.pixbuf().expect("No pixbuf loaded");
-        let (w, h) = (pixbuf.width(), pixbuf.height());
-        let side = w.min(h);
-        let cropped = pixbuf.new_subpixbuf((w - side) / 2, (h - side) / 2, side, side);
-        let scaled = cropped
-            .scale_simple(cover_size, cover_size, Bilinear)
-            .unwrap();
-        let picture = Picture::for_pixbuf(&scaled);
-        picture.set_size_request(cover_size, cover_size);
-        picture.set_halign(Start);
-        picture.set_valign(Start);
-        picture.add_css_class("album-cover-border");
-        picture
-    } else {
-        let pic = Picture::new();
-        pic.set_size_request(cover_size, cover_size);
-        pic.set_halign(Start);
-        pic.set_valign(Start);
-        pic.add_css_class("album-cover-border");
-        pic
+/// This function takes an optional path to a cached image file and a desired size,
+/// then creates a `Picture` widget displaying the scaled album cover.
+/// If no path is provided or the file doesn't exist, an empty `Picture` is returned.
+pub fn create_album_cover(cover_art_path: Option<&String>, cover_size: i32) -> Picture {
+    let pic = Picture::new();
+    pic.set_size_request(cover_size, cover_size);
+    pic.set_halign(Start);
+    pic.set_valign(Start);
+    pic.add_css_class("album-cover-border");
+    if let Some(path) = cover_art_path {
+        if let Ok(pixbuf) = Pixbuf::from_file_at_scale(path, cover_size, cover_size, true) {
+            pic.set_pixbuf(Some(&pixbuf));
+        }
     }
+    pic
 }
 
 /// Helper to create the DR badge overlay if present.

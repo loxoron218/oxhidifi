@@ -418,7 +418,7 @@ pub struct AlbumDisplayInfoWithYear {
     pub title: String,
     pub year: Option<i32>,
     pub artist: String,
-    pub cover_art: Option<Vec<u8>>,
+    pub cover_art: Option<String>,
     pub format: Option<String>,
     pub bit_depth: Option<u32>,
     pub frequency: Option<u32>,

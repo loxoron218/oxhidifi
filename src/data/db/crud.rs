@@ -65,7 +65,7 @@ pub async fn insert_or_get_artist(pool: &SqlitePool, name: &str) -> Result<i64> 
 /// * `title` - The title of the album.
 /// * `artist_id` - The ID of the primary artist of the album.
 /// * `year` - The release year of the album (optional).
-/// * `cover_art` - The album's cover art as a byte vector (optional).
+/// * `cover_art_path` - The path to the album's cached cover art (optional).
 /// * `folder_id` - The ID of the folder where the album's files are located.
 /// * `dr_value` - The Dynamic Range (DR) value for the album (optional).
 /// * `original_release_date` - The original release date of the album as a string (optional).
@@ -78,7 +78,7 @@ pub async fn insert_or_get_album(
     title: &str,
     artist_id: i64,
     year: Option<i32>,
-    cover_art: Option<Vec<u8>>,
+    cover_art_path: Option<String>,
     folder_id: i64,
     dr_value: Option<u8>,
     original_release_date: Option<String>,
@@ -96,7 +96,7 @@ pub async fn insert_or_get_album(
         // Album exists, update its metadata
         query("UPDATE albums SET year = ?, cover_art = ?, dr_value = ?, original_release_date = ? WHERE id = ?")
             .bind(year)
-            .bind(cover_art)
+            .bind(cover_art_path)
             .bind(dr_value)
             .bind(original_release_date)
             .bind(album_id)
@@ -109,7 +109,7 @@ pub async fn insert_or_get_album(
             .bind(title)
             .bind(artist_id)
             .bind(year)
-            .bind(cover_art)
+            .bind(cover_art_path)
             .bind(folder_id)
             .bind(dr_value)
             .bind(false)

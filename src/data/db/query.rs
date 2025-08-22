@@ -14,8 +14,8 @@ pub struct AlbumDisplayInfo {
     pub artist: String,
     /// The release year of the album (optional).
     pub year: Option<i32>,
-    /// The album's cover art as a byte vector (optional).
-    pub cover_art: Option<Vec<u8>>,
+    /// The path to the album's cached cover art image file (optional).
+    pub cover_art: Option<String>,
     /// The audio format of the tracks in the album (e.g., "FLAC", "MP3", optional).
     pub format: Option<String>,
     /// The bit depth of the tracks (e.g., 16, 24, optional).

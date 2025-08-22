@@ -5,7 +5,7 @@ use std::{
     sync::Arc,
 };
 
-use gdk_pixbuf::{InterpType::Bilinear, Pixbuf, PixbufLoader, prelude::PixbufLoaderExt};
+use gdk_pixbuf::Pixbuf;
 use glib::{MainContext, WeakRef, markup_escape_text};
 use gtk4::{
     Align::{Center, End, Start},
@@ -97,23 +97,13 @@ pub async fn album_page(
     page.add_css_class("album-detail-page");
 
     /// Build the album cover widget, scaling and falling back if needed.
-    fn build_album_cover(art: &Option<Vec<u8>>) -> Picture {
-        if let Some(art) = art {
-            let loader = PixbufLoader::new();
-            if loader.write(art).is_ok() {
-                loader.close().ok();
-                if let Some(pixbuf) = loader.pixbuf() {
-                    let (width, height) = (pixbuf.width(), pixbuf.height());
-                    let scale = f64::min(300.0 / width as f64, 300.0 / height as f64);
-                    let new_width = (width as f64 * scale).round() as i32;
-                    let new_height = (height as f64 * scale).round() as i32;
-                    if let Some(scaled) = pixbuf.scale_simple(new_width, new_height, Bilinear) {
-                        let pic = Picture::for_pixbuf(&scaled);
-                        pic.set_size_request(300, 300);
-                        pic.add_css_class("album-cover-border");
-                        return pic;
-                    }
-                }
+    fn build_album_cover(path: &Option<String>) -> Picture {
+        if let Some(path_str) = path {
+            if let Ok(pixbuf) = Pixbuf::from_file_at_scale(path_str, 300, 300, true) {
+                let pic = Picture::for_pixbuf(&pixbuf);
+                pic.set_size_request(300, 300);
+                pic.add_css_class("album-cover-border");
+                return pic;
             }
         }
         let pic = Picture::new();

@@ -39,8 +39,8 @@ pub struct Album {
     pub year: Option<i32>,
     /// The original release date of the album, typically in "YYYY-MM-DD" format.
     pub original_release_date: Option<String>,
-    /// The album's cover art, stored as a vector of bytes (e.g., JPEG or PNG data).
-    pub cover_art: Option<Vec<u8>>,
+    /// The path to the album's cached cover art image file.
+    pub cover_art: Option<String>,
     /// The ID of the folder where the album's files are located.
     pub folder_id: i64,
     /// The Dynamic Range (DR) value of the album, if calculated or available.

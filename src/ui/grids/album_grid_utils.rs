@@ -1,10 +1,10 @@
-use gdk_pixbuf::{InterpType::Bilinear, PixbufLoader};
+use gdk_pixbuf::Pixbuf;
 use gtk4::{
     Align::{End, Start},
     Label, Picture,
     pango::{EllipsizeMode, WrapMode},
 };
-use libadwaita::prelude::{PixbufLoaderExt, WidgetExt};
+use libadwaita::prelude::WidgetExt;
 
 /// Helper function to create a styled GTK Label.
 ///
@@ -58,35 +58,34 @@ pub fn create_styled_label(
 
 /// Creates a `gtk4::Picture` widget for an album cover, handling scaling and fallbacks.
 ///
-/// This function takes optional raw image data, attempts to load it into a `Pixbuf`,
-/// crops it to a square, scales it to the desired `cover_size`, and applies a CSS class.
-/// If no cover art is provided or loading fails, it returns an empty `Picture` with the
-/// correct size and styling.
+/// This function takes an optional path to a cached image file. It attempts to load it,
+/// scale it to the desired `cover_size`, and apply a CSS class. If no path is provided
+/// or loading fails, it returns an empty `Picture` with the correct size and styling,
+/// which acts as a placeholder.
 ///
 /// # Arguments
-/// * `cover_art` - An `Option<&Vec<u8>>` containing the raw image bytes for the cover.
+/// * `cover_art_path` - An `Option<&String>` containing the path to the cached cover image.
 /// * `cover_size` - The desired size (width and height) for the square cover in pixels.
 ///
 /// # Returns
 /// A `gtk4::Picture` widget displaying the album cover or a placeholder.
-pub fn create_album_cover_picture(cover_art: Option<&Vec<u8>>, cover_size: i32) -> Picture {
+pub fn create_album_cover_picture(cover_art_path: Option<&String>, cover_size: i32) -> Picture {
     let pic = Picture::new();
     pic.set_size_request(cover_size, cover_size);
     pic.set_halign(Start);
     pic.set_valign(Start);
     pic.add_css_class("album-cover-border");
-
-    if let Some(art) = cover_art {
-        let loader = PixbufLoader::new();
-        if loader.write(art).is_ok() {
-            loader.close().ok(); // Close the loader even if there's an error to prevent resource leaks
-            if let Some(pixbuf) = loader.pixbuf() {
-                let (w, h) = (pixbuf.width(), pixbuf.height());
-                let side = w.min(h);
-                let cropped = pixbuf.new_subpixbuf((w - side) / 2, (h - side) / 2, side, side);
-                if let Some(scaled) = cropped.scale_simple(cover_size, cover_size, Bilinear) {
-                    pic.set_pixbuf(Some(&scaled));
-                }
+    if let Some(path_str) = cover_art_path {
+        // Load the pixbuf directly from the cached file, scaling it at load time
+        // for better performance and memory usage.
+        match Pixbuf::from_file_at_scale(path_str, cover_size, cover_size, true) {
+            Ok(pixbuf) => {
+                pic.set_pixbuf(Some(&pixbuf));
+            }
+            Err(e) => {
+                // This error is expected if a file was deleted from the cache,
+                // so we just log it for debugging but don't interrupt the user.
+                eprintln!("Failed to load cached cover image from {}: {}", path_str, e);
             }
         }
     }
