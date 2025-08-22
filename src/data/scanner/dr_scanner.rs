@@ -1,10 +1,27 @@
-use std::error::Error;
+use std::error::{Error, OnceLock};
 
 use regex::Regex;
 use tokio::{
     fs::{File, read_dir},
     io::{AsyncBufReadExt, BufReader},
 };
+
+/// Returns a reference to the lazily-initialized, compiled regex.
+///
+/// This function ensures the regex is compiled only once, in a thread-safe manner,
+/// using `OnceLock` for safe, concurrent initialization.
+fn get_dr_regex() -> &'static Regex {
+    // This provides safe, concurrent, one-time initialization.
+    static DR_REGEX: OnceLock<Regex> = OnceLock::new();
+    DR_REGEX.get_or_init(|| {
+
+        // The regex is compiled here only on the first call.
+        // `unwrap` is safe as the pattern is hardcoded and valid.
+        Regex::new(
+            r"(?i)DR(\d+|ERR)|Official DR value:\s*(\d+|ERR)|Реальные значения DR:\s*(\d+|ERR)|Official EP/Album DR:\s*(\d+|ERR)",
+        ).unwrap()
+    })
+}
 
 /// Scans `.txt` and `.log` files within a specified folder for Dynamic Range (DR) values.
 /// It parses various common DR value formats and returns the highest valid DR value found.
@@ -26,10 +43,8 @@ use tokio::{
 pub async fn scan_dr_value(folder_path: &str) -> Result<Option<u8>, Box<dyn Error>> {
     let mut entries = read_dir(folder_path).await?;
 
-    // Regex to capture DR values. Handles "DRXX", "DRXX|ERR", and "XX|ERR".
-    let dr_regex = Regex::new(
-        r"(?i)DR(\d+|ERR)|Official DR value:\s*(\d+|ERR)|Реальные значения DR:\s*(\d+|ERR)|Official EP/Album DR:\s*(\d+|ERR)",
-    ).unwrap(); // Unwrap is safe here as the regex is hardcoded and valid.
+    // Lazily initialize the regex to capture DR values.
+    let dr_regex = get_dr_regex();
     let mut highest_dr: Option<u8> = None;
     while let Some(entry) = entries.next_entry().await? {
         let path = entry.path();
