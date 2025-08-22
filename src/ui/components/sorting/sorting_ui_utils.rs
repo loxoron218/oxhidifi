@@ -23,12 +23,10 @@ use libadwaita::{
 ///   sort direction for albums (true for ascending, false for descending).
 /// * `sort_ascending_artists` - A reference to an `Rc<Cell<bool>>` holding the current
 ///   sort direction for artists (true for ascending, false for descending).
-/// * `_is_albums_active` - A boolean indicating whether the albums tab is currently active.
 fn refresh_ui_for_active_tab(
     refresh_library_ui: &Rc<dyn Fn(bool, bool)>,
     sort_ascending: &Rc<Cell<bool>>,
     sort_ascending_artists: &Rc<Cell<bool>>,
-    _is_albums_active: bool,
 ) {
     (refresh_library_ui)(sort_ascending.get(), sort_ascending_artists.get());
 }
@@ -69,7 +67,6 @@ pub fn connect_tab_sort_refresh(
                 &refresh_library_ui_albums,
                 &sort_ascending_albums,
                 &sort_ascending_artists_albums,
-                true,
             );
         }
     });
@@ -88,7 +85,6 @@ pub fn connect_tab_sort_refresh(
                 &refresh_library_ui_artists,
                 &sort_ascending_artists_btn,
                 &sort_ascending_artists_val,
-                false,
             );
         }
     });
