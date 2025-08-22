@@ -35,6 +35,7 @@ use super::{
 /// * `sort_ascending` - `Rc<Cell<bool>>` indicating the current sort direction for albums.
 /// * `sort_ascending_artists` - `Rc<Cell<bool>>` indicating the current sort direction for artists.
 pub fn navigate_back_to_main_grid(
+    _stack: &ViewStack, // `_stack` is intentionally unused, as it's not directly manipulated here, but passed for consistency.
     left_btn_stack: &ViewStack,
     right_btn_box: &Clamp,
     refresh_library_ui: &Rc<dyn Fn(bool, bool)>,
@@ -219,6 +220,7 @@ pub fn handle_back_navigation(
             // If navigating back to a main grid, reset the header and refresh the UI.
             if prev_page.as_str() == VIEW_STACK_ALBUMS || prev_page.as_str() == VIEW_STACK_ARTISTS {
                 navigate_back_to_main_grid(
+                    &stack,
                     &left_btn_stack,
                     &right_btn_box,
                     &refresh_library_ui,
@@ -236,6 +238,7 @@ pub fn handle_back_navigation(
                 stack.set_visible_child_name(tab);
 
                 navigate_back_to_main_grid(
+                    &stack,
                     &left_btn_stack,
                     &right_btn_box,
                     &refresh_library_ui,
