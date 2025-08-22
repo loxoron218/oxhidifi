@@ -6,8 +6,11 @@ use std::{
 };
 
 use glib::{ControlFlow::Continue, MainContext, source::timeout_add_local};
-use gtk4::{FlowBox, Label, Stack};
-use libadwaita::{Clamp, ViewStack, prelude::WidgetExt};
+use gtk4::{Entry, FlowBox, Label, Stack};
+use libadwaita::{
+    Clamp, ViewStack,
+    prelude::{EditableExt, WidgetExt},
+};
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
@@ -45,6 +48,7 @@ pub struct RefreshService {
     pub show_dr_badges: Rc<Cell<bool>>,
     pub use_original_year: Rc<Cell<bool>>,
     pub view_mode: Rc<RefCell<String>>,
+    search_entry: Rc<Entry>,
 }
 impl RefreshService {
     /// Creates a new `RefreshService` instance, initializing it with all necessary UI components
@@ -72,6 +76,7 @@ impl RefreshService {
         show_dr_badges: Rc<Cell<bool>>,
         use_original_year: Rc<Cell<bool>>,
         view_mode: Rc<RefCell<String>>,
+        search_entry: Rc<Entry>,
     ) -> Self {
         Self {
             db_pool,
@@ -95,6 +100,7 @@ impl RefreshService {
             show_dr_badges,
             use_original_year,
             view_mode,
+            search_entry,
         }
     }
 
@@ -186,8 +192,17 @@ impl RefreshService {
                                 service_clone.show_dr_badges.clone(),
                                 service_clone.use_original_year.clone(),
                                 service_clone.view_mode.clone(),
+                                service_clone.clone().create_refresh_closure(),
                             );
                         }
+                    }
+
+                    // If a search is active, trigger a re-search by emitting the changed signal
+                    // on the search entry. This ensures search results are also refreshed.
+                    if !service_clone.search_entry.text().is_empty() {
+                        service_clone
+                            .search_entry
+                            .set_text(&service_clone.search_entry.text());
                     }
                 });
             },
@@ -224,6 +239,7 @@ pub fn setup_library_refresh_channel(
     show_dr_badges: Rc<Cell<bool>>,
     use_original_year: Rc<Cell<bool>>,
     view_mode: Rc<RefCell<String>>,
+    search_entry: Rc<Entry>,
 ) -> (
     UnboundedSender<()>,
     UnboundedReceiver<()>,
@@ -255,6 +271,7 @@ pub fn setup_library_refresh_channel(
         show_dr_badges,
         use_original_year,
         view_mode,
+        search_entry,
     ));
 
     // Create the refresh UI closure from the service

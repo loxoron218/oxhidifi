@@ -11,7 +11,8 @@ use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::{
-    data::db::query::fetch_all_artists, ui::components::tiles::create_artist_tile,
+    data::db::{dr_sync::synchronize_dr_completed_from_store, query::fetch_all_artists},
+    ui::components::tiles::create_artist_tile,
     utils::screen::ScreenInfo,
 };
 
@@ -53,6 +54,7 @@ pub fn populate_artist_grid(
     show_dr_badges: Rc<Cell<bool>>,
     use_original_year: Rc<Cell<bool>>,
     _view_mode: Rc<RefCell<String>>,
+    refresh_library_ui: Rc<dyn Fn(bool, bool)>,
 ) {
     // `thread_local!` is used to prevent multiple concurrent calls to this function,
     // which could lead to race conditions or unnecessary re-population of the grid.
@@ -84,10 +86,18 @@ pub fn populate_artist_grid(
     let artist_count_label = artist_count_label.clone();
     let show_dr_badges = show_dr_badges.clone();
     let use_original_year = use_original_year.clone();
+    let refresh_library_ui = refresh_library_ui.clone();
 
     // Spawn a local asynchronous task on the GLib main context.
     // This allows UI updates to happen on the main thread after data fetching.
     MainContext::default().spawn_local(async move {
+        // Synchronize DR completed status from the persistence store before fetching artist info.
+        if let Err(e) = synchronize_dr_completed_from_store(&db_pool).await {
+            eprintln!(
+                "Error synchronizing DR completed status before artist grid population: {}",
+                e
+            );
+        }
         let fetch_result = fetch_all_artists(&db_pool).await; // Fetch artists from the database.
         match fetch_result {
             Err(e) => {
@@ -150,6 +160,7 @@ pub fn populate_artist_grid(
                         sender.clone(),
                         show_dr_badges.clone(),
                         use_original_year.clone(),
+                        refresh_library_ui.clone(),
                     ));
                     artist_grid.insert(&*tile, -1);
                 }

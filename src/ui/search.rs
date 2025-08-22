@@ -101,6 +101,7 @@ pub fn connect_live_search(
         let sender = sender_cloned.clone();
         let show_dr_badges = show_dr_badges_cloned.clone();
         let use_original_year = use_original_year_cloned.clone();
+        let refresh_library_ui = refresh_library_ui_cloned.clone();
 
         // Spawn an asynchronous task to perform the search and update the UI
         MainContext::default().spawn_local(async move {
@@ -164,6 +165,7 @@ pub fn connect_live_search(
                                 sender.clone(),
                                 show_dr_badges.clone(),
                                 use_original_year.clone(),
+                                refresh_library_ui.clone(),
                             ));
                             albums_grid.insert(&*flow_child, -1);
                         }
@@ -199,6 +201,7 @@ pub fn connect_live_search(
                                 sender.clone(),
                                 show_dr_badges.clone(),
                                 use_original_year.clone(),
+                                refresh_library_ui.clone(),
                             ));
                             artist_grid.insert(&*flow_child, -1);
                         }

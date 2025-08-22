@@ -193,6 +193,7 @@ pub fn create_album_tile(
     sender: UnboundedSender<()>,
     show_dr_badges: Rc<Cell<bool>>,
     use_original_year: Rc<Cell<bool>>,
+    refresh_library_ui: Rc<dyn Fn(bool, bool)>,
 ) -> FlowBoxChild {
     // Create and style the album title label
     let title_label = {
@@ -395,6 +396,7 @@ pub fn create_album_tile(
     gesture.connect_pressed(move |_, _, _, _| {
         // The album ID is now owned by the closure.
         let album_id = album.id;
+        let refresh_library_ui_clone = refresh_library_ui.clone();
         if let (Some(stack), Some(header_btn_stack)) = (
             stack_weak.upgrade(),
             left_btn_stack_for_closure.downgrade().upgrade(),
@@ -410,6 +412,7 @@ pub fn create_album_tile(
                 right_btn_box_for_closure.downgrade(),
                 sender.clone(),
                 show_dr_badges.clone(),
+                refresh_library_ui_clone,
             ));
         }
     });
@@ -436,6 +439,7 @@ pub fn create_artist_tile(
     sender: UnboundedSender<()>,
     show_dr_badges: Rc<Cell<bool>>,
     use_original_year: Rc<Cell<bool>>,
+    refresh_library_ui: Rc<dyn Fn(bool, bool)>,
 ) -> FlowBoxChild {
     let icon = Image::from_icon_name("avatar-default-symbolic");
     icon.set_pixel_size(cover_size);
@@ -490,6 +494,7 @@ pub fn create_artist_tile(
     let right_btn_box_weak = right_btn_box.downgrade();
     let gesture = GestureClick::builder().build();
     gesture.connect_pressed(move |_, _, _, _| {
+        let refresh_library_ui_clone = refresh_library_ui.clone();
         if let (Some(stack), Some(left_btn_stack)) =
             (stack_weak.upgrade(), left_btn_stack_weak.upgrade())
         {
@@ -506,6 +511,7 @@ pub fn create_artist_tile(
                 sender.clone(),
                 show_dr_badges.clone(),
                 use_original_year.clone(),
+                refresh_library_ui_clone,
             ));
         }
     });

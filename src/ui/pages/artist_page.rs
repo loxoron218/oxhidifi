@@ -42,6 +42,7 @@ pub async fn artist_page(
     sender: UnboundedSender<()>,
     show_dr_badges: Rc<Cell<bool>>,
     use_original_year: Rc<Cell<bool>>,
+    refresh_library_ui: Rc<dyn Fn(bool, bool)>,
 ) {
     let page_name = format!("artist_{}", artist_id);
     // Upgrade weak references
@@ -53,6 +54,9 @@ pub async fn artist_page(
         Some(s) => s,
         None => return,
     };
+
+    // Refresh the library UI to ensure the artist page reflects the latest data
+    refresh_library_ui(false, false);
 
     // Fetch artist info
     let artist = match fetch_artist_by_id(&db_pool, artist_id).await {
@@ -124,6 +128,7 @@ pub async fn artist_page(
             page_name.clone(),
             show_dr_badges.clone(),
             use_original_year.clone(),
+            refresh_library_ui.clone(),
         );
         flowbox.insert(&album_card, -1);
     }
@@ -163,6 +168,7 @@ fn build_album_card(
     artist_page_name: String,
     show_dr_badges: Rc<Cell<bool>>,
     use_original_year: Rc<Cell<bool>>,
+    refresh_library_ui: Rc<dyn Fn(bool, bool)>,
 ) -> FlowBoxChild {
     let title_label = create_album_label(
         &album.title,
@@ -367,6 +373,7 @@ fn build_album_card(
                 right_btn_box_weak.clone(),
                 sender_clone.clone(),
                 show_dr_badges.clone(),
+                refresh_library_ui.clone(),
             ));
         }
     });
