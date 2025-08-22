@@ -193,7 +193,6 @@ pub fn create_album_tile(
     sender: UnboundedSender<()>,
     show_dr_badges: Rc<Cell<bool>>,
     use_original_year: Rc<Cell<bool>>,
-    refresh_library_ui: Rc<dyn Fn(bool, bool)>,
 ) -> FlowBoxChild {
     // Create and style the album title label
     let title_label = {
@@ -396,7 +395,6 @@ pub fn create_album_tile(
     gesture.connect_pressed(move |_, _, _, _| {
         // The album ID is now owned by the closure.
         let album_id = album.id;
-        let refresh_library_ui_clone = refresh_library_ui.clone();
         if let (Some(stack), Some(header_btn_stack)) = (
             stack_weak.upgrade(),
             left_btn_stack_for_closure.downgrade().upgrade(),
@@ -412,7 +410,6 @@ pub fn create_album_tile(
                 right_btn_box_for_closure.downgrade(),
                 sender.clone(),
                 show_dr_badges.clone(),
-                refresh_library_ui_clone,
             ));
         }
     });

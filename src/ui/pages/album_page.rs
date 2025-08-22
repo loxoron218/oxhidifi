@@ -47,7 +47,6 @@ pub async fn album_page(
     header_right_btn_box: WeakRef<Clamp>,
     sender: UnboundedSender<()>,
     show_dr_badges: Rc<Cell<bool>>,
-    _refresh_library_ui: Rc<dyn Fn(bool, bool)>,
 ) {
     let stack = match stack.upgrade() {
         Some(s) => s,

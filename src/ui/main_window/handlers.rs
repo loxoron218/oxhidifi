@@ -164,7 +164,6 @@ pub fn connect_all_handlers(
     // all dynamically created album tiles are interactive.
     if let Some(albums_grid) = widgets.albums_grid_cell.borrow().as_ref() {
         let show_dr_badges_clone = show_dr_badges_cloned.clone();
-        let refresh_library_ui_clone_for_nav = refresh_library_ui.clone();
         connect_album_navigation(
             albums_grid,
             &widgets.stack,
@@ -180,7 +179,6 @@ pub fn connect_all_handlers(
                   right_btn_box_weak,
                   sender| {
                 let show_dr_badges_clone_for_closure = show_dr_badges_clone.clone();
-                let refresh_library_ui_clone_for_closure = refresh_library_ui_clone_for_nav.clone();
                 async move {
                     album_page(
                         stack_weak,
@@ -190,7 +188,6 @@ pub fn connect_all_handlers(
                         right_btn_box_weak,
                         sender,
                         show_dr_badges_clone_for_closure.clone(),
-                        refresh_library_ui_clone_for_closure,
                     )
                     .await;
                 }

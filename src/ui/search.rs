@@ -165,7 +165,6 @@ pub fn connect_live_search(
                                 sender.clone(),
                                 show_dr_badges.clone(),
                                 use_original_year.clone(),
-                                refresh_library_ui.clone(),
                             ));
                             albums_grid.insert(&*flow_child, -1);
                         }
