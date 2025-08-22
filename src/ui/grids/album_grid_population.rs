@@ -18,7 +18,7 @@ use libadwaita::prelude::{BoxExt, FixedExt, ObjectExt, WidgetExt};
 use sqlx::SqlitePool;
 
 use crate::{
-    data::db::query::fetch_album_display_info,
+    data::db::{dr_sync::synchronize_dr_completed_from_store, query::fetch_album_display_info},
     ui::{
         components::sorting::sorting_types::SortOrder::{self, Album, Artist, DrValue, Year},
         grids::album_grid_state::AlbumGridState::{Empty, Populated, Scanning},
@@ -87,12 +87,23 @@ pub async fn populate_albums_grid(
     while let Some(child) = albums_grid.first_child() {
         albums_grid.remove(&child);
     }
+
+    // Synchronize DR completed status from the persistence store before fetching album info.
+    // This ensures that any manual changes to best_dr_values.json or updates from other
+    // parts of the application are reflected in the database before the UI is populated.
+    if let Err(e) = synchronize_dr_completed_from_store(&db_pool).await {
+        eprintln!(
+            "Error synchronizing DR completed status before album grid population: {}",
+            e
+        );
+    }
     let fetch_result = fetch_album_display_info(&db_pool).await;
     let dr_store = DrValueStore::load(); // Load the DR store once for efficiency
     match fetch_result {
         Err(e) => {
             // Log the error for debugging purposes.
             eprintln!("Error fetching album display info: {:?}", e);
+
             // On error, revert busy state and show an empty state.
             IS_BUSY.with(|cell| cell.set(false));
             albums_inner_stack.set_visible_child_name(Empty.as_str());

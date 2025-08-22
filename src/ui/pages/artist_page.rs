@@ -44,6 +44,7 @@ pub async fn artist_page(
     use_original_year: Rc<Cell<bool>>,
 ) {
     let page_name = format!("artist_{}", artist_id);
+
     // Upgrade weak references
     let stack = match stack.upgrade() {
         Some(s) => s,

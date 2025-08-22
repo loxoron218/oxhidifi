@@ -11,7 +11,8 @@ use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::{
-    data::db::query::fetch_all_artists, ui::components::tiles::create_artist_tile,
+    data::db::{dr_sync::synchronize_dr_completed_from_store, query::fetch_all_artists},
+    ui::components::tiles::create_artist_tile,
     utils::screen::ScreenInfo,
 };
 
@@ -88,6 +89,13 @@ pub fn populate_artist_grid(
     // Spawn a local asynchronous task on the GLib main context.
     // This allows UI updates to happen on the main thread after data fetching.
     MainContext::default().spawn_local(async move {
+        // Synchronize DR completed status from the persistence store before fetching artist info.
+        if let Err(e) = synchronize_dr_completed_from_store(&db_pool).await {
+            eprintln!(
+                "Error synchronizing DR completed status before artist grid population: {}",
+                e
+            );
+        }
         let fetch_result = fetch_all_artists(&db_pool).await; // Fetch artists from the database.
         match fetch_result {
             Err(e) => {
