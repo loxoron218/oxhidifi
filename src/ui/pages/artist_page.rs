@@ -177,7 +177,6 @@ fn build_album_card(
     title_label.set_size_request(cover_size - 16, -1);
     title_label.set_halign(Start);
     title_label.set_xalign(0.0);
-
     let artist_label = create_album_label(
         &album.artist,
         &["album-artist-label"],
@@ -189,7 +188,6 @@ fn build_album_card(
         false, // Explicitly set use_markup to false
     );
     artist_label.add_css_class("album-artist-label"); // Ensure this class is applied
-
     let mut format_fields = Vec::new();
     if let Some(format_str) = album.format.as_ref() {
         let format_caps = format_str.to_uppercase();
