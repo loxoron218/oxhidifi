@@ -128,7 +128,13 @@ impl FolderSettingsPage {
 
             // Sort folders alphabetically by path for consistent display.
             let mut sorted_folders = folders_c;
-            sorted_folders.sort_by(|a, b| a.path.to_lowercase().cmp(&b.path.to_lowercase()));
+            sorted_folders.sort_by(|a, b| {
+                a.path
+                    .to_str()
+                    .unwrap_or_default()
+                    .to_lowercase()
+                    .cmp(&b.path.to_str().unwrap_or_default().to_lowercase())
+            });
             if sorted_folders.is_empty() {
                 // Display a message if no folders are added.
                 let empty_row = ActionRow::builder()
@@ -141,10 +147,12 @@ impl FolderSettingsPage {
             } else {
                 // Populate the ListBox with an ActionRow for each folder.
                 for folder in &sorted_folders {
-                    if folder.path.trim().is_empty() {
+                    if folder.path.to_str().unwrap_or_default().trim().is_empty() {
                         continue;
                     }
-                    let row = ActionRow::builder().title(folder.path.clone()).build();
+                    let row = ActionRow::builder()
+                        .title(folder.path.to_str().unwrap_or_default())
+                        .build();
                     let remove_btn = Button::builder()
                         .icon_name("window-close-symbolic")
                         .valign(Center)

@@ -31,7 +31,7 @@ const DR_VALUES_FILE: &str = "best_dr_values.json";
 pub struct AlbumKey {
     pub title: String,
     pub artist: String,
-    pub folder_path: String,
+    pub folder_path: PathBuf,
 }
 
 /// Custom serialization for `AlbumKey`.
@@ -44,7 +44,9 @@ impl Serialize for AlbumKey {
     {
         let key_string = format!(
             "{}<<<DRKEY>>>{}<<<DRPART>>>{}",
-            self.title, self.artist, self.folder_path
+            self.title,
+            self.artist,
+            self.folder_path.to_str().unwrap_or_default()
         );
         serializer.serialize_str(&key_string)
     }
@@ -78,7 +80,7 @@ impl<'de> Deserialize<'de> for AlbumKey {
             )));
         }
         let artist = sub_parts[0].to_string();
-        let folder_path = sub_parts[1].to_string();
+        let folder_path = PathBuf::from(sub_parts[1]);
         Ok(AlbumKey {
             title,
             artist,

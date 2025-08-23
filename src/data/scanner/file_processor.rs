@@ -89,13 +89,13 @@ pub async fn process_file(
     // --- Cover Art Handling ---
     // Extract cover art data, process it into a thumbnail, and cache it.
     // This returns a path to the cached image.
-    let cover_art_path = if let Some(t) = tag {
+    let cover_art_path_buf = if let Some(t) = tag {
         if let Some(picture) = t.pictures().first() {
             let image_data = picture.data();
             match image_cache::get_or_create_thumbnail(image_data, &album_title, &album_artist_name)
                 .await
             {
-                Ok(path) => Some(path.to_string_lossy().into_owned()),
+                Ok(path) => Some(path),
                 Err(e) => {
                     eprintln!(
                         "Could not process cover art for album {}: {}",
@@ -110,6 +110,7 @@ pub async fn process_file(
     } else {
         None
     };
+    let cover_art_path = cover_art_path_buf.as_deref();
 
     // Other metadata fields, defaulting to None if not present.
     let year = tag.and_then(|t| t.year()).map(|y| y as i32);
@@ -153,16 +154,7 @@ pub async fn process_file(
 
     // Insert or update the track, linking it to the album and track artist.
     insert_track(
-        pool,
-        &title,
-        album_id,
-        artist_id,
-        path.to_string_lossy().as_ref(), // Convert Path to &str.
-        duration,
-        track_no,
-        disc_no,
-        format,
-        bit_depth,
+        pool, &title, album_id, artist_id, path, duration, track_no, disc_no, format, bit_depth,
         frequency,
     )
     .await?;

@@ -50,7 +50,7 @@ pub async fn run_full_scan(db_pool: &Arc<SqlitePool>, sender: &UnboundedSender<(
     // from continuing.
     for folder in &folders {
         if let Err(e) = scan_folder(db_pool, &folder.path, folder.id).await {
-            eprintln!("Error scanning folder {}: {}", folder.path, e);
+            eprintln!("Error scanning folder {}: {}", folder.path.display(), e);
         }
     }
 
@@ -59,11 +59,12 @@ pub async fn run_full_scan(db_pool: &Arc<SqlitePool>, sender: &UnboundedSender<(
     // This iterates over folders fetched *before* the scan, ensuring that if
     // a folder was added during the scan, it's not prematurely removed.
     for folder in &folders {
-        if !Path::new(&folder.path).exists() {
+        if !folder.path.exists() {
             if let Err(e) = remove_folder_and_albums(db_pool, folder.id).await {
                 eprintln!(
                     "Error removing folder and albums for {}: {}",
-                    folder.path, e
+                    folder.path.display(),
+                    e
                 );
             }
         }
@@ -86,9 +87,10 @@ pub async fn run_full_scan(db_pool: &Arc<SqlitePool>, sender: &UnboundedSender<(
             .fetch_all(&**db_pool)
             .await
         {
-            Ok(tracks) => tracks
-                .into_iter()
-                .any(|r| Path::new(&r.get::<String, _>("path")).exists()),
+            Ok(tracks) => tracks.into_iter().any(|r| {
+                let path_str: String = r.get("path");
+                Path::new(&path_str).exists()
+            }),
             Err(e) => {
                 eprintln!("Error checking tracks for album {}: {}", album_id, e);
                 false // Assume tracks don't exist if we can't query them.

@@ -1,4 +1,4 @@
-use std::{error::Error, sync::OnceLock};
+use std::{error::Error, path::Path, sync::OnceLock};
 
 use regex::Regex;
 use tokio::{
@@ -40,7 +40,7 @@ fn get_dr_regex() -> &'static Regex {
 /// - `Box<dyn Error>` if a critical I/O error occurs during directory reading.
 ///   Errors during file opening or line reading are caught internally to allow
 ///   the scan to continue for other files.
-pub async fn scan_dr_value(folder_path: &str) -> Result<Option<u8>, Box<dyn Error>> {
+pub async fn scan_dr_value(folder_path: &Path) -> Result<Option<u8>, Box<dyn Error>> {
     let mut entries = read_dir(folder_path).await?;
 
     // Lazily initialize the regex to capture DR values.

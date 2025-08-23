@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use gdk_pixbuf::Pixbuf;
 use gtk4::{
     Align::{End, Start},
@@ -69,23 +71,27 @@ pub fn create_styled_label(
 ///
 /// # Returns
 /// A `gtk4::Picture` widget displaying the album cover or a placeholder.
-pub fn create_album_cover_picture(cover_art_path: Option<&String>, cover_size: i32) -> Picture {
+pub fn create_album_cover_picture(cover_art_path: Option<&Path>, cover_size: i32) -> Picture {
     let pic = Picture::new();
     pic.set_size_request(cover_size, cover_size);
     pic.set_halign(Start);
     pic.set_valign(Start);
     pic.add_css_class("album-cover-border");
-    if let Some(path_str) = cover_art_path {
+    if let Some(path) = cover_art_path {
         // Load the pixbuf directly from the cached file, scaling it at load time
         // for better performance and memory usage.
-        match Pixbuf::from_file_at_scale(path_str, cover_size, cover_size, true) {
+        match Pixbuf::from_file_at_scale(path, cover_size, cover_size, true) {
             Ok(pixbuf) => {
                 pic.set_pixbuf(Some(&pixbuf));
             }
             Err(e) => {
                 // This error is expected if a file was deleted from the cache,
                 // so we just log it for debugging but don't interrupt the user.
-                eprintln!("Failed to load cached cover image from {}: {}", path_str, e);
+                eprintln!(
+                    "Failed to load cached cover image from {}: {}",
+                    path.display(),
+                    e
+                );
             }
         }
     }

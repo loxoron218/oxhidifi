@@ -3,7 +3,7 @@ mod file_processor;
 
 pub mod library_ops;
 
-use std::{error::Error, future::Future, pin::Pin};
+use std::{error::Error, future::Future, path::Path, pin::Pin};
 
 use sqlx::SqlitePool;
 use tokio::fs::read_dir;
@@ -30,7 +30,7 @@ pub use self::{dr_scanner::scan_dr_value, file_processor::process_file};
 /// to allow the scan to continue, but a top-level error will halt the current scan operation.
 pub fn scan_folder<'a>(
     pool: &'a SqlitePool,
-    folder_path: &'a str,
+    folder_path: &'a Path,
     folder_id: i64,
 ) -> Pin<Box<dyn Future<Output = Result<(), Box<dyn Error>>> + 'a>> {
     Box::pin(async move {
@@ -43,7 +43,7 @@ pub fn scan_folder<'a>(
         let mut entries = match read_dir(folder_path).await {
             Ok(e) => e,
             Err(e) => {
-                eprintln!("Error reading directory {}: {}", folder_path, e);
+                eprintln!("Error reading directory {}: {}", folder_path.display(), e);
                 return Ok(());
             }
         };
@@ -53,12 +53,9 @@ pub fn scan_folder<'a>(
             let path = entry.path();
             if path.is_dir() {
                 // If the entry is a directory, recursively call `scan_folder`.
-                // Convert PathBuf to &str, handle potential conversion errors.
-                if let Some(path_str) = path.to_str() {
-                    // Log errors during recursive calls but don't halt the main scan.
-                    if let Err(e) = scan_folder(pool, path_str, folder_id).await {
-                        eprintln!("Error scanning subfolder {}: {}", path_str, e);
-                    }
+                // Log errors during recursive calls but don't halt the main scan.
+                if let Err(e) = scan_folder(pool, &path, folder_id).await {
+                    eprintln!("Error scanning subfolder {}: {}", path.display(), e);
                 }
             } else if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
                 // If the entry is a file, check if its extension is supported.

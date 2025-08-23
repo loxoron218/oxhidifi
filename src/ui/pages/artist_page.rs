@@ -1,6 +1,7 @@
 use std::{
     cell::{Cell, RefCell},
     cmp::Ordering::{Equal, Greater, Less},
+    path::PathBuf,
     rc::Rc,
     sync::Arc,
 };
@@ -266,7 +267,7 @@ fn build_album_card(
     cover_container.set_size_request(cover_size, cover_size);
     cover_container.set_halign(Start);
     cover_container.set_valign(Start);
-    let cover = create_album_cover(album.cover_art.as_ref(), cover_size);
+    let cover = create_album_cover(album.cover_art.as_deref(), cover_size);
     cover_container.append(&cover);
 
     // Overlay for DR badge
@@ -398,7 +399,7 @@ pub async fn fetch_album_display_info_by_artist(
             title: row.get("title"),
             year: row.get("year"),
             artist: row.get("artist"),
-            cover_art: row.get("cover_art"),
+            cover_art: row.get::<Option<String>, _>("cover_art").map(PathBuf::from),
             format: row.get("format"),
             bit_depth: row.get("bit_depth"),
             frequency: row.get("frequency"),
@@ -416,7 +417,7 @@ pub struct AlbumDisplayInfoWithYear {
     pub title: String,
     pub year: Option<i32>,
     pub artist: String,
-    pub cover_art: Option<String>,
+    pub cover_art: Option<PathBuf>,
     pub format: Option<String>,
     pub bit_depth: Option<u32>,
     pub frequency: Option<u32>,

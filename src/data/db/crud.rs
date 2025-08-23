@@ -1,3 +1,5 @@
+use std::path::{Path, PathBuf};
+
 use sqlx::{Result, Row, SqlitePool, query};
 
 use crate::data::models::{Album, Artist, Folder, Track};
@@ -12,16 +14,17 @@ use crate::data::models::{Album, Artist, Folder, Track};
 /// # Returns
 /// A `Result` containing the ID (`i64`) of the inserted or existing folder on success,
 /// or an `sqlx::Error` on failure.
-pub async fn insert_or_get_folder(pool: &SqlitePool, path: &str) -> Result<i64> {
+pub async fn insert_or_get_folder(pool: &SqlitePool, path: &Path) -> Result<i64> {
+    let path_str = path.to_str().unwrap_or_default();
     if let Some(row) = query("SELECT id FROM folders WHERE path = ?")
-        .bind(path)
+        .bind(path_str)
         .fetch_optional(pool)
         .await?
     {
         Ok(row.get(0))
     } else {
         let res = query("INSERT INTO folders (path) VALUES (?)")
-            .bind(path)
+            .bind(path_str)
             .execute(pool)
             .await?;
         Ok(res.last_insert_rowid())
@@ -78,11 +81,12 @@ pub async fn insert_or_get_album(
     title: &str,
     artist_id: i64,
     year: Option<i32>,
-    cover_art_path: Option<String>,
+    cover_art_path: Option<&Path>,
     folder_id: i64,
     dr_value: Option<u8>,
     original_release_date: Option<String>,
 ) -> Result<i64> {
+    let cover_art_path_str = cover_art_path.and_then(|p| p.to_str());
     if let Some(row) =
         query("SELECT id FROM albums WHERE title = ? AND artist_id = ? AND folder_id = ?")
             .bind(title)
@@ -96,7 +100,7 @@ pub async fn insert_or_get_album(
         // Album exists, update its metadata
         query("UPDATE albums SET year = ?, cover_art = ?, dr_value = ?, original_release_date = ? WHERE id = ?")
             .bind(year)
-            .bind(cover_art_path)
+            .bind(cover_art_path_str)
             .bind(dr_value)
             .bind(original_release_date)
             .bind(album_id)
@@ -109,7 +113,7 @@ pub async fn insert_or_get_album(
             .bind(title)
             .bind(artist_id)
             .bind(year)
-            .bind(cover_art_path)
+            .bind(cover_art_path_str)
             .bind(folder_id)
             .bind(dr_value)
             .bind(false)
@@ -144,7 +148,7 @@ pub async fn insert_track(
     title: &str,
     album_id: i64,
     artist_id: i64,
-    path: &str,
+    path: &Path,
     duration: u32,
     track_no: Option<u32>,
     disc_no: Option<u32>,
@@ -152,8 +156,9 @@ pub async fn insert_track(
     bit_depth: Option<u32>,
     frequency: Option<u32>,
 ) -> Result<i64> {
+    let path_str = path.to_str().unwrap_or_default();
     if let Some(row) = query("SELECT id FROM tracks WHERE path = ?")
-        .bind(path)
+        .bind(path_str)
         .fetch_optional(pool)
         .await?
     {
@@ -179,7 +184,7 @@ pub async fn insert_track(
             .bind(title)
             .bind(album_id)
             .bind(artist_id)
-            .bind(path)
+            .bind(path_str)
             .bind(duration)
             .bind(track_no)
             .bind(disc_no)
@@ -211,7 +216,7 @@ pub async fn fetch_album_by_id(pool: &SqlitePool, album_id: i64) -> Result<Album
         title: row.get("title"),
         artist_id: row.get("artist_id"),
         year: row.get("year"),
-        cover_art: row.get("cover_art"),
+        cover_art: row.get::<Option<String>, _>("cover_art").map(PathBuf::from),
         folder_id: row.get("folder_id"),
         dr_value: row.get("dr_value"),
         dr_completed: row.get("dr_completed"),
@@ -259,7 +264,7 @@ pub async fn fetch_tracks_by_album(pool: &SqlitePool, album_id: i64) -> Result<V
             title: row.get("title"),
             album_id: row.get("album_id"),
             artist_id: row.get("artist_id"),
-            path: row.get("path"),
+            path: PathBuf::from(row.get::<String, _>("path")),
             duration: row.get("duration"),
             track_no: row.get("track_no"),
             disc_no: row.get("disc_no"),
@@ -286,7 +291,7 @@ pub async fn fetch_folder_by_id(pool: &SqlitePool, folder_id: i64) -> Result<Fol
         .await?;
     Ok(Folder {
         id: row.get("id"),
-        path: row.get("path"),
+        path: PathBuf::from(row.get::<String, _>("path")),
     })
 }
 

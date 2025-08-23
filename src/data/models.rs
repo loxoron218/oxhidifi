@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use serde::{Deserialize, Serialize};
 
 /// Represents a music folder in the file system.
@@ -9,7 +11,7 @@ pub struct Folder {
     /// Unique identifier for the folder.
     pub id: i64,
     /// The absolute file system path of the folder.
-    pub path: String,
+    pub path: PathBuf,
 }
 
 /// Represents a music artist.
@@ -40,7 +42,7 @@ pub struct Album {
     /// The original release date of the album, typically in "YYYY-MM-DD" format.
     pub original_release_date: Option<String>,
     /// The path to the album's cached cover art image file.
-    pub cover_art: Option<String>,
+    pub cover_art: Option<PathBuf>,
     /// The ID of the folder where the album's files are located.
     pub folder_id: i64,
     /// The Dynamic Range (DR) value of the album, if calculated or available.
@@ -65,7 +67,7 @@ pub struct Track {
     /// The ID of the primary artist for this track.
     pub artist_id: i64,
     /// The absolute file system path of the track file.
-    pub path: String,
+    pub path: PathBuf,
     /// The duration of the track in seconds.
     pub duration: Option<u32>,
     /// The track number within its album (e.g., 1, 2, 3...).

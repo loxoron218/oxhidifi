@@ -103,7 +103,7 @@ pub fn create_add_folder_dialog_handler<T: IsA<Window> + Clone + 'static>(
                                 // Insert folder into DB or get existing ID
                                 let folder_id = match insert_or_get_folder(
                                     &db_pool_for_spawn,
-                                    &folder_path_string_for_spawn,
+                                    std::path::Path::new(&folder_path_string_for_spawn),
                                 )
                                 .await
                                 {
@@ -117,7 +117,7 @@ pub fn create_add_folder_dialog_handler<T: IsA<Window> + Clone + 'static>(
                                 // Scan the folder for music files
                                 if let Err(e) = scan_folder(
                                     &db_pool_for_spawn,
-                                    &folder_path_string_for_spawn,
+                                    std::path::Path::new(&folder_path_string_for_spawn),
                                     folder_id,
                                 )
                                 .await

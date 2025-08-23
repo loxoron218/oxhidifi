@@ -1,5 +1,6 @@
 use std::{
     cell::{Cell, RefCell},
+    path::Path,
     rc::Rc,
     sync::Arc,
 };
@@ -34,7 +35,7 @@ use crate::{
 /// This function takes an optional path to a cached image file and a desired size,
 /// then creates a `Picture` widget displaying the scaled album cover.
 /// If no path is provided or the file doesn't exist, an empty `Picture` is returned.
-pub fn create_album_cover(cover_art_path: Option<&String>, cover_size: i32) -> Picture {
+pub fn create_album_cover(cover_art_path: Option<&Path>, cover_size: i32) -> Picture {
     let pic = Picture::new();
     pic.set_size_request(cover_size, cover_size);
     pic.set_halign(Start);
@@ -282,7 +283,7 @@ pub fn create_album_tile(
     year_label.set_hexpand(false);
 
     // Create album cover picture
-    let cover = create_album_cover(album.cover_art.as_ref(), cover_size);
+    let cover = create_album_cover(album.cover_art.as_deref(), cover_size);
 
     // Main vertical box for the album tile
     let album_tile_box = Box::builder().orientation(Vertical).spacing(2).build();

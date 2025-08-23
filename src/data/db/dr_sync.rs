@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf};
 
 use sqlx::{Result, Row, SqlitePool, query};
 
@@ -18,11 +18,11 @@ pub async fn synchronize_dr_completed_from_store(pool: &SqlitePool) -> Result<()
         .map(|row| (row.get("id"), row.get("name")))
         .collect();
 
-    let folders_map: HashMap<i64, String> = query("SELECT id, path FROM folders")
+    let folders_map: HashMap<i64, PathBuf> = query("SELECT id, path FROM folders")
         .fetch_all(pool)
         .await?
         .into_iter()
-        .map(|row| (row.get("id"), row.get("path")))
+        .map(|row| (row.get("id"), PathBuf::from(row.get::<String, _>("path"))))
         .collect();
 
     // Fetch all albums from the database to ensure we can update all their dr_completed statuses
@@ -42,7 +42,7 @@ pub async fn synchronize_dr_completed_from_store(pool: &SqlitePool) -> Result<()
         let album_key = AlbumKey {
             title,
             artist: artist_name,
-            folder_path,
+            folder_path: folder_path.clone(),
         };
 
         // Determine if the album should be marked as DR completed based on the DrValueStore

@@ -1,5 +1,6 @@
-use sqlx::{Error, Result, Row, SqlitePool, query, sqlite::SqliteRow};
-use tokio_stream::Stream;
+use std::path::PathBuf;
+
+use sqlx::{Result, Row, SqlitePool, query, sqlite::SqliteRow};
 
 use crate::data::models::{Artist, Folder};
 
@@ -16,7 +17,7 @@ pub struct AlbumDisplayInfo {
     /// The release year of the album (optional).
     pub year: Option<i32>,
     /// The path to the album's cached cover art image file (optional).
-    pub cover_art: Option<String>,
+    pub cover_art: Option<PathBuf>,
     /// The audio format of the tracks in the album (e.g., "FLAC", "MP3", optional).
     pub format: Option<String>,
     /// The bit depth of the tracks (e.g., 16, 24, optional).
@@ -30,7 +31,7 @@ pub struct AlbumDisplayInfo {
     /// The original release date of the album as a string (optional).
     pub original_release_date: Option<String>,
     /// The file system path of the folder containing the album.
-    pub folder_path: String,
+    pub folder_path: PathBuf,
 }
 
 /// Fetches all albums from the database along with their associated artist,
@@ -45,10 +46,8 @@ pub struct AlbumDisplayInfo {
 ///
 /// # Returns
 /// A `Result` containing a `Vec<AlbumDisplayInfo>` on success, or an `sqlx::Error` on failure.
-pub fn fetch_album_display_info(
-    pool: &SqlitePool,
-) -> impl Stream<Item = Result<AlbumDisplayInfo, Error>> + '_ {
-    query(
+pub async fn fetch_album_display_info(pool: &SqlitePool) -> Result<Vec<AlbumDisplayInfo>> {
+    let rows = query(
         r#"
         SELECT
             albums.id,
@@ -71,8 +70,12 @@ pub fn fetch_album_display_info(
         ORDER BY artists.name COLLATE NOCASE, albums.title COLLATE NOCASE
         "#,
     )
-    .map(map_row_to_album_display_info)
-    .fetch(pool)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(map_row_to_album_display_info)
+        .collect())
 }
 
 /// Helper function to map a SQLX Row to an AlbumDisplayInfo struct.
@@ -82,14 +85,14 @@ fn map_row_to_album_display_info(row: SqliteRow) -> AlbumDisplayInfo {
         title: row.get("title"),
         artist: row.get("artist"),
         year: row.get("year"),
-        cover_art: row.get("cover_art"),
+        cover_art: row.get::<Option<String>, _>("cover_art").map(PathBuf::from),
         format: row.get("format"),
         bit_depth: row.get("bit_depth"),
         frequency: row.get("frequency"),
         dr_value: row.get("dr_value"),
         dr_completed: row.get("dr_completed"),
         original_release_date: row.get("original_release_date"),
-        folder_path: row.get("folder_path"),
+        folder_path: PathBuf::from(row.get::<String, _>("folder_path")),
     }
 }
 
@@ -129,7 +132,7 @@ pub async fn fetch_all_folders(pool: &SqlitePool) -> Result<Vec<Folder>> {
         .into_iter()
         .map(|row| Folder {
             id: row.get("id"),
-            path: row.get("path"),
+            path: PathBuf::from(row.get::<String, _>("path")),
         })
         .collect())
 }

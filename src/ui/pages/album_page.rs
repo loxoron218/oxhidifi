@@ -1,6 +1,7 @@
 use std::{
     cell::{Cell, RefCell},
     collections::{HashMap, HashSet},
+    path::PathBuf,
     rc::Rc,
     sync::Arc,
 };
@@ -97,9 +98,9 @@ pub async fn album_page(
     page.add_css_class("album-detail-page");
 
     /// Build the album cover widget, scaling and falling back if needed.
-    fn build_album_cover(path: &Option<String>) -> Picture {
-        if let Some(path_str) = path {
-            if let Ok(pixbuf) = Pixbuf::from_file_at_scale(path_str, 300, 300, true) {
+    fn build_album_cover(path: &Option<PathBuf>) -> Picture {
+        if let Some(path) = path {
+            if let Ok(pixbuf) = Pixbuf::from_file_at_scale(path, 300, 300, true) {
                 let pic = Picture::for_pixbuf(&pixbuf);
                 pic.set_size_request(300, 300);
                 pic.add_css_class("album-cover-border");
