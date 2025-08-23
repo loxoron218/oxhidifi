@@ -382,7 +382,7 @@ pub async fn album_page(
             .spacing(8)
             .halign(Start)
             .build();
-            let mut meta_fields = Vec::with_capacity(3);
+        let mut meta_fields = Vec::with_capacity(3);
         if !year_display_text.is_empty() {
             meta_fields.push(year_display_text);
         }

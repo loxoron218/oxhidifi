@@ -16,6 +16,7 @@ use gtk4::{
 };
 use libadwaita::prelude::{BoxExt, FixedExt, ObjectExt, WidgetExt};
 use sqlx::SqlitePool;
+use tokio_stream::StreamExt;
 
 use crate::{
     data::db::{dr_sync::synchronize_dr_completed_from_store, query::fetch_album_display_info},
@@ -97,9 +98,10 @@ pub async fn populate_albums_grid(
             e
         );
     }
-    let fetch_result = fetch_album_display_info(&db_pool).await;
     let dr_store = DrValueStore::load(); // Load the DR store once for efficiency
-    match fetch_result {
+    let fetch_result = fetch_album_display_info(&db_pool).collect::<Vec<_>>().await;
+    let albums_results: Result<Vec<_>, _> = fetch_result.into_iter().collect();
+    match albums_results {
         Err(e) => {
             // Log the error for debugging purposes.
             eprintln!("Error fetching album display info: {:?}", e);

@@ -18,3 +18,4 @@ serde = "*"
 serde_json = "*"
 sqlx = { version = "*", features = ["sqlite", "macros", "runtime-tokio-native-tls"] }
 tokio = { version = "*", features = ["macros", "rt-multi-thread", "fs"] }
+tokio-stream = "*"

@@ -1,4 +1,5 @@
-use sqlx::{Result, Row, SqlitePool, query, sqlite::SqliteRow};
+use sqlx::{Error, Result, Row, SqlitePool, query, sqlite::SqliteRow};
+use tokio_stream::Stream;
 
 use crate::data::models::{Artist, Folder};
 
@@ -44,8 +45,10 @@ pub struct AlbumDisplayInfo {
 ///
 /// # Returns
 /// A `Result` containing a `Vec<AlbumDisplayInfo>` on success, or an `sqlx::Error` on failure.
-pub async fn fetch_album_display_info(pool: &SqlitePool) -> Result<Vec<AlbumDisplayInfo>> {
-    let rows = query(
+pub fn fetch_album_display_info(
+    pool: &SqlitePool,
+) -> impl Stream<Item = Result<AlbumDisplayInfo, Error>> + '_ {
+    query(
         r#"
         SELECT
             albums.id,
@@ -68,12 +71,8 @@ pub async fn fetch_album_display_info(pool: &SqlitePool) -> Result<Vec<AlbumDisp
         ORDER BY artists.name COLLATE NOCASE, albums.title COLLATE NOCASE
         "#,
     )
-    .fetch_all(pool)
-    .await?;
-    Ok(rows
-        .into_iter()
-        .map(map_row_to_album_display_info)
-        .collect())
+    .map(map_row_to_album_display_info)
+    .fetch(pool)
 }
 
 /// Helper function to map a SQLX Row to an AlbumDisplayInfo struct.
