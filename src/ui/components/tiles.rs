@@ -25,8 +25,10 @@ use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::{
-    data::db::query::AlbumDisplayInfo,
-    ui::pages::{album_page::album_page, artist_page::artist_page},
+    ui::{
+        grids::album_grid_state::AlbumGridItem,
+        pages::{album_page::album_page, artist_page::artist_page},
+    },
     utils::formatting::format_freq_khz,
 };
 
@@ -168,7 +170,7 @@ pub fn highlight(s: &str, query: &str) -> String {
 /// title, artist, format, year, and DR badge. It also attaches a click gesture
 /// to navigate to the album's dedicated page.
 pub fn create_album_tile(
-    album: AlbumDisplayInfo,
+    album: &AlbumGridItem,
     cover_size: i32,
     tile_size: i32,
     search_text: &str,
@@ -218,9 +220,9 @@ pub fn create_album_tile(
         let format_caps = format_str.to_uppercase();
         match (album.bit_depth, album.frequency) {
             (Some(bit), Some(freq)) => {
-                format!("{} {}/{}", format_caps, bit, format_freq_khz(freq))
+                format!("{} {}/{}", format_caps, bit, format_freq_khz(freq as u32))
             }
-            (None, Some(freq)) => format!("{} {}", format_caps, format_freq_khz(freq)),
+            (None, Some(freq)) => format!("{} {}", format_caps, format_freq_khz(freq as u32)),
             _ => format_caps,
         }
     } else {
@@ -243,7 +245,7 @@ pub fn create_album_tile(
 
     // Extract and format the release year based on setting
     let year_text = if use_original_year.get() {
-        if let Some(original_release_date_str) = album.original_release_date {
+        if let Some(original_release_date_str) = &album.original_release_date {
             original_release_date_str
                 .split('-')
                 .next()
@@ -257,7 +259,7 @@ pub fn create_album_tile(
     } else {
         if let Some(year) = album.year {
             format!("{}", year)
-        } else if let Some(original_release_date_str) = album.original_release_date {
+        } else if let Some(original_release_date_str) = &album.original_release_date {
             original_release_date_str
                 .split('-')
                 .next()
@@ -283,7 +285,7 @@ pub fn create_album_tile(
     year_label.set_hexpand(false);
 
     // Create album cover picture
-    let cover = create_album_cover(album.cover_art.as_deref(), cover_size);
+    let cover = create_album_cover(album.cover_art.as_deref().map(Path::new), cover_size);
 
     // Main vertical box for the album tile
     let album_tile_box = Box::builder().orientation(Vertical).spacing(2).build();
@@ -307,7 +309,9 @@ pub fn create_album_tile(
     overlay.set_halign(Start);
     overlay.set_valign(Start);
     if show_dr_badges.get() {
-        if let Some(dr_label) = create_dr_overlay(album.dr_value, album.dr_completed) {
+        if let Some(dr_label) =
+            create_dr_overlay(album.dr_value.map(|dr| dr as u8), album.dr_completed)
+        {
             overlay.add_overlay(&dr_label);
         }
     }
@@ -379,9 +383,9 @@ pub fn create_album_tile(
     let gesture = GestureClick::builder().build();
 
     // The `move` keyword captures the needed variables safely.
+    let album_id = album.id;
     gesture.connect_pressed(move |_, _, _, _| {
         // The album ID is now owned by the closure.
-        let album_id = album.id;
         if let (Some(stack), Some(header_btn_stack)) = (
             stack_weak.upgrade(),
             left_btn_stack_for_closure.downgrade().upgrade(),

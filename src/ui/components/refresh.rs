@@ -276,7 +276,7 @@ pub fn setup_live_monitor_refresh(
     is_settings_open: Rc<Cell<bool>>,
 ) {
     let is_settings_open_cloned = is_settings_open.clone();
-    timeout_add_local(Duration::from_secs(1), move || {
+    timeout_add_local(Duration::from_secs(3), move || {
         if !is_settings_open_cloned.get() {
             let new_screen_info = ScreenInfo::new();
             if new_screen_info.width != screen_info.borrow().width {

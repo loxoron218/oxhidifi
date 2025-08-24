@@ -32,7 +32,7 @@ pub fn scan_folder<'a>(
     pool: &'a SqlitePool,
     folder_path: &'a Path,
     folder_id: i64,
-) -> Pin<Box<dyn Future<Output = Result<(), Box<dyn Error>>> + 'a>> {
+) -> Pin<Box<dyn Future<Output = Result<(), Box<dyn Error>>> + Send + 'a>> {
     Box::pin(async move {
         // Scan for DR value in .txt/.log files in this folder.
         // If an error occurs during DR value scanning, it's propagated.

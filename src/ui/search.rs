@@ -2,9 +2,10 @@ use std::{
     cell::{Cell, RefCell},
     rc::Rc,
     sync::Arc,
+    time::Duration,
 };
 
-use glib::MainContext;
+use glib::{MainContext, SourceId, source::timeout_add_local_once};
 use gtk4::{Entry, FlowBox, Stack};
 use libadwaita::{
     Clamp, ViewStack,
@@ -66,146 +67,178 @@ pub fn connect_live_search(
     let sender_cloned = sender.clone();
     let show_dr_badges_cloned = show_dr_badges.clone();
     let use_original_year_cloned = use_original_year.clone();
+    let search_timer: Rc<RefCell<Option<SourceId>>> = Rc::new(RefCell::new(None));
 
     // Connect search entry changed signal
     search_entry.connect_changed(move |entry| {
-        let text = entry.text().to_string();
-
-        // Clear grids before performing a new search
-        clear_grid(&albums_grid_cloned);
-        clear_grid(&artist_grid_cloned);
-
-        // If the search query is empty, refresh the library UI to show all albums/artists
-        if text.trim().is_empty() {
-            refresh_library_ui_cloned(
-                sort_ascending_cloned.get(),
-                sort_ascending_artists_cloned.get(),
-            );
-            return;
+        // If a timer is already scheduled, cancel it by removing its source ID.
+        if let Some(source_id) = search_timer.borrow_mut().take() {
+            source_id.remove();
         }
+        let text = entry.text().to_string();
+        let sort_ascending_cloned = sort_ascending_cloned.clone();
+        let sort_ascending_artists_cloned = sort_ascending_artists_cloned.clone();
+        let refresh_library_ui_cloned = refresh_library_ui_cloned.clone();
+        let db_pool_cloned = db_pool_cloned.clone();
+        let albums_grid_cloned = albums_grid_cloned.clone();
+        let albums_stack_cloned = albums_stack_cloned.clone();
+        let artist_grid_cloned = artist_grid_cloned.clone();
+        let artists_stack_cloned = artists_stack_cloned.clone();
+        let stack_cloned = stack_cloned.clone();
+        let left_btn_stack_cloned = left_btn_stack_cloned.clone();
+        let right_btn_box_cloned = right_btn_box_cloned.clone();
+        let nav_history_cloned = nav_history_cloned.clone();
+        let sender_cloned = sender_cloned.clone();
+        let show_dr_badges_cloned = show_dr_badges_cloned.clone();
+        let use_original_year_cloned = use_original_year_cloned.clone();
+        let search_timer_cloned = search_timer.clone();
 
-        // Trim the search query to remove leading/trailing whitespace
-        let text = text.trim().to_string();
+        // Schedule a new timer.
+        let source_id = timeout_add_local_once(Duration::from_millis(300), move || {
+            // When the timer fires, its SourceId becomes invalid. By `take()`-ing it here,
+            // we prevent the `connect_changed` handler from trying to `remove()` an invalid ID
+            // if another key is pressed after the timer has already fired.
+            search_timer_cloned.borrow_mut().take();
 
-        // Clone variables for the async `spawn_local` closure
-        let db_pool = db_pool_cloned.clone();
-        let albums_grid = albums_grid_cloned.clone();
-        let albums_stack = albums_stack_cloned.clone();
-        let artist_grid = artist_grid_cloned.clone();
-        let artists_stack = artists_stack_cloned.clone();
-        let sort_ascending = sort_ascending_cloned.clone();
-        let stack_for_closure = stack_cloned.clone();
-        let left_btn_stack_for_closure = left_btn_stack_cloned.clone();
-        let right_btn_box_clone = right_btn_box_cloned.clone();
-        let nav_history = nav_history_cloned.clone();
-        let sender = sender_cloned.clone();
-        let show_dr_badges = show_dr_badges_cloned.clone();
-        let use_original_year = use_original_year_cloned.clone();
+            // Clear grids before performing a new search
+            clear_grid(&albums_grid_cloned);
+            clear_grid(&artist_grid_cloned);
 
-        // Spawn an asynchronous task to perform the search and update the UI
-        MainContext::default().spawn_local(async move {
-            // Perform album search
-            match search_album_display_info(&db_pool, &text).await {
-                Err(e) => {
-                    // Log the error for debugging purposes
-                    eprintln!("Error searching albums: {:?}", e);
-                }
-                Ok(mut albums) => {
-                    // Sort albums based on relevance to the search query and then by artist/title
-                    albums.sort_by(|a, b| {
-                        let a_title = a.title.to_lowercase();
-                        let b_title = b.title.to_lowercase();
-                        let a_artist = a.artist.to_lowercase();
-                        let b_artist = b.artist.to_lowercase();
-                        let query = text.to_lowercase();
+            // If the search query is empty, refresh the library UI to show all albums/artists
+            if text.trim().is_empty() {
+                refresh_library_ui_cloned(
+                    sort_ascending_cloned.get(),
+                    sort_ascending_artists_cloned.get(),
+                );
+                return;
+            }
 
-                        // Scoring function: exact match (0), starts with (1), contains (2), no match (3)
-                        let score = |s: &str| {
-                            if s == query {
-                                0
-                            } else if s.starts_with(&query) {
-                                1
-                            } else if s.contains(&query) {
-                                2
-                            } else {
-                                3
+            // Trim the search query to remove leading/trailing whitespace
+            let text = text.trim().to_string();
+
+            // Clone variables for the async `spawn_local` closure
+            let db_pool = db_pool_cloned.clone();
+            let albums_grid = albums_grid_cloned.clone();
+            let albums_stack = albums_stack_cloned.clone();
+            let artist_grid = artist_grid_cloned.clone();
+            let artists_stack = artists_stack_cloned.clone();
+            let sort_ascending = sort_ascending_cloned.clone();
+            let stack_for_closure = stack_cloned.clone();
+            let left_btn_stack_for_closure = left_btn_stack_cloned.clone();
+            let right_btn_box_clone = right_btn_box_cloned.clone();
+            let nav_history = nav_history_cloned.clone();
+            let sender = sender_cloned.clone();
+            let show_dr_badges = show_dr_badges_cloned.clone();
+            let use_original_year = use_original_year_cloned.clone();
+
+            // Spawn an asynchronous task to perform the search and update the UI
+            MainContext::default().spawn_local(async move {
+                // Perform album search
+                match search_album_display_info(&db_pool, &text).await {
+                    Err(e) => {
+                        // Log the error for debugging purposes
+                        eprintln!("Error searching albums: {:?}", e);
+                    }
+                    Ok(mut albums) => {
+                        // Sort albums based on relevance to the search query and then by artist/title
+                        albums.sort_by(|a, b| {
+                            let a_title = a.title.to_lowercase();
+                            let b_title = b.title.to_lowercase();
+                            let a_artist = a.artist.to_lowercase();
+                            let b_artist = b.artist.to_lowercase();
+                            let query = text.to_lowercase();
+
+                            // Scoring function: exact match (0), starts with (1), contains (2), no match (3)
+                            let score = |s: &str| {
+                                if s == query {
+                                    0
+                                } else if s.starts_with(&query) {
+                                    1
+                                } else if s.contains(&query) {
+                                    2
+                                } else {
+                                    3
+                                }
+                            };
+                            let a_score = score(&a_title).min(score(&a_artist));
+                            let b_score = score(&b_title).min(score(&b_artist));
+
+                            // Primary sort by score, then by artist name (ascending/descending)
+                            a_score.cmp(&b_score).then_with(|| {
+                                let cmp = a_artist.cmp(&b_artist);
+                                if sort_ascending.get() {
+                                    cmp
+                                } else {
+                                    cmp.reverse()
+                                }
+                            })
+                        });
+
+                        // Update the album UI based on search results
+                        if albums.is_empty() {
+                            albums_stack.set_visible_child_name("no_results_state");
+                        } else {
+                            albums_stack.set_visible_child_name("populated_grid");
+                            for album in &albums {
+                                let flow_child = Rc::new(create_album_tile(
+                                    album,
+                                    cover_size,
+                                    tile_size,
+                                    &text,
+                                    stack_for_closure.clone(),
+                                    db_pool.clone(),
+                                    left_btn_stack_for_closure.clone(),
+                                    right_btn_box_clone.clone(),
+                                    nav_history.clone(),
+                                    sender.clone(),
+                                    show_dr_badges.clone(),
+                                    use_original_year.clone(),
+                                ));
+                                albums_grid.insert(&*flow_child, -1);
                             }
-                        };
-                        let a_score = score(&a_title).min(score(&a_artist));
-                        let b_score = score(&b_title).min(score(&b_artist));
-
-                        // Primary sort by score, then by artist name (ascending/descending)
-                        a_score.cmp(&b_score).then_with(|| {
-                            let cmp = a_artist.cmp(&b_artist);
-                            if sort_ascending.get() {
-                                cmp
-                            } else {
-                                cmp.reverse()
-                            }
-                        })
-                    });
-
-                    // Update the album UI based on search results
-                    if albums.is_empty() {
-                        albums_stack.set_visible_child_name("no_results_state");
-                    } else {
-                        albums_stack.set_visible_child_name("populated_grid");
-                        for album in albums {
-                            let flow_child = Rc::new(create_album_tile(
-                                album,
-                                cover_size,
-                                tile_size,
-                                &text,
-                                stack_for_closure.clone(),
-                                db_pool.clone(),
-                                left_btn_stack_for_closure.clone(),
-                                right_btn_box_clone.clone(),
-                                nav_history.clone(),
-                                sender.clone(),
-                                show_dr_badges.clone(),
-                                use_original_year.clone(),
-                            ));
-                            albums_grid.insert(&*flow_child, -1);
                         }
                     }
                 }
-            }
 
-            // Perform artist search
-            clear_grid(&artist_grid); // Clear artist grid before populating
-            match search_artists(&db_pool, &text).await {
-                Err(e) => {
-                    // Log the error for debugging purposes
-                    eprintln!("Error searching artists: {:?}", e);
-                }
-                Ok(artists) => {
-                    // Update the artist UI based on search results
-                    if artists.is_empty() {
-                        artists_stack.set_visible_child_name("no_results_state");
-                    } else {
-                        artists_stack.set_visible_child_name("populated_grid");
-                        for artist in artists {
-                            let flow_child = Rc::new(create_artist_tile(
-                                artist.id,
-                                &artist.name,
-                                cover_size,
-                                tile_size,
-                                &text,
-                                stack_for_closure.clone(),
-                                db_pool.clone(),
-                                left_btn_stack_for_closure.clone(),
-                                right_btn_box_clone.clone(),
-                                nav_history.clone(),
-                                sender.clone(),
-                                show_dr_badges.clone(),
-                                use_original_year.clone(),
-                            ));
-                            artist_grid.insert(&*flow_child, -1);
+                // Perform artist search
+                clear_grid(&artist_grid); // Clear artist grid before populating
+                match search_artists(&db_pool, &text).await {
+                    Err(e) => {
+                        // Log the error for debugging purposes
+                        eprintln!("Error searching artists: {:?}", e);
+                    }
+                    Ok(artists) => {
+                        // Update the artist UI based on search results
+                        if artists.is_empty() {
+                            artists_stack.set_visible_child_name("no_results_state");
+                        } else {
+                            artists_stack.set_visible_child_name("populated_grid");
+                            for artist in &artists {
+                                let flow_child = Rc::new(create_artist_tile(
+                                    artist.id,
+                                    &artist.name,
+                                    cover_size,
+                                    tile_size,
+                                    &text,
+                                    stack_for_closure.clone(),
+                                    db_pool.clone(),
+                                    left_btn_stack_for_closure.clone(),
+                                    right_btn_box_clone.clone(),
+                                    nav_history.clone(),
+                                    sender.clone(),
+                                    show_dr_badges.clone(),
+                                    use_original_year.clone(),
+                                ));
+                                artist_grid.insert(&*flow_child, -1);
+                            }
                         }
                     }
                 }
-            }
+            });
         });
+
+        // Store the ID of the new timer.
+        *search_timer.borrow_mut() = Some(source_id);
     });
 }
 

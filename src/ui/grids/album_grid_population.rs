@@ -1,6 +1,7 @@
 use std::{
     cell::{Cell, RefCell},
     cmp::Ordering::Equal,
+    path::Path,
     rc::Rc,
     sync::Arc,
     time::Duration,
@@ -23,7 +24,9 @@ use crate::{
         components::sorting::sorting_types::SortOrder::{self, Album, Artist, DrValue, Year},
         grids::{
             album_grid_state::AlbumGridState::{Empty, Populated, Scanning},
-            album_grid_utils::{create_dr_badge_label, create_styled_label},
+            album_grid_utils::{
+                create_album_cover_picture, create_dr_badge_label, create_styled_label,
+            },
         },
     },
     utils::{
@@ -98,9 +101,8 @@ pub async fn populate_albums_grid(
             e
         );
     }
-    let fetch_result = fetch_album_display_info(&db_pool).await;
     let dr_store = DrValueStore::load(); // Load the DR store once for efficiency
-    match fetch_result {
+    match fetch_album_display_info(&db_pool).await {
         Err(e) => {
             // Log the error for debugging purposes.
             eprintln!("Error fetching album display info: {:?}", e);
@@ -182,8 +184,7 @@ pub async fn populate_albums_grid(
                     return;
                 }
             };
-
-            for album_info in albums {
+            for album_info in &albums {
                 // Create album title label.
                 let title_label = create_styled_label(
                     &album_info.title,
@@ -212,9 +213,11 @@ pub async fn populate_albums_grid(
                     let format_caps = format_str.to_uppercase();
                     match (album_info.bit_depth, album_info.frequency) {
                         (Some(bit), Some(freq)) => {
-                            format!("{} {}/{}", format_caps, bit, format_freq_khz(freq))
+                            format!("{} {}/{}", format_caps, bit, format_freq_khz(freq as u32))
                         }
-                        (None, Some(freq)) => format!("{} {}", format_caps, format_freq_khz(freq)),
+                        (None, Some(freq)) => {
+                            format!("{} {}", format_caps, format_freq_khz(freq as u32))
+                        }
                         _ => format_caps,
                     }
                 } else {
@@ -234,7 +237,7 @@ pub async fn populate_albums_grid(
 
                 // Extract and format year based on setting.
                 let year_text = if use_original_year_clone_for_loop.get() {
-                    if let Some(original_release_date_str) = album_info.original_release_date {
+                    if let Some(original_release_date_str) = &album_info.original_release_date {
                         original_release_date_str
                             .split('-')
                             .next()
@@ -248,7 +251,8 @@ pub async fn populate_albums_grid(
                 } else {
                     if let Some(year) = album_info.year {
                         format!("{}", year)
-                    } else if let Some(original_release_date_str) = album_info.original_release_date
+                    } else if let Some(original_release_date_str) =
+                        &album_info.original_release_date
                     {
                         original_release_date_str
                             .split('-')
@@ -289,8 +293,8 @@ pub async fn populate_albums_grid(
                 cover_container.set_size_request(cover_size, cover_size);
                 cover_container.set_halign(Start);
                 cover_container.set_valign(Start);
-                let cover_picture = crate::ui::grids::album_grid_utils::create_album_cover_picture(
-                    album_info.cover_art.as_deref(),
+                let cover_picture = create_album_cover_picture(
+                    album_info.cover_art.as_deref().map(Path::new),
                     cover_size,
                 );
                 cover_container.append(&cover_picture);
@@ -298,7 +302,7 @@ pub async fn populate_albums_grid(
                 // Load the image asynchronously
                 async_image_loader.load_image_async(
                     cover_picture.clone(),
-                    album_info.cover_art.as_deref(),
+                    album_info.cover_art.as_deref().map(Path::new),
                     cover_size,
                 );
 
@@ -316,8 +320,10 @@ pub async fn populate_albums_grid(
                         folder_path: album_info.folder_path.clone(),
                     };
                     let is_dr_completed_from_store = dr_store.contains(&album_key);
-                    let dr_label =
-                        create_dr_badge_label(album_info.dr_value, is_dr_completed_from_store);
+                    let dr_label = create_dr_badge_label(
+                        album_info.dr_value.map(|dr| dr as u8),
+                        is_dr_completed_from_store,
+                    );
                     overlay.add_overlay(&dr_label);
                 }
 

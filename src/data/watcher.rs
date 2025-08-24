@@ -1,12 +1,16 @@
 use std::{
+    collections::VecDeque,
     path::Path,
-    sync::{Arc, Mutex},
-    thread::{self, JoinHandle},
-    time::Duration,
+    sync::{
+        Arc,
+        mpsc::{Receiver, channel},
+    },
+    thread::{sleep, spawn},
+    time::{Duration, Instant},
 };
 
 use notify::{
-    Error, Event,
+    Event,
     EventKind::{Create, Modify, Remove},
     RecommendedWatcher,
     RecursiveMode::Recursive,
@@ -19,28 +23,37 @@ use tokio::{runtime::Runtime, sync::mpsc::UnboundedSender};
 
 use crate::data::{db::query::fetch_all_folders, scanner::library_ops::run_full_scan};
 
-/// Spawns a new thread that watches the library folders for changes.
+/// The duration to wait after a file system event before triggering a full library scan.
+/// This helps to debounce rapid file changes and prevents excessive scanning.
+const DEBOUNCE_DURATION: Duration = Duration::from_secs(5);
+
+/// Spawns new threads for watching library folders and processing file events.
 ///
-/// Upon detecting a change, it sends a message through the provided channel
-/// to trigger a UI refresh. Includes a debounce mechanism to avoid excessive updates.
-///
-/// This function initializes a file system watcher for all registered library folders.
-/// Any relevant file system events (creation, deletion, modification) within these
-/// folders will trigger a debounced full library scan and a UI refresh signal.
+/// This function sets up a multi-threaded system for monitoring file system changes.
+/// One thread listens for `notify` events and sends them to a channel. A second thread
+/// receives these events, debounces them, and triggers a full library scan when the
+/// file system has been quiet for a specified duration.
 ///
 /// # Arguments
 ///
-/// * `pool` - An `Arc` to the SQLite database pool, used for fetching folder paths
-///            and for running the full library scan.
-/// * `sender` - An `UnboundedSender` to send a signal to the UI to refresh.
-///              This is typically a channel connected to the main application loop.
+/// * `pool` - An `Arc` to the SQLite database pool.
+/// * `sender` - An `UnboundedSender` to signal the UI for a refresh.
 pub fn start_watching_library(pool: Arc<SqlitePool>, sender: UnboundedSender<()>) {
-    // Spawn a new thread to run the file system watcher.
-    // This thread will manage its own Tokio runtime for async operations.
-    thread::spawn(move || {
+    // Create a channel for communication between the watcher and the event processor.
+    let (tx, rx) = channel();
+
+    // Spawn the event processing thread.
+    let pool_clone_processor = pool.clone();
+    let sender_clone_processor = sender.clone();
+    spawn(move || {
+        process_events(rx, pool_clone_processor, sender_clone_processor);
+    });
+
+    // Spawn the file system watcher thread.
+    spawn(move || {
         let rt = Runtime::new().expect("Failed to create Tokio runtime for watcher thread");
 
-        // Fetch all library folders from the database that need to be watched.
+        // Fetch all library folders to watch.
         let folders_to_watch = rt.block_on(async {
             fetch_all_folders(&pool).await.unwrap_or_else(|e| {
                 eprintln!("Error fetching folders for watcher: {}", e);
@@ -54,70 +67,20 @@ pub fn start_watching_library(pool: Arc<SqlitePool>, sender: UnboundedSender<()>
             return;
         }
 
-        // The debouncer state. A `JoinHandle` is stored in the `Option`.
-        // When a new event arrives, the old timer (if any) is dropped by replacing
-        // the `JoinHandle`, effectively cancelling the previous debounced operation.
-        let debouncer: Arc<Mutex<Option<JoinHandle<()>>>> = Arc::new(Mutex::new(None));
-
-        // Define the event handler closure for the file system watcher.
-        let event_handler = move |res: Result<Event, Error>| {
-            match res {
-                Ok(event) => {
-                    // We are interested in events that signify a change in the library's content
-                    // (e.g., file creation, deletion, or modification of name/data/metadata).
-                    if matches!(
-                        event.kind,
-                        Create(_)
-                            | Remove(_)
-                            | Modify(Name(_))
-                            | Modify(Data(_))
-                            | Modify(Metadata(_))
-                    ) {
-                        // Clone necessary Arcs for the debounced thread.
-                        let sender_clone = sender.clone();
-                        let debouncer_clone = debouncer.clone();
-                        let pool_clone = pool.clone();
-
-                        // Acquire a lock on the debouncer state.
-                        let mut guard = debouncer_clone
-                            .lock()
-                            .expect("Failed to lock debouncer mutex");
-
-                        // Spawn a new thread for the debounced operation.
-                        // The previous `JoinHandle` (if any) is dropped here, cancelling the old timer.
-                        *guard = Some(thread::spawn(move || {
-                            // Wait for a short period to debounce events.
-                            // If another relevant event occurs within this duration,
-                            // the current timer will be cancelled (by dropping this thread's handle)
-                            // and a new one will start.
-                            thread::sleep(Duration::from_secs(3));
-
-                            // Create a new Tokio runtime for this specific async operation.
-                            // This ensures that `run_full_scan` can execute async code.
-                            let rt_inner =
-                                Runtime::new().expect("Failed to create Tokio runtime for scan");
-
-                            // Execute the full library scan.
-                            rt_inner.block_on(async {
-                                run_full_scan(&pool_clone, &sender_clone).await;
-                            });
-                        }));
-                    }
-                }
-                Err(e) => eprintln!("Watcher error: {}", e),
+        // Create the file system watcher with the channel sender.
+        let mut watcher: RecommendedWatcher = match recommended_watcher(move |res| {
+            if let Ok(event) = res {
+                tx.send(event).expect("Failed to send event");
             }
-        };
-
-        // Create a new file system watcher instance with the defined event handler.
-        let mut watcher: RecommendedWatcher = match recommended_watcher(event_handler) {
+        }) {
             Ok(w) => w,
             Err(e) => {
                 eprintln!("Failed to create watcher: {}", e);
-                return; // Exit the thread if watcher creation fails.
+                return;
             }
         };
 
-        // Add each configured folder to the watcher for recursive monitoring.
+        // Add each folder to the watcher.
         for folder in folders_to_watch {
             let path = Path::new(&folder.path);
             if let Err(e) = watcher.watch(path, Recursive) {
@@ -125,12 +88,52 @@ pub fn start_watching_library(pool: Arc<SqlitePool>, sender: UnboundedSender<()>
             }
         }
 
-        // The watcher operates in its own thread, dispatching events.
-        // To keep this spawned thread alive indefinitely, we enter a blocking loop.
-        // This prevents the `thread::spawn` closure from exiting and dropping the watcher.
-        // A more sophisticated shutdown mechanism could be implemented here if needed.
+        // Keep the watcher thread alive.
         loop {
-            thread::sleep(Duration::from_secs(60));
+            sleep(Duration::from_secs(60));
         }
     });
+}
+
+/// Processes file system events with debouncing logic.
+///
+/// This function runs in a dedicated thread, receiving events from the watcher.
+/// It collects events and waits for a quiet period (`DEBOUNCE_DURATION`) before
+/// triggering a full library scan. This prevents excessive scans during periods
+/// of high file activity.
+fn process_events(rx: Receiver<Event>, pool: Arc<SqlitePool>, sender: UnboundedSender<()>) {
+    let mut last_event_time = Instant::now();
+    let mut event_queue: VecDeque<Event> = VecDeque::new();
+    let rt = Arc::new(Runtime::new().expect("Failed to create Tokio runtime for event processor"));
+    loop {
+        // Try to receive an event from the channel.
+        if let Ok(event) = rx.try_recv() {
+            if matches!(
+                event.kind,
+                Create(_) | Remove(_) | Modify(Name(_)) | Modify(Data(_)) | Modify(Metadata(_))
+            ) {
+                event_queue.push_back(event);
+                last_event_time = Instant::now();
+            }
+        }
+
+        // If the debounce duration has passed and there are events in the queue,
+        // process them and trigger a scan.
+        if !event_queue.is_empty() && last_event_time.elapsed() >= DEBOUNCE_DURATION {
+            // Clear the queue as we are about to do a full scan.
+            event_queue.clear();
+            let pool_clone = Arc::clone(&pool);
+            let sender_clone = sender.clone();
+            let rt_clone = Arc::clone(&rt);
+
+            // Spawn a blocking task for the full scan to avoid blocking the event processor.
+            rt_clone.spawn(async move {
+                println!("Debounced file system change detected. Starting full scan...");
+                run_full_scan(&pool_clone, &sender_clone).await;
+            });
+        }
+
+        // Sleep for a short duration to avoid busy-waiting.
+        sleep(Duration::from_millis(100));
+    }
 }

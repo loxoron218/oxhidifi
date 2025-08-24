@@ -2,37 +2,10 @@ use std::path::PathBuf;
 
 use sqlx::{Result, Row, SqlitePool, query, sqlite::SqliteRow};
 
-use crate::data::models::{Artist, Folder};
-
-/// Represents comprehensive album information for display in the UI.
-/// This struct combines data from the `albums`, `artists`, `tracks`, and `folders` tables.
-#[derive(Clone, Debug)]
-pub struct AlbumDisplayInfo {
-    /// Unique identifier for the album.
-    pub id: i64,
-    /// The title of the album.
-    pub title: String,
-    /// The name of the album artist.
-    pub artist: String,
-    /// The release year of the album (optional).
-    pub year: Option<i32>,
-    /// The path to the album's cached cover art image file (optional).
-    pub cover_art: Option<PathBuf>,
-    /// The audio format of the tracks in the album (e.g., "FLAC", "MP3", optional).
-    pub format: Option<String>,
-    /// The bit depth of the tracks (e.g., 16, 24, optional).
-    pub bit_depth: Option<u32>,
-    /// The sample rate frequency of the tracks (e.g., 44100, 96000, optional).
-    pub frequency: Option<u32>,
-    /// The calculated Dynamic Range (DR) value for the album (optional).
-    pub dr_value: Option<u8>,
-    /// Indicates whether the DR value for this album has been manually marked as completed/verified.
-    pub dr_completed: bool,
-    /// The original release date of the album as a string (optional).
-    pub original_release_date: Option<String>,
-    /// The file system path of the folder containing the album.
-    pub folder_path: PathBuf,
-}
+use crate::{
+    data::models::{Artist, Folder},
+    ui::grids::album_grid_state::AlbumGridItem,
+};
 
 /// Fetches all albums from the database along with their associated artist,
 /// track format details, and folder path, suitable for display in the UI.
@@ -45,8 +18,8 @@ pub struct AlbumDisplayInfo {
 /// * `pool` - A reference to the SQLite database connection pool.
 ///
 /// # Returns
-/// A `Result` containing a `Vec<AlbumDisplayInfo>` on success, or an `sqlx::Error` on failure.
-pub async fn fetch_album_display_info(pool: &SqlitePool) -> Result<Vec<AlbumDisplayInfo>> {
+/// A `Result` containing a `Vec<AlbumGridItem>` on success, or an `sqlx::Error` on failure.
+pub async fn fetch_album_display_info(pool: &SqlitePool) -> Result<Vec<AlbumGridItem>> {
     let rows = query(
         r#"
         SELECT
@@ -72,24 +45,21 @@ pub async fn fetch_album_display_info(pool: &SqlitePool) -> Result<Vec<AlbumDisp
     )
     .fetch_all(pool)
     .await?;
-    Ok(rows
-        .into_iter()
-        .map(map_row_to_album_display_info)
-        .collect())
+    Ok(rows.into_iter().map(map_row_to_album_grid_item).collect())
 }
 
-/// Helper function to map a SQLX Row to an AlbumDisplayInfo struct.
-fn map_row_to_album_display_info(row: SqliteRow) -> AlbumDisplayInfo {
-    AlbumDisplayInfo {
+/// Helper function to map a SQLX Row to an AlbumGridItem struct.
+fn map_row_to_album_grid_item(row: SqliteRow) -> AlbumGridItem {
+    AlbumGridItem {
         id: row.get("id"),
         title: row.get("title"),
         artist: row.get("artist"),
         year: row.get("year"),
-        cover_art: row.get::<Option<String>, _>("cover_art").map(PathBuf::from),
+        cover_art: row.get("cover_art"),
         format: row.get("format"),
-        bit_depth: row.get("bit_depth"),
-        frequency: row.get("frequency"),
-        dr_value: row.get("dr_value"),
+        bit_depth: row.get::<Option<u32>, _>("bit_depth").map(|bd| bd as i32),
+        frequency: row.get::<Option<u32>, _>("frequency").map(|f| f as i32),
+        dr_value: row.get::<Option<u8>, _>("dr_value").map(|dr| dr as i32),
         dr_completed: row.get("dr_completed"),
         original_release_date: row.get("original_release_date"),
         folder_path: PathBuf::from(row.get::<String, _>("folder_path")),
@@ -139,19 +109,19 @@ pub async fn fetch_all_folders(pool: &SqlitePool) -> Result<Vec<Folder>> {
 
 /// Searches for albums by matching a substring in their title or artist name (case-insensitive).
 ///
-/// Returns `AlbumDisplayInfo` which combines data from `albums`, `artists`, `tracks`, and `folders`.
+/// Returns `AlbumGridItem` which combines data from `albums`, `artists`, `tracks`, and `folders`.
 ///
 /// # Arguments
 /// * `pool` - A reference to the SQLite database connection pool.
 /// * `search_term` - The string to search for within album titles or artist names.
 ///
 /// # Returns
-/// A `Result` containing a `Vec<AlbumDisplayInfo>` of matching albums on success,
+/// A `Result` containing a `Vec<AlbumGridItem>` of matching albums on success,
 /// or an `sqlx::Error` on failure.
 pub async fn search_album_display_info(
     pool: &SqlitePool,
     search_term: &str,
-) -> Result<Vec<AlbumDisplayInfo>> {
+) -> Result<Vec<AlbumGridItem>> {
     let pattern = format!("%{}%", search_term.to_lowercase());
     let rows = query(
         r#"
@@ -181,10 +151,7 @@ pub async fn search_album_display_info(
     .bind(&pattern)
     .fetch_all(pool)
     .await?;
-    Ok(rows
-        .into_iter()
-        .map(map_row_to_album_display_info)
-        .collect())
+    Ok(rows.into_iter().map(map_row_to_album_grid_item).collect())
 }
 
 /// Searches for artists by matching a substring in their name (case-insensitive).
