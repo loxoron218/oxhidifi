@@ -11,16 +11,17 @@ use std::{
 };
 
 use fast_image_resize::{
-    FilterType::Lanczos3,
-    ImageBufferError,
-    PixelType::U8x4,
-    ResizeAlg::Convolution,
-    ResizeError, ResizeOptions, Resizer,
-    images,
+    FilterType::Lanczos3, ImageBufferError, PixelType::U8x4, ResizeAlg::Convolution, ResizeError,
+    ResizeOptions, Resizer, images,
 };
 use gdk_pixbuf::{Pixbuf, PixbufLoader};
 use glib::user_cache_dir;
-use image::{ImageError::{self, Parameter}, ImageFormat::Jpeg, RgbaImage, error::{ParameterError, ParameterErrorKind::DimensionMismatch}};
+use image::{
+    ImageError::{self, Parameter},
+    ImageFormat::Jpeg,
+    RgbaImage,
+    error::{ParameterError, ParameterErrorKind::DimensionMismatch},
+};
 use libadwaita::prelude::PixbufLoaderExt;
 
 use crate::utils::image_loader::ImageLoaderError::{
@@ -440,9 +441,7 @@ impl ImageLoader {
 
         // Convert back to image::RgbaImage for JPEG encoding
         let resized_rgba_img = RgbaImage::from_raw(dst_width, dst_height, dst_image.into_vec())
-            .ok_or(Parameter(ParameterError::from_kind(
-                DimensionMismatch,
-            )))?;
+            .ok_or(Parameter(ParameterError::from_kind(DimensionMismatch)))?;
 
         // Convert to Pixbuf
         let mut buffer: Vec<u8> = Vec::new();
