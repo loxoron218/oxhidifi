@@ -7,6 +7,7 @@ description = "A music player tailored for audiophiles, focusing on detailed col
 
 
 [dependencies]
+fast_image_resize = "*"
 gdk-pixbuf = "*"
 glib = "*"
 gtk4 = "*"

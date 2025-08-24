@@ -10,12 +10,22 @@ use std::{
     time::Instant,
 };
 
+use fast_image_resize::{
+    FilterType::Lanczos3,
+    ImageBufferError,
+    PixelType::U8x4,
+    ResizeAlg::Convolution,
+    ResizeError, ResizeOptions, Resizer,
+    images,
+};
 use gdk_pixbuf::{Pixbuf, PixbufLoader};
 use glib::user_cache_dir;
-use image::{ImageError, ImageFormat::Jpeg, imageops::FilterType::Lanczos3};
+use image::{ImageError::{self, Parameter}, ImageFormat::Jpeg, RgbaImage, error::{ParameterError, ParameterErrorKind::DimensionMismatch}};
 use libadwaita::prelude::PixbufLoaderExt;
 
-use crate::utils::image_loader::ImageLoaderError::{Glib, Image, InvalidPath, Io};
+use crate::utils::image_loader::ImageLoaderError::{
+    Glib, Image, ImageBuffer, InvalidPath, Io, Resize,
+};
 
 /// Generates a hex string from the hash of the input bytes using DefaultHasher
 fn hash_to_hex(bytes: &[u8]) -> String {
@@ -39,6 +49,10 @@ pub enum ImageLoaderError {
     Glib(glib::Error),
     /// The image path was invalid or the pixbuf could not be created
     InvalidPath,
+    /// An error occurred during fast_image_resize operations
+    Resize(ResizeError),
+    /// An error occurred during fast_image_resize image buffer operations
+    ImageBuffer(ImageBufferError),
 }
 
 /// Implementation of Display trait for ImageLoaderError
@@ -51,6 +65,8 @@ impl Display for ImageLoaderError {
             Image(e) => write!(f, "Image error: {}", e),
             Glib(e) => write!(f, "GLib error: {}", e),
             InvalidPath => write!(f, "Invalid path"),
+            Resize(e) => write!(f, "Resize error: {}", e),
+            ImageBuffer(e) => write!(f, "Image buffer error: {}", e),
         }
     }
 }
@@ -59,7 +75,18 @@ impl Display for ImageLoaderError {
 ///
 /// This implementation allows ImageLoaderError to be used as a standard error type
 /// and provides access to the underlying error source when available.
-impl Error for ImageLoaderError {}
+impl Error for ImageLoaderError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Io(e) => Some(e),
+            Image(e) => Some(e),
+            Glib(e) => Some(e),
+            Resize(e) => Some(e),
+            ImageBuffer(e) => Some(e),
+            InvalidPath => None,
+        }
+    }
+}
 
 /// Implementation of From trait to convert io::Error to ImageLoaderError
 ///
@@ -78,6 +105,26 @@ impl From<io::Error> for ImageLoaderError {
 impl From<ImageError> for ImageLoaderError {
     fn from(err: ImageError) -> Self {
         Image(err)
+    }
+}
+
+/// Implementation of From trait to convert fast_image_resize::ResizeError to ImageLoaderError
+///
+/// This implementation allows fast_image_resize::ResizeError to be automatically converted to
+/// ImageLoaderError::Resize variant when using the ? operator.
+impl From<ResizeError> for ImageLoaderError {
+    fn from(err: ResizeError) -> Self {
+        Resize(err)
+    }
+}
+
+/// Implementation of From trait to convert fast_image_resize::ImageBufferError to ImageLoaderError
+///
+/// This implementation allows fast_image_resize::ImageBufferError to be automatically converted to
+/// ImageLoaderError::ImageBuffer variant when using the ? operator.
+impl From<ImageBufferError> for ImageLoaderError {
+    fn from(err: ImageBufferError) -> Self {
+        ImageBuffer(err)
     }
 }
 
@@ -370,13 +417,36 @@ impl ImageLoader {
             return Ok(pixbuf);
         }
 
-        // 3. Load and scale the original image
+        // 3. Load and scale the original image using fast_image_resize
         let img = image::open(path)?;
-        let scaled_img = img.resize(size as u32, size as u32, Lanczos3);
+
+        // Convert to RGBA8 format for fast_image_resize
+        let rgba_img = img.to_rgba8();
+        let src_width = rgba_img.width();
+        let src_height = rgba_img.height();
+
+        // Create source and destination image views for fast_image_resize
+        let src_image =
+            images::Image::from_vec_u8(src_width, src_height, rgba_img.into_raw(), U8x4)?;
+
+        let dst_width = size as u32;
+        let dst_height = size as u32;
+        let mut dst_image = images::Image::new(dst_width, dst_height, U8x4);
+
+        // Create resizer and resize the image
+        let mut resizer = Resizer::new();
+        let resize_options = ResizeOptions::new().resize_alg(Convolution(Lanczos3));
+        resizer.resize(&src_image, &mut dst_image, &resize_options)?;
+
+        // Convert back to image::RgbaImage for JPEG encoding
+        let resized_rgba_img = RgbaImage::from_raw(dst_width, dst_height, dst_image.into_vec())
+            .ok_or(Parameter(ParameterError::from_kind(
+                DimensionMismatch,
+            )))?;
 
         // Convert to Pixbuf
         let mut buffer: Vec<u8> = Vec::new();
-        scaled_img.write_to(&mut Cursor::new(&mut buffer), Jpeg)?;
+        resized_rgba_img.write_to(&mut Cursor::new(&mut buffer), Jpeg)?;
         let loader = PixbufLoader::new();
         loader.write(&buffer)?;
         loader.close()?;
