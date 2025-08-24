@@ -2,116 +2,54 @@ use std::{
     error::Error,
     fmt::{Display, Formatter, Result as FmtResult},
     fs::create_dir_all,
-    io::{self, Cursor},
+    io,
     path::PathBuf,
 };
 
-use fast_image_resize::{
-    FilterType::Lanczos3, ImageBufferError, PixelType::U8x4, ResizeAlg, ResizeError, ResizeOptions,
-    Resizer, images::Image,
-};
 use glib::user_cache_dir;
-use image::{
-    ImageError,
-    ImageFormat::Jpeg,
-    RgbaImage,
-    error::{ParameterError, ParameterErrorKind::DimensionMismatch},
-    load_from_memory,
-};
+use image::{ImageFormat, imageops::FilterType};
 use tokio::fs::write;
 
-use crate::utils::image_cache::ThumbnailError::{CacheDir, ImageBuffer, Load, Resize};
+use crate::utils::image_cache::ThumbnailError::{CacheDir, Load};
 
-/// The size (in pixels) to which thumbnails are scaled
-///
-/// This constant defines the width and height of the square thumbnails
-/// that are generated and stored in the cache. Using a consistent size
-/// helps optimize storage and improves performance when displaying images.
 const THUMBNAIL_SIZE: i32 = 512;
 
-/// Error types that can occur during thumbnail processing
-///
-/// This enum represents all possible errors that can occur when
-/// creating or loading thumbnails. It provides a unified error type
-/// that can be used throughout the thumbnail processing pipeline.
 #[derive(Debug)]
 pub enum ThumbnailError {
-    /// An error occurred while creating or accessing the cache directory
     CacheDir(io::Error),
-    /// An error occurred while loading or processing the image data
-    Load(ImageError),
-    /// An error occurred during fast_image_resize operations
-    Resize(ResizeError),
-    /// An error occurred during fast_image_resize image buffer operations
-    ImageBuffer(ImageBufferError),
+    Load(image::ImageError),
+    // Close,  // Not used anymore
+    // Empty,  // Not used anymore
+    // Save(io::Error),  // Not used anymore
 }
 
-/// Implementation of Display trait for ThumbnailError
-///
-/// This implementation provides user-friendly error messages for all error variants.
 impl Display for ThumbnailError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match self {
             CacheDir(e) => write!(f, "Failed to create cache directory: {}", e),
             Load(e) => write!(f, "Failed to load image data: {}", e),
-            Resize(e) => write!(f, "Failed to resize image: {}", e),
-            ImageBuffer(e) => write!(f, "Failed to create image buffer: {}", e),
         }
     }
 }
 
-/// Implementation of Error trait for ThumbnailError
-///
-/// This implementation allows ThumbnailError to be used as a standard error type
-/// and provides access to the underlying error source when available.
 impl Error for ThumbnailError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             CacheDir(e) => Some(e),
             Load(e) => Some(e),
-            Resize(e) => Some(e),
-            ImageBuffer(e) => Some(e),
         }
     }
 }
 
-/// Implementation of From trait to convert io::Error to ThumbnailError
-///
-/// This implementation allows io::Error to be automatically converted to
-/// ThumbnailError::CacheDir variant when using the ? operator.
 impl From<io::Error> for ThumbnailError {
     fn from(err: io::Error) -> ThumbnailError {
         CacheDir(err)
     }
 }
 
-/// Implementation of From trait to convert image::ImageError to ThumbnailError
-///
-/// This implementation allows image::ImageError to be automatically converted to
-/// ThumbnailError::Load variant when using the ? operator.
-impl From<ImageError> for ThumbnailError {
-    fn from(err: ImageError) -> ThumbnailError {
+impl From<image::ImageError> for ThumbnailError {
+    fn from(err: image::ImageError) -> ThumbnailError {
         Load(err)
-    }
-}
-
-/// Implementation of From trait to convert fast_image_resize::ResizeError to ThumbnailError
-///
-/// This implementation allows fast_image_resize::ResizeError to be automatically converted to
-/// ThumbnailError::Resize variant when using the ? operator.
-impl From<ResizeError> for ThumbnailError {
-    fn from(err: ResizeError) -> ThumbnailError {
-        Resize(err)
-    }
-}
-
-/// Implementation of From trait to convert fast_image_resize::ImageBufferError to ThumbnailError
-///
-/// This implementation allows fast_image_resize::ImageBufferError to be automatically converted to
-/// ThumbnailError::ImageBuffer variant when using the ? operator.
-impl From<ImageBufferError> for ThumbnailError {
-    fn from(err: ImageBufferError) -> ThumbnailError {
-        ImageBuffer(err)
     }
 }
 
@@ -167,33 +105,19 @@ pub async fn get_or_create_thumbnail(
     }
 
     // The image processing part is synchronous as it operates on data already in memory.
-    // Use the image crate for loading and fast_image_resize for resizing
-    let img = load_from_memory(image_data)?;
+    // Use the image crate for better performance and quality
+    let img = image::load_from_memory(image_data)?;
 
-    // Convert to RGBA8 format for fast_image_resize
-    let rgba_img = img.to_rgba8();
-    let src_width = rgba_img.width();
-    let src_height = rgba_img.height();
-
-    // Create source and destination image views for fast_image_resize
-    let src_image = Image::from_vec_u8(src_width, src_height, rgba_img.into_raw(), U8x4)?;
-    let dst_width = THUMBNAIL_SIZE as u32;
-    let dst_height = THUMBNAIL_SIZE as u32;
-    let mut dst_image = Image::new(dst_width, dst_height, U8x4);
-
-    // Create resizer and resize the image
-    let mut resizer = Resizer::new();
-    let resize_options = ResizeOptions::new().resize_alg(ResizeAlg::Convolution(Lanczos3));
-    resizer.resize(&src_image, &mut dst_image, &resize_options)?;
-
-    // Convert back to image::RgbaImage for JPEG encoding
-    let resized_rgba_img = RgbaImage::from_raw(dst_width, dst_height, dst_image.into_vec()).ok_or(
-        ImageError::Parameter(ParameterError::from_kind(DimensionMismatch)),
-    )?;
+    // Scale the image to the desired thumbnail size using high-quality Lanczos filter
+    let scaled_img = img.resize(
+        THUMBNAIL_SIZE as u32,
+        THUMBNAIL_SIZE as u32,
+        FilterType::Lanczos3,
+    );
 
     // Encode as JPEG with quality 90
     let mut buffer: Vec<u8> = Vec::new();
-    resized_rgba_img.write_to(&mut Cursor::new(&mut buffer), Jpeg)?;
+    scaled_img.write_to(&mut std::io::Cursor::new(&mut buffer), ImageFormat::Jpeg)?;
 
     // The file I/O part is asynchronous using tokio.
     write(&cache_path, &buffer).await?;
