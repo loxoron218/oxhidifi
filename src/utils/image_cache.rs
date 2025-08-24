@@ -22,10 +22,21 @@ use tokio::fs::write;
 
 use crate::utils::image_cache::ThumbnailError::{CacheDir, ImageBuffer, Load, Resize};
 
+/// The size (in pixels) to which thumbnails are scaled
+///
+/// This constant defines the width and height of the square thumbnails
+/// that are generated and stored in the cache. Using a consistent size
+/// helps optimize storage and improves performance when displaying images.
 const THUMBNAIL_SIZE: i32 = 512;
 
+/// Error types that can occur during thumbnail processing
+///
+/// This enum represents all possible errors that can occur when
+/// creating or loading thumbnails. It provides a unified error type
+/// that can be used throughout the thumbnail processing pipeline.
 #[derive(Debug)]
 pub enum ThumbnailError {
+    /// An error occurred while creating or accessing the cache directory
     CacheDir(io::Error),
     /// An error occurred while loading or processing the image data
     Load(ImageError),
@@ -49,6 +60,10 @@ impl Display for ThumbnailError {
     }
 }
 
+/// Implementation of Error trait for ThumbnailError
+///
+/// This implementation allows ThumbnailError to be used as a standard error type
+/// and provides access to the underlying error source when available.
 impl Error for ThumbnailError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
@@ -60,6 +75,10 @@ impl Error for ThumbnailError {
     }
 }
 
+/// Implementation of From trait to convert io::Error to ThumbnailError
+///
+/// This implementation allows io::Error to be automatically converted to
+/// ThumbnailError::CacheDir variant when using the ? operator.
 impl From<io::Error> for ThumbnailError {
     fn from(err: io::Error) -> ThumbnailError {
         CacheDir(err)
