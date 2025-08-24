@@ -88,12 +88,13 @@ pub async fn insert_or_get_album(
 ) -> Result<i64> {
     let cover_art_path_str = cover_art_path.and_then(|p| p.to_str());
     if let Some(row) =
+        // Check if album already exists with the same title, artist, and folder
         query("SELECT id FROM albums WHERE title = ? AND artist_id = ? AND folder_id = ?")
-            .bind(title)
-            .bind(artist_id)
-            .bind(folder_id)
-            .fetch_optional(pool)
-            .await?
+                .bind(title)
+                .bind(artist_id)
+                .bind(folder_id)
+                .fetch_optional(pool)
+                .await?
     {
         let album_id: i64 = row.get(0);
 
@@ -312,6 +313,7 @@ pub async fn update_album_dr_completed(
     album_id: i64,
     completed: bool,
 ) -> Result<()> {
+    // Update the album's DR completion status in the database
     query("UPDATE albums SET dr_completed = ? WHERE id = ?")
         .bind(completed)
         .bind(album_id)
