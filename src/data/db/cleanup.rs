@@ -53,10 +53,13 @@ pub async fn remove_folder_and_albums(pool: &SqlitePool, folder_id: i64) -> Resu
 /// # Returns
 /// A `Result` indicating success or an `sqlx::Error` on failure.
 pub async fn remove_album_and_tracks(pool: &SqlitePool, album_id: i64) -> Result<()> {
+    // Remove all tracks associated with the specified album
     query("DELETE FROM tracks WHERE album_id = ?")
         .bind(album_id)
         .execute(pool)
         .await?;
+
+    // Remove the album itself
     query("DELETE FROM albums WHERE id = ?")
         .bind(album_id)
         .execute(pool)
@@ -73,6 +76,7 @@ pub async fn remove_album_and_tracks(pool: &SqlitePool, album_id: i64) -> Result
 /// # Returns
 /// A `Result` indicating success or an `sqlx::Error` on failure.
 pub async fn remove_artists_with_no_albums(pool: &SqlitePool) -> Result<()> {
+    // Remove artists who are not associated with any albums or tracks
     query("DELETE FROM artists WHERE id NOT IN (SELECT artist_id FROM albums) AND id NOT IN (SELECT artist_id FROM tracks)")
         .execute(pool)
         .await?;
@@ -88,6 +92,7 @@ pub async fn remove_artists_with_no_albums(pool: &SqlitePool) -> Result<()> {
 /// # Returns
 /// A `Result` indicating success or an `sqlx::Error` on failure.
 pub async fn remove_albums_with_no_tracks(pool: &SqlitePool) -> Result<()> {
+    // Remove albums that don't have any associated tracks
     query("DELETE FROM albums WHERE id NOT IN (SELECT DISTINCT album_id FROM tracks)")
         .execute(pool)
         .await?;
@@ -108,6 +113,7 @@ pub async fn remove_orphaned_tracks(pool: &SqlitePool) -> Result<()> {
         let track_id: i64 = track_row.get("id");
         let track_path: String = track_row.get("path");
         if !Path::new(&track_path).exists() {
+            // Remove the track from the database since its file no longer exists
             query("DELETE FROM tracks WHERE id = ?")
                 .bind(track_id)
                 .execute(pool)
