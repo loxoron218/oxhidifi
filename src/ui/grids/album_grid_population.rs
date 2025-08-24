@@ -21,14 +21,15 @@ use crate::{
     data::db::{dr_sync::synchronize_dr_completed_from_store, query::fetch_album_display_info},
     ui::{
         components::sorting::sorting_types::SortOrder::{self, Album, Artist, DrValue, Year},
-        grids::album_grid_state::AlbumGridState::{Empty, Populated, Scanning},
-        grids::album_grid_utils::{
-            create_album_cover_picture, create_dr_badge_label, create_styled_label,
+        grids::{
+            album_grid_state::AlbumGridState::{Empty, Populated, Scanning},
+            album_grid_utils::{create_dr_badge_label, create_styled_label},
         },
     },
     utils::{
         best_dr_persistence::{AlbumKey, DrValueStore},
         formatting::format_freq_khz,
+        image_loader_async::AsyncImageLoader,
         screen::ScreenInfo,
     },
 };
@@ -172,6 +173,16 @@ pub async fn populate_albums_grid(
             let cover_size = screen_info.borrow().cover_size;
             let tile_size = screen_info.borrow().tile_size;
             let use_original_year_clone_for_loop = use_original_year.clone();
+
+            // Create async image loader
+            let async_image_loader = match AsyncImageLoader::new() {
+                Ok(loader) => loader,
+                Err(e) => {
+                    eprintln!("Failed to create async image loader: {:?}", e);
+                    return;
+                }
+            };
+
             for album_info in albums {
                 // Create album title label.
                 let title_label = create_styled_label(
@@ -278,9 +289,19 @@ pub async fn populate_albums_grid(
                 cover_container.set_size_request(cover_size, cover_size);
                 cover_container.set_halign(Start);
                 cover_container.set_valign(Start);
-                let cover_picture =
-                    create_album_cover_picture(album_info.cover_art.as_deref(), cover_size);
+                let cover_picture = crate::ui::grids::album_grid_utils::create_album_cover_picture(
+                    album_info.cover_art.as_deref(),
+                    cover_size,
+                );
                 cover_container.append(&cover_picture);
+
+                // Load the image asynchronously
+                async_image_loader.load_image_async(
+                    cover_picture.clone(),
+                    album_info.cover_art.as_deref(),
+                    cover_size,
+                );
+
                 let overlay = Overlay::new();
                 overlay.set_size_request(cover_size, cover_size);
                 overlay.set_child(Some(&cover_container));

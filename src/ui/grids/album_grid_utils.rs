@@ -8,6 +8,28 @@ use gtk4::{
 };
 use libadwaita::prelude::WidgetExt;
 
+/// Create a placeholder image with a neutral gray color
+/// This follows GNOME's Human Interface Guidelines for placeholders
+/// that work well in both light and dark modes
+pub fn create_colored_placeholder(_path: &str, size: i32) -> Pixbuf {
+    // Create a new pixbuf with a neutral gray background
+    // Following GNOME HIG, we use a mid-gray (#808080) that works in both light/dark modes
+    let pixbuf = Pixbuf::new(
+        gdk_pixbuf::Colorspace::Rgb,
+        false, // no alpha
+        8,     // bits per sample
+        size,
+        size,
+    )
+    .expect("Failed to create placeholder pixbuf");
+
+    // Fill with neutral gray color (#8080)
+    // In 0xRRGGBBAA format: 0x808080FF
+    pixbuf.fill(0x808080FF);
+
+    pixbuf
+}
+
 /// Helper function to create a styled GTK Label.
 ///
 /// This function centralizes the creation of `gtk4::Label` widgets used for displaying
@@ -36,7 +58,7 @@ pub fn create_styled_label(
     let label = Label::builder()
         .label(text)
         .halign(Start)
-        .xalign(0.0) // Align text to the start (left) within the label's allocated space
+        .xalign(0.0)
         .build();
 
     if let Some(width) = max_width {
@@ -77,24 +99,16 @@ pub fn create_album_cover_picture(cover_art_path: Option<&Path>, cover_size: i32
     pic.set_halign(Start);
     pic.set_valign(Start);
     pic.add_css_class("album-cover-border");
+
+    // Show placeholder immediately
     if let Some(path) = cover_art_path {
-        // Load the pixbuf directly from the cached file, scaling it at load time
-        // for better performance and memory usage.
-        match Pixbuf::from_file_at_scale(path, cover_size, cover_size, true) {
-            Ok(pixbuf) => {
-                pic.set_pixbuf(Some(&pixbuf));
-            }
-            Err(e) => {
-                // This error is expected if a file was deleted from the cache,
-                // so we just log it for debugging but don't interrupt the user.
-                eprintln!(
-                    "Failed to load cached cover image from {}: {}",
-                    path.display(),
-                    e
-                );
-            }
-        }
+        let placeholder = create_colored_placeholder(&path.to_string_lossy(), cover_size);
+        pic.set_pixbuf(Some(&placeholder));
+    } else {
+        let placeholder = create_colored_placeholder("", cover_size);
+        pic.set_pixbuf(Some(&placeholder));
     }
+
     pic
 }
 

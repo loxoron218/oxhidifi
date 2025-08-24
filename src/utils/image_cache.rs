@@ -6,21 +6,21 @@ use std::{
     path::PathBuf,
 };
 
-use gdk_pixbuf::{InterpType::Bilinear, PixbufLoader, prelude::PixbufLoaderExt};
 use glib::user_cache_dir;
+use image::{ImageFormat, imageops::FilterType};
 use tokio::fs::write;
 
-use crate::utils::image_cache::ThumbnailError::{CacheDir, Close, Empty, Load, Save};
+use crate::utils::image_cache::ThumbnailError::{CacheDir, Load};
 
 const THUMBNAIL_SIZE: i32 = 512;
 
 #[derive(Debug)]
 pub enum ThumbnailError {
     CacheDir(io::Error),
-    Load(glib::Error),
-    Close,
-    Empty,
-    Save(glib::Error),
+    Load(image::ImageError),
+    // Close,  // Not used anymore
+    // Empty,  // Not used anymore
+    // Save(io::Error),  // Not used anymore
 }
 
 impl Display for ThumbnailError {
@@ -28,9 +28,6 @@ impl Display for ThumbnailError {
         match self {
             CacheDir(e) => write!(f, "Failed to create cache directory: {}", e),
             Load(e) => write!(f, "Failed to load image data: {}", e),
-            Close => write!(f, "Failed to close image loader"),
-            Empty => write!(f, "Pixbuf is empty after loading"),
-            Save(e) => write!(f, "Failed to save thumbnail: {}", e),
         }
     }
 }
@@ -40,8 +37,6 @@ impl Error for ThumbnailError {
         match self {
             CacheDir(e) => Some(e),
             Load(e) => Some(e),
-            Save(e) => Some(e),
-            _ => None,
         }
     }
 }
@@ -49,6 +44,12 @@ impl Error for ThumbnailError {
 impl From<io::Error> for ThumbnailError {
     fn from(err: io::Error) -> ThumbnailError {
         CacheDir(err)
+    }
+}
+
+impl From<image::ImageError> for ThumbnailError {
+    fn from(err: image::ImageError) -> ThumbnailError {
+        Load(err)
     }
 }
 
@@ -104,21 +105,19 @@ pub async fn get_or_create_thumbnail(
     }
 
     // The image processing part is synchronous as it operates on data already in memory.
-    let loader = PixbufLoader::new();
-    loader.write(image_data).map_err(Load)?;
-    loader.close().map_err(|_| Close)?;
-    let pixbuf = loader.pixbuf().ok_or(Empty)?;
+    // Use the image crate for better performance and quality
+    let img = image::load_from_memory(image_data)?;
 
-    // Scale the image to the desired thumbnail size.
-    let scaled_pixbuf = pixbuf
-        .scale_simple(THUMBNAIL_SIZE, THUMBNAIL_SIZE, Bilinear)
-        .ok_or(Empty)?; // Handle case where scaling might fail
+    // Scale the image to the desired thumbnail size using high-quality Lanczos filter
+    let scaled_img = img.resize(
+        THUMBNAIL_SIZE as u32,
+        THUMBNAIL_SIZE as u32,
+        FilterType::Lanczos3,
+    );
 
-    // Save the created thumbnail to the cache directory as a JPEG.
-    // We do this in-memory first to prepare the bytes for async writing.
-    let buffer = scaled_pixbuf
-        .save_to_bufferv("jpeg", &[("quality", "90")])
-        .map_err(Save)?;
+    // Encode as JPEG with quality 90
+    let mut buffer: Vec<u8> = Vec::new();
+    scaled_img.write_to(&mut std::io::Cursor::new(&mut buffer), ImageFormat::Jpeg)?;
 
     // The file I/O part is asynchronous using tokio.
     write(&cache_path, &buffer).await?;
