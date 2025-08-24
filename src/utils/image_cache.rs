@@ -2,7 +2,7 @@ use std::{
     error::Error,
     fmt::{Display, Formatter, Result as FmtResult},
     fs::create_dir_all,
-    io,
+    io::{self, Cursor},
     path::PathBuf,
 };
 
@@ -66,8 +66,12 @@ impl From<io::Error> for ThumbnailError {
     }
 }
 
-impl From<image::ImageError> for ThumbnailError {
-    fn from(err: image::ImageError) -> ThumbnailError {
+/// Implementation of From trait to convert image::ImageError to ThumbnailError
+///
+/// This implementation allows image::ImageError to be automatically converted to
+/// ThumbnailError::Load variant when using the ? operator.
+impl From<ImageError> for ThumbnailError {
+    fn from(err: ImageError) -> ThumbnailError {
         Load(err)
     }
 }
@@ -144,8 +148,8 @@ pub async fn get_or_create_thumbnail(
     }
 
     // The image processing part is synchronous as it operates on data already in memory.
-    // Use the image crate for better performance and quality
-    let img = image::load_from_memory(image_data)?;
+    // Use the image crate for loading and fast_image_resize for resizing
+    let img = load_from_memory(image_data)?;
 
     // Convert to RGBA8 format for fast_image_resize
     let rgba_img = img.to_rgba8();
@@ -154,7 +158,6 @@ pub async fn get_or_create_thumbnail(
 
     // Create source and destination image views for fast_image_resize
     let src_image = Image::from_vec_u8(src_width, src_height, rgba_img.into_raw(), U8x4)?;
-
     let dst_width = THUMBNAIL_SIZE as u32;
     let dst_height = THUMBNAIL_SIZE as u32;
     let mut dst_image = Image::new(dst_width, dst_height, U8x4);
