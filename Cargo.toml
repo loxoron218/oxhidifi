@@ -7,17 +7,17 @@ description = "A music player tailored for audiophiles, focusing on detailed col
 
 
 [dependencies]
-fast_image_resize = "*"
-gdk-pixbuf = "*"
-glib = "*"
-gtk4 = "*"
-image = "*"
-libadwaita = "*"
-lofty = "*"
-notify = "*"
-regex = "*"
-serde = "*"
-serde_json = "*"
-sqlx = { version = "*", features = ["sqlite", "macros", "runtime-tokio-native-tls"] }
-tokio = { version = "*", features = ["macros", "rt-multi-thread", "fs"] }
-tokio-stream = "*"
+fast_image_resize = "5.2.1"
+gdk-pixbuf = "0.21.1"
+glib = "0.21.1"
+gtk4 = "0.10.0"
+image = "0.25.6"
+libadwaita = "0.8.0"
+lofty = "0.22.4"
+notify = "8.2.0"
+regex = "1.11.1"
+serde = "1.0.219"
+serde_json = "1.0.143"
+sqlx = { version = "0.8.6", features = ["sqlite", "macros", "runtime-tokio-native-tls"] }
+tokio = { version = "1.47.1", features = ["macros", "rt-multi-thread", "fs"] }
+tokio-stream = "0.1.17"
