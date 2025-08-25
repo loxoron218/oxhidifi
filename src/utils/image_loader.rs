@@ -374,9 +374,16 @@ impl ImageLoader {
         let img = image::open(path)?;
         let scaled_img = img.resize(size as u32, size as u32, Lanczos3);
 
+        // Convert to RGB if necessary (JPEG doesn't support transparency)
+        let rgb_img = if scaled_img.color().has_alpha() {
+            scaled_img.to_rgb8()
+        } else {
+            scaled_img.to_rgb8() // Convert to RGB8 for consistency
+        };
+
         // Convert to Pixbuf
         let mut buffer: Vec<u8> = Vec::new();
-        scaled_img.write_to(&mut Cursor::new(&mut buffer), Jpeg)?;
+        rgb_img.write_to(&mut Cursor::new(&mut buffer), Jpeg)?;
         let loader = PixbufLoader::new();
         loader.write(&buffer)?;
         loader.close()?;

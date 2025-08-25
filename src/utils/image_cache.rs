@@ -115,9 +115,16 @@ pub async fn get_or_create_thumbnail(
         FilterType::Lanczos3,
     );
 
+    // Convert to RGB if necessary (JPEG doesn't support transparency)
+    let rgb_img = if scaled_img.color().has_alpha() {
+        scaled_img.to_rgb8()
+    } else {
+        scaled_img.to_rgb8()
+    };
+
     // Encode as JPEG with quality 90
     let mut buffer: Vec<u8> = Vec::new();
-    scaled_img.write_to(&mut std::io::Cursor::new(&mut buffer), ImageFormat::Jpeg)?;
+    rgb_img.write_to(&mut std::io::Cursor::new(&mut buffer), ImageFormat::Jpeg)?;
 
     // The file I/O part is asynchronous using tokio.
     write(&cache_path, &buffer).await?;
