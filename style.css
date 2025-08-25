@@ -170,3 +170,64 @@
 .album-detail-page .dr-badge-label {
     opacity: 1.0;
 }
+
+/* =====================
+   Player Bar Styles
+   ===================== */
+.player-bar {
+    background-color: #333;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 12px 16px;
+}
+
+.player-bar .album-title {
+    font-weight: bold;
+    font-size: 1.1em;
+    margin-bottom: 4px;
+}
+
+.player-bar .artist-name {
+    color: #ccc;
+    margin-bottom: 4px;
+}
+
+.player-bar .technical-info {
+    color: #aaa;
+    font-size: 0.9em;
+    margin-bottom: 8px;
+}
+
+.player-bar .time-label {
+    color: #ccc;
+    font-size: 0.9em;
+    margin-top: 4px;
+}
+
+.player-bar .media-button {
+    padding: 8px;
+    min-width: 40px;
+    min-height: 40px;
+}
+
+.player-bar .volume-slider {
+    margin: 0 8px;
+    min-width: 80px;
+}
+
+.player-bar .indicator {
+    min-width: 24px;
+    min-height: 24px;
+    border-radius: 50%;
+    background-color: #555;
+    color: #fff;
+    font-size: 0.7em;
+    font-weight: bold;
+}
+
+.player-bar .bit-perfect-indicator {
+    background-color: #4a86e8;
+}
+
+.player-bar .gapless-indicator {
+    background-color: #34a853;
+}

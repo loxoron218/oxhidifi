@@ -164,6 +164,7 @@ pub fn connect_all_handlers(
     // all dynamically created album tiles are interactive.
     if let Some(albums_grid) = widgets.albums_grid_cell.borrow().as_ref() {
         let show_dr_badges_clone = show_dr_badges_cloned.clone();
+        let player_bar_clone = widgets.player_bar.clone();
         connect_album_navigation(
             albums_grid,
             &widgets.stack,
@@ -179,6 +180,7 @@ pub fn connect_all_handlers(
                   right_btn_box_weak,
                   sender| {
                 let show_dr_badges_clone_for_closure = show_dr_badges_clone.clone();
+                let player_bar_clone = player_bar_clone.clone();
                 async move {
                     album_page(
                         stack_weak,
@@ -188,6 +190,7 @@ pub fn connect_all_handlers(
                         right_btn_box_weak,
                         sender,
                         show_dr_badges_clone_for_closure.clone(),
+                        player_bar_clone,
                     )
                     .await;
                 }
@@ -275,6 +278,7 @@ pub fn connect_all_handlers(
         sender.clone(),
         show_dr_badges_cloned.clone(),
         use_original_year_cloned.clone(),
+        widgets.player_bar.clone(),
     );
 
     // Set up search bar UI logic (e.g., showing/hiding, focus management).

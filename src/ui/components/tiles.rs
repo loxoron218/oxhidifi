@@ -26,6 +26,7 @@ use tokio::sync::mpsc::UnboundedSender;
 
 use crate::{
     ui::{
+        components::player_bar::PlayerBar,
         grids::album_grid_state::AlbumGridItem,
         pages::{album_page::album_page, artist_page::artist_page},
     },
@@ -182,6 +183,7 @@ pub fn create_album_tile(
     sender: UnboundedSender<()>,
     show_dr_badges: Rc<Cell<bool>>,
     use_original_year: Rc<Cell<bool>>,
+    player_bar: PlayerBar,
 ) -> FlowBoxChild {
     // Create and style the album title label
     let title_label = {
@@ -401,6 +403,7 @@ pub fn create_album_tile(
                 right_btn_box_for_closure.downgrade(),
                 sender.clone(),
                 show_dr_badges.clone(),
+                player_bar.clone(),
             ));
         }
     });
@@ -427,6 +430,7 @@ pub fn create_artist_tile(
     sender: UnboundedSender<()>,
     show_dr_badges: Rc<Cell<bool>>,
     use_original_year: Rc<Cell<bool>>,
+    player_bar: PlayerBar,
 ) -> FlowBoxChild {
     let icon = Image::from_icon_name("avatar-default-symbolic");
     icon.set_pixel_size(cover_size);
@@ -497,6 +501,7 @@ pub fn create_artist_tile(
                 sender.clone(),
                 show_dr_badges.clone(),
                 use_original_year.clone(),
+                player_bar.clone(),
             ));
         }
     });

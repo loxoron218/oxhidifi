@@ -25,7 +25,10 @@ use tokio::sync::mpsc::UnboundedSender;
 use crate::{
     data::db::crud::fetch_artist_by_id,
     ui::{
-        components::tiles::{create_album_cover, create_album_label, create_dr_overlay},
+        components::{
+            player_bar::PlayerBar,
+            tiles::{create_album_cover, create_album_label, create_dr_overlay},
+        },
         pages::album_page::album_page,
     },
     utils::{formatting::format_freq_khz, screen::ScreenInfo},
@@ -43,6 +46,7 @@ pub async fn artist_page(
     sender: UnboundedSender<()>,
     show_dr_badges: Rc<Cell<bool>>,
     use_original_year: Rc<Cell<bool>>,
+    player_bar: PlayerBar,
 ) {
     let page_name = format!("artist_{}", artist_id);
 
@@ -126,6 +130,7 @@ pub async fn artist_page(
             page_name.clone(),
             show_dr_badges.clone(),
             use_original_year.clone(),
+            player_bar.clone(),
         );
         flowbox.insert(&album_card, -1);
     }
@@ -165,6 +170,7 @@ fn build_album_card(
     artist_page_name: String,
     show_dr_badges: Rc<Cell<bool>>,
     use_original_year: Rc<Cell<bool>>,
+    player_bar: PlayerBar,
 ) -> FlowBoxChild {
     let title_label = create_album_label(
         &album.title,
@@ -367,6 +373,7 @@ fn build_album_card(
                 right_btn_box_weak.clone(),
                 sender_clone.clone(),
                 show_dr_badges.clone(),
+                player_bar.clone(),
             ));
         }
     });

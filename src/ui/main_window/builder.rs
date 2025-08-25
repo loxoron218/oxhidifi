@@ -5,11 +5,12 @@ use std::{
     thread,
 };
 
+use gtk4::prelude::*;
 use gtk4::{
-    Align::Center,
+    Align::{Center, End},
     Box, Button, FlowBox, Label,
     Orientation::{Horizontal, Vertical},
-    Stack,
+    Overlay, Stack,
 };
 use libadwaita::{
     Application, ApplicationWindow, Clamp, ViewStack,
@@ -22,7 +23,7 @@ use crate::{
     data::scanner::library_ops::run_full_scan,
     ui::{
         components::{
-            config::load_settings, refresh::setup_library_refresh_channel,
+            config::load_settings, player_bar::PlayerBar, refresh::setup_library_refresh_channel,
             scan_feedback::create_scanning_label,
         },
         grids::{album_grid_builder::build_albums_grid, artist_grid_builder::build_artist_grid},
@@ -96,6 +97,9 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     // Get primary screen dimensions to calculate optimal cover and tile sizes dynamically.
     let screen_info = ScreenInfo::new();
 
+    // Create the player bar
+    let player_bar = PlayerBar::new();
+
     // `WindowSharedState` aggregates all `Rc<Cell<T>>` and `Rc<RefCell<T>>` managed state.
     // This centralizes mutable state management, making it easier to reason about data flow.
     let shared_state = WindowSharedState {
@@ -143,6 +147,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         albums_stack_cell: albums_stack_cell.clone(),
         artist_grid_cell: artist_grid_cell.clone(),
         artists_stack_cell: artists_stack_cell.clone(),
+        player_bar: player_bar.clone(),
     };
 
     // Setup library refresh channel and service
@@ -170,6 +175,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         shared_state.show_dr_badges.clone(),
         shared_state.use_original_year.clone(),
         shared_state.view_mode.clone(),
+        widgets.player_bar.clone(),
     );
 
     // Build the album and artist grids, passing the count labels to them.
@@ -225,6 +231,12 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     vbox_inner.append(&header_bar);
     vbox_inner.append(&widgets.stack);
 
+    // Create the overlay and add the main content and player bar
+    let overlay = Overlay::new();
+    overlay.set_child(Some(&vbox_inner));
+    overlay.add_overlay(&player_bar.container);
+    player_bar.container.set_valign(End);
+
     // Connect all the handlers
     connect_all_handlers(
         &widgets,
@@ -242,7 +254,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     // Present the window to make it visible and set its content.
     // This is the final step in rendering the main application window.
     widgets.window.present();
-    widgets.window.set_content(Some(&vbox_inner));
+    widgets.window.set_content(Some(&overlay));
 
     // Initiate an initial full scan on application startup in a separate thread.
     // This is a non-blocking operation that populates the library with existing music files,

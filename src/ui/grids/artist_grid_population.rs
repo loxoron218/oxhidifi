@@ -12,7 +12,7 @@ use tokio::sync::mpsc::UnboundedSender;
 
 use crate::{
     data::db::{dr_sync::synchronize_dr_completed_from_store, query::fetch_all_artists},
-    ui::components::tiles::create_artist_tile,
+    ui::components::{player_bar::PlayerBar, tiles::create_artist_tile},
     utils::screen::ScreenInfo,
 };
 
@@ -54,6 +54,7 @@ pub fn populate_artist_grid(
     show_dr_badges: Rc<Cell<bool>>,
     use_original_year: Rc<Cell<bool>>,
     _view_mode: Rc<RefCell<String>>,
+    player_bar: PlayerBar,
 ) {
     // `thread_local!` is used to prevent multiple concurrent calls to this function,
     // which could lead to race conditions or unnecessary re-population of the grid.
@@ -158,6 +159,7 @@ pub fn populate_artist_grid(
                         sender.clone(),
                         show_dr_badges.clone(),
                         use_original_year.clone(),
+                        player_bar.clone(),
                     ));
                     artist_grid.insert(&*tile, -1);
                 }

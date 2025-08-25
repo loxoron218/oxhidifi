@@ -3,7 +3,7 @@ use std::{cell::RefCell, rc::Rc};
 use gtk4::{Button, FlowBox, Label, Stack, ToggleButton};
 use libadwaita::{ApplicationWindow, Clamp, ViewStack};
 
-use crate::ui::header::AppHeaderBar;
+use crate::ui::{components::player_bar::PlayerBar, header::AppHeaderBar};
 
 /// `WindowWidgets` struct encapsulates references to all the essential GTK widgets
 /// that make up the main application window's user interface.
@@ -57,4 +57,6 @@ pub struct WindowWidgets {
     /// `Rc<RefCell<Option<Stack>>>` holding the artists inner stack for dynamic updates.
     /// Used to switch between loading, empty, and populated states for the artists view.
     pub artists_stack_cell: Rc<RefCell<Option<Stack>>>,
+    /// The player bar widget, displayed at the bottom of the window when a song is playing.
+    pub player_bar: PlayerBar,
 }

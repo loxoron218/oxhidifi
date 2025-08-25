@@ -16,6 +16,7 @@ use tokio::sync::mpsc::UnboundedSender;
 
 use crate::{
     data::db::query::{search_album_display_info, search_artists},
+    ui::components::player_bar::PlayerBar,
     ui::components::tiles::{create_album_tile, create_artist_tile},
     utils::screen::ScreenInfo,
 };
@@ -44,6 +45,7 @@ pub fn connect_live_search(
     sender: UnboundedSender<()>,
     show_dr_badges: Rc<Cell<bool>>,
     use_original_year: Rc<Cell<bool>>,
+    player_bar: PlayerBar,
 ) {
     // Compute dynamic sizes based on screen dimensions
     let screen_info = ScreenInfo::new();
@@ -94,6 +96,7 @@ pub fn connect_live_search(
         let search_timer_cloned = search_timer.clone();
 
         // Schedule a new timer.
+        let player_bar_clone_inner = player_bar.clone();
         let source_id = timeout_add_local_once(Duration::from_millis(300), move || {
             // When the timer fires, its SourceId becomes invalid. By `take()`-ing it here,
             // we prevent the `connect_changed` handler from trying to `remove()` an invalid ID
@@ -193,6 +196,7 @@ pub fn connect_live_search(
                                     sender.clone(),
                                     show_dr_badges.clone(),
                                     use_original_year.clone(),
+                                    player_bar_clone_inner.clone(),
                                 ));
                                 albums_grid.insert(&*flow_child, -1);
                             }
@@ -228,6 +232,7 @@ pub fn connect_live_search(
                                     sender.clone(),
                                     show_dr_badges.clone(),
                                     use_original_year.clone(),
+                                    player_bar_clone_inner.clone(),
                                 ));
                                 artist_grid.insert(&*flow_child, -1);
                             }

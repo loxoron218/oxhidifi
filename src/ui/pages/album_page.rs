@@ -19,7 +19,7 @@ use gtk4::{
 };
 use libadwaita::{
     ActionRow, Clamp, PreferencesGroup, ViewStack,
-    prelude::{ActionRowExt, BoxExt, CheckButtonExt, PreferencesGroupExt, WidgetExt},
+    prelude::{ActionRowExt, BoxExt, ButtonExt, CheckButtonExt, PreferencesGroupExt, WidgetExt},
 };
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
@@ -32,6 +32,7 @@ use crate::{
         },
         models::{Album, Artist, Folder, Track},
     },
+    ui::components::player_bar::PlayerBar,
     utils::{
         best_dr_persistence::{AlbumKey, DrValueStore},
         formatting::{format_bit_freq, format_duration_hms, format_duration_mmss, format_freq_khz},
@@ -48,6 +49,7 @@ pub async fn album_page(
     header_right_btn_box: WeakRef<Clamp>,
     sender: UnboundedSender<()>,
     show_dr_badges: Rc<Cell<bool>>,
+    player_bar: PlayerBar,
 ) {
     let stack = match stack.upgrade() {
         Some(s) => s,
@@ -242,6 +244,9 @@ pub async fn album_page(
         album_artist_id: i64,
         track_artists: &HashMap<i64, String>,
         is_various_artists_album: bool,
+        player_bar: &PlayerBar,
+        album: &Album,
+        artist: &Artist,
     ) -> ActionRow {
         let mut subtitle_fields = Vec::with_capacity(4);
 
@@ -289,6 +294,38 @@ pub async fn album_page(
             .css_classes(["flat"])
             .halign(End)
             .build();
+
+        // Connect play button to update player bar
+        let player_bar_clone = player_bar.clone();
+        let album_clone = album.clone();
+        let _artist_clone = artist.clone();
+        let track_title = t.title.clone();
+        let artist_name = if t.artist_id != album_artist_id || is_various_artists_album {
+            track_artists
+                .get(&t.artist_id)
+                .cloned()
+                .unwrap_or(artist.name.clone())
+        } else {
+            artist.name.clone()
+        };
+
+        // Clone track values to move into closure
+        let track_bit_depth = t.bit_depth;
+        let track_frequency = t.frequency;
+        let track_format = t.format.clone();
+        let track_duration = t.duration;
+        play_pause_button.connect_clicked(move |_| {
+            player_bar_clone.update_with_metadata(
+                &album_clone.title,
+                &track_title,
+                &artist_name,
+                album_clone.cover_art.as_deref(),
+                track_bit_depth,
+                track_frequency,
+                track_format.as_deref(),
+                track_duration,
+            );
+        });
         row.add_suffix(&play_pause_button);
         row
     }
@@ -317,6 +354,46 @@ pub async fn album_page(
     play_pause_button.set_halign(End);
     play_pause_button.set_margin_bottom(12);
     play_pause_button.set_margin_end(12);
+
+    // Connect play button to update player bar
+    let player_bar_clone = player_bar.clone();
+    let album_clone = album.clone();
+    let artist_clone = artist.clone();
+    let tracks_clone = tracks.clone();
+    play_pause_button.connect_clicked(move |_| {
+        // Use the first track as the default track to play
+        if let Some(first_track) = tracks_clone.first() {
+            // Clone track values to move into closure
+            let track_bit_depth = first_track.bit_depth;
+            let track_frequency = first_track.frequency;
+            let track_format = first_track.format.clone();
+            let track_duration = first_track.duration;
+            let track_title = first_track.title.clone();
+            player_bar_clone.update_with_metadata(
+                &album_clone.title,
+                &track_title,
+                &artist_clone.name,
+                album_clone.cover_art.as_deref(),
+                track_bit_depth,
+                track_frequency,
+                track_format.as_deref(),
+                track_duration,
+            );
+        } else {
+            // Fallback to album title if no tracks found
+            player_bar_clone.update_with_metadata(
+                &album_clone.title,
+                &album_clone.title,
+                &artist_clone.name,
+                album_clone.cover_art.as_deref(),
+                None,
+                None,
+                None,
+                None,
+            );
+        }
+    });
+
     overlay.add_overlay(&play_pause_button);
     header.append(&overlay);
     let info_box = Box::builder()
@@ -515,6 +592,9 @@ pub async fn album_page(
             album.artist_id,
             &track_artists,
             is_various_artists_album,
+            &player_bar,
+            &album,
+            &artist,
         ));
     }
 

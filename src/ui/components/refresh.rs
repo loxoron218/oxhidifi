@@ -13,9 +13,10 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
 use crate::{
     ui::{
-        components::sorting::sorting_types::SortOrder,
+        components::{player_bar::PlayerBar, sorting::sorting_types::SortOrder},
         grids::album_grid_population::populate_albums_grid,
-        grids::artist_grid_population::populate_artist_grid, search::clear_grid,
+        grids::artist_grid_population::populate_artist_grid,
+        search::clear_grid,
     },
     utils::screen::ScreenInfo,
 };
@@ -45,6 +46,7 @@ pub struct RefreshService {
     pub show_dr_badges: Rc<Cell<bool>>,
     pub use_original_year: Rc<Cell<bool>>,
     pub view_mode: Rc<RefCell<String>>,
+    player_bar: PlayerBar,
 }
 impl RefreshService {
     /// Creates a new `RefreshService` instance, initializing it with all necessary UI components
@@ -72,6 +74,7 @@ impl RefreshService {
         show_dr_badges: Rc<Cell<bool>>,
         use_original_year: Rc<Cell<bool>>,
         view_mode: Rc<RefCell<String>>,
+        player_bar: PlayerBar,
     ) -> Self {
         Self {
             db_pool,
@@ -95,6 +98,7 @@ impl RefreshService {
             show_dr_badges,
             use_original_year,
             view_mode,
+            player_bar,
         }
     }
 
@@ -157,6 +161,7 @@ impl RefreshService {
                                 service_clone.show_dr_badges.clone(),
                                 service_clone.use_original_year.clone(),
                                 service_clone.view_mode.clone(),
+                                service_clone.player_bar.clone(),
                             )
                             .await;
                         }
@@ -186,6 +191,7 @@ impl RefreshService {
                                 service_clone.show_dr_badges.clone(),
                                 service_clone.use_original_year.clone(),
                                 service_clone.view_mode.clone(),
+                                service_clone.player_bar.clone(),
                             );
                         }
                     }
@@ -224,6 +230,7 @@ pub fn setup_library_refresh_channel(
     show_dr_badges: Rc<Cell<bool>>,
     use_original_year: Rc<Cell<bool>>,
     view_mode: Rc<RefCell<String>>,
+    player_bar: PlayerBar,
 ) -> (
     UnboundedSender<()>,
     UnboundedReceiver<()>,
@@ -255,6 +262,7 @@ pub fn setup_library_refresh_channel(
         show_dr_badges,
         use_original_year,
         view_mode,
+        player_bar,
     ));
 
     // Create the refresh UI closure from the service

@@ -7,7 +7,7 @@ use std::{
     time::Duration,
 };
 
-use glib::{ControlFlow::Continue, timeout_add_local};
+use glib::{ControlFlow::Continue, MainContext, timeout_add_local};
 use gtk4::{
     Align::{Center, End, Start},
     Box, Button, EventControllerMotion, Fixed, FlowBox, FlowBoxChild, Label,
@@ -15,13 +15,19 @@ use gtk4::{
     Overlay, Stack,
     pango::{EllipsizeMode, WrapMode::WordChar},
 };
-use libadwaita::prelude::{BoxExt, FixedExt, ObjectExt, WidgetExt};
+use libadwaita::prelude::{BoxExt, ButtonExt, FixedExt, ObjectExt, WidgetExt};
 use sqlx::SqlitePool;
 
 use crate::{
-    data::db::{dr_sync::synchronize_dr_completed_from_store, query::fetch_album_display_info},
+    data::db::{
+        crud::fetch_tracks_by_album, dr_sync::synchronize_dr_completed_from_store,
+        query::fetch_album_display_info,
+    },
     ui::{
-        components::sorting::sorting_types::SortOrder::{self, Album, Artist, DrValue, Year},
+        components::{
+            player_bar::PlayerBar,
+            sorting::sorting_types::SortOrder::{self, Album, Artist, DrValue, Year},
+        },
         grids::{
             album_grid_state::AlbumGridState::{Empty, Populated, Scanning},
             album_grid_utils::{
@@ -67,6 +73,7 @@ pub async fn populate_albums_grid(
     show_dr_badges: Rc<Cell<bool>>,
     use_original_year: Rc<Cell<bool>>,
     _view_mode: Rc<RefCell<String>>,
+    player_bar: PlayerBar,
 ) {
     // A thread-local static to prevent multiple simultaneous population calls,
     // ensuring data consistency and preventing redundant work.
@@ -337,6 +344,66 @@ pub async fn populate_albums_grid(
                     .build();
                 play_button.set_size_request(56, 56);
                 overlay.add_overlay(&play_button);
+
+                // Make player bar visible on click
+                let player_bar_clone = player_bar.clone();
+                let db_pool_clone = db_pool.clone();
+                let album_info_clone = album_info.clone();
+                play_button.connect_clicked(move |_| {
+                    // Fetch the first track of the album to get track title
+                    let db_pool_clone = db_pool_clone.clone();
+                    let player_bar_clone = player_bar_clone.clone();
+                    let album_info_clone = album_info_clone.clone();
+                    MainContext::default().spawn_local(async move {
+                        match fetch_tracks_by_album(&*db_pool_clone, album_info_clone.id).await {
+                            Ok(tracks) => {
+                                if let Some(first_track) = tracks.first() {
+                                    // Clone track values to move into closure
+                                    let track_bit_depth = first_track.bit_depth;
+                                    let track_frequency = first_track.frequency;
+                                    let track_format = first_track.format.clone();
+                                    let track_duration = first_track.duration;
+                                    let track_title = first_track.title.clone();
+                                    player_bar_clone.update_with_metadata(
+                                        &album_info_clone.title,
+                                        &track_title,
+                                        &album_info_clone.artist,
+                                        album_info_clone.cover_art.as_deref().map(Path::new),
+                                        track_bit_depth,
+                                        track_frequency,
+                                        track_format.as_deref(),
+                                        track_duration,
+                                    );
+                                } else {
+                                    // Fallback to album title if no tracks found
+                                    player_bar_clone.update_with_metadata(
+                                        &album_info_clone.title,
+                                        &album_info_clone.title,
+                                        &album_info_clone.artist,
+                                        album_info_clone.cover_art.as_deref().map(Path::new),
+                                        None,
+                                        None,
+                                        None,
+                                        None,
+                                    );
+                                }
+                            }
+                            Err(_) => {
+                                // Fallback to album title if track fetch fails
+                                player_bar_clone.update_with_metadata(
+                                    &album_info_clone.title,
+                                    &album_info_clone.title,
+                                    &album_info_clone.artist,
+                                    album_info_clone.cover_art.as_deref().map(Path::new),
+                                    None,
+                                    None,
+                                    None,
+                                    None,
+                                );
+                            }
+                        }
+                    });
+                });
 
                 // Connect hover events for the play button visibility.
                 let motion_controller = EventControllerMotion::new();
