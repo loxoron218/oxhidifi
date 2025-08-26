@@ -298,7 +298,6 @@ pub async fn album_page(
         // Connect play button to update player bar
         let player_bar_clone = player_bar.clone();
         let album_clone = album.clone();
-        let _artist_clone = artist.clone();
         let track_title = t.title.clone();
         let artist_name = if t.artist_id != album_artist_id || is_various_artists_album {
             track_artists
