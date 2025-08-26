@@ -8,7 +8,7 @@ use std::{error::Error, future::Future, path::Path, pin::Pin};
 use sqlx::SqlitePool;
 use tokio::fs::read_dir;
 
-pub use self::{dr_scanner::scan_dr_value, file_processor::process_file};
+pub use self::{dr_scanner::scan_dr_value, file_processor::process_files_batch};
 
 /// Recursively scans a folder for supported audio files and subfolders,
 /// extracting metadata and inserting it into the database.
@@ -47,6 +47,7 @@ pub fn scan_folder<'a>(
                 return Ok(());
             }
         };
+        let mut audio_files = Vec::new();
 
         // Iterate through each entry in the directory.
         while let Some(entry) = entries.next_entry().await? {
@@ -61,11 +62,20 @@ pub fn scan_folder<'a>(
                 // If the entry is a file, check if its extension is supported.
                 let supported_extensions = ["mp3", "flac", "ogg", "wav", "m4a", "opus", "aiff"];
                 if supported_extensions.contains(&ext.to_lowercase().as_str()) {
-                    // Process the audio file. Log errors but don't halt the main scan.
-                    if let Err(e) = process_file(pool, &path, folder_id, dr_value).await {
-                        eprintln!("Error processing file {}: {}", path.display(), e);
-                    }
+                    audio_files.push(path);
                 }
+            }
+        }
+
+        // Process all collected audio files in a batch, associating them with the current folder
+        // and any DR value found in the folder. Errors are logged but don't halt the scan.
+        if !audio_files.is_empty() {
+            if let Err(e) = process_files_batch(pool, &audio_files, folder_id, dr_value).await {
+                eprintln!(
+                    "Error processing batch for folder {}: {}",
+                    folder_path.display(),
+                    e
+                );
             }
         }
         Ok(())

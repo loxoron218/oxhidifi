@@ -1,4 +1,9 @@
-use std::{borrow::Cow, error::Error, path::Path};
+use std::{
+    borrow::Cow,
+    collections::HashSet,
+    error::Error,
+    path::{Path, PathBuf},
+};
 
 use lofty::{
     prelude::{
@@ -12,49 +17,89 @@ use lofty::{
 use sqlx::SqlitePool;
 
 use crate::{
-    data::db::crud::{insert_or_get_album, insert_or_get_artist, insert_track},
+    data::db::crud::{
+        AlbumForInsert, TrackForInsert, insert_or_get_artists_batch, upsert_albums_batch,
+        upsert_tracks_batch,
+    },
     utils::image_cache,
 };
 
-/// Processes a single audio file by extracting its metadata (tags and properties)
-/// and inserting or updating the corresponding entries in the database.
+/// A temporary struct to hold metadata extracted from audio files before we have database IDs.
 ///
-/// This function handles potential missing metadata by providing sensible fallbacks
-/// (e.g., using filename as title, "Unknown Artist/Album").
-/// It also associates the track with its folder and a discovered DR value if available.
+/// This struct is used during the file processing phase to store all relevant metadata
+/// extracted from audio files. The data is later used to create proper database records
+/// with assigned IDs after batch processing.
+struct TempMetadata {
+    /// The title of the track.
+    title: String,
+    /// The name of the track artist.
+    artist_name: String,
+    /// The title of the album the track belongs to.
+    album_title: String,
+    /// The name of the album artist (may differ from track artist).
+    album_artist_name: String,
+    /// The file system path to the audio file.
+    path: PathBuf,
+    /// The duration of the track in seconds.
+    duration: u32,
+    /// The track number within the album, if available.
+    track_no: Option<u32>,
+    /// The disc number for multi-disc albums, if available.
+    disc_no: Option<u32>,
+    /// The release year of the album, if available.
+    year: Option<i32>,
+    /// The original release date in "YYYY-MM-DD" format, if available.
+    original_release_date: Option<String>,
+    /// The path to the cached cover art image file, if available.
+    cover_art_path: Option<PathBuf>,
+    /// The audio format of the file (e.g., "flac", "mp3", "wav").
+    format: Option<String>,
+    /// The bit depth of the audio, if available.
+    bit_depth: Option<u32>,
+    /// The sample rate frequency of the audio, if available.
+    frequency: Option<u32>,
+}
+
+/// Extracts metadata from a single audio file.
+///
+/// This function reads an audio file and extracts all relevant metadata without
+/// interacting with the database. It handles various audio formats supported by
+/// the `lofty` crate and provides fallback values for missing metadata.
 ///
 /// # Arguments
-/// * `pool` - A reference to the SQLite database connection pool.
-/// * `path` - The file system path to the audio file.
-/// * `folder_id` - The database ID of the folder containing this file.
-/// * `dr_value` - An `Option<u8>` representing the Dynamic Range (DR) value for the folder, if found.
+///
+/// * `path` - A reference to the file system path of the audio file to process.
 ///
 /// # Returns
-/// A `Result` indicating success or an `Box<dyn Error>` on failure.
-/// If `lofty` fails to probe or read the file, it returns `Ok(())` (skips the file)
-/// to allow the scanning process to continue for other files.
-pub async fn process_file(
-    pool: &SqlitePool,
-    path: &Path,
-    folder_id: i64,
-    dr_value: Option<u8>,
-) -> Result<(), Box<dyn Error>> {
-    // Probe the file to read its metadata. If probing or reading fails, skip this file.
+///
+/// A `Result` containing:
+/// * `Ok(Some(TempMetadata))` - If metadata was successfully extracted
+/// * `Ok(None)` - If the file could not be read or is not a valid audio file
+/// * `Err(Box<dyn Error>)` - If an unexpected error occurred during processing
+///
+/// # Behavior
+///
+/// The function implements several fallback mechanisms:
+/// * For title: Uses tag title, or falls back to filename if tag is missing
+/// * For artist: Uses tag artist, or falls back to "Unknown Artist"
+/// * For album artist: Uses dedicated tag, or falls back to track artist name
+/// * For other fields: Defaults to `None` if not present in the file tags
+async fn extract_metadata_from_file(path: &Path) -> Result<Option<TempMetadata>, Box<dyn Error>> {
     let tagged_file = match Probe::open(path) {
         Ok(probe) => match probe.read() {
             Ok(tf) => tf,
             Err(e) => {
                 eprintln!("Error reading audio file {}: {}", path.display(), e);
-                return Ok(()); // Skip this file, but don't stop the overall scan.
+                return Ok(None);
             }
         },
         Err(e) => {
             eprintln!("Error probing audio file {}: {}", path.display(), e);
-            return Ok(()); // Skip this file, but don't stop the overall scan.
+            return Ok(None);
         }
     };
-    let tag = tagged_file.primary_tag(); // Get the primary tag (e.g., ID3v2, Vorbis Comments).
-    let properties = tagged_file.properties(); // Get audio properties (duration, sample rate, etc.).
+    let tag = tagged_file.primary_tag();
+    let properties = tagged_file.properties();
 
     // --- Extract metadata with fallbacks ---
     // Title: Use tag title, or fallback to filename if tag is missing.
@@ -65,7 +110,7 @@ pub async fn process_file(
             path.file_stem()
                 .and_then(|s| s.to_str())
                 .map(String::from)
-                .unwrap_or_else(|| "Unknown Title".to_string()) // Default if filename is also problematic.
+                .unwrap_or_else(|| "Unknown Title".to_string())
         });
 
     // Artist: Use tag artist, or fallback to "Unknown Artist".
@@ -74,7 +119,6 @@ pub async fn process_file(
         .map(Cow::into_owned)
         .unwrap_or_else(|| "Unknown Artist".to_string());
 
-    // Album: Use tag album, or fallback to "Unknown Album".
     let album_title = tag
         .and_then(|t| t.album())
         .map(Cow::into_owned)
@@ -86,12 +130,12 @@ pub async fn process_file(
         .map(|s| s.to_string())
         .unwrap_or_else(|| artist_name.clone());
 
-    // --- Cover Art Handling ---
-    // Extract cover art data, process it into a thumbnail, and cache it.
-    // This returns a path to the cached image.
-    let cover_art_path_buf = if let Some(t) = tag {
+    // Extract cover art if available and process it into a thumbnail
+    let cover_art_path = if let Some(t) = tag {
         if let Some(picture) = t.pictures().first() {
             let image_data = picture.data();
+
+            // Attempt to create or retrieve a cached thumbnail for the album cover
             match image_cache::get_or_create_thumbnail(image_data, &album_title, &album_artist_name)
                 .await
             {
@@ -105,12 +149,13 @@ pub async fn process_file(
                 }
             }
         } else {
+            // No cover art found in the file tags
             None
         }
     } else {
+        // No tags found in the file
         None
     };
-    let cover_art_path = cover_art_path_buf.as_deref();
 
     // Other metadata fields, defaulting to None if not present.
     let year = tag.and_then(|t| t.year()).map(|y| y as i32);
@@ -132,31 +177,121 @@ pub async fn process_file(
         .map(str::to_lowercase);
     let bit_depth = properties.bit_depth().map(|b| b as u32);
     let frequency = properties.sample_rate();
-
-    // --- Database Operations ---
-    // Insert or retrieve artists, getting their database IDs.
-    let artist_id = insert_or_get_artist(pool, &artist_name).await?;
-    let album_artist_id = insert_or_get_artist(pool, &album_artist_name).await?;
-
-    // Insert or retrieve the album, linking it to the album artist and folder.
-    // The DR value found in the folder scan is passed here.
-    let album_id = insert_or_get_album(
-        pool,
-        &album_title,
-        album_artist_id,
+    Ok(Some(TempMetadata {
+        title,
+        artist_name,
+        album_title,
+        album_artist_name,
+        path: path.to_path_buf(),
+        duration,
+        track_no,
+        disc_no,
         year,
-        cover_art_path,
-        folder_id,
-        dr_value,
         original_release_date,
-    )
-    .await?;
-
-    // Insert or update the track, linking it to the album and track artist.
-    insert_track(
-        pool, &title, album_id, artist_id, path, duration, track_no, disc_no, format, bit_depth,
+        cover_art_path,
+        format,
+        bit_depth,
         frequency,
-    )
-    .await?;
+    }))
+}
+
+/// Processes a batch of audio files, extracts their metadata, and upserts them into the database.
+///
+/// This function handles the complete pipeline of processing multiple audio files:
+/// 1. Extracts metadata from each file
+/// 2. Collects all unique artist names
+/// 3. Creates or retrieves artist IDs in a batch operation
+/// 4. Creates or updates album records with the provided DR value
+/// 5. Creates or updates track records with all extracted metadata
+///
+/// The function uses database transactions to ensure data consistency and efficiency
+/// when processing large batches of files.
+///
+/// # Arguments
+///
+/// * `pool` - A reference to the SQLite database connection pool
+/// * `paths` - A slice of file paths to process
+/// * `folder_id` - The ID of the folder containing these files
+/// * `dr_value` - An optional DR (Dynamic Range) value to assign to all processed albums
+///
+/// # Returns
+///
+/// A `Result` indicating success or an error if processing failed
+pub async fn process_files_batch(
+    pool: &SqlitePool,
+    paths: &[PathBuf],
+    folder_id: i64,
+    dr_value: Option<u8>,
+) -> Result<(), Box<dyn Error>> {
+    let mut all_metadata = Vec::new();
+    for path in paths {
+        if let Some(metadata) = extract_metadata_from_file(path).await? {
+            all_metadata.push(metadata);
+        }
+    }
+    if all_metadata.is_empty() {
+        return Ok(());
+    }
+    let mut artist_names = HashSet::new();
+    for meta in &all_metadata {
+        artist_names.insert(meta.artist_name.clone());
+        artist_names.insert(meta.album_artist_name.clone());
+    }
+    let artist_names: Vec<String> = artist_names.into_iter().collect();
+
+    // Begin a database transaction for batch processing to ensure consistency
+    let mut tx = pool.begin().await?;
+
+    // Batch insert or retrieve artist IDs for all unique artist names
+    let artist_ids = insert_or_get_artists_batch(&mut tx, &artist_names).await?;
+
+    // Prepare album records for batch upsert
+    let mut albums_to_insert = Vec::new();
+    for meta in &all_metadata {
+        let album_artist_id = artist_ids.get(&meta.album_artist_name).cloned().unwrap();
+        albums_to_insert.push(AlbumForInsert {
+            title: meta.album_title.clone(),
+            artist_id: album_artist_id,
+            folder_id,
+            year: meta.year,
+            cover_art_path: meta.cover_art_path.clone(),
+            dr_value,
+            original_release_date: meta.original_release_date.clone(),
+        });
+    }
+
+    // Batch upsert albums and retrieve their IDs
+    let album_ids = upsert_albums_batch(&mut tx, &albums_to_insert).await?;
+
+    // Prepare track records for batch upsert
+    let mut tracks_to_insert = Vec::new();
+    for meta in all_metadata {
+        let artist_id = artist_ids.get(&meta.artist_name).cloned().unwrap();
+        let album_artist_id = artist_ids.get(&meta.album_artist_name).cloned().unwrap();
+
+        // Retrieve the album ID using the composite key (title, artist_id, folder_id)
+        let album_id = album_ids
+            .get(&(meta.album_title, album_artist_id, folder_id))
+            .cloned()
+            .unwrap();
+        tracks_to_insert.push(TrackForInsert {
+            title: meta.title,
+            album_id,
+            artist_id,
+            path: meta.path,
+            duration: Some(meta.duration),
+            track_no: meta.track_no,
+            disc_no: meta.disc_no,
+            format: meta.format,
+            bit_depth: meta.bit_depth,
+            frequency: meta.frequency,
+        });
+    }
+
+    // Batch upsert tracks
+    upsert_tracks_batch(&mut tx, &tracks_to_insert).await?;
+
+    // Commit the transaction to persist all changes
+    tx.commit().await?;
     Ok(())
 }

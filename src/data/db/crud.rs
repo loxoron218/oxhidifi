@@ -1,8 +1,53 @@
-use std::path::{Path, PathBuf};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 
-use sqlx::{Result, Row, SqlitePool, query};
+use sqlx::{QueryBuilder, Result, Row, Sqlite, SqlitePool, Transaction, query};
 
 use crate::data::models::{Album, Artist, Folder, Track};
+
+#[derive(Debug)]
+pub struct AlbumForInsert {
+    /// The title of the album.
+    pub title: String,
+    /// The ID of the primary artist associated with the album.
+    pub artist_id: i64,
+    /// The ID of the folder where the album's files are located.
+    pub folder_id: i64,
+    /// The release year of the album, if available.
+    pub year: Option<i32>,
+    /// The path to the album's cover art image file, if available.
+    pub cover_art_path: Option<PathBuf>,
+    /// The Dynamic Range (DR) value of the album, if calculated or available.
+    pub dr_value: Option<u8>,
+    /// The original release date of the album, typically in "YYYY-MM-DD" format.
+    pub original_release_date: Option<String>,
+}
+
+#[derive(Debug)]
+pub struct TrackForInsert {
+    /// The title of the track.
+    pub title: String,
+    /// The ID of the album to which this track belongs.
+    pub album_id: i64,
+    /// The ID of the primary artist for this track.
+    pub artist_id: i64,
+    /// The absolute file system path of the track file.
+    pub path: PathBuf,
+    /// The duration of the track in seconds.
+    pub duration: Option<u32>,
+    /// The track number within its album (e.g., 1, 2, 3...).
+    pub track_no: Option<u32>,
+    /// The disc number if the album spans multiple discs.
+    pub disc_no: Option<u32>,
+    /// The audio format of the track (e.g., "FLAC", "MP3", "WAV").
+    pub format: Option<String>,
+    /// The bit depth of the audio (e.g., 16, 24).
+    pub bit_depth: Option<u32>,
+    /// The sample rate frequency of the audio (e.g., 44100, 96000).
+    pub frequency: Option<u32>,
+}
 
 /// Inserts a new folder into the database if it doesn't already exist,
 /// or returns the ID of the existing folder if a matching path is found.
@@ -31,171 +76,170 @@ pub async fn insert_or_get_folder(pool: &SqlitePool, path: &Path) -> Result<i64>
     }
 }
 
-/// Inserts a new artist into the database if they don't already exist,
-/// or returns the ID of the existing artist if a matching name is found.
+/// Inserts or updates a batch of tracks in the database.
+/// If a track with the same path already exists, it is updated; otherwise, it is inserted.
+/// This function should be called within an existing transaction.
 ///
 /// # Arguments
-/// * `pool` - A reference to the SQLite database connection pool.
-/// * `name` - The name of the artist.
+/// * `tx` - A mutable reference to a SQLite transaction.
+/// * `tracks` - A slice of `TrackForInsert` objects to insert or update.
 ///
 /// # Returns
-/// A `Result` containing the ID (`i64`) of the inserted or existing artist on success,
-/// or an `sqlx::Error` on failure.
-pub async fn insert_or_get_artist(pool: &SqlitePool, name: &str) -> Result<i64> {
-    if let Some(row) = query("SELECT id FROM artists WHERE name = ?")
-        .bind(name)
-        .fetch_optional(pool)
-        .await?
-    {
-        Ok(row.get(0))
-    } else {
-        let res = query("INSERT INTO artists (name) VALUES (?)")
-            .bind(name)
-            .execute(pool)
-            .await?;
-        Ok(res.last_insert_rowid())
+/// A `Result` indicating success or an `sqlx::Error` on failure.
+pub async fn upsert_tracks_batch(
+    tx: &mut Transaction<'_, Sqlite>,
+    tracks: &[TrackForInsert],
+) -> Result<()> {
+    if tracks.is_empty() {
+        return Ok(());
     }
+    let mut query_builder = QueryBuilder::new(
+        "INSERT INTO tracks (title, album_id, artist_id, path, duration, track_no, disc_no, format, bit_depth, frequency)",
+    );
+    query_builder.push_values(tracks, |mut b, track| {
+        b.push_bind(track.title.clone())
+            .push_bind(track.album_id)
+            .push_bind(track.artist_id)
+            .push_bind(track.path.to_str().unwrap_or_default())
+            .push_bind(track.duration)
+            .push_bind(track.track_no)
+            .push_bind(track.disc_no)
+            .push_bind(track.format.clone())
+            .push_bind(track.bit_depth)
+            .push_bind(track.frequency);
+    });
+    query_builder.push(
+        " ON CONFLICT(path) DO UPDATE SET
+            title = excluded.title,
+            album_id = excluded.album_id,
+            artist_id = excluded.artist_id,
+            duration = excluded.duration,
+            track_no = excluded.track_no,
+            disc_no = excluded.disc_no,
+            format = excluded.format,
+            bit_depth = excluded.bit_depth,
+            frequency = excluded.frequency",
+    );
+    let query = query_builder.build();
+    query.execute(&mut **tx).await?;
+    Ok(())
 }
 
-/// Inserts a new album into the database if it doesn't already exist,
-/// or updates an existing album's metadata (year, cover art, DR value, original release date)
-/// if a matching album is found.
+/// Inserts or updates a batch of albums in the database.
+/// If an album with the same title, artist_id, and folder_id already exists, it is updated;
+/// otherwise, it is inserted. This function should be called within an existing transaction.
 ///
-/// A match is determined by the combination of `title`, `artist_id`, and `folder_id`.
+/// After upserting the albums, this function retrieves the database IDs of all processed albums
+/// and returns them in a HashMap for further use.
 ///
 /// # Arguments
-/// * `pool` - A reference to the SQLite database connection pool.
-/// * `title` - The title of the album.
-/// * `artist_id` - The ID of the primary artist of the album.
-/// * `year` - The release year of the album (optional).
-/// * `cover_art_path` - The path to the album's cached cover art (optional).
-/// * `folder_id` - The ID of the folder where the album's files are located.
-/// * `dr_value` - The Dynamic Range (DR) value for the album (optional).
-/// * `original_release_date` - The original release date of the album as a string (optional).
+/// * `tx` - A mutable reference to a SQLite transaction.
+/// * `albums` - A slice of `AlbumForInsert` objects to insert or update.
 ///
 /// # Returns
-/// A `Result` containing the ID (`i64`) of the inserted or updated album on success,
-/// or an `sqlx::Error` on failure.
-pub async fn insert_or_get_album(
-    pool: &SqlitePool,
-    title: &str,
-    artist_id: i64,
-    year: Option<i32>,
-    cover_art_path: Option<&Path>,
-    folder_id: i64,
-    dr_value: Option<u8>,
-    original_release_date: Option<String>,
-) -> Result<i64> {
-    let cover_art_path_str = cover_art_path.and_then(|p| p.to_str());
-    if let Some(row) =
-        // Check if album already exists with the same title, artist, and folder
-        query("SELECT id FROM albums WHERE title = ? AND artist_id = ? AND folder_id = ?")
-                .bind(title)
-                .bind(artist_id)
-                .bind(folder_id)
-                .fetch_optional(pool)
-                .await?
-    {
-        let album_id: i64 = row.get(0);
-
-        // Album exists, update its metadata
-        query("UPDATE albums SET year = ?, cover_art = ?, dr_value = ?, original_release_date = ? WHERE id = ?")
-            .bind(year)
-            .bind(cover_art_path_str)
-            .bind(dr_value)
-            .bind(original_release_date)
-            .bind(album_id)
-            .execute(pool)
-            .await?;
-        Ok(album_id)
-    } else {
-        // Album doesn't exist, insert it as a new record
-        let res = query("INSERT INTO albums (title, artist_id, year, cover_art, folder_id, dr_value, dr_completed, original_release_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-            .bind(title)
-            .bind(artist_id)
-            .bind(year)
-            .bind(cover_art_path_str)
-            .bind(folder_id)
-            .bind(dr_value)
-            .bind(false)
-            .bind(original_release_date)
-            .execute(pool)
-            .await?;
-        Ok(res.last_insert_rowid())
+/// A `Result` containing a `HashMap<(String, i64, i64), i64>` where:
+/// - Keys are tuples of (album_title, artist_id, folder_id)
+/// - Values are the corresponding database IDs
+/// Returns an `sqlx::Error` on failure.
+pub async fn upsert_albums_batch(
+    tx: &mut Transaction<'_, Sqlite>,
+    albums: &[AlbumForInsert],
+) -> Result<HashMap<(String, i64, i64), i64>> {
+    if albums.is_empty() {
+        return Ok(HashMap::new());
     }
+    let mut query_builder = QueryBuilder::new(
+        "INSERT INTO albums (title, artist_id, folder_id, year, cover_art, dr_value, original_release_date, dr_completed)",
+    );
+    query_builder.push_values(albums, |mut b, album| {
+        b.push_bind(album.title.clone())
+            .push_bind(album.artist_id)
+            .push_bind(album.folder_id)
+            .push_bind(album.year)
+            .push_bind(album.cover_art_path.as_ref().and_then(|p| p.to_str()))
+            .push_bind(album.dr_value)
+            .push_bind(album.original_release_date.clone())
+            .push_bind(false); // dr_completed
+    });
+    query_builder.push(
+        " ON CONFLICT(title, artist_id, folder_id) DO UPDATE SET
+            year = excluded.year,
+            cover_art = excluded.cover_art,
+            dr_value = excluded.dr_value,
+            original_release_date = excluded.original_release_date",
+    );
+    query_builder.build().execute(&mut **tx).await?;
+    if albums.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let mut placeholders = Vec::new();
+    for _ in albums {
+        placeholders.push("(?, ?, ?)");
+    }
+    let sql = format!(
+        "SELECT id, title, artist_id, folder_id FROM albums WHERE (title, artist_id, folder_id) IN ({})",
+        placeholders.join(", ")
+    );
+    let mut query = query(&sql);
+    for album in albums {
+        query = query
+            .bind(album.title.clone())
+            .bind(album.artist_id)
+            .bind(album.folder_id);
+    }
+    let album_ids: HashMap<(String, i64, i64), i64> = query
+        .fetch_all(&mut **tx)
+        .await?
+        .into_iter()
+        .map(|row| {
+            (
+                (row.get("title"), row.get("artist_id"), row.get("folder_id")),
+                row.get("id"),
+            )
+        })
+        .collect();
+    Ok(album_ids)
 }
 
-/// Inserts a new track into the database. If a track with the same path already exists,
-/// its metadata will be updated.
+/// Inserts a batch of new artists into the database if they don't already exist,
+/// and returns a map of artist names to their corresponding database IDs.
+/// This function should be called within an existing transaction.
 ///
 /// # Arguments
-/// * `pool` - A reference to the SQLite database connection pool.
-/// * `title` - The title of the track.
-/// * `album_id` - The ID of the album this track belongs to.
-/// * `artist_id` - The ID of the primary artist of the track.
-/// * `path` - The file system path of the track file (must be unique).
-/// * `duration` - The duration of the track in seconds.
-/// * `track_no` - The track number within the album (optional).
-/// * `disc_no` - The disc number if the album has multiple discs (optional).
-/// * `format` - The audio format (e.g., "FLAC", "MP3", optional).
-/// * `bit_depth` - The bit depth of the audio (e.g., 16, 24, optional).
-/// * `frequency` - The sample rate frequency of the audio (e.g., 44100, 96000, optional).
+/// * `tx` - A mutable reference to a SQLite transaction.
+/// * `names` - A slice of artist names to insert or retrieve.
 ///
 /// # Returns
-/// A `Result` containing the ID (`i64`) of the inserted or updated track on success,
-/// or an `sqlx::Error` on failure.
-pub async fn insert_track(
-    pool: &SqlitePool,
-    title: &str,
-    album_id: i64,
-    artist_id: i64,
-    path: &Path,
-    duration: u32,
-    track_no: Option<u32>,
-    disc_no: Option<u32>,
-    format: Option<String>,
-    bit_depth: Option<u32>,
-    frequency: Option<u32>,
-) -> Result<i64> {
-    let path_str = path.to_str().unwrap_or_default();
-    if let Some(row) = query("SELECT id FROM tracks WHERE path = ?")
-        .bind(path_str)
-        .fetch_optional(pool)
-        .await?
-    {
-        let track_id: i64 = row.get(0);
-
-        // Track exists: update its metadata
-        query("UPDATE tracks SET title = ?, album_id = ?, artist_id = ?, duration = ?, track_no = ?, disc_no = ?, format = ?, bit_depth = ?, frequency = ? WHERE id = ?")
-            .bind(title)
-            .bind(album_id)
-            .bind(artist_id)
-            .bind(duration)
-            .bind(track_no)
-            .bind(disc_no)
-            .bind(format)
-            .bind(bit_depth)
-            .bind(frequency)
-            .bind(track_id)
-            .execute(pool)
-            .await?;
-        Ok(track_id)
-    } else {
-        let res = query("INSERT INTO tracks (title, album_id, artist_id, path, duration, track_no, disc_no, format, bit_depth, frequency) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-            .bind(title)
-            .bind(album_id)
-            .bind(artist_id)
-            .bind(path_str)
-            .bind(duration)
-            .bind(track_no)
-            .bind(disc_no)
-            .bind(format)
-            .bind(bit_depth)
-            .bind(frequency)
-            .execute(pool)
-            .await?;
-        Ok(res.last_insert_rowid())
+/// A `Result` containing a `HashMap<String, i64>` where keys are artist names
+/// and values are their corresponding database IDs. Returns an `sqlx::Error` on failure.
+pub async fn insert_or_get_artists_batch(
+    tx: &mut Transaction<'_, Sqlite>,
+    names: &[String],
+) -> Result<HashMap<String, i64>> {
+    if names.is_empty() {
+        return Ok(HashMap::new());
     }
+    let mut query_builder = QueryBuilder::new("INSERT OR IGNORE INTO artists (name) ");
+    query_builder.push_values(names, |mut b, name| {
+        b.push_bind(name);
+    });
+    let query = query_builder.build();
+    query.execute(&mut **tx).await?;
+    let sql = format!(
+        "SELECT id, name FROM artists WHERE name IN ({})",
+        names.iter().map(|_| "?").collect::<Vec<_>>().join(", ")
+    );
+    let mut query = query(&sql);
+    for name in names {
+        query = query.bind(name);
+    }
+    let artists: HashMap<String, i64> = query
+        .fetch_all(&mut **tx)
+        .await?
+        .into_iter()
+        .map(|row| (row.get("name"), row.get("id")))
+        .collect();
+    Ok(artists)
 }
 
 /// Fetches a single album from the database by its unique ID.
