@@ -108,16 +108,22 @@ pub async fn remove_albums_with_no_tracks(pool: &SqlitePool) -> Result<()> {
 /// A `Result` indicating success or an `sqlx::Error` on failure.
 pub async fn remove_orphaned_tracks(pool: &SqlitePool) -> Result<()> {
     let tracks_in_db = query("SELECT id, path FROM tracks").fetch_all(pool).await?;
+    
+    // Process each track to check if its file still exists
     for track_row in tracks_in_db {
         let track_id: i64 = track_row.get("id");
         let track_path: String = track_row.get("path");
-        if !Path::new(&track_path).exists() {
-            // Remove the track from the database since its file no longer exists
-            query("DELETE FROM tracks WHERE id = ?")
-                .bind(track_id)
-                .execute(pool)
-                .await?;
+        
+        // Skip to next track if file still exists
+        if Path::new(&track_path).exists() {
+            continue;
         }
+        
+        // Remove the track from the database since its file no longer exists
+        query("DELETE FROM tracks WHERE id = ?")
+            .bind(track_id)
+            .execute(pool)
+            .await?;
     }
     Ok(())
 }
