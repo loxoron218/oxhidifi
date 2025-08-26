@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::HashSet, error::Error, path::PathBuf};
+use std::{borrow::Cow, collections::HashSet, error::Error, path::PathBuf, time::Instant};
 
 use lofty::{
     prelude::{
@@ -14,9 +14,9 @@ use sqlx::SqlitePool;
 use crate::{
     data::db::crud::{
         AlbumForInsert, TrackForInsert, insert_or_get_artists_batch, upsert_albums_batch,
-        upsert_tracks_batch_optimized,
+        upsert_tracks_batch_enhanced,
     },
-    utils::image_cache::process_images_concurrently,
+    utils::{image_cache::process_images_concurrently, performance_monitor::get_metrics},
 };
 
 /// A temporary struct to hold metadata extracted from audio files before we have database IDs.
@@ -95,6 +95,9 @@ pub async fn process_files_batch_optimized(
     dr_value: Option<u8>,
     batch_size: usize,
 ) -> Result<(), Box<dyn Error>> {
+    let start_time = Instant::now();
+    let file_count = paths.len();
+
     // Process files in batches to reduce memory usage
     for chunk in paths.chunks(batch_size) {
         let mut all_metadata = Vec::new();
@@ -284,11 +287,18 @@ pub async fn process_files_batch_optimized(
             });
         }
 
-        // Batch upsert tracks with optimized batching
-        upsert_tracks_batch_optimized(&mut tx, &tracks_to_insert, batch_size).await?;
+        // Batch upsert tracks with enhanced batching
+        upsert_tracks_batch_enhanced(&mut tx, &tracks_to_insert, batch_size).await?;
 
         // Commit the transaction
         tx.commit().await?;
+    }
+
+    // Record metrics
+    let duration = start_time.elapsed();
+    get_metrics().record_scan_time(duration);
+    for _ in 0..file_count {
+        get_metrics().record_file_processed();
     }
     Ok(())
 }

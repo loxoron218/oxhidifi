@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use sqlx::{Result, Row, SqlitePool, query};
 
@@ -56,6 +56,69 @@ pub async fn synchronize_dr_completed_from_store(pool: &SqlitePool) -> Result<()
                 .bind(album_id)
                 .execute(pool)
                 .await?;
+        }
+    }
+    Ok(())
+}
+/// Synchronizes the `dr_completed` status in the database with the JSON store in the background.
+/// This function runs asynchronously and can optionally report progress through a callback.
+pub async fn synchronize_dr_completed_background(
+    pool: Arc<SqlitePool>,
+    update_callback: Option<Box<dyn Fn(String) + Send>>,
+) -> Result<()> {
+    let dr_store = DrValueStore::load();
+
+    // Fetch all artists and folders once for efficient lookups
+    let artists_map: HashMap<i64, String> = query("SELECT id, name FROM artists")
+        .fetch_all(&*pool)
+        .await?
+        .into_iter()
+        .map(|row| (row.get("id"), row.get("name")))
+        .collect();
+    let folders_map: HashMap<i64, PathBuf> = query("SELECT id, path FROM folders")
+        .fetch_all(&*pool)
+        .await?
+        .into_iter()
+        .map(|row| (row.get("id"), PathBuf::from(row.get::<String, _>("path"))))
+        .collect();
+
+    // Fetch all albums from the database
+    let all_albums = query("SELECT id, title, artist_id, folder_id, dr_completed FROM albums")
+        .fetch_all(&*pool)
+        .await?;
+    let total_albums = all_albums.len();
+    for (index, album_row) in all_albums.into_iter().enumerate() {
+        let album_id: i64 = album_row.get("id");
+        let title: String = album_row.get("title");
+        let artist_id: i64 = album_row.get("artist_id");
+        let folder_id: i64 = album_row.get("folder_id");
+        let current_dr_completed: bool = album_row.get("dr_completed");
+
+        // Use cached maps to get artist name and folder path
+        let artist_name = artists_map.get(&artist_id).cloned().unwrap_or_default();
+        let folder_path = folders_map.get(&folder_id).cloned().unwrap_or_default();
+        let album_key = AlbumKey {
+            title,
+            artist: artist_name,
+            folder_path: folder_path.clone(),
+        };
+
+        // Determine if the album should be marked as DR completed
+        let should_be_completed = dr_store.contains(&album_key);
+
+        // Update the database only if the status needs to change
+        if should_be_completed != current_dr_completed {
+            query("UPDATE albums SET dr_completed = ? WHERE id = ?")
+                .bind(should_be_completed)
+                .bind(album_id)
+                .execute(&*pool)
+                .await?;
+        }
+
+        // Report progress if callback is provided
+        if let Some(ref callback) = update_callback {
+            let progress = format!("DR Sync: {}/{} albums processed", index + 1, total_albums);
+            callback(progress);
         }
     }
     Ok(())

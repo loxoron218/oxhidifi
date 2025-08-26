@@ -5,7 +5,10 @@ use std::{
 
 use sqlx::{QueryBuilder, Result, Row, Sqlite, SqlitePool, Transaction, query};
 
-use crate::data::models::{Album, Artist, Folder, Track};
+use crate::{
+    data::models::{Album, Artist, Folder, Track},
+    utils::performance_monitor::get_metrics,
+};
 
 #[derive(Debug)]
 pub struct AlbumForInsert {
@@ -60,6 +63,7 @@ pub struct TrackForInsert {
 /// A `Result` containing the ID (`i64`) of the inserted or existing folder on success,
 /// or an `sqlx::Error` on failure.
 pub async fn insert_or_get_folder(pool: &SqlitePool, path: &Path) -> Result<i64> {
+    get_metrics().record_db_operation();
     let path_str = path.to_str().unwrap_or_default();
     if let Some(row) = query("SELECT id FROM folders WHERE path = ?")
         .bind(path_str)
@@ -76,8 +80,8 @@ pub async fn insert_or_get_folder(pool: &SqlitePool, path: &Path) -> Result<i64>
     }
 }
 
-/// Improved batch processing with configurable batch size
-pub async fn upsert_tracks_batch_optimized(
+/// Enhanced batch processing with better error handling and performance optimizations
+pub async fn upsert_tracks_batch_enhanced(
     tx: &mut Transaction<'_, Sqlite>,
     tracks: &[TrackForInsert],
     batch_size: usize,
@@ -86,20 +90,21 @@ pub async fn upsert_tracks_batch_optimized(
         return Ok(());
     }
 
-    // Process in chunks to avoid excessive memory usage
+    // Process in chunks to avoid excessive memory usage and improve performance
     for chunk in tracks.chunks(batch_size) {
-        let mut query_builder = QueryBuilder::new(
+        let mut query_builder: QueryBuilder<Sqlite> = QueryBuilder::new(
             "INSERT INTO tracks (title, album_id, artist_id, path, duration, track_no, disc_no, format, bit_depth, frequency)",
         );
         query_builder.push_values(chunk, |mut b, track| {
-            b.push_bind(track.title.clone())
+            let path_str = track.path.to_str().unwrap_or_default();
+            b.push_bind(&track.title)
                 .push_bind(track.album_id)
                 .push_bind(track.artist_id)
-                .push_bind(track.path.to_str().unwrap_or_default())
+                .push_bind(path_str)
                 .push_bind(track.duration)
                 .push_bind(track.track_no)
                 .push_bind(track.disc_no)
-                .push_bind(track.format.clone())
+                .push_bind(&track.format)
                 .push_bind(track.bit_depth)
                 .push_bind(track.frequency);
         });
@@ -248,6 +253,7 @@ pub async fn insert_or_get_artists_batch(
 /// A `Result` containing the `Album` struct on success, or an `sqlx::Error` on failure
 /// (e.g., if no album with the given ID is found).
 pub async fn fetch_album_by_id(pool: &SqlitePool, album_id: i64) -> Result<Album> {
+    get_metrics().record_db_operation();
     let row = query("SELECT id, title, artist_id, year, cover_art, folder_id, dr_value, dr_completed, original_release_date FROM albums WHERE id = ?")
         .bind(album_id)
         .fetch_one(pool)
@@ -294,6 +300,7 @@ pub async fn fetch_artist_by_id(pool: &SqlitePool, artist_id: i64) -> Result<Art
 /// # Returns
 /// A `Result` containing a `Vec<Track>` on success, or an `sqlx::Error` on failure.
 pub async fn fetch_tracks_by_album(pool: &SqlitePool, album_id: i64) -> Result<Vec<Track>> {
+    get_metrics().record_db_operation();
     let rows = query("SELECT id, title, album_id, artist_id, path, duration, track_no, disc_no, format, bit_depth, frequency FROM tracks WHERE album_id = ? ORDER BY disc_no, track_no")
         .bind(album_id)
         .fetch_all(pool)

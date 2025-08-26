@@ -40,13 +40,19 @@ fn get_dr_regex() -> &'static Regex {
 /// - `Box<dyn Error>` if a critical I/O error occurs during directory reading.
 ///   Errors during file opening or line reading are caught internally to allow
 ///   the scan to continue for other files.
-pub async fn scan_dr_value(folder_path: &Path) -> Result<Option<u8>, Box<dyn Error>> {
-    let mut entries = read_dir(folder_path).await?;
+pub async fn scan_dr_value(folder_path: &Path) -> Result<Option<u8>, Box<dyn Error + Send + Sync>> {
+    let mut entries = read_dir(folder_path)
+        .await
+        .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
 
     // Lazily initialize the regex to capture DR values.
     let dr_regex = get_dr_regex();
     let mut highest_dr: Option<u8> = None;
-    while let Some(entry) = entries.next_entry().await? {
+    while let Some(entry) = entries
+        .next_entry()
+        .await
+        .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?
+    {
         let path = entry.path();
         if path.is_file() {
             if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
@@ -57,14 +63,20 @@ pub async fn scan_dr_value(folder_path: &Path) -> Result<Option<u8>, Box<dyn Err
                         Ok(f) => f,
                         Err(e) => {
                             eprintln!("Error opening DR log file {}: {}", path.display(), e);
-                            continue; // Skip to the next entry
+
+                            // Skip to the next entry
+                            continue;
                         }
                     };
                     let mut reader = BufReader::new(file);
                     let mut buffer = Vec::with_capacity(256);
                     loop {
-                        buffer.clear(); // Clear buffer for each new line
-                        let bytes_read = reader.read_until(b'\n', &mut buffer).await?;
+                        // Clear buffer for each new line
+                        buffer.clear();
+                        let bytes_read = reader
+                            .read_until(b'\n', &mut buffer)
+                            .await
+                            .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
                         if bytes_read == 0 {
                             // EOF
                             break;

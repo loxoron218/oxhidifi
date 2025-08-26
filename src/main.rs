@@ -2,11 +2,11 @@ mod data;
 mod ui;
 mod utils;
 
-use std::{env::var, fs::create_dir_all, path::PathBuf, sync::Arc};
+use std::{env::var, fs::create_dir_all, path::PathBuf, sync::Arc, time::Duration};
 
 use gtk4::{CssProvider, STYLE_PROVIDER_PRIORITY_APPLICATION, StyleContext};
 use libadwaita::{gdk::Display, init, prelude::ApplicationExtManual};
-use sqlx::SqlitePool;
+use sqlx::sqlite::SqlitePoolOptions;
 use tokio::main;
 
 use crate::{data::db::schema::init_db, ui::App};
@@ -43,12 +43,20 @@ async fn main() {
     let db_path = config_dir.join("music_library.db");
     let db_url = format!("sqlite://{}?mode=rwc", db_path.to_string_lossy());
 
-    // Set up DB pool and run migrations
-    let pool = SqlitePool::connect(&db_url).await.expect(&format!(
-        "Failed to connect to DB at {}: {}",
-        db_path.display(),
-        "Error connecting to database"
-    ));
+    // Set up DB pool with optimized settings
+    let pool = SqlitePoolOptions::new()
+        .max_connections(10)
+        .min_connections(2)
+        .acquire_timeout(Duration::from_secs(30))
+        .idle_timeout(Duration::from_secs(60))
+        .max_lifetime(Duration::from_secs(300))
+        .connect(&db_url)
+        .await
+        .expect(&format!(
+            "Failed to connect to DB at {}: {}",
+            db_path.display(),
+            "Error connecting to database"
+        ));
     init_db(&pool).await.expect("Failed to initialize DB");
     let pool = Arc::new(pool);
 

@@ -20,7 +20,7 @@ use sqlx::SqlitePool;
 
 use crate::{
     data::db::{
-        crud::fetch_tracks_by_album, dr_sync::synchronize_dr_completed_from_store,
+        crud::fetch_tracks_by_album, dr_sync::synchronize_dr_completed_background,
         query::fetch_album_display_info,
     },
     ui::{
@@ -99,15 +99,20 @@ pub async fn populate_albums_grid(
         albums_grid.remove(&child);
     }
 
-    // Synchronize DR completed status from the persistence store before fetching album info.
+    // Synchronize DR completed status from the persistence store in the background.
     // This ensures that any manual changes to best_dr_values.json or updates from other
-    // parts of the application are reflected in the database before the UI is populated.
-    if let Err(e) = synchronize_dr_completed_from_store(&db_pool).await {
-        eprintln!(
-            "Error synchronizing DR completed status before album grid population: {}",
-            e
-        );
-    }
+    // parts of the application are reflected in the database without blocking the UI.
+    let db_pool_clone = Arc::clone(&db_pool);
+    MainContext::default().spawn_local(async move {
+        if let Err(e) = synchronize_dr_completed_background(db_pool_clone, None).await {
+            eprintln!(
+                "Error synchronizing DR completed status in background: {}",
+                e
+            );
+        }
+    });
+
+    // For immediate population, we'll use the existing DR status in the database
     let dr_store = DrValueStore::load(); // Load the DR store once for efficiency
     match fetch_album_display_info(&db_pool).await {
         Err(e) => {

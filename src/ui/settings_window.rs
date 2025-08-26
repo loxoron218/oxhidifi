@@ -27,7 +27,7 @@ use crate::{
     data::db::{cleanup::remove_folder_and_albums, query::fetch_all_folders},
     ui::components::{
         config::{Settings, load_settings, save_settings},
-        dialogs::show_remove_folder_confirmation_dialog,
+        dialogs::{show_performance_metrics_dialog, show_remove_folder_confirmation_dialog},
         sorting::{
             sorting_preferences::{
                 connect_sort_reorder_handler, make_sort_row, update_sorting_row_numbers,
@@ -346,6 +346,30 @@ pub fn show_settings_dialog(
     // Group for General settings
     let general_group = PreferencesGroup::builder().title("Display").build();
 
+    // Group for Performance settings
+    let performance_group = PreferencesGroup::builder().title("Performance").build();
+
+    // Button to show performance metrics
+    let performance_metrics_row = ActionRow::builder()
+        .title("Performance Metrics")
+        .subtitle("View detailed performance statistics and metrics.")
+        .activatable(true)
+        .build();
+    let performance_metrics_button = Button::builder()
+        .label("Show Metrics")
+        .valign(Center)
+        .build();
+    performance_metrics_row.add_suffix(&performance_metrics_button);
+    performance_metrics_row.set_activatable_widget(Some(&performance_metrics_button));
+
+    // Clone necessary variables for the button click handler
+    let parent_window_clone = parent.clone();
+    performance_metrics_button.connect_clicked(move |_| {
+        // We need to get the parent window for the dialog
+        show_performance_metrics_dialog(parent_window_clone.as_ref());
+    });
+    performance_group.add(&performance_metrics_row);
+
     // Toggle switch for DR Value badges
     let dr_badges_row = ActionRow::builder()
         .title("Show DR Value Badges")
@@ -435,6 +459,7 @@ pub fn show_settings_dialog(
     });
     general_group.add(&view_mode_row);
     general_page.add(&general_group);
+    general_page.add(&performance_group);
 
     // --- Audio Page (Currently empty, but kept for potential future use) ---
     let audio_page = PreferencesPage::builder()

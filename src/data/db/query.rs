@@ -5,6 +5,7 @@ use sqlx::{Result, Row, SqlitePool, query, sqlite::SqliteRow};
 use crate::{
     data::models::{Artist, Folder},
     ui::grids::album_grid_state::AlbumGridItem,
+    utils::metadata_cache::ALBUM_DISPLAY_CACHE,
 };
 
 /// Fetches all albums from the database along with their associated artist,
@@ -20,6 +21,14 @@ use crate::{
 /// # Returns
 /// A `Result` containing a `Vec<AlbumGridItem>` on success, or an `sqlx::Error` on failure.
 pub async fn fetch_album_display_info(pool: &SqlitePool) -> Result<Vec<AlbumGridItem>> {
+    const CACHE_KEY: &str = "album_display_info";
+
+    // Try to get from cache first
+    if let Some(cached) = ALBUM_DISPLAY_CACHE.get(CACHE_KEY) {
+        return Ok(cached);
+    }
+
+    // Execute the query to fetch all album display information
     let rows = query(
         r#"
         SELECT
@@ -45,7 +54,11 @@ pub async fn fetch_album_display_info(pool: &SqlitePool) -> Result<Vec<AlbumGrid
     )
     .fetch_all(pool)
     .await?;
-    Ok(rows.into_iter().map(map_row_to_album_grid_item).collect())
+    let result: Vec<AlbumGridItem> = rows.into_iter().map(map_row_to_album_grid_item).collect();
+
+    // Cache the result
+    ALBUM_DISPLAY_CACHE.insert(CACHE_KEY.to_string(), result.clone());
+    Ok(result)
 }
 
 /// Helper function to map a SQLX Row to an AlbumGridItem struct.

@@ -12,7 +12,7 @@ use crate::data::{
         dr_sync::synchronize_dr_completed_from_store,
         query::fetch_all_folders,
     },
-    scanner::scan_folder,
+    scanner::scan_folder_parallel,
 };
 
 /// Initiates a full scan of all configured music folders, updates the database,
@@ -49,7 +49,9 @@ pub async fn run_full_scan(db_pool: &Arc<SqlitePool>, sender: &UnboundedSender<(
     // scans are logged within `scan_folder` and do not prevent the overall scan
     // from continuing.
     for folder in &folders {
-        if let Err(e) = scan_folder(db_pool, &folder.path, folder.id).await {
+        // Use the parallel scanning function for improved performance
+        if let Err(e) = scan_folder_parallel(Arc::clone(db_pool), &folder.path, folder.id, 4).await
+        {
             eprintln!("Error scanning folder {}: {}", folder.path.display(), e);
         }
     }

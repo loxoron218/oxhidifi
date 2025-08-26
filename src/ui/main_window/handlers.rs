@@ -109,7 +109,9 @@ pub fn connect_all_handlers(
         sender.clone(),
         widgets.albums_stack_cell.clone(),
     );
-    add_music_button_albums.connect_clicked(move |_| albums_add_folder_handler());
+    add_music_button_albums.connect_clicked(move |_| {
+        albums_add_folder_handler();
+    });
     let artists_add_folder_handler = create_add_folder_dialog_handler(
         widgets.window.clone(),
         widgets.scanning_label_artists.clone(),
@@ -117,7 +119,9 @@ pub fn connect_all_handlers(
         sender.clone(),
         widgets.artists_stack_cell.clone(),
     );
-    add_music_button_artists.connect_clicked(move |_| artists_add_folder_handler());
+    add_music_button_artists.connect_clicked(move |_| {
+        artists_add_folder_handler();
+    });
 
     // Rebuild and populate initial grids for albums and artists.
     // These functions create the `FlowBox` grids and their containing `Stack`s,
@@ -313,9 +317,9 @@ pub fn connect_all_handlers(
         sender.clone(),
         widgets.albums_stack_cell.clone(),
     );
-    widgets
-        .add_button
-        .connect_clicked(move |_| add_folder_handler());
+    widgets.add_button.connect_clicked(move |_| {
+        add_folder_handler();
+    });
 
     // Connect settings dialog to its button.
     // This opens the application's settings dialog, allowing users to configure preferences

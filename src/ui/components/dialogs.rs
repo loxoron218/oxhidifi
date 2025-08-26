@@ -1,4 +1,5 @@
 use std::{
+    boxed::Box,
     cell::{Cell, RefCell},
     rc::Rc,
     sync::Arc,
@@ -9,14 +10,18 @@ use glib::MainContext;
 use gtk4::{
     Button,
     ButtonsType::OkCancel,
+    Dialog,
     FileChooserAction::SelectFolder,
     FileChooserDialog, Label, MessageDialog,
     MessageType::Warning,
-    ResponseType::{Accept, Cancel, Ok as GtkOk},
-    Stack, Window,
+    Orientation::Vertical,
+    ResponseType::{self, Accept, Cancel, Close, Other},
+    ScrolledWindow, Stack, TextView, Window,
+    WrapMode::Word,
 };
 use libadwaita::prelude::{
-    ButtonExt, DialogExt, FileChooserExt, FileExt, GtkWindowExt, IsA, WidgetExt,
+    BoxExt, ButtonExt, DialogExt, FileChooserExt, FileExt, GtkWindowExt, IsA, OrientableExt,
+    TextBufferExt, TextViewExt, WidgetExt,
 };
 use sqlx::SqlitePool;
 use tokio::{runtime::Runtime, sync::mpsc::UnboundedSender};
@@ -24,6 +29,7 @@ use tokio::{runtime::Runtime, sync::mpsc::UnboundedSender};
 use crate::{
     data::{db::crud::insert_or_get_folder, scanner::scan_folder},
     ui::{components::sorting::sorting_types::SortOrder, settings_window::show_settings_dialog},
+    utils::performance_monitor::{format_metrics, get_metrics},
 };
 
 /// Handles the logic for displaying a folder chooser dialog and initiating a library scan.
@@ -51,9 +57,8 @@ pub fn create_add_folder_dialog_handler<T: IsA<Window> + Clone + 'static>(
     db_pool: Arc<SqlitePool>,
     sender: UnboundedSender<()>,
     albums_inner_stack: Rc<RefCell<Option<Stack>>>,
-) -> Box<dyn Fn() + 'static> {
-    // Clone necessary variables for the outer closure to move them into the `Box::new`
-    // and subsequent `connect_response` closure.
+) -> Box<dyn Fn()> {
+    // Clone necessary variables for the outer closure to move them into the returned closure
     let scanning_label_cloned = scanning_label;
     let db_pool_cloned = db_pool;
     let sender_cloned = sender;
@@ -235,18 +240,71 @@ pub fn show_remove_folder_confirmation_dialog<F: FnOnce() + 'static>(
         .build();
 
     // Make the "OK" button red to indicate a destructive action
-    if let Some(ok_button) = dialog.widget_for_response(GtkOk) {
+    if let Some(ok_button) = dialog.widget_for_response(ResponseType::Ok) {
         ok_button.add_css_class("destructive-action");
     }
-
     dialog.connect_response(move |dialog, response| {
-        if response == GtkOk {
+        if response == ResponseType::Ok {
             // Execute the on_confirm closure if it exists (i.e., hasn't been taken yet)
             if let Some(f) = on_confirm_rc.borrow_mut().take() {
                 f();
             }
         }
-        dialog.close(); // Close the dialog regardless of the response
+
+        // Close the dialog regardless of the response
+        dialog.close();
     });
-    dialog.show(); // Display the dialog
+
+    // Display the dialog
+    dialog.show();
+}
+
+/// Shows a dialog with performance metrics
+pub fn show_performance_metrics_dialog(parent: &Window) {
+    let dialog = Dialog::builder()
+        .title("Performance Metrics")
+        .transient_for(parent)
+        .modal(true)
+        .build();
+    dialog.add_button("Close", Close);
+    dialog.add_button("Reset", Other(1));
+    let content_area = dialog.content_area();
+    content_area.set_orientation(Vertical);
+    content_area.set_spacing(12);
+    content_area.set_margin_top(12);
+    content_area.set_margin_bottom(12);
+    content_area.set_margin_start(12);
+    content_area.set_margin_end(12);
+
+    // Create a scrolled window for the metrics text
+    let scrolled_window = ScrolledWindow::builder()
+        .vexpand(true)
+        .hexpand(true)
+        .build();
+
+    // Create a text view to display the metrics
+    let text_view = TextView::builder().editable(false).wrap_mode(Word).build();
+
+    // Set the metrics text
+    let metrics_text = format_metrics();
+    let buffer = text_view.buffer();
+    buffer.set_text(&metrics_text);
+    scrolled_window.set_child(Some(&text_view));
+    content_area.append(&scrolled_window);
+
+    // Connect response handler
+    dialog.connect_response(|dialog, response| {
+        match response {
+            Close => {
+                dialog.close();
+            }
+            Other(1) => {
+                // Reset button clicked
+                get_metrics().reset();
+                dialog.close();
+            }
+            _ => dialog.close(),
+        }
+    });
+    dialog.present();
 }

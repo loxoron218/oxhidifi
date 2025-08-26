@@ -4,13 +4,17 @@ use std::{
     fs::create_dir_all,
     io::{self, Cursor, ErrorKind::Other},
     path::PathBuf,
+    time::Instant,
 };
 
 use glib::user_cache_dir;
 use image::{ImageError::IoError, codecs::jpeg::JpegEncoder, imageops::FilterType::Nearest};
 use tokio::{fs::write, task::JoinSet};
 
-use crate::utils::image_cache::ThumbnailError::{CacheDir, Load};
+use crate::utils::{
+    image_cache::ThumbnailError::{CacheDir, Load},
+    performance_monitor::get_metrics,
+};
 
 /// The standard size for thumbnail images in pixels
 ///
@@ -154,14 +158,17 @@ pub async fn get_or_create_thumbnail_optimized(
     album_title: &str,
     album_artist_name: &str,
 ) -> Result<PathBuf, ThumbnailError> {
+    let start_time = Instant::now();
     let cache_dir = get_or_create_cache_dir()?;
     let filename = generate_cache_filename(album_title, album_artist_name);
     let cache_path = cache_dir.join(filename);
 
     // If the thumbnail already exists, no need to process it again.
     if cache_path.exists() {
+        get_metrics().record_cache_hit();
         return Ok(cache_path);
     }
+    get_metrics().record_cache_miss();
 
     // Use faster filtering for better performance
     let target_size = THUMBNAIL_SIZE as u32;
@@ -180,6 +187,9 @@ pub async fn get_or_create_thumbnail_optimized(
 
     // The file I/O part is asynchronous using tokio.
     write(&cache_path, &buffer).await?;
+
+    // Record processing time
+    get_metrics().record_image_processing_time(start_time.elapsed());
     Ok(cache_path)
 }
 
@@ -198,6 +208,8 @@ pub async fn get_or_create_thumbnail_optimized(
 pub async fn process_images_concurrently(
     images: Vec<(Vec<u8>, String, String)>,
 ) -> Vec<Result<PathBuf, ThumbnailError>> {
+    let start_time = Instant::now();
+
     // Process images in smaller concurrent batches to avoid overwhelming the system
     const CONCURRENT_LIMIT: usize = 10;
 
@@ -249,6 +261,10 @@ pub async fn process_images_concurrently(
             break;
         }
     }
+
+    // Record processing time
+    get_metrics().record_image_processing_time(start_time.elapsed());
+
     // All results are already in the correct format, so we can return them directly
     results
 }
