@@ -107,6 +107,8 @@ struct CacheEntry {
     last_access: Instant,
     /// Expiration time for the cache entry
     expires_at: Instant,
+    /// Estimated size of the entry in bytes
+    size: usize,
 }
 
 /// Memory cache implementation using LRU eviction policy
@@ -119,6 +121,12 @@ struct CacheEntry {
 struct MemoryCache {
     /// Thread-safe storage for cache entries
     entries: Arc<RwLock<HashMap<String, CacheEntry>>>,
+    /// Maximum number of entries to store in the cache
+    max_entries: usize,
+    /// Maximum total size of entries in the cache (in bytes)
+    max_size: usize,
+    /// Time-to-live for cache entries
+    ttl: Duration,
 }
 
 impl MemoryCache {
@@ -131,9 +139,12 @@ impl MemoryCache {
     ///
     /// # Returns
     /// A new `MemoryCache` instance
-    fn new(_max_entries: usize, _max_size: usize, _ttl: Duration) -> Self {
+    fn new(max_entries: usize, max_size: usize, ttl: Duration) -> Self {
         Self {
             entries: Arc::new(RwLock::new(HashMap::new())),
+            max_entries,
+            max_size,
+            ttl,
         }
     }
 
@@ -164,6 +175,60 @@ impl MemoryCache {
             Some(entry.pixbuf.clone())
         } else {
             None
+        }
+    }
+    
+    /// Inserts an image into the cache
+    ///
+    /// This method stores an image in the cache with the specified key.
+    /// It also performs LRU eviction and size limit enforcement.
+    ///
+    /// # Arguments
+    /// * `key` - The cache key to store the image under
+    /// * `pixbuf` - The image data to store
+    fn insert(&self, key: String, pixbuf: Pixbuf) {
+        let mut entries = self.entries.write().unwrap();
+        let now = Instant::now();
+        
+        // Estimate size: width * height * 4 bytes per pixel
+        let size = (pixbuf.width() as usize) * (pixbuf.height() as usize) * 4;
+        
+        // Create new entry
+        let entry = CacheEntry {
+            pixbuf,
+            last_access: now,
+            expires_at: now + self.ttl,
+            size,
+        };
+        
+        // Insert the new entry
+        entries.insert(key, entry);
+        
+        // Perform LRU eviction if we exceed max_entries
+        if entries.len() > self.max_entries {
+            // Find the least recently used entry (smallest last_access)
+            if let Some(lru_key) = entries
+                .iter()
+                .min_by_key(|(_, entry)| entry.last_access)
+                .map(|(key, _)| key.clone()) {
+                entries.remove(&lru_key);
+            }
+        }
+        
+        // Perform size-based eviction if we exceed max_size
+        let mut total_size: usize = entries.values().map(|entry| entry.size).sum();
+        while total_size > self.max_size && !entries.is_empty() {
+            // Find the least recently used entry (smallest last_access)
+            if let Some(lru_key) = entries
+                .iter()
+                .min_by_key(|(_, entry)| entry.last_access)
+                .map(|(key, _)| key.clone()) {
+                if let Some(removed_entry) = entries.remove(&lru_key) {
+                    total_size -= removed_entry.size;
+                }
+            } else {
+                break;
+            }
         }
     }
 }
@@ -322,14 +387,8 @@ impl ImageLoader {
 
         // 2. Check disk cache
         if let Some(pixbuf) = self.disk_cache.load(path, size)? {
-            // Estimate size for cache tracking
-            // Rough estimate: width * height * 4 bytes per pixel
-            let _estimated_size = (size as usize) * (size as usize) * 4;
-
             // Store in memory cache
-            let _memory_cache = self.memory_cache.clone();
-
-            // We can't mutate the cloned memory cache directly, so we'll skip caching in this case
+            self.memory_cache.insert(cache_key.clone(), pixbuf.clone());
             return Ok(pixbuf);
         }
 
@@ -359,19 +418,14 @@ impl ImageLoader {
         loader.write(&buffer)?;
         loader.close()?;
         let pixbuf = loader.pixbuf().ok_or(InvalidPath)?;
-
-        // Estimate size for cache tracking
-        let _estimated_size = buffer.len();
-
+        
         // 4. Save to disk cache
         if let Err(e) = self.disk_cache.save(path, size, &pixbuf) {
             eprintln!("Failed to save image to disk cache: {}", e);
         }
-
+        
         // 5. Store in memory cache
-        let _memory_cache = self.memory_cache.clone();
-
-        // We can't mutate the cloned memory cache directly, so we'll skip caching in this case
+        self.memory_cache.insert(cache_key, pixbuf.clone());
         Ok(pixbuf)
     }
 }
