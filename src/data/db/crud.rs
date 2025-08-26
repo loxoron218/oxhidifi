@@ -55,6 +55,9 @@ pub struct TrackForInsert {
 /// Inserts a new folder into the database if it doesn't already exist,
 /// or returns the ID of the existing folder if a matching path is found.
 ///
+/// This optimized version completely eliminates conditional logic in Rust
+/// by using a single SQL query that handles both cases.
+///
 /// # Arguments
 /// * `pool` - A reference to the SQLite database connection pool.
 /// * `path` - The file system path of the folder.
@@ -65,19 +68,19 @@ pub struct TrackForInsert {
 pub async fn insert_or_get_folder(pool: &SqlitePool, path: &Path) -> Result<i64> {
     get_metrics().record_db_operation();
     let path_str = path.to_str().unwrap_or_default();
-    if let Some(row) = query("SELECT id FROM folders WHERE path = ?")
-        .bind(path_str)
-        .fetch_optional(pool)
-        .await?
-    {
-        Ok(row.get(0))
-    } else {
-        let res = query("INSERT INTO folders (path) VALUES (?)")
-            .bind(path_str)
-            .execute(pool)
-            .await?;
-        Ok(res.last_insert_rowid())
-    }
+    
+    // Use a single query that handles both insert and select cases
+    let row = query(
+        "WITH inserted AS (
+             INSERT OR IGNORE INTO folders (path) VALUES (?)
+         )
+         SELECT id FROM folders WHERE path = ?"
+    )
+    .bind(path_str)
+    .bind(path_str)
+    .fetch_one(pool)
+    .await?;
+    Ok(row.get(0))
 }
 
 /// Enhanced batch processing with better error handling and performance optimizations
