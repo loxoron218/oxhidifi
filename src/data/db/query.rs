@@ -28,6 +28,16 @@ pub async fn fetch_album_display_info(pool: &SqlitePool) -> Result<Vec<AlbumGrid
         return Ok(cached);
     }
 
+    // Fetch album display information from database when not cached
+    let result = fetch_album_display_info_from_db(pool).await?;
+    
+    // Cache the result
+    ALBUM_DISPLAY_CACHE.insert(CACHE_KEY.to_string(), result.clone());
+    Ok(result)
+}
+
+/// Helper function to fetch album display information from the database
+async fn fetch_album_display_info_from_db(pool: &SqlitePool) -> Result<Vec<AlbumGridItem>> {
     // Execute the query to fetch all album display information
     let rows = query(
         r#"
@@ -54,11 +64,7 @@ pub async fn fetch_album_display_info(pool: &SqlitePool) -> Result<Vec<AlbumGrid
     )
     .fetch_all(pool)
     .await?;
-    let result: Vec<AlbumGridItem> = rows.into_iter().map(map_row_to_album_grid_item).collect();
-
-    // Cache the result
-    ALBUM_DISPLAY_CACHE.insert(CACHE_KEY.to_string(), result.clone());
-    Ok(result)
+    Ok(rows.into_iter().map(map_row_to_album_grid_item).collect())
 }
 
 /// Helper function to map a SQLX Row to an AlbumGridItem struct.
