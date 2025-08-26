@@ -17,7 +17,6 @@ pub async fn synchronize_dr_completed_from_store(pool: &SqlitePool) -> Result<()
         .into_iter()
         .map(|row| (row.get("id"), row.get("name")))
         .collect();
-
     let folders_map: HashMap<i64, PathBuf> = query("SELECT id, path FROM folders")
         .fetch_all(pool)
         .await?
