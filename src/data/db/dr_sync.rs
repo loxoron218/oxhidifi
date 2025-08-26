@@ -28,6 +28,8 @@ pub async fn synchronize_dr_completed_from_store(pool: &SqlitePool) -> Result<()
     let all_albums = query("SELECT id, title, artist_id, folder_id, dr_completed FROM albums")
         .fetch_all(pool)
         .await?;
+        
+    // Process each album to synchronize dr_completed status
     for album_row in all_albums {
         let album_id: i64 = album_row.get("id");
         let title: String = album_row.get("title");
@@ -47,17 +49,21 @@ pub async fn synchronize_dr_completed_from_store(pool: &SqlitePool) -> Result<()
         // Determine if the album should be marked as DR completed based on the DrValueStore
         let should_be_completed = dr_store.contains(&album_key);
 
-        // Update the database only if the status needs to change
-        if should_be_completed != current_dr_completed {
-            // This function is still in db.rs, will be moved to crud.rs later.
-            // For now, it's called directly from here.
-            query("UPDATE albums SET dr_completed = ? WHERE id = ?")
-                .bind(should_be_completed)
-                .bind(album_id)
-                .execute(pool)
-                .await?;
+        // Skip to next album if status is already correct
+        if should_be_completed == current_dr_completed {
+            continue;
         }
+
+        // Update the database since the status needs to change
+        // This function is still in db.rs, will be moved to crud.rs later.
+        // For now, it's called directly from here.
+        query("UPDATE albums SET dr_completed = ? WHERE id = ?")
+            .bind(should_be_completed)
+            .bind(album_id)
+            .execute(pool)
+            .await?;
     }
+    
     Ok(())
 }
 /// Synchronizes the `dr_completed` status in the database with the JSON store in the background.
@@ -87,6 +93,8 @@ pub async fn synchronize_dr_completed_background(
         .fetch_all(&*pool)
         .await?;
     let total_albums = all_albums.len();
+    
+    // Process each album to synchronize dr_completed status
     for (index, album_row) in all_albums.into_iter().enumerate() {
         let album_id: i64 = album_row.get("id");
         let title: String = album_row.get("title");
@@ -106,7 +114,7 @@ pub async fn synchronize_dr_completed_background(
         // Determine if the album should be marked as DR completed
         let should_be_completed = dr_store.contains(&album_key);
 
-        // Update the database only if the status needs to change
+        // Update the database if status needs to change
         if should_be_completed != current_dr_completed {
             query("UPDATE albums SET dr_completed = ? WHERE id = ?")
                 .bind(should_be_completed)
@@ -116,10 +124,12 @@ pub async fn synchronize_dr_completed_background(
         }
 
         // Report progress if callback is provided
-        if let Some(ref callback) = update_callback {
-            let progress = format!("DR Sync: {}/{} albums processed", index + 1, total_albums);
-            callback(progress);
+        if update_callback.is_none() {
+            continue;
         }
+        let callback = update_callback.as_ref().unwrap();
+        let progress = format!("DR Sync: {}/{} albums processed", index + 1, total_albums);
+        callback(progress);
     }
     Ok(())
 }
