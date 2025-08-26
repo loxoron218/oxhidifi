@@ -105,6 +105,26 @@ pub async fn init_db(pool: &SqlitePool) -> Result<()> {
         .execute(pool)
         .await?;
 
+    // Index on tracks.path for faster file existence checks
+    query("CREATE INDEX IF NOT EXISTS idx_track_path ON tracks(path)")
+        .execute(pool)
+        .await?;
+
+    // Index on albums.title for faster album lookups
+    query("CREATE INDEX IF NOT EXISTS idx_album_title ON albums(title)")
+        .execute(pool)
+        .await?;
+
+    // Index on artists.name for faster artist lookups
+    query("CREATE INDEX IF NOT EXISTS idx_artist_name ON artists(name)")
+        .execute(pool)
+        .await?;
+
+    // Composite index for album lookups by title and artist
+    query("CREATE INDEX IF NOT EXISTS idx_album_title_artist ON albums(title, artist_id)")
+        .execute(pool)
+        .await?;
+
     // Unique index on album title/artist/folder combination to prevent duplicates
     query("CREATE UNIQUE INDEX IF NOT EXISTS uidx_album_title_artist_folder ON albums(title, artist_id, folder_id)")
         .execute(pool)

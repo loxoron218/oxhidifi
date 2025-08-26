@@ -69,7 +69,7 @@ impl AsyncImageLoader {
             // Spawn async task to load the image
             let context = MainContext::default();
             context.spawn_local_with_priority(Priority::HIGH_IDLE, async move {
-                match image_loader.load_image(&path, cover_size) {
+                match image_loader.load_image_adaptive(&path, cover_size) {
                     Ok(pixbuf) => {
                         // Update the UI with the loaded image
                         if let Some(pic) = weak_picture.upgrade() {
@@ -78,6 +78,7 @@ impl AsyncImageLoader {
                     }
                     Err(e) => {
                         eprintln!("Failed to load image {}: {:?}", path.display(), e);
+
                         // Keep the placeholder if loading fails
                     }
                 }

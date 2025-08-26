@@ -12,13 +12,17 @@ use std::{
 
 use gdk_pixbuf::{Pixbuf, PixbufLoader};
 use glib::user_cache_dir;
-use image::{ImageError, ImageFormat::Jpeg, imageops::FilterType::Lanczos3};
+use image::{
+    ImageError,
+    ImageFormat::Jpeg,
+    imageops::FilterType::{CatmullRom, Lanczos3, Triangle},
+};
 use libadwaita::prelude::PixbufLoaderExt;
 
 use crate::utils::image_loader::ImageLoaderError::{Glib, Image, InvalidPath, Io};
 
 /// Generates a hex string from the hash of the input bytes using DefaultHasher
-fn hash_to_hex(bytes: &[u8]) -> String {
+pub fn hash_to_hex(bytes: &[u8]) -> String {
     let mut hasher = DefaultHasher::new();
     hasher.write(bytes);
     let hash_value = hasher.finish();
@@ -334,23 +338,8 @@ impl ImageLoader {
         })
     }
 
-    /// Load an image with caching
-    ///
-    /// This method loads an image from the specified path, scales it to the
-    /// desired size, and caches it in both memory and disk caches. The loading
-    /// process follows this priority order:
-    ///
-    /// 1. Check memory cache first (fastest)
-    /// 2. Check disk cache second (faster than reprocessing)
-    /// 3. Load and process original image (slowest)
-    ///
-    /// # Arguments
-    /// * `path` - The path to the image file to load
-    /// * `size` - The size (width and height) to scale the image to
-    ///
-    /// # Returns
-    /// A `Result` containing the loaded and scaled `Pixbuf` or an `ImageLoaderError`
-    pub fn load_image(&self, path: &Path, size: i32) -> Result<Pixbuf, ImageLoaderError> {
+    /// Load an image with adaptive resizing based on target size
+    pub fn load_image_adaptive(&self, path: &Path, size: i32) -> Result<Pixbuf, ImageLoaderError> {
         // Generate cache key
         let cache_key = format!(
             "{}_{}",
@@ -370,16 +359,24 @@ impl ImageLoader {
             return Ok(pixbuf);
         }
 
-        // 3. Load and scale the original image
+        // 3. Load and scale the original image with adaptive filtering
         let img = image::open(path)?;
-        let scaled_img = img.resize(size as u32, size as u32, Lanczos3);
 
-        // Convert to RGB if necessary (JPEG doesn't support transparency)
-        let rgb_img = if scaled_img.color().has_alpha() {
-            scaled_img.to_rgb8()
+        // Use different filter types based on size
+        let filter_type = if size <= 128 {
+            // For small thumbnails, use faster bilinear filtering
+            Triangle
+        } else if size <= 256 {
+            // For medium thumbnails, use Catmull-Rom (good balance of quality and speed)
+            CatmullRom
         } else {
-            scaled_img.to_rgb8() // Convert to RGB8 for consistency
+            // For larger images, use high-quality Lanczos filtering
+            Lanczos3
         };
+        let scaled_img = img.resize(size as u32, size as u32, filter_type);
+
+        // Convert to RGB if necessary
+        let rgb_img = scaled_img.to_rgb8();
 
         // Convert to Pixbuf
         let mut buffer: Vec<u8> = Vec::new();

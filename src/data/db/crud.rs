@@ -76,52 +76,48 @@ pub async fn insert_or_get_folder(pool: &SqlitePool, path: &Path) -> Result<i64>
     }
 }
 
-/// Inserts or updates a batch of tracks in the database.
-/// If a track with the same path already exists, it is updated; otherwise, it is inserted.
-/// This function should be called within an existing transaction.
-///
-/// # Arguments
-/// * `tx` - A mutable reference to a SQLite transaction.
-/// * `tracks` - A slice of `TrackForInsert` objects to insert or update.
-///
-/// # Returns
-/// A `Result` indicating success or an `sqlx::Error` on failure.
-pub async fn upsert_tracks_batch(
+/// Improved batch processing with configurable batch size
+pub async fn upsert_tracks_batch_optimized(
     tx: &mut Transaction<'_, Sqlite>,
     tracks: &[TrackForInsert],
+    batch_size: usize,
 ) -> Result<()> {
     if tracks.is_empty() {
         return Ok(());
     }
-    let mut query_builder = QueryBuilder::new(
-        "INSERT INTO tracks (title, album_id, artist_id, path, duration, track_no, disc_no, format, bit_depth, frequency)",
-    );
-    query_builder.push_values(tracks, |mut b, track| {
-        b.push_bind(track.title.clone())
-            .push_bind(track.album_id)
-            .push_bind(track.artist_id)
-            .push_bind(track.path.to_str().unwrap_or_default())
-            .push_bind(track.duration)
-            .push_bind(track.track_no)
-            .push_bind(track.disc_no)
-            .push_bind(track.format.clone())
-            .push_bind(track.bit_depth)
-            .push_bind(track.frequency);
-    });
-    query_builder.push(
-        " ON CONFLICT(path) DO UPDATE SET
-            title = excluded.title,
-            album_id = excluded.album_id,
-            artist_id = excluded.artist_id,
-            duration = excluded.duration,
-            track_no = excluded.track_no,
-            disc_no = excluded.disc_no,
-            format = excluded.format,
-            bit_depth = excluded.bit_depth,
-            frequency = excluded.frequency",
-    );
-    let query = query_builder.build();
-    query.execute(&mut **tx).await?;
+
+    // Process in chunks to avoid excessive memory usage
+    for chunk in tracks.chunks(batch_size) {
+        let mut query_builder = QueryBuilder::new(
+            "INSERT INTO tracks (title, album_id, artist_id, path, duration, track_no, disc_no, format, bit_depth, frequency)",
+        );
+        query_builder.push_values(chunk, |mut b, track| {
+            b.push_bind(track.title.clone())
+                .push_bind(track.album_id)
+                .push_bind(track.artist_id)
+                .push_bind(track.path.to_str().unwrap_or_default())
+                .push_bind(track.duration)
+                .push_bind(track.track_no)
+                .push_bind(track.disc_no)
+                .push_bind(track.format.clone())
+                .push_bind(track.bit_depth)
+                .push_bind(track.frequency);
+        });
+        query_builder.push(
+            " ON CONFLICT(path) DO UPDATE SET
+                title = excluded.title,
+                album_id = excluded.album_id,
+                artist_id = excluded.artist_id,
+                duration = excluded.duration,
+                track_no = excluded.track_no,
+                disc_no = excluded.disc_no,
+                format = excluded.format,
+                bit_depth = excluded.bit_depth,
+                frequency = excluded.frequency",
+        );
+        let query = query_builder.build();
+        query.execute(&mut **tx).await?;
+    }
     Ok(())
 }
 
@@ -229,11 +225,11 @@ pub async fn insert_or_get_artists_batch(
         "SELECT id, name FROM artists WHERE name IN ({})",
         names.iter().map(|_| "?").collect::<Vec<_>>().join(", ")
     );
-    let mut query = query(&sql);
+    let mut select_query = sqlx::query(&sql);
     for name in names {
-        query = query.bind(name);
+        select_query = select_query.bind(name);
     }
-    let artists: HashMap<String, i64> = query
+    let artists: HashMap<String, i64> = select_query
         .fetch_all(&mut **tx)
         .await?
         .into_iter()
