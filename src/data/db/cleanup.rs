@@ -39,7 +39,6 @@ pub async fn remove_folder_and_albums(pool: &SqlitePool, folder_id: i64) -> Resu
         .bind(folder_id)
         .execute(&mut *tx)
         .await?;
-
     tx.commit().await?;
     Ok(())
 }
