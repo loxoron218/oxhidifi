@@ -86,13 +86,12 @@ pub fn create_add_folder_dialog_handler<T: IsA<Window> + Clone + 'static>(
                     if let Some(folder_path) = folder.path() {
                         let folder_path_string = folder_path.to_string_lossy().to_string();
 
-                        // Update UI to show scanning state
+                        // This action always happens, so we perform it first.
+                        scanning_label_for_response.set_visible(true);
+
+                        // Then, we conditionally perform the action that depends on the stack.
                         if let Some(stack) = albums_inner_stack_for_response.borrow().as_ref() {
                             stack.set_visible_child_name("scanning_state");
-                            scanning_label_for_response.set_visible(true);
-                        } else {
-                            // Fallback if stack is not available (e.g., in an empty state)
-                            scanning_label_for_response.set_visible(true);
                         }
 
                         // Clone for the spawned thread, which needs its own ownership
