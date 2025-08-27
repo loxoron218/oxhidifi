@@ -60,15 +60,8 @@ pub fn spawn_scanning_label_refresh_task(
             let page = stack_clone.visible_child_name().unwrap_or_default();
 
             // Hide the appropriate scanning label based on the currently visible page.
-            if page == "albums" {
-                scanning_label_albums.set_visible(false);
-            } else if page == "artists" {
-                scanning_label_artists.set_visible(false);
-            } else {
-                // If neither albums nor artists page is visible, hide both labels defensively.
-                scanning_label_albums.set_visible(false);
-                scanning_label_artists.set_visible(false);
-            }
+            scanning_label_albums.set_visible(page == "albums");
+            scanning_label_artists.set_visible(page == "artists");
 
             // Refresh the library UI to reflect any changes from the scan.
             refresh_library_ui_clone(
