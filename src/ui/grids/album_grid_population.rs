@@ -83,12 +83,7 @@ pub async fn populate_albums_grid(
 
     // Check and set the busy flag. If already busy, return immediately.
     let already_busy = IS_BUSY.with(|cell| {
-        if cell.get() {
-            true
-        } else {
-            cell.set(true);
-            false
-        }
+    cell.replace(true)
     });
     if already_busy {
         return;
@@ -223,20 +218,22 @@ pub async fn populate_albums_grid(
                 );
 
                 // Format audio details (format, bit depth, frequency).
-                let format_line = if let Some(format_str) = album_info.format.as_ref() {
+                let format_line = album_info.format.as_ref().map(|format_str| {
+                    // This closure only runs if `album_info.format` is Some.
                     let format_caps = format_str.to_uppercase();
-                    match (album_info.bit_depth, album_info.frequency) {
-                        (Some(bit), Some(freq)) => {
-                            format!("{} {}/{}", format_caps, bit, format_freq_khz(freq as u32))
-                        }
-                        (None, Some(freq)) => {
-                            format!("{} {}", format_caps, format_freq_khz(freq as u32))
-                        }
-                        _ => format_caps,
-                    }
-                } else {
-                    String::new()
-                };
+
+                    // First, determine only the part of the string that changes.
+                    let tech_details = match (album_info.bit_depth, album_info.frequency) {
+                        (Some(bit), Some(freq)) => format!(" {}/{}", bit, format_freq_khz(freq as u32)),
+                        (None, Some(freq)) => format!(" {}", format_freq_khz(freq as u32)),
+                        _ => String::new(),
+                    };
+
+                    // Combine the static and dynamic parts in one place.
+                    format!("{}{}", format_caps, tech_details)
+
+                // If `album_info.format` was None, this provides an empty String.
+                }).unwrap_or_default();
                 let format_label = create_styled_label(
                     &format_line,
                     &["album-format-label"],
@@ -344,36 +341,34 @@ pub async fn populate_albums_grid(
                     MainContext::default().spawn_local(async move {
                         match fetch_tracks_by_album(&*db_pool_clone, album_info_clone.id).await {
                             Ok(tracks) => {
-                                if let Some(first_track) = tracks.first() {
-                                    // Clone track values to move into closure
-                                    let track_bit_depth = first_track.bit_depth;
-                                    let track_frequency = first_track.frequency;
-                                    let track_format = first_track.format.clone();
-                                    let track_duration = first_track.duration;
-                                    let track_title = first_track.title.clone();
-                                    player_bar_clone.update_with_metadata(
-                                        &album_info_clone.title,
-                                        &track_title,
-                                        &album_info_clone.artist,
-                                        album_info_clone.cover_art.as_deref().map(Path::new),
-                                        track_bit_depth,
-                                        track_frequency,
-                                        track_format.as_deref(),
-                                        track_duration,
-                                    );
-                                } else {
-                                    // Fallback to album title if no tracks found
-                                    player_bar_clone.update_with_metadata(
-                                        &album_info_clone.title,
-                                        &album_info_clone.title,
-                                        &album_info_clone.artist,
-                                        album_info_clone.cover_art.as_deref().map(Path::new),
-                                        None,
-                                        None,
-                                        None,
-                                        None,
-                                    );
-                                }
+                            // Determine the track-specific details, providing a fallback if no tracks exist.
+                            let (track_title, bit_depth, frequency, format, duration) =
+                                tracks.first().map(|track| {
+                                    // Case 1: A track exists. Use its details.
+                                    (
+                                        track.title.clone(),
+                                        track.bit_depth,
+                                        track.frequency,
+                                        track.format.clone(),
+                                        track.duration,
+                                    )
+                                })
+                                .unwrap_or_else(|| {
+                                    // Case 2: No track exists. Use album title and None for details.
+                                    (album_info_clone.title.clone(), None, None, None, None)
+                                });
+
+                            // Now, call the update function just once with the determined values.
+                            player_bar_clone.update_with_metadata(
+                                &album_info_clone.title,
+                                &track_title,
+                                &album_info_clone.artist,
+                                album_info_clone.cover_art.as_deref().map(Path::new),
+                                bit_depth,
+                                frequency,
+                                format.as_deref(),
+                                duration,
+                            );
                             }
                             Err(_) => {
                                 // Fallback to album title if track fetch fails
