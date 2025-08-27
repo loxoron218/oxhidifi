@@ -35,7 +35,10 @@ use crate::{
     ui::components::player_bar::PlayerBar,
     utils::{
         best_dr_persistence::{AlbumKey, DrValueStore},
-        formatting::{format_bit_freq, format_duration_hms, format_duration_mmss, format_freq_khz},
+        formatting::{
+            format_album_year_display, format_bit_freq, format_duration_hms, format_duration_mmss,
+            format_freq_khz,
+        },
     },
 };
 
@@ -431,28 +434,8 @@ pub async fn album_page(
     info_box.append(&artist_label);
 
     // Year
-    let mut year_display_text = String::new();
-    let release_year = album.year;
-    let original_release_year = album
-        .original_release_date
-        .as_ref()
-        .and_then(|s| s.split('-').next().map(|y| y.to_string()));
-    match (release_year, original_release_year) {
-        (Some(r_year), Some(o_year)) => {
-            if r_year.to_string() == o_year {
-                year_display_text = format!("{}", r_year);
-            } else {
-                year_display_text = format!("{} / {}", o_year, r_year);
-            }
-        }
-        (Some(r_year), None) => {
-            year_display_text = format!("{}", r_year);
-        }
-        (None, Some(o_year)) => {
-            year_display_text = format!("{}", o_year);
-        }
-        (None, None) => {}
-    }
+    let year_display_text =
+        format_album_year_display(album.year, album.original_release_date.as_deref());
     if !year_display_text.is_empty() {
         let meta_box = Box::builder()
             .orientation(Horizontal)

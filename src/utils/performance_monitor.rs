@@ -174,10 +174,11 @@ impl PerformanceStats {
     /// A f64 value between 0.0 and 1.0 representing the cache hit ratio,
     /// or 0.0 if no cache operations have occurred
     pub fn cache_hit_ratio(&self) -> f64 {
-        if self.cache_hits + self.cache_misses == 0 {
+        let total = self.cache_hits + self.cache_misses;
+        if total == 0 {
             0.0
         } else {
-            self.cache_hits as f64 / (self.cache_hits + self.cache_misses) as f64
+            self.cache_hits as f64 / total as f64
         }
     }
 

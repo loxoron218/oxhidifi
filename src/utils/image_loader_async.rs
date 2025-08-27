@@ -52,13 +52,11 @@ impl AsyncImageLoader {
         cover_size: i32,
     ) {
         // Show placeholder immediately
-        if let Some(path) = cover_art_path {
-            let placeholder = create_colored_placeholder(&path.to_string_lossy(), cover_size);
-            picture.set_pixbuf(Some(&placeholder));
-        } else {
-            let placeholder = create_colored_placeholder("", cover_size);
-            picture.set_pixbuf(Some(&placeholder));
-        }
+        let placeholder_path = cover_art_path
+            .map(|p| p.to_string_lossy())
+            .unwrap_or_default();
+        let placeholder = create_colored_placeholder(&placeholder_path, cover_size);
+        picture.set_pixbuf(Some(&placeholder));
 
         // If we have a path, load the image asynchronously
         if let Some(path) = cover_art_path {

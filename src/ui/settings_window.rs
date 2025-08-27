@@ -147,12 +147,11 @@ impl FolderSettingsPage {
             } else {
                 // Populate the ListBox with an ActionRow for each folder.
                 for folder in &sorted_folders {
-                    if folder.path.to_str().unwrap_or_default().trim().is_empty() {
+                    let folder_path = folder.path.to_str().unwrap_or_default().trim();
+                    if folder_path.is_empty() {
                         continue;
                     }
-                    let row = ActionRow::builder()
-                        .title(folder.path.to_str().unwrap_or_default())
-                        .build();
+                    let row = ActionRow::builder().title(folder_path).build();
                     let remove_btn = Button::builder()
                         .icon_name("window-close-symbolic")
                         .valign(Center)
@@ -433,10 +432,9 @@ pub fn show_settings_dialog(
     view_mode_row.set_model(Some(&view_options));
 
     // Set default selection based on current setting
-    let initial_view_mode_index = if view_mode_setting.borrow().as_str() == "Grid View" {
-        0
-    } else {
-        1
+    let initial_view_mode_index = match view_mode_setting.borrow().as_str() {
+        "Grid View" => 0,
+        _ => 1,
     };
     view_mode_row.set_selected(initial_view_mode_index);
     let view_mode_setting_clone = view_mode_setting.clone();

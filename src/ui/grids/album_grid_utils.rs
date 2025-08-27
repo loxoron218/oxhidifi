@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use gdk_pixbuf::Pixbuf;
+use gdk_pixbuf::{Colorspace::Rgb, Pixbuf};
 use gtk4::{
     Align::{End, Start},
     Label, Picture,
@@ -14,14 +14,8 @@ use libadwaita::prelude::WidgetExt;
 pub fn create_colored_placeholder(_path: &str, size: i32) -> Pixbuf {
     // Create a new pixbuf with a neutral gray background
     // Following GNOME HIG, we use a mid-gray (#808080) that works in both light/dark modes
-    let pixbuf = Pixbuf::new(
-        gdk_pixbuf::Colorspace::Rgb,
-        false,
-        8,
-        size,
-        size,
-    )
-    .expect("Failed to create placeholder pixbuf");
+    let pixbuf =
+        Pixbuf::new(Rgb, false, 8, size, size).expect("Failed to create placeholder pixbuf");
 
     // Fill with neutral gray color (#8080)
     // In 0xRRGGBBAA format: 0x808080FF
@@ -101,14 +95,11 @@ pub fn create_album_cover_picture(cover_art_path: Option<&Path>, cover_size: i32
     pic.add_css_class("album-cover-border");
 
     // Show placeholder immediately
-    if let Some(path) = cover_art_path {
-        let placeholder = create_colored_placeholder(&path.to_string_lossy(), cover_size);
-        pic.set_pixbuf(Some(&placeholder));
-    } else {
-        let placeholder = create_colored_placeholder("", cover_size);
-        pic.set_pixbuf(Some(&placeholder));
-    }
-
+    let placeholder_path = cover_art_path
+        .map(|p| p.to_string_lossy())
+        .unwrap_or_default();
+    let placeholder = create_colored_placeholder(&placeholder_path, cover_size);
+    pic.set_pixbuf(Some(&placeholder));
     pic
 }
 

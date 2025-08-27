@@ -30,7 +30,7 @@ use crate::{
         grids::album_grid_state::AlbumGridItem,
         pages::{album_page::album_page, artist_page::artist_page},
     },
-    utils::formatting::format_freq_khz,
+    utils::formatting::{format_freq_khz, format_year_info},
 };
 
 /// Helper to create the album cover as a Picture widget.
@@ -246,31 +246,11 @@ pub fn create_album_tile(
     format_label.set_hexpand(true);
 
     // Extract and format the release year based on setting
-    let year_text = if use_original_year.get() {
-        if let Some(original_release_date_str) = &album.original_release_date {
-            original_release_date_str
-                .split('-')
-                .next()
-                .unwrap_or("N/A")
-                .to_string()
-        } else if let Some(year) = album.year {
-            format!("{}", year)
-        } else {
-            String::new()
-        }
-    } else {
-        if let Some(year) = album.year {
-            format!("{}", year)
-        } else if let Some(original_release_date_str) = &album.original_release_date {
-            original_release_date_str
-                .split('-')
-                .next()
-                .unwrap_or("N/A")
-                .to_string()
-        } else {
-            String::new()
-        }
-    };
+    let year_text = format_year_info(
+        album.year,
+        album.original_release_date.as_deref(),
+        use_original_year.get(),
+    );
 
     // Create and style the year label
     let year_label = create_album_label(

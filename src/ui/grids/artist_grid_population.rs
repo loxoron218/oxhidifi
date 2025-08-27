@@ -103,20 +103,29 @@ pub fn populate_artist_grid(
                 eprintln!("Error fetching artist info: {:?}", e);
                 BUSY.with(|b| b.set(false));
                 artists_inner_stack.set_visible_child_name("empty_state");
-                artist_count_label.set_text("0 Artists"); // Update count on error
+
+                // Update count on error
+                artist_count_label.set_text("0 Artists");
             }
             Ok(mut artists) => {
                 // If no artists are found after fetching:
                 if artists.is_empty() {
                     // Check if scanning label is visible, if so, show scanning state, else empty state.
-                    if scanning_label.is_visible() {
-                        artists_inner_stack.set_visible_child_name("scanning_state");
+                    let state_name = if scanning_label.is_visible() {
+                        "scanning_state"
                     } else {
-                        artists_inner_stack.set_visible_child_name("empty_state");
-                    }
-                    artist_count_label.set_text("0 Artists"); // Update count if no artists
-                    BUSY.with(|b| b.set(false)); // Set busy to false.
-                    return; // Exit the function.
+                        "empty_state"
+                    };
+                    artists_inner_stack.set_visible_child_name(state_name);
+
+                    // Update count if no artists
+                    artist_count_label.set_text("0 Artists");
+
+                    // Set busy to false.
+                    BUSY.with(|b| b.set(false));
+
+                    // Exit the function.
+                    return;
                 }
 
                 // Filter out "Various Artists" as per application logic.

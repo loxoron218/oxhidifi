@@ -37,7 +37,7 @@ use crate::{
     },
     utils::{
         best_dr_persistence::{AlbumKey, DrValueStore},
-        formatting::format_freq_khz,
+        formatting::{format_freq_khz, format_year_info},
         image_loader_async::AsyncImageLoader,
         screen::ScreenInfo,
     },
@@ -128,12 +128,14 @@ pub async fn populate_albums_grid(
             // Determine the appropriate state to show if no albums are found.
             if albums.is_empty() {
                 let state_to_show = if scanning_label.is_visible() {
-                    Scanning
+                    Scanning.as_str()
                 } else {
-                    Empty
+                    Empty.as_str()
                 };
-                albums_inner_stack.set_visible_child_name(state_to_show.as_str());
-                album_count_label.set_text("0 Albums"); // Update count if no albums
+                albums_inner_stack.set_visible_child_name(state_to_show);
+
+                // Update count if no albums
+                album_count_label.set_text("0 Albums");
                 IS_BUSY.with(|cell| cell.set(false));
                 return;
             }
@@ -248,34 +250,11 @@ pub async fn populate_albums_grid(
                 format_label.set_hexpand(true); // Allow format label to expand
 
                 // Extract and format year based on setting.
-                let year_text = if use_original_year_clone_for_loop.get() {
-                    if let Some(original_release_date_str) = &album_info.original_release_date {
-                        original_release_date_str
-                            .split('-')
-                            .next()
-                            .unwrap_or("N/A")
-                            .to_string()
-                    } else if let Some(year) = album_info.year {
-                        format!("{}", year)
-                    } else {
-                        String::new()
-                    }
-                } else {
-                    if let Some(year) = album_info.year {
-                        format!("{}", year)
-                    } else if let Some(original_release_date_str) =
-                        &album_info.original_release_date
-                    {
-                        original_release_date_str
-                            .split('-')
-                            .next()
-                            .unwrap_or("N/A")
-                            .to_string()
-                    } else {
-                        String::new()
-                    }
-                };
-
+                let year_text = format_year_info(
+                    album_info.year,
+                    album_info.original_release_date.as_deref(),
+                    use_original_year_clone_for_loop.get(),
+                );
                 let year_label = create_styled_label(
                     &year_text,
                     &["album-format-label"],
@@ -296,7 +275,6 @@ pub async fn populate_albums_grid(
                     .vexpand(false)
                     .halign(Start)
                     .valign(Start)
-
                     // Apply tile specific CSS
                     .css_classes(&["album-tile"] as &[&str])
                     .build();

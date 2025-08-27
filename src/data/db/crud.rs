@@ -173,9 +173,6 @@ pub async fn upsert_albums_batch(
             original_release_date = excluded.original_release_date",
     );
     query_builder.build().execute(&mut **tx).await?;
-    if albums.is_empty() {
-        return Ok(HashMap::new());
-    }
     let mut placeholders = Vec::new();
     for _ in albums {
         placeholders.push("(?, ?, ?)");

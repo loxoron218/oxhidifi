@@ -1,7 +1,7 @@
 /// Utilities for formatting various data types into human-readable strings.
 ///
-/// This module provides functions to format durations, bit depth, and frequencies
-/// for display within the application's user interface, ensuring consistency
+/// This module provides functions to format durations, bit depth, frequencies,
+/// and years for display within the application's user interface, ensuring consistency
 /// and adherence to common presentation standards.
 
 /// Formats a duration in seconds into a "H:MM:SS" string (e.g., 1:23:45).
@@ -93,5 +93,75 @@ pub(crate) fn format_bit_freq(bit: Option<u32>, freq: Option<u32>) -> String {
         (Some(b), None) => b,
         (None, Some(f)) => format!("{} kHz", f), // Add kHz suffix here
         (None, None) => String::new(),
+    }
+}
+
+/// Formats year information for display, handling both release year and original release date.
+///
+/// This function provides a consistent way to format year information based on user preferences
+/// for showing original release dates vs. release years. It handles various combinations of
+/// available data and avoids duplicate year display.
+///
+/// # Arguments
+/// * `release_year` - An `Option<i32>` representing the release year.
+/// * `original_release_date` - An `Option<&str>` representing the original release date string.
+/// * `use_original_year` - A `bool` indicating whether to prioritize original release date.
+///
+/// # Returns
+/// A `String` representing the formatted year information.
+pub(crate) fn format_year_info(
+    release_year: Option<i32>,
+    original_release_date: Option<&str>,
+    use_original_year: bool,
+) -> String {
+    // Extract year from original release date if available
+    let original_year = original_release_date
+        .and_then(|date| date.split('-').next())
+        .and_then(|year_str| year_str.parse::<i32>().ok())
+        .map(|y| y.to_string());
+
+    // Format based on user preference and available data
+    match (use_original_year, original_year, release_year) {
+        // Use original year when requested and available
+        (true, Some(o_year), _) => o_year,
+        // Fallback to release year when original year is not available or not requested
+        (_, _, Some(r_year)) => r_year.to_string(),
+        // Use original year as fallback when release year is not available
+        (false, Some(o_year), None) => o_year,
+        // No year information available
+        _ => String::new(),
+    }
+}
+
+/// Formats album year display with both original and release years when they differ.
+///
+/// This function creates a display string that shows both years when they're different,
+/// helping users understand reissues, remasters, etc.
+///
+/// # Arguments
+/// * `release_year` - An `Option<i32>` representing the release year.
+/// * `original_release_date` - An `Option<&str>` representing the original release date string.
+///
+/// # Returns
+/// A `String` representing the formatted year display.
+pub(crate) fn format_album_year_display(
+    release_year: Option<i32>,
+    original_release_date: Option<&str>,
+) -> String {
+    let original_year = original_release_date
+        .and_then(|date| date.split('-').next())
+        .and_then(|year_str| year_str.parse::<i32>().ok());
+
+    match (original_year, release_year) {
+        (Some(o_year), Some(r_year)) => {
+            if o_year == r_year {
+                o_year.to_string()
+            } else {
+                format!("{} / {}", o_year, r_year)
+            }
+        }
+        (Some(o_year), None) => o_year.to_string(),
+        (None, Some(r_year)) => r_year.to_string(),
+        _ => String::new(),
     }
 }

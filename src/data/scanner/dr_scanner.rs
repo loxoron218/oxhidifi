@@ -97,11 +97,8 @@ pub async fn scan_dr_value(folder_path: &Path) -> Result<Option<u8>, Box<dyn Err
                                                 // Update `highest_dr` if the current `dr` is higher
                                                 // or if `highest_dr` is currently `None`.
                                                 highest_dr = match highest_dr {
-                                                    Some(current_max) if dr > current_max => {
-                                                        Some(dr)
-                                                    }
+                                                    Some(current_max) => Some(current_max.max(dr)),
                                                     None => Some(dr),
-                                                    _ => highest_dr, // Keep current max
                                                 };
                                             }
                                         }
