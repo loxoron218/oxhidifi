@@ -220,6 +220,7 @@ fn build_album_card(
     );
     format_label.set_halign(Start);
     format_label.set_hexpand(true);
+
     // Get the year from the date string, if available, without cloning.
     // `as_deref` converts Option<String> to Option<&str> safely.
     let year_from_date = album.original_release_date.as_deref()
