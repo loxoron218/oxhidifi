@@ -151,19 +151,13 @@ pub async fn process_files_batch_optimized(
                 .unwrap_or_else(|| artist_name.clone());
 
             // Extract cover art data for later concurrent processing
-            let cover_art_data = if let Some(t) = tag {
-                if let Some(picture) = t.pictures().first() {
-                    Some((
-                        picture.data().to_vec(),
-                        album_title.clone(),
-                        album_artist_name.clone(),
-                    ))
-                } else {
-                    None
-                }
-            } else {
-                None
-            };
+            let cover_art_data = tag.and_then(|t| t.pictures().first()).map(|picture| {
+                (
+                    picture.data().to_vec(),
+                    album_title.clone(),
+                    album_artist_name.clone(),
+                )
+            });
 
             // Other metadata fields, defaulting to None if not present.
             let year = tag.and_then(|t| t.year()).map(|y| y as i32);
@@ -213,23 +207,17 @@ pub async fn process_files_batch_optimized(
         }
 
         // Process all images concurrently
-        let cover_art_paths = if !image_data_list.is_empty() {
-            let results = process_images_concurrently(image_data_list).await;
-            results
-        } else {
-            Vec::new()
-        };
+        let cover_art_paths = process_images_concurrently(image_data_list).await;
 
         // Update metadata with processed cover art paths
-        for (i, result) in cover_art_paths.into_iter().enumerate() {
-            if let Some(index) = image_indices.get(i) {
-                if let Ok(path) = result {
-                    if let Some(metadata) = all_metadata.get_mut(*index) {
+        for (result, &index) in cover_art_paths.into_iter().zip(&image_indices) {
+            match result {
+                Ok(path) => {
+                    if let Some(metadata) = all_metadata.get_mut(index) {
                         metadata.cover_art_path = Some(path);
                     }
-                } else if let Err(e) = result {
-                    eprintln!("Error processing cover art: {:?}", e);
                 }
+                Err(e) => eprintln!("Error processing cover art: {:?}", e),
             }
         }
 
