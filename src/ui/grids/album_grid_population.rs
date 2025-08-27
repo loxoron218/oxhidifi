@@ -296,9 +296,13 @@ pub async fn populate_albums_grid(
                     .vexpand(false)
                     .halign(Start)
                     .valign(Start)
-                    .css_classes(&["album-tile"] as &[&str]) // Apply tile specific CSS
+
+                    // Apply tile specific CSS
+                    .css_classes(&["album-tile"] as &[&str])
                     .build();
-                album_tile_box.set_size_request(tile_size, tile_size + 80); // Fixed size for the whole tile
+
+                // Fixed size for the whole tile
+                album_tile_box.set_size_request(tile_size, tile_size + 80);
 
                 // Cover container and overlay for DR badge and play button.
                 let cover_container = Box::new(Vertical, 0);
