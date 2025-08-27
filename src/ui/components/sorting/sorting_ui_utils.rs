@@ -111,18 +111,18 @@ pub fn get_sort_icon_name(
     sort_ascending: &Rc<Cell<bool>>,
     sort_ascending_artists: &Rc<Cell<bool>>,
 ) -> &'static str {
-    if page == "artists" {
-        if sort_ascending_artists.get() {
-            "view-sort-descending-symbolic"
-        } else {
-            "view-sort-ascending-symbolic"
-        }
+    // 1. Select the correct boolean value based on the page.
+    let ascending = if page == "artists" {
+        sort_ascending_artists.get()
     } else {
-        if sort_ascending.get() {
-            "view-sort-descending-symbolic"
-        } else {
-            "view-sort-ascending-symbolic"
-        }
+        sort_ascending.get()
+    };
+
+    // 2. Use that boolean in the now-deduplicated logic.
+    if ascending {
+        "view-sort-descending-symbolic"
+    } else {
+        "view-sort-ascending-symbolic"
     }
 }
 
