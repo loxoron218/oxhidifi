@@ -15,6 +15,17 @@ use tokio::{
 
 pub use self::{dr_scanner::scan_dr_value, file_processor::process_files_batch};
 
+/// Checks if a file path has a supported audio file extension
+fn is_supported_audio_file(path: &Path) -> bool {
+    const SUPPORTED_EXTENSIONS: [&str; 7] = ["mp3", "flac", "ogg", "wav", "m4a", "opus", "aiff"];
+    
+    path.extension()
+        .and_then(|e| e.to_str())
+        .map(|ext| ext.to_lowercase())
+        .map(|ext| SUPPORTED_EXTENSIONS.contains(&ext.as_str()))
+        .unwrap_or(false)
+}
+
 /// Recursively scans a folder for supported audio files and subfolders,
 /// extracting metadata and inserting it into the database.
 /// It also scans for Dynamic Range (DR) values in `.txt` or `.log` files within the folder.
@@ -57,17 +68,19 @@ pub fn scan_folder<'a>(
         // Iterate through each entry in the directory.
         while let Some(entry) = entries.next_entry().await? {
             let path = entry.path();
-            if path.is_dir() {
-                // If the entry is a directory, recursively call `scan_folder`.
-                // Log errors during recursive calls but don't halt the main scan.
-                if let Err(e) = scan_folder(pool, &path, folder_id).await {
-                    eprintln!("Error scanning subfolder {}: {}", path.display(), e);
+            match path.is_dir() {
+                true => {
+                    // If the entry is a directory, recursively call `scan_folder`.
+                    // Log errors during recursive calls but don't halt the main scan.
+                    if let Err(e) = scan_folder(pool, &path, folder_id).await {
+                        eprintln!("Error scanning subfolder {}: {}", path.display(), e);
+                    }
                 }
-            } else if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-                // If the entry is a file, check if its extension is supported.
-                let supported_extensions = ["mp3", "flac", "ogg", "wav", "m4a", "opus", "aiff"];
-                if supported_extensions.contains(&ext.to_lowercase().as_str()) {
-                    audio_files.push(path);
+                false => {
+                    // If the entry is a file with a supported extension, add it to the list.
+                    if is_supported_audio_file(&path) {
+                        audio_files.push(path);
+                    }
                 }
             }
         }
@@ -197,14 +210,16 @@ async fn scan_single_directory(
     // Iterate through each entry in the directory.
     while let Some(entry) = entries.next_entry().await? {
         let path = entry.path();
-        if path.is_dir() {
-            // Add subdirectory to the queue for parallel processing
-            queue.lock().await.push_back(path);
-        } else if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-            // If the entry is a file, check if its extension is supported.
-            let supported_extensions = ["mp3", "flac", "ogg", "wav", "m4a", "opus", "aiff"];
-            if supported_extensions.contains(&ext.to_lowercase().as_str()) {
-                audio_files.push(path);
+        match path.is_dir() {
+            true => {
+                // Add subdirectory to the queue for parallel processing
+                queue.lock().await.push_back(path);
+            }
+            false => {
+                // If the entry is a file with a supported extension, add it to the list.
+                if is_supported_audio_file(&path) {
+                    audio_files.push(path);
+                }
             }
         }
     }
