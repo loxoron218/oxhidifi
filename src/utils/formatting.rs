@@ -50,7 +50,7 @@ fn format_khz_display(freq: u32) -> String {
     let khz = (freq as f32) / 1000.0;
     // Check if the kHz value is very close to a whole number.
     // Using a small epsilon to account for floating point inaccuracies.
-    if (khz - khz.floor()).abs() < 0.01 {
+    if khz.fract().abs() < 0.01 {
         format!("{:.0}", khz)
     } else {
         format!("{:.1}", khz)
