@@ -119,7 +119,6 @@ impl FolderSettingsPage {
         let sort_ascending_artists_c = self.sort_ascending_artists.clone();
         let main_context_c = self.main_context.clone();
         let folders_c = folders.clone(); // Clone the fetched folders for the closure
-
         idle_add_local_once(move || {
             // Clear all existing children from the ListBox before repopulating.
             while let Some(child) = list_box_c.first_child() {
