@@ -105,10 +105,66 @@ impl RefreshService {
     /// Sets the visible child name for a given inner stack (e.g., albums or artists) based on
     /// whether scanning is active.
     fn set_inner_stack_state(&self, inner_stack: &Stack, is_scanning_visible: bool) {
-        if is_scanning_visible {
-            inner_stack.set_visible_child_name("scanning_state");
+        let child_name = if is_scanning_visible {
+            "scanning_state"
         } else {
-            inner_stack.set_visible_child_name("loading_state");
+            "loading_state"
+        };
+        inner_stack.set_visible_child_name(child_name);
+}
+
+    /// A new helper function specifically for the albums tab
+    async fn repopulate_albums_tab(&self) {
+        if let (Some(grid), Some(stack)) = (
+            self.albums_grid_cell.borrow().as_ref(),
+            self.albums_stack_cell.borrow().as_ref(),
+        ) {
+            clear_grid(grid);
+            self.set_inner_stack_state(stack, self.scanning_label_albums.is_visible());
+            populate_albums_grid(
+                grid,
+                self.db_pool.clone(),
+                self.sort_ascending.get(),
+                Rc::clone(&self.sort_orders),
+                &self.screen_info,
+                &self.scanning_label_albums,
+                stack,
+                &self.album_count_label,
+                self.show_dr_badges.clone(),
+                self.use_original_year.clone(),
+                self.view_mode.clone(),
+                self.player_bar.clone(),
+            )
+            .await;
+        }
+    }
+
+    /// A new helper function specifically for the artists tab
+    async fn repopulate_artists_tab(&self) {
+        if let (Some(grid), Some(stack)) = (
+            self.artist_grid_cell.borrow().as_ref(),
+            self.artists_stack_cell.borrow().as_ref(),
+        ) {
+            clear_grid(grid);
+            self.set_inner_stack_state(stack, self.scanning_label_artists.is_visible());
+            populate_artist_grid(
+                grid,
+                self.db_pool.clone(),
+                self.sort_ascending_artists.get(),
+                &self.stack,
+                &self.left_btn_stack,
+                &self.right_btn_box,
+                &self.screen_info,
+                &self.scanning_label_artists,
+                self.sender.clone(),
+                self.nav_history.clone(),
+                stack,
+                self.artist_count_label.clone(),
+                self.show_dr_badges.clone(),
+                self.use_original_year.clone(),
+                self.view_mode.clone(),
+                self.player_bar.clone(),
+            );
         }
     }
 
@@ -123,77 +179,32 @@ impl RefreshService {
                     .stack
                     .visible_child_name()
                     .unwrap_or_else(|| "albums".into());
-                if current_tab == "albums" {
-                    self.sort_ascending.set(sort_ascending_param);
-                } else if current_tab == "artists" {
-                    self.sort_ascending_artists
-                        .set(sort_ascending_artists_param);
+                match current_tab.as_str() {
+                    "albums" => {
+                        self.sort_ascending.set(sort_ascending_param);
+                    }
+                    "artists" => {
+                        self.sort_ascending_artists
+                            .set(sort_ascending_artists_param);
+                    }
+
+                    // This arm explicitly handles any other tab values by doing nothing.
+                    _ => {}
                 }
 
                 // Clone `self` for the async block to ensure ownership is transferred correctly
                 let service_clone = Rc::clone(&self);
-
                 MainContext::default().spawn_local(async move {
                     let current_tab = service_clone
                         .stack
                         .visible_child_name()
                         .unwrap_or_else(|| "albums".into());
 
-                    if current_tab == "albums" {
-                        if let (Some(albums_grid), Some(albums_inner_stack)) = (
-                            service_clone.albums_grid_cell.borrow().as_ref(),
-                            service_clone.albums_stack_cell.borrow().as_ref(),
-                        ) {
-                            clear_grid(albums_grid);
-                            service_clone.set_inner_stack_state(
-                                albums_inner_stack,
-                                service_clone.scanning_label_albums.is_visible(),
-                            );
-                            populate_albums_grid(
-                                albums_grid,
-                                service_clone.db_pool.clone(),
-                                service_clone.sort_ascending.get(),
-                                Rc::clone(&service_clone.sort_orders),
-                                &service_clone.screen_info,
-                                &service_clone.scanning_label_albums,
-                                albums_inner_stack,
-                                &service_clone.album_count_label,
-                                service_clone.show_dr_badges.clone(),
-                                service_clone.use_original_year.clone(),
-                                service_clone.view_mode.clone(),
-                                service_clone.player_bar.clone(),
-                            )
-                            .await;
-                        }
-                    } else if current_tab == "artists" {
-                        if let (Some(artist_grid), Some(artists_inner_stack)) = (
-                            service_clone.artist_grid_cell.borrow().as_ref(),
-                            service_clone.artists_stack_cell.borrow().as_ref(),
-                        ) {
-                            clear_grid(artist_grid);
-                            service_clone.set_inner_stack_state(
-                                artists_inner_stack,
-                                service_clone.scanning_label_artists.is_visible(),
-                            );
-                            populate_artist_grid(
-                                artist_grid,
-                                service_clone.db_pool.clone(),
-                                service_clone.sort_ascending_artists.get(),
-                                &service_clone.stack,
-                                &service_clone.left_btn_stack,
-                                &service_clone.right_btn_box,
-                                &service_clone.screen_info,
-                                &service_clone.scanning_label_artists,
-                                service_clone.sender.clone(),
-                                service_clone.nav_history.clone(),
-                                artists_inner_stack,
-                                service_clone.artist_count_label.clone(),
-                                service_clone.show_dr_badges.clone(),
-                                service_clone.use_original_year.clone(),
-                                service_clone.view_mode.clone(),
-                                service_clone.player_bar.clone(),
-                            );
-                        }
+                    // The main logic is now clean, readable, and easy to extend.
+                    match current_tab.as_str() {
+                        "albums" => service_clone.repopulate_albums_tab().await,
+                        "artists" => service_clone.repopulate_artists_tab().await,
+                        _ => {} // Handle other tabs or do nothing
                     }
                 });
             },
