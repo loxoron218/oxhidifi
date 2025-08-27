@@ -16,8 +16,8 @@ pub fn create_colored_placeholder(_path: &str, size: i32) -> Pixbuf {
     // Following GNOME HIG, we use a mid-gray (#808080) that works in both light/dark modes
     let pixbuf = Pixbuf::new(
         gdk_pixbuf::Colorspace::Rgb,
-        false, // no alpha
-        8,     // bits per sample
+        false,
+        8,
         size,
         size,
     )
