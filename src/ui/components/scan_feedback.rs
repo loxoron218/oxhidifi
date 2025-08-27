@@ -51,7 +51,6 @@ pub fn spawn_scanning_label_refresh_task(
     let sort_ascending_for_refresh = sort_ascending.clone();
     let sort_ascending_artists_for_refresh = sort_ascending_artists.clone();
     let stack_clone = stack.clone();
-
     MainContext::default().spawn_local(async move {
         let mut receiver = receiver.borrow_mut();
 

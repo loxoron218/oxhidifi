@@ -25,7 +25,6 @@ pub enum SortOrder {
 /// and handling UI interactions.
 impl FromStr for SortOrder {
     type Err = ();
-
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "Artist" => Ok(Artist),

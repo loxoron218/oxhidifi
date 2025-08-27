@@ -63,7 +63,7 @@ pub fn populate_artist_grid(
     }
     let already_busy = BUSY.with(|b| b.replace(true));
     if already_busy {
-        return; // Exit if a population task is already in progress.
+        return;
     }
 
     // Clone necessary `Rc` and `Arc` references for use within the `spawn_local` closure.
@@ -90,7 +90,8 @@ pub fn populate_artist_grid(
                 e
             );
         }
-        let fetch_result = fetch_all_artists(&db_pool).await; // Fetch artists from the database.
+        // Fetch artists from the database.
+        let fetch_result = fetch_all_artists(&db_pool).await;
         match fetch_result {
             Err(e) => {
                 eprintln!("Error fetching artist info: {:?}", e);
@@ -125,7 +126,7 @@ pub fn populate_artist_grid(
                 artists.retain(|artist| artist.name != "Various Artists");
 
                 // Artists fetched: {}
-                artist_count_label.set_text(&format!("{} Artists", artists.len())); // Update count with actual number
+                artist_count_label.set_text(&format!("{} Artists", artists.len()));
 
                 // If artists are found, set the stack to show the populated grid.
                 artists_inner_stack.set_visible_child_name("populated_grid");

@@ -48,6 +48,7 @@ pub(crate) fn format_duration_mmss(secs: u32) -> String {
 /// A `String` representing the frequency in kHz.
 fn format_khz_display(freq: u32) -> String {
     let khz = (freq as f32) / 1000.0;
+
     // Check if the kHz value is very close to a whole number.
     // Using a small epsilon to account for floating point inaccuracies.
     if khz.fract().abs() < 0.01 {
@@ -86,12 +87,15 @@ pub(crate) fn format_freq_khz(freq: u32) -> String {
 /// string if both are `None`.
 pub(crate) fn format_bit_freq(bit: Option<u32>, freq: Option<u32>) -> String {
     let bit_str = bit.map(|b| format!("{}-Bit", b));
-    let freq_str = freq.map(|f| format_khz_display(f)); // Use the helper function here
 
+    // Use the helper function here
+    let freq_str = freq.map(|f| format_khz_display(f));
     match (bit_str, freq_str) {
-        (Some(b), Some(f)) => format!("{}/{} kHz", b, f), // Add kHz suffix here
+        // Add kHz suffix here
+        (Some(b), Some(f)) => format!("{}/{} kHz", b, f),
         (Some(b), None) => b,
-        (None, Some(f)) => format!("{} kHz", f), // Add kHz suffix here
+        // Add kHz suffix here
+        (None, Some(f)) => format!("{} kHz", f),
         (None, None) => String::new(),
     }
 }
@@ -124,10 +128,13 @@ pub(crate) fn format_year_info(
     match (use_original_year, original_year, release_year) {
         // Use original year when requested and available
         (true, Some(o_year), _) => o_year,
+
         // Fallback to release year when original year is not available or not requested
         (_, _, Some(r_year)) => r_year.to_string(),
+
         // Use original year as fallback when release year is not available
         (false, Some(o_year), None) => o_year,
+
         // No year information available
         _ => String::new(),
     }
@@ -151,7 +158,6 @@ pub(crate) fn format_album_year_display(
     let original_year = original_release_date
         .and_then(|date| date.split('-').next())
         .and_then(|year_str| year_str.parse::<i32>().ok());
-
     match (original_year, release_year) {
         (Some(o_year), Some(r_year)) => {
             if o_year == r_year {

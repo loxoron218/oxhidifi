@@ -91,10 +91,8 @@ pub fn make_sort_row(
                             children_widgets.push(child.clone());
                             current_child = child.next_sibling();
                         }
-
                         let mut source_idx = None;
                         let mut target_idx = None;
-
                         for (idx, child_widget) in children_widgets.iter().enumerate() {
                             if child_widget.as_ptr()
                                 == target_row.clone().upcast::<Widget>().as_ptr()
@@ -115,7 +113,6 @@ pub fn make_sort_row(
                                 }
                             }
                         }
-
                         if let (Some(from), Some(to)) = (source_idx, target_idx) {
                             if from != to {
                                 let row_to_move = &children_widgets[from];
@@ -149,7 +146,6 @@ pub fn make_sort_row(
                                     current_child_after_reorder =
                                         child_after_reorder.next_sibling();
                                 }
-
                                 if !new_orders.is_empty() {
                                     *sort_orders_rc.borrow_mut() = new_orders.clone();
                                     let prev = load_settings();

@@ -51,12 +51,12 @@ pub fn connect_tab_sort_refresh(
     refresh_library_ui: Rc<dyn Fn(bool, bool)>,
     sort_ascending: Rc<Cell<bool>>,
     sort_ascending_artists: Rc<Cell<bool>>,
-    stack: Rc<ViewStack>, // Add ViewStack as a parameter
+    stack: Rc<ViewStack>,
 ) {
     let refresh_library_ui_albums = refresh_library_ui.clone();
     let sort_ascending_albums = sort_ascending.clone();
     let sort_ascending_artists_albums = sort_ascending_artists.clone();
-    let stack_albums_clone = stack.clone(); // Clone stack for albums button
+    let stack_albums_clone = stack.clone();
     albums_btn.connect_toggled(move |btn| {
         if btn.is_active() {
             // Only refresh if the albums view is not already the visible child
@@ -74,7 +74,7 @@ pub fn connect_tab_sort_refresh(
     let refresh_library_ui_artists = refresh_library_ui.clone();
     let sort_ascending_artists_btn = sort_ascending.clone();
     let sort_ascending_artists_val = sort_ascending_artists.clone();
-    let stack_artists_clone = stack.clone(); // Clone stack for artists button
+    let stack_artists_clone = stack.clone();
     artists_btn.connect_toggled(move |btn| {
         if btn.is_active() {
             // Only refresh if the artists view is not already the visible child

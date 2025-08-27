@@ -70,6 +70,7 @@ pub fn connect_tab_navigation(
     let nav_history_albums_clone = nav_history.clone();
     albums_btn.connect_clicked(move |_| {
         let current_visible_child = stack_albums_clone.visible_child_name().unwrap_or_default();
+
         // If the albums grid is already the visible child, do nothing to prevent unnecessary refreshes.
         if current_visible_child == VIEW_STACK_ALBUMS {
             return;
@@ -103,6 +104,7 @@ pub fn connect_tab_navigation(
         } else {
             "view-sort-ascending-symbolic"
         });
+
         // Trigger a refresh for the albums view with its specific sort order.
         refresh_library_ui_albums_clone(ascending, sort_ascending_artists_albums_clone.get());
 
@@ -126,6 +128,7 @@ pub fn connect_tab_navigation(
     let nav_history_artists_clone = nav_history.clone();
     artists_btn.connect_clicked(move |_| {
         let current_visible_child = stack_artists_clone.visible_child_name().unwrap_or_default();
+
         // If the artists grid is already the visible child, do nothing to prevent unnecessary refreshes.
         if current_visible_child == VIEW_STACK_ARTISTS {
             return;

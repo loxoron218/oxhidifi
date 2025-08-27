@@ -66,9 +66,15 @@ impl SearchBar {
         search_button.connect_clicked(move |_| {
             search_button_on_click.set_visible(false);
             search_revealer_on_click.set_reveal_child(true);
-            search_entry_on_click.set_text(""); // Clear previous search text
-            search_entry_on_click.grab_focus(); // Immediately focus the entry
-            search_entry_on_click.set_position(-1); // Move cursor to end of text
+
+            // Clear previous search text
+            search_entry_on_click.set_text("");
+
+            // Immediately focus the entry
+            search_entry_on_click.grab_focus();
+
+            // Move cursor to end of text
+            search_entry_on_click.set_position(-1);
         });
 
         // --- Event: Hide search bar when clicking outside ---
@@ -84,10 +90,11 @@ impl SearchBar {
             if search_revealer_for_gesture.reveals_child() {
                 // Get the allocation (position and size) of the search entry
                 let alloc = search_entry_for_gesture.allocation();
+
                 // Translate the search entry's coordinates relative to the vbox_inner
                 let (sx, sy) = search_entry_for_gesture
                     .translate_coordinates(&vbox_inner_for_gesture, 0.0, 0.0)
-                    .unwrap_or((alloc.x() as f64, alloc.y() as f64)); // Fallback if translation fails
+                    .unwrap_or((alloc.x() as f64, alloc.y() as f64));
 
                 // Check if the click coordinates (x, y) are *inside* the search entry's bounds
                 let inside = x >= sx
@@ -97,13 +104,20 @@ impl SearchBar {
 
                 // If the click was outside the search entry, hide the search bar
                 if !inside {
-                    search_entry_for_gesture.set_text(""); // Clear search text
-                    search_revealer_for_gesture.set_reveal_child(false); // Hide the entry
-                    search_button_for_gesture.set_visible(true); // Show the search button again
+                    // Clear search text
+                    search_entry_for_gesture.set_text("");
+
+                    // Hide the entry
+                    search_revealer_for_gesture.set_reveal_child(false);
+
+                    // Show the search button again
+                    search_button_for_gesture.set_visible(true);
                 }
             }
         });
-        vbox_inner.add_controller(gesture_click_outside); // Attach the gesture to the main content box
+
+        // Attach the gesture to the main content box
+        vbox_inner.add_controller(gesture_click_outside);
 
         // --- Event: Type-to-search (activate search bar on any printable key) ---
         // This controller is added to the main application window to capture global key presses.
@@ -117,18 +131,33 @@ impl SearchBar {
                 if !ch.is_control() && !ch.is_whitespace() {
                     // If the search bar is currently hidden, activate it
                     if !search_revealer_on_key.reveals_child() {
-                        search_button_on_key.set_visible(false); // Hide the search button
-                        search_revealer_on_key.set_reveal_child(true); // Show the search entry
-                        search_entry_on_key.set_text(&ch.to_string()); // Pre-fill with the typed character
-                        search_entry_on_key.grab_focus(); // Give focus to the entry
-                        search_entry_on_key.set_position(-1); // Move cursor to end
-                        return Stop; // Stop propagation so the character is not processed twice
+                        // Hide the search button
+                        search_button_on_key.set_visible(false);
+
+                        // Show the search entry
+                        search_revealer_on_key.set_reveal_child(true);
+
+                        // Pre-fill with the typed character
+                        search_entry_on_key.set_text(&ch.to_string());
+
+                        // Give focus to the entry
+                        search_entry_on_key.grab_focus();
+
+                        // Move cursor to end
+                        search_entry_on_key.set_position(-1);
+
+                        // Stop propagation so the character is not processed twice
+                        return Stop;
                     }
                 }
             }
-            Proceed // Continue propagating the event
+
+            // Continue propagating the event
+            Proceed
         });
-        window.add_controller(key_controller); // Attach the key controller to the window
+
+        // Attach the key controller to the window
+        window.add_controller(key_controller);
 
         // --- Event: Hide entry and show button on focus out ---
         // This controller is specifically for when the search Entry widget loses focus.
@@ -139,9 +168,15 @@ impl SearchBar {
         focus_controller.connect_leave(move |_| {
             // Clear the text when focus is lost, ensuring a clean state for the next search
             search_entry_on_focus_out.set_text("");
-            search_revealer_on_focus_out.set_reveal_child(false); // Hide the search entry
-            search_button_on_focus_out.set_visible(true); // Show the search button again
+
+            // Hide the search entry
+            search_revealer_on_focus_out.set_reveal_child(false);
+
+            // Show the search button again
+            search_button_on_focus_out.set_visible(true);
         });
-        search_entry.add_controller(focus_controller); // Attach to the search entry itself
+
+        // Attach to the search entry itself
+        search_entry.add_controller(focus_controller);
     }
 }

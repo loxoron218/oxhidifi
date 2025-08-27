@@ -163,7 +163,7 @@ pub async fn upsert_albums_batch(
             .push_bind(album.cover_art_path.as_ref().and_then(|p| p.to_str()))
             .push_bind(album.dr_value)
             .push_bind(album.original_release_date.clone())
-            .push_bind(false); // dr_completed
+            .push_bind(false);
     });
     query_builder.push(
         " ON CONFLICT(title, artist_id, folder_id) DO UPDATE SET

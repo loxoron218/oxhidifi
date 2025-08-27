@@ -74,6 +74,8 @@ impl ScreenInfo {
         // if additional spacing or text area needs to be accounted for within a tile.
         let tile_size = cover_size;
 
+        // Construct and return a new ScreenInfo instance with the calculated dimensions.
+        // This struct provides essential screen information for UI layout calculations throughout the application.
         Self {
             width: screen_width,
             cover_size,

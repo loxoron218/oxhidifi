@@ -94,6 +94,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     // Initialize shared state for sorting, navigation, and dynamic sizing
     // Load persistent user settings for initial sort orders.
     let settings = load_settings();
+
     // Get primary screen dimensions to calculate optimal cover and tile sizes dynamically.
     let screen_info = ScreenInfo::new();
 
@@ -219,7 +220,6 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
 
     // Artists toggle button frame is removed for a cleaner, tab-like appearance.
     widgets.artists_btn.set_has_frame(false);
-
     let header_bar = build_main_headerbar(
         &widgets.search_bar.left_btn_stack, // Use the left_btn_stack from the cloned AppHeaderBar
         &widgets.search_bar.right_btn_box,  // Use the right_btn_box from the cloned AppHeaderBar
@@ -243,12 +243,12 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         &shared_state,
         db_pool.clone(),
         sender.clone(),
-        receiver, // receiver is moved here
+        receiver,
         refresh_library_ui.clone(),
         refresh_service.clone(),
         &vbox_inner,
-        &add_music_button_albums,  // Pass the button here
-        &add_music_button_artists, // Pass the button here
+        &add_music_button_albums,
+        &add_music_button_artists,
     );
 
     // Present the window to make it visible and set its content.

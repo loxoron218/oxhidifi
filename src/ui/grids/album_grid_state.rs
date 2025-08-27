@@ -48,8 +48,8 @@ pub enum AlbumGridState {
     Populated,
 }
 
+/// Returns the string name associated with each state for use with `gtk4::Stack`.
 impl AlbumGridState {
-    /// Returns the string name associated with each state for use with `gtk4::Stack`.
     pub fn as_str(&self) -> &'static str {
         match self {
             Loading => "loading_state",

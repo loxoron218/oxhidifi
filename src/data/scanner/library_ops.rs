@@ -95,7 +95,9 @@ pub async fn run_full_scan(db_pool: &Arc<SqlitePool>, sender: &UnboundedSender<(
             }),
             Err(e) => {
                 eprintln!("Error checking tracks for album {}: {}", album_id, e);
-                false // Assume tracks don't exist if we can't query them.
+
+                // Assume tracks don't exist if we can't query them.
+                false
             }
         };
         if !tracks_exist {

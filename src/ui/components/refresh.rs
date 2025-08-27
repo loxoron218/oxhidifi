@@ -204,7 +204,9 @@ impl RefreshService {
                     match current_tab.as_str() {
                         "albums" => service_clone.repopulate_albums_tab().await,
                         "artists" => service_clone.repopulate_artists_tab().await,
-                        _ => {} // Handle other tabs or do nothing
+
+                        // Handle other tabs or do nothing
+                        _ => {}
                     }
                 });
             },

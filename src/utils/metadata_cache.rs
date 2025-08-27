@@ -76,30 +76,31 @@ impl<T> CacheEntry<T> {
 pub struct MetadataCache<T> {
     /// Thread-safe storage of cache entries
     entries: Arc<RwLock<HashMap<String, CacheEntry<T>>>>,
+
     /// Default time-to-live duration for new entries
     default_ttl: Duration,
 }
 
+/// Creates a new cache instance with the specified default TTL.
+///
+/// # Arguments
+/// * `default_ttl` - The default time-to-live duration for cache entries
+///
+/// # Returns
+/// A new `MetadataCache` instance
+///
+/// # Examples
+///
+/// ```
+/// use std::time::Duration;
+/// use your_crate::utils::metadata_cache::MetadataCache;
+///
+/// let cache = MetadataCache::new(Duration::from_secs(60)); // 60 second TTL
+/// ```
 impl<T> MetadataCache<T>
 where
     T: Clone,
 {
-    /// Creates a new cache instance with the specified default TTL.
-    ///
-    /// # Arguments
-    /// * `default_ttl` - The default time-to-live duration for cache entries
-    ///
-    /// # Returns
-    /// A new `MetadataCache` instance
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use std::time::Duration;
-    /// use your_crate::utils::metadata_cache::MetadataCache;
-    ///
-    /// let cache = MetadataCache::new(Duration::from_secs(60)); // 60 second TTL
-    /// ```
     pub fn new(default_ttl: Duration) -> Self {
         Self {
             entries: Arc::new(RwLock::new(HashMap::new())),

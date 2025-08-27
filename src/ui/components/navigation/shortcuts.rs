@@ -92,6 +92,7 @@ pub fn setup_keyboard_shortcuts(
 
     // Add the Escape key shortcut to the shortcut controller.
     accel_group.add_shortcut(esc_shortcut);
+
     // Add the shortcut controller to the application window.
     window.add_controller(accel_group);
 }

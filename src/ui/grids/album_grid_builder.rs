@@ -44,14 +44,14 @@ pub fn build_albums_grid(
 ) -> (Stack, FlowBox) {
     // --- Empty State (No Music Found) ---
     // This state is shown when the library is completely empty.
-    add_music_button.add_css_class("suggested-action"); // Apply suggested action style
+    add_music_button.add_css_class("suggested-action");
     let empty_state_status_page = StatusPage::builder()
         .icon_name("folder-music-symbolic")
         .title("No Music Found")
         .description("Add music to your library to get started.")
         .vexpand(true)
         .hexpand(true)
-        .child(add_music_button) // Set the add_music_button as the child of the StatusPage
+        .child(add_music_button)
         .build();
 
     let empty_state_container = Box::builder()
@@ -72,7 +72,6 @@ pub fn build_albums_grid(
         .vexpand(true)
         .hexpand(true)
         .build();
-
     let no_results_container = Box::builder()
         .orientation(Vertical)
         .halign(Center)
@@ -94,9 +93,9 @@ pub fn build_albums_grid(
         .hexpand(true)
         .build();
     loading_state_container.append(&loading_spinner);
-    let scanning_label_widget = create_scanning_label(); // Re-use the common scanning label
+    let scanning_label_widget = create_scanning_label();
     loading_state_container.append(&scanning_label_widget);
-    scanning_label_widget.set_visible(true); // Scanning label is visible during loading too
+    scanning_label_widget.set_visible(true);
 
     // --- Scanning State ---
     // Displayed when the library is actively being scanned for new music.
@@ -110,17 +109,17 @@ pub fn build_albums_grid(
         .hexpand(true)
         .build();
     scanning_state_container.append(&scanning_spinner);
-    scanning_state_container.append(scanning_label); // Use the passed scanning label
+    scanning_state_container.append(scanning_label);
 
     // --- Albums Grid (Populated State) ---
     // The actual FlowBox where album tiles will be rendered.
     let albums_grid = FlowBox::builder()
         .valign(Start)
-        .max_children_per_line(128) // Allow many children per line for flexible layout
+        .max_children_per_line(128)
         .row_spacing(8)
         .column_spacing(8)
-        .selection_mode(None) // Albums are not selectable in this grid
-        .homogeneous(true) // All children are treated as having the same size for layout purposes
+        .selection_mode(None)
+        .homogeneous(true)
         .hexpand(true)
         .halign(Fill)
         .build();
@@ -130,8 +129,8 @@ pub fn build_albums_grid(
         .hscrollbar_policy(Automatic)
         .vscrollbar_policy(Automatic)
         .child(&albums_grid)
-        .min_content_height(400) // Minimum height for the scrollable area
-        .min_content_width(400) // Minimum width for the scrollable area
+        .min_content_height(400)
+        .min_content_width(400)
         .vexpand(true)
         .margin_start(24)
         .margin_end(24)
@@ -144,7 +143,7 @@ pub fn build_albums_grid(
     // --- Main Albums Stack ---
     // A Stack widget to manage the different states (loading, empty, populated, etc.).
     let albums_stack = Stack::builder()
-        .transition_type(StackTransitionType::None) // No visual transition when switching states
+        .transition_type(StackTransitionType::None)
         .build();
 
     // Add all state containers and the populated grid to the stack.

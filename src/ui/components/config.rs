@@ -82,10 +82,13 @@ fn get_config_dir() -> Result<PathBuf> {
     let base_dir = var_os("HOME")
         .or_else(|| var_os("USERPROFILE"))
         .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(".")); // Fallback to current directory if home not found
+        // Fallback to current directory if home not found
+        .unwrap_or_else(|| PathBuf::from("."));
 
     let config_dir = base_dir.join(".config").join("oxhidifi");
-    create_dir_all(&config_dir)?; // Create directory if it doesn't exist
+
+    // Create directory if it doesn't exist
+    create_dir_all(&config_dir)?;
     Ok(config_dir)
 }
 
@@ -126,7 +129,6 @@ pub fn load_settings() -> Settings {
             return default_settings;
         }
     };
-
     match read_to_string(&settings_path) {
         Ok(data) => match from_str(&data) {
             Ok(settings) => settings,
@@ -175,7 +177,6 @@ pub fn save_settings(settings: &Settings) -> Result<()> {
     let path = get_settings_path()?;
     let data = to_string_pretty(settings)
         .map_err(|e| Error::new(Other, format!("Failed to serialize settings: {}", e)))?;
-
     let mut file = File::create(&path)?;
     file.write_all(data.as_bytes())?;
     Ok(())

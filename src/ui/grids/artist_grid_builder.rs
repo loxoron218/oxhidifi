@@ -53,7 +53,9 @@ pub fn build_artist_grid(
 
     // The add_music_button is passed in from `main_window/handlers.rs` and styled here.
     add_music_button.add_css_class("suggested-action");
-    empty_state_status_page.set_child(Some(add_music_button)); // Set the button as the child of the StatusPage.
+
+    // Set the button as the child of the StatusPage.
+    empty_state_status_page.set_child(Some(add_music_button));
     let empty_state_container = Box::builder()
         .orientation(Vertical)
         .halign(Center)
@@ -85,11 +87,11 @@ pub fn build_artist_grid(
     // This is the actual `FlowBox` where artist tiles will be dynamically added.
     let artist_grid = FlowBox::builder()
         .valign(Start)
-        .max_children_per_line(128) // Set a high number to allow dynamic resizing by CSS/Adwaita.
+        .max_children_per_line(128)
         .row_spacing(8)
         .column_spacing(8)
-        .selection_mode(None) // Artists are clickable, but not selectable.
-        .homogeneous(true) // All children have the same size.
+        .selection_mode(None)
+        .homogeneous(true)
         .hexpand(true)
         .halign(Fill)
         .build();
@@ -99,26 +101,32 @@ pub fn build_artist_grid(
         .hscrollbar_policy(Automatic)
         .vscrollbar_policy(Automatic)
         .child(&artist_grid)
-        .min_content_height(400) // Ensure a minimum height for the scrollable area.
-        .min_content_width(400) // Ensure a minimum width for the scrollable area.
-        .vexpand(true) // Allow the scrolled window to expand vertically.
-        .margin_start(24) // Add margins for visual spacing.
+        .min_content_height(400)
+        .min_content_width(400)
+        .vexpand(true)
+        .margin_start(24)
         .margin_end(24)
         .margin_top(24)
         .margin_bottom(24)
         .build();
-    scrolled.set_hexpand(true); // Allow horizontal expansion.
-    scrolled.set_halign(Fill); // Fill available horizontal space.
+
+    // Allow horizontal expansion.
+    scrolled.set_hexpand(true);
+
+    // Fill available horizontal space.
+    scrolled.set_halign(Fill);
 
     // The main `Stack` to manage the different views (loading, empty, populated, etc.).
     let artists_stack = Stack::builder()
-        .transition_type(StackTransitionType::None) // No transition animation between children.
+        .transition_type(StackTransitionType::None)
         .build();
 
     // --- Loading State ---
     // Shown while initial data is being fetched.
     let loading_spinner = Spinner::builder().spinning(true).build();
-    loading_spinner.set_size_request(48, 48); // Set a fixed size for the spinner.
+
+    // Set a fixed size for the spinner.
+    loading_spinner.set_size_request(48, 48);
     let loading_state_container = Box::builder()
         .orientation(Vertical)
         .halign(Center)
@@ -127,6 +135,7 @@ pub fn build_artist_grid(
         .hexpand(true)
         .build();
     loading_state_container.append(&loading_spinner);
+
     // The scanning label widget is also part of the loading state.
     let scanning_label_widget = create_scanning_label();
     loading_state_container.append(&scanning_label_widget);
@@ -144,7 +153,7 @@ pub fn build_artist_grid(
         .hexpand(true)
         .build();
     scanning_state_container.append(&scanning_spinner);
-    scanning_state_container.append(scanning_label); // The scanning label passed as an argument.
+    scanning_state_container.append(scanning_label);
 
     // Add all the different states as named children to the `artists_stack`.
     artists_stack.add_named(&loading_state_container, Some("loading_state"));
@@ -162,6 +171,5 @@ pub fn build_artist_grid(
 
     // Set the initial visible child of the stack to the loading state.
     artists_stack.set_visible_child_name("loading_state");
-
     (artists_stack, artist_grid)
 }

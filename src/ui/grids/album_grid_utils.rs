@@ -20,7 +20,6 @@ pub fn create_colored_placeholder(_path: &str, size: i32) -> Pixbuf {
     // Fill with neutral gray color (#8080)
     // In 0xRRGGBBAA format: 0x808080FF
     pixbuf.fill(0x808080FF);
-
     pixbuf
 }
 
@@ -54,7 +53,6 @@ pub fn create_styled_label(
         .halign(Start)
         .xalign(0.0)
         .build();
-
     if let Some(width) = max_width {
         label.set_max_width_chars(width);
     }
@@ -127,7 +125,6 @@ pub fn create_dr_badge_label(dr_value: Option<u8>, dr_completed: bool) -> Label 
             vec!["dr-na".to_string()],
         ),
     };
-
     let dr_label = Label::builder()
         .label(&dr_str)
         .css_classes(&["dr-badge-label", "dr-badge-label-grid"] as &[&str])
@@ -139,8 +136,7 @@ pub fn create_dr_badge_label(dr_value: Option<u8>, dr_completed: bool) -> Label 
         .halign(End)
         .valign(End)
         .build();
-    dr_label.set_size_request(28, 28); // Fixed size for the badge in the grid
-
+    dr_label.set_size_request(28, 28);
     if dr_completed {
         css_classes.push("dr-completed".to_string());
     }

@@ -25,12 +25,10 @@ fn create_view_stack_child_box(widget: &impl IsA<Widget>) -> Clamp {
 /// This pattern is used for the "Albums" and "Artists" tabs.
 fn create_tab_toggle_button(icon_name: &str, label_text: &str, is_active: bool) -> ToggleButton {
     let button = ToggleButton::builder().active(is_active).build();
-    button.set_has_frame(false); // Remove the default button frame for a cleaner look.
 
-    let content_box = Box::builder()
-        .orientation(Horizontal)
-        .spacing(4) // Small spacing between icon and label.
-        .build();
+    // Remove the default button frame for a cleaner look.
+    button.set_has_frame(false);
+    let content_box = Box::builder().orientation(Horizontal).spacing(4).build();
     content_box.append(&Image::from_icon_name(icon_name));
     content_box.append(&Label::builder().label(label_text).build());
     button.set_child(Some(&content_box));
@@ -103,24 +101,31 @@ pub fn build_header_bar() -> AppHeaderBar {
         Some("back"),
         "Back",
     );
-    left_btn_stack.set_visible_child_name("main"); // Initially show the main (add) button.
+
+    // Initially show the main (add) button.
+    left_btn_stack.set_visible_child_name("main");
 
     // Right-aligned box containing search, sort, and settings buttons.
-    let right_btn_inner = Box::builder()
-        .orientation(Horizontal)
-        .spacing(6) // Standard spacing between header elements.
-        .build();
-    right_btn_inner.append(&search_bar.button); // The search icon button.
-    right_btn_inner.append(&*search_bar.revealer); // The animated search entry revealer.
-    right_btn_inner.append(&sort_button); // Button to change sorting order.
-    right_btn_inner.append(&settings_button); // Button to open application settings.
+    let right_btn_inner = Box::builder().orientation(Horizontal).spacing(6).build();
 
-    let right_btn_box = Clamp::builder()
-        .child(&right_btn_inner)
-        .halign(End) // Align to the end (right) of the header bar.
-        .build();
-    right_btn_box.set_visible(true); // Ensure visibility by default.
+    // The search icon button.
+    right_btn_inner.append(&search_bar.button);
 
+    // The animated search entry revealer.
+    right_btn_inner.append(&*search_bar.revealer);
+
+    // Button to change sorting order.
+    right_btn_inner.append(&sort_button);
+
+    // Button to open application settings.
+    right_btn_inner.append(&settings_button);
+    let right_btn_box = Clamp::builder().child(&right_btn_inner).halign(End).build();
+
+    // Ensure visibility by default.
+    right_btn_box.set_visible(true);
+
+    // Construct and return the AppHeaderBar struct with all initialized components.
+    // This struct provides access to all header widgets for signal connections and state management.
     AppHeaderBar {
         left_btn_stack,
         right_btn_box,
@@ -150,9 +155,15 @@ pub fn build_main_headerbar(
     center_box: &Clamp,
 ) -> HeaderBar {
     let header_bar = HeaderBar::builder().build();
-    header_bar.pack_start(left_btn_stack); // Place left-aligned widgets.
-    header_bar.set_title_widget(Some(center_box)); // Set the central title widget.
-    header_bar.pack_end(right_btn_box); // Place right-aligned widgets.
+
+    // Place left-aligned widgets.
+    header_bar.pack_start(left_btn_stack);
+
+    // Set the central title widget.
+    header_bar.set_title_widget(Some(center_box));
+
+    // Place right-aligned widgets.
+    header_bar.pack_end(right_btn_box);
     header_bar
 }
 
@@ -175,12 +186,8 @@ pub fn build_tab_bar() -> (Box, ToggleButton, ToggleButton) {
     let artists_btn = create_tab_toggle_button("avatar-default-symbolic", "Artists", false);
 
     // Container for the tab buttons.
-    let tab_bar = Box::builder()
-        .orientation(Horizontal)
-        .spacing(6) // Spacing between the two tab buttons.
-        .build();
+    let tab_bar = Box::builder().orientation(Horizontal).spacing(6).build();
     tab_bar.append(&albums_btn);
     tab_bar.append(&artists_btn);
-
     (tab_bar, albums_btn, artists_btn)
 }

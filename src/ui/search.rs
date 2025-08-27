@@ -208,7 +208,7 @@ pub fn connect_live_search(
                 }
 
                 // Perform artist search
-                clear_grid(&artist_grid); // Clear artist grid before populating
+                clear_grid(&artist_grid);
                 match search_artists(&db_pool, &text).await {
                     Err(e) => {
                         // Log the error for debugging purposes

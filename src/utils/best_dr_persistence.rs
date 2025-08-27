@@ -147,11 +147,19 @@ impl DrValueStore {
     /// system or serialization operation fails.
     pub fn save(&self) -> IoResult<()> {
         let config_dir = Self::config_dir_path();
-        create_dir_all(&config_dir)?; // Ensure the configuration directory exists
+
+        // Ensure the configuration directory exists
+        create_dir_all(&config_dir)?;
         let file_path = Self::dr_values_file_path();
-        let json_contents = to_string_pretty(&self)?; // Serialize to pretty-printed JSON
-        let mut file = File::create(&file_path)?; // Create or overwrite the file
-        file.write_all(json_contents.as_bytes())?; // Write the JSON contents
+
+        // Serialize to pretty-printed JSON
+        let json_contents = to_string_pretty(&self)?;
+
+        // Create or overwrite the file
+        let mut file = File::create(&file_path)?;
+
+        // Write the JSON contents
+        file.write_all(json_contents.as_bytes())?;
         Ok(())
     }
 

@@ -50,8 +50,11 @@ pub fn connect_sort_button(
 
     // Connect handler for the sort button's `clicked` signal.
     sort_button.connect_clicked(move |_| {
-        let mut settings = load_settings(); // Load current user settings.
-        let page = stack_clone.visible_child_name().unwrap_or_default(); // Get current visible page name.
+        // Load current user settings.
+        let mut settings = load_settings();
+
+        // Get current visible page name.
+        let page = stack_clone.visible_child_name().unwrap_or_default();
         let current_sort_ascending: bool;
         let current_sort_ascending_artists: bool;
 
@@ -95,6 +98,7 @@ pub fn connect_sort_button(
     let sort_ascending_artists_for_notify = sort_ascending_artists.clone();
     stack.connect_notify_local(Some("visible-child-name"), move |stack, _| {
         let page = stack.visible_child_name().unwrap_or_default();
+
         // Use the helper function to determine the icon name.
         let icon_name = get_sort_icon_name(
             &page,

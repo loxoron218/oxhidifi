@@ -97,8 +97,7 @@ pub fn connect_album_navigation<Fut, F>(
     let left_btn_stack_weak = left_btn_stack.downgrade();
     let right_btn_box_weak = right_btn_box.downgrade();
     let nav_history_clone = nav_history.clone();
-    let sender_clone_for_closure = sender.clone(); // Clone sender for the closure
-
+    let sender_clone_for_closure = sender.clone();
     albums_grid.connect_child_activated(move |_, child| {
         // Upgrade weak references to strong references or return if they are no longer valid.
         let left_btn_stack = left_btn_stack_weak

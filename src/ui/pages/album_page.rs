@@ -519,7 +519,7 @@ pub async fn album_page(
                     Err(e) => {
                         // Log the error
                         eprintln!("Failed to load Hi-Res icon: {}", e);
-                        
+
                         // Fallback to a symbolic icon
                         let fallback_icon = Image::from_icon_name("image-missing-symbolic");
                         fallback_icon.set_pixel_size(44);

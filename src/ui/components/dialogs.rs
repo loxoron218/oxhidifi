@@ -64,7 +64,6 @@ pub fn create_add_folder_dialog_handler<T: IsA<Window> + Clone + 'static>(
     let sender_cloned = sender;
     let parent_window_cloned = parent_window;
     let albums_inner_stack_cloned = albums_inner_stack;
-
     Box::new(move || {
         let dialog = FileChooserDialog::new(
             Some("Open Folder"),
@@ -101,7 +100,8 @@ pub fn create_add_folder_dialog_handler<T: IsA<Window> + Clone + 'static>(
 
                         // Spawn a new thread for blocking I/O and async operations
                         spawn(move || {
-                            let rt = Runtime::new().unwrap(); // Create a new Tokio runtime for this thread
+                            // Create a new Tokio runtime for this thread
+                            let rt = Runtime::new().unwrap();
                             rt.block_on(async {
                                 // Insert folder into DB or get existing ID
                                 let folder_id = match insert_or_get_folder(
@@ -113,7 +113,9 @@ pub fn create_add_folder_dialog_handler<T: IsA<Window> + Clone + 'static>(
                                     Ok(id) => id,
                                     Err(e) => {
                                         eprintln!("Error inserting or getting folder: {:?}", e);
-                                        return; // Exit on error
+
+                                        // Exit on error
+                                        return;
                                     }
                                 };
 
@@ -137,9 +139,12 @@ pub fn create_add_folder_dialog_handler<T: IsA<Window> + Clone + 'static>(
                     }
                 }
             }
-            dialog.close(); // Close the dialog regardless of response
+            // Close the dialog regardless of response
+            dialog.close();
         });
-        dialog.show(); // Display the dialog
+
+        // Display the dialog
+        dialog.show();
     })
 }
 

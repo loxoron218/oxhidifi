@@ -56,7 +56,7 @@ pub fn connect_all_handlers(
     shared_state: &WindowSharedState,
     db_pool: Arc<SqlitePool>,
     sender: UnboundedSender<()>,
-    receiver: UnboundedReceiver<()>, // Pass receiver here
+    receiver: UnboundedReceiver<()>,
     refresh_library_ui: Rc<dyn Fn(bool, bool)>,
     refresh_service: Rc<RefreshService>,
     vbox_inner: &Box,
@@ -216,7 +216,7 @@ pub fn connect_all_handlers(
         sort_ascending_cloned.clone(),
         sort_ascending_artists_cloned.clone(),
         refresh_library_ui.clone(),
-        None::<fn()>, // Optional closure for artists grid rebuild, currently handled by `rebuild_artist_grid_for_window`
+        None::<fn()>,
     );
 
     // Connect sorting logic for tab toggles and sort icon updates.
