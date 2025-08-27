@@ -166,16 +166,18 @@ impl MemoryCache {
         // Remove expired entries
         entries.retain(|_, entry| entry.expires_at > now);
         if let Some(entry) = entries.get_mut(key) {
-            // Check if entry has expired
             if entry.expires_at <= now {
+                // Entry is expired, remove it and let the function fall through to return None.
                 entries.remove(key);
-                return None;
+            } else {
+                // Entry is valid, update it and return the value immediately.
+                entry.last_access = now;
+                return Some(entry.pixbuf.clone());
             }
-            entry.last_access = now;
-            Some(entry.pixbuf.clone())
-        } else {
-            None
         }
+
+        // Return None if the entry was not found, or if it was found but expired.
+        None
     }
 
     /// Inserts an image into the cache
@@ -302,13 +304,21 @@ impl DiskCache {
     /// `None` if it's not in the cache, or an `ImageLoaderError` if an error occurred
     fn load(&self, original_path: &Path, size: i32) -> Result<Option<Pixbuf>, ImageLoaderError> {
         let cache_path = self.get_cache_path(original_path, size);
-
-        if cache_path.exists() {
-            // Load from cache
-            let pixbuf = Pixbuf::from_file_at_scale(&cache_path, size, size, true)?;
-            Ok(Some(pixbuf))
-        } else {
-            Ok(None)
+        match Pixbuf::from_file_at_scale(&cache_path, size, size, true) {
+            Ok(pixbuf) => Ok(Some(pixbuf)),
+            Err(e) => {
+                // Check if the error is specifically a "file not found" error.
+                // The exact method may vary slightly based on the error type,
+                // but for glib-based errors, this is a common pattern.
+                if e.matches(glib::FileError::Noent) {
+                    // This is the expected "cache miss" case, not a real error.
+                    Ok(None)
+                } else {
+                    // This is a real error (e.g., corrupt file, permissions issue).
+                    // Propagate it up.
+                    Err(e.into())
+                }
+            }
         }
     }
 
