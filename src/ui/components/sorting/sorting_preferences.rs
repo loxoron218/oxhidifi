@@ -122,12 +122,8 @@ pub fn make_sort_row(
                                 listbox.remove(row_to_move);
 
                                 // Re-insert at the new position
-                                if to >= children_widgets.len() {
-                                    // Use children_widgets.len() for current count
-                                    listbox.append(row_to_move);
-                                } else {
-                                    listbox.insert(row_to_move, to as i32);
-                                }
+                                // The `insert` method handles the out-of-bounds case by appending,
+                                listbox.insert(row_to_move, to as i32);
 
                                 // Update sort_orders, persist, and refresh UI after reorder
                                 let mut new_orders = Vec::with_capacity(children_widgets.len());
