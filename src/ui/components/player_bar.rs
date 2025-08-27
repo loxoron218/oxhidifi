@@ -245,31 +245,31 @@ impl PlayerBar {
         };
         self.technical_info.set_label(&technical_text);
 
-        // Update time label with duration if provided
-        if let Some(duration_secs) = duration {
+        // Determine the label and progress range based on the duration
+        let (label, range_end) = if let Some(duration_secs) = duration {
             let minutes = duration_secs / 60;
             let seconds = duration_secs % 60;
-            self.time_label
-                .set_label(&format!("0:00 / {}:{}", minutes, seconds));
-
-            // Set the range of the progress bar to the duration
-            self.progress_bar.set_range(0.0, duration_secs as f64);
+            // Note the {:02} to correctly pad seconds (e.g., 1:07)
+            (format!("0:00 / {}:{:02}", minutes, seconds), duration_secs as f64)
         } else {
-            self.time_label.set_label("0:00 / 0:0");
-            self.progress_bar.set_range(0.0, 100.0);
-        }
+            ("0:00 / 0:0".to_string(), 100.0)
+        };
 
-        // Update album art if a path was provided
-        if let Some(path) = cover_art_path {
-            // Attempt to load and scale the album art image to 96x96 pixels
-            if let Ok(pixbuf) = Pixbuf::from_file_at_scale(path, 96, 96, true) {
-                self.album_art.set_from_pixbuf(Some(&pixbuf));
-            } else {
-                // Fall back to placeholder icon if image loading fails
-                self.album_art.set_icon_name(Some("image-missing"));
-            }
+        // Now, perform the UI updates once
+        self.time_label.set_label(&label);
+        self.progress_bar.set_range(0.0, range_end);
+
+        // Chain the operations: start with an optional path, then try to load from it.
+        // .and_then() is perfect for this. .ok() converts the Result into an Option.
+        let pixbuf = cover_art_path.and_then(|path| {
+            Pixbuf::from_file_at_scale(path, 96, 96, true).ok()
+        });
+
+        // Now we have an Option<Pixbuf>. We can act on it in one place.
+        if let Some(p) = pixbuf.as_ref() {
+            self.album_art.set_from_pixbuf(Some(p));
         } else {
-            // Use placeholder icon when no album art path is provided
+            // This single else block now handles both "no path" and "failed to load" cases.
             self.album_art.set_icon_name(Some("image-missing"));
         }
 
