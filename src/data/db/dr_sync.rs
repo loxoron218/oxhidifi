@@ -28,7 +28,7 @@ pub async fn synchronize_dr_completed_from_store(pool: &SqlitePool) -> Result<()
     let all_albums = query("SELECT id, title, artist_id, folder_id, dr_completed FROM albums")
         .fetch_all(pool)
         .await?;
-        
+
     // Process each album to synchronize dr_completed status
     for album_row in all_albums {
         let album_id: i64 = album_row.get("id");
@@ -63,7 +63,6 @@ pub async fn synchronize_dr_completed_from_store(pool: &SqlitePool) -> Result<()
             .execute(pool)
             .await?;
     }
-    
     Ok(())
 }
 /// Synchronizes the `dr_completed` status in the database with the JSON store in the background.
@@ -93,7 +92,7 @@ pub async fn synchronize_dr_completed_background(
         .fetch_all(&*pool)
         .await?;
     let total_albums = all_albums.len();
-    
+
     // Process each album to synchronize dr_completed status
     for (index, album_row) in all_albums.into_iter().enumerate() {
         let album_id: i64 = album_row.get("id");

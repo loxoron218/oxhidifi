@@ -177,7 +177,7 @@ impl MemoryCache {
             None
         }
     }
-    
+
     /// Inserts an image into the cache
     ///
     /// This method stores an image in the cache with the specified key.
@@ -189,10 +189,10 @@ impl MemoryCache {
     fn insert(&self, key: String, pixbuf: Pixbuf) {
         let mut entries = self.entries.write().unwrap();
         let now = Instant::now();
-        
+
         // Estimate size: width * height * 4 bytes per pixel
         let size = (pixbuf.width() as usize) * (pixbuf.height() as usize) * 4;
-        
+
         // Create new entry
         let entry = CacheEntry {
             pixbuf,
@@ -200,21 +200,22 @@ impl MemoryCache {
             expires_at: now + self.ttl,
             size,
         };
-        
+
         // Insert the new entry
         entries.insert(key, entry);
-        
+
         // Perform LRU eviction if we exceed max_entries
         if entries.len() > self.max_entries {
             // Find the least recently used entry (smallest last_access)
             if let Some(lru_key) = entries
                 .iter()
                 .min_by_key(|(_, entry)| entry.last_access)
-                .map(|(key, _)| key.clone()) {
+                .map(|(key, _)| key.clone())
+            {
                 entries.remove(&lru_key);
             }
         }
-        
+
         // Perform size-based eviction if we exceed max_size
         let mut total_size: usize = entries.values().map(|entry| entry.size).sum();
         while total_size > self.max_size && !entries.is_empty() {
@@ -222,7 +223,8 @@ impl MemoryCache {
             if let Some(lru_key) = entries
                 .iter()
                 .min_by_key(|(_, entry)| entry.last_access)
-                .map(|(key, _)| key.clone()) {
+                .map(|(key, _)| key.clone())
+            {
                 if let Some(removed_entry) = entries.remove(&lru_key) {
                     total_size -= removed_entry.size;
                 }
@@ -418,12 +420,12 @@ impl ImageLoader {
         loader.write(&buffer)?;
         loader.close()?;
         let pixbuf = loader.pixbuf().ok_or(InvalidPath)?;
-        
+
         // 4. Save to disk cache
         if let Err(e) = self.disk_cache.save(path, size, &pixbuf) {
             eprintln!("Failed to save image to disk cache: {}", e);
         }
-        
+
         // 5. Store in memory cache
         self.memory_cache.insert(cache_key, pixbuf.clone());
         Ok(pixbuf)
