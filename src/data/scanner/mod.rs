@@ -18,7 +18,6 @@ pub use self::{dr_scanner::scan_dr_value, file_processor::process_files_batch};
 /// Checks if a file path has a supported audio file extension
 fn is_supported_audio_file(path: &Path) -> bool {
     const SUPPORTED_EXTENSIONS: [&str; 7] = ["mp3", "flac", "ogg", "wav", "m4a", "opus", "aiff"];
-    
     path.extension()
         .and_then(|e| e.to_str())
         .map(|ext| ext.to_lowercase())
