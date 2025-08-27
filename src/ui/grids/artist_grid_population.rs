@@ -61,14 +61,7 @@ pub fn populate_artist_grid(
     thread_local! {
         static BUSY: Cell<bool> = Cell::new(false);
     }
-    let already_busy = BUSY.with(|b| {
-        if b.get() {
-            true // If already busy, return true and do not proceed.
-        } else {
-            b.set(true); // If not busy, set busy to true and proceed.
-            false
-        }
-    });
+    let already_busy = BUSY.with(|b| b.replace(true));
     if already_busy {
         return; // Exit if a population task is already in progress.
     }
