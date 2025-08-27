@@ -509,14 +509,24 @@ pub async fn album_page(
         match (show_hires, is_lossy_album) {
             // Case 1: Show Hi-Res icon, regardless of whether it's lossy.
             (true, _) => {
-                if let Ok(pixbuf) = Pixbuf::from_file_at_scale("assets/hires.png", -1, 40, true) {
-                    let hires_pic = Picture::for_pixbuf(&pixbuf);
-                    hires_pic.set_size_request(40, 40);
-                    hires_pic.set_halign(Start);
-                    outer_row.append(&hires_pic);
+                match Pixbuf::from_file_at_scale("assets/hires.png", -1, 40, true) {
+                    Ok(pixbuf) => {
+                        let hires_pic = Picture::for_pixbuf(&pixbuf);
+                        hires_pic.set_size_request(40, 40);
+                        hires_pic.set_halign(Start);
+                        outer_row.append(&hires_pic);
+                    }
+                    Err(e) => {
+                        // Log the error
+                        eprintln!("Failed to load Hi-Res icon: {}", e);
+                        
+                        // Fallback to a symbolic icon
+                        let fallback_icon = Image::from_icon_name("image-missing-symbolic");
+                        fallback_icon.set_pixel_size(44);
+                        fallback_icon.set_halign(Start);
+                        outer_row.append(&fallback_icon);
+                    }
                 }
-                // Note: This still fails silently if the image doesn't load.
-                // You might want to log an error or add a fallback icon here.
             }
 
             // Case 2 & 3: Not showing Hi-Res, so show a symbolic icon.
