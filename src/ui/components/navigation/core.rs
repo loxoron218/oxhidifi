@@ -234,7 +234,6 @@ pub fn handle_back_navigation(
             if current_page != VIEW_STACK_ALBUMS && current_page != VIEW_STACK_ARTISTS {
                 let tab = last_tab.get(); // Get the name of the last active tab.
                 stack.set_visible_child_name(tab);
-
                 navigate_back_to_main_grid(
                     &left_btn_stack,
                     &right_btn_box,
