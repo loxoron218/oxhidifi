@@ -213,40 +213,35 @@ pub fn handle_back_navigation(
 ) -> impl Fn() {
     move || {
         // Attempt to pop the previous page from the navigation history.
-        let is_main_grid_page =
-            |page: &str| page == VIEW_STACK_ALBUMS || page == VIEW_STACK_ARTISTS;
+        if let Some(prev_page) = nav_history.borrow_mut().pop() {
+            stack.set_visible_child_name(&prev_page);
 
-        // Handle navigation based on history or current page state
-        let should_refresh_ui = nav_history
-            .borrow_mut()
-            .pop()
-            .map(|prev_page| {
-                stack.set_visible_child_name(&prev_page);
-                is_main_grid_page(prev_page.as_str())
-            })
-            .unwrap_or_else(|| {
-                // If history is empty, check if the current page is already a main grid.
-                let current_page = stack.visible_child_name().unwrap_or_default();
+            // If navigating back to a main grid, reset the header and refresh the UI.
+            if prev_page.as_str() == VIEW_STACK_ALBUMS || prev_page.as_str() == VIEW_STACK_ARTISTS {
+                navigate_back_to_main_grid(
+                    &left_btn_stack,
+                    &right_btn_box,
+                    &refresh_library_ui,
+                    &sort_ascending,
+                    &sort_ascending_artists,
+                );
+            }
+        } else {
+            // If history is empty, check if the current page is already a main grid.
+            let current_page = stack.visible_child_name().unwrap_or_default();
 
-                // If not on a main grid, navigate to the last remembered tab.
-                let is_current_main_grid = is_main_grid_page(&current_page);
-                let should_navigate_to_last_tab = !is_current_main_grid;
-                let tab = last_tab.get();
-
-                // Only set visible child name if we're navigating to a different page
-                should_navigate_to_last_tab.then(|| stack.set_visible_child_name(tab));
-                should_navigate_to_last_tab
-            });
-
-        // Reset header and refresh UI if navigating back to a main grid
-        should_refresh_ui.then(|| {
-            navigate_back_to_main_grid(
-                &left_btn_stack,
-                &right_btn_box,
-                &refresh_library_ui,
-                &sort_ascending,
-                &sort_ascending_artists,
-            )
-        });
+            // If not on a main grid, navigate to the last remembered tab and reset header.
+            if current_page != VIEW_STACK_ALBUMS && current_page != VIEW_STACK_ARTISTS {
+                let tab = last_tab.get(); // Get the name of the last active tab.
+                stack.set_visible_child_name(tab);
+                navigate_back_to_main_grid(
+                    &left_btn_stack,
+                    &right_btn_box,
+                    &refresh_library_ui,
+                    &sort_ascending,
+                    &sort_ascending_artists,
+                );
+            }
+        }
     }
 }
