@@ -145,7 +145,10 @@ pub fn connect_tab_navigation(
         // Check if the Artists view is already present in the ViewStack.
         // If not, and a `rebuild_artist_grid_opt` closure is provided, call it to build the grid.
         // Step 1: If the child doesn't exist, try to build it.
-        if stack_artists_clone.child_by_name(VIEW_STACK_ARTISTS).is_none() {
+        if stack_artists_clone
+            .child_by_name(VIEW_STACK_ARTISTS)
+            .is_none()
+        {
             if let Some(ref rebuild_artist_grid) = rebuild_artist_grid_opt {
                 rebuild_artist_grid();
             }

@@ -223,7 +223,9 @@ fn build_album_card(
 
     // Get the year from the date string, if available, without cloning.
     // `as_deref` converts Option<String> to Option<&str> safely.
-    let year_from_date = album.original_release_date.as_deref()
+    let year_from_date = album
+        .original_release_date
+        .as_deref()
         .and_then(|s| s.split('-').next()); // This gives us an Option<&str>
 
     // Get the year from the integer field, if available.
@@ -232,14 +234,15 @@ fn build_album_card(
     // Determine the final year string based on the preference.
     let year_text = if use_original_year.get() {
         // Try date first, then the number.
-        year_from_date.map(str::to_string) // Convert Option<&str> to Option<String>
+        year_from_date
+            .map(str::to_string) // Convert Option<&str> to Option<String>
             .or_else(|| year_from_num.map(|y| y.to_string()))
     } else {
         // Try number first, then the date.
-        year_from_num.map(|y| y.to_string())
+        year_from_num
+            .map(|y| y.to_string())
             .or_else(|| year_from_date.map(str::to_string))
     }
-
     // If both are None, provide an empty String.
     .unwrap_or_default();
     let year_label = create_album_label(

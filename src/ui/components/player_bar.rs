@@ -250,7 +250,10 @@ impl PlayerBar {
             let minutes = duration_secs / 60;
             let seconds = duration_secs % 60;
             // Note the {:02} to correctly pad seconds (e.g., 1:07)
-            (format!("0:00 / {}:{:02}", minutes, seconds), duration_secs as f64)
+            (
+                format!("0:00 / {}:{:02}", minutes, seconds),
+                duration_secs as f64,
+            )
         } else {
             ("0:00 / 0:0".to_string(), 100.0)
         };
@@ -261,9 +264,8 @@ impl PlayerBar {
 
         // Chain the operations: start with an optional path, then try to load from it.
         // .and_then() is perfect for this. .ok() converts the Result into an Option.
-        let pixbuf = cover_art_path.and_then(|path| {
-            Pixbuf::from_file_at_scale(path, 96, 96, true).ok()
-        });
+        let pixbuf =
+            cover_art_path.and_then(|path| Pixbuf::from_file_at_scale(path, 96, 96, true).ok());
 
         // Now we have an Option<Pixbuf>. We can act on it in one place.
         if let Some(p) = pixbuf.as_ref() {

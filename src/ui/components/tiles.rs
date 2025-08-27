@@ -218,20 +218,24 @@ pub fn create_album_tile(
     };
 
     // Format the audio quality line (e.g., "FLAC 24/96")
-    let format_line = album.format.as_ref().map(|format_str| {
-        // This closure only runs if `album.format` is Some.
-        let format_caps = format_str.to_uppercase();
+    let format_line = album
+        .format
+        .as_ref()
+        .map(|format_str| {
+            // This closure only runs if `album.format` is Some.
+            let format_caps = format_str.to_uppercase();
 
-        // First, determine only the part of the string that changes.
-        let tech_details = match (album.bit_depth, album.frequency) {
-            (Some(bit), Some(freq)) => format!(" {}/{}", bit, format_freq_khz(freq as u32)),
-            (None, Some(freq)) => format!(" {}", format_freq_khz(freq as u32)),
-            _ => String::new(),
-        };
+            // First, determine only the part of the string that changes.
+            let tech_details = match (album.bit_depth, album.frequency) {
+                (Some(bit), Some(freq)) => format!(" {}/{}", bit, format_freq_khz(freq as u32)),
+                (None, Some(freq)) => format!(" {}", format_freq_khz(freq as u32)),
+                _ => String::new(),
+            };
 
-    // Combine the static and dynamic parts in one place.
-    format!("{}{}", format_caps, tech_details)
-}).unwrap_or_default(); // If `album.format` was None, this provides an empty String.
+            // Combine the static and dynamic parts in one place.
+            format!("{}{}", format_caps, tech_details)
+        })
+        .unwrap_or_default(); // If `album.format` was None, this provides an empty String.
 
     // Create and style the format label
     let format_label = create_album_label(

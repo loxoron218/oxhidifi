@@ -111,7 +111,7 @@ impl RefreshService {
             "loading_state"
         };
         inner_stack.set_visible_child_name(child_name);
-}
+    }
 
     /// A new helper function specifically for the albums tab
     async fn repopulate_albums_tab(&self) {
