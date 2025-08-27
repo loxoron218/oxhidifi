@@ -56,23 +56,29 @@ pub fn connect_sort_button(
         let current_sort_ascending_artists: bool;
 
         // Determine which sort state to toggle based on the current page.
-        if page == VIEW_STACK_ALBUMS {
-            let asc = !sort_ascending_clone.get(); // Toggle the album sort order.
-            sort_ascending_clone.set(asc);
-            settings.sort_ascending_albums = asc; // Persist the new state.
-            current_sort_ascending = asc;
-            current_sort_ascending_artists = sort_ascending_artists_clone.get(); // Keep artists sort state as is.
-        } else if page == VIEW_STACK_ARTISTS {
-            let asc = !sort_ascending_artists_clone.get(); // Toggle the artist sort order.
-            sort_ascending_artists_clone.set(asc);
-            settings.sort_ascending_artists = asc; // Persist the new state.
-            current_sort_ascending = sort_ascending_clone.get(); // Keep album sort state as is.
-            current_sort_ascending_artists = asc;
-        } else {
-            // If neither albums nor artists page is active, do nothing.
-            return;
-        }
-        let _ = save_settings(&settings); // Attempt to save the updated settings.
+        // Use a `match` statement to handle the page-specific logic.
+        match page.as_str() {
+            VIEW_STACK_ALBUMS => {
+                let asc = !sort_ascending_clone.get();
+                sort_ascending_clone.set(asc);
+                settings.sort_ascending_albums = asc;
+            }
+            VIEW_STACK_ARTISTS => {
+                let asc = !sort_ascending_artists_clone.get();
+                sort_ascending_artists_clone.set(asc);
+                settings.sort_ascending_artists = asc;
+            }
+
+            // If the page is anything else, do nothing and exit the function.
+            _ => return,
+        };
+
+        // This common logic is now performed once, after the state has been updated.
+        current_sort_ascending = sort_ascending_clone.get();
+        current_sort_ascending_artists = sort_ascending_artists_clone.get();
+
+        // Attempt to save the updated settings.
+        let _ = save_settings(&settings);
 
         // Update the sort button's icon to reflect the new sort state using the helper function.
         let icon_name =
