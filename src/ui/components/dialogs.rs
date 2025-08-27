@@ -80,7 +80,6 @@ pub fn create_add_folder_dialog_handler<T: IsA<Window> + Clone + 'static>(
         let db_pool_for_response = db_pool_cloned.clone();
         let sender_for_response = sender_cloned.clone();
         let albums_inner_stack_for_response = albums_inner_stack_cloned.clone();
-
         dialog.connect_response(move |dialog, resp| {
             if resp == Accept {
                 if let Some(folder) = dialog.file() {
