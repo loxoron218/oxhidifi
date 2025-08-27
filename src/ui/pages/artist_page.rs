@@ -196,18 +196,24 @@ fn build_album_card(
         false, // Explicitly set use_markup to false
     );
     artist_label.add_css_class("album-artist-label"); // Ensure this class is applied
-    let format_line = if let Some(format_str) = album.format.as_ref() {
-        let format_caps = format_str.to_uppercase();
-        match (album.bit_depth, album.frequency) {
-            (Some(bit), Some(freq)) => {
-                format!("{} {}/{}", format_caps, bit, format_freq_khz(freq))
-            }
-            (None, Some(freq)) => format!("{} {}", format_caps, format_freq_khz(freq)),
-            _ => format_caps,
-        }
-    } else {
-        String::new()
-    };
+    let format_line = album
+        .format
+        .as_ref()
+        .map(|format_str| {
+            // This closure only runs if `album.format` is Some.
+            let format_caps = format_str.to_uppercase();
+
+            // First, determine only the part of the string that changes.
+            let tech_details = match (album.bit_depth, album.frequency) {
+                (Some(bit), Some(freq)) => format!(" {}/{}", bit, format_freq_khz(freq)),
+                (None, Some(freq)) => format!(" {}", format_freq_khz(freq)),
+                _ => String::new(),
+            };
+
+            // Combine the static and dynamic parts in one place.
+            format!("{}{}", format_caps, tech_details)
+        })
+        .unwrap_or_default(); // If `album.format` was None, this provides an empty String.
     let format_label = create_album_label(
         &format_line,
         &["album-format-label"],
@@ -232,31 +238,17 @@ fn build_album_card(
     let year_from_num = album.year;
 
     // Determine the final year string based on the preference.
+    // 1. Prepare both potential string versions of the year.
+    let date_str_opt = year_from_date.map(str::to_string);
+    let num_str_opt = year_from_num.map(|y| y.to_string());
+
+    // 2. Chain them in the correct priority order and unwrap the final result.
     let year_text = if use_original_year.get() {
-        // Try date first, then the number.
-        year_from_date
-            .map(str::to_string) // Convert Option<&str> to Option<String>
-            .or_else(|| year_from_num.map(|y| y.to_string()))
+        date_str_opt.or(num_str_opt)
     } else {
-        // Try number first, then the date.
-        year_from_num
-            .map(|y| y.to_string())
-            .or_else(|| year_from_date.map(str::to_string))
+        num_str_opt.or(date_str_opt)
     }
-    // If both are None, provide an empty String.
     .unwrap_or_default();
-    let year_label = create_album_label(
-        &year_text,
-        &["album-format-label"],
-        None,
-        None,
-        false,
-        None,
-        None,
-        false, // Explicitly set use_markup to false
-    );
-    year_label.set_halign(End);
-    year_label.set_hexpand(false);
 
     // Album box creation
     let album_tile_box = Box::builder().orientation(Vertical).spacing(2).build();
@@ -332,6 +324,20 @@ fn build_album_card(
     title_area_box.append(&title_label);
     album_tile_box.append(&title_area_box);
     album_tile_box.append(&artist_label);
+
+    // Create year label using the year_text value
+    let year_label = create_album_label(
+        &year_text,
+        &["album-format-label"],
+        None,
+        None,
+        false,
+        None,
+        None,
+        false, // Explicitly set use_markup to false
+    );
+    year_label.set_halign(End);
+    year_label.set_hexpand(false);
 
     // Create a horizontal box to hold format and year labels
     let metadata_box = Box::builder()
