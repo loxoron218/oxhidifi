@@ -178,10 +178,13 @@ pub fn connect_live_search(
                         });
 
                         // Update the album UI based on search results
-                        if albums.is_empty() {
-                            albums_stack.set_visible_child_name("no_results_state");
+                        let child_name = if albums.is_empty() {
+                            "no_results_state"
                         } else {
-                            albums_stack.set_visible_child_name("populated_grid");
+                            "populated_grid"
+                        };
+                        albums_stack.set_visible_child_name(child_name);
+                        if !albums.is_empty() {
                             for album in &albums {
                                 let flow_child = Rc::new(create_album_tile(
                                     album,
@@ -213,10 +216,13 @@ pub fn connect_live_search(
                     }
                     Ok(artists) => {
                         // Update the artist UI based on search results
-                        if artists.is_empty() {
-                            artists_stack.set_visible_child_name("no_results_state");
+                        let child_name = if artists.is_empty() {
+                            "no_results_state"
                         } else {
-                            artists_stack.set_visible_child_name("populated_grid");
+                            "populated_grid"
+                        };
+                        artists_stack.set_visible_child_name(child_name);
+                        if !artists.is_empty() {
                             for artist in &artists {
                                 let flow_child = Rc::new(create_artist_tile(
                                     artist.id,
