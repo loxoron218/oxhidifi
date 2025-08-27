@@ -230,14 +230,19 @@ pub async fn album_page(
                     folder_path: folder_rc.path.clone(),
                 };
                 if is_completed {
-                    dr_store.add_dr_value(album_key, dr.unwrap_or(0)); // Store DR value if completed
+                    dr_store.add_dr_value(album_key, dr.unwrap_or(0));
                 } else {
                     dr_store.remove_dr_value(&album_key);
                 }
-                if let Err(_e) = dr_store.save() {}
+
+                // Handle the result of the save operation.
+                if let Err(e) = dr_store.save() {
+                    // Log the error instead of ignoring it.
+                    // Replace with your actual logging framework (e.g., log::error!)
+                    eprintln!("Failed to save DR store: {}", e);
+                }
             });
         });
-
         dr_box
     }
 
@@ -302,14 +307,17 @@ pub async fn album_page(
         let player_bar_clone = player_bar.clone();
         let album_clone = album.clone();
         let track_title = t.title.clone();
-        let artist_name = if t.artist_id != album_artist_id || is_various_artists_album {
-            track_artists
-                .get(&t.artist_id)
-                .cloned()
-                .unwrap_or(artist.name.clone())
-        } else {
-            artist.name.clone()
-        };
+
+        // Start with the album artist's name as the default.
+        let mut artist_name = artist.name.clone();
+
+        // If this is a "various artists" situation, try to find a more specific artist.
+        if t.artist_id != album_artist_id || is_various_artists_album {
+            if let Some(specific_artist_name) = track_artists.get(&t.artist_id) {
+                // If found, override the default.
+                artist_name = specific_artist_name.clone();
+            }
+        }
 
         // Clone track values to move into closure
         let track_bit_depth = t.bit_depth;
@@ -363,37 +371,35 @@ pub async fn album_page(
     let artist_clone = artist.clone();
     let tracks_clone = tracks.clone();
     play_pause_button.connect_clicked(move |_| {
-        // Use the first track as the default track to play
-        if let Some(first_track) = tracks_clone.first() {
-            // Clone track values to move into closure
-            let track_bit_depth = first_track.bit_depth;
-            let track_frequency = first_track.frequency;
-            let track_format = first_track.format.clone();
-            let track_duration = first_track.duration;
-            let track_title = first_track.title.clone();
-            player_bar_clone.update_with_metadata(
-                &album_clone.title,
-                &track_title,
-                &artist_clone.name,
-                album_clone.cover_art.as_deref(),
-                track_bit_depth,
-                track_frequency,
-                track_format.as_deref(),
-                track_duration,
-            );
-        } else {
-            // Fallback to album title if no tracks found
-            player_bar_clone.update_with_metadata(
-                &album_clone.title,
-                &album_clone.title,
-                &artist_clone.name,
-                album_clone.cover_art.as_deref(),
-                None,
-                None,
-                None,
-                None,
-            );
-        }
+        // Determine the track-specific details, providing a fallback if no tracks exist.
+        let (track_title, bit_depth, frequency, format, duration) = tracks_clone
+            .first()
+            .map(|track| {
+                // Case 1: A track exists. Use its details.
+                (
+                    track.title.clone(),
+                    track.bit_depth,
+                    track.frequency,
+                    track.format.clone(),
+                    track.duration,
+                )
+            })
+            .unwrap_or_else(|| {
+                // Case 2: No track exists. Use album title and None for details.
+                (album_clone.title.clone(), None, None, None, None)
+            });
+
+        // Now, call the update function just once with the determined values.
+        player_bar_clone.update_with_metadata(
+            &album_clone.title,
+            &track_title,
+            &artist_clone.name,
+            album_clone.cover_art.as_deref(),
+            bit_depth,
+            frequency,
+            format.as_deref(),
+            duration,
+        );
     });
 
     overlay.add_overlay(&play_pause_button);
@@ -499,25 +505,35 @@ pub async fn album_page(
             .build();
 
         // Hi-Res, Lossy, or CD icon (tall, left)
-        if show_hires {
-            if let Ok(pixbuf) = Pixbuf::from_file_at_scale("assets/hires.png", -1, 40, true) {
-                let hires_pic = Picture::for_pixbuf(&pixbuf);
-                hires_pic.set_size_request(40, 40);
-                hires_pic.set_halign(Start);
-                outer_row.append(&hires_pic);
+        // Use a match statement on the conditions for a clear, exhaustive check.
+        match (show_hires, is_lossy_album) {
+            // Case 1: Show Hi-Res icon, regardless of whether it's lossy.
+            (true, _) => {
+                if let Ok(pixbuf) = Pixbuf::from_file_at_scale("assets/hires.png", -1, 40, true) {
+                    let hires_pic = Picture::for_pixbuf(&pixbuf);
+                    hires_pic.set_size_request(40, 40);
+                    hires_pic.set_halign(Start);
+                    outer_row.append(&hires_pic);
+                }
+                // Note: This still fails silently if the image doesn't load.
+                // You might want to log an error or add a fallback icon here.
             }
-        } else if is_lossy_album {
-            // Use musical note icon for lossy albums
-            let lossy_icon = Image::from_icon_name("audio-x-generic-symbolic");
-            lossy_icon.set_pixel_size(44);
-            lossy_icon.set_halign(Start);
-            outer_row.append(&lossy_icon);
-        } else {
-            // Use symbolic CD icon from system theme
-            let cd_icon = Image::from_icon_name("media-optical-symbolic");
-            cd_icon.set_pixel_size(44);
-            cd_icon.set_halign(Start);
-            outer_row.append(&cd_icon);
+
+            // Case 2 & 3: Not showing Hi-Res, so show a symbolic icon.
+            (false, is_lossy) => {
+                // First, determine the correct icon name.
+                let icon_name = if is_lossy {
+                    "audio-x-generic-symbolic"
+                } else {
+                    "media-optical-symbolic"
+                };
+
+                // Now, create and configure the icon just once.
+                let icon = Image::from_icon_name(icon_name);
+                icon.set_pixel_size(44);
+                icon.set_halign(Start);
+                outer_row.append(&icon);
+            }
         }
 
         // Right: vertical box with bit/freq and format
