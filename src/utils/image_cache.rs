@@ -226,16 +226,14 @@ pub async fn process_images_concurrently(
     // Process images with a concurrency limit
     loop {
         // Add tasks up to the concurrency limit
-        while active_tasks < CONCURRENT_LIMIT {
-            if let Some((image_data, album_title, album_artist_name)) = image_iter.next() {
-                join_set.spawn(async move {
-                    get_or_create_thumbnail_optimized(&image_data, &album_title, &album_artist_name)
-                        .await
-                });
-                active_tasks += 1;
-            } else {
-                break;
-            }
+        for (image_data, album_title, album_artist_name) in
+            image_iter.by_ref().take(CONCURRENT_LIMIT - active_tasks)
+        {
+            join_set.spawn(async move {
+                get_or_create_thumbnail_optimized(&image_data, &album_title, &album_artist_name)
+                    .await
+            });
+            active_tasks += 1;
         }
 
         // If no more tasks to add, break
@@ -244,7 +242,7 @@ pub async fn process_images_concurrently(
         }
 
         // Wait for a task to complete
-        if let Some(result) = join_set.join_next().await {
+        while let Some(result) = join_set.join_next().await {
             match result {
                 Ok(task_result) => results.push(task_result),
                 Err(e) => {
@@ -256,9 +254,6 @@ pub async fn process_images_concurrently(
                 }
             }
             active_tasks -= 1;
-        } else {
-            // No more tasks in the set
-            break;
         }
     }
 
