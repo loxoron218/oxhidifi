@@ -215,33 +215,34 @@ pub fn handle_back_navigation(
         // Attempt to pop the previous page from the navigation history.
         if let Some(prev_page) = nav_history.borrow_mut().pop() {
             stack.set_visible_child_name(&prev_page);
+            match prev_page.as_str() {
+                // The `|` operator creates a pattern that matches either constant.
+                VIEW_STACK_ALBUMS | VIEW_STACK_ARTISTS => {
+                    navigate_back_to_main_grid(
+                        &left_btn_stack,
+                        &right_btn_box,
+                        &refresh_library_ui,
+                        &sort_ascending,
+                        &sort_ascending_artists,
+                    );
+                }
 
-            // If navigating back to a main grid, reset the header and refresh the UI.
-            if prev_page.as_str() == VIEW_STACK_ALBUMS || prev_page.as_str() == VIEW_STACK_ARTISTS {
-                navigate_back_to_main_grid(
-                    &left_btn_stack,
-                    &right_btn_box,
-                    &refresh_library_ui,
-                    &sort_ascending,
-                    &sort_ascending_artists,
-                );
+                // This arm explicitly does nothing for any other page values.
+                _ => {}
             }
-        } else {
-            // If history is empty, check if the current page is already a main grid.
-            let current_page = stack.visible_child_name().unwrap_or_default();
 
             // If not on a main grid, navigate to the last remembered tab and reset header.
-            if current_page != VIEW_STACK_ALBUMS && current_page != VIEW_STACK_ARTISTS {
-                let tab = last_tab.get(); // Get the name of the last active tab.
-                stack.set_visible_child_name(tab);
-                navigate_back_to_main_grid(
-                    &left_btn_stack,
-                    &right_btn_box,
-                    &refresh_library_ui,
-                    &sort_ascending,
-                    &sort_ascending_artists,
-                );
-            }
+        } else {
+            // If history is empty, navigate to the last remembered tab and reset header.
+            let tab = last_tab.get(); // Get the name of the last active tab.
+            stack.set_visible_child_name(tab);
+            navigate_back_to_main_grid(
+                &left_btn_stack,
+                &right_btn_box,
+                &refresh_library_ui,
+                &sort_ascending,
+                &sort_ascending_artists,
+            );
         }
     }
 }
