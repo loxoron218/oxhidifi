@@ -80,14 +80,13 @@ pub fn setup_keyboard_shortcuts(
                     sort_ascending_for_search.get(),
                     sort_ascending_artists_for_search.get(),
                 );
-                Stop // Stop event propagation as the shortcut has been handled.
             } else {
                 // If search bar is not open, execute the general back navigation logic.
                 back_nav_action();
-
-                // Stop event propagation as the shortcut has been handled.
-                Stop
             }
+
+            // Stop event propagation as the shortcut has been handled in either case.
+            Stop
         }))
         .build();
 
