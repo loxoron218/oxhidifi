@@ -85,7 +85,8 @@ pub fn setup_keyboard_shortcuts(
                 // If search bar is not open, execute the general back navigation logic.
                 back_nav_action();
 
-                Stop // Stop event propagation as the shortcut has been handled.
+                // Stop event propagation as the shortcut has been handled.
+                Stop
             }
         }))
         .build();
