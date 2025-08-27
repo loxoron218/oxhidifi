@@ -177,6 +177,7 @@ pub fn connect_tab_navigation(
         } else {
             "view-sort-ascending-symbolic"
         });
+
         // Trigger a refresh for the artists view with its specific sort order.
         refresh_library_ui_artists_clone(sort_ascending_artists_clone.get(), ascending);
 
