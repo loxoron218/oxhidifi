@@ -144,22 +144,16 @@ pub fn connect_tab_navigation(
 
         // Check if the Artists view is already present in the ViewStack.
         // If not, and a `rebuild_artist_grid_opt` closure is provided, call it to build the grid.
-        if stack_artists_clone
-            .child_by_name(VIEW_STACK_ARTISTS)
-            .is_some()
-        {
-            // If already exists, just switch to it.
-            stack_artists_clone.set_visible_child_name(VIEW_STACK_ARTISTS);
-        } else if let Some(ref rebuild_artist_grid) = rebuild_artist_grid_opt {
-            rebuild_artist_grid(); // Build the artists grid.
-            // After rebuilding, the child should now be present, so set it visible.
-            if stack_artists_clone
-                .child_by_name(VIEW_STACK_ARTISTS)
-                .is_some()
-            {
-                stack_artists_clone.set_visible_child_name(VIEW_STACK_ARTISTS);
+        // Step 1: If the child doesn't exist, try to build it.
+        if stack_artists_clone.child_by_name(VIEW_STACK_ARTISTS).is_none() {
+            if let Some(ref rebuild_artist_grid) = rebuild_artist_grid_opt {
+                rebuild_artist_grid();
             }
         }
+
+        // Step 2: Unconditionally try to switch to the child.
+        // If the build step failed or wasn't possible, this does nothing, which is safe.
+        stack_artists_clone.set_visible_child_name(VIEW_STACK_ARTISTS);
 
         // Reset the header to the main view and refresh the UI.
         navigate_back_to_main_grid(
