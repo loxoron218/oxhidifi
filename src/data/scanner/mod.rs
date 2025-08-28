@@ -15,9 +15,42 @@ use tokio::{
 
 pub use self::{dr_scanner::scan_dr_value, file_processor::process_files_batch};
 
-/// Checks if a file path has a supported audio file extension
+/// Checks if a file path has a supported audio file extension.
+///
+/// This function determines whether a given file path corresponds to a supported
+/// audio file format by examining its extension. The comparison is case-insensitive.
+///
+/// # Supported Formats
+///
+/// * MP3 - MPEG Audio Layer III
+/// * FLAC - Free Lossless Audio Codec
+/// * OGG - Ogg Vorbis
+/// * WAV - Waveform Audio File Format
+/// * M4A - MPEG-4 Audio
+/// * OPUS - Opus Audio Codec
+/// * AIFF - Audio Interchange File Format
+///
+/// # Arguments
+///
+/// * `path` - A reference to the file path to check
+///
+/// # Returns
+///
+/// Returns `true` if the file has a supported audio extension, `false` otherwise.
+///
+/// # Examples
+///
+/// ```
+/// use std::path::Path;
+///
+/// assert_eq!(is_supported_audio_file(Path::new("song.mp3")), true);
+/// assert_eq!(is_supported_audio_file(Path::new("document.txt")), false);
+/// ```
 fn is_supported_audio_file(path: &Path) -> bool {
+    // List of supported audio file extensions
     const SUPPORTED_EXTENSIONS: [&str; 7] = ["mp3", "flac", "ogg", "wav", "m4a", "opus", "aiff"];
+    
+    // Extract extension, convert to lowercase, and check if it's in our supported list
     path.extension()
         .and_then(|e| e.to_str())
         .map(|ext| ext.to_lowercase())
@@ -62,6 +95,8 @@ pub fn scan_folder<'a>(
                 return Ok(());
             }
         };
+        
+        // Vector to collect audio files found in this directory for batch processing
         let mut audio_files = Vec::new();
 
         // Iterate through each entry in the directory.
@@ -137,12 +172,21 @@ pub async fn scan_folder_parallel(
     loop {
         // Start new tasks if we have available permits and directories in the queue
         while !queue.lock().await.is_empty() && semaphore.available_permits() > 0 {
+            // Acquire a permit from the semaphore to limit concurrency
+            // acquire_owned() gives us an owned permit that can be moved into the task
             let permit = semaphore.clone().acquire_owned().await?;
+            
+            // Get the next directory to scan from the front of the queue
             let path = queue.lock().await.pop_front().unwrap();
+            
+            // Clone the necessary values for the task
             let pool_clone = pool.clone();
             let queue_clone = queue.clone();
             let folder_id_clone = folder_id;
+            
+^            // Spawn a new task to scan this directory
             join_set.spawn(async move {
+                // Perform the actual directory scanning
                 let result =
                     scan_single_directory(pool_clone, &path, folder_id_clone, queue_clone).await;
 
@@ -159,6 +203,7 @@ pub async fn scan_folder_parallel(
 
         // Wait for one task to complete
         if let Some(result) = join_set.join_next().await {
+            // Handle any errors from completed tasks
             if let Ok(Err(e)) = result {
                 eprintln!("Error scanning directory: {}", e);
             }
@@ -204,6 +249,8 @@ async fn scan_single_directory(
             return Ok(());
         }
     };
+    
+    // Vector to collect audio files found in this directory for batch processing
     let mut audio_files = Vec::new();
 
     // Iterate through each entry in the directory.
