@@ -9,10 +9,14 @@ use gtk4::{FlowBox, Label, Stack};
 use libadwaita::{Clamp, ViewStack, prelude::WidgetExt};
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
+use tokio_stream::{StreamExt, wrappers::UnboundedReceiverStream};
 
 use crate::{
-    data::db::{dr_sync::synchronize_dr_completed_from_store, query::fetch_all_artists},
-    ui::components::{player_bar::PlayerBar, tiles::artist_tile::create_artist_tile},
+    data::db::dr_sync::synchronize_dr_completed_from_store,
+    ui::{
+        components::{player_bar::PlayerBar, tiles::artist_tile::create_artist_tile},
+        grids::async_data_loader::{DataLoaderMessage, spawn_artist_loader},
+    },
     utils::screen::ScreenInfo,
 };
 
@@ -90,86 +94,160 @@ pub fn populate_artist_grid(
                 e
             );
         }
-        // Fetch artists from the database.
-        let fetch_result = fetch_all_artists(&db_pool).await;
-        match fetch_result {
-            Err(e) => {
-                eprintln!("Error fetching artist info: {:?}", e);
-                BUSY.with(|b| b.set(false));
-                artists_inner_stack.set_visible_child_name("empty_state");
 
-                // Update count on error
-                artist_count_label.set_text("0 Artists");
-            }
-            Ok(mut artists) => {
-                // If no artists are found after fetching:
-                if artists.is_empty() {
-                    // Check if scanning label is visible, if so, show scanning state, else empty state.
-                    let state_name = if scanning_label.is_visible() {
-                        "scanning_state"
-                    } else {
-                        "empty_state"
-                    };
-                    artists_inner_stack.set_visible_child_name(state_name);
+        // Spawn the async artist loader
+        let (receiver, _handle) = spawn_artist_loader(db_pool.clone());
+        let mut stream = UnboundedReceiverStream::new(receiver);
 
-                    // Update count if no artists
-                    artist_count_label.set_text("0 Artists");
+        // Variables to track state
+        let mut all_artists: Vec<crate::data::models::Artist> = Vec::new();
 
-                    // Set busy to false.
-                    BUSY.with(|b| b.set(false));
+        // Process messages from the async loader
+        while let Some(message) = stream.next().await {
+            match message {
+                DataLoaderMessage::ArtistData(artists) => {
+                    // Collect artists
+                    all_artists.extend(artists);
 
-                    // Exit the function.
-                    return;
-                }
-
-                // Filter out "Various Artists" as per application logic.
-                artists.retain(|artist| artist.name != "Various Artists");
-
-                // Artists fetched: {}
-                artist_count_label.set_text(&format!("{} Artists", artists.len()));
-
-                // If artists are found, set the stack to show the populated grid.
-                artists_inner_stack.set_visible_child_name("populated_grid");
-
-                // Sort artists based on the `sort_ascending` flag.
-                artists.sort_by(|a, b| {
-                    let cmp = a.name.to_lowercase().cmp(&b.name.to_lowercase());
-                    if sort_ascending { cmp } else { cmp.reverse() }
-                });
-
-                // Get screen info for tile sizing.
-                let cover_size = screen_info.borrow().cover_size;
-                let tile_size = screen_info.borrow().tile_size;
-
-                // Clear existing children from the grid before adding new ones.
-                while let Some(child) = artist_grid.first_child() {
-                    artist_grid.remove(&child);
-                }
-
-                // Create and insert a tile for each artist.
-                for artist in artists {
-                    let tile = Rc::new(create_artist_tile(
-                        artist.id,
-                        &artist.name,
-                        cover_size,
-                        tile_size,
-                        "",
-                        stack_rc.clone(),
+                    // Update UI with new artists without blocking
+                    update_artist_grid_ui(
+                        &artist_grid,
+                        &all_artists,
+                        sort_ascending,
+                        &stack_rc,
+                        &left_btn_stack_rc,
+                        &right_btn_box_rc,
+                        &screen_info,
+                        &nav_history,
+                        &sender,
+                        &show_dr_badges,
+                        &use_original_year,
+                        &player_bar,
                         db_pool.clone(),
-                        left_btn_stack_rc.clone(),
-                        right_btn_box_rc.clone(),
-                        nav_history.clone(),
-                        sender.clone(),
-                        show_dr_badges.clone(),
-                        use_original_year.clone(),
-                        player_bar.clone(),
-                    ));
-                    artist_grid.insert(&*tile, -1);
+                    )
+                    .await;
                 }
-                // Ensure the populated grid is visible after adding tiles.
-                artists_inner_stack.set_visible_child_name("populated_grid");
+                DataLoaderMessage::AlbumData(_) => {
+                    // This message type is not relevant for artist grid population
+                    // We can safely ignore it
+                }
+                DataLoaderMessage::Progress(processed, total) => {
+                    // Update progress in UI if needed
+                    if total > 0 {
+                        artist_count_label
+                            .set_text(&format!("Loading... {} of {} Artists", processed, total));
+                    }
+                }
+                DataLoaderMessage::Completed => {
+                    // Final update with sorted artists
+                    if !all_artists.is_empty() {
+                        // Filter out "Various Artists" as per application logic.
+                        all_artists.retain(|artist| artist.name != "Various Artists");
+
+                        // Artists fetched: {}
+                        artist_count_label.set_text(&format!("{} Artists", all_artists.len()));
+
+                        // If artists are found, set the stack to show the populated grid.
+                        artists_inner_stack.set_visible_child_name("populated_grid");
+
+                        // Sort artists based on the `sort_ascending` flag.
+                        all_artists.sort_by(|a, b| {
+                            let cmp = a.name.to_lowercase().cmp(&b.name.to_lowercase());
+                            if sort_ascending { cmp } else { cmp.reverse() }
+                        });
+
+                        // Update UI with sorted artists
+                        update_artist_grid_ui(
+                            &artist_grid,
+                            &all_artists,
+                            sort_ascending,
+                            &stack_rc,
+                            &left_btn_stack_rc,
+                            &right_btn_box_rc,
+                            &screen_info,
+                            &nav_history,
+                            &sender,
+                            &show_dr_badges,
+                            &use_original_year,
+                            &player_bar,
+                            db_pool.clone(),
+                        )
+                        .await;
+
+                        // Ensure the populated grid is visible after adding tiles.
+                        artists_inner_stack.set_visible_child_name("populated_grid");
+                    } else {
+                        // If no artists are found after fetching:
+                        // Check if scanning label is visible, if so, show scanning state, else empty state.
+                        let state_name = if scanning_label.is_visible() {
+                            "scanning_state"
+                        } else {
+                            "empty_state"
+                        };
+                        artists_inner_stack.set_visible_child_name(state_name);
+
+                        // Update count if no artists
+                        artist_count_label.set_text("0 Artists");
+                    }
+
+                    BUSY.with(|b| b.set(false));
+                    break;
+                }
+                DataLoaderMessage::Error(e) => {
+                    eprintln!("Error loading artist data: {}", e);
+                    BUSY.with(|b| b.set(false));
+                    artists_inner_stack.set_visible_child_name("empty_state");
+                    artist_count_label.set_text("0 Artists");
+                    break;
+                }
             }
         }
-        BUSY.with(|b| b.set(false)); // Finally, set busy to false.
     });
+}
+
+/// Updates the artist grid UI with the provided artists
+async fn update_artist_grid_ui(
+    artist_grid: &FlowBox,
+    artists: &[crate::data::models::Artist],
+    _sort_ascending: bool,
+    stack_rc: &Rc<ViewStack>,
+    left_btn_stack_rc: &Rc<ViewStack>,
+    right_btn_box_rc: &Rc<Clamp>,
+    screen_info: &Rc<RefCell<ScreenInfo>>,
+    nav_history: &Rc<RefCell<Vec<String>>>,
+    sender: &UnboundedSender<()>,
+    show_dr_badges: &Rc<Cell<bool>>,
+    use_original_year: &Rc<Cell<bool>>,
+    player_bar: &PlayerBar,
+    db_pool: Arc<SqlitePool>,
+) {
+    // Get screen info for tile sizing.
+    let cover_size = screen_info.borrow().cover_size;
+    let tile_size = screen_info.borrow().tile_size;
+
+    // Clear existing children from the grid before adding new ones.
+    while let Some(child) = artist_grid.first_child() {
+        artist_grid.remove(&child);
+    }
+
+    // Create and insert a tile for each artist.
+    for artist in artists {
+        let tile = Rc::new(create_artist_tile(
+            artist.id,
+            &artist.name,
+            cover_size,
+            tile_size,
+            "",
+            stack_rc.clone(),
+            db_pool.clone(),
+            left_btn_stack_rc.clone(),
+            right_btn_box_rc.clone(),
+            nav_history.clone(),
+            sender.clone(),
+            show_dr_badges.clone(),
+            use_original_year.clone(),
+            player_bar.clone(),
+        ));
+        artist_grid.insert(&*tile, -1);
+    }
 }

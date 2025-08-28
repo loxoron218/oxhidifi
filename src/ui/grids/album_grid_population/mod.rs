@@ -9,18 +9,21 @@ use glib::{ControlFlow::Continue, MainContext, timeout_add_local};
 use gtk4::{FlowBox, Label, Stack};
 use libadwaita::prelude::WidgetExt;
 use sqlx::SqlitePool;
+use tokio_stream::{StreamExt, wrappers::UnboundedReceiverStream};
 
 use crate::{
     data::db::dr_sync::synchronize_dr_completed_background,
     ui::{
         components::{player_bar::PlayerBar, sorting::sorting_types::SortOrder},
         grids::{
-            album_grid_population::{
-                data_handler::fetch_and_process_album_data, ui_builder::create_album_tile,
-            },
+            album_grid_population::{sorting::sort_albums, ui_builder::create_album_tile},
             album_grid_state::{
                 AlbumGridItem,
                 AlbumGridState::{Empty, Populated, Scanning},
+            },
+            async_data_loader::{
+                DataLoaderMessage::{AlbumData, ArtistData, Completed, Error, Progress},
+                spawn_album_loader,
             },
         },
     },
@@ -28,7 +31,6 @@ use crate::{
 };
 
 // Import the submodules
-mod data_handler;
 mod sorting;
 mod ui_builder;
 
@@ -94,58 +96,95 @@ pub async fn populate_albums_grid(
         }
     });
 
-    // Fetch and process album data
-    match fetch_and_process_album_data(&db_pool).await {
-        Err(e) => {
-            // Handle error case
-            eprintln!("Error fetching album display info: {:?}", e);
+    // Spawn the async album loader
+    let (receiver, _handle) = spawn_album_loader(db_pool.clone());
+    let mut stream = UnboundedReceiverStream::new(receiver);
 
-            // On error, revert busy state and show an empty state.
-            IS_BUSY.with(|cell| cell.set(false));
-            albums_inner_stack.set_visible_child_name(Empty.as_str());
+    // Variables to track state
+    let mut all_albums: Vec<AlbumGridItem> = Vec::new();
 
-            // Update count on error
-            album_count_label.set_text("0 Albums");
-        }
-        Ok(mut albums) => {
-            // Determine the appropriate state to show if no albums are found.
-            if albums.is_empty() {
-                let state_to_show = if scanning_label.is_visible() {
-                    Scanning.as_str()
-                } else {
-                    Empty.as_str()
-                };
-                albums_inner_stack.set_visible_child_name(state_to_show);
+    // Process messages from the async loader
+    while let Some(message) = stream.next().await {
+        match message {
+            AlbumData(albums) => {
+                // Collect albums for sorting
+                all_albums.extend(albums);
 
-                // Update count if no albums
-                album_count_label.set_text("0 Albums");
-                IS_BUSY.with(|cell| cell.set(false));
-                return;
+                // Update UI with new albums without blocking
+                process_albums_in_batches(
+                    all_albums.clone(),
+                    albums_grid,
+                    screen_info,
+                    show_dr_badges.clone(),
+                    use_original_year.clone(),
+                    player_bar.clone(),
+                    db_pool.clone(),
+                )
+                .await;
             }
+            ArtistData(_) => {
+                // This message type is not relevant for album grid population
+                // We can safely ignore it
+            }
+            Progress(processed, total) => {
+                // Update progress in UI if needed
+                if total > 0 {
+                    album_count_label
+                        .set_text(&format!("Loading... {} of {} Albums", processed, total));
+                }
+            }
+            Completed => {
+                // Final update with sorted albums
+                if !all_albums.is_empty() {
+                    // Update album count
+                    album_count_label.set_text(&format!("{} Albums", all_albums.len()));
 
-            // Update album count
-            album_count_label.set_text(&format!("{} Albums", albums.len()));
+                    // If albums are found, transition to the populated grid state.
+                    albums_inner_stack.set_visible_child_name(Populated.as_str());
 
-            // If albums are found, transition to the populated grid state.
-            albums_inner_stack.set_visible_child_name(Populated.as_str());
+                    // Multi-level sort albums according to user-defined sort orders.
+                    sort_albums(&mut all_albums, &sort_orders, sort_ascending);
 
-            // Multi-level sort albums according to user-defined sort orders.
-            sorting::sort_albums(&mut albums, &sort_orders, sort_ascending);
+                    // Process all albums in batches to maintain UI responsiveness
+                    process_albums_in_batches(
+                        all_albums.clone(),
+                        albums_grid,
+                        screen_info,
+                        show_dr_badges.clone(),
+                        use_original_year.clone(),
+                        player_bar.clone(),
+                        db_pool.clone(),
+                    )
+                    .await;
+                } else {
+                    // Determine the appropriate state to show if no albums are found.
+                    let state_to_show = if scanning_label.is_visible() {
+                        Scanning.as_str()
+                    } else {
+                        Empty.as_str()
+                    };
+                    albums_inner_stack.set_visible_child_name(state_to_show);
 
-            // Process albums in batches to maintain UI responsiveness
-            process_albums_in_batches(
-                albums,
-                albums_grid,
-                screen_info,
-                show_dr_badges,
-                use_original_year,
-                player_bar,
-                db_pool,
-            )
-            .await;
+                    // Update count if no albums
+                    album_count_label.set_text("0 Albums");
+                }
 
-            // Reset busy flag after all albums have been processed.
-            IS_BUSY.with(|cell| cell.set(false));
+                // Reset busy flag after all albums have been processed.
+                IS_BUSY.with(|cell| cell.set(false));
+                break;
+            }
+            Error(e) => {
+                // Handle error case
+                eprintln!("Error loading album data: {}", e);
+
+                // On error, revert busy state and show an empty state.
+                IS_BUSY.with(|cell| cell.set(false));
+                albums_inner_stack.set_visible_child_name(Empty.as_str());
+
+                // Update count on error
+                album_count_label.set_text("0 Albums");
+                break;
+            }
         }
     }
 }
@@ -170,6 +209,11 @@ async fn process_albums_in_batches(
     const BATCH_SIZE: usize = 50;
     let mut processed_count = 0;
     let use_original_year_clone_for_loop = use_original_year.clone();
+
+    // Clear existing children from the grid to prepare for new population.
+    while let Some(child) = albums_grid.first_child() {
+        albums_grid.remove(&child);
+    }
 
     for album_info in &albums {
         // Create the album tile
