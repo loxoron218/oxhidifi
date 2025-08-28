@@ -6,6 +6,6 @@ pub mod main_window;
 pub mod pages;
 pub mod search;
 pub mod search_bar;
-pub mod settings_window;
+pub mod settings;
 
 pub use app::App;
