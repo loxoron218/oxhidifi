@@ -27,7 +27,7 @@ use crate::{
             album_grid_rebuilder::rebuild_albums_grid_for_window,
             artist_grid_rebuilder::rebuild_artist_grid_for_window,
         },
-        pages::album_page::album_page,
+        pages::album::album_page::album_page,
         search::connect_live_search,
     },
 };

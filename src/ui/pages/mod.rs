@@ -1,2 +1,2 @@
-pub mod album_page;
-pub mod artist_page;
+pub mod album;
+pub mod artist;

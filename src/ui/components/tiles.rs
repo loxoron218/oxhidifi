@@ -28,7 +28,7 @@ use crate::{
     ui::{
         components::player_bar::PlayerBar,
         grids::album_grid_state::AlbumGridItem,
-        pages::{album_page::album_page, artist_page::artist_page},
+        pages::{album::album_page::album_page, artist::artist_page::artist_page},
     },
     utils::formatting::{format_freq_khz, format_year_info},
 };
