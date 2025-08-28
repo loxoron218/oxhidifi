@@ -1,10 +1,11 @@
 use std::{
-    collections::{HashMap, hash_map::DefaultHasher},
+    collections::hash_map::DefaultHasher,
     error::Error,
     fmt::{Display, Formatter, Result as FmtResult},
     fs::create_dir_all,
     hash::Hasher,
     io::{self, Cursor},
+    num::NonZeroUsize,
     path::{Path, PathBuf},
     sync::{Arc, RwLock},
     time::{Duration, Instant},
@@ -18,6 +19,7 @@ use image::{
     imageops::FilterType::{CatmullRom, Lanczos3, Triangle},
 };
 use libadwaita::prelude::PixbufLoaderExt;
+use lru::LruCache;
 
 use crate::utils::image_loader::ImageLoaderError::{Glib, Image, InvalidPath, Io};
 
@@ -98,13 +100,11 @@ impl From<glib::Error> for ImageLoaderError {
 /// Memory cache entry
 ///
 /// Represents a single entry in the memory cache, storing both the pixbuf
-/// and metadata about when it was last accessed for LRU eviction.
+/// and metadata about expiration and size.
 #[derive(Clone)]
 struct CacheEntry {
     /// The cached image data
     pixbuf: Pixbuf,
-    /// Timestamp of the last access for LRU eviction
-    last_access: Instant,
     /// Expiration time for the cache entry
     expires_at: Instant,
     /// Estimated size of the entry in bytes
@@ -117,14 +117,16 @@ struct CacheEntry {
 /// It uses a Least Recently Used (LRU) eviction policy to manage memory usage,
 /// automatically removing the least recently accessed entries when the cache
 /// exceeds its maximum capacity or size limits.
-#[derive(Clone)]
+///
+/// This implementation uses the `lru` crate for efficient O(1) operations
+/// and tracks total cache size incrementally for O(1) size checks.
 struct MemoryCache {
-    /// Thread-safe storage for cache entries
-    entries: Arc<RwLock<HashMap<String, CacheEntry>>>,
-    /// Maximum number of entries to store in the cache
-    max_entries: usize,
+    /// Thread-safe LRU cache storage
+    cache: Arc<RwLock<LruCache<String, CacheEntry>>>,
     /// Maximum total size of entries in the cache (in bytes)
     max_size: usize,
+    /// Current total size of all entries in the cache
+    total_size: Arc<RwLock<usize>>,
     /// Time-to-live for cache entries
     ttl: Duration,
 }
@@ -140,19 +142,22 @@ impl MemoryCache {
     /// # Returns
     /// A new `MemoryCache` instance
     fn new(max_entries: usize, max_size: usize, ttl: Duration) -> Self {
+        // Create an LRU cache with the specified maximum entries
         Self {
-            entries: Arc::new(RwLock::new(HashMap::new())),
-            max_entries,
+            cache: Arc::new(RwLock::new(LruCache::new(
+                NonZeroUsize::new(max_entries).unwrap(),
+            ))),
             max_size,
+            total_size: Arc::new(RwLock::new(0)),
             ttl,
         }
     }
 
     /// Retrieves an image from the cache if it exists and hasn't expired
     ///
-    /// If the image exists in the cache and hasn't expired, this method updates
-    /// its last access timestamp and returns a clone of the pixbuf. If the image
-    /// is not in the cache or has expired, it returns `None`.
+    /// If the image exists in the cache and hasn't expired, this method promotes
+    /// the entry to most recently used and returns a clone of the pixbuf.
+    /// If the image is not in the cache or has expired, it returns `None`.
     ///
     /// # Arguments
     /// * `key` - The cache key to look up
@@ -160,24 +165,46 @@ impl MemoryCache {
     /// # Returns
     /// `Some(pixbuf)` if the image is in the cache and hasn't expired, `None` otherwise
     fn get(&self, key: &str) -> Option<Pixbuf> {
-        let mut entries = self.entries.write().unwrap();
+        let mut cache = self.cache.write().unwrap();
         let now = Instant::now();
 
-        // Remove expired entries
-        entries.retain(|_, entry| entry.expires_at > now);
-        if let Some(entry) = entries.get_mut(key) {
-            if entry.expires_at <= now {
-                // Entry is expired, remove it and let the function fall through to return None.
-                entries.remove(key);
-            } else {
-                // Entry is valid, update it and return the value immediately.
-                entry.last_access = now;
+        // Check if the entry exists and hasn't expired
+        if let Some(entry) = cache.get(key) {
+            if entry.expires_at > now {
+                // Entry is valid, return a clone of the pixbuf
+                // The get() operation already promoted it to most recently used
                 return Some(entry.pixbuf.clone());
             }
+
+            // Entry is expired, fall through to return None
         }
 
-        // Return None if the entry was not found, or if it was found but expired.
+        // Remove expired entry if it exists
+        if cache.contains(key) {
+            cache.pop(key);
+        }
+
+        // Return None if the entry was not found or was expired
         None
+    }
+
+    /// Evicts entries from the cache until the total size is within limits
+    ///
+    /// This method efficiently removes the least recently used entries
+    /// until the total cache size is within the maximum allowed size.
+    ///
+    /// Time complexity: O(M) where M is the number of entries evicted
+    fn evict_until_within_limit(&self) {
+        let mut cache = self.cache.write().unwrap();
+        let mut total_size = self.total_size.write().unwrap();
+        while *total_size > self.max_size && !cache.is_empty() {
+            // Efficiently remove the least recently used entry
+            if let Some((_, entry)) = cache.pop_lru() {
+                *total_size -= entry.size;
+            } else {
+                break;
+            }
+        }
     }
 
     /// Inserts an image into the cache
@@ -189,7 +216,6 @@ impl MemoryCache {
     /// * `key` - The cache key to store the image under
     /// * `pixbuf` - The image data to store
     fn insert(&self, key: String, pixbuf: Pixbuf) {
-        let mut entries = self.entries.write().unwrap();
         let now = Instant::now();
 
         // Estimate size: width * height * 4 bytes per pixel
@@ -198,41 +224,46 @@ impl MemoryCache {
         // Create new entry
         let entry = CacheEntry {
             pixbuf,
-            last_access: now,
             expires_at: now + self.ttl,
             size,
         };
 
-        // Insert the new entry
-        entries.insert(key, entry);
+        {
+            let mut cache = self.cache.write().unwrap();
+            let mut total_size = self.total_size.write().unwrap();
 
-        // Perform LRU eviction if we exceed max_entries
-        if entries.len() > self.max_entries {
-            // Find the least recently used entry (smallest last_access)
-            if let Some(lru_key) = entries
-                .iter()
-                .min_by_key(|(_, entry)| entry.last_access)
-                .map(|(key, _)| key.clone())
-            {
-                entries.remove(&lru_key);
+            // If an entry with this key already exists, subtract its size from total
+            if let Some(old_entry) = cache.pop(&key) {
+                *total_size -= old_entry.size;
             }
+
+            // Add the new entry size to total
+            *total_size += size;
+
+            // Insert the new entry (this automatically promotes it to most recently used)
+            cache.put(key, entry);
         }
 
         // Perform size-based eviction if we exceed max_size
-        let mut total_size: usize = entries.values().map(|entry| entry.size).sum();
-        while total_size > self.max_size && !entries.is_empty() {
-            // Find the least recently used entry (smallest last_access)
-            if let Some(lru_key) = entries
-                .iter()
-                .min_by_key(|(_, entry)| entry.last_access)
-                .map(|(key, _)| key.clone())
-            {
-                if let Some(removed_entry) = entries.remove(&lru_key) {
-                    total_size -= removed_entry.size;
-                }
-            } else {
-                break;
-            }
+        self.evict_until_within_limit();
+    }
+}
+
+// Implement Clone manually for MemoryCache since LruCache doesn't implement Clone
+impl Clone for MemoryCache {
+    fn clone(&self) -> Self {
+        // For cloning, we create a new empty cache with the same parameters
+        // This is a reasonable approach since cloning a cache is rarely needed
+        // and recreating it is simpler than deep cloning all entries
+        let cache_size = self.cache.read().unwrap().cap();
+
+        // Clone implementation creates a new empty cache with the same parameters
+        // This is a shallow clone that doesn't copy the actual cache entries
+        Self {
+            cache: Arc::new(RwLock::new(LruCache::new(cache_size))),
+            max_size: self.max_size,
+            total_size: Arc::new(RwLock::new(0)),
+            ttl: self.ttl,
         }
     }
 }
