@@ -12,7 +12,7 @@ use tokio::sync::mpsc::UnboundedSender;
 
 use crate::{
     data::db::{dr_sync::synchronize_dr_completed_from_store, query::fetch_all_artists},
-    ui::components::{player_bar::PlayerBar, tiles::create_artist_tile},
+    ui::components::{player_bar::PlayerBar, tiles::artist_tile::create_artist_tile},
     utils::screen::ScreenInfo,
 };
 

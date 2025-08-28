@@ -17,7 +17,7 @@ use tokio::sync::mpsc::UnboundedSender;
 use crate::{
     data::db::query::{search_album_display_info, search_artists},
     ui::components::player_bar::PlayerBar,
-    ui::components::tiles::{create_album_tile, create_artist_tile},
+    ui::components::tiles::{album_tile::create_album_tile, artist_tile::create_artist_tile},
     utils::screen::ScreenInfo,
 };
 

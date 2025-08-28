@@ -23,7 +23,7 @@ use crate::{
     ui::{
         components::{
             player_bar::PlayerBar,
-            tiles::{create_album_cover, create_album_label, create_dr_overlay},
+            tiles::helpers::{create_album_cover, create_album_label, create_dr_overlay},
         },
         pages::album::album_page::album_page,
         pages::artist::data::artist_data::AlbumDisplayInfoWithYear,
