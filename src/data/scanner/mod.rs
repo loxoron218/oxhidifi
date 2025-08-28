@@ -49,7 +49,7 @@ pub use self::{dr_scanner::scan_dr_value, file_processor::process_files_batch};
 fn is_supported_audio_file(path: &Path) -> bool {
     // List of supported audio file extensions
     const SUPPORTED_EXTENSIONS: [&str; 7] = ["mp3", "flac", "ogg", "wav", "m4a", "opus", "aiff"];
-    
+
     // Extract extension, convert to lowercase, and check if it's in our supported list
     path.extension()
         .and_then(|e| e.to_str())
@@ -95,7 +95,7 @@ pub fn scan_folder<'a>(
                 return Ok(());
             }
         };
-        
+
         // Vector to collect audio files found in this directory for batch processing
         let mut audio_files = Vec::new();
 
@@ -175,16 +175,16 @@ pub async fn scan_folder_parallel(
             // Acquire a permit from the semaphore to limit concurrency
             // acquire_owned() gives us an owned permit that can be moved into the task
             let permit = semaphore.clone().acquire_owned().await?;
-            
+
             // Get the next directory to scan from the front of the queue
             let path = queue.lock().await.pop_front().unwrap();
-            
+
             // Clone the necessary values for the task
             let pool_clone = pool.clone();
             let queue_clone = queue.clone();
             let folder_id_clone = folder_id;
-            
-^            // Spawn a new task to scan this directory
+
+            // Spawn a new task to scan this directory
             join_set.spawn(async move {
                 // Perform the actual directory scanning
                 let result =
@@ -249,7 +249,7 @@ async fn scan_single_directory(
             return Ok(());
         }
     };
-    
+
     // Vector to collect audio files found in this directory for batch processing
     let mut audio_files = Vec::new();
 
