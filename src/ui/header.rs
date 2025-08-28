@@ -9,12 +9,33 @@ use libadwaita::{
 use crate::ui::search_bar::SearchBar;
 
 /// Helper to create a GTK Button with a specified icon name.
+///
+/// This function creates a button with only an icon, no text label, using GTK's
+/// built-in icon naming system.
+///
+/// # Arguments
+///
+/// * `icon_name` - A string slice that holds the name of the icon to display on the button.
+///
+/// # Returns
+///
+/// A new `Button` instance with the specified icon.
 fn create_icon_button(icon_name: &str) -> Button {
     Button::builder().icon_name(icon_name).build()
 }
 
 /// Helper to create a horizontal Box and wrap it in a Clamp for ViewStack children.
+///
 /// This pattern is common for adding widgets to a ViewStack, ensuring proper layout.
+/// The Clamp container provides responsive sizing behavior.
+///
+/// # Arguments
+///
+/// * `widget` - A reference to a widget that implements the `IsA<Widget>` trait.
+///
+/// # Returns
+///
+/// A new `Clamp` widget containing the provided widget inside a horizontal Box.
 fn create_view_stack_child_box(widget: &impl IsA<Widget>) -> Clamp {
     let inner_box = Box::builder().orientation(Horizontal).build();
     inner_box.append(widget);
@@ -22,7 +43,19 @@ fn create_view_stack_child_box(widget: &impl IsA<Widget>) -> Clamp {
 }
 
 /// Helper function to create a toggle button with an icon and label.
-/// This pattern is used for the "Albums" and "Artists" tabs.
+///
+/// This pattern is used for the "Albums" and "Artists" tabs. The button is styled
+/// to remove the default frame for a cleaner look, and contains both an icon and text.
+///
+/// # Arguments
+///
+/// * `icon_name` - A string slice that holds the name of the icon to display.
+/// * `label_text` - A string slice that holds the text label to display.
+/// * `is_active` - A boolean indicating whether the toggle button should be initially active.
+///
+/// # Returns
+///
+/// A new `ToggleButton` instance with the specified icon, label, and initial state.
 fn create_tab_toggle_button(icon_name: &str, label_text: &str, is_active: bool) -> ToggleButton {
     let button = ToggleButton::builder().active(is_active).build();
 
