@@ -1,107 +1,132 @@
 /* =====================
-   General Grid Styles
+   Component: Album Tiles
    ===================== */
-.album-cover-border {
-    border: 1px solid rgba(0, 0, 0, 0.1);
-}
+
 .album-artist-label {
-    color: var(--window_fg_color, #AAA);
-    font-size: 0.95em;
-    font-weight: 400;
-}
-.album-format-label {
-    color: var(--window_fg_color, #666);
-    font-size: 0.9em;
-    font-style: italic;
-    margin-top: 2px;
-}
-.album-meta-label {
-    color: var(--window_fg_color, #888);
-    font-size: 0.9em;
-    font-style: italic;
-}
-.album-technical-label {
-    font-size: 13px;
-    color: #bbb;
-    margin-bottom: 2px;
-    font-family: monospace;
-}
-.album-tile {
-    border-radius: 12px;
-    background: transparent;
-    transition: background 0.2s, box-shadow 0.2s;
-    box-shadow: none;
-}
-.album-tile:hover, .album-tile:selected, .album-tile:focus {
-    background: var(--accent_color, rgba(128,128,128,0.08));
-    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-}
-.album-title-label {
-    font-weight: 700;
-    font-size: 1.1em;
+  color: var(--window_fg_color, #AAA);
+  font-size: 0.95em;
+  font-weight: 400;
 }
 
-/* =====================
-   Album Detail Page Styles
-   ===================== */
-.album-detail-page .album-artist-label {
-    font-size: 20px;
-    font-weight: 500;
-    color: var(--window_fg_color, #AAA);
-    margin-bottom: 6px;
+.album-cover-border {
+  border: 1px solid rgba(0, 0, 0, 0.1);
 }
-.album-detail-page .album-meta-label {
-    font-size: 15px;
-    color: #aaa;
-    margin-bottom: 6px;
-}
-.album-detail-page .album-technical-label {
-    font-size: 13px;
-    color: #bbb;
-    margin-bottom: 2px;
-    font-family: monospace;
-}
-.album-detail-page .album-title-label {
-    font-size: 28px;
-    font-weight: bold;
-    margin-bottom: 8px;
-}
-.album-header {
-    margin-bottom: 24px;
-}
-.album-info-box {
-    padding: 0 0 8px 0;
-}
+
 .album-cover-play {
-    background: rgba(0,0,0,0.6);
-    border-radius: 50%;
-    color: #fff;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.20);
-    transition: background 0.2s;
+  background: rgba(0,0,0,0.6);
+  border-radius: 50%;
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.20);
+  transition: background 0.2s;
 }
+
 .album-cover-play:hover {
-    background: rgba(0,0,0,0.9);
+  background: rgba(0,0,0,0.9);
 }
-.track-list-container {
-    padding: 24px;
+
+.album-format-label {
+  color: var(--window_fg_color, #666);
+  font-size: 0.9em;
+  font-style: italic;
+  margin-top: 2px;
+}
+
+.album-meta-label {
+  color: var(--window_fg_color, #888);
+  font-size: 0.9em;
+  font-style: italic;
+}
+
+.album-technical-label {
+  font-size: 13px;
+  color: #bbb;
+  margin-bottom: 2px;
+  font-family: monospace;
+}
+
+.album-title-label {
+  font-weight: 700;
+  font-size: 1.1em;
+}
+
+.album-tile {
+  border-radius: 12px;
+  background: transparent;
+  transition: background 0.2s, box-shadow 0.2s;
+  box-shadow: none;
+}
+
+.album-tile:hover,
+.album-tile:selected,
+.album-tile:focus {
+  background: var(--accent_color, rgba(128, 128, 128, 0.08));
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
 }
 
 /* =====================
-   DR Badge Styles
+   Component: Album Detail Page
    ===================== */
-.dr-badge-label {
-    background: var(--accent_color, #888);
-    border: 2px solid var(--window_fg_color, #222);
-    border-radius: 4px;
-    color: var(--window_bg_color, #fff);
-    font-family: monospace;
-    font-size: 28px;
-    font-weight: bold;
-    margin: 0;
-    min-height: 44px;
-    min-width: 44px;
-    padding: 0;
+
+.album-detail-page .album-artist-label {
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--window_fg_color, #AAA);
+  margin-bottom: 6px;
 }
+
+.album-detail-page .album-meta-label {
+  font-size: 15px;
+  color: #aaa;
+  margin-bottom: 6px;
+}
+
+.album-detail-page .album-technical-label {
+  font-size: 13px;
+  color: #bbb;
+  margin-bottom: 2px;
+  font-family: monospace;
+}
+
+.album-detail-page .album-title-label {
+  font-size: 28px;
+  font-weight: bold;
+  margin-bottom: 8px;
+}
+
+.album-detail-page .dr-badge-label {
+  opacity: 1.0;
+}
+
+.album-header {
+  margin-bottom: 24px;
+}
+
+.album-info-box {
+  padding: 0 0 8px 0;
+}
+
+/* =====================
+   Component: DR Badges
+   ===================== */
+
+.album-detail-page .dr-badge-label {
+  opacity: 1.0;
+}
+
+.dr-badge-label {
+  background: var(--accent_color, #888);
+  border: 2px solid var(--window_fg_color, #222);
+  border-radius: 4px;
+  color: var(--window_bg_color, #fff);
+  font-family: monospace;
+  font-size: 28px;
+  font-weight: bold;
+  margin: 0;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0;
+}
+
 .dr-badge-label.dr-00,
 .dr-badge-label.dr-01,
 .dr-badge-label.dr-02,
@@ -110,33 +135,40 @@
 .dr-badge-label.dr-05,
 .dr-badge-label.dr-06,
 .dr-badge-label.dr-07 {
-    background: var(--error_color, #ff2222);
-    color: var(--window_fg_color, #000);
+  background: var(--error_color, #ff2222);
+  color: var(--window_fg_color, #000);
 }
+
 .dr-badge-label.dr-08 {
-    background: var(--warning_color, #ff8800);
-    color: var(--window_fg_color, #000);
+  background: var(--warning_color, #ff8800);
+  color: var(--window_fg_color, #000);
 }
+
 .dr-badge-label.dr-09 {
-    background: var(--warning_color, #ffaa00);
-    color: var(--window_fg_color, #000);
+  background: var(--warning_color, #ffaa00);
+  color: var(--window_fg_color, #000);
 }
+
 .dr-badge-label.dr-10 {
-    background: var(--warning_color, #ffee00);
-    color: var(--window_fg_color, #000);
+  background: var(--warning_color, #ffee00);
+  color: var(--window_fg_color, #000);
 }
+
 .dr-badge-label.dr-11 {
-    background: var(--success_color, #ccff00);
-    color: var(--window_fg_color, #000);
+  background: var(--success_color, #ccff00);
+  color: var(--window_fg_color, #000);
 }
+
 .dr-badge-label.dr-12 {
-    background: var(--success_color, #99ff00);
-    color: var(--window_fg_color, #000);
+  background: var(--success_color, #99ff00);
+  color: var(--window_fg_color, #000);
 }
+
 .dr-badge-label.dr-13 {
-    background: var(--success_color, #44dd00);
-    color: var(--window_fg_color, #000);
+  background: var(--success_color, #44dd00);
+  color: var(--window_fg_color, #000);
 }
+
 .dr-badge-label.dr-14,
 .dr-badge-label.dr-15,
 .dr-badge-label.dr-16,
@@ -144,90 +176,92 @@
 .dr-badge-label.dr-18,
 .dr-badge-label.dr-19,
 .dr-badge-label.dr-20 {
-    background: var(--success_color, #00cc44);
-    color: var(--window_fg_color, #000);
+  background: var(--success_color, #00cc44);
+  color: var(--window_fg_color, #000);
 }
+
 .dr-badge-label.dr-badge-label-grid {
-    font-size: 18px;
-    min-width: 28px;
-    min-height: 28px;
-    padding: 0;
+  font-size: 18px;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
 }
+
 .dr-badge-label.dr-completed {
-    border: 2px solid #000;
-    color: #000;
-    opacity: 1.0;
+  border: 2px solid #000;
+  color: #000;
+  opacity: 1.0;
 }
+
 .dr-badge-label.dr-na {
-    background: var(--dim_color, #555);
-    color: var(--window_bg_color, #fff);
-    font-size: 14px;
-    opacity: 1.0;
+  background: var(--dim_color, #555);
+  color: var(--window_bg_color, #fff);
+  font-size: 14px;
+  opacity: 1.0;
 }
+
 .dr-badge-label:not(.dr-completed) {
-    opacity: 0.4;
-}
-.album-detail-page .dr-badge-label {
-    opacity: 1.0;
+  opacity: 0.4;
 }
 
 /* =====================
-   Player Bar Styles
+   Component: Player Bar
    ===================== */
+
 .player-bar {
-    background-color: #333;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-    padding: 12px 16px;
+  background-color: #333;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 12px 16px;
 }
 
 .player-bar .album-title {
-    font-weight: bold;
-    font-size: 1.1em;
-    margin-bottom: 4px;
+  font-weight: bold;
+  font-size: 1.1em;
+  margin-bottom: 4px;
 }
 
 .player-bar .artist-name {
-    color: #ccc;
-    margin-bottom: 4px;
-}
-
-.player-bar .technical-info {
-    color: #aaa;
-    font-size: 0.9em;
-    margin-bottom: 8px;
-}
-
-.player-bar .time-label {
-    color: #ccc;
-    font-size: 0.9em;
-    margin-top: 4px;
-}
-
-.player-bar .media-button {
-    padding: 8px;
-    min-width: 40px;
-    min-height: 40px;
-}
-
-.player-bar .volume-slider {
-    margin: 0 8px;
-    min-width: 80px;
-}
-
-.player-bar .indicator {
-    min-width: 24px;
-    min-height: 24px;
-    border-radius: 50%;
-    background-color: #555;
-    color: #fff;
-    font-size: 0.7em;
-    font-weight: bold;
+  color: #ccc;
+  margin-bottom: 4px;
 }
 
 .player-bar .bit-perfect-indicator {
-    background-color: #4a86e8;
+  background-color: #4a86e8;
 }
 
 .player-bar .gapless-indicator {
-    background-color: #34a853;
+  background-color: #34a853;
+}
+
+.player-bar .indicator {
+  min-width: 24px;
+  min-height: 24px;
+  border-radius: 50%;
+  background-color: #555;
+  color: #fff;
+  font-size: 0.7em;
+  font-weight: bold;
+}
+
+.player-bar .media-button {
+  padding: 8px;
+  min-width: 40px;
+  min-height: 40px;
+}
+
+.player-bar .technical-info {
+  color: #aaa;
+  font-size: 0.9em;
+  margin-bottom: 8px;
+}
+
+.player-bar .time-label {
+  color: #ccc;
+  font-size: 0.9em;
+  margin-top: 4px;
+}
+
+.player-bar .volume-slider {
+  margin: 0 8px;
+  min-width: 80px;
 }
