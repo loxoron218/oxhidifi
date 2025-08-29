@@ -15,12 +15,13 @@ use gtk4::{
 };
 use libadwaita::{
     Clamp, ViewStack,
-    prelude::{BoxExt, FixedExt, FlowBoxChildExt, WidgetExt},
+    prelude::{BoxExt, ButtonExt, FixedExt, FlowBoxChildExt, WidgetExt},
 };
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::{
+    data::db::crud::fetch_tracks_by_album,
     ui::{
         components::{
             player_bar::PlayerBar,
@@ -209,6 +210,69 @@ pub fn create_album_tile(
     play_button.set_valign(Center);
     play_button.set_visible(false);
     overlay.add_overlay(&play_button);
+
+    // Add click handler to play button to update player bar
+    let player_bar_clone = player_bar.clone();
+    let db_pool_clone = db_pool.clone();
+    let album_id = album.id;
+    let album_title = album.title.clone();
+    let album_artist = album.artist.clone();
+    let album_cover_art = album.cover_art.clone();
+    play_button.connect_clicked(move |_| {
+        // Clone values for the async block
+        let player_bar_clone = player_bar_clone.clone();
+        let db_pool_clone = db_pool_clone.clone();
+        let album_title = album_title.clone();
+        let album_artist = album_artist.clone();
+        let album_cover_art = album_cover_art.clone();
+
+        // Spawn async task to fetch track information
+        MainContext::default().spawn_local(async move {
+            // Fetch the first track of the album for playback information
+            match fetch_tracks_by_album(&db_pool_clone, album_id).await {
+                Ok(tracks) => {
+                    if let Some(first_track) = tracks.first() {
+                        // Use first track information for the player bar
+                        player_bar_clone.update_with_metadata(
+                            &album_title,
+                            &first_track.title,
+                            &album_artist,
+                            album_cover_art.as_deref().map(Path::new),
+                            first_track.bit_depth,
+                            first_track.frequency,
+                            first_track.format.as_deref(),
+                            first_track.duration,
+                        );
+                    } else {
+                        // Fallback if no tracks found
+                        player_bar_clone.update_with_metadata(
+                            &album_title,
+                            &album_title,
+                            &album_artist,
+                            album_cover_art.as_deref().map(Path::new),
+                            None,
+                            None,
+                            None,
+                            None,
+                        );
+                    }
+                }
+                Err(_) => {
+                    // Fallback if database query fails
+                    player_bar_clone.update_with_metadata(
+                        &album_title,
+                        &album_title,
+                        &album_artist,
+                        album_cover_art.as_deref().map(Path::new),
+                        None,
+                        None,
+                        None,
+                        None,
+                    );
+                }
+            }
+        });
+    });
 
     // Event controller for hover effects on the album cover
     let motion_controller = EventControllerMotion::new();

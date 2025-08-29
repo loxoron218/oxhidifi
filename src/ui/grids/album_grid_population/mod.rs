@@ -200,7 +200,7 @@ async fn process_albums_in_batches(
     show_dr_badges: Rc<Cell<bool>>,
     use_original_year: Rc<Cell<bool>>,
     player_bar: PlayerBar,
-    _db_pool: Arc<SqlitePool>,
+    db_pool: Arc<SqlitePool>,
 ) {
     // BATCH_SIZE: The number of album tiles to process before yielding control
     // back to the GTK main thread. This helps prevent UI freezes during large
@@ -223,6 +223,7 @@ async fn process_albums_in_batches(
             &show_dr_badges,
             &use_original_year_clone_for_loop,
             &player_bar,
+            db_pool.clone(),
         );
 
         // Insert the new album tile into the FlowBox.
