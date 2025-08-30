@@ -3,10 +3,12 @@ mod file_processor;
 
 pub mod library_ops;
 
-use std::{error::Error, future::Future, path::Path, path::PathBuf, pin::Pin, sync::Arc};
+use std::{
+    collections::VecDeque, error::Error, future::Future, path::Path, path::PathBuf, pin::Pin,
+    sync::Arc,
+};
 
 use sqlx::SqlitePool;
-use std::collections::VecDeque;
 use tokio::{
     fs::read_dir,
     sync::{Mutex, Semaphore},
