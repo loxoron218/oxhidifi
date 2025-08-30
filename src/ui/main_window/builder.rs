@@ -237,6 +237,11 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     overlay.add_overlay(&player_bar.container);
     player_bar.container.set_valign(End);
 
+    // Set the main content area for the player bar and connect visibility changes
+    let mut player_bar_mut = player_bar.clone();
+    player_bar_mut.set_main_content_area(vbox_inner.clone());
+    player_bar_mut.connect_visibility_changes();
+
     // Connect all the handlers
     connect_all_handlers(
         &widgets,

@@ -1,12 +1,13 @@
-use std::path::Path;
+use std::{cell::RefCell, path::Path, rc::Rc};
 
 use gdk_pixbuf::Pixbuf;
+use glib::SignalHandlerId;
 use gtk4::{
     Align::Start,
     Box, Button, Image, Label,
     Orientation::{Horizontal, Vertical},
     Scale,
-    prelude::{BoxExt, RangeExt, WidgetExt},
+    prelude::{BoxExt, ObjectExt, RangeExt, WidgetExt},
 };
 
 /// A UI component that displays currently playing track information at the bottom of the window.
@@ -48,6 +49,10 @@ pub struct PlayerBar {
     pub _play_button: Button,
     /// Next track button
     pub _next_button: Button,
+    /// Reference to the main content area that needs padding adjustment
+    main_content_area: Rc<RefCell<Option<Box>>>,
+    /// Signal handler ID for visibility change notifications
+    visibility_handler_id: Option<Rc<SignalHandlerId>>,
 }
 
 impl PlayerBar {
@@ -188,6 +193,59 @@ impl PlayerBar {
             _prev_button: prev_button,
             _play_button: play_button,
             _next_button: next_button,
+            main_content_area: Rc::new(RefCell::new(None)),
+            visibility_handler_id: None,
+        }
+    }
+
+    /// Sets the main content area that needs padding adjustment when player bar visibility changes.
+    ///
+    /// This method should be called once during initialization to provide a reference
+    /// to the main content area (typically vbox_inner from the main window builder).
+    ///
+    /// # Parameters
+    /// * `content_area` - A reference to the main content area Box widget
+    pub fn set_main_content_area(&mut self, content_area: Box) {
+        *self.main_content_area.borrow_mut() = Some(content_area);
+    }
+
+    /// Connects to visibility change notifications for the player bar container.
+    ///
+    /// This method sets up a signal handler that monitors the "visible" property
+    /// of the player bar container. When visibility changes, it adjusts the
+    /// bottom margin of the main content area to prevent overlap.
+    ///
+    /// This method should be called after the player bar has been added to the overlay
+    /// and the main content area has been set.
+    pub fn connect_visibility_changes(&mut self) {
+        // If we already have a handler, disconnect it first
+        // Note: We can't disconnect the handler because SignalHandlerId doesn't implement Clone
+        // This means we might have multiple handlers if this method is called multiple times
+        // In practice, this should only be called once during initialization
+
+        // If we have a content area, connect the visibility change handler
+        if let Some(content_area) = self.main_content_area.borrow().as_ref() {
+            let content_area_weak = ObjectExt::downgrade(content_area);
+            let container_weak = ObjectExt::downgrade(&self.container);
+            let handler_id =
+                self.container
+                    .connect_notify_local(Some("visible"), move |_container, _| {
+                        if let (Some(content_area), Some(container_strong)) =
+                            (content_area_weak.upgrade(), container_weak.upgrade())
+                        {
+                            if container_strong.is_visible() {
+                                // When player bar becomes visible, add bottom margin to content area
+                                // Get the player bar height and use it as margin
+                                let allocation = container_strong.allocation();
+                                let height = allocation.height();
+                                content_area.set_margin_bottom(height);
+                            } else {
+                                // When player bar becomes hidden, remove bottom margin from content area
+                                content_area.set_margin_bottom(0);
+                            }
+                        }
+                    });
+            self.visibility_handler_id = Some(Rc::new(handler_id));
         }
     }
 
@@ -277,5 +335,13 @@ impl PlayerBar {
 
         // Make the player bar visible now that it has track information
         self.container.set_visible(true);
+
+        // Adjust the main content area padding to prevent overlap
+        if let Some(content_area) = self.main_content_area.borrow().as_ref() {
+            // Use a fixed height for the margin based on the player bar's design
+            // The player bar has a fixed height request of 96 pixels for the album art,
+            // plus some padding from the CSS (12px top/bottom), so we'll use 120 pixels
+            content_area.set_margin_bottom(120);
+        }
     }
 }
