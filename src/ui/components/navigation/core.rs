@@ -217,13 +217,28 @@ pub fn handle_back_navigation(
             match prev_page.as_str() {
                 // The `|` operator creates a pattern that matches either constant.
                 VIEW_STACK_ALBUMS | VIEW_STACK_ARTISTS => {
-                    navigate_back_to_main_grid(
-                        &left_btn_stack,
-                        &right_btn_box,
-                        &refresh_library_ui,
-                        &sort_ascending,
-                        &sort_ascending_artists,
-                    );
+                    // Check if we're already on the same main grid view to avoid unnecessary refresh
+                    let current_page = stack.visible_child_name();
+                    if let Some(current) = current_page {
+                        if current != prev_page {
+                            navigate_back_to_main_grid(
+                                &left_btn_stack,
+                                &right_btn_box,
+                                &refresh_library_ui,
+                                &sort_ascending,
+                                &sort_ascending_artists,
+                            );
+                        }
+                    } else {
+                        // If we can't determine the current page, refresh for safety
+                        navigate_back_to_main_grid(
+                            &left_btn_stack,
+                            &right_btn_box,
+                            &refresh_library_ui,
+                            &sort_ascending,
+                            &sort_ascending_artists,
+                        );
+                    }
                 }
 
                 // This arm explicitly does nothing for any other page values.
@@ -235,13 +250,29 @@ pub fn handle_back_navigation(
             // If history is empty, navigate to the last remembered tab and reset header.
             let tab = last_tab.get(); // Get the name of the last active tab.
             stack.set_visible_child_name(tab);
-            navigate_back_to_main_grid(
-                &left_btn_stack,
-                &right_btn_box,
-                &refresh_library_ui,
-                &sort_ascending,
-                &sort_ascending_artists,
-            );
+            
+            // Check if we're already on the same main grid view to avoid unnecessary refresh
+            let current_page = stack.visible_child_name();
+            if let Some(current) = current_page {
+                if current != tab {
+                    navigate_back_to_main_grid(
+                        &left_btn_stack,
+                        &right_btn_box,
+                        &refresh_library_ui,
+                        &sort_ascending,
+                        &sort_ascending_artists,
+                    );
+                }
+            } else {
+                // If we can't determine the current page, refresh for safety
+                navigate_back_to_main_grid(
+                    &left_btn_stack,
+                    &right_btn_box,
+                    &refresh_library_ui,
+                    &sort_ascending,
+                    &sort_ascending_artists,
+                );
+            }
         }
     }
 }

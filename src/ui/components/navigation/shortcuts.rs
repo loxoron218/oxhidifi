@@ -8,12 +8,12 @@ use gtk4::{CallbackAction, KeyvalTrigger, Shortcut, ShortcutController};
 use libadwaita::{
     ApplicationWindow, Clamp, ViewStack,
     gdk::{Key, ModifierType},
-    prelude::WidgetExt,
+    prelude::{WidgetExt, ObjectExt},
 };
 
 use crate::ui::search_bar::SearchBar;
 
-use super::core::handle_back_navigation;
+use super::{core::handle_back_navigation, VIEW_STACK_ALBUMS, VIEW_STACK_ARTISTS};
 
 /// Sets up keyboard shortcuts for the main application window.
 ///
@@ -53,6 +53,9 @@ pub fn setup_keyboard_shortcuts(
     let sort_ascending_artists_for_search = sort_ascending_artists.clone();
     let search_revealer = search_bar.revealer.clone();
     let search_button = search_bar.button.clone();
+    
+    // Downgrade references to weak references for use in closures
+    let stack_weak = stack.downgrade();
 
     // Create the back navigation action, which will be reused by the Escape key.
     // This leverages the shared logic from `core` to ensure consistency.
@@ -81,8 +84,25 @@ pub fn setup_keyboard_shortcuts(
                     sort_ascending_artists_for_search.get(),
                 );
             } else {
-                // If search bar is not open, execute the general back navigation logic.
-                back_nav_action();
+                // If search bar is not open, check if we're on a main grid view
+                // Upgrade the weak reference to check the current visible page
+                if let Some(stack) = stack_weak.upgrade() {
+                    let current_page = stack.visible_child_name();
+                    
+                    // Only execute back navigation if we're not already on a main grid view
+                    // (albums or artists). Pressing ESC on main grids should do nothing.
+                    if let Some(page_name) = current_page {
+                        if page_name != VIEW_STACK_ALBUMS && page_name != VIEW_STACK_ARTISTS {
+                            back_nav_action();
+                        }
+                    } else {
+                        // If we can't determine the current page, execute back navigation for safety
+                        back_nav_action();
+                    }
+                } else {
+                    // If we can't upgrade the weak reference, execute back navigation for safety
+                    back_nav_action();
+                }
             }
 
             // Stop event propagation as the shortcut has been handled in either case.
