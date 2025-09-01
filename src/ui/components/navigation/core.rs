@@ -250,7 +250,7 @@ pub fn handle_back_navigation(
             // If history is empty, navigate to the last remembered tab and reset header.
             let tab = last_tab.get(); // Get the name of the last active tab.
             stack.set_visible_child_name(tab);
-            
+
             // Check if we're already on the same main grid view to avoid unnecessary refresh
             let current_page = stack.visible_child_name();
             if let Some(current) = current_page {

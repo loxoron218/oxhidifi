@@ -8,12 +8,12 @@ use gtk4::{CallbackAction, KeyvalTrigger, Shortcut, ShortcutController};
 use libadwaita::{
     ApplicationWindow, Clamp, ViewStack,
     gdk::{Key, ModifierType},
-    prelude::{WidgetExt, ObjectExt, EditableExt},
+    prelude::{EditableExt, ObjectExt, WidgetExt},
 };
 
 use crate::ui::search_bar::SearchBar;
 
-use super::{core::handle_back_navigation, VIEW_STACK_ALBUMS, VIEW_STACK_ARTISTS};
+use super::{VIEW_STACK_ALBUMS, VIEW_STACK_ARTISTS, core::handle_back_navigation};
 
 /// Sets up keyboard shortcuts for the main application window.
 ///
@@ -51,7 +51,7 @@ pub fn setup_keyboard_shortcuts(
     let search_revealer = search_bar.revealer.clone();
     let search_button = search_bar.button.clone();
     let search_entry = search_bar.entry.clone();
-    
+
     // Downgrade references to weak references for use in closures
     let stack_weak = stack.downgrade();
 
@@ -82,13 +82,12 @@ pub fn setup_keyboard_shortcuts(
 
                 // Clear the search text, which will trigger the search refresh automatically
                 search_entry.set_text("");
-
             } else {
                 // If search bar is not open, check if we're on a main grid view
                 // Upgrade the weak reference to check the current visible page
                 if let Some(stack) = stack_weak.upgrade() {
                     let current_page = stack.visible_child_name();
-                    
+
                     // Only execute back navigation if we're not already on a main grid view
                     // (albums or artists). Pressing ESC on main grids should do nothing.
                     if let Some(page_name) = current_page {
