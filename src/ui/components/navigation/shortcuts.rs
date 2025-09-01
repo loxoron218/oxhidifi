@@ -8,7 +8,7 @@ use gtk4::{CallbackAction, KeyvalTrigger, Shortcut, ShortcutController};
 use libadwaita::{
     ApplicationWindow, Clamp, ViewStack,
     gdk::{Key, ModifierType},
-    prelude::{WidgetExt, ObjectExt},
+    prelude::{WidgetExt, ObjectExt, EditableExt},
 };
 
 use crate::ui::search_bar::SearchBar;
@@ -48,11 +48,9 @@ pub fn setup_keyboard_shortcuts(
     let accel_group = ShortcutController::new();
 
     // Clones for the search bar related actions within the Escape key closure.
-    let refresh_library_ui_for_search = refresh_library_ui.clone();
-    let sort_ascending_for_search = sort_ascending.clone();
-    let sort_ascending_artists_for_search = sort_ascending_artists.clone();
     let search_revealer = search_bar.revealer.clone();
     let search_button = search_bar.button.clone();
+    let search_entry = search_bar.entry.clone();
     
     // Downgrade references to weak references for use in closures
     let stack_weak = stack.downgrade();
@@ -76,13 +74,15 @@ pub fn setup_keyboard_shortcuts(
         .action(&CallbackAction::new(move |_, _| {
             // Check if the search bar is currently visible.
             if search_revealer.reveals_child() {
-                // If search bar is open, close it and refresh the UI.
+                // If search bar is open, close it.
+                // Note: We don't call refresh_library_ui here because the search implementation
+                // in search.rs already handles refreshing when the search text is cleared.
                 search_revealer.set_reveal_child(false);
                 search_button.set_visible(true);
-                refresh_library_ui_for_search(
-                    sort_ascending_for_search.get(),
-                    sort_ascending_artists_for_search.get(),
-                );
+
+                // Clear the search text, which will trigger the search refresh automatically
+                search_entry.set_text("");
+
             } else {
                 // If search bar is not open, check if we're on a main grid view
                 // Upgrade the weak reference to check the current visible page
