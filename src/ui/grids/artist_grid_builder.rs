@@ -101,8 +101,6 @@ pub fn build_artist_grid(
         .hscrollbar_policy(Automatic)
         .vscrollbar_policy(Automatic)
         .child(&artist_grid)
-        .min_content_height(400)
-        .min_content_width(400)
         .vexpand(true)
         .margin_start(24)
         .margin_end(24)
