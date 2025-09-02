@@ -53,7 +53,6 @@ pub fn build_albums_grid(
         .hexpand(true)
         .child(add_music_button)
         .build();
-
     let empty_state_container = Box::builder()
         .orientation(Vertical)
         .halign(Center)
