@@ -19,7 +19,6 @@ use crate::{
             technical_info::{build_album_cover, build_album_metadata, build_technical_info},
         },
     },
-    utils::best_dr_persistence::{AlbumKey, DrValueStore},
 };
 
 /// Build the header section of the album page
@@ -178,18 +177,12 @@ pub fn build_album_header(
     }
 
     // Add DR badge if show_dr_badges is enabled
-    let dr_store = DrValueStore::load();
-    let album_key = AlbumKey {
-        title: album.title.clone(),
-        artist: artist.name.clone(),
-        folder_path: folder.path.clone(),
-    };
-    let is_completed = dr_store.contains(&album_key);
     if show_dr_badges.get() {
         info_box.append(&build_dr_badge(
             album.id,
             album.dr_value,
-            is_completed,
+            // Always show as completed on album page
+            true,
             db_pool.clone(),
             sender.clone(),
             Rc::new(album.clone()),

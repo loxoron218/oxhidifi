@@ -81,6 +81,11 @@ pub fn build_dr_badge(
     dr_label.add_css_class("dr-badge-label");
     dr_label.add_css_class(&css_class);
 
+    // Add dr-completed class if the DR value is marked as completed
+    if dr_completed {
+        dr_label.add_css_class("dr-completed");
+    }
+
     // Create the text label that describes the DR value
     let dr_text_label = Label::builder()
         .label("Official DR Value")
