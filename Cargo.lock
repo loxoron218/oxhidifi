@@ -1457,15 +1457,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "lru"
-version = "0.16.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "86ea4e65087ff52f3862caff188d489f1fab49a0cb09e01b2e3f1a617b10aaed"
-dependencies = [
- "hashbrown",
-]
-
-[[package]]
 name = "maybe-rayon"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1758,7 +1749,6 @@ dependencies = [
  "image",
  "libadwaita",
  "lofty",
- "lru",
  "notify",
  "regex",
  "serde",

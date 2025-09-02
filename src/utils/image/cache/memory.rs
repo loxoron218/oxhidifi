@@ -7,7 +7,8 @@ use std::{
 };
 
 use gdk_pixbuf::Pixbuf;
-use lru::LruCache;
+
+use crate::utils::image::cache::lru::LruCache;
 
 /// Generates a hex string from the hash of the input bytes using DefaultHasher
 pub fn hash_to_hex(bytes: &[u8]) -> String {
