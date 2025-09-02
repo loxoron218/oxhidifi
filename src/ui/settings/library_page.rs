@@ -53,13 +53,13 @@ pub fn create_library_page(
         .build();
 
     // Initialize the FolderSettingsPage
-    let folder_settings_page = Rc::new(FolderSettingsPage::new(
+    let folder_settings_page = FolderSettingsPage::new(
         db_pool.clone(),
         refresh_library_ui.clone(),
         sort_ascending.clone(),
         sort_ascending_artists.clone(),
         main_context.clone(),
-    ));
+    );
 
     // Initial population of the folders group when the settings dialog opens.
     let folder_settings_page_clone = folder_settings_page.clone();
