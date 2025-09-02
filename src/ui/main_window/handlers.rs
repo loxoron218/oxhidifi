@@ -11,7 +11,7 @@ use crate::{
         components::{
             dialogs::{connect_settings_dialog, create_add_folder_dialog_handler},
             navigation::{
-                core::{connect_album_navigation, connect_back_button},
+                core::{connect_album_navigation, connect_artist_navigation, connect_back_button},
                 shortcuts::setup_keyboard_shortcuts,
                 sorting::connect_sort_button,
                 tabs::connect_tab_navigation,
@@ -27,7 +27,7 @@ use crate::{
             album_grid_rebuilder::rebuild_albums_grid_for_window,
             artist_grid_rebuilder::rebuild_artist_grid_for_window,
         },
-        pages::album::album_page::album_page,
+        pages::album::album_page::{album_page, artist_page},
         search::connect_live_search,
     },
 };
@@ -195,6 +195,54 @@ pub fn connect_all_handlers(
                         sender,
                         show_dr_badges_clone_for_closure.clone(),
                         player_bar_clone,
+                    )
+                    .await;
+                }
+            },
+        );
+    }
+
+    // Initial connection for artist navigation (clicking on an artist tile).
+    // This handler enables users to click on an artist tile to navigate to its detailed page.
+    // This handler will be re-connected whenever the artists grid is rebuilt to ensure
+    // all dynamically created artist tiles are interactive.
+    if let Some(artist_grid) = widgets.artist_grid_cell.borrow().as_ref() {
+        let show_dr_badges_clone = show_dr_badges_cloned.clone();
+        let use_original_year_clone = use_original_year_cloned.clone();
+        let player_bar_clone = widgets.player_bar.clone();
+        connect_artist_navigation(
+            artist_grid,
+            &widgets.stack,
+            db_pool.clone(),
+            &widgets.left_btn_stack,
+            &widgets.right_btn_box,
+            nav_history_cloned.clone(),
+            sender.clone(),
+            show_dr_badges_clone,
+            use_original_year_clone,
+            player_bar_clone,
+            move |stack_weak,
+                  db_pool,
+                  artist_id,
+                  left_btn_stack_weak,
+                  right_btn_box_weak,
+                  nav_history,
+                  sender,
+                  show_dr_badges,
+                  use_original_year,
+                  player_bar| {
+                async move {
+                    artist_page(
+                        stack_weak,
+                        db_pool,
+                        artist_id,
+                        left_btn_stack_weak,
+                        right_btn_box_weak,
+                        nav_history,
+                        sender,
+                        show_dr_badges,
+                        use_original_year,
+                        player_bar,
                     )
                     .await;
                 }

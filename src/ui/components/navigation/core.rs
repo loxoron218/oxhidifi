@@ -14,6 +14,8 @@ use libadwaita::{
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
+use crate::ui::components::player_bar::PlayerBar;
+
 use super::{
     VIEW_STACK_ALBUMS, VIEW_STACK_ARTISTS, VIEW_STACK_BACK_HEADER, VIEW_STACK_MAIN_HEADER,
 };
@@ -136,6 +138,109 @@ pub fn connect_album_navigation<Fut, F>(
     });
 }
 
+/// Connects a handler to the `artist_grid` to manage navigation to the artist detail page.
+///
+/// When an artist child in the `FlowBox` is activated (e.g., clicked), this function:
+/// 1. Pushes the current visible page onto the `nav_history` stack for back navigation.
+/// 2. Changes the header to display the back button (`VIEW_STACK_BACK_HEADER`).
+/// 3. Hides the right-side header buttons.
+/// 4. Spawns an asynchronous task to build and display the `artist_page` for the selected artist.
+///
+/// # Type Parameters
+/// * `Fut`: The future type returned by `artist_page`.
+/// * `F`: The function type for `artist_page`, which builds the artist detail UI.
+///
+/// # Arguments
+/// * `artist_grid` - The `FlowBox` displaying artist tiles.
+/// * `stack` - The main `ViewStack` managing application pages.
+/// * `db_pool` - The database connection pool.
+/// * `left_btn_stack` - The `ViewStack` controlling the left side of the header bar.
+/// * `right_btn_box` - The `Clamp` widget containing the right side buttons of the header bar.
+/// * `nav_history` - `Rc<RefCell<Vec<String>>>` storing the history of visited page names.
+/// * `sender` - `UnboundedSender<()>` for triggering UI refreshes.
+/// * `artist_page` - An async function that takes `WeakRef<ViewStack>`, `Arc<SqlitePool>`, `i64` (artist ID),
+///   `WeakRef<ViewStack>`, `WeakRef<Clamp>`, `Rc<RefCell<Vec<String>>>`, `UnboundedSender<()>`, `Rc<Cell<bool>>`,
+///   `Rc<Cell<bool>>`, and `PlayerBar` and returns a `Future`.
+pub fn connect_artist_navigation<Fut, F>(
+    artist_grid: &FlowBox,
+    stack: &ViewStack,
+    db_pool: Arc<SqlitePool>,
+    left_btn_stack: &ViewStack,
+    right_btn_box: &Clamp,
+    nav_history: Rc<RefCell<Vec<String>>>,
+    sender: UnboundedSender<()>,
+    show_dr_badges: Rc<Cell<bool>>,
+    use_original_year: Rc<Cell<bool>>,
+    player_bar: PlayerBar,
+    artist_page: F,
+) where
+    F: Fn(
+            WeakRef<ViewStack>,
+            Arc<SqlitePool>,
+            i64,
+            WeakRef<ViewStack>,
+            WeakRef<Clamp>,
+            Rc<RefCell<Vec<String>>>,
+            UnboundedSender<()>,
+            Rc<Cell<bool>>,
+            Rc<Cell<bool>>,
+            PlayerBar,
+        ) -> Fut
+        + 'static,
+    Fut: Future<Output = ()> + 'static,
+{
+    // Downgrade `Rc` references to `WeakRef` for use in closures to prevent reference cycles.
+    let stack_weak = stack.downgrade();
+    let db_pool_clone = db_pool.clone();
+    let left_btn_stack_weak = left_btn_stack.downgrade();
+    let right_btn_box_weak = right_btn_box.downgrade();
+    let nav_history_clone = nav_history.clone();
+    let sender_clone_for_closure = sender.clone();
+    let show_dr_badges_clone = show_dr_badges.clone();
+    let use_original_year_clone = use_original_year.clone();
+    let player_bar_clone = player_bar.clone();
+    artist_grid.connect_child_activated(move |_, child| {
+        // Upgrade weak references to strong references or return if they are no longer valid.
+        let left_btn_stack = left_btn_stack_weak
+            .upgrade()
+            .expect("left_btn_stack disappeared");
+        let right_btn_box = right_btn_box_weak
+            .upgrade()
+            .expect("right_btn_box disappeared");
+
+        // Retrieve the `artist_id` from the clicked child's data.
+        let artist_id = child
+            .widget_name()
+            .parse::<i64>()
+            .expect("FlowBoxChild widget name is not a valid i64 artist_id");
+
+        // If there's a current visible page, push it onto the navigation history.
+        if let Some(current_page) = stack_weak.upgrade().and_then(|s| s.visible_child_name()) {
+            nav_history_clone
+                .borrow_mut()
+                .push(current_page.to_string());
+        }
+
+        // Update header visibility for the detail page.
+        left_btn_stack.set_visible_child_name(VIEW_STACK_BACK_HEADER);
+        right_btn_box.set_visible(false);
+
+        // Spawn an async task to load and display the artist detail page.
+        MainContext::default().spawn_local(artist_page(
+            stack_weak.clone(),
+            db_pool_clone.clone(),
+            artist_id,
+            left_btn_stack_weak.clone(),
+            right_btn_box_weak.clone(),
+            nav_history_clone.clone(),
+            sender_clone_for_closure.clone(),
+            show_dr_badges_clone.clone(),
+            use_original_year_clone.clone(),
+            player_bar_clone.clone(),
+        ));
+    });
+}
+
 /// Connects the back button's `clicked` signal to trigger back navigation.
 ///
 /// This function reuses the `handle_back_navigation` closure, ensuring consistent
@@ -217,28 +322,14 @@ pub fn handle_back_navigation(
             match prev_page.as_str() {
                 // The `|` operator creates a pattern that matches either constant.
                 VIEW_STACK_ALBUMS | VIEW_STACK_ARTISTS => {
-                    // Check if we're already on the same main grid view to avoid unnecessary refresh
-                    let current_page = stack.visible_child_name();
-                    if let Some(current) = current_page {
-                        if current != prev_page {
-                            navigate_back_to_main_grid(
-                                &left_btn_stack,
-                                &right_btn_box,
-                                &refresh_library_ui,
-                                &sort_ascending,
-                                &sort_ascending_artists,
-                            );
-                        }
-                    } else {
-                        // If we can't determine the current page, refresh for safety
-                        navigate_back_to_main_grid(
-                            &left_btn_stack,
-                            &right_btn_box,
-                            &refresh_library_ui,
-                            &sort_ascending,
-                            &sort_ascending_artists,
-                        );
-                    }
+                    // Navigating back to a main grid view, so reset header and refresh UI
+                    navigate_back_to_main_grid(
+                        &left_btn_stack,
+                        &right_btn_box,
+                        &refresh_library_ui,
+                        &sort_ascending,
+                        &sort_ascending_artists,
+                    );
                 }
 
                 // This arm explicitly does nothing for any other page values.
@@ -252,28 +343,14 @@ pub fn handle_back_navigation(
             let tab = last_tab.get();
             stack.set_visible_child_name(tab);
 
-            // Check if we're already on the same main grid view to avoid unnecessary refresh
-            let current_page = stack.visible_child_name();
-            if let Some(current) = current_page {
-                if current != tab {
-                    navigate_back_to_main_grid(
-                        &left_btn_stack,
-                        &right_btn_box,
-                        &refresh_library_ui,
-                        &sort_ascending,
-                        &sort_ascending_artists,
-                    );
-                }
-            } else {
-                // If we can't determine the current page, refresh for safety
-                navigate_back_to_main_grid(
-                    &left_btn_stack,
-                    &right_btn_box,
-                    &refresh_library_ui,
-                    &sort_ascending,
-                    &sort_ascending_artists,
-                );
-            }
+            // Navigating back to a main grid view, so reset header and refresh UI
+            navigate_back_to_main_grid(
+                &left_btn_stack,
+                &right_btn_box,
+                &refresh_library_ui,
+                &sort_ascending,
+                &sort_ascending_artists,
+            );
         }
     }
 }
