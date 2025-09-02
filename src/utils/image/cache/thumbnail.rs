@@ -8,11 +8,15 @@ use std::{
 };
 
 use glib::user_cache_dir;
-use image::{ImageError::IoError, codecs::jpeg::JpegEncoder, imageops::FilterType::Nearest};
+use image::{
+    ImageError::{self, IoError},
+    codecs::jpeg::JpegEncoder,
+    imageops::FilterType::Nearest,
+};
 use tokio::{fs::write, task::JoinSet};
 
 use crate::utils::{
-    image_cache::ThumbnailError::{CacheDir, Load},
+    image::cache::thumbnail::ThumbnailError::{CacheDir, Load},
     performance_monitor::get_metrics,
 };
 
@@ -39,7 +43,7 @@ pub enum ThumbnailError {
     ///
     /// This variant wraps an `image::ImageError` that occurred during
     /// image loading, decoding, or encoding operations.
-    Load(image::ImageError),
+    Load(ImageError),
 }
 
 /// Implementation of Display trait for ThumbnailError
@@ -81,8 +85,8 @@ impl From<io::Error> for ThumbnailError {
 ///
 /// This implementation allows ImageError to be automatically converted to
 /// ThumbnailError::Load variant when using the ? operator.
-impl From<image::ImageError> for ThumbnailError {
-    fn from(err: image::ImageError) -> ThumbnailError {
+impl From<ImageError> for ThumbnailError {
+    fn from(err: ImageError) -> ThumbnailError {
         Load(err)
     }
 }
@@ -217,6 +221,7 @@ pub async fn process_images_concurrently(
     if images.is_empty() {
         return Vec::new();
     }
+
     // Process images concurrently with a concurrency limit using JoinSet
     let mut join_set = JoinSet::new();
     let mut active_tasks = 0;

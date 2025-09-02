@@ -16,7 +16,9 @@ use crate::{
         AlbumForInsert, TrackForInsert, insert_or_get_artists_batch, upsert_albums_batch,
         upsert_tracks_batch_enhanced,
     },
-    utils::{image_cache::process_images_concurrently, performance_monitor::get_metrics},
+    utils::{
+        image::cache::thumbnail::process_images_concurrently, performance_monitor::get_metrics,
+    },
 };
 
 /// A temporary struct to hold metadata extracted from audio files before we have database IDs.

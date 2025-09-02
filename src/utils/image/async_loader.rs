@@ -6,7 +6,7 @@ use libadwaita::prelude::ObjectExt;
 
 use crate::{
     ui::grids::album_grid_utils::create_colored_placeholder,
-    utils::image_loader::{ImageLoader, ImageLoaderError},
+    utils::image::{ImageLoader, ImageLoaderError},
 };
 
 /// Async image loader for album covers

@@ -30,7 +30,7 @@ use crate::{
     utils::{
         best_dr_persistence::{AlbumKey, DrValueStore},
         formatting::{format_freq_khz, format_year_info},
-        image_loader_async::AsyncImageLoader,
+        image::AsyncImageLoader,
         screen::ScreenInfo,
     },
 };
