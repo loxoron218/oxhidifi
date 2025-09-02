@@ -156,7 +156,8 @@ pub fn build_album_card(
         // Prefer album year, fallback to original release date year
         num_str_opt.or(date_str_opt)
     }
-    .unwrap_or_default(); // Default to empty string if neither is available
+    // Default to empty string if neither is available
+    .unwrap_or_default();
 
     // Main container for the album tile with vertical orientation
     let album_tile_box = Box::builder().orientation(Vertical).spacing(2).build();

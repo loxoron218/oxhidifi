@@ -107,13 +107,13 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         sort_orders: Rc::new(RefCell::new(settings.sort_orders)),
         sort_ascending: Rc::new(Cell::new(settings.sort_ascending_albums)),
         sort_ascending_artists: Rc::new(Cell::new(settings.sort_ascending_artists)),
-        last_tab: Rc::new(Cell::new("albums")), // Tracks the last active main tab (Albums or Artists).
-        nav_history: Rc::new(RefCell::new(Vec::new())), // Stores navigation history for back functionality.
+        last_tab: Rc::new(Cell::new("albums")),
+        nav_history: Rc::new(RefCell::new(Vec::new())),
         screen_info: Rc::new(RefCell::new(screen_info)),
-        is_settings_open: Rc::new(Cell::new(false)), // Flag to prevent UI refresh while settings dialog is open.
-        show_dr_badges: Rc::new(Cell::new(settings.show_dr_badges)), // Initialize with setting
-        use_original_year: Rc::new(Cell::new(settings.use_original_year)), // Initialize with setting
-        view_mode: Rc::new(RefCell::new(settings.view_mode)), // Initialize with setting
+        is_settings_open: Rc::new(Cell::new(false)),
+        show_dr_badges: Rc::new(Cell::new(settings.show_dr_badges)),
+        use_original_year: Rc::new(Cell::new(settings.use_original_year)),
+        view_mode: Rc::new(RefCell::new(settings.view_mode)),
     };
 
     // Initialize `Rc<RefCell<Option<FlowBox>>>` and `Rc<RefCell<Option<Stack>>>` for grids and stacks
@@ -136,7 +136,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         add_button: app_header_bar_widgets.add_button.clone(),
         back_button: app_header_bar_widgets.back_button.clone(),
         settings_button: app_header_bar_widgets.settings_button.clone(),
-        search_bar: app_header_bar_widgets.clone(), // Clone the entire AppHeaderBar struct
+        search_bar: app_header_bar_widgets.clone(),
         sort_button: app_header_bar_widgets.sort_button.clone(),
         albums_btn: albums_btn.clone(),
         artists_btn: artists_btn.clone(),
@@ -221,8 +221,8 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     // Artists toggle button frame is removed for a cleaner, tab-like appearance.
     widgets.artists_btn.set_has_frame(false);
     let header_bar = build_main_headerbar(
-        &widgets.search_bar.left_btn_stack, // Use the left_btn_stack from the cloned AppHeaderBar
-        &widgets.search_bar.right_btn_box,  // Use the right_btn_box from the cloned AppHeaderBar
+        &widgets.search_bar.left_btn_stack,
+        &widgets.search_bar.right_btn_box,
         &center_box,
     );
 

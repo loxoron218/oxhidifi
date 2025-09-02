@@ -57,8 +57,10 @@ impl ScreenInfo {
         // We expect at least one monitor to be present for a functional display.
         let monitor = display
             .monitors()
-            .item(0) // Get the first monitor, typically considered the primary.
-            .and_then(|obj| obj.downcast::<Monitor>().ok()) // Downcast to `Monitor` type.
+            // Get the first monitor, typically considered the primary.
+            .item(0)
+            // Downcast to `Monitor` type.
+            .and_then(|obj| obj.downcast::<Monitor>().ok())
             .expect("No monitor found on the default display. Ensure a display device is connected and configured.");
 
         // Get the geometry (position and dimensions) of the monitor.

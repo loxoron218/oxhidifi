@@ -248,7 +248,8 @@ pub fn handle_back_navigation(
             // If not on a main grid, navigate to the last remembered tab and reset header.
         } else {
             // If history is empty, navigate to the last remembered tab and reset header.
-            let tab = last_tab.get(); // Get the name of the last active tab.
+            // Get the name of the last active tab.
+            let tab = last_tab.get();
             stack.set_visible_child_name(tab);
 
             // Check if we're already on the same main grid view to avoid unnecessary refresh

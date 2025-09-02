@@ -132,7 +132,9 @@ pub fn show_settings_dialog(
                 // Stop further propagation of the event
                 return Stop;
             }
-            Proceed // Allow other key events to propagate
+
+            // Allow other key events to propagate
+            Proceed
         });
     }
 

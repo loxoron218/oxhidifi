@@ -251,7 +251,8 @@ pub fn connect_all_handlers(
     // Spawn scanning label refresh task to hide labels after scan completion.
     // This listens for signals from the library scanner (e.g., when a scan finishes)
     // and hides the "Scanning..." labels, providing clear visual feedback to the user.
-    let receiver = Rc::new(RefCell::new(receiver)); // Wrap receiver in Rc<RefCell> for shared mutable access
+    // Wrap receiver in Rc<RefCell> for shared mutable access
+    let receiver = Rc::new(RefCell::new(receiver));
     spawn_scanning_label_refresh_task(
         receiver,
         Rc::new(widgets.scanning_label_albums.clone()),

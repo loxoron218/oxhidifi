@@ -12,7 +12,8 @@ const DATA_CHUNK_SIZE: usize = 100;
 pub enum DataLoaderMessage {
     AlbumData(Vec<AlbumGridItem>),
     ArtistData(Vec<Artist>),
-    Progress(usize, usize), // processed, total
+    // processed, total
+    Progress(usize, usize),
     Completed,
     Error(String),
 }
