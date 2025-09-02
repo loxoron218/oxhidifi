@@ -178,13 +178,9 @@ pub fn populate_artist_grid(
                         artists_inner_stack.set_visible_child_name("populated_grid");
                     } else {
                         // If no artists are found after fetching:
-                        // Check if scanning label is visible, if so, show scanning state, else empty state.
-                        let state_name = if scanning_label.is_visible() {
-                            "scanning_state"
-                        } else {
-                            "empty_state"
-                        };
-                        artists_inner_stack.set_visible_child_name(state_name);
+                        // After scan completion, we should show the empty state with "Add Music" button
+                        // rather than remaining in loading or scanning state
+                        artists_inner_stack.set_visible_child_name("empty_state");
 
                         // Update count if no artists
                         artist_count_label.set_text("0 Artists");

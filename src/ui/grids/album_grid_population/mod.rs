@@ -158,12 +158,9 @@ pub async fn populate_albums_grid(
                     .await;
                 } else {
                     // Determine the appropriate state to show if no albums are found.
-                    let state_to_show = if scanning_label.is_visible() {
-                        Scanning.as_str()
-                    } else {
-                        Empty.as_str()
-                    };
-                    albums_inner_stack.set_visible_child_name(state_to_show);
+                    // After scan completion, we should show the empty state with "Add Music" button
+                    // rather than remaining in loading or scanning state
+                    albums_inner_stack.set_visible_child_name(Empty.as_str());
 
                     // Update count if no albums
                     album_count_label.set_text("0 Albums");
