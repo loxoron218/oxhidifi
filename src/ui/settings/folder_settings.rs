@@ -6,7 +6,7 @@ use std::{
     time::Duration,
 };
 
-use glib::{timeout_future, MainContext, idle_add_local_once};
+use glib::{MainContext, idle_add_local_once, timeout_future};
 use gtk4::{
     Align::Center,
     Button,
@@ -232,11 +232,17 @@ impl FolderSettingsPage {
                                 db_pool: self_clone_for_async.db_pool.clone(),
                                 refresh_library_ui: self_clone_for_async.refresh_library_ui.clone(),
                                 sort_ascending: self_clone_for_async.sort_ascending.clone(),
-                                sort_ascending_artists: self_clone_for_async.sort_ascending_artists.clone(),
+                                sort_ascending_artists: self_clone_for_async
+                                    .sort_ascending_artists
+                                    .clone(),
                                 main_context: self_clone_for_async.main_context.clone(),
                                 sender: self_clone_for_async.sender.clone(),
-                                scanning_label_albums: self_clone_for_async.scanning_label_albums.clone(),
-                                scanning_label_artists: self_clone_for_async.scanning_label_artists.clone(),
+                                scanning_label_albums: self_clone_for_async
+                                    .scanning_label_albums
+                                    .clone(),
+                                scanning_label_artists: self_clone_for_async
+                                    .scanning_label_artists
+                                    .clone(),
                                 albums_stack_cell: self_clone_for_async.albums_stack_cell.clone(),
                                 artists_stack_cell: self_clone_for_async.artists_stack_cell.clone(),
                             };
