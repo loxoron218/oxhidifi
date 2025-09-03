@@ -50,7 +50,6 @@ pub fn populate_artist_grid(
     left_btn_stack: &ViewStack,
     right_btn_box: &Clamp,
     screen_info: &Rc<RefCell<ScreenInfo>>,
-    scanning_label: &Label,
     sender: UnboundedSender<()>,
     nav_history: Rc<RefCell<Vec<String>>>,
     artists_inner_stack: &Stack,
@@ -78,7 +77,6 @@ pub fn populate_artist_grid(
     let artists_inner_stack = artists_inner_stack.clone();
     let db_pool = Arc::clone(&db_pool);
     let screen_info = Rc::clone(screen_info);
-    let scanning_label = scanning_label.clone();
     let sender = sender.clone();
     let artist_count_label = artist_count_label.clone();
     let show_dr_badges = show_dr_badges.clone();

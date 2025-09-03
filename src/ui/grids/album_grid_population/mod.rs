@@ -19,7 +19,7 @@ use crate::{
             album_grid_population::{sorting::sort_albums, ui_builder::create_album_tile},
             album_grid_state::{
                 AlbumGridItem,
-                AlbumGridState::{Empty, Populated, Scanning},
+                AlbumGridState::{Empty, Populated},
             },
             async_data_loader::{
                 DataLoaderMessage::{AlbumData, ArtistData, Completed, Error, Progress},
@@ -57,7 +57,6 @@ pub async fn populate_albums_grid(
     sort_ascending: bool,
     sort_orders: Rc<RefCell<Vec<SortOrder>>>,
     screen_info: &Rc<RefCell<ScreenInfo>>,
-    scanning_label: &Label,
     albums_inner_stack: &Stack,
     album_count_label: &Label,
     show_dr_badges: Rc<Cell<bool>>,
