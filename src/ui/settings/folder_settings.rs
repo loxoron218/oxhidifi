@@ -3,9 +3,10 @@ use std::{
     rc::Rc,
     sync::Arc,
     thread::spawn,
+    time::Duration,
 };
 
-use glib::{MainContext, idle_add_local_once};
+use glib::{timeout_future, MainContext, idle_add_local_once};
 use gtk4::{
     Align::Center,
     Button,
@@ -213,6 +214,35 @@ impl FolderSettingsPage {
                                     }
                                 }
                             });
+                        });
+
+                        // Clone self_clone for use in the async block
+                        let self_clone_for_async = self_clone.clone();
+
+                        // Spawn a local async task to refresh the display after a short delay
+                        // This gives time for the database operation to complete
+                        self_clone.main_context.spawn_local(async move {
+                            // Small delay to ensure database operation completes
+                            timeout_future(Duration::from_millis(500)).await;
+
+                            // Create a new FolderSettingsPage instance for refreshing the display.
+                            let folder_settings_page = Self {
+                                folders_group: self_clone_for_async.folders_group.clone(),
+                                list_box: self_clone_for_async.list_box.clone(),
+                                db_pool: self_clone_for_async.db_pool.clone(),
+                                refresh_library_ui: self_clone_for_async.refresh_library_ui.clone(),
+                                sort_ascending: self_clone_for_async.sort_ascending.clone(),
+                                sort_ascending_artists: self_clone_for_async.sort_ascending_artists.clone(),
+                                main_context: self_clone_for_async.main_context.clone(),
+                                sender: self_clone_for_async.sender.clone(),
+                                scanning_label_albums: self_clone_for_async.scanning_label_albums.clone(),
+                                scanning_label_artists: self_clone_for_async.scanning_label_artists.clone(),
+                                albums_stack_cell: self_clone_for_async.albums_stack_cell.clone(),
+                                artists_stack_cell: self_clone_for_async.artists_stack_cell.clone(),
+                            };
+
+                            // Refresh the folder display in the settings dialog.
+                            folder_settings_page.refresh_display().await;
                         });
                     }
                 }
