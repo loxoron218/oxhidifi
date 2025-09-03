@@ -30,7 +30,6 @@ use crate::{
     utils::screen::ScreenInfo,
 };
 
-// Import the submodules
 mod sorting;
 mod ui_builder;
 

@@ -5,7 +5,6 @@ use std::{
     thread,
 };
 
-use gtk4::prelude::*;
 use gtk4::{
     Align::{Center, End},
     Box, Button, FlowBox, Label,
@@ -14,7 +13,7 @@ use gtk4::{
 };
 use libadwaita::{
     Application, ApplicationWindow, Clamp, ViewStack,
-    prelude::{AdwApplicationWindowExt, BoxExt, ButtonExt, GtkWindowExt},
+    prelude::{AdwApplicationWindowExt, BoxExt, ButtonExt, GtkWindowExt, WidgetExt},
 };
 use sqlx::SqlitePool;
 use tokio::runtime::Runtime;
