@@ -1,23 +1,29 @@
-use std::{cell::Cell, rc::Rc, sync::Arc};
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+    sync::Arc,
+    thread::spawn,
+};
 
-use glib::{MainContext, source::idle_add_local_once};
+use glib::{MainContext, idle_add_local_once};
 use gtk4::{
     Align::Center,
     Button,
     FileChooserAction::SelectFolder,
-    FileChooserDialog, ListBox,
+    FileChooserDialog, Label, ListBox,
     ResponseType::{Accept, Cancel},
     SelectionMode::None,
-    Window,
+    Stack, Window,
 };
 use libadwaita::{
     ActionRow, PreferencesGroup,
     prelude::{
-        ActionRowExt, ButtonExt, Cast, DialogExt, FileChooserExt, FileExt, GtkWindowExt,
+        ActionRowExt, ButtonExt, CastNone, DialogExt, FileChooserExt, FileExt, GtkWindowExt,
         PreferencesGroupExt, StaticType, WidgetExt,
     },
 };
 use sqlx::SqlitePool;
+use tokio::{runtime::Runtime, sync::mpsc::UnboundedSender};
 
 use crate::{
     data::{
@@ -43,6 +49,11 @@ pub struct FolderSettingsPage {
     sort_ascending: Rc<Cell<bool>>,
     sort_ascending_artists: Rc<Cell<bool>>,
     main_context: Rc<MainContext>,
+    sender: Option<UnboundedSender<()>>,
+    scanning_label_albums: Rc<Label>,
+    scanning_label_artists: Rc<Label>,
+    albums_stack_cell: Rc<RefCell<Option<Stack>>>,
+    artists_stack_cell: Rc<RefCell<Option<Stack>>>,
 }
 
 impl FolderSettingsPage {
@@ -56,6 +67,11 @@ impl FolderSettingsPage {
     /// * `sort_ascending` - Shared state for album sort direction.
     /// * `sort_ascending_artists` - Shared state for artist sort direction.
     /// * `main_context` - The GLib main context for spawning UI tasks.
+    /// * `sender` - Optional sender to notify UI refresh after scanning.
+    /// * `scanning_label_albums` - The scanning label for albums.
+    /// * `scanning_label_artists` - The scanning label for artists.
+    /// * `albums_stack_cell` - The albums stack cell.
+    /// * `artists_stack_cell` - The artists stack cell.
     ///
     /// # Returns
     ///
@@ -66,6 +82,11 @@ impl FolderSettingsPage {
         sort_ascending: Rc<Cell<bool>>,
         sort_ascending_artists: Rc<Cell<bool>>,
         main_context: Rc<MainContext>,
+        sender: Option<UnboundedSender<()>>,
+        scanning_label_albums: Rc<Label>,
+        scanning_label_artists: Rc<Label>,
+        albums_stack_cell: Rc<RefCell<Option<Stack>>>,
+        artists_stack_cell: Rc<RefCell<Option<Stack>>>,
     ) -> Rc<Self> {
         // Create the main preferences group for library folders with a title and description
         let folders_group = PreferencesGroup::builder()
@@ -101,6 +122,11 @@ impl FolderSettingsPage {
             sort_ascending,
             sort_ascending_artists,
             main_context,
+            sender,
+            scanning_label_albums,
+            scanning_label_artists,
+            albums_stack_cell,
+            artists_stack_cell,
         });
 
         // Clone the page instance for use in the click handler closure
@@ -125,13 +151,11 @@ impl FolderSettingsPage {
     /// to select a folder. Upon confirmation, it triggers the process of adding
     /// the folder to the database, scanning it, and refreshing the UI.
     fn handle_add_folder_clicked(&self) {
-        let parent_window = self
-            .folders_group
-            .ancestor(Window::static_type())
-            .and_then(|w| w.downcast::<Window>().ok());
+        let binding = self.folders_group.ancestor(Window::static_type());
+        let parent_window = binding.and_downcast_ref::<Window>();
         let dialog = FileChooserDialog::new(
             Some("Add Folder to Library"),
-            parent_window.as_ref(),
+            parent_window,
             SelectFolder,
             &[("Cancel", Cancel), ("Add", Accept)],
         );
@@ -143,35 +167,52 @@ impl FolderSettingsPage {
             if response == Accept {
                 if let Some(folder) = dialog.file() {
                     if let Some(path) = folder.path() {
-                        let self_clone_for_async = self_clone.clone();
-                        self_clone.main_context.spawn_local(async move {
-                            // Insert folder into DB or get existing ID.
-                            let folder_id =
-                                match insert_or_get_folder(&self_clone_for_async.db_pool, &path)
-                                    .await
+                        // Show scanning feedback before starting the scan
+                        // Make the scanning labels visible
+                        self_clone.scanning_label_albums.set_visible(true);
+                        self_clone.scanning_label_artists.set_visible(true);
+
+                        // Set the appropriate stacks to scanning state if they exist
+                        if let Some(stack) = self_clone.albums_stack_cell.borrow().as_ref() {
+                            stack.set_visible_child_name("scanning_state");
+                        }
+                        if let Some(stack) = self_clone.artists_stack_cell.borrow().as_ref() {
+                            stack.set_visible_child_name("scanning_state");
+                        }
+
+                        // Extract the necessary fields before spawning the thread
+                        let db_pool = self_clone.db_pool.clone();
+                        let sender = self_clone.sender.clone();
+                        let path_clone = path.clone();
+
+                        // Spawn a new thread for blocking I/O and async operations
+                        spawn(move || {
+                            // Create a new Tokio runtime for this thread
+                            let rt = Runtime::new().unwrap();
+                            rt.block_on(async {
+                                // Insert folder into DB or get existing ID.
+                                let folder_id =
+                                    match insert_or_get_folder(&db_pool, &path_clone).await {
+                                        Ok(id) => id,
+                                        Err(e) => {
+                                            eprintln!("Error inserting or getting folder: {:?}", e);
+                                            return;
+                                        }
+                                    };
+
+                                // Scan the folder for music files.
+                                if let Err(e) = scan_folder(&db_pool, &path_clone, folder_id).await
                                 {
-                                    Ok(id) => id,
-                                    Err(e) => {
-                                        eprintln!("Error inserting or getting folder: {:?}", e);
-                                        return;
+                                    eprintln!("Error scanning folder: {:?}", e);
+                                }
+
+                                // Notify the main thread that scanning is complete
+                                if let Some(sender) = sender {
+                                    if let Err(e) = sender.send(()) {
+                                        eprintln!("Error sending refresh signal: {:?}", e);
                                     }
-                                };
-
-                            // Scan the folder for music files.
-                            if let Err(e) =
-                                scan_folder(&self_clone_for_async.db_pool, &path, folder_id).await
-                            {
-                                eprintln!("Error scanning folder: {:?}", e);
-                            }
-
-                            // Refresh the folder list in the settings dialog.
-                            self_clone_for_async.refresh_display().await;
-
-                            // Refresh the main library UI.
-                            (self_clone_for_async.refresh_library_ui)(
-                                self_clone_for_async.sort_ascending.get(),
-                                self_clone_for_async.sort_ascending_artists.get(),
-                            );
+                                }
+                            });
                         });
                     }
                 }
@@ -193,6 +234,11 @@ impl FolderSettingsPage {
             sort_ascending: self.sort_ascending.clone(),
             sort_ascending_artists: self.sort_ascending_artists.clone(),
             main_context: self.main_context.clone(),
+            sender: self.sender.clone(),
+            scanning_label_albums: self.scanning_label_albums.clone(),
+            scanning_label_artists: self.scanning_label_artists.clone(),
+            albums_stack_cell: self.albums_stack_cell.clone(),
+            artists_stack_cell: self.artists_stack_cell.clone(),
         }
     }
 
@@ -215,9 +261,14 @@ impl FolderSettingsPage {
         let sort_ascending_c = self.sort_ascending.clone();
         let sort_ascending_artists_c = self.sort_ascending_artists.clone();
         let main_context_c = self.main_context.clone();
+        let sender_c = self.sender.clone();
 
         // Clone the fetched folders for the closure
         let folders_c = folders.clone();
+        let scanning_label_albums = self.scanning_label_albums.clone();
+        let scanning_label_artists = self.scanning_label_artists.clone();
+        let albums_stack_cell = self.albums_stack_cell.clone();
+        let artists_stack_cell = self.artists_stack_cell.clone();
         idle_add_local_once(move || {
             // Clear all existing children from the ListBox before repopulating.
             while let Some(child) = list_box_c.first_child() {
@@ -259,48 +310,80 @@ impl FolderSettingsPage {
                         .build();
                     let folder_id = folder.id;
 
-                    // Capture a clone of `self` (the FolderSettingsPage instance) for the closure.
-                    // This allows the closure to access all the shared state (db_pool, refresh_library_ui, etc.)
-                    // without needing to clone each field individually.
-                    let self_c = Rc::new(Self {
-                        folders_group: folders_group_c.clone(),
-                        list_box: list_box_c.clone(),
-                        db_pool: db_pool_c.clone(),
-                        refresh_library_ui: refresh_library_ui_c.clone(),
-                        sort_ascending: sort_ascending_c.clone(),
-                        sort_ascending_artists: sort_ascending_artists_c.clone(),
-                        main_context: main_context_c.clone(),
-                    });
+                    // Clone the necessary fields for the closure.
+                    let folders_group = folders_group_c.clone();
+                    let list_box = list_box_c.clone();
+                    let db_pool = db_pool_c.clone();
+                    let refresh_library_ui = refresh_library_ui_c.clone();
+                    let sort_ascending = sort_ascending_c.clone();
+                    let sort_ascending_artists = sort_ascending_artists_c.clone();
+                    let main_context = main_context_c.clone();
+                    let sender = sender_c.clone();
+                    let scanning_label_albums = scanning_label_albums.clone();
+                    let scanning_label_artists = scanning_label_artists.clone();
+                    let albums_stack_cell = albums_stack_cell.clone();
+                    let artists_stack_cell = artists_stack_cell.clone();
                     remove_btn.connect_clicked(move |btn| {
-                        let parent_widget = btn
-                            .ancestor(Window::static_type())
-                            .expect("Button should be within a window heirarchy.");
-                        let parent_window = parent_widget
-                            .downcast_ref::<Window>()
-                            .expect("Parent widget should be a window.");
+                        let binding = btn.ancestor(Window::static_type());
+                        let parent_widget = binding
+                            .and_downcast_ref::<Window>()
+                            .expect("Button should be within a window hierarchy.");
 
-                        // Clone `self_c` for the `on_confirm` closure of the dialog.
-                        let self_dialog = self_c.clone();
-                        show_remove_folder_confirmation_dialog(parent_window, move || {
+                        // Clone the necessary fields for the `on_confirm` closure of the dialog.
+                        let folders_group = folders_group.clone();
+                        let list_box = list_box.clone();
+                        let db_pool = db_pool.clone();
+                        let refresh_library_ui = refresh_library_ui.clone();
+                        let sort_ascending = sort_ascending.clone();
+                        let sort_ascending_artists = sort_ascending_artists.clone();
+                        let main_context = main_context.clone();
+                        let sender = sender.clone();
+                        let scanning_label_albums = scanning_label_albums.clone();
+                        let scanning_label_artists = scanning_label_artists.clone();
+                        let albums_stack_cell = albums_stack_cell.clone();
+                        let artists_stack_cell = artists_stack_cell.clone();
+                        show_remove_folder_confirmation_dialog(parent_widget, move || {
                             // Spawn an asynchronous task on the main context.
-                            self_dialog.main_context.spawn_local({
-                                // Clone `self_dialog` for the async block itself.
-                                let self_async = self_dialog.clone();
-                                async move {
-                                    // Perform database deletion.
-                                    let _ =
-                                        remove_folder_and_albums(&self_async.db_pool, folder_id)
-                                            .await;
+                            let folders_group = folders_group.clone();
+                            let list_box = list_box.clone();
+                            let db_pool = db_pool.clone();
+                            let refresh_library_ui = refresh_library_ui.clone();
+                            let sort_ascending = sort_ascending.clone();
+                            let sort_ascending_artists = sort_ascending_artists.clone();
+                            let main_context = main_context.clone();
+                            let sender = sender.clone();
+                            let scanning_label_albums = scanning_label_albums.clone();
+                            let scanning_label_artists = scanning_label_artists.clone();
+                            let albums_stack_cell = albums_stack_cell.clone();
+                            let artists_stack_cell = artists_stack_cell.clone();
+                            main_context.clone().spawn_local(async move {
+                                // Perform database deletion.
+                                let _ = remove_folder_and_albums(&db_pool, folder_id).await;
 
-                                    // Refresh main library UI.
-                                    (self_async.refresh_library_ui)(
-                                        self_async.sort_ascending.get(),
-                                        self_async.sort_ascending_artists.get(),
-                                    );
+                                // Refresh main library UI.
+                                refresh_library_ui(
+                                    sort_ascending.get(),
+                                    sort_ascending_artists.get(),
+                                );
 
-                                    // Refresh the folder display in the settings dialog.
-                                    self_async.refresh_display().await;
-                                }
+                                // Create a new FolderSettingsPage instance for refreshing the display.
+                                let folder_settings_page = Self {
+                                    folders_group,
+                                    list_box,
+                                    db_pool,
+                                    refresh_library_ui,
+                                    sort_ascending,
+                                    sort_ascending_artists,
+                                    main_context,
+                                    sender,
+                                    scanning_label_albums,
+                                    scanning_label_artists,
+                                    albums_stack_cell,
+                                    artists_stack_cell,
+                                };
+
+                                // Refresh the folder display in the settings dialog.
+                                folder_settings_page.refresh_display().await;
                             });
                         });
                     });

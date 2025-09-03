@@ -5,12 +5,13 @@ use std::{
 };
 
 use glib::MainContext;
-use gtk4::ListBox;
+use gtk4::{Label, ListBox, Stack};
 use libadwaita::{
     PreferencesGroup, PreferencesPage,
     prelude::{PreferencesGroupExt, PreferencesPageExt},
 };
 use sqlx::SqlitePool;
+use tokio::sync::mpsc::UnboundedSender;
 
 use crate::ui::{
     components::sorting::{
@@ -34,6 +35,11 @@ use crate::ui::{
 /// * `sort_ascending_artists` - Shared state for artist sort direction.
 /// * `sort_orders` - Shared sort order preferences.
 /// * `main_context` - The GLib main context for spawning UI tasks.
+/// * `sender` - Optional sender to notify UI refresh after scanning.
+/// * `scanning_label_albums` - The scanning label for albums.
+/// * `scanning_label_artists` - The scanning label for artists.
+/// * `albums_stack_cell` - The albums stack cell.
+/// * `artists_stack_cell` - The artists stack cell.
 ///
 /// # Returns
 ///
@@ -45,6 +51,11 @@ pub fn create_library_page(
     sort_ascending_artists: Rc<Cell<bool>>,
     sort_orders: Rc<RefCell<Vec<SortOrder>>>,
     main_context: Rc<MainContext>,
+    sender: Option<UnboundedSender<()>>,
+    scanning_label_albums: Rc<Label>,
+    scanning_label_artists: Rc<Label>,
+    albums_stack_cell: Rc<RefCell<Option<Stack>>>,
+    artists_stack_cell: Rc<RefCell<Option<Stack>>>,
 ) -> PreferencesPage {
     // Library page definition
     let library_page = PreferencesPage::builder()
@@ -59,6 +70,11 @@ pub fn create_library_page(
         sort_ascending.clone(),
         sort_ascending_artists.clone(),
         main_context.clone(),
+        sender,
+        scanning_label_albums,
+        scanning_label_artists,
+        albums_stack_cell,
+        artists_stack_cell,
     );
 
     // Initial population of the folders group when the settings dialog opens.

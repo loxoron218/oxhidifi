@@ -72,7 +72,7 @@ pub async fn insert_or_get_folder(pool: &SqlitePool, path: &Path) -> Result<i64>
     // Use a single query that handles both insert and select cases
     let row = query(
         "INSERT OR IGNORE INTO folders (path) VALUES (?);
-         SELECT id FROM folders WHERE path = ?"
+         SELECT id FROM folders WHERE path = ?",
     )
     .bind(path_str)
     .bind(path_str)

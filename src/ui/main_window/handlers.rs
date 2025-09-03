@@ -50,7 +50,9 @@ use super::{state::WindowSharedState, widgets::WindowWidgets};
 /// * `receiver` - An `UnboundedReceiver<()>` to receive signals for scan feedback.
 /// * `refresh_library_ui` - A closure to trigger a full UI refresh.
 /// * `refresh_service` - An `Rc<refresh::RefreshService>` for managing live UI updates.
-/// * `screen_info` - The `ScreenInfo` struct containing primary screen dimensions and calculated UI element sizes.
+/// * `vbox_inner` - The main vertical box container.
+/// * `add_music_button_albums` - The "Add Music" button for albums.
+/// * `add_music_button_artists` - The "Add Music" button for artists.
 pub fn connect_all_handlers(
     widgets: &WindowWidgets,
     shared_state: &WindowSharedState,
@@ -385,5 +387,10 @@ pub fn connect_all_handlers(
         show_dr_badges_cloned.clone(),
         use_original_year_cloned.clone(),
         view_mode_cloned.clone(),
+        Some(sender.clone()),
+        widgets.scanning_label_albums.clone(),
+        widgets.scanning_label_artists.clone(),
+        widgets.albums_stack_cell.clone(),
+        widgets.artists_stack_cell.clone(),
     );
 }

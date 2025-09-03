@@ -167,6 +167,10 @@ pub fn create_add_folder_dialog_handler<T: IsA<Window> + Clone + 'static>(
 /// * `sort_ascending_artists` - An `Rc<Cell<bool>>` indicating the sort direction for artists.
 /// * `db_pool` - An `Arc<SqlitePool>` for database operations within the settings dialog.
 /// * `is_settings_open` - An `Rc<Cell<bool>>` flag to track if the settings dialog is currently open.
+/// * `show_dr_badges_setting` - An `Rc<Cell<bool>>` flag for showing DR badges.
+/// * `use_original_year_setting` - An `Rc<Cell<bool>>` flag for using original release year.
+/// * `view_mode_setting` - An `Rc<RefCell<String>>` for the view mode setting.
+/// * `sender` - Optional sender to notify UI refresh after scanning.
 pub fn connect_settings_dialog(
     settings_button: &Button,
     parent_window: impl IsA<Window> + Clone + 'static,
@@ -179,6 +183,11 @@ pub fn connect_settings_dialog(
     show_dr_badges_setting: Rc<Cell<bool>>,
     use_original_year_setting: Rc<Cell<bool>>,
     view_mode_setting: Rc<RefCell<String>>,
+    sender: Option<UnboundedSender<()>>,
+    scanning_label_albums: gtk4::Label,
+    scanning_label_artists: gtk4::Label,
+    albums_stack_cell: Rc<RefCell<Option<Stack>>>,
+    artists_stack_cell: Rc<RefCell<Option<Stack>>>,
 ) {
     // Clone all necessary `Rc` and `Arc` variables once for the `connect_clicked` closure.
     // These clones will be moved into the outer closure.
@@ -190,6 +199,7 @@ pub fn connect_settings_dialog(
     let db_pool_cloned = db_pool;
     let is_settings_open_cloned = is_settings_open;
     let show_dr_badges_setting_cloned = show_dr_badges_setting;
+    let sender_clone = sender.clone();
     settings_button.connect_clicked(move |_| {
         // Clone variables again for the `spawn_local` async block.
         // These clones will be moved into the inner async closure.
@@ -203,6 +213,11 @@ pub fn connect_settings_dialog(
         let show_dr_badges_setting_for_async = show_dr_badges_setting_cloned.clone();
         let use_original_year_setting_for_async = use_original_year_setting.clone();
         let view_mode_setting_for_async = view_mode_setting.clone();
+        let sender_for_async = sender_clone.clone();
+        let scanning_label_albums_clone = scanning_label_albums.clone();
+        let scanning_label_artists_clone = scanning_label_artists.clone();
+        let albums_stack_cell_clone = albums_stack_cell.clone();
+        let artists_stack_cell_clone = artists_stack_cell.clone();
         MainContext::default().spawn_local(async move {
             show_settings_dialog(
                 &window_for_async,
@@ -215,6 +230,11 @@ pub fn connect_settings_dialog(
                 show_dr_badges_setting_for_async,
                 use_original_year_setting_for_async,
                 view_mode_setting_for_async,
+                sender_for_async,
+                scanning_label_albums_clone,
+                scanning_label_artists_clone,
+                albums_stack_cell_clone,
+                artists_stack_cell_clone,
             );
         });
     });

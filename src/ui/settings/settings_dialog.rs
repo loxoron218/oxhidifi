@@ -5,12 +5,13 @@ use std::{
 };
 
 use glib::Propagation::{Proceed, Stop};
-use gtk4::{EventControllerKey, Window};
+use gtk4::{EventControllerKey, Label, Stack, Window};
 use libadwaita::{
     PreferencesWindow,
     gdk::Key,
     prelude::{GtkWindowExt, IsA, PreferencesWindowExt, WidgetExt},
 };
+use tokio::sync::mpsc::UnboundedSender;
 
 use crate::ui::{
     components::{
@@ -41,6 +42,14 @@ use crate::ui::{
 /// * `db_pool` - An `Arc<SqlitePool>` for database operations, particularly for managing library folders.
 /// * `is_settings_open` - An `Rc<Cell<bool>>` flag used to track whether the settings dialog is
 ///                        currently open, preventing multiple instances.
+/// * `show_dr_badges_setting` - An `Rc<Cell<bool>>` flag for showing DR badges.
+/// * `use_original_year_setting` - An `Rc<Cell<bool>>` flag for using original release year.
+/// * `view_mode_setting` - An `Rc<RefCell<String>>` for the view mode setting.
+/// * `sender` - Optional sender to notify UI refresh after scanning.
+/// * `scanning_label_albums` - The scanning label for albums.
+/// * `scanning_label_artists` - The scanning label for artists.
+/// * `albums_stack_cell` - The albums stack cell.
+/// * `artists_stack_cell` - The artists stack cell.
 pub fn show_settings_dialog(
     parent: &impl IsA<Window>,
     sort_orders: Rc<RefCell<Vec<SortOrder>>>,
@@ -52,6 +61,11 @@ pub fn show_settings_dialog(
     show_dr_badges_setting: Rc<Cell<bool>>,
     use_original_year_setting: Rc<Cell<bool>>,
     view_mode_setting: Rc<RefCell<String>>,
+    sender: Option<UnboundedSender<()>>,
+    scanning_label_albums: Label,
+    scanning_label_artists: Label,
+    albums_stack_cell: Rc<RefCell<Option<Stack>>>,
+    artists_stack_cell: Rc<RefCell<Option<Stack>>>,
 ) {
     // Create the settings window, configured as a modal dialog.
     let dialog = PreferencesWindow::builder()
@@ -81,6 +95,11 @@ pub fn show_settings_dialog(
         sort_ascending_artists.clone(),
         sort_orders.clone(),
         main_context.clone(),
+        sender,
+        Rc::new(scanning_label_albums),
+        Rc::new(scanning_label_artists),
+        albums_stack_cell,
+        artists_stack_cell,
     );
 
     // Create the General page
