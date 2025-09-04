@@ -16,7 +16,7 @@ use tokio::sync::mpsc::UnboundedSender;
 use crate::ui::{
     components::{
         config::{Settings, load_settings, save_settings},
-        sorting_types::SortOrder,
+        view_controls::sorting_controls::types::SortOrder,
     },
     settings::{
         audio_page::create_audio_page, general_page::create_general_page,

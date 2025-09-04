@@ -28,7 +28,10 @@ use tokio::{runtime::Runtime, sync::mpsc::UnboundedSender};
 
 use crate::{
     data::{db::crud::insert_or_get_folder, scanner::scan_folder},
-    ui::{components::sorting_types::SortOrder, settings::settings_dialog::show_settings_dialog},
+    ui::{
+        components::view_controls::sorting_controls::types::SortOrder,
+        settings::settings_dialog::show_settings_dialog,
+    },
     utils::performance_monitor::{format_metrics, get_metrics},
 };
 

@@ -4,6 +4,5 @@ pub mod navigation;
 pub mod player_bar;
 pub mod refresh;
 pub mod scan_feedback;
-pub mod sorting_types;
 pub mod tiles;
 pub mod view_controls;

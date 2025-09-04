@@ -13,12 +13,9 @@ use libadwaita::{
     prelude::{BoxExt, Cast, PopoverExt, WidgetExt},
 };
 
-use crate::ui::components::{
-    sorting_types::SortOrder,
-    view_controls::{
-        sorting_controls::create_sorting_control_row, view_mode::ViewMode,
-        zoom_controls::create_zoom_control_row,
-    },
+use crate::ui::components::view_controls::{
+    sorting_controls::create_sorting_control_row, sorting_controls::types::SortOrder,
+    view_mode::ViewMode, zoom_controls::create_zoom_control_row,
 };
 
 /// A split button widget that provides view control functionality

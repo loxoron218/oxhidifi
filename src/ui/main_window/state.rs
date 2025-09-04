@@ -3,7 +3,7 @@ use std::{
     rc::Rc,
 };
 
-use crate::{ui::components::sorting_types, utils::screen::ScreenInfo};
+use crate::{ui::components::view_controls::sorting_controls::types, utils::screen::ScreenInfo};
 
 /// `WindowSharedState` struct encapsulates all the `Rc<Cell<T>>` and `Rc<RefCell<T>>` managed
 /// shared state that is passed around and mutated by different parts of the UI logic.
@@ -14,7 +14,7 @@ use crate::{ui::components::sorting_types, utils::screen::ScreenInfo};
 pub struct WindowSharedState {
     /// Stores the current sort orders for albums and artists.
     /// `RefCell` allows for mutable access to the `Vec<SortOrder>` within an `Rc`.
-    pub sort_orders: Rc<RefCell<Vec<sorting_types::SortOrder>>>,
+    pub sort_orders: Rc<RefCell<Vec<types::SortOrder>>>,
     /// Indicates whether albums should be sorted in ascending order.
     /// `Cell` is used for simple copyable types like `bool` to allow mutable interior access.
     pub sort_ascending: Rc<Cell<bool>>,

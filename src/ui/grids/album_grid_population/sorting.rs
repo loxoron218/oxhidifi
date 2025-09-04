@@ -1,7 +1,9 @@
 use std::{cell::RefCell, cmp::Ordering::Equal, rc::Rc};
 
 use crate::ui::{
-    components::sorting_types::SortOrder::{self, Album, Artist, DrValue, Year},
+    components::view_controls::sorting_controls::types::SortOrder::{
+        self, Album, Artist, DrValue, Year,
+    },
     grids::album_grid_state::AlbumGridItem,
 };
 

@@ -2,7 +2,9 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
-use crate::ui::components::sorting_types::SortOrder::{Album, Artist, DrValue, Year};
+use crate::ui::components::view_controls::sorting_controls::types::SortOrder::{
+    Album, Artist, DrValue, Year,
+};
 
 /// Represents the sorting order for library views.
 ///
