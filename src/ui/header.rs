@@ -79,7 +79,7 @@ pub struct AppHeaderBar {
     /// The `ViewStack` managing the left-aligned buttons in the header (e.g., add or back button).
     /// This allows for animated transitions between different button states.
     pub left_btn_stack: ViewStack,
-    /// The `Clamp` widget containing the right-aligned utility buttons (search, sort, settings).
+    /// The `Clamp` widget containing the right-aligned utility buttons (search,  , settings).
     /// `Clamp` is used here for responsive layout and alignment.
     pub right_btn_box: Clamp,
     /// The back button, used for navigating back to previous views (e.g., from an album detail page).
@@ -88,8 +88,6 @@ pub struct AppHeaderBar {
     pub settings_button: Button,
     /// The search bar component, including its entry field, revealer, and trigger button.
     pub search_bar: SearchBar,
-    /// The sort button, used to change the sorting order of content in the main views.
-    pub sort_button: Button,
     /// The view control button, used to change view modes and access view options.
     pub button: ViewControlButton,
 }
@@ -107,7 +105,6 @@ pub fn build_header_bar() -> AppHeaderBar {
     let search_bar = SearchBar::new();
     let settings_button = create_icon_button("open-menu-symbolic");
     let back_button = create_icon_button("go-previous-symbolic");
-    let sort_button = create_icon_button("view-sort-descending-symbolic");
     let button = ViewControlButton::new();
 
     // Left-aligned button stack for animated transitions (e.g., main menu vs. back button).
@@ -133,7 +130,7 @@ pub fn build_header_bar() -> AppHeaderBar {
     // Initially show the main (add) button.
     left_btn_stack.set_visible_child_name("main");
 
-    // Right-aligned box containing search, sort, and settings buttons.
+    // Right-aligned box containing search, view_controls, and settings buttons.
     let right_btn_inner = Box::builder().orientation(Horizontal).spacing(6).build();
 
     // The search icon button.
@@ -141,9 +138,6 @@ pub fn build_header_bar() -> AppHeaderBar {
 
     // The animated search entry revealer.
     right_btn_inner.append(&*search_bar.revealer);
-
-    // Button to change sorting order.
-    right_btn_inner.append(&sort_button);
 
     // View control button for changing view modes and accessing view options.
     right_btn_inner.append(button.widget());
@@ -163,7 +157,6 @@ pub fn build_header_bar() -> AppHeaderBar {
         back_button,
         settings_button,
         search_bar,
-        sort_button,
         button,
     }
 }

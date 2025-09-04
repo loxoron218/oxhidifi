@@ -3,7 +3,7 @@ use std::{
     rc::Rc,
 };
 
-use gtk4::{Button, ToggleButton};
+use gtk4::ToggleButton;
 use libadwaita::{
     Clamp, ViewStack,
     prelude::{ButtonExt, ToggleButtonExt},
@@ -31,7 +31,6 @@ use super::{
 /// * `albums_btn` - The `ToggleButton` for the "Albums" tab.
 /// * `artists_btn` - The `ToggleButton` for the "Artists" tab.
 /// * `stack` - The main `ViewStack` managing application pages.
-/// * `sort_button` - The `Button` used for sorting, whose icon needs updating.
 /// * `left_btn_stack` - The `ViewStack` controlling the left side of the header bar.
 /// * `right_btn_box` - The `Clamp` widget containing the right side buttons of the header bar.
 /// * `last_tab` - `Rc<Cell<&'static str>>` storing the name of the last active main tab.
@@ -45,7 +44,6 @@ pub fn connect_tab_navigation(
     albums_btn: &ToggleButton,
     artists_btn: &ToggleButton,
     stack: &ViewStack,
-    sort_button: &Button,
     left_btn_stack: &ViewStack,
     right_btn_box: &Clamp,
     last_tab: Rc<Cell<&'static str>>,
@@ -61,7 +59,6 @@ pub fn connect_tab_navigation(
     let sort_ascending_albums_clone = sort_ascending.clone();
     let sort_ascending_artists_albums_clone = sort_ascending_artists.clone();
     let refresh_library_ui_albums_clone = refresh_library_ui.clone();
-    let sort_button_albums_clone = sort_button.clone();
     let last_tab_albums_clone = last_tab.clone();
     let albums_btn_albums_clone = albums_btn.clone();
     let artists_btn_albums_clone = artists_btn.clone();
@@ -97,16 +94,8 @@ pub fn connect_tab_navigation(
             &sort_ascending_artists_albums_clone,
         );
 
-        // Restore the last used (or persistent) sort direction for albums and update the sort button icon.
-        let ascending = sort_ascending_albums_clone.get();
-        sort_button_albums_clone.set_icon_name(if ascending {
-            "view-sort-descending-symbolic"
-        } else {
-            "view-sort-ascending-symbolic"
-        });
-
         // Trigger a refresh for the albums view with its specific sort order.
-        refresh_library_ui_albums_clone(ascending, sort_ascending_artists_albums_clone.get());
+        refresh_library_ui_albums_clone(sort_ascending_albums_clone.get(), sort_ascending_artists_albums_clone.get());
 
         // Ensure toggle button states are correct: Albums active, Artists inactive.
         albums_btn_albums_clone.set_active(true);
@@ -119,7 +108,6 @@ pub fn connect_tab_navigation(
     let sort_ascending_artists_clone = sort_ascending.clone();
     let sort_ascending_artists_artists_clone = sort_ascending_artists.clone();
     let refresh_library_ui_artists_clone = refresh_library_ui.clone();
-    let sort_button_artists_clone = sort_button.clone();
     let last_tab_artists_clone = last_tab.clone();
     let albums_btn_artists_clone = albums_btn.clone();
     let artists_btn_artists_clone = artists_btn.clone();
@@ -170,16 +158,8 @@ pub fn connect_tab_navigation(
             &sort_ascending_artists_artists_clone,
         );
 
-        // Restore the last used (or persistent) sort direction for artists and update the sort button icon.
-        let ascending = sort_ascending_artists_artists_clone.get();
-        sort_button_artists_clone.set_icon_name(if ascending {
-            "view-sort-descending-symbolic"
-        } else {
-            "view-sort-ascending-symbolic"
-        });
-
         // Trigger a refresh for the artists view with its specific sort order.
-        refresh_library_ui_artists_clone(sort_ascending_artists_clone.get(), ascending);
+        refresh_library_ui_artists_clone(sort_ascending_artists_clone.get(), sort_ascending_artists_artists_clone.get());
 
         // Ensure toggle button states are correct: Artists active, Albums inactive.
         albums_btn_artists_clone.set_active(false);

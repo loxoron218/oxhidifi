@@ -1,6 +1,5 @@
 pub mod core;
 pub mod shortcuts;
-pub mod sorting;
 pub mod tabs;
 
 /// Constants for `ViewStack` child names, improving readability and reducing magic strings.

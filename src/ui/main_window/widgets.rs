@@ -24,7 +24,7 @@ pub struct WindowWidgets {
     pub stack: ViewStack,
     /// The `ViewStack` managing the left-aligned buttons in the header (e.g., add or back button).
     pub left_btn_stack: ViewStack,
-    /// The `Clamp` widget containing the right-aligned utility buttons (search, sort, settings).
+    /// The `Clamp` widget containing the right-aligned utility buttons (search, view_controls, settings).
     pub right_btn_box: Clamp,
     /// The back button, used for navigating back to previous views.
     pub back_button: Button,
@@ -32,8 +32,6 @@ pub struct WindowWidgets {
     pub settings_button: Button,
     /// The search bar component, including its entry field, revealer, and trigger button.
     pub search_bar: AppHeaderBar,
-    /// The sort button, used to change the sorting order of content.
-    pub sort_button: Button,
     /// The view control button, used to change view modes and access view options.
     pub button: ViewControlButton,
     /// The "Albums" toggle button in the tab bar.

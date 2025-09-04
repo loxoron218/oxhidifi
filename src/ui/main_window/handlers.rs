@@ -13,15 +13,10 @@ use crate::{
             navigation::{
                 core::{connect_album_navigation, connect_artist_navigation, connect_back_button},
                 shortcuts::setup_keyboard_shortcuts,
-                sorting::connect_sort_button,
                 tabs::connect_tab_navigation,
             },
             refresh::{RefreshService, setup_live_monitor_refresh},
             scan_feedback::spawn_scanning_label_refresh_task,
-            sorting::sorting_ui_utils::{
-                connect_sort_icon_update_on_tab_switch, connect_tab_sort_refresh,
-                set_initial_sort_icon_state,
-            },
         },
         grids::{
             album_grid_rebuilder::rebuild_albums_grid_for_window,
@@ -75,16 +70,6 @@ pub fn connect_all_handlers(
     let show_dr_badges_cloned = shared_state.show_dr_badges.clone();
     let use_original_year_cloned = shared_state.use_original_year.clone();
     let view_mode_cloned = shared_state.view_mode.clone();
-
-    // Set initial sort icon state based on loaded settings.
-    // This ensures the sort button's icon correctly reflects the default or saved sort order
-    // when the application starts.
-    set_initial_sort_icon_state(
-        &widgets.sort_button,
-        &sort_ascending_cloned,
-        &sort_ascending_artists_cloned,
-        "albums",
-    );
 
     // Connect back button functionality.
     // The back button uses the `nav_history` to navigate to previous views, providing
@@ -258,7 +243,6 @@ pub fn connect_all_handlers(
         &widgets.albums_btn,
         &widgets.artists_btn,
         &widgets.stack,
-        &widgets.sort_button,
         &widgets.left_btn_stack,
         &widgets.right_btn_box,
         last_tab_cloned.clone(),
@@ -267,35 +251,6 @@ pub fn connect_all_handlers(
         sort_ascending_artists_cloned.clone(),
         refresh_library_ui.clone(),
         None::<fn()>,
-    );
-
-    // Connect sorting logic for tab toggles and sort icon updates.
-    // Ensures that when tabs are switched or sort preferences change, the UI reflects
-    // the correct sort icon and triggers a refresh of the displayed content.
-    connect_tab_sort_refresh(
-        &widgets.albums_btn,
-        &widgets.artists_btn,
-        refresh_library_ui.clone(),
-        sort_ascending_cloned.clone(),
-        sort_ascending_artists_cloned.clone(),
-        Rc::new(widgets.stack.clone()),
-    );
-    connect_sort_icon_update_on_tab_switch(
-        &widgets.sort_button,
-        &widgets.stack,
-        sort_ascending_cloned.clone(),
-        sort_ascending_artists_cloned.clone(),
-    );
-
-    // Connect sort button logic to toggle sort order and refresh UI.
-    // This allows users to change the sorting direction (ascending/descending) for the
-    // currently active library view and updates the UI to reflect the new order.
-    connect_sort_button(
-        &widgets.sort_button,
-        &widgets.stack,
-        sort_ascending_cloned.clone(),
-        sort_ascending_artists_cloned.clone(),
-        refresh_library_ui.clone(),
     );
 
     // Spawn scanning label refresh task to hide labels after scan completion.
