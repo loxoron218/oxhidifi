@@ -9,7 +9,7 @@ use gtk4::{
     Popover, Separator,
 };
 use libadwaita::{
-    SplitButton,
+    SplitButton, ViewStack,
     prelude::{BoxExt, Cast, PopoverExt, WidgetExt},
 };
 
@@ -99,6 +99,7 @@ impl ViewControlButton {
         sort_ascending: Rc<Cell<bool>>,
         sort_ascending_artists: Rc<Cell<bool>>,
         on_sort_changed: Rc<dyn Fn(bool, bool)>,
+        stack: Rc<ViewStack>,
     ) {
         // Get the popover content box
         if let Some(popover) = self.split_button.popover() {
@@ -110,6 +111,7 @@ impl ViewControlButton {
                         sort_ascending,
                         sort_ascending_artists,
                         on_sort_changed,
+                        stack.clone(),
                     );
                     popover_box.append(&sorting_widget);
                 }

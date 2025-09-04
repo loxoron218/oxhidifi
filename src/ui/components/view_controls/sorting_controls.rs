@@ -8,12 +8,13 @@ use std::{
 use glib::{SendValue, Type, timeout_add_local_once};
 use gtk4::{
     Align::Start,
-    Box, Button, DropTarget, Label, ListBox, ListBoxRow,
+    Box, Button, DragSource, DropTarget, Label, ListBox, ListBoxRow,
     Orientation::{Horizontal, Vertical},
+    SelectionMode, Widget,
     gdk::{ContentProvider, DragAction},
 };
 use libadwaita::{
-    ActionRow,
+    ActionRow, ViewStack,
     prelude::{
         BoxExt, ButtonExt, Cast, ListBoxRowExt, ObjectExt, ObjectType, PreferencesRowExt, WidgetExt,
     },
@@ -46,6 +47,7 @@ pub fn create_sorting_control_row(
     sort_ascending: Rc<Cell<bool>>,
     sort_ascending_artists: Rc<Cell<bool>>,
     on_sort_changed: Rc<dyn Fn(bool, bool)>,
+    stack: Rc<ViewStack>,
 ) -> Box {
     // Main Container: A vertical box for the whole sorting section.
     let main_box = Box::builder()
@@ -75,8 +77,14 @@ pub fn create_sorting_control_row(
     sort_direction_button_box.add_css_class("linked");
 
     // Create a button for toggling sort direction
-    // Set initial icon based on current sort direction
-    let initial_icon = if sort_ascending.get() {
+    // Set initial icon based on current sort direction of the current view
+    let current_tab = stack
+        .visible_child_name()
+        .unwrap_or_else(|| "albums".into());
+    let is_currently_albums = current_tab.as_str() == "albums";
+    let initial_icon = if (is_currently_albums && sort_ascending.get())
+        || (!is_currently_albums && sort_ascending_artists.get())
+    {
         // For ascending order
         "view-sort-descending-symbolic"
     } else {
@@ -98,17 +106,92 @@ pub fn create_sorting_control_row(
     let sort_ascending_artists_clone = sort_ascending_artists.clone();
     let on_sort_changed_clone = on_sort_changed.clone();
     let sort_direction_button_clone = sort_direction_button.clone();
+    let stack_clone = stack.clone();
 
     // Connect the sort direction button to update sort direction
+    let sort_ascending_clone_button = sort_ascending_clone.clone();
+    let sort_ascending_artists_clone_button = sort_ascending_artists_clone.clone();
+    let on_sort_changed_clone_button = on_sort_changed_clone.clone();
     sort_direction_button.connect_clicked(move |_| {
-        // Toggle the sort direction
-        let is_ascending = !sort_ascending_clone.get();
+        // Determine the current view and toggle the appropriate sort direction
+        let current_tab = stack_clone
+            .visible_child_name()
+            .unwrap_or_else(|| "albums".into());
+        let is_currently_albums = current_tab.as_str() == "albums";
 
-        // Update the shared state
-        sort_ascending_clone.set(is_ascending);
-        sort_ascending_artists_clone.set(is_ascending);
+        if is_currently_albums {
+            // Toggle the album sort direction
+            let is_ascending = !sort_ascending_clone_button.get();
 
-        // Update the button icon
+            // Update the shared state
+            sort_ascending_clone_button.set(is_ascending);
+
+            // Update the button icon
+            let icon_name = if is_ascending {
+                // For ascending order
+                "view-sort-descending-symbolic"
+            } else {
+                // For descending order
+                "view-sort-ascending-symbolic"
+            };
+            sort_direction_button_clone.set_icon_name(icon_name);
+
+            // Save to settings
+            let mut settings = load_settings();
+            settings.sort_ascending_albums = is_ascending;
+            let _ = save_settings(&settings);
+
+            // Trigger UI refresh
+            on_sort_changed_clone_button(
+                sort_ascending_clone_button.get(),
+                sort_ascending_artists_clone_button.get(),
+            );
+        } else {
+            // Toggle the artist sort direction
+            let is_ascending = !sort_ascending_artists_clone_button.get();
+
+            // Update the shared state
+            sort_ascending_artists_clone_button.set(is_ascending);
+
+            // Update the button icon
+            let icon_name = if is_ascending {
+                // For ascending order
+                "view-sort-descending-symbolic"
+            } else {
+                // For descending order
+                "view-sort-ascending-symbolic"
+            };
+            sort_direction_button_clone.set_icon_name(icon_name);
+
+            // Save to settings
+            let mut settings = load_settings();
+            settings.sort_ascending_artists = is_ascending;
+            let _ = save_settings(&settings);
+
+            // Trigger UI refresh
+            on_sort_changed_clone_button(
+                sort_ascending_clone_button.get(),
+                sort_ascending_artists_clone_button.get(),
+            );
+        }
+    });
+
+    // Connect to view changes to update the sorting button icon
+    let sort_direction_button_clone_for_listener = sort_direction_button.clone();
+    let sort_ascending_clone_for_listener = sort_ascending.clone();
+    let sort_ascending_artists_clone_for_listener = sort_ascending_artists.clone();
+    let stack_clone_for_listener = stack.clone();
+    stack_clone_for_listener.connect_visible_child_notify(move |stack| {
+        // Update the button icon based on the current view and its sort direction
+        let current_tab = stack
+            .visible_child_name()
+            .unwrap_or_else(|| "albums".into());
+        let is_currently_albums = current_tab.as_str() == "albums";
+        let is_ascending = if is_currently_albums {
+            sort_ascending_clone_for_listener.get()
+        } else {
+            sort_ascending_artists_clone_for_listener.get()
+        };
         let icon_name = if is_ascending {
             // For ascending order
             "view-sort-descending-symbolic"
@@ -116,19 +199,7 @@ pub fn create_sorting_control_row(
             // For descending order
             "view-sort-ascending-symbolic"
         };
-        sort_direction_button_clone.set_icon_name(icon_name);
-
-        // Save to settings
-        let mut settings = load_settings();
-        settings.sort_ascending_albums = is_ascending;
-        settings.sort_ascending_artists = is_ascending;
-        let _ = save_settings(&settings);
-
-        // Trigger UI refresh
-        on_sort_changed_clone(
-            sort_ascending_clone.get(),
-            sort_ascending_artists_clone.get(),
-        );
+        sort_direction_button_clone_for_listener.set_icon_name(icon_name);
     });
 
     // Create a label for the sort criteria section
@@ -148,7 +219,7 @@ pub fn create_sorting_control_row(
         .margin_end(12)
         .margin_bottom(6)
         .build();
-    sort_listbox.set_selection_mode(gtk4::SelectionMode::None);
+    sort_listbox.set_selection_mode(SelectionMode::None);
     main_box.append(&sort_listbox);
 
     // Create rows for each sort criterion with drag and drop support
@@ -202,7 +273,7 @@ pub fn update_sorting_criteria(
         list_row.set_child(Some(&row));
 
         // DragSource setup
-        let drag_source = gtk4::DragSource::new();
+        let drag_source = DragSource::new();
         drag_source.set_actions(DragAction::MOVE);
         drag_source.connect_prepare({
             let order_clone = *order;
@@ -241,7 +312,7 @@ pub fn update_sorting_criteria(
                                 count += 1;
                                 current_child = child.next_sibling();
                             }
-                            let mut children_widgets: Vec<gtk4::Widget> = Vec::with_capacity(count);
+                            let mut children_widgets: Vec<Widget> = Vec::with_capacity(count);
                             let mut current_child = listbox.first_child();
                             while let Some(child) = current_child {
                                 children_widgets.push(child.clone());
@@ -251,7 +322,7 @@ pub fn update_sorting_criteria(
                             let mut target_idx = None;
                             for (idx, child_widget) in children_widgets.iter().enumerate() {
                                 if child_widget.as_ptr()
-                                    == target_row.clone().upcast_ref::<gtk4::Widget>().as_ptr()
+                                    == target_row.clone().upcast_ref::<Widget>().as_ptr()
                                 {
                                     target_idx = Some(idx);
                                 }

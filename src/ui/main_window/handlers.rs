@@ -342,5 +342,6 @@ pub fn connect_all_handlers(
         sort_ascending_cloned.clone(),
         sort_ascending_artists_cloned.clone(),
         refresh_library_ui.clone(),
+        Rc::new(widgets.stack.clone()),
     );
 }
