@@ -6,3 +6,4 @@ pub mod refresh;
 pub mod scan_feedback;
 pub mod sorting;
 pub mod tiles;
+pub mod view_controls;
