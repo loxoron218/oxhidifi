@@ -27,7 +27,7 @@ use crate::ui::{
 /// Shows the settings dialog, providing an interface for users to manage application preferences.
 ///
 /// This function constructs a `PreferencesWindow` and populates it with various settings
-/// pages and groups, including library folder management and sorting preferences.
+/// pages and groups, including library folder management.
 /// It interacts with shared application state to reflect and persist user choices.
 ///
 /// # Arguments
@@ -36,7 +36,7 @@ use crate::ui::{
 /// * `sort_orders` - An `Rc<RefCell<Vec<SortOrder>>>` holding the current sort order preferences.
 ///                   Changes made in the dialog are reflected in this shared state.
 /// * `refresh_library_ui` - A callback `Rc<dyn Fn(bool, bool)>` to trigger a refresh of the
-///                          main library UI after settings changes (e.g., folder removal, sort order change).
+///                          main library UI after settings changes (e.g., folder removal).
 /// * `sort_ascending` - An `Rc<Cell<bool>>` indicating the current sort direction for albums.
 /// * `sort_ascending_artists` - An `Rc<Cell<bool>>` indicating the current sort direction for artists.
 /// * `db_pool` - An `Arc<SqlitePool>` for database operations, particularly for managing library folders.
@@ -93,7 +93,6 @@ pub fn show_settings_dialog(
         refresh_library_ui.clone(),
         sort_ascending.clone(),
         sort_ascending_artists.clone(),
-        sort_orders.clone(),
         main_context.clone(),
         sender,
         Rc::new(scanning_label_albums),
