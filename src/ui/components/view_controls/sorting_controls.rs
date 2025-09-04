@@ -21,7 +21,7 @@ use libadwaita::{
 
 use crate::ui::components::{
     config::{Settings, load_settings, save_settings},
-    sorting::sorting_types::{SortOrder, sort_order_label},
+    sorting_types::{SortOrder, sort_order_label},
 };
 
 /// Creates a custom sorting control widget that integrates with the application's sorting system.

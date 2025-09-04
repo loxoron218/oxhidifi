@@ -9,9 +9,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 use serde_json::{from_str, to_string_pretty};
 
-use crate::ui::components::sorting::sorting_types::SortOrder::{
-    self, Album, Artist, DrValue, Year,
-};
+use crate::ui::components::sorting_types::SortOrder::{self, Album, Artist, DrValue, Year};
 
 /// Manages application settings, including sorting preferences and completed albums.
 ///

@@ -14,7 +14,7 @@ use tokio_stream::{StreamExt, wrappers::UnboundedReceiverStream};
 use crate::{
     data::db::dr_sync::synchronize_dr_completed_background,
     ui::{
-        components::{player_bar::PlayerBar, sorting::sorting_types::SortOrder},
+        components::{player_bar::PlayerBar, sorting_types::SortOrder},
         grids::{
             album_grid_population::{sorting::sort_albums, ui_builder::create_album_tile},
             album_grid_state::{

@@ -13,7 +13,7 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
 use crate::{
     ui::{
-        components::{player_bar::PlayerBar, sorting::sorting_types::SortOrder},
+        components::{player_bar::PlayerBar, sorting_types::SortOrder},
         grids::album_grid_population::populate_albums_grid,
         grids::artist_grid_population::populate_artist_grid,
         search::clear_grid,

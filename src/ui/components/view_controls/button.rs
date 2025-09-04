@@ -14,7 +14,7 @@ use libadwaita::{
 };
 
 use crate::ui::components::{
-    sorting::sorting_types::SortOrder,
+    sorting_types::SortOrder,
     view_controls::{
         sorting_controls::create_sorting_control_row, view_mode::ViewMode,
         zoom_controls::create_zoom_control_row,
