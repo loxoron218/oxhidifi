@@ -359,19 +359,6 @@ pub fn connect_all_handlers(
         &nav_history_cloned,
     );
 
-    // Connect "Add Folder" dialog to its button.
-    // This allows users to add new music folders to their library via a file chooser dialog.
-    let add_folder_handler = create_add_folder_dialog_handler(
-        widgets.window.clone(),
-        widgets.scanning_label_albums.clone(),
-        db_pool.clone(),
-        sender.clone(),
-        widgets.albums_stack_cell.clone(),
-    );
-    widgets.add_button.connect_clicked(move |_| {
-        add_folder_handler();
-    });
-
     // Connect settings dialog to its button.
     // This opens the application's settings dialog, allowing users to configure preferences
     // such as sorting orders and other application behaviors.

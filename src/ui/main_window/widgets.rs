@@ -26,8 +26,6 @@ pub struct WindowWidgets {
     pub left_btn_stack: ViewStack,
     /// The `Clamp` widget containing the right-aligned utility buttons (search, sort, settings).
     pub right_btn_box: Clamp,
-    /// The '+' button, typically used to add new content (e.g., music folders).
-    pub add_button: Button,
     /// The back button, used for navigating back to previous views.
     pub back_button: Button,
     /// The settings button, which opens the application's configuration dialog.

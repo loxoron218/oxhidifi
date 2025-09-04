@@ -132,7 +132,6 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         stack: stack.clone(),
         left_btn_stack: app_header_bar_widgets.left_btn_stack.clone(),
         right_btn_box: app_header_bar_widgets.right_btn_box.clone(),
-        add_button: app_header_bar_widgets.add_button.clone(),
         back_button: app_header_bar_widgets.back_button.clone(),
         settings_button: app_header_bar_widgets.settings_button.clone(),
         search_bar: app_header_bar_widgets.clone(),

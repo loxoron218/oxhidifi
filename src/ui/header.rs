@@ -84,8 +84,6 @@ pub struct AppHeaderBar {
     /// The `Clamp` widget containing the right-aligned utility buttons (search, sort, settings).
     /// `Clamp` is used here for responsive layout and alignment.
     pub right_btn_box: Clamp,
-    /// The '+' button, typically used to add new content (e.g., music folders).
-    pub add_button: Button,
     /// The back button, used for navigating back to previous views (e.g., from an album detail page).
     pub back_button: Button,
     /// The settings button, which opens the application's configuration dialog.
@@ -108,7 +106,6 @@ pub struct AppHeaderBar {
 /// An `AppHeaderBar` instance containing all the constructed header widgets.
 pub fn build_header_bar() -> AppHeaderBar {
     // Create individual buttons using the helper function for consistency and brevity.
-    let add_button = create_icon_button("list-add");
     let search_bar = SearchBar::new();
     let settings_button = create_icon_button("open-menu-symbolic");
     let back_button = create_icon_button("go-previous-symbolic");
@@ -118,10 +115,11 @@ pub fn build_header_bar() -> AppHeaderBar {
     // Left-aligned button stack for animated transitions (e.g., main menu vs. back button).
     let left_btn_stack = ViewStack::builder().build();
 
-    // Add button: Used for actions like adding new music folders.
+    // Empty state placeholder for the back button.
     // Wrapped in a Clamp and added to the ViewStack for animated visibility.
+    let empty_widget = Box::builder().orientation(Horizontal).build();
     left_btn_stack.add_titled(
-        &create_view_stack_child_box(&add_button),
+        &create_view_stack_child_box(&empty_widget),
         Some("main"),
         "Main",
     );
@@ -164,7 +162,6 @@ pub fn build_header_bar() -> AppHeaderBar {
     AppHeaderBar {
         left_btn_stack,
         right_btn_box,
-        add_button,
         back_button,
         settings_button,
         search_bar,
