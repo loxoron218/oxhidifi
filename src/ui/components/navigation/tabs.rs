@@ -95,7 +95,10 @@ pub fn connect_tab_navigation(
         );
 
         // Trigger a refresh for the albums view with its specific sort order.
-        refresh_library_ui_albums_clone(sort_ascending_albums_clone.get(), sort_ascending_artists_albums_clone.get());
+        refresh_library_ui_albums_clone(
+            sort_ascending_albums_clone.get(),
+            sort_ascending_artists_albums_clone.get(),
+        );
 
         // Ensure toggle button states are correct: Albums active, Artists inactive.
         albums_btn_albums_clone.set_active(true);
@@ -159,7 +162,10 @@ pub fn connect_tab_navigation(
         );
 
         // Trigger a refresh for the artists view with its specific sort order.
-        refresh_library_ui_artists_clone(sort_ascending_artists_clone.get(), sort_ascending_artists_artists_clone.get());
+        refresh_library_ui_artists_clone(
+            sort_ascending_artists_clone.get(),
+            sort_ascending_artists_artists_clone.get(),
+        );
 
         // Ensure toggle button states are correct: Artists active, Albums inactive.
         albums_btn_artists_clone.set_active(false);
