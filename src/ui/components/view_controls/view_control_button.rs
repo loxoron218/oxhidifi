@@ -12,8 +12,6 @@ use libadwaita::{
 pub enum ViewMode {
     /// Grid view layout for displaying content in a grid format
     GridView,
-    /// List view layout for displaying content in a list format
-    ListView,
 }
 
 impl ViewMode {
@@ -25,7 +23,6 @@ impl ViewMode {
     pub fn icon_name(&self) -> &'static str {
         match self {
             ViewMode::GridView => "view-grid-symbolic",
-            ViewMode::ListView => "view-list-symbolic",
         }
     }
 
@@ -37,7 +34,6 @@ impl ViewMode {
     pub fn tooltip_text(&self) -> &'static str {
         match self {
             ViewMode::GridView => "Grid View",
-            ViewMode::ListView => "List View",
         }
     }
 }
@@ -157,28 +153,6 @@ impl ViewControlButton {
     /// A reference to the internal `SplitButton` widget
     pub fn widget(&self) -> &SplitButton {
         &self.split_button
-    }
-
-    /// Sets the current view mode and updates the button appearance
-    ///
-    /// Changes the view mode and automatically updates the button's icon
-    /// and tooltip to reflect the new mode.
-    ///
-    /// # Parameters
-    ///
-    /// * `mode` - The new `ViewMode` to set
-    pub fn set_view_mode(&mut self, mode: ViewMode) {
-        self.view_mode = mode;
-        self.update_main_button();
-    }
-
-    /// Returns the current view mode
-    ///
-    /// # Returns
-    ///
-    /// The current `ViewMode` of the button
-    pub fn view_mode(&self) -> ViewMode {
-        self.view_mode
     }
 }
 

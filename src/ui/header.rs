@@ -92,8 +92,6 @@ pub struct AppHeaderBar {
     pub search_bar: SearchBar,
     /// The sort button, used to change the sorting order of content in the main views.
     pub sort_button: Button,
-    /// The view control button, used to change the view mode and access view options.
-    pub view_control_button: ViewControlButton,
 }
 
 /// Builds the application's primary header bar, including left-aligned action buttons,
@@ -110,7 +108,7 @@ pub fn build_header_bar() -> AppHeaderBar {
     let settings_button = create_icon_button("open-menu-symbolic");
     let back_button = create_icon_button("go-previous-symbolic");
     let sort_button = create_icon_button("view-sort-descending-symbolic");
-    let mut view_control_button = ViewControlButton::new();
+    let view_control_button = ViewControlButton::new();
 
     // Left-aligned button stack for animated transitions (e.g., main menu vs. back button).
     let left_btn_stack = ViewStack::builder().build();
@@ -166,7 +164,6 @@ pub fn build_header_bar() -> AppHeaderBar {
         settings_button,
         search_bar,
         sort_button,
-        view_control_button,
     }
 }
 
