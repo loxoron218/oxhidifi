@@ -380,4 +380,12 @@ pub fn connect_all_handlers(
         widgets.albums_stack_cell.clone(),
         widgets.artists_stack_cell.clone(),
     );
+
+    // Connect the view control button to the sorting system
+    widgets.button.connect_sorting(
+        sort_orders_cloned.clone(),
+        sort_ascending_cloned.clone(),
+        sort_ascending_artists_cloned.clone(),
+        refresh_library_ui.clone(),
+    );
 }

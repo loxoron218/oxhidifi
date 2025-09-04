@@ -6,9 +6,7 @@ use libadwaita::{
     prelude::{BoxExt, ButtonExt, IsA, WidgetExt},
 };
 
-use crate::ui::{
-    components::view_controls::view_control_button::ViewControlButton, search_bar::SearchBar,
-};
+use crate::ui::{components::view_controls::ViewControlButton, search_bar::SearchBar};
 
 /// Helper to create a GTK Button with a specified icon name.
 ///
@@ -92,6 +90,8 @@ pub struct AppHeaderBar {
     pub search_bar: SearchBar,
     /// The sort button, used to change the sorting order of content in the main views.
     pub sort_button: Button,
+    /// The view control button, used to change view modes and access view options.
+    pub button: ViewControlButton,
 }
 
 /// Builds the application's primary header bar, including left-aligned action buttons,
@@ -108,7 +108,7 @@ pub fn build_header_bar() -> AppHeaderBar {
     let settings_button = create_icon_button("open-menu-symbolic");
     let back_button = create_icon_button("go-previous-symbolic");
     let sort_button = create_icon_button("view-sort-descending-symbolic");
-    let view_control_button = ViewControlButton::new();
+    let button = ViewControlButton::new();
 
     // Left-aligned button stack for animated transitions (e.g., main menu vs. back button).
     let left_btn_stack = ViewStack::builder().build();
@@ -146,7 +146,7 @@ pub fn build_header_bar() -> AppHeaderBar {
     right_btn_inner.append(&sort_button);
 
     // View control button for changing view modes and accessing view options.
-    right_btn_inner.append(view_control_button.widget());
+    right_btn_inner.append(button.widget());
 
     // Button to open application settings.
     right_btn_inner.append(&settings_button);
@@ -164,6 +164,7 @@ pub fn build_header_bar() -> AppHeaderBar {
         settings_button,
         search_bar,
         sort_button,
+        button,
     }
 }
 

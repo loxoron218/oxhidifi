@@ -3,7 +3,10 @@ use std::{cell::RefCell, rc::Rc};
 use gtk4::{Button, FlowBox, Label, Stack, ToggleButton};
 use libadwaita::{ApplicationWindow, Clamp, ViewStack};
 
-use crate::ui::{components::player_bar::PlayerBar, header::AppHeaderBar};
+use crate::ui::{
+    components::{player_bar::PlayerBar, view_controls::ViewControlButton},
+    header::AppHeaderBar,
+};
 
 /// `WindowWidgets` struct encapsulates references to all the essential GTK widgets
 /// that make up the main application window's user interface.
@@ -31,6 +34,8 @@ pub struct WindowWidgets {
     pub search_bar: AppHeaderBar,
     /// The sort button, used to change the sorting order of content.
     pub sort_button: Button,
+    /// The view control button, used to change view modes and access view options.
+    pub button: ViewControlButton,
     /// The "Albums" toggle button in the tab bar.
     pub albums_btn: ToggleButton,
     /// The "Artists" toggle button in the tab bar.
