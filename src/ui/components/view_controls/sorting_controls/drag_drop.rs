@@ -157,7 +157,6 @@ pub fn setup_drag_drop_for_row(
                                         completed_albums: prev.completed_albums,
                                         show_dr_badges: prev.show_dr_badges,
                                         use_original_year: prev.use_original_year,
-                                        view_mode: prev.view_mode.clone(),
                                     });
 
                                     // Trigger UI refresh

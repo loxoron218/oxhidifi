@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc};
+use std::rc::Rc;
 
 use gtk4::{
     Align::{Center, Fill, Start},
@@ -39,7 +39,6 @@ pub fn build_artist_grid(
     scanning_label: &Label,
     add_music_button: &Button,
     artist_count_label: Rc<Label>,
-    _view_mode: Rc<RefCell<String>>,
 ) -> (Stack, FlowBox) {
     // --- Empty State ---
     // This state is shown when no artists are found in the library and no scan is in progress.

@@ -36,6 +36,4 @@ pub struct WindowSharedState {
     pub show_dr_badges: Rc<Cell<bool>>,
     /// Indicates whether the original release year should be used for display.
     pub use_original_year: Rc<Cell<bool>>,
-    /// Indicates the preferred view mode for albums and artists (e.g., "Grid View", "List View").
-    pub view_mode: Rc<RefCell<String>>,
 }

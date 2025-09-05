@@ -44,7 +44,6 @@ use crate::ui::{
 ///                        currently open, preventing multiple instances.
 /// * `show_dr_badges_setting` - An `Rc<Cell<bool>>` flag for showing DR badges.
 /// * `use_original_year_setting` - An `Rc<Cell<bool>>` flag for using original release year.
-/// * `view_mode_setting` - An `Rc<RefCell<String>>` for the view mode setting.
 /// * `sender` - Optional sender to notify UI refresh after scanning.
 /// * `scanning_label_albums` - The scanning label for albums.
 /// * `scanning_label_artists` - The scanning label for artists.
@@ -60,7 +59,6 @@ pub fn show_settings_dialog(
     is_settings_open: Rc<Cell<bool>>,
     show_dr_badges_setting: Rc<Cell<bool>>,
     use_original_year_setting: Rc<Cell<bool>>,
-    view_mode_setting: Rc<RefCell<String>>,
     sender: Option<UnboundedSender<()>>,
     scanning_label_albums: Label,
     scanning_label_artists: Label,
@@ -109,7 +107,6 @@ pub fn show_settings_dialog(
         sort_ascending_artists.clone(),
         show_dr_badges_setting.clone(),
         use_original_year_setting.clone(),
-        view_mode_setting.clone(),
     );
 
     // Create the Audio page
@@ -120,7 +117,6 @@ pub fn show_settings_dialog(
     let is_settings_open_clone = is_settings_open.clone();
     let show_dr_badges_setting_clone_for_close = show_dr_badges_setting.clone();
     let use_original_year_setting_clone_for_close = use_original_year_setting.clone();
-    let view_mode_setting_clone_for_close = view_mode_setting.clone();
     dialog.connect_close_request(move |_| {
         let current_orders = sort_orders_rc.borrow().clone();
         let prev_settings = load_settings();
@@ -131,7 +127,6 @@ pub fn show_settings_dialog(
             completed_albums: prev_settings.completed_albums,
             show_dr_badges: show_dr_badges_setting_clone_for_close.get(),
             use_original_year: use_original_year_setting_clone_for_close.get(),
-            view_mode: view_mode_setting_clone_for_close.borrow().to_string(),
         });
         is_settings_open_clone.set(false);
         Proceed

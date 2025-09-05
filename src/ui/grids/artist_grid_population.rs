@@ -56,7 +56,6 @@ pub fn populate_artist_grid(
     artist_count_label: Rc<Label>,
     show_dr_badges: Rc<Cell<bool>>,
     use_original_year: Rc<Cell<bool>>,
-    _view_mode: Rc<RefCell<String>>,
     player_bar: PlayerBar,
 ) {
     // `thread_local!` is used to prevent multiple concurrent calls to this function,

@@ -1,15 +1,9 @@
-use std::{
-    cell::{Cell, RefCell},
-    rc::Rc,
-};
+use std::{cell::Cell, rc::Rc};
 
-use gtk4::{Button, StringList, StringObject, Switch, Window};
+use gtk4::{Button, Switch, Window};
 use libadwaita::{
-    ActionRow, ComboRow, PreferencesGroup, PreferencesPage,
-    prelude::{
-        ActionRowExt, ButtonExt, Cast, ComboRowExt, ListModelExt, PreferencesGroupExt,
-        PreferencesPageExt,
-    },
+    ActionRow, PreferencesGroup, PreferencesPage,
+    prelude::{ActionRowExt, ButtonExt, PreferencesGroupExt, PreferencesPageExt},
 };
 
 use crate::ui::components::dialogs::show_performance_metrics_dialog;
@@ -26,7 +20,6 @@ use crate::ui::components::dialogs::show_performance_metrics_dialog;
 /// * `sort_ascending_artists` - Shared state for artist sort direction.
 /// * `show_dr_badges_setting` - Shared state for DR badges visibility.
 /// * `use_original_year_setting` - Shared state for original year display.
-/// * `view_mode_setting` - Shared state for view mode.
 ///
 /// # Returns
 ///
@@ -39,7 +32,6 @@ pub fn create_general_page<T: Clone + 'static>(
     sort_ascending_artists: Rc<Cell<bool>>,
     show_dr_badges_setting: Rc<Cell<bool>>,
     use_original_year_setting: Rc<Cell<bool>>,
-    view_mode_setting: Rc<RefCell<String>>,
 ) -> PreferencesPage
 where
     T: AsRef<Window>,
@@ -130,40 +122,6 @@ where
         );
     });
     general_group.add(&use_original_year_row);
-
-    // ComboRow for View Mode
-    let view_mode_row = ComboRow::builder()
-        .title("View Mode")
-        .subtitle("Choose how albums and artists are displayed.")
-        .build();
-    let view_options = StringList::new(&["Grid View", "List View"]);
-    view_mode_row.set_model(Some(&view_options));
-
-    // Set default selection based on current setting
-    let initial_view_mode_index = match view_mode_setting.borrow().as_str() {
-        "Grid View" => 0,
-        _ => 1,
-    };
-    view_mode_row.set_selected(initial_view_mode_index);
-    let view_mode_setting_clone = view_mode_setting.clone();
-    let refresh_library_ui_clone = refresh_library_ui.clone();
-    let sort_ascending_clone = sort_ascending.clone();
-    let sort_ascending_artists_clone = sort_ascending_artists.clone();
-    view_mode_row.connect_selected_notify(move |combo_row| {
-        let selected_index = combo_row.selected();
-        let selected_item = view_options
-            .item(selected_index)
-            .and_then(|obj| obj.downcast::<StringObject>().ok())
-            .map(|s_obj| s_obj.string().to_string());
-        if let Some(mode) = selected_item {
-            *view_mode_setting_clone.borrow_mut() = mode;
-            (refresh_library_ui_clone)(
-                sort_ascending_clone.get(),
-                sort_ascending_artists_clone.get(),
-            );
-        }
-    });
-    general_group.add(&view_mode_row);
     general_page.add(&general_group);
     general_page.add(&performance_group);
     general_page

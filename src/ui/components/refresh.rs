@@ -47,7 +47,6 @@ pub struct RefreshService {
     sender: UnboundedSender<()>,
     pub show_dr_badges: Rc<Cell<bool>>,
     pub use_original_year: Rc<Cell<bool>>,
-    pub view_mode: Rc<RefCell<String>>,
     player_bar: PlayerBar,
 }
 impl RefreshService {
@@ -75,7 +74,6 @@ impl RefreshService {
         sender: UnboundedSender<()>,
         show_dr_badges: Rc<Cell<bool>>,
         use_original_year: Rc<Cell<bool>>,
-        view_mode: Rc<RefCell<String>>,
         player_bar: PlayerBar,
     ) -> Self {
         Self {
@@ -99,7 +97,6 @@ impl RefreshService {
             sender,
             show_dr_badges,
             use_original_year,
-            view_mode,
             player_bar,
         }
     }
@@ -133,7 +130,6 @@ impl RefreshService {
                 &self.album_count_label,
                 self.show_dr_badges.clone(),
                 self.use_original_year.clone(),
-                self.view_mode.clone(),
                 self.player_bar.clone(),
             )
             .await;
@@ -162,7 +158,6 @@ impl RefreshService {
                 self.artist_count_label.clone(),
                 self.show_dr_badges.clone(),
                 self.use_original_year.clone(),
-                self.view_mode.clone(),
                 self.player_bar.clone(),
             );
         }
@@ -242,7 +237,6 @@ pub fn setup_library_refresh_channel(
     nav_history: Rc<RefCell<Vec<String>>>,
     show_dr_badges: Rc<Cell<bool>>,
     use_original_year: Rc<Cell<bool>>,
-    view_mode: Rc<RefCell<String>>,
     player_bar: PlayerBar,
 ) -> (
     UnboundedSender<()>,
@@ -274,7 +268,6 @@ pub fn setup_library_refresh_channel(
         sender.clone(),
         show_dr_badges,
         use_original_year,
-        view_mode,
         player_bar,
     ));
 

@@ -112,7 +112,6 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         is_settings_open: Rc::new(Cell::new(false)),
         show_dr_badges: Rc::new(Cell::new(settings.show_dr_badges)),
         use_original_year: Rc::new(Cell::new(settings.use_original_year)),
-        view_mode: Rc::new(RefCell::new(settings.view_mode)),
     };
 
     // Initialize `Rc<RefCell<Option<FlowBox>>>` and `Rc<RefCell<Option<Stack>>>` for grids and stacks
@@ -173,7 +172,6 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         shared_state.nav_history.clone(),
         shared_state.show_dr_badges.clone(),
         shared_state.use_original_year.clone(),
-        shared_state.view_mode.clone(),
         widgets.player_bar.clone(),
     );
 
@@ -185,13 +183,11 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         shared_state.screen_info.borrow().tile_size,
         &add_music_button_albums,
         widgets.album_count_label.clone(),
-        shared_state.view_mode.clone(),
     );
     let (artists_stack, artist_grid) = build_artist_grid(
         &widgets.scanning_label_artists,
         &add_music_button_artists,
         widgets.artist_count_label.clone(),
-        shared_state.view_mode.clone(),
     );
 
     // Set the initial children of the `ViewStack` to the newly built album and artist stacks.

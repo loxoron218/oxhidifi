@@ -49,7 +49,6 @@ mod ui_builder;
 /// * `album_count_label` - A `gtk4::Label` to display the number of albums.
 /// * `show_dr_badges` - A `Rc<Cell<bool>>` indicating whether to show DR badges.
 /// * `use_original_year` - A `Rc<Cell<bool>>` indicating whether to use original release year.
-/// * `view_mode` - A `Rc<RefCell<String>>` representing the current view mode.
 /// * `player_bar` - A `PlayerBar` instance for playback functionality.
 pub async fn populate_albums_grid(
     albums_grid: &FlowBox,
@@ -61,7 +60,6 @@ pub async fn populate_albums_grid(
     album_count_label: &Label,
     show_dr_badges: Rc<Cell<bool>>,
     use_original_year: Rc<Cell<bool>>,
-    _view_mode: Rc<RefCell<String>>,
     player_bar: PlayerBar,
 ) {
     // A thread-local static to prevent multiple simultaneous population calls,

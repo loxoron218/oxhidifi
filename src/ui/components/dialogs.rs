@@ -169,7 +169,6 @@ pub fn create_add_folder_dialog_handler<T: IsA<Window> + Clone + 'static>(
 /// * `is_settings_open` - An `Rc<Cell<bool>>` flag to track if the settings dialog is currently open.
 /// * `show_dr_badges_setting` - An `Rc<Cell<bool>>` flag for showing DR badges.
 /// * `use_original_year_setting` - An `Rc<Cell<bool>>` flag for using original release year.
-/// * `view_mode_setting` - An `Rc<RefCell<String>>` for the view mode setting.
 /// * `sender` - Optional sender to notify UI refresh after scanning.
 pub fn connect_settings_dialog(
     settings_button: &Button,
@@ -182,7 +181,6 @@ pub fn connect_settings_dialog(
     is_settings_open: Rc<Cell<bool>>,
     show_dr_badges_setting: Rc<Cell<bool>>,
     use_original_year_setting: Rc<Cell<bool>>,
-    view_mode_setting: Rc<RefCell<String>>,
     sender: Option<UnboundedSender<()>>,
     scanning_label_albums: gtk4::Label,
     scanning_label_artists: gtk4::Label,
@@ -212,7 +210,6 @@ pub fn connect_settings_dialog(
         let is_settings_open_for_async = is_settings_open_cloned.clone();
         let show_dr_badges_setting_for_async = show_dr_badges_setting_cloned.clone();
         let use_original_year_setting_for_async = use_original_year_setting.clone();
-        let view_mode_setting_for_async = view_mode_setting.clone();
         let sender_for_async = sender_clone.clone();
         let scanning_label_albums_clone = scanning_label_albums.clone();
         let scanning_label_artists_clone = scanning_label_artists.clone();
@@ -229,7 +226,6 @@ pub fn connect_settings_dialog(
                 is_settings_open_for_async,
                 show_dr_badges_setting_for_async,
                 use_original_year_setting_for_async,
-                view_mode_setting_for_async,
                 sender_for_async,
                 scanning_label_albums_clone,
                 scanning_label_artists_clone,
