@@ -26,8 +26,9 @@ use crate::{
             player_bar::PlayerBar,
             tiles::helpers::{create_album_cover, create_album_label, create_dr_overlay},
         },
-        pages::album::album_page::album_page,
-        pages::artist::data::artist_data::AlbumDisplayInfoWithYear,
+        pages::{
+            album::album_page::album_page, artist::data::artist_data::AlbumDisplayInfoWithYear,
+        },
     },
     utils::formatting::format_freq_khz,
 };
