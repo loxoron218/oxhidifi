@@ -13,9 +13,13 @@ use libadwaita::{
     prelude::{BoxExt, Cast, PopoverExt, WidgetExt},
 };
 
-use crate::ui::components::view_controls::{
-    sorting_controls::create_sorting_control_row, sorting_controls::types::SortOrder,
-    view_mode::ViewMode, zoom_controls::create_zoom_control_row,
+use crate::ui::components::{
+    navigation::VIEW_STACK_ALBUMS,
+    view_controls::{
+        sorting_controls::{create_sorting_control_row, types::SortOrder},
+        view_mode::ViewMode,
+        zoom_controls::create_zoom_control_row,
+    },
 };
 
 /// A split button widget that provides view control functionality
@@ -29,6 +33,8 @@ pub struct ViewControlButton {
     split_button: SplitButton,
     /// The current view mode of the button
     view_mode: ViewMode,
+    /// The sorting control widget
+    sorting_widget: RefCell<Option<Rc<Box>>>,
 }
 
 impl ViewControlButton {
@@ -62,6 +68,7 @@ impl ViewControlButton {
         let button = Self {
             split_button,
             view_mode: ViewMode::GridView,
+            sorting_widget: RefCell::new(None),
         };
 
         // Update the main button to reflect the initial view mode
@@ -82,7 +89,9 @@ impl ViewControlButton {
     /// Connects the view control button to the application's sorting system
     ///
     /// This method adds the sorting controls to the popover and connects them
-    /// to the shared sorting references.
+    /// to the shared sorting references. It also sets up visibility logic
+    /// to only show sorting criteria on the albums view, while keeping
+    /// the sort direction button visible on both views.
     ///
     /// # Arguments
     ///
@@ -110,7 +119,52 @@ impl ViewControlButton {
                         on_sort_changed,
                         stack.clone(),
                     );
-                    popover_box.append(&sorting_widget);
+
+                    // Store the sorting widget for visibility control
+                    let sorting_widget_rc = Rc::new(sorting_widget);
+                    self.sorting_widget
+                        .borrow_mut()
+                        .replace(sorting_widget_rc.clone());
+                    popover_box.append(&*sorting_widget_rc);
+
+                    // Get references to the child widgets we want to control
+                    // The sorting widget is a vertical box with:
+                    // 0: sorting_box (label + direction button) - always visible
+                    // 1: criteria_label ("Drag to reorder criteria:") - hide on artist view
+                    // 2: sort_listbox (sort criteria) - hide on artist view
+                    let mut children = Vec::new();
+                    let mut child = sorting_widget_rc.first_child();
+                    while let Some(c) = child {
+                        children.push(c.clone());
+                        child = c.next_sibling();
+                    }
+
+                    // Get the criteria label and listbox (indices 1 and 2)
+                    if children.len() >= 3 {
+                        let criteria_label = children[1].clone();
+                        let sort_listbox = children[2].clone();
+
+                        // Set initial visibility based on current view
+                        let current_view = stack
+                            .visible_child_name()
+                            .unwrap_or_else(|| VIEW_STACK_ALBUMS.into());
+                        let is_albums_view = current_view.as_str() == VIEW_STACK_ALBUMS;
+                        criteria_label.set_visible(is_albums_view);
+                        sort_listbox.set_visible(is_albums_view);
+
+                        // Connect to view changes to update sorting criteria visibility
+                        let stack_clone = stack.clone();
+                        let criteria_label_clone = criteria_label.clone();
+                        let sort_listbox_clone = sort_listbox.clone();
+                        stack.connect_visible_child_notify(move |_| {
+                            let current_view = stack_clone
+                                .visible_child_name()
+                                .unwrap_or_else(|| VIEW_STACK_ALBUMS.into());
+                            let is_albums_view = current_view.as_str() == VIEW_STACK_ALBUMS;
+                            criteria_label_clone.set_visible(is_albums_view);
+                            sort_listbox_clone.set_visible(is_albums_view);
+                        });
+                    }
                 }
             }
         }
