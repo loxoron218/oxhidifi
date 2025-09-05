@@ -76,10 +76,10 @@ fn create_tab_toggle_button(icon_name: &str, label_text: &str, is_active: bool) 
 /// for connecting signals and managing UI state.
 #[derive(Clone)]
 pub struct AppHeaderBar {
-    /// The `ViewStack` managing the left-aligned buttons in the header (e.g., settings or back button).
+    /// The `ViewStack` managing the left-aligned buttons in the header (e.g., add or back button).
     /// This allows for animated transitions between different button states.
     pub left_btn_stack: ViewStack,
-    /// The `Clamp` widget containing the right-aligned utility buttons (search and view controls).
+    /// The `Clamp` widget containing the right-aligned utility buttons (search,  , settings).
     /// `Clamp` is used here for responsive layout and alignment.
     pub right_btn_box: Clamp,
     /// The back button, used for navigating back to previous views (e.g., from an album detail page).
@@ -107,13 +107,14 @@ pub fn build_header_bar() -> AppHeaderBar {
     let back_button = create_icon_button("go-previous-symbolic");
     let button = ViewControlButton::new();
 
-    // Left-aligned button stack for animated transitions (e.g., settings vs. back button).
+    // Left-aligned button stack for animated transitions (e.g., main menu vs. back button).
     let left_btn_stack = ViewStack::builder().build();
 
-    // Settings button: Appears as the main left-aligned button.
+    // Empty state placeholder for the back button.
     // Wrapped in a Clamp and added to the ViewStack for animated visibility.
+    let empty_widget = Box::builder().orientation(Horizontal).build();
     left_btn_stack.add_titled(
-        &create_view_stack_child_box(&settings_button),
+        &create_view_stack_child_box(&empty_widget),
         Some("main"),
         "Main",
     );
@@ -126,10 +127,10 @@ pub fn build_header_bar() -> AppHeaderBar {
         "Back",
     );
 
-    // Initially show the settings button.
+    // Initially show the main (add) button.
     left_btn_stack.set_visible_child_name("main");
 
-    // Right-aligned box containing search and view_controls buttons.
+    // Right-aligned box containing search, view_controls, and settings buttons.
     let right_btn_inner = Box::builder().orientation(Horizontal).spacing(6).build();
 
     // The search icon button.
@@ -140,6 +141,9 @@ pub fn build_header_bar() -> AppHeaderBar {
 
     // View control button for changing view modes and accessing view options.
     right_btn_inner.append(button.widget());
+
+    // Button to open application settings.
+    right_btn_inner.append(&settings_button);
     let right_btn_box = Clamp::builder().child(&right_btn_inner).halign(End).build();
 
     // Ensure visibility by default.
@@ -163,7 +167,7 @@ pub fn build_header_bar() -> AppHeaderBar {
 /// into a single `HeaderBar` instance, which serves as the top-level header for the application window.
 ///
 /// # Arguments
-/// * `left_btn_stack` - The `ViewStack` containing left-aligned buttons (e.g., settings, back).
+/// * `left_btn_stack` - The `ViewStack` containing left-aligned buttons (e.g., add, back).
 /// * `right_btn_box` - The `Clamp` widget containing right-aligned utility buttons (e.g., search, settings).
 /// * `center_box` - The `Clamp` widget containing the central title widget (e.g., tab bar).
 ///
