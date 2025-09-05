@@ -127,7 +127,7 @@ pub fn build_albums_grid(
         .hscrollbar_policy(Automatic)
         .vscrollbar_policy(Automatic)
         .child(&albums_grid)
-        .min_content_height(600)
+        .min_content_height(500)
         .min_content_width(410)
         .vexpand(true)
         .margin_start(24)
