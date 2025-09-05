@@ -48,7 +48,6 @@ pub fn setup_keyboard_shortcuts(
     let accel_group = ShortcutController::new();
 
     // Clones for the search bar related actions within the Escape key closure.
-    let search_revealer = search_bar.revealer.clone();
     let search_button = search_bar.button.clone();
     let search_entry = search_bar.entry.clone();
 
@@ -73,11 +72,11 @@ pub fn setup_keyboard_shortcuts(
         .trigger(&KeyvalTrigger::new(Key::Escape, ModifierType::empty()))
         .action(&CallbackAction::new(move |_, _| {
             // Check if the search bar is currently visible.
-            if search_revealer.reveals_child() {
+            if search_entry.is_visible() {
                 // If search bar is open, close it.
                 // Note: We don't call refresh_library_ui here because the search implementation
                 // in search.rs already handles refreshing when the search text is cleared.
-                search_revealer.set_reveal_child(false);
+                search_entry.set_visible(false);
                 search_button.set_visible(true);
 
                 // Clear the search text, which will trigger the search refresh automatically

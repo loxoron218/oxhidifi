@@ -110,11 +110,10 @@ pub fn build_header_bar() -> AppHeaderBar {
     // Left-aligned button stack for animated transitions (e.g., main menu vs. back button).
     let left_btn_stack = ViewStack::builder().build();
 
-    // Empty state placeholder for the back button.
+    // Search button for the main state.
     // Wrapped in a Clamp and added to the ViewStack for animated visibility.
-    let empty_widget = Box::builder().orientation(Horizontal).build();
     left_btn_stack.add_titled(
-        &create_view_stack_child_box(&empty_widget),
+        &create_view_stack_child_box(&search_bar.container),
         Some("main"),
         "Main",
     );
@@ -130,14 +129,8 @@ pub fn build_header_bar() -> AppHeaderBar {
     // Initially show the main (add) button.
     left_btn_stack.set_visible_child_name("main");
 
-    // Right-aligned box containing search, view_controls, and settings buttons.
+    // Right-aligned box containing view_controls and settings buttons.
     let right_btn_inner = Box::builder().orientation(Horizontal).spacing(6).build();
-
-    // The search icon button.
-    right_btn_inner.append(&search_bar.button);
-
-    // The animated search entry revealer.
-    right_btn_inner.append(&*search_bar.revealer);
 
     // View control button for changing view modes and accessing view options.
     right_btn_inner.append(button.widget());

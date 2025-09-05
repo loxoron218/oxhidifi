@@ -1,43 +1,43 @@
-use std::rc::Rc;
-
 use glib::Propagation::{Proceed, Stop};
 use gtk4::{
-    Box, Button, Entry, EventControllerFocus, EventControllerKey, GestureClick, Revealer,
-    RevealerTransitionType::SlideLeft,
+    Box, Button, Entry, EventControllerFocus, EventControllerKey, GestureClick,
+    Orientation::Horizontal,
 };
 use libadwaita::{
     ApplicationWindow,
-    prelude::{ButtonExt, EditableExt, WidgetExt},
+    prelude::{BoxExt, ButtonExt, EditableExt, WidgetExt},
 };
 
 // SearchBar Widget
 #[derive(Clone)]
 pub struct SearchBar {
     pub entry: Entry,
-    pub revealer: Rc<Revealer>,
+    pub container: Box,
     pub button: Button,
 }
 
 impl SearchBar {
     /// Construct a new SearchBar widget.
     pub fn new() -> Self {
-        let entry = Entry::builder()
-            .placeholder_text("Search...")
-            .hexpand(true)
-            .build();
-        let revealer = Rc::new(
-            Revealer::builder()
-                .transition_type(SlideLeft)
-                .reveal_child(false)
-                .build(),
-        );
-        revealer.set_child(Some(&entry));
+        let entry = Entry::builder().placeholder_text("Search...").build();
+
+        // Hidden by default
+        entry.set_visible(false);
+
+        // Create the search button with a symbolic icon
         let button = Button::builder()
             .icon_name("system-search-symbolic")
             .build();
+
+        // Create a container box to hold both button and entry
+        let container = Box::builder().orientation(Horizontal).build();
+        container.append(&button);
+        container.append(&entry);
+
+        // Initialize the SearchBar struct with its components
         Self {
             entry,
-            revealer,
+            container,
             button,
         }
     }
@@ -55,17 +55,15 @@ impl SearchBar {
     /// * `window` - The application window, used for adding global key event controllers.
     /// * `vbox_inner` - The main vertical box containing the header and content, used for detecting clicks outside the search bar.
     pub fn setup_logic(&self, window: &ApplicationWindow, vbox_inner: &Box) {
-        let search_revealer = self.revealer.clone();
         let search_entry = self.entry.clone();
         let search_button = self.button.clone();
 
         // --- Event: Show search bar when button is clicked ---
-        let search_revealer_on_click = search_revealer.clone();
         let search_button_on_click = search_button.clone();
         let search_entry_on_click = search_entry.clone();
         search_button.connect_clicked(move |_| {
             search_button_on_click.set_visible(false);
-            search_revealer_on_click.set_reveal_child(true);
+            search_entry_on_click.set_visible(true);
 
             // Clear previous search text
             search_entry_on_click.set_text("");
@@ -83,11 +81,10 @@ impl SearchBar {
         let gesture_click_outside = GestureClick::new();
         let search_entry_for_gesture = search_entry.clone();
         let search_button_for_gesture = search_button.clone();
-        let search_revealer_for_gesture = search_revealer.clone();
         let vbox_inner_for_gesture = vbox_inner.clone();
         gesture_click_outside.connect_pressed(move |_, _, x, y| {
-            // Only act if the revealer is currently showing the search entry
-            if search_revealer_for_gesture.reveals_child() {
+            // Only act if the entry is currently visible
+            if search_entry_for_gesture.is_visible() {
                 // Get the allocation (position and size) of the search entry
                 let alloc = search_entry_for_gesture.allocation();
 
@@ -108,7 +105,7 @@ impl SearchBar {
                     search_entry_for_gesture.set_text("");
 
                     // Hide the entry
-                    search_revealer_for_gesture.set_reveal_child(false);
+                    search_entry_for_gesture.set_visible(false);
 
                     // Show the search button again
                     search_button_for_gesture.set_visible(true);
@@ -121,7 +118,6 @@ impl SearchBar {
 
         // --- Event: Type-to-search (activate search bar on any printable key) ---
         // This controller is added to the main application window to capture global key presses.
-        let search_revealer_on_key = search_revealer.clone();
         let search_entry_on_key = search_entry.clone();
         let search_button_on_key = search_button.clone();
         let key_controller = EventControllerKey::new();
@@ -130,12 +126,12 @@ impl SearchBar {
                 // Check if the character is printable and not a control character or whitespace
                 if !ch.is_control() && !ch.is_whitespace() {
                     // If the search bar is currently hidden, activate it
-                    if !search_revealer_on_key.reveals_child() {
+                    if !search_entry_on_key.is_visible() {
                         // Hide the search button
                         search_button_on_key.set_visible(false);
 
                         // Show the search entry
-                        search_revealer_on_key.set_reveal_child(true);
+                        search_entry_on_key.set_visible(true);
 
                         // Pre-fill with the typed character
                         search_entry_on_key.set_text(&ch.to_string());
@@ -162,7 +158,6 @@ impl SearchBar {
         // --- Event: Hide entry and show button on focus out ---
         // This controller is specifically for when the search Entry widget loses focus.
         let search_button_on_focus_out = search_button.clone();
-        let search_revealer_on_focus_out = search_revealer.clone();
         let search_entry_on_focus_out = search_entry.clone();
         let focus_controller = EventControllerFocus::new();
         focus_controller.connect_leave(move |_| {
@@ -170,7 +165,7 @@ impl SearchBar {
             search_entry_on_focus_out.set_text("");
 
             // Hide the search entry
-            search_revealer_on_focus_out.set_reveal_child(false);
+            search_entry_on_focus_out.set_visible(false);
 
             // Show the search button again
             search_button_on_focus_out.set_visible(true);
