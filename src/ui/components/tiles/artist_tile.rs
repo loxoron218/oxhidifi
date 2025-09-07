@@ -164,7 +164,7 @@ pub fn create_artist_tile(
 
     // Attach the click gesture controller to the flow child
     flow_child.add_controller(gesture);
-    
+
     // Set the widget name to the artist ID for navigation purposes
     flow_child.set_widget_name(&artist_id.to_string());
     flow_child

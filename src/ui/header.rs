@@ -6,7 +6,10 @@ use libadwaita::{
     prelude::{BoxExt, ButtonExt, IsA, WidgetExt},
 };
 
-use crate::ui::{components::view_controls::ViewControlButton, search_bar::SearchBar};
+use crate::ui::{
+    components::{config::load_settings, view_controls::ViewControlButton},
+    search_bar::SearchBar,
+};
 
 /// Helper to create a GTK Button with a specified icon name.
 ///
@@ -105,7 +108,10 @@ pub fn build_header_bar() -> AppHeaderBar {
     let search_bar = SearchBar::new();
     let settings_button = create_icon_button("open-menu-symbolic");
     let back_button = create_icon_button("go-previous-symbolic");
-    let button = ViewControlButton::new();
+
+    // Load the saved view mode to initialize the button with the correct state
+    let settings = load_settings();
+    let button = ViewControlButton::with_initial_view_mode(settings.view_mode);
 
     // Left-aligned button stack for animated transitions (e.g., main menu vs. back button).
     let left_btn_stack = ViewStack::builder().build();

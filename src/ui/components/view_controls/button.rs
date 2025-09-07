@@ -38,15 +38,19 @@ pub struct ViewControlButton {
 }
 
 impl ViewControlButton {
-    /// Creates a new `ViewControlButton` with default settings
+    /// Creates a new `ViewControlButton` with a specified initial view mode
     ///
     /// Initializes the button with a popover menu containing various view-related
-    /// options and sets the initial view mode to `GridView`.
+    /// options and sets the initial view mode to the provided value.
+    ///
+    /// # Arguments
+    ///
+    /// * `initial_view_mode` - The initial view mode for the button
     ///
     /// # Returns
     ///
     /// A new instance of `ViewControlButton`
-    pub fn new() -> Self {
+    pub fn with_initial_view_mode(initial_view_mode: ViewMode) -> Self {
         // Create a container box for the popover content
         let popover_box = Box::builder().orientation(Vertical).spacing(6).build();
 
@@ -64,10 +68,10 @@ impl ViewControlButton {
         // Create the main split button with the popover
         let split_button = SplitButton::builder().popover(&popover).build();
 
-        // Initialize the button with default view mode
+        // Initialize the button with the specified initial view mode
         let button = Self {
             split_button,
-            view_mode: RefCell::new(GridView),
+            view_mode: RefCell::new(initial_view_mode),
             sorting_widget: RefCell::new(None),
         };
 
@@ -171,6 +175,19 @@ impl ViewControlButton {
         }
     }
 
+    /// Sets the view mode of the button and updates its visual representation
+    ///
+    /// This method allows external code to update the button's view mode,
+    /// ensuring that the button's state matches the actual view mode.
+    ///
+    /// # Arguments
+    ///
+    /// * `view_mode` - The new view mode to set
+    pub fn set_view_mode(&self, view_mode: ViewMode) {
+        *self.view_mode.borrow_mut() = view_mode;
+        self.update_main_button();
+    }
+
     /// Returns a reference to the underlying SplitButton widget
     ///
     /// This method allows access to the raw GTK widget for further customization
@@ -216,11 +233,11 @@ impl ViewControlButton {
 /// Implements the Default trait for ViewControlButton
 ///
 /// This allows creating a default instance of ViewControlButton using ViewControlButton::default(),
-/// which is equivalent to calling ViewControlButton::new(). This implementation follows Rust's
+/// which initializes the button with GridView mode. This implementation follows Rust's
 /// convention for providing default values for types and enables ViewControlButton to be used
 /// with constructs that require the Default trait.
 impl Default for ViewControlButton {
     fn default() -> Self {
-        Self::new()
+        Self::with_initial_view_mode(GridView)
     }
 }
