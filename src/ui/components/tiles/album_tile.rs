@@ -31,7 +31,7 @@ use crate::{
         grids::album_grid_state::AlbumGridItem,
         pages::album::album_page::album_page,
     },
-    utils::formatting::{format_freq_khz, format_year_info},
+    utils::formatting::{format_sample_rate_khz, format_year_info},
 };
 
 /// Creates a `FlowBoxChild` containing the UI representation of an album.
@@ -119,9 +119,11 @@ pub fn create_album_tile(
             let format_caps = format_str.to_uppercase();
 
             // First, determine only the part of the string that changes.
-            let tech_details = match (album.bit_depth, album.frequency) {
-                (Some(bit), Some(freq)) => format!(" {}/{}", bit, format_freq_khz(freq as u32)),
-                (None, Some(freq)) => format!(" {}", format_freq_khz(freq as u32)),
+            let tech_details = match (album.bit_depth, album.sample_rate) {
+                (Some(bit), Some(freq)) => {
+                    format!(" {}/{}", bit, format_sample_rate_khz(freq as u32))
+                }
+                (None, Some(freq)) => format!(" {}", format_sample_rate_khz(freq as u32)),
                 _ => String::new(),
             };
 
@@ -239,7 +241,7 @@ pub fn create_album_tile(
                             &album_artist,
                             album_cover_art.as_deref().map(Path::new),
                             first_track.bit_depth,
-                            first_track.frequency,
+                            first_track.sample_rate,
                             first_track.format.as_deref(),
                             first_track.duration,
                         );

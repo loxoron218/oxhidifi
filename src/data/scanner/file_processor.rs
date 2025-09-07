@@ -53,8 +53,8 @@ struct TempMetadata {
     format: Option<String>,
     /// The bit depth of the audio, if available.
     bit_depth: Option<u32>,
-    /// The sample rate frequency of the audio, if available.
-    frequency: Option<u32>,
+    /// The sample rate of the audio, if available.
+    sample_rate: Option<u32>,
 }
 
 /// Processes a batch of audio files, extracts their metadata, and upserts them into the database.
@@ -180,7 +180,7 @@ pub async fn process_files_batch_optimized(
                 .and_then(|s| s.to_str())
                 .map(str::to_lowercase);
             let bit_depth = properties.bit_depth().map(|b| b as u32);
-            let frequency = properties.sample_rate();
+            let sample_rate = properties.sample_rate();
 
             // Store image data for concurrent processing if available
             if let Some(image_data) = cover_art_data {
@@ -201,7 +201,7 @@ pub async fn process_files_batch_optimized(
                 cover_art_path: None,
                 format,
                 bit_depth,
-                frequency,
+                sample_rate,
             });
         }
         if all_metadata.is_empty() {
@@ -273,7 +273,7 @@ pub async fn process_files_batch_optimized(
                 disc_no: meta.disc_no,
                 format: meta.format,
                 bit_depth: meta.bit_depth,
-                frequency: meta.frequency,
+                sample_rate: meta.sample_rate,
             });
         }
 

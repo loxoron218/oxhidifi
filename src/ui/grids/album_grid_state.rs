@@ -30,8 +30,8 @@ pub struct AlbumGridItem {
     pub format: Option<String>,
     /// The bit depth of the audio files, if available
     pub bit_depth: Option<i32>,
-    /// The sample frequency of the audio files in Hz, if available
-    pub frequency: Option<i32>,
+    /// The sample rate of the audio files in Hz, if available
+    pub sample_rate: Option<i32>,
     /// The file system path to the album's folder
     pub folder_path: PathBuf,
 }

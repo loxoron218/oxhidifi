@@ -211,7 +211,7 @@ async fn process_albums_in_batches(
             album_info.dr_completed,
             album_info.format.clone(),
             album_info.bit_depth,
-            album_info.frequency,
+            album_info.sample_rate,
             album_info.folder_path.clone(),
         );
 

@@ -75,7 +75,7 @@ pub async fn init_db(pool: &SqlitePool) -> Result<()> {
             disc_no INTEGER,
             format TEXT,
             bit_depth INTEGER,
-            frequency INTEGER,
+            sample_rate INTEGER,
             FOREIGN KEY(album_id) REFERENCES albums(id),
             FOREIGN KEY(artist_id) REFERENCES artists(id)
         )",

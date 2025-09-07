@@ -10,7 +10,7 @@ use libadwaita::{
 use crate::{
     data::models::{Album, Artist, Track},
     ui::components::player_bar::PlayerBar,
-    utils::formatting::{format_duration_mmss, format_freq_khz},
+    utils::formatting::{format_duration_mmss, format_sample_rate_khz},
 };
 
 /// Builds a single track row for display in the album track list.
@@ -19,7 +19,7 @@ use crate::{
 /// in the album view. Each row contains:
 /// - Track number (disc and track number)
 /// - Track title
-/// - Track metadata (artist, format, bit depth, frequency)
+/// - Track metadata (artist, format, bit depth, sample rate)
 /// - Track duration
 /// - Play button
 ///
@@ -68,9 +68,9 @@ pub fn build_track_row(
         subtitle_fields.push(format!("{}-Bit", bit));
     }
 
-    // Add frequency if available
-    if let Some(freq) = t.frequency {
-        subtitle_fields.push(format_freq_khz(freq));
+    // Add sample rate if available
+    if let Some(freq) = t.sample_rate {
+        subtitle_fields.push(format_sample_rate_khz(freq));
     }
 
     // Join all subtitle fields with a separator
@@ -131,7 +131,7 @@ pub fn build_track_row(
 
     // Clone track values to move into closure
     let track_bit_depth = t.bit_depth;
-    let track_frequency = t.frequency;
+    let track_sample_rate = t.sample_rate;
     let track_format = t.format.clone();
     let track_duration = t.duration;
 
@@ -143,7 +143,7 @@ pub fn build_track_row(
             &artist_name,
             album_clone.cover_art.as_deref(),
             track_bit_depth,
-            track_frequency,
+            track_sample_rate,
             track_format.as_deref(),
             track_duration,
         );

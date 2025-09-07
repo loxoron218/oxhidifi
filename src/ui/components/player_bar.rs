@@ -31,7 +31,7 @@ pub struct PlayerBar {
     pub song_title: Label,
     /// Label displaying the artist of the currently playing song
     pub song_artist: Label,
-    /// Label displaying technical information (bit depth, frequency, format)
+    /// Label displaying technical information (bit depth, sample rate, format)
     pub technical_info: Label,
     /// Progress bar showing current position in the track
     pub progress_bar: Scale,
@@ -260,7 +260,7 @@ impl PlayerBar {
     /// - `song_artist`: The artist of the currently playing track
     /// - `cover_art_path`: Optional path to the album art image file
     /// - `bit_depth`: Optional bit depth of the audio file
-    /// - `frequency`: Optional frequency of the audio file
+    /// - `sample_rate`: Optional sample rate of the audio file
     /// - `format`: Optional format of the audio file
     /// - `duration`: Optional duration of the track in seconds
     ///
@@ -276,7 +276,7 @@ impl PlayerBar {
         song_artist: &str,
         cover_art_path: Option<&Path>,
         bit_depth: Option<u32>,
-        frequency: Option<u32>,
+        sample_rate: Option<u32>,
         format: Option<&str>,
         duration: Option<u32>,
     ) {
@@ -290,9 +290,9 @@ impl PlayerBar {
         self.song_artist.set_label(song_artist);
 
         // Format and update technical information
-        let technical_text = match (bit_depth, frequency, format) {
+        let technical_text = match (bit_depth, sample_rate, format) {
             (Some(bit), Some(freq), Some(fmt)) => {
-                format!("{}-Bit/{} kHz {}", bit, freq / 1000, fmt.to_uppercase())
+                format!("{}-Bit/{} kHz {}", bit, freq / 100, fmt.to_uppercase())
             }
             (Some(bit), None, Some(fmt)) => format!("{}-Bit {}", bit, fmt.to_uppercase()),
             (None, Some(freq), Some(fmt)) => {

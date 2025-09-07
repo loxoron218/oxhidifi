@@ -78,6 +78,6 @@ pub struct Track {
     pub format: Option<String>,
     /// The bit depth of the audio (e.g., 16, 24).
     pub bit_depth: Option<u32>,
-    /// The sample rate frequency of the audio (e.g., 44100, 96000).
-    pub frequency: Option<u32>,
+    /// The sample rate of the audio (e.g., 44100, 96000).
+    pub sample_rate: Option<u32>,
 }

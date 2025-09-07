@@ -1,6 +1,6 @@
 /// Utilities for formatting various data types into human-readable strings.
 ///
-/// This module provides functions to format durations, bit depth, frequencies,
+/// This module provides functions to format durations, bit depth, sample rates,
 /// and years for display within the application's user interface, ensuring consistency
 /// and adherence to common presentation standards.
 
@@ -35,19 +35,19 @@ pub(crate) fn format_duration_mmss(secs: u32) -> String {
     format!("{:02}:{:02}", secs / 60, secs % 60)
 }
 
-/// Formats a frequency in Hertz (Hz) to a kilohertz (kHz) string.
+/// Formats a sample rate in Hertz (Hz) to a kilohertz (kHz) string.
 ///
 /// This private helper function handles the common logic for converting and
-/// formatting frequency values. It attempts to display an integer if the
+/// formatting sample rate values. It attempts to display an integer if the
 /// kHz value is very close to a whole number, otherwise it shows one decimal place.
 ///
 /// # Arguments
-/// * `freq` - The frequency in Hertz (u32).
+/// * `sample_rate` - The sample rate in Hertz (u32).
 ///
 /// # Returns
-/// A `String` representing the frequency in kHz.
-fn format_khz_display(freq: u32) -> String {
-    let khz = (freq as f32) / 1000.0;
+/// A `String` representing the sample rate in kHz.
+fn format_khz_display(sample_rate: u32) -> String {
+    let khz = (sample_rate as f32) / 1000.0;
 
     // Check if the kHz value is very close to a whole number.
     // Using a small epsilon to account for floating point inaccuracies.
@@ -58,39 +58,39 @@ fn format_khz_display(freq: u32) -> String {
     }
 }
 
-/// Formats frequency as kHz (e.g., "44.1 kHz").
+/// Formats sample rate as kHz (e.g., "44.1 kHz").
 ///
 /// This function is a public wrapper around `format_khz_display` and adds the " kHz" suffix.
-/// It's used when only frequency information needs to be displayed.
+/// It's used when only sample rate information needs to be displayed.
 ///
 /// # Arguments
-/// * `freq` - The frequency in Hertz (u32).
+/// * `sample_rate` - The sample rate in Hertz (u32).
 ///
 /// # Returns
-/// A `String` representing the frequency in kHz with units.
-pub(crate) fn format_freq_khz(freq: u32) -> String {
-    format!("{} kHz", format_khz_display(freq))
+/// A `String` representing the sample rate in kHz with units.
+pub(crate) fn format_sample_rate_khz(sample_rate: u32) -> String {
+    format!("{} kHz", format_khz_display(sample_rate))
 }
 
-/// Formats bit depth and frequency into a combined string (e.g., "24-Bit/96 kHz").
+/// Formats bit depth and sample rate into a combined string (e.g., "24-Bit/96 kHz").
 ///
-/// This function handles various combinations of optional bit depth and frequency
+/// This function handles various combinations of optional bit depth and sample rate
 /// values, providing a concise string representation. It leverages `format_khz_display`
-/// for consistent frequency formatting.
+/// for consistent sample rate formatting.
 ///
 /// # Arguments
 /// * `bit` - An `Option<u32>` representing the bit depth.
-/// * `freq` - An `Option<u32>` representing the frequency in Hertz.
+/// * `sample_rate` - An `Option<u32>` representing the sample rate in Hertz.
 ///
 /// # Returns
-/// A `String` representing the formatted bit depth and frequency. Returns an empty
+/// A `String` representing the formatted bit depth and sample rate. Returns an empty
 /// string if both are `None`.
-pub(crate) fn format_bit_freq(bit: Option<u32>, freq: Option<u32>) -> String {
+pub(crate) fn format_bit_sample_rate(bit: Option<u32>, sample_rate: Option<u32>) -> String {
     let bit_str = bit.map(|b| format!("{}-Bit", b));
 
     // Use the helper function here
-    let freq_str = freq.map(|f| format_khz_display(f));
-    match (bit_str, freq_str) {
+    let sample_rate_str = sample_rate.map(|f| format_khz_display(f));
+    match (bit_str, sample_rate_str) {
         // Add kHz suffix here
         (Some(b), Some(f)) => format!("{}/{} kHz", b, f),
         (Some(b), None) => b,

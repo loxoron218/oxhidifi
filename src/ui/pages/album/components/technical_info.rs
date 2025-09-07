@@ -16,7 +16,7 @@ use libadwaita::prelude::{BoxExt, WidgetExt};
 use crate::{
     data::models::{Album, Track},
     ui::pages::album::helpers::album_helpers::{get_most_common_track_properties, is_lossy_format},
-    utils::formatting::{format_album_year_display, format_bit_freq, format_duration_hms},
+    utils::formatting::{format_album_year_display, format_bit_sample_rate, format_duration_hms},
 };
 
 /// Build the album cover widget, scaling and falling back if needed.
@@ -98,12 +98,12 @@ pub fn build_technical_info(tracks: &[Track], _album: &Album) -> Option<Box> {
 
     // Calculate if the album is mainly Hi-Res
     let hires_tracks_count = tracks.iter()
-        .filter(|t| matches!((t.bit_depth, t.frequency), (Some(bd), Some(fq)) if bd >= 24 && fq >= 88_200))
+        .filter(|t| matches!((t.bit_depth, t.sample_rate), (Some(bd), Some(fq)) if bd >= 24 && fq >= 8_200))
         .count();
     let show_hires = total_tracks > 0 && (hires_tracks_count as f64 / total_tracks as f64) > 0.5;
 
-    // Bit depth / Freq and Format, with Hi-Res icon aligned to both lines
-    let bit_freq_str = format_bit_freq(most_common_bit_depth, most_common_freq);
+    // Bit depth / Sample Rate and Format, with Hi-Res icon aligned to both lines
+    let bit_freq_str = format_bit_sample_rate(most_common_bit_depth, most_common_freq);
 
     // Only build this row if any content
     if show_hires || is_lossy_album || !bit_freq_str.is_empty() || most_common_format_opt.is_some()

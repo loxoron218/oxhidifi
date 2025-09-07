@@ -48,8 +48,8 @@ pub struct TrackForInsert {
     pub format: Option<String>,
     /// The bit depth of the audio (e.g., 16, 24).
     pub bit_depth: Option<u32>,
-    /// The sample rate frequency of the audio (e.g., 44100, 96000).
-    pub frequency: Option<u32>,
+    /// The sample rate of the audio (e.g., 44100, 96000).
+    pub sample_rate: Option<u32>,
 }
 
 /// Inserts a new folder into the database if it doesn't already exist,
@@ -94,7 +94,7 @@ pub async fn upsert_tracks_batch_enhanced(
     // Process in chunks to avoid excessive memory usage and improve performance
     for chunk in tracks.chunks(batch_size) {
         let mut query_builder: QueryBuilder<Sqlite> = QueryBuilder::new(
-            "INSERT INTO tracks (title, album_id, artist_id, path, duration, track_no, disc_no, format, bit_depth, frequency)",
+            "INSERT INTO tracks (title, album_id, artist_id, path, duration, track_no, disc_no, format, bit_depth, sample_rate)",
         );
         query_builder.push_values(chunk, |mut b, track| {
             let path_str = track.path.to_str().unwrap_or_default();
@@ -107,7 +107,7 @@ pub async fn upsert_tracks_batch_enhanced(
                 .push_bind(track.disc_no)
                 .push_bind(&track.format)
                 .push_bind(track.bit_depth)
-                .push_bind(track.frequency);
+                .push_bind(track.sample_rate);
         });
         query_builder.push(
             " ON CONFLICT(path) DO UPDATE SET
@@ -119,7 +119,7 @@ pub async fn upsert_tracks_batch_enhanced(
                 disc_no = excluded.disc_no,
                 format = excluded.format,
                 bit_depth = excluded.bit_depth,
-                frequency = excluded.frequency",
+                sample_rate = excluded.sample_rate",
         );
         let query = query_builder.build();
         query.execute(&mut **tx).await?;
@@ -299,7 +299,7 @@ pub async fn fetch_artist_by_id(pool: &SqlitePool, artist_id: i64) -> Result<Art
 /// A `Result` containing a `Vec<Track>` on success, or an `sqlx::Error` on failure.
 pub async fn fetch_tracks_by_album(pool: &SqlitePool, album_id: i64) -> Result<Vec<Track>> {
     get_metrics().record_db_operation();
-    let rows = query("SELECT id, title, album_id, artist_id, path, duration, track_no, disc_no, format, bit_depth, frequency FROM tracks WHERE album_id = ? ORDER BY disc_no, track_no")
+    let rows = query("SELECT id, title, album_id, artist_id, path, duration, track_no, disc_no, format, bit_depth, sample_rate FROM tracks WHERE album_id = ? ORDER BY disc_no, track_no")
         .bind(album_id)
         .fetch_all(pool)
         .await?;
@@ -316,7 +316,7 @@ pub async fn fetch_tracks_by_album(pool: &SqlitePool, album_id: i64) -> Result<V
             disc_no: row.get("disc_no"),
             format: row.get("format"),
             bit_depth: row.get("bit_depth"),
-            frequency: row.get("frequency"),
+            sample_rate: row.get("sample_rate"),
         })
         .collect())
 }

@@ -28,8 +28,8 @@ pub struct AlbumListItem {
     pub format: Option<String>,
     /// The bit depth of the audio files, if available
     pub bit_depth: Option<i32>,
-    /// The sample frequency of the audio files in Hz, if available
-    pub frequency: Option<i32>,
+    /// The sample rate of the audio files in Hz, if available
+    pub sample_rate: Option<i32>,
     /// The file system path to the album's folder
     pub folder_path: PathBuf,
 }
@@ -48,7 +48,7 @@ impl AlbumListItem {
     /// - `dr_completed`: Indicates whether the DR analysis for this album is completed
     /// - `format`: The audio format of the album files (e.g., "FLAC", "MP3"), if available
     /// - `bit_depth`: The bit depth of the audio files, if available
-    /// - `frequency`: The sample frequency of the audio files in Hz, if available
+    /// - `sample_rate`: The sample rate of the audio files in Hz, if available
     /// - `folder_path`: The file system path to the album's folder
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -62,7 +62,7 @@ impl AlbumListItem {
         dr_completed: bool,
         format: Option<String>,
         bit_depth: Option<i32>,
-        frequency: Option<i32>,
+        sample_rate: Option<i32>,
         folder_path: PathBuf,
     ) -> Self {
         Self {
@@ -76,7 +76,7 @@ impl AlbumListItem {
             dr_completed,
             format,
             bit_depth,
-            frequency,
+            sample_rate,
             folder_path,
         }
     }
@@ -202,13 +202,13 @@ impl AlbumListItemObject {
         }
     }
 
-    /// Gets the AlbumListItem's frequency
+    /// Gets the AlbumListItem's sample rate
     ///
     /// # Returns
-    /// The sample frequency of the audio files in Hz, or None if not available or item not set
-    pub fn frequency(&self) -> Option<i32> {
+    /// The sample rate of the audio files in Hz, or None if not available or item not set
+    pub fn sample_rate(&self) -> Option<i32> {
         if let Some(ref item) = *self.imp().item.borrow() {
-            item.frequency
+            item.sample_rate
         } else {
             None
         }

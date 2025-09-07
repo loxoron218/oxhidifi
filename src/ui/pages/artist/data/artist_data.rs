@@ -21,7 +21,7 @@ use sqlx::{Error, Row, SqlitePool, query};
 ///     cover_art: Some(PathBuf::from("/path/to/cover.jpg")),
 ///     format: Some("FLAC".to_string()),
 ///     bit_depth: Some(24),
-///     frequency: Some(96000),
+///     sample_rate: Some(96000),
 ///     dr_value: Some(12),
 ///     dr_completed: true,
 ///     original_release_date: Some("2023-01-01".to_string()),
@@ -43,8 +43,8 @@ pub struct AlbumDisplayInfoWithYear {
     pub format: Option<String>,
     /// Bit depth of the audio files in bits (e.g., 16, 24)
     pub bit_depth: Option<u32>,
-    /// Sampling frequency of the audio files in Hz (e.g., 44100, 96000)
-    pub frequency: Option<u32>,
+    /// Sample rate of the audio files in Hz (e.g., 44100, 96000)
+    pub sample_rate: Option<u32>,
     /// Dynamic Range value for the album (lower values indicate more compression)
     pub dr_value: Option<u8>,
     /// Flag indicating whether DR analysis has been completed for this album
@@ -93,7 +93,7 @@ pub async fn fetch_album_display_info_by_artist(
 ) -> Result<Vec<AlbumDisplayInfoWithYear>, Error> {
     let rows = query(
         r#"SELECT albums.id, albums.title, albums.year, artists.name as artist, albums.cover_art,
-                     tracks.format, tracks.bit_depth, tracks.frequency, albums.dr_value, albums.dr_completed, albums.original_release_date
+                     tracks.format, tracks.bit_depth, tracks.sample_rate, albums.dr_value, albums.dr_completed, albums.original_release_date
            FROM albums
            JOIN artists ON albums.artist_id = artists.id
            LEFT JOIN tracks ON tracks.album_id = albums.id
@@ -114,7 +114,7 @@ pub async fn fetch_album_display_info_by_artist(
             cover_art: row.get::<Option<String>, _>("cover_art").map(PathBuf::from),
             format: row.get("format"),
             bit_depth: row.get("bit_depth"),
-            frequency: row.get("frequency"),
+            sample_rate: row.get("sample_rate"),
             dr_value: row.get("dr_value"),
             dr_completed: row.get("dr_completed"),
             original_release_date: row.get("original_release_date"),

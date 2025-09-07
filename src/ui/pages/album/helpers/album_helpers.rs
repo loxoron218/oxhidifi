@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::data::models::Track;
 
-/// Determines the most common audio properties (bit depth, frequency, and format) from a collection of tracks.
+/// Determines the most common audio properties (bit depth, sample rate, and format) from a collection of tracks.
 ///
 /// This function analyzes a slice of [`Track`] objects to find the most frequently occurring
 /// technical audio specifications. It's primarily used in the album detail view to display
@@ -16,7 +16,7 @@ use crate::data::models::Track;
 ///
 /// A tuple containing:
 /// * `Option<u32>` - The most common bit depth (e.g., 16, 24) or `None` if not available
-/// * `Option<u32>` - The most common frequency in Hz (e.g., 44100, 96000) or `None` if not available
+/// * `Option<u32>` - The most common sample rate in Hz (e.g., 44100, 96000) or `None` if not available
 /// * `Option<String>` - The most common format (e.g., "FLAC", "MP3") or `None` if not available
 ///
 /// # Examples
@@ -24,7 +24,7 @@ use crate::data::models::Track;
 /// ```
 /// # use crate::data::models::Track;
 /// # let tracks = vec![]; // Vector of Track objects
-/// let (bit_depth, frequency, format) = get_most_common_track_properties(&tracks);
+/// let (bit_depth, sample_rate, format) = get_most_common_track_properties(&tracks);
 /// ```
 ///
 /// # See Also
@@ -35,7 +35,7 @@ pub fn get_most_common_track_properties(
     tracks: &[Track],
 ) -> (Option<u32>, Option<u32>, Option<String>) {
     let mut bit_depth_counts: HashMap<u32, usize> = HashMap::new();
-    let mut freq_counts: HashMap<u32, usize> = HashMap::new();
+    let mut sample_rate_counts: HashMap<u32, usize> = HashMap::new();
     let mut format_counts: HashMap<String, usize> = HashMap::new();
 
     // Count occurrences of each property across all tracks
@@ -43,8 +43,8 @@ pub fn get_most_common_track_properties(
         if let Some(bd) = track.bit_depth {
             *bit_depth_counts.entry(bd).or_insert(0) += 1;
         }
-        if let Some(fq) = track.frequency {
-            *freq_counts.entry(fq).or_insert(0) += 1;
+        if let Some(sr) = track.sample_rate {
+            *sample_rate_counts.entry(sr).or_insert(0) += 1;
         }
         if let Some(fmt) = &track.format {
             *format_counts.entry(fmt.clone()).or_insert(0) += 1;
@@ -56,15 +56,19 @@ pub fn get_most_common_track_properties(
         .into_iter()
         .max_by_key(|&(_, count)| count)
         .map(|(bd, _)| bd);
-    let most_common_freq = freq_counts
+    let most_common_sample_rate = sample_rate_counts
         .into_iter()
         .max_by_key(|&(_, count)| count)
-        .map(|(fq, _)| fq);
+        .map(|(sr, _)| sr);
     let most_common_format = format_counts
         .into_iter()
         .max_by_key(|&(_, count)| count)
         .map(|(fmt, _)| fmt);
-    (most_common_bit_depth, most_common_freq, most_common_format)
+    (
+        most_common_bit_depth,
+        most_common_sample_rate,
+        most_common_format,
+    )
 }
 
 /// Determines if an audio format is considered "lossy".

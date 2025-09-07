@@ -29,7 +29,7 @@ use crate::{
     },
     utils::{
         best_dr_persistence::{AlbumKey, DrValueStore},
-        formatting::{format_freq_khz, format_year_info},
+        formatting::{format_sample_rate_khz, format_year_info},
         image::AsyncImageLoader,
         screen::ScreenInfo,
     },
@@ -90,7 +90,7 @@ pub fn create_album_tile(
         None,
     );
 
-    // Format audio details (format, bit depth, frequency).
+    // Format audio details (format, bit depth, sample rate).
     let format_line = album_info
         .format
         .as_ref()
@@ -99,11 +99,11 @@ pub fn create_album_tile(
             let format_caps = format_str.to_uppercase();
 
             // First, determine only the part of the string that changes.
-            let tech_details = match (album_info.bit_depth, album_info.frequency) {
+            let tech_details = match (album_info.bit_depth, album_info.sample_rate) {
                 (Some(bit), Some(freq)) => {
-                    format!(" {}/{}", bit, format_freq_khz(freq as u32))
+                    format!(" {}/{}", bit, format_sample_rate_khz(freq as u32))
                 }
-                (None, Some(freq)) => format!(" {}", format_freq_khz(freq as u32)),
+                (None, Some(freq)) => format!(" {}", format_sample_rate_khz(freq as u32)),
                 _ => String::new(),
             };
 
@@ -240,7 +240,7 @@ pub fn create_album_tile(
                             &album_artist,
                             album_cover_art.as_deref().map(Path::new),
                             first_track.bit_depth,
-                            first_track.frequency,
+                            first_track.sample_rate,
                             first_track.format.as_deref(),
                             first_track.duration,
                         );

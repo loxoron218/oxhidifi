@@ -94,14 +94,14 @@ pub fn build_album_header(
     let tracks_clone = tracks.to_vec();
     play_pause_button.connect_clicked(move |_| {
         // Determine the track-specific details, providing a fallback if no tracks exist.
-        let (track_title, bit_depth, frequency, format, duration) = tracks_clone
+        let (track_title, bit_depth, sample_rate, format, duration) = tracks_clone
             .first()
             .map(|track| {
                 // Case 1: A track exists. Use its details.
                 (
                     track.title.clone(),
                     track.bit_depth,
-                    track.frequency,
+                    track.sample_rate,
                     track.format.clone(),
                     track.duration,
                 )
@@ -118,7 +118,7 @@ pub fn build_album_header(
             &artist_clone.name,
             album_clone.cover_art.as_deref(),
             bit_depth,
-            frequency,
+            sample_rate,
             format.as_deref(),
             duration,
         );
@@ -171,7 +171,7 @@ pub fn build_album_header(
         info_box.append(&meta_box);
     }
 
-    // Add technical information (bit depth, frequency, format, Hi-Res/Lossy icon) if available
+    // Add technical information (bit depth, sample rate, format, Hi-Res/Lossy icon) if available
     if let Some(tech_box) = build_technical_info(tracks, album) {
         info_box.append(&tech_box);
     }

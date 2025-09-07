@@ -30,7 +30,7 @@ use crate::{
             album::album_page::album_page, artist::data::artist_data::AlbumDisplayInfoWithYear,
         },
     },
-    utils::formatting::format_freq_khz,
+    utils::formatting::format_sample_rate_khz,
 };
 
 /// Build an album card widget for the artist page.
@@ -108,10 +108,10 @@ pub fn build_album_card(
             // Convert format to uppercase for consistent display
             let format_caps = format_str.to_uppercase();
 
-            // Add technical details if available (bit depth and frequency)
-            let tech_details = match (album.bit_depth, album.frequency) {
-                (Some(bit), Some(freq)) => format!(" {}/{}", bit, format_freq_khz(freq)),
-                (None, Some(freq)) => format!(" {}", format_freq_khz(freq)),
+            // Add technical details if available (bit depth and sample rate)
+            let tech_details = match (album.bit_depth, album.sample_rate) {
+                (Some(bit), Some(freq)) => format!(" {}/{}", bit, format_sample_rate_khz(freq)),
+                (None, Some(freq)) => format!(" {}", format_sample_rate_khz(freq)),
                 _ => String::new(),
             };
 
@@ -230,7 +230,7 @@ pub fn build_album_card(
                             &album_artist,
                             album_cover_art.as_deref(),
                             first_track.bit_depth,
-                            first_track.frequency,
+                            first_track.sample_rate,
                             first_track.format.as_deref(),
                             first_track.duration,
                         );

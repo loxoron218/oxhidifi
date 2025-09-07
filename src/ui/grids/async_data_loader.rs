@@ -95,7 +95,7 @@ pub async fn load_albums_async(
                 albums.cover_art,
                 tracks.format,
                 tracks.bit_depth,
-                tracks.frequency,
+                tracks.sample_rate,
                 albums.dr_value,
                 albums.dr_completed,
                 albums.original_release_date,
@@ -138,7 +138,7 @@ pub async fn load_albums_async(
                         bit_depth: row.get::<Option<u32>, _>("bit_depth").map(|bd| bd as i32),
 
                         // Convert u32 to i32 for compatibility with AlbumGridItem
-                        frequency: row.get::<Option<u32>, _>("frequency").map(|f| f as i32),
+                        sample_rate: row.get::<Option<u32>, _>("sample_rate").map(|f| f as i32),
 
                         // Convert u8 to i32 for compatibility with AlbumGridItem
                         dr_value: row.get::<Option<u8>, _>("dr_value").map(|dr| dr as i32),

@@ -6,7 +6,7 @@ use gtk4::{
 };
 use libadwaita::prelude::{Cast, SorterExt};
 
-use crate::utils::formatting::{format_freq_khz, format_year_info};
+use crate::utils::formatting::{format_sample_rate_khz, format_year_info};
 
 use super::{
     cell_factories::{
@@ -253,25 +253,25 @@ fn create_columns(
     // Add the column to the ColumnView
     column_view.append_column(&bit_depth_column);
 
-    // Frequency column - displays the sample frequency (e.g., 44100 Hz)
-    // Non-expanding column with "Freq" title
-    let frequency_column = ColumnViewColumn::builder()
-        .title("Freq")
+    // Sample rate column - displays the sample rate (e.g., 44.1 kHz)
+    // Non-expanding column with "Sample Rate" title
+    let sample_rate_column = ColumnViewColumn::builder()
+        .title("Sample Rate")
         .expand(false)
         .build();
 
     // Configure the cell factory for displaying numeric values with formatting
-    // The first closure extracts the frequency value
-    // The second closure formats the value (e.g., "44100 Hz" or "Unknown")
+    // The first closure extracts the sample rate value
+    // The second closure formats the value (e.g., "44.1 kHz" or "Unknown")
     create_numeric_column(
-        &frequency_column,
-        // Extract frequency value
-        |album| album.frequency(),
+        &sample_rate_column,
+        // Extract sample rate value
+        |album| album.sample_rate(),
         // Format the value for display
         |value| match value {
             Some(v) => {
                 if v >= 0 {
-                    format_freq_khz(v as u32)
+                    format_sample_rate_khz(v as u32)
                 } else {
                     "Unknown".to_string()
                 }
@@ -280,7 +280,7 @@ fn create_columns(
         },
     );
     // Add the column to the ColumnView
-    column_view.append_column(&frequency_column);
+    column_view.append_column(&sample_rate_column);
 
     // Year column - displays the release year
     // Non-expanding column with "Year" title
@@ -333,7 +333,7 @@ fn create_columns(
         &artist_column,
         &format_column,
         &bit_depth_column,
-        &frequency_column,
+        &sample_rate_column,
         &year_column,
         &dr_column,
     );
@@ -352,7 +352,7 @@ fn create_columns(
 /// * `artist_column` - The artist column
 /// * `format_column` - The format column
 /// * `bit_depth_column` - The bit depth column
-/// * `frequency_column` - The frequency column
+/// * `sample_rate_column` - The sample rate column
 /// * `year_column` - The year column
 /// * `dr_column` - The DR column
 fn setup_column_sorting(
@@ -361,7 +361,7 @@ fn setup_column_sorting(
     artist_column: &ColumnViewColumn,
     format_column: &ColumnViewColumn,
     bit_depth_column: &ColumnViewColumn,
-    frequency_column: &ColumnViewColumn,
+    sample_rate_column: &ColumnViewColumn,
     year_column: &ColumnViewColumn,
     dr_column: &Option<ColumnViewColumn>,
 ) {
@@ -421,18 +421,18 @@ fn setup_column_sorting(
         bit1.cmp(&bit2).into()
     })));
 
-    // Frequency sorting - compares frequency values numerically
-    frequency_column.set_sorter(Some(&CustomSorter::new(|item1, item2| {
+    // Sample rate sorting - compares sample rate values numerically
+    sample_rate_column.set_sorter(Some(&CustomSorter::new(|item1, item2| {
         // Downcast the generic items to AlbumListItemObject for access to album data
         let album1 = item1.downcast_ref::<AlbumListItemObject>().unwrap();
         let album2 = item2.downcast_ref::<AlbumListItemObject>().unwrap();
 
-        // Extract frequency values and compare them
-        let freq1 = album1.frequency();
-        let freq2 = album2.frequency();
+        // Extract sample rate values and compare them
+        let sample_rate1 = album1.sample_rate();
+        let sample_rate2 = album2.sample_rate();
 
         // Convert the comparison result to the expected GTK ordering type
-        freq1.cmp(&freq2).into()
+        sample_rate1.cmp(&sample_rate2).into()
     })));
 
     // Year sorting - compares release years numerically
