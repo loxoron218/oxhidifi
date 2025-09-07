@@ -1,17 +1,19 @@
-use std::rc::Rc;
+use std::{path::Path, rc::Rc};
 
 use gtk4::{
     Align::{Center, Start},
-    ColumnViewColumn, Image, Label, ListItem, SignalListItemFactory,
+    ColumnViewColumn, Label, ListItem, Picture, SignalListItemFactory,
     pango::EllipsizeMode::End,
 };
-use libadwaita::prelude::{Cast, ListItemExt};
+use libadwaita::prelude::{Cast, ListItemExt, WidgetExt};
 
 use super::data_model::AlbumListItemObject;
 
+use crate::utils::image::AsyncImageLoader;
+
 /// Creates a cell factory for displaying album cover images in a ColumnView column.
 ///
-/// This function sets up a `SignalListItemFactory` that creates and manages `Image` widgets
+/// This function sets up a `SignalListItemFactory` that creates and manages `Picture` widgets
 /// for each cell in the column. The factory handles two key phases:
 /// 1. Setup phase: Creates the UI widgets for each cell
 /// 2. Bind phase: Updates the widgets with data from the model
@@ -23,7 +25,7 @@ use super::data_model::AlbumListItemObject;
 /// # Implementation Details
 ///
 /// The function connects two signals to the factory:
-/// - `setup`: Called when a new cell needs to be created, sets up the Image widget
+/// - `setup`: Called when a new cell needs to be created, sets up the Picture widget
 /// - `bind`: Called when a cell needs to be updated with data, loads the album cover
 pub fn create_cover_image_column(column: &ColumnViewColumn) {
     // Create a new SignalListItemFactory which will manage the creation and updating of cells
@@ -38,12 +40,13 @@ pub fn create_cover_image_column(column: &ColumnViewColumn) {
         // Downcast the generic ListItem to the specific type we're working with
         let list_item = list_item.downcast_ref::<ListItem>().unwrap();
 
-        // Create an Image widget centered both horizontally and vertically
-        // This will display the album cover art or a placeholder icon
-        let image = Image::builder().halign(Center).valign(Center).build();
+        // Create a Picture widget centered both horizontally and vertically
+        // This will display the album cover art or a placeholder
+        let picture = Picture::builder().halign(Center).valign(Center).build();
+        picture.set_size_request(48, 48);
 
-        // Set the created image as the child widget of this list item
-        list_item.set_child(Some(&image));
+        // Set the created picture as the child widget of this list item
+        list_item.set_child(Some(&picture));
     });
 
     // Bind callback - updates the widgets with data from the model
@@ -52,13 +55,26 @@ pub fn create_cover_image_column(column: &ColumnViewColumn) {
         // Downcast the generic ListItem to the specific type we're working with
         let list_item = list_item.downcast_ref::<ListItem>().unwrap();
 
-        // Get the Image widget that was created in the setup phase
-        let image = list_item.child().unwrap().downcast::<Image>().unwrap();
+        // Get the Picture widget that was created in the setup phase
+        let picture = list_item.child().unwrap().downcast::<Picture>().unwrap();
 
-        // Set a placeholder icon for the album cover
-        // In a complete implementation, this would load the actual cover art image
-        image.set_icon_name(Some("media-optical-cd-audio-symbolic"));
-        image.set_pixel_size(48);
+        // Check if there's an item associated with this list item
+        if let Some(item) = list_item.item() {
+            // Downcast the generic item to our specific AlbumListItemObject
+            let album_item = item.downcast_ref::<AlbumListItemObject>().unwrap();
+
+            // Get the cover art path from the album item
+            let cover_art_path = album_item.cover_art();
+
+            // Create an AsyncImageLoader to load the image asynchronously
+            if let Ok(loader) = AsyncImageLoader::new() {
+                // Convert the cover art path to a Path if it exists
+                let path = cover_art_path.as_ref().map(|p| Path::new(p));
+
+                // Load the image asynchronously
+                loader.load_image_async(picture, path, 48);
+            }
+        }
     });
 }
 
