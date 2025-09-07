@@ -9,7 +9,7 @@ use crate::data::{
             remove_album_and_tracks, remove_albums_with_no_tracks, remove_artists_with_no_albums,
             remove_folder_and_albums, remove_orphaned_tracks,
         },
-        dr_sync::synchronize_dr_completed_from_store,
+        dr_sync::synchronize_dr_is_best_from_store,
         query::fetch_all_folders,
     },
     scanner::scan_folder_parallel,
@@ -120,8 +120,8 @@ pub async fn run_full_scan(db_pool: &Arc<SqlitePool>, sender: &UnboundedSender<(
     if let Err(e) = remove_artists_with_no_albums(db_pool).await {
         eprintln!("Error removing artists with no albums: {}", e);
     }
-    if let Err(e) = synchronize_dr_completed_from_store(db_pool).await {
-        eprintln!("Error synchronizing DR completed status: {}", e);
+    if let Err(e) = synchronize_dr_is_best_from_store(db_pool).await {
+        eprintln!("Error synchronizing DR best status: {}", e);
     }
 
     // Signal UI that scan is complete.

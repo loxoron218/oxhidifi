@@ -89,14 +89,14 @@ impl<'de> Deserialize<'de> for AlbumKey {
     }
 }
 
-/// A struct for storing and managing DR (Dynamic Range) values for albums.
+/// A struct for storing and managing the best DR (Dynamic Range) values for albums.
 ///
 /// It uses a `HashMap` where the key is an `AlbumKey` and the value is the
 /// DR value (u8). Provides methods for loading from and saving to a JSON file,
-/// as well as adding, removing, and checking for the existence of DR values.
+/// as well as adding, removing, and checking for the existence of best DR values.
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct DrValueStore {
-    /// A hash map storing `AlbumKey` to DR value (u8) mappings.
+    /// A hash map storing `AlbumKey` to best DR value (u8) mappings.
     pub dr_values: HashMap<AlbumKey, u8>,
 }
 impl DrValueStore {
@@ -163,21 +163,21 @@ impl DrValueStore {
         Ok(())
     }
 
-    /// Adds or updates a DR value for a given `AlbumKey`.
+    /// Adds or updates a best DR value for a given `AlbumKey`.
     ///
-    /// If the `key` already exists, its associated DR value will be updated.
+    /// If the `key` already exists, its associated best DR value will be updated.
     pub fn add_dr_value(&mut self, key: AlbumKey, dr_value: u8) {
         self.dr_values.insert(key, dr_value);
     }
 
-    /// Removes a DR value associated with a given `AlbumKey`.
+    /// Removes a best DR value associated with a given `AlbumKey`.
     ///
     /// If the `key` does not exist in the store, this operation does nothing.
     pub fn remove_dr_value(&mut self, key: &AlbumKey) {
         self.dr_values.remove(key);
     }
 
-    /// Checks if a DR value exists for a given `AlbumKey`.
+    /// Checks if a best DR value exists for a given `AlbumKey`.
     ///
     /// Returns `true` if the `key` is present in the store, `false` otherwise.
     pub fn contains(&self, key: &AlbumKey) -> bool {

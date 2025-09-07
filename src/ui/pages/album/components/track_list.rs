@@ -195,6 +195,6 @@ pub fn build_track_list(
         ));
     }
 
-    // Return the completed track list group
+    // Return the constructed track list group
     group
 }

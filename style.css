@@ -194,7 +194,7 @@
   padding: 0;
 }
 
-.dr-badge-label.dr-completed {
+.dr-badge-label.dr-best {
   border: 2px solid #000;
   color: #000;
   opacity: 1.0;
@@ -207,7 +207,7 @@
   opacity: 1.0;
 }
 
-.dr-badge-label:not(.dr-completed) {
+.dr-badge-label:not(.dr-best) {
   opacity: 0.4;
 }
 

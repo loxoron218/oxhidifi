@@ -12,23 +12,26 @@ use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::{
-    data::models::{Album, Artist, Folder},
+    data::{
+        db::crud::update_album_dr_is_best,
+        models::{Album, Artist, Folder},
+    },
     utils::best_dr_persistence::{AlbumKey, DrValueStore},
 };
 
 /// Build the DR badge widget for dynamic range value.
 ///
 /// Creates a UI component that displays the album's DR value and allows users
-/// to mark it as completed. The badge includes:
+/// to mark it as the best. The badge includes:
 /// - A visual indicator of the DR value with color coding
-/// - A hover effect that shows a checkbox for marking completion
-/// - Persistence of the completion status in both database and local storage
+/// - A hover effect that shows a checkbox for marking as the best
+/// - Persistence of the best status in both database and local storage
 ///
 /// # Parameters
 /// - `album_id`: The unique identifier of the album in the database
 /// - `dr`: The DR value of the album (if available)
-/// - `dr_completed`: Whether the DR value has been marked as completed by the user
-/// - `db_pool`: Database connection pool for persisting completion status
+/// - `dr_is_best`: Whether the DR value has been marked as the best by the user
+/// - `db_pool`: Database connection pool for persisting best status
 /// - `sender`: Channel sender for notifying UI updates
 /// - `album`: Album data for persistence operations
 /// - `artist`: Artist data for persistence operations
@@ -39,7 +42,7 @@ use crate::{
 pub fn build_dr_badge(
     album_id: i64,
     dr: Option<u8>,
-    dr_completed: bool,
+    dr_is_best: bool,
     db_pool: std::sync::Arc<SqlitePool>,
     sender: UnboundedSender<()>,
     album: Rc<Album>,
@@ -81,9 +84,9 @@ pub fn build_dr_badge(
     dr_label.add_css_class("dr-badge-label");
     dr_label.add_css_class(&css_class);
 
-    // Add dr-completed class if the DR value is marked as completed
-    if dr_completed {
-        dr_label.add_css_class("dr-completed");
+    // Add dr-best class if the DR value is marked as the best
+    if dr_is_best {
+        dr_label.add_css_class("dr-best");
     }
 
     // Create the text label that describes the DR value
@@ -96,12 +99,12 @@ pub fn build_dr_badge(
     // Set a fixed width to prevent UI movement when text changes
     dr_text_label.set_width_chars(18);
 
-    // Create the checkbox for marking DR value as completed
+    // Create the checkbox for marking DR value as the best
     let checkbox = CheckButton::builder()
-        .active(dr_completed)
+        .active(dr_is_best)
         .halign(Center)
         .valign(Center)
-        .css_classes(vec!["dr-completion-checkbox"])
+        .css_classes(vec!["dr-best-checkbox"])
         .build();
 
     // Create a stack to switch between DR label and checkbox on hover
@@ -162,12 +165,12 @@ pub fn build_dr_badge(
     // Attach the motion controller to the overlay
     overlay.add_controller(motion_controller);
 
-    // Connect checkbox toggled signal to handle completion status changes
+    // Connect checkbox toggled signal to handle best status changes
     checkbox_weak.borrow().connect_toggled(move |btn| {
         // Clone values for async context
         let db_pool = db_pool.clone();
         let sender = sender.clone();
-        let is_completed = btn.is_active();
+        let is_best = btn.is_active();
         let current_db_pool = db_pool.clone();
         let sender = sender.clone();
         let album_rc = album.clone();
@@ -176,14 +179,8 @@ pub fn build_dr_badge(
 
         // Spawn async task to handle database and persistence updates
         MainContext::default().spawn_local(async move {
-            // Update the album's DR completion status in the database
-            if let Err(_e) = crate::data::db::crud::update_album_dr_completed(
-                &*current_db_pool,
-                album_id,
-                is_completed,
-            )
-            .await
-            {}
+            // Update the album's DR best status in the database
+            if let Err(_e) = update_album_dr_is_best(&*current_db_pool, album_id, is_best).await {}
 
             // Notify UI of changes through the channel
             if let Err(_e) = sender.send(()) {
@@ -198,8 +195,8 @@ pub fn build_dr_badge(
                 folder_path: folder_rc.path.clone(),
             };
 
-            // Add or remove the DR value from the store based on completion status
-            if is_completed {
+            // Add or remove the DR value from the store based on best status
+            if is_best {
                 dr_store.add_dr_value(album_key, dr.unwrap_or(0));
             } else {
                 dr_store.remove_dr_value(&album_key);

@@ -10,7 +10,7 @@ use sqlx::SqlitePool;
 use tokio_stream::{StreamExt, wrappers::UnboundedReceiverStream};
 
 use crate::{
-    data::db::dr_sync::synchronize_dr_completed_background,
+    data::db::dr_sync::synchronize_dr_is_best_background,
     ui::{
         components::{
             player_bar::PlayerBar,
@@ -70,16 +70,13 @@ pub async fn populate_albums_column_view(
     // Clear existing items from the model to prepare for new population.
     column_view_model.remove_all();
 
-    // Synchronize DR completed status from the persistence store in the background.
+    // Synchronize DR best status from the persistence store in the background.
     // This ensures that any manual changes to best_dr_values.json or updates from other
     // parts of the application are reflected in the database without blocking the UI.
     let db_pool_clone = Arc::clone(&db_pool);
     MainContext::default().spawn_local(async move {
-        if let Err(e) = synchronize_dr_completed_background(db_pool_clone, None).await {
-            eprintln!(
-                "Error synchronizing DR completed status in background: {}",
-                e
-            );
+        if let Err(e) = synchronize_dr_is_best_background(db_pool_clone, None).await {
+            eprintln!("Error synchronizing DR best status in background: {}", e);
         }
     });
 
@@ -208,7 +205,7 @@ async fn process_albums_in_batches(
             album_info.year,
             album_info.original_release_date.clone(),
             album_info.dr_value,
-            album_info.dr_completed,
+            album_info.dr_is_best,
             album_info.format.clone(),
             album_info.bit_depth,
             album_info.sample_rate,

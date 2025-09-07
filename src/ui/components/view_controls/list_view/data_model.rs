@@ -22,8 +22,8 @@ pub struct AlbumListItem {
     pub original_release_date: Option<String>,
     /// The DR (Dynamic Range) value of the album, if available
     pub dr_value: Option<i32>,
-    /// Indicates whether the DR (Dynamic Range) analysis for this album is completed
-    pub dr_completed: bool,
+    /// Indicates whether the DR (Dynamic Range) analysis for this album is the best
+    pub dr_is_best: bool,
     /// The audio format of the album files (e.g., "FLAC", "MP3"), if available
     pub format: Option<String>,
     /// The bit depth of the audio files, if available
@@ -45,7 +45,7 @@ impl AlbumListItem {
     /// - `year`: The release year of the album, if available
     /// - `original_release_date`: The original release date of the album as a string, if available
     /// - `dr_value`: The DR (Dynamic Range) value of the album, if available
-    /// - `dr_completed`: Indicates whether the DR analysis for this album is completed
+    /// - `dr_is_best`: Indicates whether the DR analysis for this album is the best
     /// - `format`: The audio format of the album files (e.g., "FLAC", "MP3"), if available
     /// - `bit_depth`: The bit depth of the audio files, if available
     /// - `sample_rate`: The sample rate of the audio files in Hz, if available
@@ -59,7 +59,7 @@ impl AlbumListItem {
         year: Option<i32>,
         original_release_date: Option<String>,
         dr_value: Option<i32>,
-        dr_completed: bool,
+        dr_is_best: bool,
         format: Option<String>,
         bit_depth: Option<i32>,
         sample_rate: Option<i32>,
@@ -73,7 +73,7 @@ impl AlbumListItem {
             year,
             original_release_date,
             dr_value,
-            dr_completed,
+            dr_is_best,
             format,
             bit_depth,
             sample_rate,
@@ -238,13 +238,13 @@ impl AlbumListItemObject {
         }
     }
 
-    /// Gets the AlbumListItem's DR completion status
+    /// Gets the AlbumListItem's DR best status
     ///
     /// # Returns
-    /// Whether the DR (Dynamic Range) analysis for this album is completed
-    pub fn dr_completed(&self) -> bool {
+    /// Whether the DR (Dynamic Range) analysis for this album is the best
+    pub fn dr_is_best(&self) -> bool {
         if let Some(ref item) = *self.imp().item.borrow() {
-            item.dr_completed
+            item.dr_is_best
         } else {
             false
         }

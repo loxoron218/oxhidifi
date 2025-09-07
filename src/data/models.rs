@@ -48,8 +48,8 @@ pub struct Album {
     /// The Dynamic Range (DR) value of the album, if calculated or available.
     pub dr_value: Option<u8>,
     /// A boolean flag indicating whether the DR value for this album has been
-    /// manually marked as completed or verified by the user.
-    pub dr_completed: bool,
+    /// manually marked as the best or verified by the user.
+    pub dr_is_best: bool,
 }
 
 /// Represents a single music track.

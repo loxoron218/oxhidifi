@@ -292,9 +292,9 @@ pub fn create_dr_badge_column(column: &ColumnViewColumn) {
             // Downcast the generic item to our specific AlbumListItemObject
             let album_item = item.downcast_ref::<AlbumListItemObject>().unwrap();
 
-            // Get the DR value and completion status from the album item
+            // Get the DR value and best status from the album item
             let dr_value = album_item.dr_value();
-            let dr_completed = album_item.dr_completed();
+            let dr_is_best = album_item.dr_is_best();
 
             // Determine the display values based on whether DR is available
             let (dr_str, tooltip_text, css_class) = match dr_value {
@@ -326,9 +326,9 @@ pub fn create_dr_badge_column(column: &ColumnViewColumn) {
             // Add the value-specific CSS class
             new_classes.push(&css_class);
 
-            // Add dr-completed class if the DR value is marked as completed
-            if dr_completed {
-                new_classes.push("dr-completed");
+            // Add dr-best class if the DR value is marked as the best
+            if dr_is_best {
+                new_classes.push("dr-best");
             }
 
             // Apply the updated CSS classes

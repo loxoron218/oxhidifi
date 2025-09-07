@@ -187,7 +187,7 @@ pub fn build_album_card(
 
     // Conditionally add DR badge to overlay based on user settings
     if show_dr_badges.get() {
-        let dr_label = create_dr_overlay(album.dr_value, album.dr_completed).unwrap();
+        let dr_label = create_dr_overlay(album.dr_value, album.dr_is_best).unwrap();
         overlay.add_overlay(&dr_label);
     }
 

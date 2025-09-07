@@ -12,7 +12,7 @@ use sqlx::SqlitePool;
 use tokio_stream::{StreamExt, wrappers::UnboundedReceiverStream};
 
 use crate::{
-    data::db::dr_sync::synchronize_dr_completed_background,
+    data::db::dr_sync::synchronize_dr_is_best_background,
     ui::{
         components::{player_bar::PlayerBar, view_controls::sorting_controls::types::SortOrder},
         grids::{
@@ -80,16 +80,13 @@ pub async fn populate_albums_grid(
         albums_grid.remove(&child);
     }
 
-    // Synchronize DR completed status from the persistence store in the background.
+    // Synchronize DR best status from the persistence store in the background.
     // This ensures that any manual changes to best_dr_values.json or updates from other
     // parts of the application are reflected in the database without blocking the UI.
     let db_pool_clone = Arc::clone(&db_pool);
     MainContext::default().spawn_local(async move {
-        if let Err(e) = synchronize_dr_completed_background(db_pool_clone, None).await {
-            eprintln!(
-                "Error synchronizing DR completed status in background: {}",
-                e
-            );
+        if let Err(e) = synchronize_dr_is_best_background(db_pool_clone, None).await {
+            eprintln!("Error synchronizing DR best status in background: {}", e);
         }
     });
 

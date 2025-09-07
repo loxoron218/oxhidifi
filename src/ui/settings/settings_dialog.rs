@@ -124,7 +124,7 @@ pub fn show_settings_dialog(
         settings.sort_orders = current_orders;
         settings.sort_ascending_albums = prev_settings.sort_ascending_albums;
         settings.sort_ascending_artists = prev_settings.sort_ascending_artists;
-        settings.completed_albums = prev_settings.completed_albums;
+        settings.best_dr_albums = prev_settings.best_dr_albums;
         settings.show_dr_badges = show_dr_badges_setting_clone_for_close.get();
         settings.use_original_year = use_original_year_setting_clone_for_close.get();
         let _ = save_settings(&settings);

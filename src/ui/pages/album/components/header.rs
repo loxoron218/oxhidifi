@@ -181,7 +181,7 @@ pub fn build_album_header(
         info_box.append(&build_dr_badge(
             album.id,
             album.dr_value,
-            // Always show as completed on album page
+            // Always show as the best on album page
             true,
             db_pool.clone(),
             sender.clone(),

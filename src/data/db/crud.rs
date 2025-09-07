@@ -24,6 +24,9 @@ pub struct AlbumForInsert {
     pub cover_art_path: Option<PathBuf>,
     /// The Dynamic Range (DR) value of the album, if calculated or available.
     pub dr_value: Option<u8>,
+    /// A boolean flag indicating whether the DR value for this album has been
+    /// manually marked as the best or verified by the user.
+    pub dr_is_best: bool,
     /// The original release date of the album, typically in "YYYY-MM-DD" format.
     pub original_release_date: Option<String>,
 }
@@ -151,7 +154,7 @@ pub async fn upsert_albums_batch(
         return Ok(HashMap::new());
     }
     let mut query_builder = QueryBuilder::new(
-        "INSERT INTO albums (title, artist_id, folder_id, year, cover_art, dr_value, original_release_date, dr_completed)",
+        "INSERT INTO albums (title, artist_id, folder_id, year, cover_art, dr_value, original_release_date, dr_is_best)",
     );
     query_builder.push_values(albums, |mut b, album| {
         b.push_bind(album.title.clone())
@@ -161,7 +164,7 @@ pub async fn upsert_albums_batch(
             .push_bind(album.cover_art_path.as_ref().and_then(|p| p.to_str()))
             .push_bind(album.dr_value)
             .push_bind(album.original_release_date.clone())
-            .push_bind(false);
+            .push_bind(album.dr_is_best);
     });
     query_builder.push(
         " ON CONFLICT(title, artist_id, folder_id) DO UPDATE SET
@@ -252,7 +255,7 @@ pub async fn insert_or_get_artists_batch(
 /// (e.g., if no album with the given ID is found).
 pub async fn fetch_album_by_id(pool: &SqlitePool, album_id: i64) -> Result<Album> {
     get_metrics().record_db_operation();
-    let row = query("SELECT id, title, artist_id, year, cover_art, folder_id, dr_value, dr_completed, original_release_date FROM albums WHERE id = ?")
+    let row = query("SELECT id, title, artist_id, year, cover_art, folder_id, dr_value, dr_is_best, original_release_date FROM albums WHERE id = ?")
         .bind(album_id)
         .fetch_one(pool)
         .await?;
@@ -264,7 +267,7 @@ pub async fn fetch_album_by_id(pool: &SqlitePool, album_id: i64) -> Result<Album
         cover_art: row.get::<Option<String>, _>("cover_art").map(PathBuf::from),
         folder_id: row.get("folder_id"),
         dr_value: row.get("dr_value"),
-        dr_completed: row.get("dr_completed"),
+        dr_is_best: row.get("dr_is_best"),
         original_release_date: row.get("original_release_date"),
     })
 }
@@ -341,26 +344,26 @@ pub async fn fetch_folder_by_id(pool: &SqlitePool, folder_id: i64) -> Result<Fol
     })
 }
 
-/// Updates the `dr_completed` status for a specific album in the database.
+/// Updates the `dr_is_best` status for a specific album in the database.
 ///
 /// This function is typically called when a user manually marks an album's
-/// DR value as completed or uncompleted in the UI.
+/// DR value as the best or verified in the UI.
 ///
 /// # Arguments
 /// * `pool` - A reference to the SQLite database connection pool.
 /// * `album_id` - The ID of the album to update.
-/// * `completed` - A boolean indicating the new `dr_completed` status.
+/// * `is_best` - A boolean indicating the new `dr_is_best` status.
 ///
 /// # Returns
 /// A `Result` indicating success or an `sqlx::Error` on failure.
-pub async fn update_album_dr_completed(
+pub async fn update_album_dr_is_best(
     pool: &SqlitePool,
     album_id: i64,
-    completed: bool,
+    is_best: bool,
 ) -> Result<()> {
-    // Update the album's DR completion status in the database
-    query("UPDATE albums SET dr_completed = ? WHERE id = ?")
-        .bind(completed)
+    // Update the album's DR best status in the database
+    query("UPDATE albums SET dr_is_best = ? WHERE id = ?")
+        .bind(is_best)
         .bind(album_id)
         .execute(pool)
         .await?;

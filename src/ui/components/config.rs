@@ -14,7 +14,7 @@ use crate::ui::components::view_controls::{
     view_mode::ViewMode::{self, GridView},
 };
 
-/// Manages application settings, including sorting preferences and completed albums.
+/// Manages application settings, including sorting preferences and best DR albums.
 ///
 /// This module provides functionality to load and save user preferences to a JSON file.
 /// The `Settings` struct defines the structure of these preferences.
@@ -39,9 +39,9 @@ pub struct Settings {
     pub sort_ascending_albums: bool,
     /// Indicates whether artists should be sorted in ascending order.
     pub sort_ascending_artists: bool,
-    /// A map of completed album IDs to a boolean indicating their completion status.
+    /// A map of album IDs to a boolean indicating whether their DR value is the best.
     /// The `i64` key represents the album ID.
-    pub completed_albums: HashMap<i64, bool>,
+    pub best_dr_albums: HashMap<i64, bool>,
     /// Indicates whether DR Value badges should be displayed.
     pub show_dr_badges: bool,
     /// Indicates whether the original release year should be used for display.
@@ -61,7 +61,7 @@ impl Default for Settings {
             sort_orders: vec![Artist, Year, Album, DrValue],
             sort_ascending_albums: true,
             sort_ascending_artists: true,
-            completed_albums: HashMap::new(),
+            best_dr_albums: HashMap::new(),
             show_dr_badges: true,
             use_original_year: true,
             view_mode: GridView,

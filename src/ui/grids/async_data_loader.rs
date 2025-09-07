@@ -97,7 +97,7 @@ pub async fn load_albums_async(
                 tracks.bit_depth,
                 tracks.sample_rate,
                 albums.dr_value,
-                albums.dr_completed,
+                albums.dr_is_best,
                 albums.original_release_date,
                 folders.path AS folder_path
             FROM albums
@@ -142,7 +142,7 @@ pub async fn load_albums_async(
 
                         // Convert u8 to i32 for compatibility with AlbumGridItem
                         dr_value: row.get::<Option<u8>, _>("dr_value").map(|dr| dr as i32),
-                        dr_completed: row.get("dr_completed"),
+                        dr_is_best: row.get("dr_is_best"),
                         original_release_date: row.get("original_release_date"),
 
                         // Convert string path to PathBuf for folder_path

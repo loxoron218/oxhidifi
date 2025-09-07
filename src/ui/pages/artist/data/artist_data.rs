@@ -23,7 +23,7 @@ use sqlx::{Error, Row, SqlitePool, query};
 ///     bit_depth: Some(24),
 ///     sample_rate: Some(96000),
 ///     dr_value: Some(12),
-///     dr_completed: true,
+///     dr_is_best: true,
 ///     original_release_date: Some("2023-01-01".to_string()),
 /// };
 /// ```
@@ -47,8 +47,8 @@ pub struct AlbumDisplayInfoWithYear {
     pub sample_rate: Option<u32>,
     /// Dynamic Range value for the album (lower values indicate more compression)
     pub dr_value: Option<u8>,
-    /// Flag indicating whether DR analysis has been completed for this album
-    pub dr_completed: bool,
+    /// Flag indicating whether DR analysis has been marked as the best for this album
+    pub dr_is_best: bool,
     /// Original release date of the album in ISO format (YYYY-MM-DD)
     pub original_release_date: Option<String>,
 }
@@ -93,7 +93,7 @@ pub async fn fetch_album_display_info_by_artist(
 ) -> Result<Vec<AlbumDisplayInfoWithYear>, Error> {
     let rows = query(
         r#"SELECT albums.id, albums.title, albums.year, artists.name as artist, albums.cover_art,
-                     tracks.format, tracks.bit_depth, tracks.sample_rate, albums.dr_value, albums.dr_completed, albums.original_release_date
+                     tracks.format, tracks.bit_depth, tracks.sample_rate, albums.dr_value, albums.dr_is_best, albums.original_release_date
            FROM albums
            JOIN artists ON albums.artist_id = artists.id
            LEFT JOIN tracks ON tracks.album_id = albums.id
@@ -116,7 +116,7 @@ pub async fn fetch_album_display_info_by_artist(
             bit_depth: row.get("bit_depth"),
             sample_rate: row.get("sample_rate"),
             dr_value: row.get("dr_value"),
-            dr_completed: row.get("dr_completed"),
+            dr_is_best: row.get("dr_is_best"),
             original_release_date: row.get("original_release_date"),
         })
         .collect())

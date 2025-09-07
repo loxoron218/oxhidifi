@@ -248,6 +248,7 @@ pub async fn process_files_batch_optimized(
                 year: meta.year,
                 cover_art_path: meta.cover_art_path.clone(),
                 dr_value,
+                dr_is_best: false,
                 original_release_date: meta.original_release_date.clone(),
             });
         }

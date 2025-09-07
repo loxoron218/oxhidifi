@@ -42,7 +42,7 @@ pub fn create_album_cover(cover_art_path: Option<&Path>, cover_size: i32) -> Pic
 /// This function generates a `Label` widget to display the Dynamic Range (DR) value
 /// of an album. It applies specific CSS classes based on the DR value and completion status,
 /// and provides a tooltip for additional information.
-pub fn create_dr_overlay(dr_value: Option<u8>, dr_completed: bool) -> Option<Label> {
+pub fn create_dr_overlay(dr_value: Option<u8>, dr_is_best: bool) -> Option<Label> {
     // Deconstruct the DR value to determine display text, tooltip, and CSS classes
     let (dr_str, tooltip_text, mut css_classes) = match dr_value {
         // For valid DR values (0-15), format as two-digit number
@@ -69,9 +69,9 @@ pub fn create_dr_overlay(dr_value: Option<u8>, dr_completed: bool) -> Option<Lab
     // Set fixed size for consistent appearance
     dr_label.set_size_request(28, 28);
 
-    // Add completion status styling if applicable
-    if dr_completed {
-        css_classes.push("dr-completed".to_string());
+    // Add best status styling if applicable
+    if dr_is_best {
+        css_classes.push("dr-best".to_string());
     }
 
     // Apply all computed CSS classes

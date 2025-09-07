@@ -154,7 +154,7 @@ pub fn setup_drag_drop_for_row(
                                     settings.sort_orders = new_orders;
                                     settings.sort_ascending_albums = prev.sort_ascending_albums;
                                     settings.sort_ascending_artists = prev.sort_ascending_artists;
-                                    settings.completed_albums = prev.completed_albums;
+                                    settings.best_dr_albums = prev.best_dr_albums;
                                     settings.show_dr_badges = prev.show_dr_badges;
                                     settings.use_original_year = prev.use_original_year;
                                     settings.view_mode = prev.view_mode;

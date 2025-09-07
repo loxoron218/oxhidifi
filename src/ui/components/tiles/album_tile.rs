@@ -196,7 +196,7 @@ pub fn create_album_tile(
     overlay.set_valign(Start);
     if show_dr_badges.get() {
         if let Some(dr_label) =
-            create_dr_overlay(album.dr_value.map(|dr| dr as u8), album.dr_completed)
+            create_dr_overlay(album.dr_value.map(|dr| dr as u8), album.dr_is_best)
         {
             overlay.add_overlay(&dr_label);
         }

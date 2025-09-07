@@ -40,21 +40,20 @@ pub async fn init_db(pool: &SqlitePool) -> Result<()> {
             cover_art BLOB,
             folder_id INTEGER NOT NULL,
             dr_value INTEGER,
-            dr_completed BOOLEAN DEFAULT FALSE,
+            dr_is_best BOOLEAN DEFAULT FALSE,
             original_release_date TEXT
         )",
     )
     .execute(pool)
     .await?;
 
-    // Add `dr_completed` column if it doesn't exist.
+    // Add `dr_is_best` column if it doesn't exist.
     // `.ok()` is used here to gracefully handle the error if the column already exists,
     // which is expected behavior for idempotent schema migrations.
-    query("ALTER TABLE albums ADD COLUMN dr_completed BOOLEAN DEFAULT FALSE")
+    query("ALTER TABLE albums ADD COLUMN dr_is_best BOOLEAN DEFAULT FALSE")
         .execute(pool)
         .await
         .ok();
-
     // Add `original_release_date` column if it doesn't exist.
     // `.ok()` is used here to gracefully handle the error if the column already exists.
     query("ALTER TABLE albums ADD COLUMN original_release_date TEXT")
@@ -136,8 +135,8 @@ pub async fn init_db(pool: &SqlitePool) -> Result<()> {
         .execute(pool)
         .await?;
 
-    // Index on albums.dr_completed for faster DR synchronization
-    query("CREATE INDEX IF NOT EXISTS idx_albums_dr_completed ON albums(dr_completed)")
+    // Index on albums.dr_is_best for faster DR synchronization
+    query("CREATE INDEX IF NOT EXISTS idx_albums_dr_is_best ON albums(dr_is_best)")
         .execute(pool)
         .await?;
 

@@ -19,7 +19,7 @@ fn map_row_to_album_grid_item(row: sqlx::sqlite::SqliteRow) -> AlbumGridItem {
         bit_depth: row.get::<Option<u32>, _>("bit_depth").map(|bd| bd as i32),
         sample_rate: row.get::<Option<u32>, _>("sample_rate").map(|f| f as i32),
         dr_value: row.get::<Option<u8>, _>("dr_value").map(|dr| dr as i32),
-        dr_completed: row.get("dr_completed"),
+        dr_is_best: row.get("dr_is_best"),
         original_release_date: row.get("original_release_date"),
         folder_path: PathBuf::from(row.get::<String, _>("folder_path")),
     }
@@ -73,7 +73,7 @@ pub async fn search_album_display_info(
             tracks.bit_depth,
             tracks.sample_rate,
             albums.dr_value,
-            albums.dr_completed,
+            albums.dr_is_best,
             albums.original_release_date,
             folders.path AS folder_path
         FROM albums

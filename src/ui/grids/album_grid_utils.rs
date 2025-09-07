@@ -108,11 +108,11 @@ pub fn create_album_cover_picture(cover_art_path: Option<&Path>, cover_size: i32
 ///
 /// # Arguments
 /// * `dr_value` - An `Option<u8>` representing the album's DR value.
-/// * `dr_completed` - A boolean indicating if the DR value has been marked as completed.
+/// * `dr_is_best` - A boolean indicating if the DR value has been marked as the best.
 ///
 /// # Returns
 /// A `gtk4::Label` widget configured as a DR badge.
-pub fn create_dr_badge_label(dr_value: Option<u8>, dr_completed: bool) -> Label {
+pub fn create_dr_badge_label(dr_value: Option<u8>, dr_is_best: bool) -> Label {
     let (dr_str, tooltip_text, mut css_classes) = match dr_value {
         Some(value) => (
             format!("{:02}", value),
@@ -137,8 +137,8 @@ pub fn create_dr_badge_label(dr_value: Option<u8>, dr_completed: bool) -> Label 
         .valign(End)
         .build();
     dr_label.set_size_request(28, 28);
-    if dr_completed {
-        css_classes.push("dr-completed".to_string());
+    if dr_is_best {
+        css_classes.push("dr-best".to_string());
     }
     for class in css_classes {
         dr_label.add_css_class(&class);

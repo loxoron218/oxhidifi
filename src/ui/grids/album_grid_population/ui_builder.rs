@@ -193,10 +193,10 @@ pub fn create_album_tile(
             artist: album_info.artist.clone(),
             folder_path: album_info.folder_path.clone(),
         };
-        let is_dr_completed_from_store = dr_store.contains(&album_key);
+        let is_dr_best_from_store = dr_store.contains(&album_key);
         let dr_label = create_dr_badge_label(
             album_info.dr_value.map(|dr| dr as u8),
-            is_dr_completed_from_store,
+            is_dr_best_from_store,
         );
         overlay.add_overlay(&dr_label);
     }

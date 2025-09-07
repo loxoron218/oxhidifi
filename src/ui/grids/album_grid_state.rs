@@ -24,8 +24,8 @@ pub struct AlbumGridItem {
     pub original_release_date: Option<String>,
     /// The DR (Dynamic Range) value of the album, if available
     pub dr_value: Option<i32>,
-    /// Indicates whether the DR (Dynamic Range) analysis for this album is completed
-    pub dr_completed: bool,
+    /// Indicates whether the DR (Dynamic Range) analysis for this album is the best
+    pub dr_is_best: bool,
     /// The audio format of the album files (e.g., "FLAC", "MP3"), if available
     pub format: Option<String>,
     /// The bit depth of the audio files, if available
