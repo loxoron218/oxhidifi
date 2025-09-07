@@ -249,4 +249,16 @@ impl AlbumListItemObject {
             false
         }
     }
+
+    /// Gets the AlbumListItem's original release date
+    ///
+    /// # Returns
+    /// The original release date of the album, or None if not available or item not set
+    pub fn original_release_date(&self) -> Option<String> {
+        if let Some(ref item) = *self.imp().item.borrow() {
+            item.original_release_date.clone()
+        } else {
+            None
+        }
+    }
 }

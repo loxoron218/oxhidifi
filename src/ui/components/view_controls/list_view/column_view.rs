@@ -295,10 +295,7 @@ fn create_columns(
         // Format the year based on settings
         format_year_info(
             album.year(),
-            album
-                .item()
-                .as_ref()
-                .and_then(|item| item.original_release_date.as_deref()),
+            album.original_release_date().as_deref(),
             use_original_year,
         )
     });

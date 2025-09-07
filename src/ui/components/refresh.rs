@@ -202,9 +202,19 @@ impl RefreshService {
         // Check if the "Show DR Value Badges" setting has changed
         let current_show_dr_badges = self.show_dr_badges.get();
         let previous_show_dr_badges = self.previous_show_dr_badges.get();
-        if current_show_dr_badges != previous_show_dr_badges {
-            // Update the previous state
+        
+        // Check if the "Use Original Year" setting has changed
+        // We need to track the previous state of this setting as well
+        thread_local! {
+            // Default to true to force initial population
+            static PREVIOUS_USE_ORIGINAL_YEAR: Cell<bool> = Cell::new(true);
+        }
+        let current_use_original_year = self.use_original_year.get();
+        let previous_use_original_year = PREVIOUS_USE_ORIGINAL_YEAR.with(|cell| cell.get());
+        if current_show_dr_badges != previous_show_dr_badges || current_use_original_year != previous_use_original_year {
+            // Update the previous states
             self.previous_show_dr_badges.set(current_show_dr_badges);
+            PREVIOUS_USE_ORIGINAL_YEAR.with(|cell| cell.set(current_use_original_year));
 
             // Rebuild the albums grid with ListView mode
             let model = rebuild_albums_grid_for_window(
@@ -218,7 +228,7 @@ impl RefreshService {
                 &self.sender,
                 self.album_count_label.clone(),
                 ListView,
-                self.use_original_year.get(),
+                current_use_original_year,
                 self.show_dr_badges.clone(),
             );
 
