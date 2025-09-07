@@ -16,7 +16,7 @@ use libadwaita::{
 };
 
 use crate::ui::components::{
-    config::{Settings, load_settings, save_settings},
+    config::{load_settings, save_settings},
     view_controls::sorting_controls::{
         types::{SortOrder, sort_order_label},
         updater::{update_popover_content, update_sorting_row_numbers},
@@ -150,14 +150,15 @@ pub fn setup_drag_drop_for_row(
                                 if !new_orders.is_empty() {
                                     *sort_orders_rc.borrow_mut() = new_orders.clone();
                                     let prev = load_settings();
-                                    let _ = save_settings(&Settings {
-                                        sort_orders: new_orders,
-                                        sort_ascending_albums: prev.sort_ascending_albums,
-                                        sort_ascending_artists: prev.sort_ascending_artists,
-                                        completed_albums: prev.completed_albums,
-                                        show_dr_badges: prev.show_dr_badges,
-                                        use_original_year: prev.use_original_year,
-                                    });
+                                    let mut settings = load_settings();
+                                    settings.sort_orders = new_orders;
+                                    settings.sort_ascending_albums = prev.sort_ascending_albums;
+                                    settings.sort_ascending_artists = prev.sort_ascending_artists;
+                                    settings.completed_albums = prev.completed_albums;
+                                    settings.show_dr_badges = prev.show_dr_badges;
+                                    settings.use_original_year = prev.use_original_year;
+                                    settings.view_mode = prev.view_mode;
+                                    let _ = save_settings(&settings);
 
                                     // Trigger UI refresh
                                     (refresh_library_ui_cb)(

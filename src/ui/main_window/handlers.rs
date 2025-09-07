@@ -10,6 +10,7 @@ use crate::{
     data::watcher::start_watching_library,
     ui::{
         components::{
+            config::{load_settings, save_settings},
             dialogs::{connect_settings_dialog, create_add_folder_dialog_handler},
             navigation::{
                 core::{connect_album_navigation, connect_artist_navigation, connect_back_button},
@@ -19,8 +20,7 @@ use crate::{
             refresh::{RefreshService, setup_live_monitor_refresh},
             scan_feedback::spawn_scanning_label_refresh_task,
             view_controls::{
-                list_view::population::populate_albums_column_view,
-                view_mode::ViewMode::{GridView, ListView},
+                list_view::population::populate_albums_column_view, view_mode::ViewMode::ListView,
             },
         },
         grids::{
@@ -65,6 +65,8 @@ pub fn connect_all_handlers(
     add_music_button_albums: &Button,
     add_music_button_artists: &Button,
 ) {
+    // Load persistent user settings for initial sort orders and view mode.
+    let settings = load_settings();
     let sort_orders_cloned = shared_state.sort_orders.clone();
     let sort_ascending_cloned = shared_state.sort_ascending.clone();
     let sort_ascending_artists_cloned = shared_state.sort_ascending_artists.clone();
@@ -128,7 +130,7 @@ pub fn connect_all_handlers(
         &db_pool,
         &sender,
         widgets.album_count_label.clone(),
-        GridView,
+        settings.view_mode,
         use_original_year_cloned.get(),
         show_dr_badges_cloned.clone(),
     );
@@ -321,25 +323,33 @@ pub fn connect_all_handlers(
     // Connect live search functionality to the search entry.
     // As the user types, this triggers real-time searches in the database and dynamically
     // updates the displayed album and artist grids with matching results.
-    connect_live_search(
-        &widgets.search_bar.search_bar.entry,
-        widgets.albums_grid_cell.borrow().as_ref().unwrap(),
-        widgets.albums_stack_cell.borrow().as_ref().unwrap(),
-        widgets.artist_grid_cell.borrow().as_ref().unwrap(),
-        widgets.artists_stack_cell.borrow().as_ref().unwrap(),
-        db_pool.clone(),
-        sort_ascending_cloned.clone(),
-        sort_ascending_artists_cloned.clone(),
-        refresh_library_ui.clone(),
-        Rc::new(widgets.stack.clone()),
-        Rc::new(widgets.left_btn_stack.clone()),
-        Rc::new(widgets.right_btn_box.clone()),
-        nav_history_cloned.clone(),
-        sender.clone(),
-        show_dr_badges_cloned.clone(),
-        use_original_year_cloned.clone(),
-        widgets.player_bar.clone(),
-    );
+    // Only connect live search if we have the necessary grid references
+    if let (Some(albums_grid), Some(albums_stack), Some(artist_grid), Some(artists_stack)) = (
+        widgets.albums_grid_cell.borrow().as_ref().cloned(),
+        widgets.albums_stack_cell.borrow().as_ref().cloned(),
+        widgets.artist_grid_cell.borrow().as_ref().cloned(),
+        widgets.artists_stack_cell.borrow().as_ref().cloned(),
+    ) {
+        connect_live_search(
+            &widgets.search_bar.search_bar.entry,
+            &albums_grid,
+            &albums_stack,
+            &artist_grid,
+            &artists_stack,
+            db_pool.clone(),
+            sort_ascending_cloned.clone(),
+            sort_ascending_artists_cloned.clone(),
+            refresh_library_ui.clone(),
+            Rc::new(widgets.stack.clone()),
+            Rc::new(widgets.left_btn_stack.clone()),
+            Rc::new(widgets.right_btn_box.clone()),
+            nav_history_cloned.clone(),
+            sender.clone(),
+            show_dr_badges_cloned.clone(),
+            use_original_year_cloned.clone(),
+            widgets.player_bar.clone(),
+        );
+    }
 
     // Set up search bar UI logic (e.g., showing/hiding, focus management).
     // This integrates the search bar's behavior into the main window's UI flow.
@@ -482,5 +492,10 @@ pub fn connect_all_handlers(
             sort_ascending_cloned2.get(),
             sort_ascending_artists_cloned.get(),
         );
+
+        // Save the new view mode to the configuration
+        let mut settings = load_settings();
+        settings.view_mode = view_mode;
+        let _ = save_settings(&settings);
     });
 }

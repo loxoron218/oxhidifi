@@ -25,7 +25,10 @@ use crate::{
             config::load_settings, player_bar::PlayerBar, refresh::setup_library_refresh_channel,
             scan_feedback::create_scanning_label,
         },
-        grids::{album_grid_builder::build_albums_grid, artist_grid_builder::build_artist_grid},
+        grids::{
+            album_grid_rebuilder::rebuild_albums_grid_for_window,
+            artist_grid_builder::build_artist_grid,
+        },
         header::{build_header_bar, build_main_headerbar, build_tab_bar},
     },
     utils::screen::ScreenInfo,
@@ -178,13 +181,26 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
 
     // Build the album and artist grids, passing the count labels to them.
     // The grid builders are responsible for constructing the FlowBox and Stack.
-    let (albums_stack, albums_grid) = build_albums_grid(
+    // Use the saved view mode from settings
+    let _model = rebuild_albums_grid_for_window(
+        &widgets.stack,
         &widgets.scanning_label_albums,
-        shared_state.screen_info.borrow().cover_size,
-        shared_state.screen_info.borrow().tile_size,
-        &add_music_button_albums,
+        &shared_state.screen_info,
+        &albums_grid_cell,
+        &albums_stack_cell,
+        &widgets.window.clone().into(),
+        &db_pool,
+        &sender,
         widgets.album_count_label.clone(),
+        settings.view_mode,
+        settings.use_original_year,
+        shared_state.show_dr_badges.clone(),
     );
+
+    // Get the albums stack from the cell (always available)
+    let _albums_stack = albums_stack_cell.borrow().as_ref().cloned();
+
+    // Build the artist grid
     let (artists_stack, artist_grid) = build_artist_grid(
         &widgets.scanning_label_artists,
         &add_music_button_artists,
@@ -194,16 +210,9 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     // Set the initial children of the `ViewStack` to the newly built album and artist stacks.
     widgets
         .stack
-        .add_titled(&albums_stack, Some("albums"), "Albums");
-    widgets
-        .stack
         .add_titled(&artists_stack, Some("artists"), "Artists");
 
-    // Store the built grids and stacks in the `Rc<RefCell<Option<...>>>` cells.
-    // This allows them to be accessed and manipulated by other parts of the application,
-    // particularly during UI refresh operations.
-    albums_grid_cell.borrow_mut().replace(albums_grid);
-    albums_stack_cell.borrow_mut().replace(albums_stack);
+    // Store the artist grid and stack in the cells
     artist_grid_cell.borrow_mut().replace(artist_grid);
     artists_stack_cell.borrow_mut().replace(artists_stack);
 

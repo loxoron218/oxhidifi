@@ -1,10 +1,25 @@
+use std::default::Default;
+
+use serde::{Deserialize, Serialize};
+
 /// Represents the different view modes available in the application
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum ViewMode {
     /// Grid view layout for displaying content in a grid format
     GridView,
     /// List view layout for displaying content in a list format
     ListView,
+}
+
+impl Default for ViewMode {
+    /// Returns the default view mode, which is GridView.
+    ///
+    /// # Returns
+    ///
+    /// The default `ViewMode` variant, `GridView`.
+    fn default() -> Self {
+        ViewMode::GridView
+    }
 }
 
 impl ViewMode {

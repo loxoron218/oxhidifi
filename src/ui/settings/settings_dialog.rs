@@ -15,7 +15,7 @@ use tokio::sync::mpsc::UnboundedSender;
 
 use crate::ui::{
     components::{
-        config::{Settings, load_settings, save_settings},
+        config::{load_settings, save_settings},
         view_controls::sorting_controls::types::SortOrder,
     },
     settings::{
@@ -120,14 +120,14 @@ pub fn show_settings_dialog(
     dialog.connect_close_request(move |_| {
         let current_orders = sort_orders_rc.borrow().clone();
         let prev_settings = load_settings();
-        let _ = save_settings(&Settings {
-            sort_orders: current_orders,
-            sort_ascending_albums: prev_settings.sort_ascending_albums,
-            sort_ascending_artists: prev_settings.sort_ascending_artists,
-            completed_albums: prev_settings.completed_albums,
-            show_dr_badges: show_dr_badges_setting_clone_for_close.get(),
-            use_original_year: use_original_year_setting_clone_for_close.get(),
-        });
+        let mut settings = load_settings();
+        settings.sort_orders = current_orders;
+        settings.sort_ascending_albums = prev_settings.sort_ascending_albums;
+        settings.sort_ascending_artists = prev_settings.sort_ascending_artists;
+        settings.completed_albums = prev_settings.completed_albums;
+        settings.show_dr_badges = show_dr_badges_setting_clone_for_close.get();
+        settings.use_original_year = use_original_year_setting_clone_for_close.get();
+        let _ = save_settings(&settings);
         is_settings_open_clone.set(false);
         Proceed
     });

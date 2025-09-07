@@ -9,8 +9,9 @@ use std::{
 use serde::{Deserialize, Serialize};
 use serde_json::{from_str, to_string_pretty};
 
-use crate::ui::components::view_controls::sorting_controls::types::SortOrder::{
-    self, Album, Artist, DrValue, Year,
+use crate::ui::components::view_controls::{
+    sorting_controls::types::SortOrder::{self, Album, Artist, DrValue, Year},
+    view_mode::ViewMode::{self, GridView},
 };
 
 /// Manages application settings, including sorting preferences and completed albums.
@@ -45,6 +46,9 @@ pub struct Settings {
     pub show_dr_badges: bool,
     /// Indicates whether the original release year should be used for display.
     pub use_original_year: bool,
+    /// The current view mode (grid or list view)
+    #[serde(default)]
+    pub view_mode: ViewMode,
 }
 
 /// Provides default values for `Settings`.
@@ -60,6 +64,7 @@ impl Default for Settings {
             completed_albums: HashMap::new(),
             show_dr_badges: true,
             use_original_year: true,
+            view_mode: GridView,
         }
     }
 }
