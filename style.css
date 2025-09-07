@@ -97,6 +97,10 @@
   opacity: 1.0;
 }
 
+.album-detail-page .dr-badge-label:not(.dr-best) {
+  opacity: 1.0;
+}
+
 .album-header {
   margin-bottom: 24px;
 }
@@ -108,10 +112,6 @@
 /* =====================
    Component: DR Badges
    ===================== */
-
-.album-detail-page .dr-badge-label {
-  opacity: 1.0;
-}
 
 .dr-badge-label {
   background: var(--accent_color, #888);
