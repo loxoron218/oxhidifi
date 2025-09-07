@@ -422,9 +422,6 @@ pub fn connect_all_handlers(
         let scanning_label_albums_clone = scanning_label_albums_cloned.clone();
         let player_bar_clone = player_bar_cloned.clone();
 
-        // Rebuild the grid with the new view mode
-        println!("View mode changed to: {:?}", view_mode);
-
         // Rebuild the albums grid with the new view mode
         let model = rebuild_albums_grid_for_window(
             &stack_clone,
