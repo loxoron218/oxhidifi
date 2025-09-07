@@ -237,4 +237,16 @@ impl AlbumListItemObject {
             None
         }
     }
+
+    /// Gets the AlbumListItem's DR completion status
+    ///
+    /// # Returns
+    /// Whether the DR (Dynamic Range) analysis for this album is completed
+    pub fn dr_completed(&self) -> bool {
+        if let Some(ref item) = *self.imp().item.borrow() {
+            item.dr_completed
+        } else {
+            false
+        }
+    }
 }

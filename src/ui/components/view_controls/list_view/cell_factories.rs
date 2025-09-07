@@ -236,3 +236,102 @@ where
         }
     });
 }
+
+/// Creates a cell factory for displaying DR (Dynamic Range) badges in a ColumnView column.
+///
+/// This function creates a factory that displays DR values as color-coded badges similar to
+/// the ones used in the album grid view. Each badge shows the DR value (or "N/A") with
+/// appropriate styling based on the value and completion status.
+///
+/// # Arguments
+///
+/// * `column` - The `ColumnViewColumn` to configure with the DR badge cell factory
+///
+/// # Implementation Details
+///
+/// The function creates a SignalListItemFactory that manages Label widgets for each cell.
+/// In the setup phase, it creates a Label with the base CSS classes for DR badges.
+/// In the bind phase, it updates the Label with the correct DR value, color coding,
+/// completion status, and tooltip based on the album data.
+pub fn create_dr_badge_column(column: &ColumnViewColumn) {
+    // Create a new SignalListItemFactory which will manage the creation and updating of cells
+    let factory = SignalListItemFactory::new();
+
+    // Associate the factory with the column
+    column.set_factory(Some(&factory));
+
+    // Setup callback - creates the widgets for each cell when they are first needed
+    // This is called once per cell during the initial rendering or when new cells are needed
+    factory.connect_setup(move |_, list_item| {
+        // Downcast the generic ListItem to the specific type we're working with
+        let list_item = list_item.downcast_ref::<ListItem>().unwrap();
+
+        // Create a Label widget for the DR badge with base CSS classes
+        let label = Label::builder().halign(Center).valign(Center).build();
+
+        // Add the base CSS classes for DR badges
+        label.add_css_class("dr-badge-label");
+        label.add_css_class("dr-badge-label-list");
+
+        // Set the created label as the child widget of this list item
+        list_item.set_child(Some(&label));
+    });
+
+    // Bind callback - updates the widgets with data from the model
+    // This is called whenever a cell needs to be updated with new data (e.g., scrolling)
+    factory.connect_bind(move |_, list_item| {
+        // Downcast the generic ListItem to the specific type we're working with
+        let list_item = list_item.downcast_ref::<ListItem>().unwrap();
+
+        // Get the Label widget that was created in the setup phase
+        let label = list_item.child().unwrap().downcast::<Label>().unwrap();
+
+        // Check if there's an item associated with this list item
+        if let Some(item) = list_item.item() {
+            // Downcast the generic item to our specific AlbumListItemObject
+            let album_item = item.downcast_ref::<AlbumListItemObject>().unwrap();
+
+            // Get the DR value and completion status from the album item
+            let dr_value = album_item.dr_value();
+            let dr_completed = album_item.dr_completed();
+
+            // Determine the display values based on whether DR is available
+            let (dr_str, tooltip_text, css_class) = match dr_value {
+                Some(value) => (
+                    // Format DR value as two-digit number (e.g., "08", "12")
+                    format!("{:02}", value),
+                    "Official Dynamic Range Value",
+                    // CSS class for color coding based on DR value
+                    format!("dr-{:02}", value),
+                ),
+                None => (
+                    // Display "N/A" when DR value is not available
+                    "N/A".to_string(),
+                    "Dynamic Range Value not available",
+                    // CSS class for "not available" state
+                    "dr-na".to_string(),
+                ),
+            };
+
+            // Update the label with the DR value
+            label.set_text(&dr_str);
+
+            // Set the tooltip text
+            label.set_tooltip_text(Some(tooltip_text));
+
+            // Set the CSS classes for the label
+            let mut new_classes = vec!["dr-badge-label", "dr-badge-label-list"];
+
+            // Add the value-specific CSS class
+            new_classes.push(&css_class);
+
+            // Add dr-completed class if the DR value is marked as completed
+            if dr_completed {
+                new_classes.push("dr-completed");
+            }
+
+            // Apply the updated CSS classes
+            label.set_css_classes(&new_classes);
+        }
+    });
+}

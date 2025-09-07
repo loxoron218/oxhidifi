@@ -7,7 +7,10 @@ use libadwaita::prelude::{Cast, SorterExt};
 use crate::utils::formatting::{format_freq_khz, format_year_info};
 
 use super::{
-    cell_factories::{create_cover_image_column, create_numeric_column, create_text_column},
+    cell_factories::{
+        create_cover_image_column, create_dr_badge_column, create_numeric_column,
+        create_text_column,
+    },
     data_model::{AlbumListItem, AlbumListItemObject},
 };
 
@@ -290,26 +293,15 @@ fn create_columns(column_view: &ColumnView, use_original_year: bool) {
     // Add the column to the ColumnView
     column_view.append_column(&year_column);
 
-    // DR column - displays the Dynamic Range value
+    // DR column - displays the Dynamic Range value as a badge
     // Non-expanding column with "DR" title
     let dr_column = ColumnViewColumn::builder()
         .title("DR")
         .expand(false)
         .build();
 
-    // Configure the cell factory for displaying numeric values with formatting
-    // The first closure extracts the DR value
-    // The second closure formats the value (e.g., "DR14" or "Unknown")
-    create_numeric_column(
-        &dr_column,
-        // Extract DR value
-        |album| album.dr_value(),
-        // Format the value for display
-        |value| match value {
-            Some(v) => format!("DR{}", v),
-            None => "Unknown".to_string(),
-        },
-    );
+    // Configure the cell factory for displaying DR badges
+    create_dr_badge_column(&dr_column);
 
     // Add the column to the ColumnView
     column_view.append_column(&dr_column);
