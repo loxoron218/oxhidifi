@@ -6,7 +6,7 @@ use std::{
 };
 
 use glib::{ControlFlow::Continue, MainContext, source::timeout_add_local};
-use gtk4::{FlowBox, Label, Stack, gio::ListStore};
+use gtk4::{FlowBox, Label, Stack, Window, gio::ListStore};
 use libadwaita::{Clamp, ViewStack, prelude::WidgetExt};
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
@@ -17,12 +17,13 @@ use crate::{
             player_bar::PlayerBar,
             view_controls::{
                 list_view::population::populate_albums_column_view,
-                sorting_controls::types::SortOrder,
+                sorting_controls::types::SortOrder, view_mode::ViewMode::ListView,
             },
         },
         grids::{
-            album_grid_population::populate_albums_grid, album_grid_state::AlbumGridState::Empty,
-            artist_grid_population::populate_artist_grid,
+            album_grid_population::populate_albums_grid,
+            album_grid_rebuilder::rebuild_albums_grid_for_window,
+            album_grid_state::AlbumGridState::Empty, artist_grid_population::populate_artist_grid,
         },
         search::clear_grid,
     },
@@ -55,6 +56,8 @@ pub struct RefreshService {
     pub use_original_year: Rc<Cell<bool>>,
     player_bar: PlayerBar,
     column_view_model: Rc<RefCell<Option<ListStore>>>,
+    previous_show_dr_badges: Cell<bool>,
+    window: Window,
 }
 impl RefreshService {
     /// Creates a new `RefreshService` instance, initializing it with all necessary UI components
@@ -82,6 +85,7 @@ impl RefreshService {
         show_dr_badges: Rc<Cell<bool>>,
         use_original_year: Rc<Cell<bool>>,
         player_bar: PlayerBar,
+        window: Window,
     ) -> Self {
         Self {
             db_pool,
@@ -102,10 +106,12 @@ impl RefreshService {
             artist_count_label,
             nav_history,
             sender,
-            show_dr_badges,
+            show_dr_badges: show_dr_badges.clone(),
             use_original_year,
             player_bar,
             column_view_model: Rc::new(RefCell::new(None)),
+            previous_show_dr_badges: Cell::new(show_dr_badges.get()),
+            window,
         }
     }
 
@@ -184,7 +190,7 @@ impl RefreshService {
     }
 
     /// A new helper function specifically for repopulating the ColumnView in ListView mode
-    async fn repopulate_column_view(&self) {
+    async fn repopulate_column_view(&self, window: &Window) {
         // Get the scanning label from the albums stack if it exists
         let scanning_label = if self.albums_stack_cell.borrow().as_ref().is_some() {
             // Check if scanning label is visible
@@ -193,36 +199,86 @@ impl RefreshService {
             false
         };
 
-        // For refresh operations, we should use the existing model, not rebuild the grid
-        if let Some(model) = self.column_view_model.borrow().as_ref() {
-            // Get the albums stack to pass to the population function
-            if let Some(albums_stack) = self.albums_stack_cell.borrow().as_ref() {
-                let albums_stack_clone = albums_stack.clone();
+        // Check if the "Show DR Value Badges" setting has changed
+        let current_show_dr_badges = self.show_dr_badges.get();
+        let previous_show_dr_badges = self.previous_show_dr_badges.get();
+        if current_show_dr_badges != previous_show_dr_badges {
+            // Update the previous state
+            self.previous_show_dr_badges.set(current_show_dr_badges);
 
-                // Set the inner stack state based on scanning visibility
-                self.set_inner_stack_state(&albums_stack_clone, scanning_label);
+            // Rebuild the albums grid with ListView mode
+            let model = rebuild_albums_grid_for_window(
+                &self.stack,
+                &self.scanning_label_albums,
+                &self.screen_info,
+                &self.albums_grid_cell,
+                &self.albums_stack_cell,
+                window,
+                &self.db_pool,
+                &self.sender,
+                self.album_count_label.clone(),
+                ListView,
+                self.use_original_year.get(),
+                self.show_dr_badges.clone(),
+            );
 
-                // Repopulate the ColumnView with updated data
-                populate_albums_column_view(
-                    model,
-                    self.db_pool.clone(),
-                    self.sort_ascending.get(),
-                    Rc::clone(&self.sort_orders),
-                    &albums_stack_clone,
-                    &self.album_count_label,
-                    self.show_dr_badges.clone(),
-                    self.use_original_year.clone(),
-                    self.player_bar.clone(),
-                )
-                .await;
-            } else {
+            // Set the ColumnView model in the RefreshService
+            self.set_column_view_model(model.clone());
+
+            // If we have a model, populate the column view with data
+            if let Some(model) = model {
+                // Get the albums stack to pass to the population function
+                if let Some(albums_stack) = self.albums_stack_cell.borrow().as_ref() {
+                    let albums_stack_clone = albums_stack.clone();
+
+                    // Set the inner stack state based on scanning visibility
+                    self.set_inner_stack_state(&albums_stack_clone, scanning_label);
+
+                    // Repopulate the ColumnView with updated data
+                    populate_albums_column_view(
+                        &model,
+                        self.db_pool.clone(),
+                        self.sort_ascending.get(),
+                        Rc::clone(&self.sort_orders),
+                        &albums_stack_clone,
+                        &self.album_count_label,
+                        self.use_original_year.clone(),
+                        self.player_bar.clone(),
+                    )
+                    .await;
+                }
             }
         } else {
-            // If we don't have a model but we have a stack, set it to a default state
-            // to avoid leaving the UI in a loading state indefinitely
-            if let Some(stack) = self.albums_stack_cell.borrow().as_ref() {
-                // Set to empty state as a fallback
-                stack.set_visible_child_name(Empty.as_str());
+            // For refresh operations, we should use the existing model, not rebuild the grid
+            if let Some(model) = self.column_view_model.borrow().as_ref() {
+                // Get the albums stack to pass to the population function
+                if let Some(albums_stack) = self.albums_stack_cell.borrow().as_ref() {
+                    let albums_stack_clone = albums_stack.clone();
+
+                    // Set the inner stack state based on scanning visibility
+                    self.set_inner_stack_state(&albums_stack_clone, scanning_label);
+
+                    // Repopulate the ColumnView with updated data
+                    populate_albums_column_view(
+                        model,
+                        self.db_pool.clone(),
+                        self.sort_ascending.get(),
+                        Rc::clone(&self.sort_orders),
+                        &albums_stack_clone,
+                        &self.album_count_label,
+                        self.use_original_year.clone(),
+                        self.player_bar.clone(),
+                    )
+                    .await;
+                } else {
+                }
+            } else {
+                // If we don't have a model but we have a stack, set it to a default state
+                // to avoid leaving the UI in a loading state indefinitely
+                if let Some(stack) = self.albums_stack_cell.borrow().as_ref() {
+                    // Set to empty state as a fallback
+                    stack.set_visible_child_name(Empty.as_str());
+                }
             }
         }
     }
@@ -268,7 +324,9 @@ impl RefreshService {
                                 service_clone.repopulate_albums_tab().await;
                             } else {
                                 // Repopulate the ColumnView with updated data (ListView mode)
-                                service_clone.repopulate_column_view().await;
+                                service_clone
+                                    .repopulate_column_view(&service_clone.window)
+                                    .await;
                             }
                         }
                         "artists" => service_clone.repopulate_artists_tab().await,
@@ -311,6 +369,7 @@ pub fn setup_library_refresh_channel(
     show_dr_badges: Rc<Cell<bool>>,
     use_original_year: Rc<Cell<bool>>,
     player_bar: PlayerBar,
+    window: Window,
 ) -> (
     UnboundedSender<()>,
     UnboundedReceiver<()>,
@@ -342,6 +401,7 @@ pub fn setup_library_refresh_channel(
         show_dr_badges,
         use_original_year,
         player_bar,
+        window,
     ));
 
     // Create the refresh UI closure from the service

@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{cell::Cell, rc::Rc};
 
 use gtk4::{
     Align::{Center, Fill, Start},
@@ -189,6 +189,7 @@ pub fn build_albums_grid(
 /// # Arguments
 /// * `album_count_label` - A `gtk4::Label` to display the album count.
 /// * `use_original_year` - Whether to display the original release year instead of the release year.
+/// * `show_dr_badges` - A `Rc<Cell<bool>>` indicating whether to show DR badges.
 ///
 /// # Returns
 /// A tuple containing the `gtk4::Stack` managing the album views and the `gtk4::ScrolledWindow`
@@ -196,6 +197,7 @@ pub fn build_albums_grid(
 pub fn build_albums_list_view(
     album_count_label: Rc<Label>,
     use_original_year: bool,
+    show_dr_badges: Rc<Cell<bool>>,
     add_music_button: &Button,
 ) -> (Stack, ScrolledWindow, ListStore) {
     // Create a simple empty state for the list view
@@ -231,7 +233,7 @@ pub fn build_albums_list_view(
 
     // Create the ColumnView (initially empty)
     let (column_view_scrolled, model) =
-        create_column_view_with_year_setting(vec![], use_original_year);
+        create_column_view_with_year_setting(vec![], use_original_year, show_dr_badges);
 
     // --- Scanning State ---
     // Displayed when the library is actively being scanned for new music.

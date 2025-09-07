@@ -43,7 +43,6 @@ use crate::{
 /// * `sort_orders` - A `Rc<RefCell<Vec<SortOrder>>>` defining the multi-level sorting criteria.
 /// * `albums_inner_stack` - The `gtk4::Stack` managing the different states of the album grid.
 /// * `album_count_label` - A `gtk4::Label` to display the number of albums.
-/// * `show_dr_badges` - A `Rc<Cell<bool>>` indicating whether to show DR badges.
 /// * `use_original_year` - A `Rc<Cell<bool>>` indicating whether to use original release year.
 /// * `player_bar` - A `PlayerBar` instance for playback functionality.
 pub async fn populate_albums_column_view(
@@ -53,7 +52,6 @@ pub async fn populate_albums_column_view(
     sort_orders: Rc<RefCell<Vec<SortOrder>>>,
     albums_inner_stack: &Stack,
     album_count_label: &Label,
-    _show_dr_badges: Rc<Cell<bool>>,
     _use_original_year: Rc<Cell<bool>>,
     _player_bar: PlayerBar,
 ) {
@@ -103,7 +101,6 @@ pub async fn populate_albums_column_view(
                 process_albums_in_batches(
                     all_albums.clone(),
                     column_view_model,
-                    _show_dr_badges.clone(),
                     _use_original_year.clone(),
                     _player_bar.clone(),
                     db_pool.clone(),
@@ -143,7 +140,6 @@ pub async fn populate_albums_column_view(
                     process_albums_in_batches(
                         all_albums.clone(),
                         column_view_model,
-                        _show_dr_badges.clone(),
                         _use_original_year.clone(),
                         _player_bar.clone(),
                         db_pool.clone(),
@@ -188,7 +184,6 @@ pub async fn populate_albums_column_view(
 async fn process_albums_in_batches(
     albums: Vec<AlbumGridItem>,
     column_view_model: &ListStore,
-    _show_dr_badges: Rc<Cell<bool>>,
     _use_original_year: Rc<Cell<bool>>,
     _player_bar: PlayerBar,
     _db_pool: Arc<SqlitePool>,

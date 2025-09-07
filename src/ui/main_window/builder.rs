@@ -173,6 +173,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         shared_state.show_dr_badges.clone(),
         shared_state.use_original_year.clone(),
         widgets.player_bar.clone(),
+        widgets.window.clone().into(),
     );
 
     // Build the album and artist grids, passing the count labels to them.

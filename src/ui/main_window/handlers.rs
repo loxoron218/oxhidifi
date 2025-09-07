@@ -130,6 +130,7 @@ pub fn connect_all_handlers(
         widgets.album_count_label.clone(),
         GridView,
         use_original_year_cloned.get(),
+        show_dr_badges_cloned.clone(),
     );
 
     // If we're in ListView mode, populate the column view with data
@@ -141,7 +142,6 @@ pub fn connect_all_handlers(
         let db_pool_clone = db_pool.clone();
         let sort_orders_clone = sort_orders_cloned.clone();
         let sort_ascending_clone = sort_ascending_cloned.clone();
-        let show_dr_badges_clone = show_dr_badges_cloned.clone();
         let use_original_year_clone = use_original_year_cloned.clone();
         let player_bar_clone = widgets.player_bar.clone();
 
@@ -159,7 +159,6 @@ pub fn connect_all_handlers(
                     sort_orders_clone,
                     &albums_stack_clone,
                     &album_count_label_clone,
-                    show_dr_badges_clone,
                     use_original_year_clone,
                     player_bar_clone,
                 )
@@ -439,6 +438,7 @@ pub fn connect_all_handlers(
             album_count_label_clone.clone(),
             view_mode,
             use_original_year_cloned2.get(),
+            show_dr_badges_cloned2.clone(),
         );
 
         // If we're in ListView mode, populate the column view with data
@@ -451,7 +451,6 @@ pub fn connect_all_handlers(
                 let db_pool_clone = db_pool2.clone();
                 let sort_orders_clone = sort_orders_cloned2.clone();
                 let sort_ascending_clone = sort_ascending_cloned2.clone();
-                let show_dr_badges_clone = show_dr_badges_cloned2.clone();
                 let use_original_year_clone = use_original_year_cloned2.clone();
                 let player_bar_clone = player_bar_clone.clone();
 
@@ -469,7 +468,6 @@ pub fn connect_all_handlers(
                             sort_orders_clone,
                             &albums_stack_clone,
                             &album_count_label_clone,
-                            show_dr_badges_clone,
                             use_original_year_clone,
                             player_bar_clone,
                         )

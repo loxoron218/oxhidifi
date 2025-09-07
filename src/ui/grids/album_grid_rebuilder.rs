@@ -1,4 +1,8 @@
-use std::{cell::RefCell, rc::Rc, sync::Arc};
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+    sync::Arc,
+};
 
 use gtk4::{Button, FlowBox, Label, Stack, Window, gio::ListStore};
 use libadwaita::{ViewStack, prelude::ButtonExt};
@@ -35,6 +39,7 @@ use crate::{
 /// * `album_count_label` - A `gtk4::Label` to display the album count.
 /// * `view_mode` - The current view mode (GridView or ListView).
 /// * `use_original_year` - Whether to display the original release year.
+/// * `show_dr_badges` - A `Rc<Cell<bool>>` indicating whether to show DR badges.
 pub fn rebuild_albums_grid_for_window(
     stack: &ViewStack,
     scanning_label_albums: &Label,
@@ -47,6 +52,7 @@ pub fn rebuild_albums_grid_for_window(
     album_count_label: Rc<Label>,
     view_mode: ViewMode,
     use_original_year: bool,
+    show_dr_badges: Rc<Cell<bool>>,
 ) -> Option<ListStore> {
     // Remove old grid widget from the stack if it exists to prevent duplicates.
     if let Some(child) = stack.child_by_name("albums") {
@@ -118,6 +124,7 @@ pub fn rebuild_albums_grid_for_window(
             let (albums_stack, _column_view_scrolled, model) = build_albums_list_view(
                 album_count_label.clone(),
                 use_original_year,
+                show_dr_badges,
                 &add_music_button_list,
             );
 

@@ -1,3 +1,5 @@
+use std::{cell::Cell, rc::Rc};
+
 use gtk4::{
     ColumnView, ColumnViewColumn, CustomSorter, PolicyType::Automatic, ScrolledWindow,
     SingleSelection, gio::ListStore,
@@ -23,6 +25,7 @@ use super::{
 ///
 /// * `albums` - A vector of [`AlbumListItem`] to display in the ColumnView
 /// * `use_original_year` - Whether to display the original release year instead of the release year
+/// * `show_dr_badges` - A `Rc<Cell<bool>>` indicating whether to show DR badges
 ///
 /// # Returns
 ///
@@ -32,12 +35,14 @@ use super::{
 pub fn create_column_view_with_year_setting(
     albums: Vec<AlbumListItem>,
     use_original_year: bool,
+    show_dr_badges: Rc<Cell<bool>>,
 ) -> (ScrolledWindow, ListStore) {
     // Use the generic version with no activation callback
     create_column_view_with_activate_and_year_setting::<fn(&ColumnView, u32)>(
         albums,
         None,
         use_original_year,
+        show_dr_badges,
     )
 }
 
@@ -57,6 +62,8 @@ pub fn create_column_view_with_year_setting(
 /// * `albums` - A vector of [`AlbumListItem`] to display in the ColumnView
 /// * `on_activate` - An optional callback function to handle item activation events.
 ///                   If `None`, a default handler will print the position to stdout.
+/// * `use_original_year` - Whether to display the original release year instead of the release year
+/// * `show_dr_badges` - A `Rc<Cell<bool>>` indicating whether to show DR badges
 ///
 /// # Returns
 ///
@@ -78,6 +85,7 @@ pub fn create_column_view_with_activate_and_year_setting<F>(
     albums: Vec<AlbumListItem>,
     on_activate: Option<F>,
     use_original_year: bool,
+    show_dr_badges: Rc<Cell<bool>>,
 ) -> (ScrolledWindow, ListStore)
 where
     F: Fn(&ColumnView, u32) + 'static,
@@ -122,7 +130,7 @@ where
 
     // Create and configure all columns for the ColumnView
     // This includes setting up column titles, widths, and cell factories
-    create_columns(&column_view, use_original_year);
+    create_columns(&column_view, use_original_year, show_dr_badges);
 
     // Create a scrolled window to contain the ColumnView
     // This allows the view to be scrollable when there are more items than can fit on screen
@@ -154,7 +162,12 @@ where
 ///
 /// * `column_view` - A reference to the [`ColumnView`] to add columns to
 /// * `use_original_year` - Whether to display the original release year instead of the release year
-fn create_columns(column_view: &ColumnView, use_original_year: bool) {
+/// * `show_dr_badges` - A `Rc<Cell<bool>>` indicating whether to show DR badges
+fn create_columns(
+    column_view: &ColumnView,
+    use_original_year: bool,
+    show_dr_badges: Rc<Cell<bool>>,
+) {
     // Cover column - displays album cover art
     // Fixed width column with no title (cover art is self-explanatory)
     let cover_column = ColumnViewColumn::builder()
@@ -293,18 +306,27 @@ fn create_columns(column_view: &ColumnView, use_original_year: bool) {
     // Add the column to the ColumnView
     column_view.append_column(&year_column);
 
-    // DR column - displays the Dynamic Range value as a badge
-    // Non-expanding column with "DR" title
-    let dr_column = ColumnViewColumn::builder()
-        .title("DR")
-        .expand(false)
-        .build();
+    // Conditionally add DR column based on settings
+    let dr_column = if show_dr_badges.get() {
+        // DR column - displays the Dynamic Range value as a badge
+        // Non-expanding column with "DR" title
+        let dr_column = ColumnViewColumn::builder()
+            .title("DR")
+            .expand(false)
+            .build();
 
-    // Configure the cell factory for displaying DR badges
-    create_dr_badge_column(&dr_column);
+        // Configure the cell factory for displaying DR badges
+        create_dr_badge_column(&dr_column);
 
-    // Add the column to the ColumnView
-    column_view.append_column(&dr_column);
+        // Add the column to the ColumnView
+        column_view.append_column(&dr_column);
+
+        // Return Some(dr_column) to indicate that the DR column was added
+        Some(dr_column)
+    } else {
+        // Return None to indicate that the DR column was not added
+        None
+    };
 
     // Set up sorting for all columns
     // This connects custom sorters to each column that define how to compare items
@@ -344,7 +366,7 @@ fn setup_column_sorting(
     bit_depth_column: &ColumnViewColumn,
     frequency_column: &ColumnViewColumn,
     year_column: &ColumnViewColumn,
-    dr_column: &ColumnViewColumn,
+    dr_column: &Option<ColumnViewColumn>,
 ) {
     // Album name sorting - compares album titles alphabetically
     name_column.set_sorter(Some(&CustomSorter::new(|item1, item2| {
@@ -431,18 +453,20 @@ fn setup_column_sorting(
     })));
 
     // DR sorting - compares Dynamic Range values numerically
-    dr_column.set_sorter(Some(&CustomSorter::new(|item1, item2| {
-        // Downcast the generic items to AlbumListItemObject for access to album data
-        let album1 = item1.downcast_ref::<AlbumListItemObject>().unwrap();
-        let album2 = item2.downcast_ref::<AlbumListItemObject>().unwrap();
+    if let Some(dr_column) = dr_column {
+        dr_column.set_sorter(Some(&CustomSorter::new(|item1, item2| {
+            // Downcast the generic items to AlbumListItemObject for access to album data
+            let album1 = item1.downcast_ref::<AlbumListItemObject>().unwrap();
+            let album2 = item2.downcast_ref::<AlbumListItemObject>().unwrap();
 
-        // Extract DR values and compare them
-        let dr1 = album1.dr_value();
-        let dr2 = album2.dr_value();
+            // Extract DR values and compare them
+            let dr1 = album1.dr_value();
+            let dr2 = album2.dr_value();
 
-        // Convert the comparison result to the expected GTK ordering type
-        dr1.cmp(&dr2).into()
-    })));
+            // Convert the comparison result to the expected GTK ordering type
+            dr1.cmp(&dr2).into()
+        })));
+    }
 
     // Connect to sort changes to handle when the user clicks column headers
     // This allows the application to respond to sort order changes

@@ -246,13 +246,14 @@ where
 /// # Arguments
 ///
 /// * `column` - The `ColumnViewColumn` to configure with the DR badge cell factory
+/// * `show_dr_badges` - A `Rc<Cell<bool>>` indicating whether to show DR badges
 ///
 /// # Implementation Details
 ///
 /// The function creates a SignalListItemFactory that manages Label widgets for each cell.
 /// In the setup phase, it creates a Label with the base CSS classes for DR badges.
 /// In the bind phase, it updates the Label with the correct DR value, color coding,
-/// completion status, and tooltip based on the album data.
+/// completion status, and tooltip based on the album data and the show_dr_badges setting.
 pub fn create_dr_badge_column(column: &ColumnViewColumn) {
     // Create a new SignalListItemFactory which will manage the creation and updating of cells
     let factory = SignalListItemFactory::new();
