@@ -5,8 +5,10 @@ use std::{
     time::Duration,
 };
 
-use glib::{ControlFlow::Continue, MainContext, source::timeout_add_local};
-use gtk4::{FlowBox, Label, Stack, Window, gio::ListStore};
+use glib::{
+    ControlFlow::Continue, MainContext, WeakRef, clone::Downgrade, source::timeout_add_local,
+};
+use gtk4::{ColumnView, FlowBox, Label, Stack, Window, gio::ListStore};
 use libadwaita::{Clamp, ViewStack, prelude::WidgetExt};
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
@@ -33,6 +35,7 @@ use crate::{
 /// A service struct that encapsulates all the shared state and logic required for refreshing
 /// the library UI. This centralizes the management of UI components and data, simplifying
 /// function signatures and improving maintainability.
+#[derive(Clone)]
 pub struct RefreshService {
     db_pool: Arc<SqlitePool>,
     albums_grid_cell: Rc<RefCell<Option<FlowBox>>>,
@@ -56,6 +59,7 @@ pub struct RefreshService {
     pub use_original_year: Rc<Cell<bool>>,
     player_bar: PlayerBar,
     column_view_model: Rc<RefCell<Option<ListStore>>>,
+    pub column_view_widget: Rc<RefCell<Option<ColumnView>>>,
     previous_show_dr_badges: Cell<bool>,
     window: Window,
 }
@@ -110,6 +114,7 @@ impl RefreshService {
             use_original_year,
             player_bar,
             column_view_model: Rc::new(RefCell::new(None)),
+            column_view_widget: Rc::new(RefCell::new(None)),
             previous_show_dr_badges: Cell::new(show_dr_badges.get()),
             window,
         }
@@ -129,6 +134,23 @@ impl RefreshService {
     /// Sets the ColumnView model reference for ListView mode
     pub fn set_column_view_model(&self, model: Option<ListStore>) {
         *self.column_view_model.borrow_mut() = model;
+    }
+
+    /// Sets the ColumnView widget reference for ListView mode
+    pub fn set_column_view_widget(&self, widget: Option<ColumnView>) {
+        *self.column_view_widget.borrow_mut() = widget;
+    }
+
+    /// Gets a weak reference to the left button stack
+    pub fn get_left_btn_stack(&self) -> WeakRef<ViewStack> {
+        // Borrow the ViewStack from the Rc and then downgrade it
+        // This should give us a glib::WeakRef<ViewStack> instead of std::rc::Weak<ViewStack>
+        self.left_btn_stack.as_ref().downgrade()
+    }
+
+    /// Gets a clone of the player bar
+    pub fn get_player_bar(&self) -> PlayerBar {
+        self.player_bar.clone()
     }
 
     /// A new helper function specifically for the albums tab
@@ -232,6 +254,7 @@ impl RefreshService {
                 ListView,
                 current_use_original_year,
                 self.show_dr_badges.clone(),
+                Some(Rc::new(self.clone())),
             );
 
             // Set the ColumnView model in the RefreshService

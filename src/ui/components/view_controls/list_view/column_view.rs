@@ -16,36 +16,6 @@ use super::{
     data_model::{AlbumListItem, AlbumListItemObject},
 };
 
-/// Creates a ColumnView widget for displaying albums in a list format with configurable year display.
-///
-/// This function creates a ColumnView with the option to display original release years
-/// based on user settings, similar to how the album grid works.
-///
-/// # Arguments
-///
-/// * `albums` - A vector of [`AlbumListItem`] to display in the ColumnView
-/// * `use_original_year` - Whether to display the original release year instead of the release year
-/// * `show_dr_badges` - A `Rc<Cell<bool>>` indicating whether to show DR badges
-///
-/// # Returns
-///
-/// A tuple containing:
-/// * A [`ScrolledWindow`] that contains the ColumnView for scrollable display
-/// * A [`ListStore`] model that holds the album data for the ColumnView
-pub fn create_column_view_with_year_setting(
-    albums: Vec<AlbumListItem>,
-    use_original_year: bool,
-    show_dr_badges: Rc<Cell<bool>>,
-) -> (ScrolledWindow, ListStore) {
-    // Use the generic version with no activation callback
-    create_column_view_with_activate_and_year_setting::<fn(&ColumnView, u32)>(
-        albums,
-        None,
-        use_original_year,
-        show_dr_badges,
-    )
-}
-
 /// Creates a ColumnView widget for displaying albums in a list format with an optional activation callback.
 ///
 /// This is the main function for creating a ColumnView with album data. It sets up the
@@ -86,7 +56,7 @@ pub fn create_column_view_with_activate_and_year_setting<F>(
     on_activate: Option<F>,
     use_original_year: bool,
     show_dr_badges: Rc<Cell<bool>>,
-) -> (ScrolledWindow, ListStore)
+) -> (ScrolledWindow, ListStore, ColumnView)
 where
     F: Fn(&ColumnView, u32) + 'static,
 {
@@ -148,8 +118,8 @@ where
         .hexpand(true)
         .build();
 
-    // Return the scrolled window and model for further use by the caller
-    (scrolled_window, model)
+    // Return the scrolled window, model, and ColumnView widget for further use by the caller
+    (scrolled_window, model, column_view)
 }
 
 /// Creates and configures all columns for the ColumnView.

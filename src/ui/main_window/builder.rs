@@ -195,6 +195,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         settings.view_mode,
         settings.use_original_year,
         shared_state.show_dr_badges.clone(),
+        Some(refresh_service.clone()),
     );
 
     // Get the albums stack from the cell (always available)

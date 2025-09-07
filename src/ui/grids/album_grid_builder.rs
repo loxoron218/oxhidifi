@@ -2,7 +2,7 @@ use std::{cell::Cell, rc::Rc};
 
 use gtk4::{
     Align::{Center, Fill, Start},
-    Box, Button, FlowBox, Label,
+    Box, Button, ColumnView, FlowBox, Label,
     Orientation::Vertical,
     PolicyType::Automatic,
     ScrolledWindow,
@@ -18,7 +18,7 @@ use libadwaita::{
 use crate::ui::{
     components::{
         scan_feedback::create_scanning_label,
-        view_controls::list_view::column_view::create_column_view_with_year_setting,
+        view_controls::list_view::column_view::create_column_view_with_activate_and_year_setting,
     },
     grids::album_grid_state::AlbumGridState::{Empty, Loading, NoResults, Populated, Scanning},
 };
@@ -194,12 +194,16 @@ pub fn build_albums_grid(
 /// # Returns
 /// A tuple containing the `gtk4::Stack` managing the album views and the `gtk4::ScrolledWindow`
 /// containing the ColumnView.
-pub fn build_albums_list_view(
+pub fn build_albums_list_view<F>(
     album_count_label: Rc<Label>,
     use_original_year: bool,
     show_dr_badges: Rc<Cell<bool>>,
     add_music_button: &Button,
-) -> (Stack, ScrolledWindow, ListStore) {
+    on_activate: Option<F>,
+) -> (Stack, ScrolledWindow, ListStore, ColumnView)
+where
+    F: Fn(&ColumnView, u32) + 'static,
+{
     // Create a simple empty state for the list view
     add_music_button.add_css_class("suggested-action");
     let empty_state_status_page = StatusPage::builder()
@@ -232,8 +236,13 @@ pub fn build_albums_list_view(
     loading_state_container.append(&loading_spinner);
 
     // Create the ColumnView (initially empty)
-    let (column_view_scrolled, model) =
-        create_column_view_with_year_setting(vec![], use_original_year, show_dr_badges);
+    let (column_view_scrolled, model, column_view) =
+        create_column_view_with_activate_and_year_setting(
+            vec![],
+            on_activate,
+            use_original_year,
+            show_dr_badges,
+        );
 
     // --- Scanning State ---
     // Displayed when the library is actively being scanned for new music.
@@ -284,5 +293,5 @@ pub fn build_albums_list_view(
 
     // Set the initial visible child to the loading state.
     albums_stack.set_visible_child_name(Loading.as_str());
-    (albums_stack, column_view_scrolled, model)
+    (albums_stack, column_view_scrolled, model, column_view)
 }

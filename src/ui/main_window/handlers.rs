@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use glib::MainContext;
 use gtk4::{Box, Button};
-use libadwaita::prelude::ButtonExt;
+use libadwaita::prelude::{ButtonExt, ObjectExt};
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
@@ -13,14 +13,18 @@ use crate::{
             config::{load_settings, save_settings},
             dialogs::{connect_settings_dialog, create_add_folder_dialog_handler},
             navigation::{
-                core::{connect_album_navigation, connect_artist_navigation, connect_back_button},
+                core::{
+                    connect_album_navigation, connect_artist_navigation, connect_back_button,
+                    connect_list_view_album_navigation,
+                },
                 shortcuts::setup_keyboard_shortcuts,
                 tabs::connect_tab_navigation,
             },
             refresh::{RefreshService, setup_live_monitor_refresh},
             scan_feedback::spawn_scanning_label_refresh_task,
             view_controls::{
-                list_view::population::populate_albums_column_view, view_mode::ViewMode::ListView,
+                list_view::population::populate_albums_column_view,
+                view_mode::ViewMode::{GridView, ListView},
             },
         },
         grids::{
@@ -133,12 +137,52 @@ pub fn connect_all_handlers(
         settings.view_mode,
         use_original_year_cloned.get(),
         show_dr_badges_cloned.clone(),
+        Some(refresh_service.clone()),
     );
 
     // If we're in ListView mode, populate the column view with data
     if let Some(model) = model {
         // Set the ColumnView model in the RefreshService
         refresh_service.set_column_view_model(Some(model.clone()));
+
+        // Connect list view album navigation
+        if let Some(column_view) = refresh_service.column_view_widget.borrow().as_ref() {
+            connect_list_view_album_navigation(
+                column_view,
+                widgets.stack.downgrade(),
+                db_pool.clone(),
+                &widgets.left_btn_stack,
+                &widgets.right_btn_box,
+                nav_history_cloned.clone(),
+                sender.clone(),
+                show_dr_badges_cloned.clone(),
+                widgets.player_bar.clone(),
+                move |stack_weak,
+                      db_pool,
+                      album_id,
+                      left_btn_stack_weak,
+                      right_btn_box_weak,
+                      sender,
+                      show_dr_badges,
+                      player_bar| {
+                    let show_dr_badges_clone_for_closure = show_dr_badges.clone();
+                    let player_bar_clone = player_bar.clone();
+                    async move {
+                        album_page(
+                            stack_weak,
+                            db_pool,
+                            album_id,
+                            left_btn_stack_weak,
+                            right_btn_box_weak,
+                            sender,
+                            show_dr_badges_clone_for_closure.clone(),
+                            player_bar_clone,
+                        )
+                        .await;
+                    }
+                },
+            );
+        }
 
         // Clone the necessary values for the async block
         let db_pool_clone = db_pool.clone();
@@ -417,20 +461,33 @@ pub fn connect_all_handlers(
     let stack_cloned = widgets.stack.clone();
     let scanning_label_albums_cloned = widgets.scanning_label_albums.clone();
     let player_bar_cloned = widgets.player_bar.clone();
-    let window_cloned = widgets.window.clone().into();
-
-    // Removed unused variable
-    widgets.button.connect_view_mode_changed(move |view_mode| {
+    let left_btn_stack_cloned = widgets.left_btn_stack.clone();
+    let right_btn_box_cloned = widgets.right_btn_box.clone();
+    let window_cloned = widgets.window.clone();
+    let button_cloned = widgets.button.clone();
+    let sender_cloned = sender.clone();
+    let nav_history_cloned2 = nav_history_cloned.clone();
+    button_cloned.connect_view_mode_changed(move |view_mode| {
         // Clone the necessary values for the closure
         let screen_info_clone = screen_info_cloned2.clone();
         let albums_grid_cell_clone = albums_grid_cell_cloned.clone();
         let albums_stack_cell_clone = albums_stack_cell_cloned.clone();
-
-        // Removed unused variable
         let album_count_label_clone = album_count_label_cloned.clone();
         let stack_clone = stack_cloned.clone();
         let scanning_label_albums_clone = scanning_label_albums_cloned.clone();
         let player_bar_clone = player_bar_cloned.clone();
+        let left_btn_stack_clone = left_btn_stack_cloned.clone();
+        let right_btn_box_clone = right_btn_box_cloned.clone();
+        let window_clone = window_cloned.clone();
+        let db_pool_clone = db_pool2.clone();
+        let sender_clone = sender_cloned.clone();
+        let nav_history_clone = nav_history_cloned2.clone();
+        let show_dr_badges_clone = show_dr_badges_cloned2.clone();
+        let refresh_service_clone = refresh_service.clone();
+        let sort_orders_clone = sort_orders_cloned2.clone();
+        let sort_ascending_clone = sort_ascending_cloned2.clone();
+        let use_original_year_clone = use_original_year_cloned2.clone();
+        let sort_ascending_artists_clone = sort_ascending_artists_cloned.clone();
 
         // Rebuild the albums grid with the new view mode
         let model = rebuild_albums_grid_for_window(
@@ -439,58 +496,139 @@ pub fn connect_all_handlers(
             &screen_info_clone,
             &albums_grid_cell_clone,
             &albums_stack_cell_clone,
-            &window_cloned,
-            &db_pool2,
-            &sender,
+            &window_clone.into(),
+            &db_pool_clone,
+            &sender_clone,
             album_count_label_clone.clone(),
             view_mode,
-            use_original_year_cloned2.get(),
-            show_dr_badges_cloned2.clone(),
+            use_original_year_clone.get(),
+            show_dr_badges_clone.clone(),
+            Some(refresh_service_clone.clone()),
         );
 
-        // If we're in ListView mode, populate the column view with data
-        if view_mode == ListView {
-            if let Some(model) = model {
-                // Set the ColumnView model in the RefreshService
-                refresh_service.set_column_view_model(Some(model.clone()));
+        // Connect album navigation based on the view mode
+        match view_mode {
+            ListView => {
+                // If we're in ListView mode, populate the column view with data
+                if let Some(model) = model {
+                    // Set the ColumnView model in the RefreshService
+                    refresh_service_clone.set_column_view_model(Some(model.clone()));
 
-                // Clone the necessary values for the async block
-                let db_pool_clone = db_pool2.clone();
-                let sort_orders_clone = sort_orders_cloned2.clone();
-                let sort_ascending_clone = sort_ascending_cloned2.clone();
-                let use_original_year_clone = use_original_year_cloned2.clone();
-                let player_bar_clone = player_bar_clone.clone();
+                    // Connect list view album navigation
+                    if let Some(column_view) =
+                        refresh_service_clone.column_view_widget.borrow().as_ref()
+                    {
+                        connect_list_view_album_navigation(
+                            column_view,
+                            stack_clone.downgrade(),
+                            db_pool_clone.clone(),
+                            &left_btn_stack_clone,
+                            &right_btn_box_clone,
+                            nav_history_clone.clone(),
+                            sender_clone.clone(),
+                            show_dr_badges_clone.clone(),
+                            player_bar_clone.clone(),
+                            move |stack_weak,
+                                  db_pool,
+                                  album_id,
+                                  left_btn_stack_weak,
+                                  right_btn_box_weak,
+                                  sender,
+                                  show_dr_badges,
+                                  player_bar| {
+                                let show_dr_badges_clone_for_closure = show_dr_badges.clone();
+                                let player_bar_clone = player_bar.clone();
+                                async move {
+                                    album_page(
+                                        stack_weak,
+                                        db_pool,
+                                        album_id,
+                                        left_btn_stack_weak,
+                                        right_btn_box_weak,
+                                        sender,
+                                        show_dr_badges_clone_for_closure.clone(),
+                                        player_bar_clone,
+                                    )
+                                    .await;
+                                }
+                            },
+                        );
+                    }
 
-                // Get the albums stack to pass to the population function
-                if let Some(albums_stack) = albums_stack_cell_clone.borrow().as_ref() {
-                    let albums_stack_clone = albums_stack.clone();
-                    let album_count_label_clone = album_count_label_clone.clone();
+                    // Clone the necessary values for the async block
+                    let db_pool_clone_inner = db_pool_clone.clone();
+                    let sort_orders_clone_inner = sort_orders_clone.clone();
+                    let sort_ascending_clone_inner = sort_ascending_clone.clone();
+                    let use_original_year_clone_inner = use_original_year_clone.clone();
+                    let player_bar_clone_inner = player_bar_clone.clone();
 
-                    // Spawn the async task to populate the column view
-                    MainContext::default().spawn_local(async move {
-                        populate_albums_column_view(
-                            &model,
-                            db_pool_clone,
-                            sort_ascending_clone.get(),
-                            sort_orders_clone,
-                            &albums_stack_clone,
-                            &album_count_label_clone,
-                            use_original_year_clone,
-                            player_bar_clone,
-                        )
-                        .await;
-                    });
+                    // Get the albums stack to pass to the population function
+                    if let Some(albums_stack) = albums_stack_cell_clone.borrow().as_ref() {
+                        let albums_stack_clone = albums_stack.clone();
+                        let album_count_label_clone_inner = album_count_label_clone.clone();
+
+                        // Spawn the async task to populate the column view
+                        MainContext::default().spawn_local(async move {
+                            populate_albums_column_view(
+                                &model,
+                                db_pool_clone_inner,
+                                sort_ascending_clone_inner.get(),
+                                sort_orders_clone_inner,
+                                &albums_stack_clone,
+                                &album_count_label_clone_inner,
+                                use_original_year_clone_inner,
+                                player_bar_clone_inner,
+                            )
+                            .await;
+                        });
+                    }
                 }
             }
-        } else {
-            // If we're not in ListView mode, clear the ColumnView model reference
-            refresh_service.set_column_view_model(None);
+            GridView => {
+                // If we're in GridView mode, connect the album navigation for the FlowBox
+                if let Some(albums_grid) = albums_grid_cell_clone.borrow().as_ref() {
+                    connect_album_navigation(
+                        albums_grid,
+                        &stack_clone,
+                        db_pool_clone.clone(),
+                        &left_btn_stack_clone,
+                        &right_btn_box_clone,
+                        nav_history_clone.clone(),
+                        sender_clone.clone(),
+                        move |stack_weak,
+                              db_pool,
+                              album_id,
+                              left_btn_stack_weak,
+                              right_btn_box_weak,
+                              sender| {
+                            let show_dr_badges_clone_for_closure = show_dr_badges_clone.clone();
+                            let player_bar_clone = player_bar_clone.clone();
+                            async move {
+                                album_page(
+                                    stack_weak,
+                                    db_pool,
+                                    album_id,
+                                    left_btn_stack_weak,
+                                    right_btn_box_weak,
+                                    sender,
+                                    show_dr_badges_clone_for_closure.clone(),
+                                    player_bar_clone,
+                                )
+                                .await;
+                            }
+                        },
+                    );
+                }
+
+                // If we're not in ListView mode, clear the ColumnView model reference
+                refresh_service_clone.set_column_view_model(None);
+            }
         }
 
         // Trigger a refresh to populate the newly created grid
         refresh_library_ui(
-            sort_ascending_cloned2.get(),
-            sort_ascending_artists_cloned.get(),
+            sort_ascending_clone.get(),
+            sort_ascending_artists_clone.get(),
         );
 
         // Save the new view mode to the configuration
