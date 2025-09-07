@@ -151,14 +151,8 @@ pub fn rebuild_albums_grid_for_window(
                             if let Some(album_item) = item.downcast_ref::<AlbumListItemObject>() {
                                 // Extract the album ID from the AlbumListItemObject's wrapped AlbumListItem
                                 if let Some(album) = album_item.item().as_ref() {
-                                    println!(
-                                        "Album '{}' activated at position: {}",
-                                        album.title, position
-                                    );
-
                                     // Extract the album ID from the AlbumListItemObject's wrapped AlbumListItem
                                     let album_id = album.id;
-                                    println!("Album ID: {}", album_id);
 
                                     // Clone the necessary values for the async block
                                     let stack_clone = stack_clone.clone();
