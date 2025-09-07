@@ -17,7 +17,7 @@ use crate::ui::components::{
     navigation::VIEW_STACK_ALBUMS,
     view_controls::{
         sorting_controls::{create_sorting_control_row, types::SortOrder},
-        view_mode::ViewMode,
+        view_mode::ViewMode::{self, GridView, ListView},
         zoom_controls::create_zoom_control_row,
     },
 };
@@ -32,7 +32,7 @@ pub struct ViewControlButton {
     /// The underlying libadwaita SplitButton widget
     split_button: SplitButton,
     /// The current view mode of the button
-    view_mode: ViewMode,
+    view_mode: RefCell<ViewMode>,
     /// The sorting control widget
     sorting_widget: RefCell<Option<Rc<Box>>>,
 }
@@ -67,7 +67,7 @@ impl ViewControlButton {
         // Initialize the button with default view mode
         let button = Self {
             split_button,
-            view_mode: ViewMode::GridView,
+            view_mode: RefCell::new(GridView),
             sorting_widget: RefCell::new(None),
         };
 
@@ -81,9 +81,10 @@ impl ViewControlButton {
     /// This method is called whenever the view mode changes to ensure the
     /// button's visual representation matches the current state.
     fn update_main_button(&self) {
-        self.split_button.set_icon_name(self.view_mode.icon_name());
+        let view_mode = *self.view_mode.borrow();
+        self.split_button.set_icon_name(view_mode.icon_name());
         self.split_button
-            .set_tooltip_text(Some(self.view_mode.tooltip_text()));
+            .set_tooltip_text(Some(view_mode.tooltip_text()));
     }
 
     /// Connects the view control button to the application's sorting system
@@ -180,6 +181,35 @@ impl ViewControlButton {
     /// A reference to the internal `SplitButton` widget
     pub fn widget(&self) -> &SplitButton {
         &self.split_button
+    }
+
+    /// Connects a callback function to handle view mode changes
+    ///
+    /// This method sets up a click handler on the main button that cycles through
+    /// available view modes when clicked.
+    ///
+    /// # Arguments
+    ///
+    /// * `on_view_mode_changed` - A callback function that will be called when the view mode changes
+    pub fn connect_view_mode_changed<F>(&self, on_view_mode_changed: F)
+    where
+        F: Fn(ViewMode) + 'static,
+    {
+        let button_ref = self.clone();
+        self.split_button.connect_clicked(move |_| {
+            // Cycle through view modes
+            let new_view_mode = match *button_ref.view_mode.borrow() {
+                GridView => ListView,
+                ListView => GridView,
+            };
+
+            // Update the view mode
+            *button_ref.view_mode.borrow_mut() = new_view_mode;
+            button_ref.update_main_button();
+
+            // The callback will handle updating the view mode and UI
+            on_view_mode_changed(new_view_mode);
+        });
     }
 }
 

@@ -3,6 +3,8 @@
 pub enum ViewMode {
     /// Grid view layout for displaying content in a grid format
     GridView,
+    /// List view layout for displaying content in a list format
+    ListView,
 }
 
 impl ViewMode {
@@ -14,6 +16,7 @@ impl ViewMode {
     pub fn icon_name(&self) -> &'static str {
         match self {
             ViewMode::GridView => "view-grid-symbolic",
+            ViewMode::ListView => "view-list-symbolic",
         }
     }
 
@@ -25,6 +28,7 @@ impl ViewMode {
     pub fn tooltip_text(&self) -> &'static str {
         match self {
             ViewMode::GridView => "Grid View",
+            ViewMode::ListView => "List View",
         }
     }
 }

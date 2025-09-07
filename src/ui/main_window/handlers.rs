@@ -1,5 +1,6 @@
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
+use glib::MainContext;
 use gtk4::{Box, Button};
 use libadwaita::prelude::ButtonExt;
 use sqlx::SqlitePool;
@@ -17,6 +18,10 @@ use crate::{
             },
             refresh::{RefreshService, setup_live_monitor_refresh},
             scan_feedback::spawn_scanning_label_refresh_task,
+            view_controls::{
+                list_view::population::populate_albums_column_view,
+                view_mode::ViewMode::{GridView, ListView},
+            },
         },
         grids::{
             album_grid_rebuilder::rebuild_albums_grid_for_window,
@@ -113,15 +118,64 @@ pub fn connect_all_handlers(
     // These functions create the `FlowBox` grids and their containing `Stack`s,
     // and then populate them with initial data or empty states. This ensures the UI
     // is ready to display content as soon as the application launches.
-    rebuild_albums_grid_for_window(
+    let model = rebuild_albums_grid_for_window(
         &widgets.stack,
         &widgets.scanning_label_albums,
         &screen_info_cloned,
         &widgets.albums_grid_cell,
         &widgets.albums_stack_cell,
-        &add_music_button_albums,
+        &widgets.window.clone().into(),
+        &db_pool,
+        &sender,
         widgets.album_count_label.clone(),
+        GridView,
+        use_original_year_cloned.get(),
     );
+
+    // If we're in ListView mode, populate the column view with data
+    if let Some(model) = model {
+        // Set the ColumnView model in the RefreshService
+        refresh_service.set_column_view_model(Some(model.clone()));
+
+        // Clone the necessary values for the async block
+        let db_pool_clone = db_pool.clone();
+        let sort_orders_clone = sort_orders_cloned.clone();
+        let sort_ascending_clone = sort_ascending_cloned.clone();
+        let show_dr_badges_clone = show_dr_badges_cloned.clone();
+        let use_original_year_clone = use_original_year_cloned.clone();
+        let player_bar_clone = widgets.player_bar.clone();
+
+        // Get the albums stack to pass to the population function
+        if let Some(albums_stack) = widgets.albums_stack_cell.borrow().as_ref() {
+            let albums_stack_clone = albums_stack.clone();
+            let album_count_label_clone = widgets.album_count_label.clone();
+
+            // Spawn the async task to populate the column view
+            MainContext::default().spawn_local(async move {
+                populate_albums_column_view(
+                    &model,
+                    db_pool_clone,
+                    sort_ascending_clone.get(),
+                    sort_orders_clone,
+                    &albums_stack_clone,
+                    &album_count_label_clone,
+                    show_dr_badges_clone,
+                    use_original_year_clone,
+                    player_bar_clone,
+                )
+                .await;
+            });
+        }
+    } else {
+        // If we're not in ListView mode, clear the ColumnView model reference
+        refresh_service.set_column_view_model(None);
+    }
+
+    // Rebuild and populate initial grid for artists.
+    // This function creates the `FlowBox` grid and its containing `Stack` for artists,
+    // and then populates them with initial data or empty states. This ensures the UI
+    // is ready to display content as soon as the application launches, similar to
+    // how the albums grid is initialized above.
     rebuild_artist_grid_for_window(
         &widgets.stack,
         &widgets.scanning_label_artists,
@@ -340,4 +394,98 @@ pub fn connect_all_handlers(
         refresh_library_ui.clone(),
         Rc::new(widgets.stack.clone()),
     );
+
+    // Connect the view control button to handle view mode changes
+    let screen_info_cloned2 = screen_info_cloned.clone();
+    let sort_orders_cloned2 = sort_orders_cloned.clone();
+    let sort_ascending_cloned2 = sort_ascending_cloned.clone();
+    let show_dr_badges_cloned2 = show_dr_badges_cloned.clone();
+    let use_original_year_cloned2 = use_original_year_cloned.clone();
+    let db_pool2 = db_pool.clone();
+    let albums_grid_cell_cloned = widgets.albums_grid_cell.clone();
+    let albums_stack_cell_cloned = widgets.albums_stack_cell.clone();
+    let album_count_label_cloned = widgets.album_count_label.clone();
+    let stack_cloned = widgets.stack.clone();
+    let scanning_label_albums_cloned = widgets.scanning_label_albums.clone();
+    let player_bar_cloned = widgets.player_bar.clone();
+    let window_cloned = widgets.window.clone().into();
+
+    // Removed unused variable
+    widgets.button.connect_view_mode_changed(move |view_mode| {
+        // Clone the necessary values for the closure
+        let screen_info_clone = screen_info_cloned2.clone();
+        let albums_grid_cell_clone = albums_grid_cell_cloned.clone();
+        let albums_stack_cell_clone = albums_stack_cell_cloned.clone();
+
+        // Removed unused variable
+        let album_count_label_clone = album_count_label_cloned.clone();
+        let stack_clone = stack_cloned.clone();
+        let scanning_label_albums_clone = scanning_label_albums_cloned.clone();
+        let player_bar_clone = player_bar_cloned.clone();
+
+        // Rebuild the grid with the new view mode
+        println!("View mode changed to: {:?}", view_mode);
+
+        // Rebuild the albums grid with the new view mode
+        let model = rebuild_albums_grid_for_window(
+            &stack_clone,
+            &scanning_label_albums_clone,
+            &screen_info_clone,
+            &albums_grid_cell_clone,
+            &albums_stack_cell_clone,
+            &window_cloned,
+            &db_pool2,
+            &sender,
+            album_count_label_clone.clone(),
+            view_mode,
+            use_original_year_cloned2.get(),
+        );
+
+        // If we're in ListView mode, populate the column view with data
+        if view_mode == ListView {
+            if let Some(model) = model {
+                // Set the ColumnView model in the RefreshService
+                refresh_service.set_column_view_model(Some(model.clone()));
+
+                // Clone the necessary values for the async block
+                let db_pool_clone = db_pool2.clone();
+                let sort_orders_clone = sort_orders_cloned2.clone();
+                let sort_ascending_clone = sort_ascending_cloned2.clone();
+                let show_dr_badges_clone = show_dr_badges_cloned2.clone();
+                let use_original_year_clone = use_original_year_cloned2.clone();
+                let player_bar_clone = player_bar_clone.clone();
+
+                // Get the albums stack to pass to the population function
+                if let Some(albums_stack) = albums_stack_cell_clone.borrow().as_ref() {
+                    let albums_stack_clone = albums_stack.clone();
+                    let album_count_label_clone = album_count_label_clone.clone();
+
+                    // Spawn the async task to populate the column view
+                    MainContext::default().spawn_local(async move {
+                        populate_albums_column_view(
+                            &model,
+                            db_pool_clone,
+                            sort_ascending_clone.get(),
+                            sort_orders_clone,
+                            &albums_stack_clone,
+                            &album_count_label_clone,
+                            show_dr_badges_clone,
+                            use_original_year_clone,
+                            player_bar_clone,
+                        )
+                        .await;
+                    });
+                }
+            }
+        } else {
+            // If we're not in ListView mode, clear the ColumnView model reference
+            refresh_service.set_column_view_model(None);
+        }
+
+        // Trigger a refresh to populate the newly created grid
+        refresh_library_ui(
+            sort_ascending_cloned2.get(),
+            sort_ascending_artists_cloned.get(),
+        );
+    });
 }

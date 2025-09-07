@@ -8,6 +8,7 @@ use gtk4::{
     ScrolledWindow,
     SelectionMode::None,
     Spinner, Stack, StackTransitionType,
+    gio::ListStore,
 };
 use libadwaita::{
     StatusPage,
@@ -15,7 +16,10 @@ use libadwaita::{
 };
 
 use crate::ui::{
-    components::scan_feedback::create_scanning_label,
+    components::{
+        scan_feedback::create_scanning_label,
+        view_controls::list_view::column_view::create_column_view_with_year_setting,
+    },
     grids::album_grid_state::AlbumGridState::{Empty, Loading, NoResults, Populated, Scanning},
 };
 
@@ -107,7 +111,9 @@ pub fn build_albums_grid(
         .hexpand(true)
         .build();
     scanning_state_container.append(&scanning_spinner);
-    scanning_state_container.append(scanning_label);
+    let scanning_label_clone = create_scanning_label();
+    scanning_label_clone.set_text(&scanning_label.text());
+    scanning_state_container.append(&scanning_label_clone);
 
     // --- Albums Grid (Populated State) ---
     // The actual FlowBox where album tiles will be rendered.
@@ -153,7 +159,21 @@ pub fn build_albums_grid(
     // The actual populated grid is placed inside another Box for potential future additions
     // like a search bar or filters above the grid.
     let albums_content_box = Box::builder().orientation(Vertical).build();
-    albums_content_box.prepend(&*album_count_label);
+
+    // Create a new label for the grid view to avoid the "already has parent" issue
+    let grid_view_album_count_label = Label::builder()
+        .label(&*album_count_label.text())
+        .halign(Center)
+        .margin_top(12)
+        .css_classes(&*["dim-label"].as_ref())
+        .build();
+
+    // Synchronize the grid view label with the original label
+    let grid_view_album_count_label_clone = grid_view_album_count_label.clone();
+    album_count_label.connect_label_notify(move |orig_label| {
+        grid_view_album_count_label_clone.set_text(&*orig_label.text());
+    });
+    albums_content_box.prepend(&grid_view_album_count_label);
 
     // The album_count_label is now passed from main_window/builder.rs
     albums_content_box.append(&scrolled_window);
@@ -162,4 +182,105 @@ pub fn build_albums_grid(
     // Set the initial visible child to the loading state.
     albums_stack.set_visible_child_name(Loading.as_str());
     (albums_stack, albums_grid)
+}
+
+/// Builds a ColumnView for the albums list view
+///
+/// # Arguments
+/// * `album_count_label` - A `gtk4::Label` to display the album count.
+/// * `use_original_year` - Whether to display the original release year instead of the release year.
+///
+/// # Returns
+/// A tuple containing the `gtk4::Stack` managing the album views and the `gtk4::ScrolledWindow`
+/// containing the ColumnView.
+pub fn build_albums_list_view(
+    album_count_label: Rc<Label>,
+    use_original_year: bool,
+    add_music_button: &Button,
+) -> (Stack, ScrolledWindow, ListStore) {
+    // Create a simple empty state for the list view
+    add_music_button.add_css_class("suggested-action");
+    let empty_state_status_page = StatusPage::builder()
+        .icon_name("folder-music-symbolic")
+        .title("No Music Found")
+        .description("Add music to your library to get started.")
+        .vexpand(true)
+        .hexpand(true)
+        .child(add_music_button)
+        .build();
+    let empty_state_container = Box::builder()
+        .orientation(Vertical)
+        .halign(Center)
+        .valign(Center)
+        .vexpand(true)
+        .hexpand(true)
+        .build();
+    empty_state_container.append(&empty_state_status_page);
+
+    // Create a simple loading state for the list view
+    let loading_spinner = Spinner::builder().spinning(true).build();
+    loading_spinner.set_size_request(48, 48);
+    let loading_state_container = Box::builder()
+        .orientation(Vertical)
+        .halign(Center)
+        .valign(Center)
+        .vexpand(true)
+        .hexpand(true)
+        .build();
+    loading_state_container.append(&loading_spinner);
+
+    // Create the ColumnView (initially empty)
+    let (column_view_scrolled, model) =
+        create_column_view_with_year_setting(vec![], use_original_year);
+
+    // --- Scanning State ---
+    // Displayed when the library is actively being scanned for new music.
+    let scanning_spinner = Spinner::builder().spinning(true).build();
+    scanning_spinner.set_size_request(48, 48);
+    let scanning_state_container = Box::builder()
+        .orientation(Vertical)
+        .halign(Center)
+        .valign(Center)
+        .vexpand(true)
+        .hexpand(true)
+        .build();
+    scanning_state_container.append(&scanning_spinner);
+    let scanning_label_clone = create_scanning_label();
+    scanning_label_clone.set_text(&album_count_label.text());
+    scanning_state_container.append(&scanning_label_clone);
+
+    // --- Main Albums Stack ---
+    // A Stack widget to manage the different states (loading, empty, populated, etc.).
+    let albums_stack = Stack::builder()
+        .transition_type(StackTransitionType::None)
+        .build();
+
+    // Add state containers to the stack.
+    albums_stack.add_named(&loading_state_container, Some(Loading.as_str()));
+    albums_stack.add_named(&empty_state_container, Some(Empty.as_str()));
+    albums_stack.add_named(&scanning_state_container, Some(Scanning.as_str()));
+
+    // The actual populated view is placed inside another Box
+    let albums_content_box = Box::builder().orientation(Vertical).build();
+
+    // Create a new label for the list view to avoid the "already has parent" issue
+    let list_view_album_count_label = Label::builder()
+        .label(&*album_count_label.text())
+        .halign(Center)
+        .margin_top(12)
+        .css_classes(&*["dim-label"].as_ref())
+        .build();
+
+    // Synchronize the list view label with the original label
+    let list_view_album_count_label_clone = list_view_album_count_label.clone();
+    album_count_label.connect_label_notify(move |orig_label| {
+        list_view_album_count_label_clone.set_text(&*orig_label.text());
+    });
+    albums_content_box.prepend(&list_view_album_count_label);
+    albums_content_box.append(&column_view_scrolled);
+    albums_stack.add_named(&albums_content_box, Some(Populated.as_str()));
+
+    // Set the initial visible child to the loading state.
+    albums_stack.set_visible_child_name(Loading.as_str());
+    (albums_stack, column_view_scrolled, model)
 }

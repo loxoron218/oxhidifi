@@ -1,0 +1,222 @@
+use std::rc::Rc;
+
+use gtk4::{
+    Align::{Center, Start},
+    ColumnViewColumn, Image, Label, ListItem, SignalListItemFactory,
+    pango::EllipsizeMode::End,
+};
+use libadwaita::prelude::{Cast, ListItemExt};
+
+use super::data_model::AlbumListItemObject;
+
+/// Creates a cell factory for displaying album cover images in a ColumnView column.
+///
+/// This function sets up a `SignalListItemFactory` that creates and manages `Image` widgets
+/// for each cell in the column. The factory handles two key phases:
+/// 1. Setup phase: Creates the UI widgets for each cell
+/// 2. Bind phase: Updates the widgets with data from the model
+///
+/// # Arguments
+///
+/// * `column` - The `ColumnViewColumn` to configure with the image cell factory
+///
+/// # Implementation Details
+///
+/// The function connects two signals to the factory:
+/// - `setup`: Called when a new cell needs to be created, sets up the Image widget
+/// - `bind`: Called when a cell needs to be updated with data, loads the album cover
+pub fn create_cover_image_column(column: &ColumnViewColumn) {
+    // Create a new SignalListItemFactory which will manage the creation and updating of cells
+    let factory = SignalListItemFactory::new();
+
+    // Associate the factory with the column
+    column.set_factory(Some(&factory));
+
+    // Setup callback - creates the widgets for each cell when they are first needed
+    // This is called once per cell during the initial rendering or when new cells are needed
+    factory.connect_setup(move |_, list_item| {
+        // Downcast the generic ListItem to the specific type we're working with
+        let list_item = list_item.downcast_ref::<ListItem>().unwrap();
+
+        // Create an Image widget centered both horizontally and vertically
+        // This will display the album cover art or a placeholder icon
+        let image = Image::builder().halign(Center).valign(Center).build();
+
+        // Set the created image as the child widget of this list item
+        list_item.set_child(Some(&image));
+    });
+
+    // Bind callback - updates the widgets with data from the model
+    // This is called whenever a cell needs to be updated with new data (e.g., scrolling)
+    factory.connect_bind(move |_, list_item| {
+        // Downcast the generic ListItem to the specific type we're working with
+        let list_item = list_item.downcast_ref::<ListItem>().unwrap();
+
+        // Get the Image widget that was created in the setup phase
+        let image = list_item.child().unwrap().downcast::<Image>().unwrap();
+
+        // Set a placeholder icon for the album cover
+        // In a complete implementation, this would load the actual cover art image
+        image.set_icon_name(Some("media-optical-cd-audio-symbolic"));
+        image.set_pixel_size(48);
+    });
+}
+
+/// Creates a cell factory for displaying text fields in a ColumnView column.
+///
+/// This generic function creates a factory that can display any text field from an `AlbumListItemObject`.
+/// It uses a closure (`field_getter`) to extract the specific field value, making it reusable for
+/// different text fields like album title, artist name, etc.
+///
+/// # Arguments
+///
+/// * `column` - The `ColumnViewColumn` to configure with the text cell factory
+/// * `field_getter` - A closure that extracts a String value from an `AlbumListItemObject`
+///
+/// # Type Parameters
+///
+/// * `F` - The type of the field_getter closure, which must implement `Fn(&AlbumListItemObject) -> String`
+///        and have a static lifetime so it can be moved into the callbacks
+///
+/// # Implementation Details
+///
+/// The function uses `Rc` (Reference Counted) smart pointers to share the `field_getter` closure
+/// between the setup and bind callbacks. This is necessary because the callbacks are moved into
+/// the signal handlers and need to maintain access to the closure.
+pub fn create_text_column<F>(column: &ColumnViewColumn, field_getter: F)
+where
+    F: Fn(&AlbumListItemObject) -> String + 'static,
+{
+    // Create a new SignalListItemFactory which will manage the creation and updating of cells
+    let factory = SignalListItemFactory::new();
+
+    // Associate the factory with the column
+    column.set_factory(Some(&factory));
+
+    // Wrap the field_getter in an Rc so it can be shared between callbacks
+    // This is necessary because the callbacks take ownership of their captured variables
+    let field_getter = Rc::new(field_getter);
+
+    // Setup callback - creates the widgets for each cell when they are first needed
+    // This is called once per cell during the initial rendering or when new cells are needed
+    factory.connect_setup(move |_, list_item| {
+        // Downcast the generic ListItem to the specific type we're working with
+        let list_item = list_item.downcast_ref::<ListItem>().unwrap();
+
+        // Create a Label widget with specific alignment and text properties
+        let label = Label::builder()
+            .halign(Start)
+            .valign(Center)
+            .ellipsize(End)
+            .build();
+
+        // Set the created label as the child widget of this list item
+        list_item.set_child(Some(&label));
+    });
+
+    // Bind callback - updates the widgets with data from the model
+    // This is called whenever a cell needs to be updated with new data (e.g., scrolling)
+    factory.connect_bind(move |_, list_item| {
+        // Downcast the generic ListItem to the specific type we're working with
+        let list_item = list_item.downcast_ref::<ListItem>().unwrap();
+
+        // Get the Label widget that was created in the setup phase
+        let label = list_item.child().unwrap().downcast::<Label>().unwrap();
+
+        // Clone the Rc to get access to the field_getter closure
+        // This is necessary because we need to move it into the closure
+        let field_getter = field_getter.clone();
+
+        // Check if there's an item associated with this list item
+        if let Some(item) = list_item.item() {
+            // Downcast the generic item to our specific AlbumListItemObject
+            let album_item = item.downcast_ref::<AlbumListItemObject>().unwrap();
+
+            // Use the field_getter closure to extract the text value and set it on the label
+            label.set_text(&field_getter(album_item));
+        }
+    });
+}
+
+/// Creates a cell factory for displaying numeric fields with optional formatting in a ColumnView column.
+///
+/// This generic function creates a factory for numeric fields that may or may not be present
+/// (represented as `Option<i32>`). It uses two closures:
+/// 1. `field_getter`: Extracts the numeric value from an `AlbumListItemObject`
+/// 2. `formatter`: Converts the numeric value to a formatted String
+///
+/// This design allows for flexible formatting of numeric values (e.g., "16-bit", "44100 Hz", "DR14").
+///
+/// # Arguments
+///
+/// * `column` - The `ColumnViewColumn` to configure with the numeric cell factory
+/// * `field_getter` - A closure that extracts an `Option<i32>` value from an `AlbumListItemObject`
+/// * `formatter` - A closure that formats an `Option<i32>` into a displayable String
+///
+/// # Type Parameters
+///
+/// * `F` - The type of the field_getter closure, which must implement `Fn(&AlbumListItemObject) -> Option<i32>`
+/// * `G` - The type of the formatter closure, which must implement `Fn(Option<i32>) -> String`
+///
+/// # Implementation Details
+///
+/// Both closures are wrapped in `Rc` smart pointers to allow them to be shared between the
+/// setup and bind callbacks. This is necessary because the callbacks take ownership of their
+/// captured variables.
+pub fn create_numeric_column<F, G>(column: &ColumnViewColumn, field_getter: F, formatter: G)
+where
+    F: Fn(&AlbumListItemObject) -> Option<i32> + 'static,
+    G: Fn(Option<i32>) -> String + 'static,
+{
+    // Create a new SignalListItemFactory which will manage the creation and updating of cells
+    let factory = SignalListItemFactory::new();
+
+    // Associate the factory with the column
+    column.set_factory(Some(&factory));
+
+    // Wrap the closures in Rc so they can be shared between callbacks
+    // This is necessary because the callbacks take ownership of their captured variables
+    let field_getter = Rc::new(field_getter);
+    let formatter = Rc::new(formatter);
+
+    // Setup callback - creates the widgets for each cell when they are first needed
+    // This is called once per cell during the initial rendering or when new cells are needed
+    factory.connect_setup(move |_, list_item| {
+        // Downcast the generic ListItem to the specific type we're working with
+        let list_item = list_item.downcast_ref::<ListItem>().unwrap();
+
+        // Create a Label widget with specific alignment properties
+        // Note: No ellipsizing is applied here as numeric fields are typically short
+        let label = Label::builder().halign(Start).valign(Center).build();
+
+        // Set the created label as the child widget of this list item
+        list_item.set_child(Some(&label));
+    });
+
+    // Bind callback - updates the widgets with data from the model
+    // This is called whenever a cell needs to be updated with new data (e.g., scrolling)
+    factory.connect_bind(move |_, list_item| {
+        // Downcast the generic ListItem to the specific type we're working with
+        let list_item = list_item.downcast_ref::<ListItem>().unwrap();
+
+        // Get the Label widget that was created in the setup phase
+        let label = list_item.child().unwrap().downcast::<Label>().unwrap();
+
+        // Clone the Rcs to get access to the closures
+        // This is necessary because we need to move them into the closure
+        let field_getter = field_getter.clone();
+        let formatter = formatter.clone();
+
+        // Check if there's an item associated with this list item
+        if let Some(item) = list_item.item() {
+            // Downcast the generic item to our specific AlbumListItemObject
+            let album_item = item.downcast_ref::<AlbumListItemObject>().unwrap();
+
+            // Extract the numeric value using the field_getter closure
+            let value = field_getter(album_item);
+
+            // Format the value using the formatter closure and set it on the label
+            label.set_text(&formatter(value));
+        }
+    });
+}

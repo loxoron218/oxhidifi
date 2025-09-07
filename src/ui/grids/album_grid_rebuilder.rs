@@ -1,9 +1,20 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 
-use gtk4::{Button, FlowBox, Label, Stack};
-use libadwaita::ViewStack;
+use gtk4::{Button, FlowBox, Label, Stack, Window, gio::ListStore};
+use libadwaita::{ViewStack, prelude::ButtonExt};
+use sqlx::SqlitePool;
+use tokio::sync::mpsc::UnboundedSender;
 
-use crate::{ui::grids::album_grid_builder::build_albums_grid, utils::screen::ScreenInfo};
+use crate::{
+    ui::{
+        components::{
+            dialogs::create_add_folder_dialog_handler,
+            view_controls::view_mode::ViewMode::{self, GridView, ListView},
+        },
+        grids::album_grid_builder::{build_albums_grid, build_albums_list_view},
+    },
+    utils::screen::ScreenInfo,
+};
 
 /// Rebuilds the albums grid in the main window.
 ///
@@ -18,16 +29,25 @@ use crate::{ui::grids::album_grid_builder::build_albums_grid, utils::screen::Scr
 /// * `screen_info` - A `Rc<RefCell<ScreenInfo>>` providing screen dimension details.
 /// * `albums_grid_cell` - A `Rc<RefCell<Option<FlowBox>>>` holding a reference to the albums `FlowBox`.
 /// * `albums_stack_cell` - A `Rc<RefCell<Option<Stack>>>` holding a reference to the albums `Stack`.
-/// * `add_music_button` - A `gtk4::Button` used in the empty state to add music.
+/// * `window` - The main application window.
+/// * `db_pool` - The database pool for database operations.
+/// * `sender` - The sender for UI refresh signals.
+/// * `album_count_label` - A `gtk4::Label` to display the album count.
+/// * `view_mode` - The current view mode (GridView or ListView).
+/// * `use_original_year` - Whether to display the original release year.
 pub fn rebuild_albums_grid_for_window(
     stack: &ViewStack,
     scanning_label_albums: &Label,
     screen_info: &Rc<RefCell<ScreenInfo>>,
     albums_grid_cell: &Rc<RefCell<Option<FlowBox>>>,
     albums_stack_cell: &Rc<RefCell<Option<Stack>>>,
-    add_music_button: &Button,
+    window: &Window,
+    db_pool: &Arc<SqlitePool>,
+    sender: &UnboundedSender<()>,
     album_count_label: Rc<Label>,
-) {
+    view_mode: ViewMode,
+    use_original_year: bool,
+) -> Option<ListStore> {
     // Remove old grid widget from the stack if it exists to prevent duplicates.
     if let Some(child) = stack.child_by_name("albums") {
         stack.remove(&child);
@@ -38,19 +58,76 @@ pub fn rebuild_albums_grid_for_window(
     *albums_grid_cell.borrow_mut() = None;
     *albums_stack_cell.borrow_mut() = None;
 
-    // Build a new albums grid and its containing stack.
-    let (albums_stack, albums_grid) = build_albums_grid(
-        scanning_label_albums,
-        screen_info.borrow().cover_size,
-        screen_info.borrow().tile_size,
-        add_music_button,
-        album_count_label.clone(),
-    );
+    // Build the new albums grid or list view and its containing stack based on the view mode.
+    // This ensures the albums view is always up-to-date and correctly displayed according to
+    // the user's selected view preference (grid or list).
+    match view_mode {
+        GridView => {
+            // Create a new "Add Music" button for the grid view
+            let add_music_button_grid = Button::with_label("Add Music");
 
-    // Add the newly created albums stack to the main ViewStack.
-    stack.add_titled(&albums_stack, Some("albums"), "Albums");
+            // Attach the click handler to the new button
+            let add_folder_handler = create_add_folder_dialog_handler(
+                window.clone(),
+                scanning_label_albums.clone(),
+                db_pool.clone(),
+                sender.clone(),
+                albums_stack_cell.clone(),
+            );
+            add_music_button_grid.connect_clicked(move |_| {
+                add_folder_handler();
+            });
 
-    // Store references to the new FlowBox and Stack in the cells for later access.
-    *albums_grid_cell.borrow_mut() = Some(albums_grid.clone());
-    *albums_stack_cell.borrow_mut() = Some(albums_stack.clone());
+            // Build a new albums grid and its containing stack.
+            // Get screen info values to avoid double borrowing
+            let cover_size = screen_info.borrow().cover_size;
+            let tile_size = screen_info.borrow().tile_size;
+            let (albums_stack, albums_grid) = build_albums_grid(
+                scanning_label_albums,
+                cover_size,
+                tile_size,
+                &add_music_button_grid,
+                album_count_label.clone(),
+            );
+
+            // Add the newly created albums stack to the main ViewStack.
+            stack.add_titled(&albums_stack, Some("albums"), "Albums");
+
+            // Store references to the new FlowBox and Stack in the cells for later access.
+            *albums_grid_cell.borrow_mut() = Some(albums_grid.clone());
+            *albums_stack_cell.borrow_mut() = Some(albums_stack.clone());
+            None
+        }
+        ListView => {
+            // Create a new "Add Music" button for the list view
+            let add_music_button_list = Button::with_label("Add Music");
+
+            // Attach the click handler to the new button
+            let add_folder_handler = create_add_folder_dialog_handler(
+                window.clone(),
+                scanning_label_albums.clone(),
+                db_pool.clone(),
+                sender.clone(),
+                albums_stack_cell.clone(),
+            );
+            add_music_button_list.connect_clicked(move |_| {
+                add_folder_handler();
+            });
+
+            // Build a new albums list view and its containing stack.
+            let (albums_stack, _column_view_scrolled, model) = build_albums_list_view(
+                album_count_label.clone(),
+                use_original_year,
+                &add_music_button_list,
+            );
+
+            // Add the newly created albums stack to the main ViewStack.
+            stack.add_titled(&albums_stack, Some("albums"), "Albums");
+
+            // For ListView mode, we don't store the FlowBox since we're using a ColumnView
+            // Store the stack for later access.
+            *albums_stack_cell.borrow_mut() = Some(albums_stack.clone());
+            Some(model)
+        }
+    }
 }
