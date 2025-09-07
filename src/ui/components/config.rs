@@ -7,7 +7,7 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
-use serde_json::{from_str, to_string_pretty};
+use serde_json::{Map, Value, from_str, to_string_pretty, to_value};
 
 use crate::ui::components::view_controls::{
     sorting_controls::types::SortOrder::{self, Album, Artist, DrValue, Year},
@@ -164,7 +164,7 @@ pub fn load_settings() -> Settings {
 
 /// Saves the current application settings to the `settings.json` file on disk.
 ///
-/// The settings are serialized to a pretty-printed JSON format.
+/// The settings are serialized to a pretty-printed JSON format with fields sorted alphabetically.
 ///
 /// # Arguments
 ///
@@ -177,7 +177,31 @@ pub fn load_settings() -> Settings {
 /// - `Err(io::Error)`: If there was an error during serialization, file creation, or writing.
 pub fn save_settings(settings: &Settings) -> Result<()> {
     let path = get_settings_path()?;
-    let data = to_string_pretty(settings)
+
+    // Serialize settings to a JSON Value first
+    let mut value = to_value(settings)
+        .map_err(|e| Error::new(Other, format!("Failed to serialize settings: {}", e)))?;
+
+    // Sort the fields alphabetically if it's an object
+    if let Value::Object(ref mut map) = value {
+        // Create a new map with sorted keys
+        let mut sorted_map = Map::new();
+        let mut keys: Vec<_> = map.keys().cloned().collect();
+        keys.sort();
+
+        // Insert values in alphabetical order of keys
+        for key in keys {
+            if let Some(val) = map.remove(&key) {
+                sorted_map.insert(key, val);
+            }
+        }
+
+        // Replace the original map with the sorted one
+        *map = sorted_map;
+    }
+
+    // Serialize the sorted JSON Value to a pretty-printed string
+    let data = to_string_pretty(&value)
         .map_err(|e| Error::new(Other, format!("Failed to serialize settings: {}", e)))?;
     let mut file = File::create(&path)?;
     file.write_all(data.as_bytes())?;
