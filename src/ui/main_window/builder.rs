@@ -179,9 +179,12 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         widgets.window.clone().into(),
     );
 
-    // Build the album and artist grids, passing the count labels to them.
-    // The grid builders are responsible for constructing the FlowBox and Stack.
-    // Use the saved view mode from settings
+    // Get the albums stack from the cell (always available)
+    let _albums_stack = albums_stack_cell.borrow().as_ref().cloned();
+
+    // Build the album grid
+    // Load persistent user settings for initial sort orders and view mode.
+    let settings = load_settings();
     let _model = rebuild_albums_grid_for_window(
         &widgets.stack,
         &widgets.scanning_label_albums,
@@ -198,9 +201,6 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         Some(refresh_service.clone()),
     );
 
-    // Get the albums stack from the cell (always available)
-    let _albums_stack = albums_stack_cell.borrow().as_ref().cloned();
-
     // Build the artist grid
     let (artists_stack, artist_grid) = build_artist_grid(
         &widgets.scanning_label_artists,
@@ -209,6 +209,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     );
 
     // Set the initial children of the `ViewStack` to the newly built album and artist stacks.
+    // The albums stack was already added by rebuild_albums_grid_for_window
     widgets
         .stack
         .add_titled(&artists_stack, Some("artists"), "Artists");
@@ -260,6 +261,9 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         &add_music_button_albums,
         &add_music_button_artists,
     );
+
+    // Set the initial view to albums since last_tab is set to "albums"
+    widgets.stack.set_visible_child_name("albums");
 
     // Present the window to make it visible and set its content.
     // This is the final step in rendering the main application window.
