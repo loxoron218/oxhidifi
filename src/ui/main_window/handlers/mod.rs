@@ -166,6 +166,7 @@ pub fn connect_all_handlers(
         db_pool.clone(),
         sender.clone(),
         refresh_library_ui.clone(),
+        refresh_service.clone(),
     );
 
     // Set up search bar UI logic for focus and visibility handling

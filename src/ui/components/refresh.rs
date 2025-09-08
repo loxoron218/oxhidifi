@@ -153,6 +153,11 @@ impl RefreshService {
         self.player_bar.clone()
     }
 
+    /// Gets a clone of the column view model
+    pub fn get_column_view_model(&self) -> Option<ListStore> {
+        self.column_view_model.borrow().as_ref().cloned()
+    }
+
     /// A new helper function specifically for the albums tab
     async fn repopulate_albums_tab(&self) {
         if let (Some(grid), Some(stack)) = (
