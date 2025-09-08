@@ -10,7 +10,7 @@ description = "A music player tailored for audiophiles, focusing on detailed col
 gdk-pixbuf = "0.21.1"
 glib = "0.21.1"
 gtk4 = "0.10.0"
-image = "0.25.7"
+image = "0.25.8"
 libadwaita = { version = "0.8.0", features = ["v1_5"] }
 lofty = "0.22.4"
 notify = "8.2.0"
