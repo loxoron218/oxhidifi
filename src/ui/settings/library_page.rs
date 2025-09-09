@@ -10,7 +10,7 @@ use libadwaita::{PreferencesPage, prelude::PreferencesPageExt};
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::ui::settings::folder_settings::FolderSettingsPage;
+use crate::ui::settings::folder::FolderSettingsPage;
 
 /// Creates and configures the Library preferences page.
 ///
