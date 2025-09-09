@@ -272,3 +272,50 @@
   margin: 0 8px;
   min-width: 80px;
 }
+
+/* =====================
+   Component: Column View (List View)
+   ===================== */
+
+columnview {
+  background-color: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+columnview listview {
+  background-color: transparent;
+  border: none;
+}
+
+columnview listview row {
+  background-color: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 4px 8px;
+}
+
+columnview listview row:hover {
+  background-color: var(--accent_color, rgba(128, 128, 128, 0.08));
+}
+
+columnview listview row.activatable:selected {
+  background-color: var(--accent_color, rgba(128, 128, 128, 0.15));
+}
+
+columnview columnviewcolumn header {
+  background-color: transparent;
+  border: none;
+  padding: 8px;
+}
+
+columnview columnviewcolumn header button {
+  background-color: transparent;
+  border: none;
+  box-shadow: none;
+  font-weight: bold;
+}
+
+columnview columnviewcolumn header button:hover {
+  background-color: var(--accent_color, rgba(128, 128, 128, 0.08));
+}
