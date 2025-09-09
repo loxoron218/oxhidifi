@@ -75,7 +75,7 @@ pub fn setup_keyboard_shortcuts(
             if search_entry.is_visible() {
                 // If search bar is open, close it.
                 // Note: We don't call refresh_library_ui here because the search implementation
-                // in search.rs already handles refreshing when the search text is cleared.
+                // in the search module already handles refreshing when the search text is cleared.
                 search_entry.set_visible(false);
                 search_button.set_visible(true);
 
