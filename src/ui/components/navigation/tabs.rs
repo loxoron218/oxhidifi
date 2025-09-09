@@ -11,7 +11,7 @@ use libadwaita::{
 
 use super::{
     VIEW_STACK_ALBUM_DETAIL, VIEW_STACK_ALBUMS, VIEW_STACK_ARTIST_DETAIL, VIEW_STACK_ARTISTS,
-    core::navigate_back_to_main_grid,
+    utils::navigate_back_to_main_grid,
 };
 
 /// Connects the "Albums" and "Artists" tab toggle buttons to manage `ViewStack` visibility,

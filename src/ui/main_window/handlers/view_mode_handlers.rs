@@ -7,7 +7,9 @@ use tokio::sync::mpsc::UnboundedSender;
 use crate::ui::{
     components::{
         config::{load_settings, save_settings},
-        navigation::core::{connect_album_navigation, connect_list_view_album_navigation},
+        navigation::{
+            grid::connect_album_navigation, list_view::connect_list_view_album_navigation,
+        },
         refresh::RefreshService,
         view_controls::{
             list_view::population::populate_albums_column_view,

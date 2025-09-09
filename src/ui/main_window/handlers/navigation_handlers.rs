@@ -8,10 +8,9 @@ use tokio::sync::mpsc::UnboundedSender;
 use crate::ui::{
     components::{
         navigation::{
-            core::{
-                connect_album_navigation, connect_artist_navigation, connect_back_button,
-                connect_list_view_album_navigation,
-            },
+            back::connect_back_button,
+            grid::{connect_album_navigation, connect_artist_navigation},
+            list_view::connect_list_view_album_navigation,
             tabs::connect_tab_navigation,
         },
         player_bar::PlayerBar,
@@ -39,8 +38,8 @@ use crate::ui::{
 ///
 /// # Implementation Details
 ///
-/// This function delegates to [`connect_back_button`] in the navigation core module,
-/// passing all necessary UI components and shared state. The core function handles:
+/// This function delegates to [`connect_back_button`] in the navigation back module,
+/// passing all necessary UI components and shared state. The function handles:
 /// - Connecting the button's click signal to navigation logic
 /// - Managing navigation history traversal
 /// - Updating header visibility when navigating between views
@@ -156,9 +155,9 @@ pub fn connect_tab_navigation_handler(
 ///
 /// The function first checks if an albums grid exists in the UI. If it does, it creates
 /// clones of the necessary shared components and delegates to [`connect_album_navigation`]
-/// in the navigation core module.
+/// in the navigation grid module.
 ///
-/// The navigation closure passed to the core function is responsible for:
+/// The navigation closure passed to the function is responsible for:
 /// - Capturing the album ID from the clicked tile
 /// - Spawning an async task to load album data and build the detail page
 /// - Calling the [`album_page`] function to construct and display the album detail UI
@@ -176,7 +175,7 @@ pub fn connect_album_navigation_handler(
         let show_dr_badges_clone = show_dr_badges_cloned.clone();
         let player_bar_clone = player_bar_clone.clone();
 
-        // Delegate to the core navigation function with all necessary parameters
+        // Delegate to the grid navigation function with all necessary parameters
         connect_album_navigation(
             albums_grid,
             &widgets.stack,
@@ -239,7 +238,7 @@ pub fn connect_album_navigation_handler(
 ///
 /// The function first checks if a ColumnView widget exists in the refresh service.
 /// If it does, it delegates to [`connect_list_view_album_navigation`] in the navigation
-/// core module, passing all necessary UI components and a navigation closure.
+/// list_view module, passing all necessary UI components and a navigation closure.
 ///
 /// The navigation closure is responsible for:
 /// - Capturing the album ID from the selected list item
@@ -256,7 +255,7 @@ pub fn connect_list_view_album_navigation_handler(
 ) {
     // Connect list view album navigation only if the ColumnView widget exists
     if let Some(column_view) = refresh_service.column_view_widget.borrow().as_ref() {
-        // Delegate to the core navigation function for list view with all necessary parameters
+        // Delegate to the list view navigation function for list view with all necessary parameters
         connect_list_view_album_navigation(
             column_view,
             widgets.stack.downgrade(),
@@ -324,9 +323,9 @@ pub fn connect_list_view_album_navigation_handler(
 ///
 /// The function first checks if an artist grid exists in the UI. If it does, it creates
 /// clones of the necessary shared components and delegates to [`connect_artist_navigation`]
-/// in the navigation core module.
+/// in the navigation grid module.
 ///
-/// The navigation closure passed to the core function is responsible for:
+/// The navigation closure passed to the function is responsible for:
 /// - Capturing the artist ID from the clicked tile
 /// - Spawning an async task to load artist data and build the detail page
 /// - Calling the [`artist_page`] function to construct and display the artist detail UI
@@ -346,7 +345,7 @@ pub fn connect_artist_navigation_handler(
         let use_original_year_clone = use_original_year_cloned.clone();
         let player_bar_clone = player_bar_clone.clone();
 
-        // Delegate to the core navigation function with all necessary parameters
+        // Delegate to the grid navigation function with all necessary parameters
         connect_artist_navigation(
             artist_grid,
             &widgets.stack,

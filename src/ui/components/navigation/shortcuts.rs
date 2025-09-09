@@ -13,7 +13,7 @@ use libadwaita::{
 
 use crate::ui::search_bar::SearchBar;
 
-use super::{VIEW_STACK_ALBUMS, VIEW_STACK_ARTISTS, core::handle_back_navigation};
+use super::{VIEW_STACK_ALBUMS, VIEW_STACK_ARTISTS, back::handle_back_navigation};
 
 /// Sets up keyboard shortcuts for the main application window.
 ///
@@ -55,7 +55,7 @@ pub fn setup_keyboard_shortcuts(
     let stack_weak = stack.downgrade();
 
     // Create the back navigation action, which will be reused by the Escape key.
-    // This leverages the shared logic from `core` to ensure consistency.
+    // This leverages the shared logic from `back` module to ensure consistency.
     let back_nav_action = handle_back_navigation(
         stack.clone(),
         left_btn_stack.clone(),

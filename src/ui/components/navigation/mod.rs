@@ -1,6 +1,9 @@
-pub mod core;
+pub mod back;
+pub mod grid;
+pub mod list_view;
 pub mod shortcuts;
 pub mod tabs;
+pub mod utils;
 
 /// Constants for `ViewStack` child names, improving readability and reducing magic strings.
 /// These constants are used to identify different UI pages or header states within the application's
