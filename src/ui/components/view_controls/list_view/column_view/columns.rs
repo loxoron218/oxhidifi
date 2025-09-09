@@ -88,7 +88,7 @@ pub fn create_columns(
     // Bit depth column - displays the audio bit depth (e.g., 16-bit)
     // Non-expanding column with "Bit" title
     let bit_depth_column = ColumnViewColumn::builder()
-        .title("Bit")
+        .title("Bit depth")
         .expand(false)
         .build();
 
