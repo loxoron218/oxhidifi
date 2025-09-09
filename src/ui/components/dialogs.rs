@@ -287,6 +287,8 @@ pub fn show_performance_metrics_dialog(parent: &Window) {
         .title("Performance Metrics")
         .transient_for(parent)
         .modal(true)
+        .default_width(600)
+        .default_height(400)
         .build();
     dialog.add_button("Close", Close);
     dialog.add_button("Reset", Other(1));
