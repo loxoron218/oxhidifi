@@ -99,7 +99,7 @@ pub fn create_album_tile(
         let label = create_album_label(
             &highlight(&album.artist, search_text),
             &["album-artist-label"],
-            Some(18),
+            Some(((cover_size - 16) / 10).max(8)),
             Some(EllipsizeMode::End),
             false,
             None,
@@ -107,6 +107,7 @@ pub fn create_album_tile(
             // use_markup: true because highlight is used
             true,
         );
+        label.set_size_request(cover_size - 16, -1);
         label
     };
 
@@ -137,8 +138,8 @@ pub fn create_album_tile(
     let format_label = create_album_label(
         &format_line,
         &["album-format-label"],
-        None,
-        None,
+        Some(((cover_size - 16) / 10).max(8)),
+        Some(EllipsizeMode::End),
         false,
         None,
         None,
@@ -159,8 +160,8 @@ pub fn create_album_tile(
     let year_label = create_album_label(
         &year_text,
         &["album-format-label"],
-        None,
-        None,
+        Some(8),
+        Some(EllipsizeMode::End),
         false,
         None,
         None,
@@ -175,7 +176,7 @@ pub fn create_album_tile(
 
     // Main vertical box for the album tile layout
     let album_tile_box = Box::builder().orientation(Vertical).spacing(2).build();
-    album_tile_box.set_size_request(tile_size, tile_size + 80);
+    album_tile_box.set_size_request(cover_size, tile_size + 80);
     album_tile_box.set_hexpand(false);
     album_tile_box.set_vexpand(false);
     album_tile_box.set_halign(Start);
@@ -310,15 +311,19 @@ pub fn create_album_tile(
     album_tile_box.append(&title_area_box);
     album_tile_box.append(&artist_label);
 
-    // Horizontal box to hold format and year labels
+    // Container to constrain metadata box width
+    let metadata_container = Box::builder().orientation(Vertical).hexpand(false).build();
+    metadata_container.set_size_request(cover_size - 16, -1);
+
     let metadata_box = Box::builder()
         .orientation(Horizontal)
         .spacing(0)
-        .hexpand(true)
+        .hexpand(false)
         .build();
     metadata_box.append(&format_label);
     metadata_box.append(&year_label);
-    album_tile_box.append(&metadata_box);
+    metadata_container.append(&metadata_box);
+    album_tile_box.append(&metadata_container);
     album_tile_box.set_css_classes(&["album-tile"]);
 
     // Create the FlowBoxChild and set its properties
@@ -326,8 +331,9 @@ pub fn create_album_tile(
     flow_child.set_child(Some(&album_tile_box));
     flow_child.set_hexpand(false);
     flow_child.set_vexpand(false);
-    flow_child.set_halign(Fill);
+    flow_child.set_halign(Start);
     flow_child.set_valign(Start);
+    flow_child.set_size_request(cover_size, -1);
 
     // Add click gesture for navigation to album page
     let stack_weak = stack_for_closure.downgrade();

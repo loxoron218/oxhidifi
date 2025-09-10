@@ -31,6 +31,7 @@ use crate::ui::{
 /// - Sort state references for UI refreshes
 /// - Navigation stack components for page transitions
 /// - History tracking for back navigation
+/// - Zoom manager for zoom level changes
 pub fn setup_keyboard_shortcuts_handler(
     widgets: &WindowWidgets,
     shared_state: &WindowSharedState,
@@ -48,5 +49,6 @@ pub fn setup_keyboard_shortcuts_handler(
         &widgets.right_btn_box,
         &shared_state.last_tab,
         &shared_state.nav_history,
+        &shared_state.zoom_manager,
     );
 }

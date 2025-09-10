@@ -1,5 +1,7 @@
 use gtk4::{Align::Start, Box, Button, Label, Orientation::Horizontal};
-use libadwaita::prelude::{BoxExt, WidgetExt};
+use libadwaita::prelude::{BoxExt, ButtonExt, WidgetExt};
+
+use super::zoom_manager::ZoomManager;
 
 /// Creates a custom visual-only zoom control widget with flat-style buttons.
 ///
@@ -7,10 +9,14 @@ use libadwaita::prelude::{BoxExt, WidgetExt};
 /// with zoom in/out icons, similar to the Nautilus file manager. The buttons have no background
 /// by default and show a subtle highlight on hover, matching the GNOME HIG.
 ///
+/// # Arguments
+///
+/// * `zoom_manager` - A reference to the ZoomManager instance
+///
 /// # Returns
 ///
 /// A `gtk::Box` containing the custom zoom control widget.
-pub fn create_zoom_control_row() -> Box {
+pub fn create_zoom_control_row(zoom_manager: &ZoomManager) -> Box {
     // Main Container: A horizontal box for the whole row.
     let main_box = Box::builder()
         .orientation(Horizontal)
@@ -45,6 +51,18 @@ pub fn create_zoom_control_row() -> Box {
         .css_classes(["flat"])
         .tooltip_text("Zoom In")
         .build();
+
+    // Connect the zoom out button to the zoom manager
+    let zoom_manager_clone = zoom_manager.clone();
+    zoom_out_button.connect_clicked(move |_| {
+        zoom_manager_clone.zoom_out();
+    });
+
+    // Connect the zoom in button to the zoom manager
+    let zoom_manager_clone = zoom_manager.clone();
+    zoom_in_button.connect_clicked(move |_| {
+        zoom_manager_clone.zoom_in();
+    });
 
     // Assemble the Widget: Pack everything together.
     button_box.append(&zoom_out_button);

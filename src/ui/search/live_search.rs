@@ -48,12 +48,8 @@ pub fn connect_live_search(
     show_dr_badges: Rc<Cell<bool>>,
     use_original_year: Rc<Cell<bool>>,
     player_bar: PlayerBar,
+    screen_info: Rc<RefCell<ScreenInfo>>,
 ) {
-    // Compute dynamic sizes based on screen dimensions
-    let screen_info = ScreenInfo::new();
-    let cover_size = screen_info.get_cover_size();
-    let tile_size = screen_info.get_tile_size();
-
     // Clone shared resources for the closure to avoid moving them into the closure
     // and allow them to be used across multiple async operations.
     let db_pool_cloned = db_pool.clone();
@@ -72,6 +68,9 @@ pub fn connect_live_search(
     let show_dr_badges_cloned = show_dr_badges.clone();
     let use_original_year_cloned = use_original_year.clone();
     let search_timer: Rc<RefCell<Option<SourceId>>> = Rc::new(RefCell::new(None));
+
+    // Clone screen_info outside the closure to avoid move issues
+    let screen_info_clone = screen_info.clone();
 
     // Connect search entry changed signal
     search_entry.connect_changed(move |entry| {
@@ -92,6 +91,9 @@ pub fn connect_live_search(
         let show_dr_badges_cloned = show_dr_badges_cloned.clone();
         let use_original_year_cloned = use_original_year_cloned.clone();
         let search_timer_cloned = search_timer.clone();
+
+        // Clone screen_info for the debounce closure
+        let screen_info_debounce = screen_info_clone.clone();
 
         // Schedule a new timer.
         let player_bar_clone_inner = player_bar.clone();
@@ -130,8 +132,15 @@ pub fn connect_live_search(
                 let show_dr_badges = show_dr_badges_cloned.clone();
                 let use_original_year = use_original_year_cloned.clone();
 
+                // Clone screen_info for the async closure
+                let screen_info_async = screen_info_debounce.clone();
+
                 // Spawn an asynchronous task to perform the search and update the UI
                 MainContext::default().spawn_local(async move {
+                    // Compute dynamic sizes based on screen dimensions
+                    let cover_size = screen_info_async.borrow().get_cover_size();
+                    let tile_size = screen_info_async.borrow().get_tile_size();
+
                     // Perform album search
                     match search_album_display_info(&db_pool, &text).await {
                         Err(e) => {
@@ -204,6 +213,7 @@ pub fn connect_live_search(
                                         show_dr_badges.clone(),
                                         use_original_year.clone(),
                                         player_bar_clone_inner.clone(),
+                                        screen_info_async.clone(),
                                     ));
                                     artist_grid.insert(&*flow_child, -1);
                                 }

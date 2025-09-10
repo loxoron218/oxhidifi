@@ -345,6 +345,9 @@ pub fn connect_artist_navigation_handler(
         let use_original_year_clone = use_original_year_cloned.clone();
         let player_bar_clone = player_bar_clone.clone();
 
+        // Clone the necessary fields from shared_state outside the closure
+        let screen_info = shared_state.screen_info.clone();
+
         // Delegate to the grid navigation function with all necessary parameters
         connect_artist_navigation(
             artist_grid,
@@ -357,6 +360,7 @@ pub fn connect_artist_navigation_handler(
             show_dr_badges_clone,
             use_original_year_clone,
             player_bar_clone,
+            screen_info.clone(),
             move |stack_weak,
                   db_pool,
                   artist_id,
@@ -366,7 +370,8 @@ pub fn connect_artist_navigation_handler(
                   sender,
                   show_dr_badges,
                   use_original_year,
-                  player_bar| {
+                  player_bar,
+                  screen_info_async| {
                 // Return an async block that builds and displays the artist detail page
                 async move {
                     artist_page(
@@ -380,6 +385,7 @@ pub fn connect_artist_navigation_handler(
                         show_dr_badges,
                         use_original_year,
                         player_bar,
+                        screen_info_async,
                     )
                     .await;
                 }

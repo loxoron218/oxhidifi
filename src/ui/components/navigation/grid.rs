@@ -11,7 +11,7 @@ use libadwaita::{Clamp, ViewStack};
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::ui::components::player_bar::PlayerBar;
+use crate::{ui::components::player_bar::PlayerBar, utils::screen::ScreenInfo};
 
 use super::VIEW_STACK_BACK_HEADER;
 
@@ -125,7 +125,7 @@ pub fn connect_album_navigation<Fut, F>(
 /// * `sender` - `UnboundedSender<()>` for triggering UI refreshes.
 /// * `artist_page` - An async function that takes `WeakRef<ViewStack>`, `Arc<SqlitePool>`, `i64` (artist ID),
 ///   `WeakRef<ViewStack>`, `WeakRef<Clamp>`, `Rc<RefCell<Vec<String>>>`, `UnboundedSender<()>`, `Rc<Cell<bool>>`,
-///   `Rc<Cell<bool>>`, and `PlayerBar` and returns a `Future`.
+///   `Rc<Cell<bool>>`, `PlayerBar`, and `Rc<RefCell<ScreenInfo>>` and returns a `Future`.
 pub fn connect_artist_navigation<Fut, F>(
     artist_grid: &FlowBox,
     stack: &ViewStack,
@@ -137,6 +137,7 @@ pub fn connect_artist_navigation<Fut, F>(
     show_dr_badges: Rc<Cell<bool>>,
     use_original_year: Rc<Cell<bool>>,
     player_bar: PlayerBar,
+    screen_info: Rc<RefCell<ScreenInfo>>,
     artist_page: F,
 ) where
     F: Fn(
@@ -150,6 +151,7 @@ pub fn connect_artist_navigation<Fut, F>(
             Rc<Cell<bool>>,
             Rc<Cell<bool>>,
             PlayerBar,
+            Rc<RefCell<ScreenInfo>>,
         ) -> Fut
         + 'static,
     Fut: Future<Output = ()> + 'static,
@@ -202,6 +204,7 @@ pub fn connect_artist_navigation<Fut, F>(
             show_dr_badges_clone.clone(),
             use_original_year_clone.clone(),
             player_bar_clone.clone(),
+            screen_info.clone(),
         ));
     });
 }

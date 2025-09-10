@@ -63,6 +63,7 @@ pub fn connect_live_search_handler(
                 shared_state.show_dr_badges.clone(),
                 shared_state.use_original_year.clone(),
                 widgets.player_bar.clone(),
+                shared_state.screen_info.clone(),
             );
         }
     } else {

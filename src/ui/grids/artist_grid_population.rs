@@ -240,6 +240,7 @@ async fn update_artist_grid_ui(
             show_dr_badges.clone(),
             use_original_year.clone(),
             player_bar.clone(),
+            screen_info.clone(),
         ));
         artist_grid.insert(&*tile, -1);
     }

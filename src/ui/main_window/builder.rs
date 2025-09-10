@@ -22,8 +22,11 @@ use crate::{
     data::scanner::library_ops::run_full_scan,
     ui::{
         components::{
-            config::load_settings, player_bar::PlayerBar, refresh::setup_library_refresh_channel,
+            config::load_settings,
+            player_bar::PlayerBar,
+            refresh::setup_library_refresh_channel,
             scan_feedback::create_scanning_label,
+            view_controls::{ZoomLevel::Medium, ZoomManager},
         },
         grids::{
             album_grid_rebuilder::rebuild_albums_grid_for_window,
@@ -103,6 +106,9 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     // Create the player bar
     let player_bar = PlayerBar::new();
 
+    // Create the zoom manager
+    let zoom_manager = Rc::new(ZoomManager::new(Medium));
+
     // `WindowSharedState` aggregates all `Rc<Cell<T>>` and `Rc<RefCell<T>>` managed state.
     // This centralizes mutable state management, making it easier to reason about data flow.
     let shared_state = WindowSharedState {
@@ -115,6 +121,8 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         is_settings_open: Rc::new(Cell::new(false)),
         show_dr_badges: Rc::new(Cell::new(settings.show_dr_badges)),
         use_original_year: Rc::new(Cell::new(settings.use_original_year)),
+        zoom_manager,
+        current_zoom_level: Rc::new(Cell::new(Medium)),
     };
 
     // Initialize `Rc<RefCell<Option<FlowBox>>>` and `Rc<RefCell<Option<Stack>>>` for grids and stacks
@@ -261,6 +269,38 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         &add_music_button_albums,
         &add_music_button_artists,
     );
+
+    // Connect the zoom manager to the view control button
+    widgets
+        .button
+        .set_zoom_manager(shared_state.zoom_manager.clone());
+
+    // Connect the zoom manager callback to update screen info and rebuild grids
+    let screen_info_clone = shared_state.screen_info.clone();
+    let current_zoom_level_clone = shared_state.current_zoom_level.clone();
+    let refresh_library_ui_clone = refresh_library_ui.clone();
+    shared_state
+        .zoom_manager
+        .connect_zoom_changed(move |zoom_level| {
+            // Store the current zoom level
+            current_zoom_level_clone.set(zoom_level);
+
+            // Update screen info with new zoom level values
+            if zoom_level == Medium {
+                // Reset to original screen dimensions for default zoom level
+                screen_info_clone.borrow_mut().reset_to_original();
+            } else {
+                // Use fixed values for other zoom levels
+                let cover_size = zoom_level.cover_size();
+                let tile_size = zoom_level.tile_size();
+                screen_info_clone
+                    .borrow_mut()
+                    .update_with_zoom(cover_size, tile_size);
+            }
+
+            // Trigger a UI refresh to rebuild the grids with new sizes
+            refresh_library_ui_clone(true, true);
+        });
 
     // Set the initial view to albums since last_tab is set to "albums"
     widgets.stack.set_visible_child_name("albums");

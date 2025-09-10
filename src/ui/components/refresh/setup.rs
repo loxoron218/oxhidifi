@@ -13,8 +13,9 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
 use crate::{
     ui::components::{
-        player_bar::PlayerBar, refresh::RefreshService,
-        view_controls::sorting_controls::types::SortOrder,
+        player_bar::PlayerBar,
+        refresh::RefreshService,
+        view_controls::{ZoomLevel, sorting_controls::types::SortOrder},
     },
     utils::screen::ScreenInfo,
 };
@@ -100,6 +101,7 @@ pub fn setup_live_monitor_refresh(
     refresh_service: Rc<RefreshService>,
     screen_info: Rc<RefCell<ScreenInfo>>,
     is_settings_open: Rc<Cell<bool>>,
+    current_zoom_level: Option<Rc<Cell<ZoomLevel>>>,
 ) {
     let is_settings_open_cloned = is_settings_open.clone();
     timeout_add_local(Duration::from_secs(3), move || {
@@ -107,6 +109,18 @@ pub fn setup_live_monitor_refresh(
             let new_screen_info = ScreenInfo::new();
             if new_screen_info.width != screen_info.borrow().width {
                 *screen_info.borrow_mut() = new_screen_info;
+
+                // Apply zoom level if available
+                if let Some(zoom_level) = &current_zoom_level {
+                    let zoom = zoom_level.get();
+                    let cover_size = zoom.cover_size();
+                    let tile_size = zoom.tile_size();
+                    screen_info
+                        .borrow_mut()
+                        .update_with_zoom(cover_size, tile_size);
+                }
+
+                // Refresh the library UI with current sort orders when screen geometry changes
                 (refresh_service.clone().create_refresh_closure())(
                     refresh_service.sort_ascending.get(),
                     refresh_service.sort_ascending_artists.get(),

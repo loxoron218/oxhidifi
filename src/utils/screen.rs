@@ -20,6 +20,12 @@ pub struct ScreenInfo {
     /// Currently, this is set to be the same as `cover_size`, but it is kept
     /// as a separate field for potential future adjustments (e.g., adding padding).
     pub tile_size: i32,
+    /// The original cover size calculated at application startup.
+    /// This preserves the screen-appropriate size for the default zoom level.
+    pub original_cover_size: i32,
+    /// The original tile size calculated at application startup.
+    /// This preserves the screen-appropriate size for the default zoom level.
+    pub original_tile_size: i32,
 }
 
 impl ScreenInfo {
@@ -76,13 +82,29 @@ impl ScreenInfo {
         // if additional spacing or text area needs to be accounted for within a tile.
         let tile_size = cover_size;
 
+        // Store original dimensions as well
+        let original_cover_size = cover_size;
+        let original_tile_size = tile_size;
+
         // Construct and return a new ScreenInfo instance with the calculated dimensions.
         // This struct provides essential screen information for UI layout calculations throughout the application.
         Self {
             width: screen_width,
             cover_size,
             tile_size,
+            original_cover_size,
+            original_tile_size,
         }
+    }
+
+    /// Updates the screen info with zoom level values
+    ///
+    /// # Arguments
+    /// * `cover_size` - The new cover size in pixels
+    /// * `tile_size` - The new tile size in pixels
+    pub fn update_with_zoom(&mut self, cover_size: i32, tile_size: i32) {
+        self.cover_size = cover_size;
+        self.tile_size = tile_size;
     }
 
     /// Returns the calculated cover art size.
@@ -99,5 +121,15 @@ impl ScreenInfo {
     /// The tile size in pixels.
     pub fn get_tile_size(&self) -> i32 {
         self.tile_size
+    }
+
+    /// Resets the screen info to original dimensions
+    ///
+    /// This method restores the cover_size and tile_size to their original
+    /// values calculated at application startup, which preserves the
+    /// screen-appropriate size for the default zoom level.
+    pub fn reset_to_original(&mut self) {
+        self.cover_size = self.original_cover_size;
+        self.tile_size = self.original_tile_size;
     }
 }

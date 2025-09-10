@@ -34,6 +34,7 @@ pub fn setup_live_monitor_refresh_handler(
         refresh_service.clone(),
         shared_state.screen_info.clone(),
         shared_state.is_settings_open.clone(),
+        Some(shared_state.current_zoom_level.clone()),
     );
 }
 

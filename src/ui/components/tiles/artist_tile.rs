@@ -18,11 +18,14 @@ use libadwaita::{
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::ui::{
-    components::{
-        player_bar::PlayerBar, tiles::helpers::create_album_label, tiles::text_utils::highlight,
+use crate::{
+    ui::{
+        components::{
+            player_bar::PlayerBar, tiles::helpers::create_album_label, tiles::text_utils::highlight,
+        },
+        pages::artist::artist_page::artist_page,
     },
-    pages::artist::artist_page::artist_page,
+    utils::screen::ScreenInfo,
 };
 
 /// Creates a `FlowBoxChild` containing the UI representation of an artist.
@@ -46,6 +49,7 @@ use crate::ui::{
 /// - `show_dr_badges`: Flag indicating whether to display DR badges
 /// - `use_original_year`: Flag for choosing between original and release years
 /// - `player_bar`: Shared player control bar component
+/// - `screen_info`: Screen information for calculating cover and tile sizes
 ///
 /// # Returns
 /// A `FlowBoxChild` widget containing the complete artist tile UI
@@ -64,6 +68,7 @@ pub fn create_artist_tile(
     show_dr_badges: Rc<Cell<bool>>,
     use_original_year: Rc<Cell<bool>>,
     player_bar: PlayerBar,
+    screen_info: Rc<RefCell<ScreenInfo>>,
 ) -> FlowBoxChild {
     // Create the default avatar icon for the artist
     let icon = Image::from_icon_name("avatar-default-symbolic");
@@ -158,6 +163,7 @@ pub fn create_artist_tile(
                 show_dr_badges.clone(),
                 use_original_year.clone(),
                 player_bar.clone(),
+                screen_info.clone(),
             ));
         }
     });

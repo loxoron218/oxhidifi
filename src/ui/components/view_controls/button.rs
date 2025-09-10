@@ -6,7 +6,7 @@ use std::{
 use gtk4::{
     Box,
     Orientation::{Horizontal, Vertical},
-    Popover, Separator,
+    Popover, Separator, Widget,
 };
 use libadwaita::{
     SplitButton, ViewStack,
@@ -16,6 +16,7 @@ use libadwaita::{
 use crate::ui::components::{
     navigation::VIEW_STACK_ALBUMS,
     view_controls::{
+        ZoomManager,
         sorting_controls::{create_sorting_control_row, types::SortOrder},
         view_mode::ViewMode::{self, GridView, ListView},
         zoom_controls::create_zoom_control_row,
@@ -33,6 +34,8 @@ pub struct ViewControlButton {
     split_button: SplitButton,
     /// The current view mode of the button
     view_mode: RefCell<ViewMode>,
+    /// The zoom manager for handling zoom levels
+    zoom_manager: RefCell<Option<Rc<ZoomManager>>>,
     /// The sorting control widget
     sorting_widget: RefCell<Option<Rc<Box>>>,
 }
@@ -54,11 +57,7 @@ impl ViewControlButton {
         // Create a container box for the popover content
         let popover_box = Box::builder().orientation(Vertical).spacing(6).build();
 
-        // Create our custom zoom widget
-        let zoom_widget = create_zoom_control_row();
-        popover_box.append(&zoom_widget);
-
-        // Add a separator for the next section
+        // Add a separator for the next section (placeholder for zoom controls)
         let separator = Separator::new(Horizontal);
         popover_box.append(&separator);
 
@@ -72,6 +71,7 @@ impl ViewControlButton {
         let button = Self {
             split_button,
             view_mode: RefCell::new(initial_view_mode),
+            zoom_manager: RefCell::new(None),
             sorting_widget: RefCell::new(None),
         };
 
@@ -239,5 +239,38 @@ impl ViewControlButton {
 impl Default for ViewControlButton {
     fn default() -> Self {
         Self::with_initial_view_mode(GridView)
+    }
+}
+
+impl ViewControlButton {
+    /// Sets the zoom manager for the button
+    ///
+    /// This method allows connecting a zoom manager to the button, which
+    /// enables the zoom controls in the popover.
+    ///
+    /// # Arguments
+    ///
+    /// * `zoom_manager` - The zoom manager to connect
+    pub fn set_zoom_manager(&self, zoom_manager: Rc<ZoomManager>) {
+        *self.zoom_manager.borrow_mut() = Some(zoom_manager);
+
+        // Update the popover with the zoom controls
+        if let Some(popover) = self.split_button.popover() {
+            if let Some(popover_child) = popover.child() {
+                if let Some(popover_box) = popover_child.downcast_ref::<Box>() {
+                    // Create the zoom controls widget
+                    let zoom_widget = create_zoom_control_row(
+                        &self.zoom_manager.borrow().as_ref().unwrap().clone(),
+                    );
+
+                    // Add a separator after the zoom controls
+                    let separator = Separator::new(Horizontal);
+
+                    // Insert the zoom controls at the beginning of the popover
+                    popover_box.insert_child_after(&zoom_widget, None::<&Widget>);
+                    popover_box.insert_child_after(&separator, Some(&zoom_widget));
+                }
+            }
+        }
     }
 }

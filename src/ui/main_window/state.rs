@@ -3,7 +3,10 @@ use std::{
     rc::Rc,
 };
 
-use crate::{ui::components::view_controls::sorting_controls::types, utils::screen::ScreenInfo};
+use crate::{
+    ui::components::view_controls::{ZoomLevel, ZoomManager, sorting_controls::types},
+    utils::screen::ScreenInfo,
+};
 
 /// `WindowSharedState` struct encapsulates all the `Rc<Cell<T>>` and `Rc<RefCell<T>>` managed
 /// shared state that is passed around and mutated by different parts of the UI logic.
@@ -36,4 +39,8 @@ pub struct WindowSharedState {
     pub show_dr_badges: Rc<Cell<bool>>,
     /// Indicates whether the original release year should be used for display.
     pub use_original_year: Rc<Cell<bool>>,
+    /// Manages the zoom level for the grid and list views.
+    pub zoom_manager: Rc<ZoomManager>,
+    /// Stores the current zoom level to apply to the screen info.
+    pub current_zoom_level: Rc<Cell<ZoomLevel>>,
 }

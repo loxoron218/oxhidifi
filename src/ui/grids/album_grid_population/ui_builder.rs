@@ -82,13 +82,16 @@ pub fn create_album_tile(
         &album_info.artist,
         &["album-artist-label"],
         // Max width chars for artist
-        Some(18),
+        Some(((cover_size - 16) / 10).max(8)),
         Some(EllipsizeMode::End),
         // No wrapping
         false,
         None,
         None,
     );
+
+    // Set explicit width
+    artist_label.set_size_request(cover_size - 16, -1);
 
     // Format audio details (format, bit depth, sample rate).
     let format_line = album_info
@@ -116,8 +119,8 @@ pub fn create_album_tile(
     let format_label = create_styled_label(
         &format_line,
         &["album-format-label"],
-        None,
-        None,
+        Some(((cover_size - 16) / 10).max(8)),
+        Some(EllipsizeMode::End),
         false,
         None,
         None,
@@ -136,8 +139,8 @@ pub fn create_album_tile(
     let year_label = create_styled_label(
         &year_text,
         &["album-format-label"],
-        None,
-        None,
+        Some(8),
+        Some(EllipsizeMode::End),
         false,
         None,
         None,
@@ -159,7 +162,7 @@ pub fn create_album_tile(
         .build();
 
     // Fixed size for the whole tile
-    album_tile_box.set_size_request(tile_size, tile_size + 80);
+    album_tile_box.set_size_request(cover_size, tile_size + 80);
 
     // Cover container and overlay for DR badge and play button.
     let cover_container = Box::new(Vertical, 0);
@@ -313,14 +316,20 @@ pub fn create_album_tile(
     title_area_box.append(&title_label);
     album_tile_box.append(&title_area_box);
     album_tile_box.append(&artist_label);
+
+    // Container to constrain metadata box width
+    let metadata_container = Box::builder().orientation(Vertical).hexpand(false).build();
+    metadata_container.set_size_request(cover_size - 16, -1);
+
     let metadata_box = Box::builder()
         .orientation(Horizontal)
         .spacing(0)
-        .hexpand(true)
+        .hexpand(false)
         .build();
     metadata_box.append(&format_label);
     metadata_box.append(&year_label);
-    album_tile_box.append(&metadata_box);
+    metadata_container.append(&metadata_box);
+    album_tile_box.append(&metadata_container);
 
     // --- FlowBoxChild and Navigation ---
     let flow_child = FlowBoxChild::builder()
@@ -329,6 +338,7 @@ pub fn create_album_tile(
         .vexpand(false)
         .halign(Start)
         .valign(Start)
+        .width_request(cover_size)
         .build();
     flow_child.set_widget_name(&album_info.id.to_string());
     flow_child

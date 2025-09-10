@@ -49,6 +49,7 @@ use crate::{
 /// - `show_dr_badges`: Shared flag indicating whether to display DR badges
 /// - `use_original_year`: Shared flag for choosing between original and release years
 /// - `player_bar`: Shared player control bar component
+/// - `screen_info`: Screen information for calculating cover and tile sizes
 ///
 /// # Behavior
 /// - Fetches artist information and album data from the database
@@ -72,6 +73,7 @@ pub async fn artist_page(
     show_dr_badges: Rc<Cell<bool>>,
     use_original_year: Rc<Cell<bool>>,
     player_bar: PlayerBar,
+    screen_info: Rc<RefCell<ScreenInfo>>,
 ) {
     // Generate a unique page name for this artist
     let page_name = format!("artist_{}", artist_id);
@@ -141,9 +143,8 @@ pub async fn artist_page(
 
     // Compute dynamic cover and tile sizes based on screen dimensions
     // This ensures the UI adapts to different screen sizes and resolutions
-    let screen_info = ScreenInfo::new();
-    let cover_size = screen_info.get_cover_size();
-    let tile_size = screen_info.get_tile_size();
+    let cover_size = screen_info.borrow().get_cover_size();
+    let tile_size = screen_info.borrow().get_tile_size();
 
     // Create a responsive flow box for displaying albums in a grid
     // This matches the styling used in the main albums grid and album page
