@@ -99,42 +99,6 @@ impl ZoomLevel {
     pub fn tile_size(&self) -> i32 {
         self.cover_size()
     }
-
-    /// Returns the number of text lines to display for this zoom level.
-    ///
-    /// Controls how much textual information (album title, artist, etc.)
-    /// is shown for each grid item. Higher zoom levels display more text lines.
-    ///
-    /// # Returns
-    ///
-    /// The number of text lines as an `i32`.
-    pub fn text_lines(&self) -> i32 {
-        match self {
-            ZoomLevel::ExtraSmall => 1,
-            ZoomLevel::Small => 1,
-            ZoomLevel::Medium => 2,
-            ZoomLevel::Large => 2,
-            ZoomLevel::ExtraLarge => 3,
-        }
-    }
-
-    /// Returns the CSS class name for this zoom level.
-    ///
-    /// Provides a CSS class name that can be used to apply specific styling
-    /// to UI elements based on the current zoom level.
-    ///
-    /// # Returns
-    ///
-    /// A static string slice representing the CSS class name.
-    pub fn css_class(&self) -> &'static str {
-        match self {
-            ZoomLevel::ExtraSmall => "zoom-extra-small",
-            ZoomLevel::Small => "zoom-small",
-            ZoomLevel::Medium => "zoom-medium",
-            ZoomLevel::Large => "zoom-large",
-            ZoomLevel::ExtraLarge => "zoom-extra-large",
-        }
-    }
 }
 
 impl Default for ZoomLevel {

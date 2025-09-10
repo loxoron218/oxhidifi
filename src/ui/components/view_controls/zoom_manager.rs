@@ -82,26 +82,6 @@ impl ZoomManager {
         }
     }
 
-    /// Returns the current zoom level.
-    ///
-    /// Retrieves the current zoom level from internal storage.
-    ///
-    /// # Returns
-    ///
-    /// The current `ZoomLevel` value.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use your_crate::ui::components::view_controls::{ZoomLevel, ZoomManager};
-    ///
-    /// let zoom_manager = ZoomManager::new(ZoomLevel::Large);
-    /// assert_eq!(zoom_manager.current_zoom_level(), ZoomLevel::Large);
-    /// ```
-    pub fn current_zoom_level(&self) -> ZoomLevel {
-        self.current_zoom_level.get()
-    }
-
     /// Sets the current zoom level and notifies the registered callback.
     ///
     /// Updates the internal zoom level and executes the registered callback
@@ -229,71 +209,5 @@ impl ZoomManager {
         F: Fn(ZoomLevel) + 'static,
     {
         *self.on_zoom_changed.borrow_mut() = Some(Box::new(callback));
-    }
-
-    /// Returns the cover size for the current zoom level.
-    ///
-    /// Delegates to the `ZoomLevel::cover_size()` method of the current zoom level
-    /// to determine the appropriate cover art size in pixels.
-    ///
-    /// # Returns
-    ///
-    /// The cover size in pixels as an `i32`.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use your_crate::ui::components::view_controls::{ZoomLevel, ZoomManager};
-    ///
-    /// let zoom_manager = ZoomManager::new(ZoomLevel::Medium);
-    /// let size = zoom_manager.cover_size();
-    /// assert_eq!(size, 128); // Assuming Medium zoom level returns 128
-    /// ```
-    pub fn cover_size(&self) -> i32 {
-        self.current_zoom_level.get().cover_size()
-    }
-
-    /// Returns the tile size for the current zoom level.
-    ///
-    /// Delegates to the `ZoomLevel::tile_size()` method of the current zoom level
-    /// to determine the appropriate tile size in pixels.
-    ///
-    /// # Returns
-    ///
-    /// The tile size in pixels as an `i32`.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use your_crate::ui::components::view_controls::{ZoomLevel, ZoomManager};
-    ///
-    /// let zoom_manager = ZoomManager::new(ZoomLevel::Large);
-    /// let size = zoom_manager.tile_size();
-    /// assert_eq!(size, 256); // Assuming Large zoom level returns 256
-    /// ```
-    pub fn tile_size(&self) -> i32 {
-        self.current_zoom_level.get().tile_size()
-    }
-
-    /// Returns the number of text lines for the current zoom level.
-    ///
-    /// Delegates to the `ZoomLevel::text_lines()` method of the current zoom level
-    /// to determine how many lines of text information should be displayed.
-    ///
-    /// # Returns
-    ///
-    /// The number of text lines as an `i32`.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use your_crate::ui::components::view_controls::{ZoomLevel, ZoomManager};
-    ///
-    /// let zoom_manager = ZoomManager::new(ZoomLevel::ExtraLarge);
-    /// let lines = zoom_manager.text_lines();
-    /// assert_eq!(lines, 3); // Assuming ExtraLarge zoom level returns 3
-    /// ```
-    pub fn text_lines(&self) -> i32 {
-        self.current_zoom_level.get().text_lines()
     }
 }
