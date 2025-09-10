@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, from_str, to_string_pretty, to_value};
 
 use crate::ui::components::view_controls::{
+    ZoomLevel,
     sorting_controls::types::SortOrder::{self, Album, Artist, DrValue, Year},
     view_mode::ViewMode::{self, GridView},
 };
@@ -49,6 +50,9 @@ pub struct Settings {
     /// The current view mode (grid or list view)
     #[serde(default)]
     pub view_mode: ViewMode,
+    /// The current zoom level for grid views
+    #[serde(default)]
+    pub current_zoom_level: ZoomLevel,
 }
 
 /// Provides default values for `Settings`.
@@ -65,6 +69,7 @@ impl Default for Settings {
             show_dr_badges: true,
             use_original_year: true,
             view_mode: GridView,
+            current_zoom_level: ZoomLevel::Medium,
         }
     }
 }

@@ -22,11 +22,11 @@ use crate::{
     data::scanner::library_ops::run_full_scan,
     ui::{
         components::{
-            config::load_settings,
+            config::{load_settings, save_settings},
             player_bar::PlayerBar,
             refresh::setup_library_refresh_channel,
             scan_feedback::create_scanning_label,
-            view_controls::{ZoomLevel::Medium, ZoomManager},
+            view_controls::{ZoomLevel, ZoomManager},
         },
         grids::{
             album_grid_rebuilder::rebuild_albums_grid_for_window,
@@ -107,7 +107,18 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     let player_bar = PlayerBar::new();
 
     // Create the zoom manager
-    let zoom_manager = Rc::new(ZoomManager::new(Medium));
+    let zoom_manager = Rc::new(ZoomManager::new(settings.current_zoom_level));
+
+    // Update screen info with the loaded zoom level values if not Medium
+    let screen_info = if settings.current_zoom_level != ZoomLevel::Medium {
+        let mut screen_info = screen_info;
+        let cover_size = settings.current_zoom_level.cover_size();
+        let tile_size = settings.current_zoom_level.tile_size();
+        screen_info.update_with_zoom(cover_size, tile_size);
+        screen_info
+    } else {
+        screen_info
+    };
 
     // `WindowSharedState` aggregates all `Rc<Cell<T>>` and `Rc<RefCell<T>>` managed state.
     // This centralizes mutable state management, making it easier to reason about data flow.
@@ -122,7 +133,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         show_dr_badges: Rc::new(Cell::new(settings.show_dr_badges)),
         use_original_year: Rc::new(Cell::new(settings.use_original_year)),
         zoom_manager,
-        current_zoom_level: Rc::new(Cell::new(Medium)),
+        current_zoom_level: Rc::new(Cell::new(settings.current_zoom_level)),
     };
 
     // Initialize `Rc<RefCell<Option<FlowBox>>>` and `Rc<RefCell<Option<Stack>>>` for grids and stacks
@@ -286,8 +297,13 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
             // Store the current zoom level
             current_zoom_level_clone.set(zoom_level);
 
+            // Save the new zoom level to settings
+            let mut settings = load_settings();
+            settings.current_zoom_level = zoom_level;
+            let _ = save_settings(&settings);
+
             // Update screen info with new zoom level values
-            if zoom_level == Medium {
+            if zoom_level == ZoomLevel::Medium {
                 // Reset to original screen dimensions for default zoom level
                 screen_info_clone.borrow_mut().reset_to_original();
             } else {
