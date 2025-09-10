@@ -14,7 +14,10 @@ use tokio_stream::{StreamExt, wrappers::UnboundedReceiverStream};
 use crate::{
     data::db::dr_sync::synchronize_dr_is_best_background,
     ui::{
-        components::{player_bar::PlayerBar, view_controls::sorting_controls::types::SortOrder},
+        components::{
+            player_bar::PlayerBar,
+            view_controls::{ZoomLevel, sorting_controls::types::SortOrder},
+        },
         grids::{
             album_grid_population::{sorting::sort_albums, ui_builder::create_album_tile},
             album_grid_state::{
@@ -45,12 +48,12 @@ pub mod sorting;
 /// * `sort_ascending` - A boolean indicating the overall sort direction (ascending/descending).
 /// * `sort_orders` - A `Rc<RefCell<Vec<SortOrder>>>` defining the multi-level sorting criteria.
 /// * `screen_info` - A `Rc<RefCell<ScreenInfo>>` providing screen dimensions for UI sizing.
-/// * `scanning_label` - A `gtk4::Label` used for scanning feedback.
 /// * `albums_inner_stack` - The `gtk4::Stack` managing the different states of the album grid.
 /// * `album_count_label` - A `gtk4::Label` to display the number of albums.
 /// * `show_dr_badges` - A `Rc<Cell<bool>>` indicating whether to show DR badges.
 /// * `use_original_year` - A `Rc<Cell<bool>>` indicating whether to use original release year.
 /// * `player_bar` - A `PlayerBar` instance for playback functionality.
+/// * `zoom_level` - The current zoom level to determine display density.
 pub async fn populate_albums_grid(
     albums_grid: &FlowBox,
     db_pool: Arc<SqlitePool>,
@@ -62,6 +65,7 @@ pub async fn populate_albums_grid(
     show_dr_badges: Rc<Cell<bool>>,
     use_original_year: Rc<Cell<bool>>,
     player_bar: PlayerBar,
+    zoom_level: ZoomLevel,
 ) {
     // A thread-local static to prevent multiple simultaneous population calls,
     // ensuring data consistency and preventing redundant work.
@@ -113,6 +117,7 @@ pub async fn populate_albums_grid(
                     use_original_year.clone(),
                     player_bar.clone(),
                     db_pool.clone(),
+                    zoom_level,
                 )
                 .await;
             }
@@ -148,6 +153,7 @@ pub async fn populate_albums_grid(
                         use_original_year.clone(),
                         player_bar.clone(),
                         db_pool.clone(),
+                        zoom_level,
                     )
                     .await;
                 } else {
@@ -192,6 +198,7 @@ async fn process_albums_in_batches(
     use_original_year: Rc<Cell<bool>>,
     player_bar: PlayerBar,
     db_pool: Arc<SqlitePool>,
+    zoom_level: ZoomLevel,
 ) {
     // BATCH_SIZE: The number of album tiles to process before yielding control
     // back to the GTK main thread. This helps prevent UI freezes during large
@@ -215,6 +222,7 @@ async fn process_albums_in_batches(
             &use_original_year_clone_for_loop,
             &player_bar,
             db_pool.clone(),
+            zoom_level,
         );
 
         // Insert the new album tile into the FlowBox.

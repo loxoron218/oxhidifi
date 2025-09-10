@@ -72,6 +72,20 @@ pub(crate) fn format_sample_rate_khz(sample_rate: u32) -> String {
     format!("{} kHz", format_khz_display(sample_rate))
 }
 
+/// Formats sample rate as kHz without the "kHz" suffix (e.g., "44.1").
+///
+/// This function is used when displaying sample rate information in contexts
+/// where the "kHz" suffix should be omitted for space reasons.
+///
+/// # Arguments
+/// * `sample_rate` - The sample rate in Hertz (u32).
+///
+/// # Returns
+/// A `String` representing the sample rate in kHz without units.
+pub(crate) fn format_sample_rate_value(sample_rate: u32) -> String {
+    format_khz_display(sample_rate)
+}
+
 /// Formats bit depth and sample rate into a combined string (e.g., "24-Bit/96 kHz").
 ///
 /// This function handles various combinations of optional bit depth and sample rate

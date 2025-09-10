@@ -11,7 +11,10 @@ use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::{
-    ui::components::{player_bar::PlayerBar, view_controls::sorting_controls::types::SortOrder},
+    ui::components::{
+        player_bar::PlayerBar,
+        view_controls::{ZoomLevel, sorting_controls::types::SortOrder},
+    },
     utils::screen::ScreenInfo,
 };
 
@@ -45,6 +48,7 @@ pub struct RefreshService {
     pub column_view_widget: Rc<RefCell<Option<ColumnView>>>,
     pub previous_show_dr_badges: Cell<bool>,
     pub window: Window,
+    pub current_zoom_level: Option<Rc<Cell<ZoomLevel>>>,
 }
 
 impl RefreshService {
@@ -74,6 +78,7 @@ impl RefreshService {
         use_original_year: Rc<Cell<bool>>,
         player_bar: PlayerBar,
         window: Window,
+        current_zoom_level: Option<Rc<Cell<ZoomLevel>>>,
     ) -> Self {
         Self {
             db_pool,
@@ -101,6 +106,7 @@ impl RefreshService {
             column_view_widget: Rc::new(RefCell::new(None)),
             previous_show_dr_badges: Cell::new(show_dr_badges.get()),
             window,
+            current_zoom_level,
         }
     }
 

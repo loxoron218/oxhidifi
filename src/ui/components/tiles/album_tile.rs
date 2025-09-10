@@ -7,7 +7,7 @@ use std::{
 
 use glib::{MainContext, prelude::ObjectExt};
 use gtk4::{
-    Align::{Center, End, Fill, Start},
+    Align::{Center, End, Start},
     Box, Button, EventControllerMotion, Fixed, FlowBoxChild, GestureClick,
     Orientation::{Horizontal, Vertical},
     Overlay,

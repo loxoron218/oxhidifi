@@ -50,6 +50,7 @@ pub fn setup_library_refresh_channel(
     use_original_year: Rc<Cell<bool>>,
     player_bar: PlayerBar,
     window: Window,
+    current_zoom_level: Option<Rc<Cell<ZoomLevel>>>,
 ) -> (
     UnboundedSender<()>,
     UnboundedReceiver<()>,
@@ -82,6 +83,7 @@ pub fn setup_library_refresh_channel(
         use_original_year,
         player_bar,
         window,
+        current_zoom_level,
     ));
 
     // Create the refresh UI closure from the service

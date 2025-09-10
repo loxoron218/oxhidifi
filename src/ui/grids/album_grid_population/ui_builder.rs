@@ -19,7 +19,7 @@ use sqlx::SqlitePool;
 use crate::{
     data::db::crud::fetch_tracks_by_album,
     ui::{
-        components::player_bar::PlayerBar,
+        components::{player_bar::PlayerBar, view_controls::ZoomLevel},
         grids::{
             album_grid_state::AlbumGridItem,
             album_grid_utils::{
@@ -29,7 +29,7 @@ use crate::{
     },
     utils::{
         best_dr_persistence::{AlbumKey, DrValueStore},
-        formatting::{format_sample_rate_khz, format_year_info},
+        formatting::{format_sample_rate_khz, format_sample_rate_value, format_year_info},
         image::AsyncImageLoader,
         screen::ScreenInfo,
     },
@@ -46,6 +46,7 @@ use crate::{
 /// * `show_dr_badges` - A `Rc<Cell<bool>>` indicating whether to show DR badges
 /// * `use_original_year` - A `Rc<Cell<bool>>` indicating whether to use original release year
 /// * `player_bar` - A `PlayerBar` instance for playback functionality
+/// * `zoom_level` - The current zoom level to determine display density
 ///
 /// # Returns
 /// A `FlowBoxChild` widget with the complete album tile UI
@@ -56,6 +57,7 @@ pub fn create_album_tile(
     use_original_year: &Rc<Cell<bool>>,
     player_bar: &PlayerBar,
     db_pool: Arc<SqlitePool>,
+    zoom_level: ZoomLevel,
 ) -> FlowBoxChild {
     let cover_size = screen_info.borrow().cover_size;
     let tile_size = screen_info.borrow().tile_size;
@@ -101,26 +103,51 @@ pub fn create_album_tile(
             // This closure only runs if `album_info.format` is Some.
             let format_caps = format_str.to_uppercase();
 
-            // First, determine only the part of the string that changes.
-            let tech_details = match (album_info.bit_depth, album_info.sample_rate) {
-                (Some(bit), Some(freq)) => {
-                    format!(" {}/{}", bit, format_sample_rate_khz(freq as u32))
-                }
-                (None, Some(freq)) => format!(" {}", format_sample_rate_khz(freq as u32)),
-                _ => String::new(),
-            };
+            // For ExtraSmall zoom level, only show the format without bit depth/sample rate
+            if zoom_level == ZoomLevel::ExtraSmall {
+                format_caps
+            } else {
+                // First, determine only the part of the string that changes.
+                let tech_details = match (album_info.bit_depth, album_info.sample_rate) {
+                    (Some(bit), Some(freq)) => {
+                        // For Small zoom level, don't show "kHz" suffix
+                        match zoom_level {
+                            ZoomLevel::Small => {
+                                format!(" {}/{}", bit, format_sample_rate_value(freq as u32))
+                            }
+                            _ => {
+                                format!(" {}/{}", bit, format_sample_rate_khz(freq as u32))
+                            }
+                        }
+                    }
+                    (None, Some(freq)) => {
+                        // For Small zoom level, don't show "kHz" suffix
+                        match zoom_level {
+                            ZoomLevel::Small => {
+                                format!(" {}", format_sample_rate_value(freq as u32))
+                            }
+                            _ => {
+                                format!(" {}", format_sample_rate_khz(freq as u32))
+                            }
+                        }
+                    }
+                    _ => String::new(),
+                };
 
-            // Combine the static and dynamic parts in one place.
-            format!("{}{}", format_caps, tech_details)
-
-            // If `album_info.format` was None, this provides an empty String.
+                // Combine the static and dynamic parts in one place.
+                format!("{}{}", format_caps, tech_details)
+            }
         })
         .unwrap_or_default();
     let format_label = create_styled_label(
         &format_line,
         &["album-format-label"],
         Some(((cover_size - 16) / 10).max(8)),
-        Some(EllipsizeMode::End),
+        // Only ellipsize at ExtraSmall zoom level, not at Small or larger
+        match zoom_level {
+            ZoomLevel::ExtraSmall => Some(EllipsizeMode::End),
+            _ => None,
+        },
         false,
         None,
         None,
@@ -136,6 +163,9 @@ pub fn create_album_tile(
         album_info.original_release_date.as_deref(),
         use_original_year.get(),
     );
+
+    // Create year label but only show it for Medium and larger zoom levels
+    // At ExtraSmall and Small zoom levels, hiding the year helps maintain visual consistency
     let year_label = create_styled_label(
         &year_text,
         &["album-format-label"],
@@ -146,6 +176,10 @@ pub fn create_album_tile(
         None,
     );
     year_label.set_halign(End);
+    year_label.set_visible(match zoom_level {
+        ZoomLevel::ExtraSmall | ZoomLevel::Small => false,
+        _ => true,
+    });
 
     // Do not allow year label to expand
     year_label.set_hexpand(false);

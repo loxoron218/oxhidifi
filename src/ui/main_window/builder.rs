@@ -185,6 +185,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         shared_state.use_original_year.clone(),
         widgets.player_bar.clone(),
         widgets.window.clone().into(),
+        Some(shared_state.current_zoom_level.clone()),
     );
 
     // Get the albums stack from the cell (always available)
