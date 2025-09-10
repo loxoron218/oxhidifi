@@ -42,6 +42,7 @@ pub fn create_columns(
     // Expanding column with "Album" title
     let name_column = ColumnViewColumn::builder()
         .title("Album")
+        .expand(true)
         .resizable(true)
         .build();
 
@@ -56,6 +57,7 @@ pub fn create_columns(
     // Expanding column with "Artist" title
     let artist_column = ColumnViewColumn::builder()
         .title("Artist")
+        .expand(true)
         .resizable(true)
         .build();
 
