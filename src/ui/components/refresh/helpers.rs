@@ -77,6 +77,10 @@ impl RefreshService {
                 self.show_dr_badges.clone(),
                 self.use_original_year.clone(),
                 self.player_bar.clone(),
+                self.current_zoom_level
+                    .as_ref()
+                    .map(|zoom| zoom.get())
+                    .unwrap_or_default(),
             );
         }
     }

@@ -22,7 +22,7 @@ use tokio::sync::mpsc::UnboundedSender;
 use crate::{
     data::db::crud::fetch_artist_by_id,
     ui::{
-        components::player_bar::PlayerBar,
+        components::{player_bar::PlayerBar, view_controls::ZoomLevel},
         pages::artist::{
             components::album_grid::build_album_card,
             data::artist_data::fetch_album_display_info_by_artist,
@@ -74,6 +74,7 @@ pub async fn artist_page(
     use_original_year: Rc<Cell<bool>>,
     player_bar: PlayerBar,
     screen_info: Rc<RefCell<ScreenInfo>>,
+    current_zoom_level: ZoomLevel,
 ) {
     // Generate a unique page name for this artist
     let page_name = format!("artist_{}", artist_id);
@@ -176,6 +177,9 @@ pub async fn artist_page(
             show_dr_badges.clone(),
             use_original_year.clone(),
             player_bar.clone(),
+            // Empty search text for artist page
+            "",
+            current_zoom_level,
         );
 
         // Add the album card to the flow box

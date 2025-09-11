@@ -21,7 +21,9 @@ use tokio::sync::mpsc::UnboundedSender;
 use crate::{
     ui::{
         components::{
-            player_bar::PlayerBar, tiles::helpers::create_album_label, tiles::text_utils::highlight,
+            player_bar::PlayerBar,
+            tiles::{helpers::create_album_label, text_utils::highlight},
+            view_controls::ZoomLevel,
         },
         pages::artist::artist_page::artist_page,
     },
@@ -50,6 +52,7 @@ use crate::{
 /// - `use_original_year`: Flag for choosing between original and release years
 /// - `player_bar`: Shared player control bar component
 /// - `screen_info`: Screen information for calculating cover and tile sizes
+/// - `current_zoom_level`: Current zoom level for consistent sizing across views
 ///
 /// # Returns
 /// A `FlowBoxChild` widget containing the complete artist tile UI
@@ -69,6 +72,7 @@ pub fn create_artist_tile(
     use_original_year: Rc<Cell<bool>>,
     player_bar: PlayerBar,
     screen_info: Rc<RefCell<ScreenInfo>>,
+    current_zoom_level: ZoomLevel,
 ) -> FlowBoxChild {
     // Create the default avatar icon for the artist
     let icon = Image::from_icon_name("avatar-default-symbolic");
@@ -164,6 +168,7 @@ pub fn create_artist_tile(
                 use_original_year.clone(),
                 player_bar.clone(),
                 screen_info.clone(),
+                current_zoom_level,
             ));
         }
     });

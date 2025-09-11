@@ -27,11 +27,12 @@ use crate::{
             player_bar::PlayerBar,
             tiles::helpers::{create_album_cover, create_album_label, create_dr_overlay},
             tiles::text_utils::highlight,
+            view_controls::ZoomLevel::{self, ExtraSmall, Small},
         },
         grids::album_grid_state::AlbumGridItem,
         pages::album::album_page::album_page,
     },
-    utils::formatting::{format_sample_rate_khz, format_year_info},
+    utils::formatting::{format_sample_rate_khz, format_sample_rate_value, format_year_info},
 };
 
 /// Creates a `FlowBoxChild` containing the UI representation of an album.
@@ -73,6 +74,7 @@ pub fn create_album_tile(
     show_dr_badges: Rc<Cell<bool>>,
     use_original_year: Rc<Cell<bool>>,
     player_bar: PlayerBar,
+    zoom_level: ZoomLevel,
 ) -> FlowBoxChild {
     // Create and style the album title label with search highlighting
     let title_label = {
@@ -116,20 +118,43 @@ pub fn create_album_tile(
         .format
         .as_ref()
         .map(|format_str| {
-            // This closure only runs if `album.format` is Some.
+            // Convert format to uppercase for consistent display
             let format_caps = format_str.to_uppercase();
 
-            // First, determine only the part of the string that changes.
-            let tech_details = match (album.bit_depth, album.sample_rate) {
-                (Some(bit), Some(freq)) => {
-                    format!(" {}/{}", bit, format_sample_rate_khz(freq as u32))
-                }
-                (None, Some(freq)) => format!(" {}", format_sample_rate_khz(freq as u32)),
-                _ => String::new(),
-            };
+            // For ExtraSmall zoom level, only show the format without bit depth/sample rate
+            if zoom_level == ExtraSmall {
+                format_caps
+            } else {
+                // First, determine only the part of the string that changes.
+                let tech_details = match (album.bit_depth, album.sample_rate) {
+                    (Some(bit), Some(freq)) => {
+                        // For Small zoom level, don't show "kHz" suffix
+                        match zoom_level {
+                            Small => {
+                                format!(" {}/{}", bit, format_sample_rate_value(freq as u32))
+                            }
+                            _ => {
+                                format!(" {}/{}", bit, format_sample_rate_khz(freq as u32))
+                            }
+                        }
+                    }
+                    (None, Some(freq)) => {
+                        // For Small zoom level, don't show "kHz" suffix
+                        match zoom_level {
+                            Small => {
+                                format!(" {}", format_sample_rate_value(freq as u32))
+                            }
+                            _ => {
+                                format!(" {}", format_sample_rate_khz(freq as u32))
+                            }
+                        }
+                    }
+                    _ => String::new(),
+                };
 
-            // Combine the static and dynamic parts in one place.
-            format!("{}{}", format_caps, tech_details)
+                // Combine the static and dynamic parts in one place.
+                format!("{}{}", format_caps, tech_details)
+            }
         })
         // If `album.format` was None, this provides an empty String.
         .unwrap_or_default();
@@ -139,7 +164,11 @@ pub fn create_album_tile(
         &format_line,
         &["album-format-label"],
         Some(((cover_size - 16) / 10).max(8)),
-        Some(EllipsizeMode::End),
+        // Only ellipsize at ExtraSmall zoom level, not at Small or larger
+        match zoom_level {
+            ExtraSmall => Some(EllipsizeMode::End),
+            _ => None,
+        },
         false,
         None,
         None,
@@ -170,6 +199,10 @@ pub fn create_album_tile(
     );
     year_label.set_halign(End);
     year_label.set_hexpand(false);
+    year_label.set_visible(match zoom_level {
+        ExtraSmall | Small => false,
+        _ => true,
+    });
 
     // Create album cover picture from cached image file
     let cover = create_album_cover(album.cover_art.as_deref().map(Path::new), cover_size);

@@ -12,9 +12,11 @@ use tokio::sync::mpsc::UnboundedSender;
 use tokio_stream::{StreamExt, wrappers::UnboundedReceiverStream};
 
 use crate::{
-    data::db::dr_sync::synchronize_dr_is_best_from_store,
+    data::{db::dr_sync::synchronize_dr_is_best_from_store, models::Artist},
     ui::{
-        components::{player_bar::PlayerBar, tiles::artist_tile::create_artist_tile},
+        components::{
+            player_bar::PlayerBar, tiles::artist_tile::create_artist_tile, view_controls::ZoomLevel,
+        },
         grids::async_data_loader::{DataLoaderMessage, spawn_artist_loader},
     },
     utils::screen::ScreenInfo,
@@ -42,6 +44,7 @@ use crate::{
 /// * `sender` - An `UnboundedSender<()>` for sending signals (e.g., for UI refreshes).
 /// * `nav_history` - A `Rc<RefCell<Vec<String>>>` to manage navigation history.
 /// * `artists_inner_stack` - The `gtk4::Stack` that manages the states of the artists view.
+/// * `current_zoom_level` - The current zoom level for consistent sizing across views.
 pub fn populate_artist_grid(
     artist_grid: &FlowBox,
     db_pool: Arc<SqlitePool>,
@@ -57,6 +60,7 @@ pub fn populate_artist_grid(
     show_dr_badges: Rc<Cell<bool>>,
     use_original_year: Rc<Cell<bool>>,
     player_bar: PlayerBar,
+    current_zoom_level: ZoomLevel,
 ) {
     // `thread_local!` is used to prevent multiple concurrent calls to this function,
     // which could lead to race conditions or unnecessary re-population of the grid.
@@ -97,7 +101,7 @@ pub fn populate_artist_grid(
         let mut stream = UnboundedReceiverStream::new(receiver);
 
         // Variables to track state
-        let mut all_artists: Vec<crate::data::models::Artist> = Vec::new();
+        let mut all_artists: Vec<Artist> = Vec::new();
 
         // Process messages from the async loader
         while let Some(message) = stream.next().await {
@@ -110,7 +114,6 @@ pub fn populate_artist_grid(
                     update_artist_grid_ui(
                         &artist_grid,
                         &all_artists,
-                        sort_ascending,
                         &stack_rc,
                         &left_btn_stack_rc,
                         &right_btn_box_rc,
@@ -121,6 +124,7 @@ pub fn populate_artist_grid(
                         &use_original_year,
                         &player_bar,
                         db_pool.clone(),
+                        current_zoom_level,
                     )
                     .await;
                 }
@@ -157,7 +161,6 @@ pub fn populate_artist_grid(
                         update_artist_grid_ui(
                             &artist_grid,
                             &all_artists,
-                            sort_ascending,
                             &stack_rc,
                             &left_btn_stack_rc,
                             &right_btn_box_rc,
@@ -168,6 +171,7 @@ pub fn populate_artist_grid(
                             &use_original_year,
                             &player_bar,
                             db_pool.clone(),
+                            current_zoom_level,
                         )
                         .await;
 
@@ -201,8 +205,7 @@ pub fn populate_artist_grid(
 /// Updates the artist grid UI with the provided artists
 async fn update_artist_grid_ui(
     artist_grid: &FlowBox,
-    artists: &[crate::data::models::Artist],
-    _sort_ascending: bool,
+    artists: &[Artist],
     stack_rc: &Rc<ViewStack>,
     left_btn_stack_rc: &Rc<ViewStack>,
     right_btn_box_rc: &Rc<Clamp>,
@@ -213,6 +216,7 @@ async fn update_artist_grid_ui(
     use_original_year: &Rc<Cell<bool>>,
     player_bar: &PlayerBar,
     db_pool: Arc<SqlitePool>,
+    current_zoom_level: ZoomLevel,
 ) {
     // Get screen info for tile sizing.
     let cover_size = screen_info.borrow().cover_size;
@@ -241,6 +245,7 @@ async fn update_artist_grid_ui(
             use_original_year.clone(),
             player_bar.clone(),
             screen_info.clone(),
+            current_zoom_level,
         ));
         artist_grid.insert(&*tile, -1);
     }

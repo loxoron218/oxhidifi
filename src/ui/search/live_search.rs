@@ -17,6 +17,7 @@ use crate::{
         components::{
             player_bar::PlayerBar,
             tiles::{album_tile::create_album_tile, artist_tile::create_artist_tile},
+            view_controls::ZoomLevel,
         },
         search::search_utils::{clear_grid, debounce_search, sort_albums_by_relevance},
     },
@@ -49,6 +50,7 @@ pub fn connect_live_search(
     use_original_year: Rc<Cell<bool>>,
     player_bar: PlayerBar,
     screen_info: Rc<RefCell<ScreenInfo>>,
+    current_zoom_level: ZoomLevel,
 ) {
     // Clone shared resources for the closure to avoid moving them into the closure
     // and allow them to be used across multiple async operations.
@@ -174,6 +176,7 @@ pub fn connect_live_search(
                                         show_dr_badges.clone(),
                                         use_original_year.clone(),
                                         player_bar_clone_inner.clone(),
+                                        current_zoom_level,
                                     ));
                                     albums_grid.insert(&*flow_child, -1);
                                 }
@@ -214,6 +217,7 @@ pub fn connect_live_search(
                                         use_original_year.clone(),
                                         player_bar_clone_inner.clone(),
                                         screen_info_async.clone(),
+                                        current_zoom_level,
                                     ));
                                     artist_grid.insert(&*flow_child, -1);
                                 }

@@ -15,6 +15,7 @@ use crate::ui::{
         },
         player_bar::PlayerBar,
         refresh::RefreshService,
+        view_controls::ZoomLevel,
     },
     grids::artist_grid_rebuilder::rebuild_artist_grid_for_window,
     main_window::{state::WindowSharedState, widgets::WindowWidgets},
@@ -337,6 +338,7 @@ pub fn connect_artist_navigation_handler(
     show_dr_badges_cloned: Rc<Cell<bool>>,
     use_original_year_cloned: Rc<Cell<bool>>,
     player_bar_clone: PlayerBar,
+    current_zoom_level: ZoomLevel,
 ) {
     // Only connect navigation if the artist grid exists
     if let Some(artist_grid) = widgets.artist_grid_cell.borrow().as_ref() {
@@ -386,6 +388,7 @@ pub fn connect_artist_navigation_handler(
                         use_original_year,
                         player_bar,
                         screen_info_async,
+                        current_zoom_level,
                     )
                     .await;
                 }

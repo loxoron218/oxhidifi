@@ -24,13 +24,17 @@ use crate::{
     ui::{
         components::{
             player_bar::PlayerBar,
-            tiles::helpers::{create_album_cover, create_album_label, create_dr_overlay},
+            tiles::{
+                helpers::{create_album_cover, create_album_label, create_dr_overlay},
+                text_utils::highlight,
+            },
+            view_controls::ZoomLevel::{self, ExtraSmall, Small},
         },
         pages::{
             album::album_page::album_page, artist::data::artist_data::AlbumDisplayInfoWithYear,
         },
     },
-    utils::formatting::format_sample_rate_khz,
+    utils::formatting::{format_sample_rate_khz, format_sample_rate_value, format_year_info},
 };
 
 /// Build an album card widget for the artist page.
@@ -70,35 +74,55 @@ pub fn build_album_card(
     show_dr_badges: Rc<Cell<bool>>,
     use_original_year: Rc<Cell<bool>>,
     player_bar: PlayerBar,
+    search_text: &str,
+    zoom_level: ZoomLevel,
 ) -> FlowBoxChild {
-    let title_label = create_album_label(
-        &album.title,
-        &["album-title-label"],
-        Some(((cover_size - 16) / 10).max(8)),
+    // Create and style the album title label with search highlighting
+    let title_label = {
+        let label = create_album_label(
+            &highlight(&album.title, search_text),
+            &["album-title-label"],
+            Some(((cover_size - 16) / 10).max(8)),
+            Some(EllipsizeMode::End),
+            true,
+            Some(WordChar),
+            Some(2),
+            // use_markup: true because highlight is used
+            true,
+        );
+        label.set_size_request(cover_size - 16, -1);
+
+        // Align to the bottom of its allocated space
+        label.set_valign(End);
+        label
+    };
+
+    // Extract and format the release year based on user preference for original vs. release year
+    let year_text = format_year_info(
+        album.year,
+        album.original_release_date.as_deref(),
+        use_original_year.get(),
+    );
+
+    // Create and style the year label for displaying release year information
+    let year_label = create_album_label(
+        &year_text,
+        &["album-format-label"],
+        Some(8),
         Some(EllipsizeMode::End),
-        true,
-        Some(WordChar),
-        Some(2),
+        false,
+        None,
+        None,
         // use_markup: false for plain text
         false,
     );
-    title_label.set_size_request(cover_size - 16, -1);
-    title_label.set_halign(Start);
-    title_label.set_xalign(0.0);
-    let artist_label = create_album_label(
-        &album.artist,
-        &["album-artist-label"],
-        Some(18),
-        Some(EllipsizeMode::End),
-        false,
-        None,
-        None,
-        // Explicitly set use_markup to false
-        false,
-    );
 
-    // Ensure this class is applied
-    artist_label.add_css_class("album-artist-label");
+    year_label.set_halign(End);
+    year_label.set_hexpand(false);
+    year_label.set_visible(match zoom_level {
+        ExtraSmall | Small => false,
+        _ => true,
+    });
 
     // Format the audio quality line (e.g., "FLAC 24/96")
     let format_line = album
@@ -108,23 +132,54 @@ pub fn build_album_card(
             // Convert format to uppercase for consistent display
             let format_caps = format_str.to_uppercase();
 
-            // Add technical details if available (bit depth and sample rate)
-            let tech_details = match (album.bit_depth, album.sample_rate) {
-                (Some(bit), Some(freq)) => format!(" {}/{}", bit, format_sample_rate_khz(freq)),
-                (None, Some(freq)) => format!(" {}", format_sample_rate_khz(freq)),
-                _ => String::new(),
-            };
+            // For ExtraSmall zoom level, only show the format without bit depth/sample rate
+            if zoom_level == ExtraSmall {
+                format_caps
+            } else {
+                // First, determine only the part of the string that changes.
+                let tech_details = match (album.bit_depth, album.sample_rate) {
+                    (Some(bit), Some(freq)) => {
+                        // For Small zoom level, don't show "kHz" suffix
+                        match zoom_level {
+                            Small => {
+                                format!(" {}/{}", bit, format_sample_rate_value(freq))
+                            }
+                            _ => {
+                                format!(" {}/{}", bit, format_sample_rate_khz(freq))
+                            }
+                        }
+                    }
+                    (None, Some(freq)) => {
+                        // For Small zoom level, don't show "kHz" suffix
+                        match zoom_level {
+                            Small => {
+                                format!(" {}", format_sample_rate_value(freq))
+                            }
+                            _ => {
+                                format!(" {}", format_sample_rate_khz(freq))
+                            }
+                        }
+                    }
+                    _ => String::new(),
+                };
 
-            // Combine format and technical details
-            format!("{}{}", format_caps, tech_details)
+                // Combine the static and dynamic parts in one place.
+                format!("{}{}", format_caps, tech_details)
+            }
         })
-        // Provide empty string if format is not available
+        // If `album.format` was None, this provides an empty String.
         .unwrap_or_default();
+
+    // Create and style the format label for displaying audio format information
     let format_label = create_album_label(
         &format_line,
         &["album-format-label"],
-        None,
-        None,
+        Some(((cover_size - 16) / 10).max(8)),
+        // Only ellipsize at ExtraSmall zoom level, not at Small or larger
+        match zoom_level {
+            ExtraSmall => Some(EllipsizeMode::End),
+            _ => None,
+        },
         false,
         None,
         None,
@@ -133,32 +188,6 @@ pub fn build_album_card(
     );
     format_label.set_halign(Start);
     format_label.set_hexpand(true);
-
-    // Extract year from original release date string (e.g., "2023-05-15" -> "2023")
-    // `as_deref` converts Option<String> to Option<&str> safely.
-    let year_from_date = album
-        .original_release_date
-        .as_deref()
-        .and_then(|s| s.split('-').next());
-
-    // Get the year from the integer field, if available.
-    let year_from_num = album.year;
-
-    // Determine the final year string based on user preference for original vs. release year.
-    // Convert both potential year sources to strings for consistent handling.
-    let date_str_opt = year_from_date.map(str::to_string);
-    let num_str_opt = year_from_num.map(|y| y.to_string());
-
-    // Select year based on preference: original year first if enabled, otherwise release year
-    let year_text = if use_original_year.get() {
-        // Prefer original release date year, fallback to album year
-        date_str_opt.or(num_str_opt)
-    } else {
-        // Prefer album year, fallback to original release date year
-        num_str_opt.or(date_str_opt)
-    }
-    // Default to empty string if neither is available
-    .unwrap_or_default();
 
     // Main container for the album tile with vertical orientation
     let album_tile_box = Box::builder().orientation(Vertical).spacing(2).build();
@@ -291,42 +320,27 @@ pub fn build_album_card(
     cover_fixed.put(&overlay, 0.0, 0.0);
     album_tile_box.append(&cover_fixed);
 
-    // Create container for title with fixed height to ensure consistent layout
-    // Height of 40px allows for exactly two lines of text with proper spacing
+    // Box for title, with explicit height for two lines of text
     let title_area_box = Box::builder()
         .orientation(Vertical)
         .height_request(40)
         .margin_top(12)
         .build();
-    title_label.set_valign(End);
     title_area_box.append(&title_label);
     album_tile_box.append(&title_area_box);
-    album_tile_box.append(&artist_label);
 
-    // Create year label with the determined year text
-    let year_label = create_album_label(
-        &year_text,
-        &["album-format-label"],
-        None,
-        None,
-        false,
-        None,
-        None,
-        // Explicitly set use_markup to false for plain text
-        false,
-    );
-    year_label.set_halign(End);
-    year_label.set_hexpand(false);
-
-    // Create horizontal container for format and year information
+    // Container to constrain metadata box width
+    let metadata_container = Box::builder().orientation(Vertical).hexpand(false).build();
+    metadata_container.set_size_request(cover_size - 16, -1);
     let metadata_box = Box::builder()
         .orientation(Horizontal)
         .spacing(0)
-        .hexpand(true)
+        .hexpand(false)
         .build();
     metadata_box.append(&format_label);
     metadata_box.append(&year_label);
-    album_tile_box.append(&metadata_box);
+    metadata_container.append(&metadata_box);
+    album_tile_box.append(&metadata_container);
     album_tile_box.set_css_classes(&["album-tile"]);
 
     // Create FlowBoxChild container and set the album tile as its child

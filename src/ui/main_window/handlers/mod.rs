@@ -143,6 +143,7 @@ pub fn connect_all_handlers(
         shared_state.show_dr_badges.clone(),
         shared_state.use_original_year.clone(),
         widgets.player_bar.clone(),
+        shared_state.current_zoom_level.get(),
     );
 
     // Setup live monitor refresh for automatic UI updates
