@@ -43,6 +43,8 @@ pub struct ViewControlButton {
     sorting_widget: RefCell<Option<Rc<Box>>>,
     /// Reference to the zoom controls widget for dynamic updates
     zoom_controls_widget: RefCell<Option<Rc<Box>>>,
+    /// Reference to the separator after the zoom controls
+    zoom_separator: RefCell<Option<Rc<Separator>>>,
 }
 
 impl ViewControlButton {
@@ -62,10 +64,6 @@ impl ViewControlButton {
         // Create a container box for the popover content
         let popover_box = Box::builder().orientation(Vertical).spacing(6).build();
 
-        // Add a separator for the next section (placeholder for zoom controls)
-        let separator = Separator::new(Horizontal);
-        popover_box.append(&separator);
-
         // Create a regular popover with our custom content
         let popover = Popover::builder().child(&popover_box).build();
 
@@ -80,6 +78,7 @@ impl ViewControlButton {
             column_view_zoom_manager: RefCell::new(None),
             sorting_widget: RefCell::new(None),
             zoom_controls_widget: RefCell::new(None),
+            zoom_separator: RefCell::new(None),
         };
 
         // Update the main button to reflect the initial view mode
@@ -288,29 +287,11 @@ impl ViewControlButton {
                     if let Some(existing_zoom_widget) = self.zoom_controls_widget.borrow().as_ref()
                     {
                         popover_box.remove(existing_zoom_widget.as_ref());
+                    }
 
-                        // Also remove the separator that comes after the zoom controls
-                        let mut children = Vec::new();
-                        let mut child = popover_box.first_child();
-                        while let Some(c) = child {
-                            children.push(c.clone());
-                            child = c.next_sibling();
-                        }
-
-                        // Find and remove the separator that comes after our zoom controls
-                        // (it should be the next sibling after the zoom controls)
-                        for (i, child) in children.iter().enumerate() {
-                            if child == existing_zoom_widget.as_ref() {
-                                if i + 1 < children.len() {
-                                    if let Some(separator) =
-                                        children[i + 1].downcast_ref::<Separator>()
-                                    {
-                                        popover_box.remove(separator);
-                                    }
-                                }
-                                break;
-                            }
-                        }
+                    // Remove existing separator if it exists
+                    if let Some(existing_separator) = self.zoom_separator.borrow().as_ref() {
+                        popover_box.remove(existing_separator.as_ref());
                     }
 
                     // Create the appropriate zoom controls based on current view mode
@@ -343,12 +324,15 @@ impl ViewControlButton {
                     let zoom_widget_rc = Rc::new(zoom_widget);
                     *self.zoom_controls_widget.borrow_mut() = Some(zoom_widget_rc.clone());
 
-                    // Add a separator after the zoom controls
+                    // Create a separator after the zoom controls
                     let separator = Separator::new(Horizontal);
+                    let separator_rc = Rc::new(separator);
+                    *self.zoom_separator.borrow_mut() = Some(separator_rc.clone());
 
-                    // Insert the zoom controls at the beginning of the popover
+                    // Insert the zoom controls and separator at the beginning of the popover
                     popover_box.insert_child_after(zoom_widget_rc.as_ref(), None::<&Widget>);
-                    popover_box.insert_child_after(&separator, Some(zoom_widget_rc.as_ref()));
+                    popover_box
+                        .insert_child_after(separator_rc.as_ref(), Some(zoom_widget_rc.as_ref()));
                 }
             }
         }
