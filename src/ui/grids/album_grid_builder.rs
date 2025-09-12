@@ -18,7 +18,9 @@ use libadwaita::{
 use crate::ui::{
     components::{
         scan_feedback::create_scanning_label,
-        view_controls::list_view::column_view::create_column_view_with_activate_and_year_setting,
+        view_controls::list_view::column_view::{
+            create_column_view_with_activate_and_year_setting, zoom_manager::ColumnViewZoomManager,
+        },
     },
     grids::album_grid_state::AlbumGridState::{Empty, Loading, NoResults, Populated, Scanning},
 };
@@ -200,6 +202,7 @@ pub fn build_albums_list_view<F>(
     show_dr_badges: Rc<Cell<bool>>,
     add_music_button: &Button,
     on_activate: Option<F>,
+    zoom_manager: Option<Rc<ColumnViewZoomManager>>,
 ) -> (Stack, ScrolledWindow, ListStore, ColumnView)
 where
     F: Fn(&ColumnView, u32) + 'static,
@@ -242,6 +245,7 @@ where
             on_activate,
             use_original_year,
             show_dr_badges,
+            zoom_manager,
         );
 
     // --- Scanning State ---

@@ -19,21 +19,32 @@ use super::super::cell_factories::{
 /// * `column_view` - A reference to the [`ColumnView`] to add columns to
 /// * `use_original_year` - Whether to display the original release year instead of the release year
 /// * `show_dr_badges` - A `Rc<Cell<bool>>` indicating whether to show DR badges
+use super::zoom_manager::ColumnViewZoomManager;
+
 pub fn create_columns(
     column_view: &ColumnView,
     use_original_year: bool,
     show_dr_badges: Rc<Cell<bool>>,
+    zoom_manager: Option<Rc<ColumnViewZoomManager>>,
 ) {
+    // Get the current zoom level or use default
+    let (cover_width, dr_width) = if let Some(ref zoom_manager) = zoom_manager {
+        zoom_manager.current_zoom_level().column_widths()
+    } else {
+        // Default column widths
+        (60, 50)
+    };
+
     // Cover column - displays album cover art
     // Fixed width column with no title (cover art is self-explanatory)
     let cover_column = ColumnViewColumn::builder()
         .title("")
         .expand(false)
-        .fixed_width(60)
+        .fixed_width(cover_width)
         .build();
 
     // Configure the cell factory for displaying cover images
-    create_cover_image_column(&cover_column);
+    create_cover_image_column(&cover_column, zoom_manager.clone());
 
     // Add the column to the ColumnView
     column_view.append_column(&cover_column);
@@ -168,6 +179,7 @@ pub fn create_columns(
         let dr_column = ColumnViewColumn::builder()
             .title("DR")
             .expand(false)
+            .fixed_width(dr_width)
             .build();
 
         // Configure the cell factory for displaying DR badges

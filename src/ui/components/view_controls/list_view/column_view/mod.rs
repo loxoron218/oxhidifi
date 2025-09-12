@@ -1,11 +1,15 @@
 pub mod columns;
 pub mod sorting;
+pub mod zoom;
+pub mod zoom_manager;
 
 use std::{cell::Cell, rc::Rc};
 
 use gtk4::{ColumnView, PolicyType::Automatic, ScrolledWindow, SingleSelection, gio::ListStore};
 
-use crate::ui::components::view_controls::list_view::column_view::columns::create_columns;
+use crate::ui::components::view_controls::list_view::column_view::{
+    columns::create_columns, zoom_manager::ColumnViewZoomManager,
+};
 
 use super::data_model::{AlbumListItem, AlbumListItemObject};
 
@@ -49,6 +53,7 @@ pub fn create_column_view_with_activate_and_year_setting<F>(
     on_activate: Option<F>,
     use_original_year: bool,
     show_dr_badges: Rc<Cell<bool>>,
+    zoom_manager: Option<Rc<ColumnViewZoomManager>>,
 ) -> (ScrolledWindow, ListStore, ColumnView)
 where
     F: Fn(&ColumnView, u32) + 'static,
@@ -93,7 +98,12 @@ where
 
     // Create and configure all columns for the ColumnView
     // This includes setting up column titles, widths, and cell factories
-    create_columns(&column_view, use_original_year, show_dr_badges);
+    create_columns(
+        &column_view,
+        use_original_year,
+        show_dr_badges,
+        zoom_manager,
+    );
 
     // Create a scrolled window to contain the ColumnView
     // This allows the view to be scrollable when there are more items than can fit on screen

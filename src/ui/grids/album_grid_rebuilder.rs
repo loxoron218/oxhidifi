@@ -19,7 +19,10 @@ use crate::{
             dialogs::create_add_folder_dialog_handler,
             refresh::RefreshService,
             view_controls::{
-                list_view::data_model::AlbumListItemObject,
+                list_view::{
+                    column_view::zoom_manager::ColumnViewZoomManager,
+                    data_model::AlbumListItemObject,
+                },
                 view_mode::ViewMode::{self, GridView, ListView},
             },
         },
@@ -63,6 +66,7 @@ pub fn rebuild_albums_grid_for_window(
     use_original_year: bool,
     show_dr_badges: Rc<Cell<bool>>,
     refresh_service: Option<Rc<RefreshService>>,
+    column_view_zoom_manager: Option<Rc<ColumnViewZoomManager>>,
 ) -> Option<ListStore> {
     // Remove old grid widget from the stack if it exists to prevent duplicates.
     if let Some(child) = stack.child_by_name("albums") {
@@ -184,7 +188,7 @@ pub fn rebuild_albums_grid_for_window(
                                                 )
                                             };
 
-                                        // If we have a player_bar, call the album_page function to build and display the album detail page
+                                            // If we have a player_bar, call the album_page function to build and display the album detail page
                                         if let Some(player_bar) = player_bar {
                                             // Call the album_page function to build and display the album detail page
                                             album_page(
@@ -208,6 +212,7 @@ pub fn rebuild_albums_grid_for_window(
                         }
                     }
                 }),
+                column_view_zoom_manager,
             );
 
             // Add the newly created albums stack to the main ViewStack.

@@ -26,7 +26,12 @@ use crate::{
             player_bar::PlayerBar,
             refresh::setup_library_refresh_channel,
             scan_feedback::create_scanning_label,
-            view_controls::{ZoomLevel, ZoomManager},
+            view_controls::{
+                ZoomLevel, ZoomManager,
+                list_view::column_view::{
+                    zoom::ColumnViewZoomLevel::Normal, zoom_manager::ColumnViewZoomManager,
+                },
+            },
         },
         grids::{
             album_grid_rebuilder::rebuild_albums_grid_for_window,
@@ -106,8 +111,9 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     // Create the player bar
     let player_bar = PlayerBar::new();
 
-    // Create the zoom manager
+    // Create the zoom managers
     let zoom_manager = Rc::new(ZoomManager::new(settings.current_zoom_level));
+    let column_view_zoom_manager = Rc::new(ColumnViewZoomManager::new(Normal));
 
     // Update screen info with the loaded zoom level values if not Medium
     let screen_info = if settings.current_zoom_level != ZoomLevel::Medium {
@@ -133,7 +139,9 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         show_dr_badges: Rc::new(Cell::new(settings.show_dr_badges)),
         use_original_year: Rc::new(Cell::new(settings.use_original_year)),
         zoom_manager,
+        column_view_zoom_manager,
         current_zoom_level: Rc::new(Cell::new(settings.current_zoom_level)),
+        current_view_mode: Rc::new(Cell::new(settings.view_mode)),
     };
 
     // Initialize `Rc<RefCell<Option<FlowBox>>>` and `Rc<RefCell<Option<Stack>>>` for grids and stacks
@@ -219,6 +227,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         settings.use_original_year,
         shared_state.show_dr_badges.clone(),
         Some(refresh_service.clone()),
+        Some(shared_state.column_view_zoom_manager.clone()),
     );
 
     // Build the artist grid
@@ -227,6 +236,9 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         &add_music_button_artists,
         widgets.artist_count_label.clone(),
     );
+
+    // Update zoom controls based on initial view mode
+    widgets.button.set_view_mode(settings.view_mode);
 
     // Set the initial children of the `ViewStack` to the newly built album and artist stacks.
     // The albums stack was already added by rebuild_albums_grid_for_window
@@ -268,6 +280,15 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     player_bar_mut.set_main_content_area(vbox_inner.clone());
     player_bar_mut.connect_visibility_changes();
 
+    // Connect the zoom managers to the view control button
+    widgets.button.set_zoom_managers(
+        shared_state.zoom_manager.clone(),
+        shared_state.column_view_zoom_manager.clone(),
+    );
+
+    // Update zoom controls after connecting zoom managers
+    widgets.button.update_zoom_controls();
+
     // Connect all the handlers
     connect_all_handlers(
         &widgets,
@@ -281,11 +302,6 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         &add_music_button_albums,
         &add_music_button_artists,
     );
-
-    // Connect the zoom manager to the view control button
-    widgets
-        .button
-        .set_zoom_manager(shared_state.zoom_manager.clone());
 
     // Connect the zoom manager callback to update screen info and rebuild grids
     let screen_info_clone = shared_state.screen_info.clone();
@@ -316,6 +332,15 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
             }
 
             // Trigger a UI refresh to rebuild the grids with new sizes
+            refresh_library_ui_clone(true, true);
+        });
+
+    // Connect the column view zoom manager callback to update column widths and cover sizes
+    let refresh_library_ui_clone = refresh_library_ui.clone();
+    shared_state
+        .column_view_zoom_manager
+        .connect_zoom_changed(move |_zoom_level| {
+            // Trigger a UI refresh to update the column view with new sizes
             refresh_library_ui_clone(true, true);
         });
 

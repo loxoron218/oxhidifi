@@ -129,6 +129,7 @@ impl RefreshService {
                 current_use_original_year,
                 self.show_dr_badges.clone(),
                 Some(Rc::new(self.clone())),
+                None,
             );
 
             // Set the ColumnView model in the RefreshService

@@ -174,12 +174,7 @@ pub fn connect_all_handlers(
     setup_search_bar_logic(widgets, vbox_inner);
 
     // Setup global keyboard shortcuts for application-wide actions
-    setup_keyboard_shortcuts_handler(
-        widgets,
-        shared_state,
-        refresh_library_ui.clone(),
-        vbox_inner,
-    );
+    setup_keyboard_shortcuts_handler(widgets, shared_state, refresh_library_ui.clone());
 
     // Connect view control button to sorting system for grid/list organization
     connect_view_control_sorting(widgets, shared_state, refresh_library_ui.clone());

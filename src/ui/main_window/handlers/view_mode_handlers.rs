@@ -80,11 +80,16 @@ pub fn connect_view_mode_change_handler(
     let sender_cloned = sender.clone();
     let nav_history_cloned2 = shared_state.nav_history.clone();
     let sort_ascending_artists_cloned2 = shared_state.sort_ascending_artists.clone();
+    let column_view_zoom_manager_cloned = shared_state.column_view_zoom_manager.clone();
 
     // Connect the view mode changed signal to handle UI updates
+    let current_view_mode_clone = shared_state.current_view_mode.clone();
     button_cloned
         .clone()
         .connect_view_mode_changed(move |view_mode| {
+            // Update the current view mode in shared state
+            current_view_mode_clone.set(view_mode);
+
             // Clone the necessary values for the closure to ensure they can be moved into async blocks
             let screen_info_clone = screen_info_cloned2.clone();
             let albums_grid_cell_clone = albums_grid_cell_cloned.clone();
@@ -121,10 +126,11 @@ pub fn connect_view_mode_change_handler(
                 use_original_year_clone.get(),
                 show_dr_badges_clone.clone(),
                 Some(refresh_service_clone.clone()),
+                Some(column_view_zoom_manager_cloned.clone()),
             );
 
             // Update the button's view mode to match the new view mode
-            // This ensures the UI reflects the current state
+            // This ensures the UI reflects the current state and updates zoom controls
             button_cloned.set_view_mode(view_mode);
 
             // Connect album navigation based on the view mode

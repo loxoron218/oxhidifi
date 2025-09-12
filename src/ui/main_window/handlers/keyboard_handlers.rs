@@ -1,7 +1,5 @@
 use std::rc::Rc;
 
-use gtk4::Box;
-
 use crate::ui::{
     components::navigation::shortcuts::setup_keyboard_shortcuts,
     main_window::{state::WindowSharedState, widgets::WindowWidgets},
@@ -19,7 +17,6 @@ use crate::ui::{
 /// * `widgets` - A reference to `WindowWidgets` containing all UI components
 /// * `shared_state` - A reference to `WindowSharedState` containing shared application state
 /// * `refresh_library_ui` - A closure for refreshing the main library UI with sort parameters
-/// * `_vbox_inner` - A reference to the inner GTK Box (currently unused but kept for API consistency)
 ///
 /// # Implementation Details
 ///
@@ -32,11 +29,11 @@ use crate::ui::{
 /// - Navigation stack components for page transitions
 /// - History tracking for back navigation
 /// - Zoom manager for zoom level changes
+/// - Current view mode for determining which zoom manager to use
 pub fn setup_keyboard_shortcuts_handler(
     widgets: &WindowWidgets,
     shared_state: &WindowSharedState,
     refresh_library_ui: Rc<dyn Fn(bool, bool)>,
-    _vbox_inner: &Box,
 ) {
     setup_keyboard_shortcuts(
         &widgets.window,
@@ -50,5 +47,7 @@ pub fn setup_keyboard_shortcuts_handler(
         &shared_state.last_tab,
         &shared_state.nav_history,
         &shared_state.zoom_manager,
+        Some(shared_state.column_view_zoom_manager.clone()),
+        shared_state.current_view_mode.clone(),
     );
 }

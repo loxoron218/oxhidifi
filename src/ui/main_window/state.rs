@@ -4,7 +4,10 @@ use std::{
 };
 
 use crate::{
-    ui::components::view_controls::{ZoomLevel, ZoomManager, sorting_controls::types},
+    ui::components::view_controls::{
+        ZoomLevel, ZoomManager, list_view::column_view::zoom_manager::ColumnViewZoomManager,
+        sorting_controls::types, view_mode::ViewMode,
+    },
     utils::screen::ScreenInfo,
 };
 
@@ -41,6 +44,10 @@ pub struct WindowSharedState {
     pub use_original_year: Rc<Cell<bool>>,
     /// Manages the zoom level for the grid and list views.
     pub zoom_manager: Rc<ZoomManager>,
+    /// Manages the zoom level for the column view.
+    pub column_view_zoom_manager: Rc<ColumnViewZoomManager>,
     /// Stores the current zoom level to apply to the screen info.
     pub current_zoom_level: Rc<Cell<ZoomLevel>>,
+    /// Stores the current view mode (GridView or ListView).
+    pub current_view_mode: Rc<Cell<ViewMode>>,
 }

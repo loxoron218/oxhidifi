@@ -62,6 +62,7 @@ pub fn rebuild_and_populate_grids(
         use_original_year_cloned.get(),
         show_dr_badges_cloned.clone(),
         Some(refresh_service.clone()),
+        None,
     );
 
     // Update the view control button's mode to match the initial view mode from settings.

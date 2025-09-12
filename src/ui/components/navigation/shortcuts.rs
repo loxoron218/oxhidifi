@@ -11,7 +11,14 @@ use libadwaita::{
     prelude::{EditableExt, ObjectExt, WidgetExt},
 };
 
-use crate::ui::{components::view_controls::ZoomManager, search_bar::SearchBar};
+use crate::ui::{
+    components::view_controls::{
+        ZoomManager,
+        list_view::column_view::zoom_manager::ColumnViewZoomManager,
+        view_mode::ViewMode::{self, GridView, ListView},
+    },
+    search_bar::SearchBar,
+};
 
 use super::{VIEW_STACK_ALBUMS, VIEW_STACK_ARTISTS, back::handle_back_navigation};
 
@@ -34,6 +41,7 @@ use super::{VIEW_STACK_ALBUMS, VIEW_STACK_ARTISTS, back::handle_back_navigation}
 /// * `last_tab` - `Rc<Cell<&'static str>>` storing the name of the last active main tab.
 /// * `nav_history` - `Rc<RefCell<Vec<String>>>` storing the history of visited page names.
 /// * `zoom_manager` - `Rc<ZoomManager>` for handling zoom level changes.
+/// * `current_view_mode` - `Rc<Cell<ViewMode>>` storing the current view mode.
 pub fn setup_keyboard_shortcuts(
     window: &ApplicationWindow,
     search_bar: &SearchBar,
@@ -46,6 +54,8 @@ pub fn setup_keyboard_shortcuts(
     last_tab: &Rc<Cell<&'static str>>,
     nav_history: &Rc<RefCell<Vec<String>>>,
     zoom_manager: &Rc<ZoomManager>,
+    column_view_zoom_manager: Option<Rc<ColumnViewZoomManager>>,
+    current_view_mode: Rc<Cell<ViewMode>>,
 ) {
     let accel_group = ShortcutController::new();
 
@@ -119,40 +129,72 @@ pub fn setup_keyboard_shortcuts(
     // Create a new shortcut controller for zoom shortcuts
     let zoom_accel_group = ShortcutController::new();
 
-    // Clone the zoom manager for use in the closures
+    // Clone the zoom managers for use in the closures
     let zoom_manager_clone = zoom_manager.clone();
+    let column_view_zoom_manager_clone = column_view_zoom_manager.clone();
 
     // Define the zoom in shortcut (Ctrl + +)
+    let current_view_mode_clone = current_view_mode.clone();
     let zoom_in_shortcut = Shortcut::builder()
         .trigger(&KeyvalTrigger::new(Key::plus, ModifierType::CONTROL_MASK))
         .action(&CallbackAction::new(move |_, _| {
-            zoom_manager_clone.zoom_in();
+            // Apply zoom in only to the current view mode's zoom manager
+            match current_view_mode_clone.get() {
+                GridView => zoom_manager_clone.zoom_in(),
+                ListView => {
+                    if let Some(ref column_view_zoom_manager) = column_view_zoom_manager_clone {
+                        column_view_zoom_manager.zoom_in();
+                    }
+                }
+            }
             Stop
         }))
         .build();
     zoom_accel_group.add_shortcut(zoom_in_shortcut);
 
-    // Clone the zoom manager for use in the closures
+    // Clone the zoom managers for use in the closures
     let zoom_manager_clone = zoom_manager.clone();
+    let column_view_zoom_manager_clone = column_view_zoom_manager.clone();
+    let current_view_mode = current_view_mode.clone();
 
     // Define the zoom out shortcut (Ctrl + -)
+    let current_view_mode_clone = current_view_mode.clone();
     let zoom_out_shortcut = Shortcut::builder()
         .trigger(&KeyvalTrigger::new(Key::minus, ModifierType::CONTROL_MASK))
         .action(&CallbackAction::new(move |_, _| {
-            zoom_manager_clone.zoom_out();
+            // Apply zoom out only to the current view mode's zoom manager
+            match current_view_mode_clone.get() {
+                GridView => zoom_manager_clone.zoom_out(),
+                ListView => {
+                    if let Some(ref column_view_zoom_manager) = column_view_zoom_manager_clone {
+                        column_view_zoom_manager.zoom_out();
+                    }
+                }
+            }
             Stop
         }))
         .build();
     zoom_accel_group.add_shortcut(zoom_out_shortcut);
 
-    // Clone the zoom manager for use in the closures
+    // Clone the zoom managers for use in the closures
     let zoom_manager_clone = zoom_manager.clone();
+    let column_view_zoom_manager_clone = column_view_zoom_manager.clone();
+    let current_view_mode = current_view_mode.clone();
 
     // Define the reset zoom shortcut (Ctrl + 0)
+    let current_view_mode_clone = current_view_mode.clone();
     let reset_zoom_shortcut = Shortcut::builder()
         .trigger(&KeyvalTrigger::new(Key::_0, ModifierType::CONTROL_MASK))
         .action(&CallbackAction::new(move |_, _| {
-            zoom_manager_clone.reset_zoom();
+            // Reset zoom only for the current view mode's zoom manager
+            match current_view_mode_clone.get() {
+                GridView => zoom_manager_clone.reset_zoom(),
+                ListView => {
+                    if let Some(ref column_view_zoom_manager) = column_view_zoom_manager_clone {
+                        column_view_zoom_manager.reset_zoom();
+                    }
+                }
+            }
             Stop
         }))
         .build();

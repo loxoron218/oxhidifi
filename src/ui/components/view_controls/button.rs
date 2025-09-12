@@ -17,9 +17,10 @@ use crate::ui::components::{
     navigation::VIEW_STACK_ALBUMS,
     view_controls::{
         ZoomManager,
+        list_view::column_view::zoom_manager::ColumnViewZoomManager,
         sorting_controls::{create_sorting_control_row, types::SortOrder},
         view_mode::ViewMode::{self, GridView, ListView},
-        zoom_controls::create_zoom_control_row,
+        zoom_controls::{create_column_view_zoom_control_row, create_zoom_control_row},
     },
 };
 
@@ -34,10 +35,14 @@ pub struct ViewControlButton {
     split_button: SplitButton,
     /// The current view mode of the button
     view_mode: RefCell<ViewMode>,
-    /// The zoom manager for handling zoom levels
-    zoom_manager: RefCell<Option<Rc<ZoomManager>>>,
+    /// The zoom manager for handling grid view zoom levels
+    grid_zoom_manager: RefCell<Option<Rc<ZoomManager>>>,
+    /// The zoom manager for handling column view zoom levels
+    column_view_zoom_manager: RefCell<Option<Rc<ColumnViewZoomManager>>>,
     /// The sorting control widget
     sorting_widget: RefCell<Option<Rc<Box>>>,
+    /// Reference to the zoom controls widget for dynamic updates
+    zoom_controls_widget: RefCell<Option<Rc<Box>>>,
 }
 
 impl ViewControlButton {
@@ -71,8 +76,10 @@ impl ViewControlButton {
         let button = Self {
             split_button,
             view_mode: RefCell::new(initial_view_mode),
-            zoom_manager: RefCell::new(None),
+            grid_zoom_manager: RefCell::new(None),
+            column_view_zoom_manager: RefCell::new(None),
             sorting_widget: RefCell::new(None),
+            zoom_controls_widget: RefCell::new(None),
         };
 
         // Update the main button to reflect the initial view mode
@@ -175,19 +182,6 @@ impl ViewControlButton {
         }
     }
 
-    /// Sets the view mode of the button and updates its visual representation
-    ///
-    /// This method allows external code to update the button's view mode,
-    /// ensuring that the button's state matches the actual view mode.
-    ///
-    /// # Arguments
-    ///
-    /// * `view_mode` - The new view mode to set
-    pub fn set_view_mode(&self, view_mode: ViewMode) {
-        *self.view_mode.borrow_mut() = view_mode;
-        self.update_main_button();
-    }
-
     /// Returns a reference to the underlying SplitButton widget
     ///
     /// This method allows access to the raw GTK widget for further customization
@@ -198,6 +192,23 @@ impl ViewControlButton {
     /// A reference to the internal `SplitButton` widget
     pub fn widget(&self) -> &SplitButton {
         &self.split_button
+    }
+
+    /// Sets the view mode of the button and updates its visual representation
+    ///
+    /// This method allows external code to update the button's view mode,
+    /// ensuring that the button's state matches the actual view mode and
+    /// updates the zoom controls to match the new view mode.
+    ///
+    /// # Arguments
+    ///
+    /// * `view_mode` - The new view mode to set
+    pub fn set_view_mode(&self, view_mode: ViewMode) {
+        *self.view_mode.borrow_mut() = view_mode;
+        self.update_main_button();
+
+        // Update zoom controls when view mode changes
+        self.update_zoom_controls();
     }
 
     /// Connects a callback function to handle view mode changes
@@ -243,32 +254,101 @@ impl Default for ViewControlButton {
 }
 
 impl ViewControlButton {
-    /// Sets the zoom manager for the button
+    /// Sets the zoom managers for the button
     ///
-    /// This method allows connecting a zoom manager to the button, which
-    /// enables the zoom controls in the popover.
+    /// This method allows connecting both zoom managers to the button, which
+    /// enables the appropriate zoom controls in the popover based on the current view mode.
     ///
     /// # Arguments
     ///
-    /// * `zoom_manager` - The zoom manager to connect
-    pub fn set_zoom_manager(&self, zoom_manager: Rc<ZoomManager>) {
-        *self.zoom_manager.borrow_mut() = Some(zoom_manager);
+    /// * `grid_zoom_manager` - The zoom manager for grid view
+    /// * `column_view_zoom_manager` - The zoom manager for column view
+    pub fn set_zoom_managers(
+        &self,
+        grid_zoom_manager: Rc<ZoomManager>,
+        column_view_zoom_manager: Rc<ColumnViewZoomManager>,
+    ) {
+        *self.grid_zoom_manager.borrow_mut() = Some(grid_zoom_manager);
+        *self.column_view_zoom_manager.borrow_mut() = Some(column_view_zoom_manager);
 
-        // Update the popover with the zoom controls
+        // Update the popover with the appropriate zoom controls based on current view mode
+        self.update_zoom_controls();
+    }
+
+    /// Updates the zoom controls in the popover based on the current view mode
+    ///
+    /// This method creates and displays the appropriate zoom controls for the current view mode.
+    /// It removes any existing zoom controls and adds the correct ones.
+    pub fn update_zoom_controls(&self) {
+        // Get the popover content box
         if let Some(popover) = self.split_button.popover() {
             if let Some(popover_child) = popover.child() {
                 if let Some(popover_box) = popover_child.downcast_ref::<Box>() {
-                    // Create the zoom controls widget
-                    let zoom_widget = create_zoom_control_row(
-                        &self.zoom_manager.borrow().as_ref().unwrap().clone(),
-                    );
+                    // Remove existing zoom controls if they exist
+                    if let Some(existing_zoom_widget) = self.zoom_controls_widget.borrow().as_ref()
+                    {
+                        popover_box.remove(existing_zoom_widget.as_ref());
+
+                        // Also remove the separator that comes after the zoom controls
+                        let mut children = Vec::new();
+                        let mut child = popover_box.first_child();
+                        while let Some(c) = child {
+                            children.push(c.clone());
+                            child = c.next_sibling();
+                        }
+
+                        // Find and remove the separator that comes after our zoom controls
+                        // (it should be the next sibling after the zoom controls)
+                        for (i, child) in children.iter().enumerate() {
+                            if child == existing_zoom_widget.as_ref() {
+                                if i + 1 < children.len() {
+                                    if let Some(separator) =
+                                        children[i + 1].downcast_ref::<Separator>()
+                                    {
+                                        popover_box.remove(separator);
+                                    }
+                                }
+                                break;
+                            }
+                        }
+                    }
+
+                    // Create the appropriate zoom controls based on current view mode
+                    let zoom_widget = match *self.view_mode.borrow() {
+                        GridView => {
+                            // Clone the zoom manager to avoid borrowing issues
+                            let grid_zoom_manager =
+                                self.grid_zoom_manager.borrow().as_ref().cloned();
+                            if let Some(grid_zoom_manager) = grid_zoom_manager {
+                                create_zoom_control_row(&grid_zoom_manager)
+                            } else {
+                                // Fallback if grid zoom manager is not set
+                                return;
+                            }
+                        }
+                        ListView => {
+                            // Clone the zoom manager to avoid borrowing issues
+                            let column_view_zoom_manager =
+                                self.column_view_zoom_manager.borrow().as_ref().cloned();
+                            if let Some(column_view_zoom_manager) = column_view_zoom_manager {
+                                create_column_view_zoom_control_row(&column_view_zoom_manager)
+                            } else {
+                                // Fallback if column view zoom manager is not set
+                                return;
+                            }
+                        }
+                    };
+
+                    // Wrap the zoom widget in an Rc for storage
+                    let zoom_widget_rc = Rc::new(zoom_widget);
+                    *self.zoom_controls_widget.borrow_mut() = Some(zoom_widget_rc.clone());
 
                     // Add a separator after the zoom controls
                     let separator = Separator::new(Horizontal);
 
                     // Insert the zoom controls at the beginning of the popover
-                    popover_box.insert_child_after(&zoom_widget, None::<&Widget>);
-                    popover_box.insert_child_after(&separator, Some(&zoom_widget));
+                    popover_box.insert_child_after(zoom_widget_rc.as_ref(), None::<&Widget>);
+                    popover_box.insert_child_after(&separator, Some(zoom_widget_rc.as_ref()));
                 }
             }
         }

@@ -7,7 +7,7 @@ use gtk4::{
 };
 use libadwaita::prelude::{Cast, ListItemExt, WidgetExt};
 
-use super::data_model::AlbumListItemObject;
+use super::{column_view::zoom_manager::ColumnViewZoomManager, data_model::AlbumListItemObject};
 
 use crate::utils::image::AsyncImageLoader;
 
@@ -27,7 +27,11 @@ use crate::utils::image::AsyncImageLoader;
 /// The function connects two signals to the factory:
 /// - `setup`: Called when a new cell needs to be created, sets up the Picture widget
 /// - `bind`: Called when a cell needs to be updated with data, loads the album cover
-pub fn create_cover_image_column(column: &ColumnViewColumn) {
+
+pub fn create_cover_image_column(
+    column: &ColumnViewColumn,
+    zoom_manager: Option<Rc<ColumnViewZoomManager>>,
+) {
     // Create a new SignalListItemFactory which will manage the creation and updating of cells
     let factory = SignalListItemFactory::new();
 
@@ -43,9 +47,10 @@ pub fn create_cover_image_column(column: &ColumnViewColumn) {
         // Create a Picture widget centered both horizontally and vertically
         // This will display the album cover art or a placeholder
         let picture = Picture::builder().halign(Center).valign(Center).build();
+        // Set a default size request, will be updated dynamically based on zoom level
         picture.set_size_request(48, 48);
 
-        // Set the created picture as the child widget of this list item
+        // Store the picture in the list item for access in the bind callback
         list_item.set_child(Some(&picture));
     });
 
@@ -66,13 +71,23 @@ pub fn create_cover_image_column(column: &ColumnViewColumn) {
             // Get the cover art path from the album item
             let cover_art_path = album_item.cover_art();
 
+            // Get the cover size based on the zoom level or use default
+            let cover_size = if let Some(ref zoom_manager) = zoom_manager {
+                zoom_manager.current_zoom_level().cover_size()
+            } else {
+                48 // Default size
+            };
+
+            // Update the picture size request
+            picture.set_size_request(cover_size, cover_size);
+
             // Create an AsyncImageLoader to load the image asynchronously
             if let Ok(loader) = AsyncImageLoader::new() {
                 // Convert the cover art path to a Path if it exists
                 let path = cover_art_path.as_ref().map(|p| Path::new(p));
 
-                // Load the image asynchronously
-                loader.load_image_async(picture, path, 48);
+                // Load the image asynchronously with the size based on zoom level
+                loader.load_image_async(picture, path, cover_size);
             }
         }
     });
