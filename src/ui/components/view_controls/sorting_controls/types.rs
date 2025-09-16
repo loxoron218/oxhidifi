@@ -3,20 +3,23 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 
 use crate::ui::components::view_controls::sorting_controls::types::SortOrder::{
-    Album, Artist, DrValue, Year,
+    Album, Artist, BitDepth, DrValue, Format, SampleRate, Year,
 };
 
 /// Represents the sorting order for library views.
 ///
 /// This `enum` defines the various criteria by which albums or artists can be sorted
 /// within the application's library views. It supports sorting by `Artist`, `Album` title,
-/// `Year` of release, and audio `Format`.
+/// `Year` of release, and audio technical properties.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize, Hash)]
 pub enum SortOrder {
     Artist,
     Album,
     Year,
     DrValue,
+    BitDepth,
+    SampleRate,
+    Format,
 }
 
 /// Allows parsing a `SortOrder` from a string ("Artist", "Year", etc). Useful for persistence and drag-and-drop.
@@ -33,6 +36,9 @@ impl FromStr for SortOrder {
             "Year" => Ok(Year),
             "Album" => Ok(Album),
             "DR Value" => Ok(DrValue),
+            "Bit Depth" => Ok(BitDepth),
+            "Sample Rate" => Ok(SampleRate),
+            "Format" => Ok(Format),
             _ => Err(()),
         }
     }
@@ -57,5 +63,8 @@ pub fn sort_order_label(order: &SortOrder) -> &'static str {
         Year => "Year",
         Album => "Album",
         DrValue => "DR Value",
+        BitDepth => "Bit Depth",
+        SampleRate => "Sample Rate",
+        Format => "Format",
     }
 }

@@ -28,7 +28,7 @@ impl SearchBar {
         let button = Button::builder()
             .icon_name("system-search-symbolic")
             .build();
-        
+
         // Add tooltip to the search button
         button.set_tooltip_text(Some("Search Library"));
 

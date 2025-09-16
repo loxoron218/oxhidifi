@@ -68,7 +68,7 @@ fn create_tab_toggle_button(icon_name: &str, label_text: &str, is_active: bool) 
     content_box.append(&Image::from_icon_name(icon_name));
     content_box.append(&Label::builder().label(label_text).build());
     button.set_child(Some(&content_box));
-    
+
     // Add tooltip based on the label text
     let tooltip_text = match label_text {
         "Albums" => "View Albums",
@@ -115,7 +115,7 @@ pub fn build_header_bar() -> AppHeaderBar {
     // Create individual buttons using the helper function for consistency and brevity.
     let search_bar = SearchBar::new();
     let settings_button = create_icon_button("open-menu-symbolic");
-    
+
     // Add tooltips to buttons for better user experience
     settings_button.set_tooltip_text(Some("Application Settings"));
     let back_button = create_icon_button("go-previous-symbolic");

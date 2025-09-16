@@ -2,7 +2,7 @@ use std::{cell::RefCell, cmp::Ordering::Equal, rc::Rc};
 
 use crate::ui::{
     components::view_controls::sorting_controls::types::SortOrder::{
-        self, Album, Artist, DrValue, Year,
+        self, Album, Artist, BitDepth, DrValue, Format, SampleRate, Year,
     },
     grids::album_grid_state::AlbumGridItem,
 };
@@ -42,7 +42,10 @@ pub fn sort_albums(
                         .or(b.year);
                     a_year.cmp(&b_year)
                 }
-                DrValue => a.dr_value.cmp(&b.dr_value),
+                DrValue => a.dr_value.cmp(&b.dr_value).reverse(),
+                BitDepth => a.bit_depth.cmp(&b.bit_depth).reverse(),
+                SampleRate => a.sample_rate.cmp(&b.sample_rate).reverse(),
+                Format => a.format.cmp(&b.format),
             };
 
             // If comparison is not equal, return the result, applying ascending/descending.

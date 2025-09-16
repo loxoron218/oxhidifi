@@ -11,7 +11,9 @@ use serde_json::{Map, Value, from_str, to_string_pretty, to_value};
 
 use crate::ui::components::view_controls::{
     ZoomLevel,
-    sorting_controls::types::SortOrder::{self, Album, Artist, DrValue, Year},
+    sorting_controls::types::SortOrder::{
+        self, Album, Artist, BitDepth, DrValue, Format, SampleRate, Year,
+    },
     view_mode::ViewMode::{self, GridView},
 };
 
@@ -62,7 +64,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            sort_orders: vec![Artist, Year, Album, DrValue],
+            sort_orders: vec![Artist, Year, Album, DrValue, BitDepth, SampleRate, Format],
             sort_ascending_albums: true,
             sort_ascending_artists: true,
             best_dr_albums: HashMap::new(),
