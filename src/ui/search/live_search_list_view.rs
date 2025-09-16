@@ -16,7 +16,10 @@ use crate::{
     ui::{
         components::{
             player_bar::PlayerBar,
-            view_controls::list_view::data_model::{AlbumListItem, AlbumListItemObject},
+            view_controls::{
+                ZoomLevel,
+                list_view::data_model::{AlbumListItem, AlbumListItemObject},
+            },
         },
         search::search_utils::{debounce_search, sort_albums_by_relevance},
     },

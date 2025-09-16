@@ -50,7 +50,7 @@ pub fn connect_live_search(
     use_original_year: Rc<Cell<bool>>,
     player_bar: PlayerBar,
     screen_info: Rc<RefCell<ScreenInfo>>,
-    current_zoom_level: ZoomLevel,
+    current_zoom_level: Rc<Cell<ZoomLevel>>,
 ) {
     // Clone shared resources for the closure to avoid moving them into the closure
     // and allow them to be used across multiple async operations.
@@ -92,6 +92,7 @@ pub fn connect_live_search(
         let sender_cloned = sender_cloned.clone();
         let show_dr_badges_cloned = show_dr_badges_cloned.clone();
         let use_original_year_cloned = use_original_year_cloned.clone();
+        let current_zoom_level_cloned = current_zoom_level.clone();
         let search_timer_cloned = search_timer.clone();
 
         // Clone screen_info for the debounce closure
@@ -176,7 +177,7 @@ pub fn connect_live_search(
                                         show_dr_badges.clone(),
                                         use_original_year.clone(),
                                         player_bar_clone_inner.clone(),
-                                        current_zoom_level,
+                                        current_zoom_level_cloned.get(),
                                     ));
                                     albums_grid.insert(&*flow_child, -1);
                                 }
@@ -217,7 +218,7 @@ pub fn connect_live_search(
                                         use_original_year.clone(),
                                         player_bar_clone_inner.clone(),
                                         screen_info_async.clone(),
-                                        current_zoom_level,
+                                        current_zoom_level_cloned.get(),
                                     ));
                                     artist_grid.insert(&*flow_child, -1);
                                 }
