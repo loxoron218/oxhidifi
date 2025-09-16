@@ -93,6 +93,8 @@ impl ViewControlButton {
     fn update_main_button(&self) {
         let view_mode = *self.view_mode.borrow();
         self.split_button.set_icon_name(view_mode.icon_name());
+
+        // Set tooltip text for the view control button
         self.split_button
             .set_tooltip_text(Some(view_mode.tooltip_text()));
     }

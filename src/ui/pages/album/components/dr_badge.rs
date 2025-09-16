@@ -122,6 +122,8 @@ pub fn build_dr_badge(
 
     // Set the stack as the child of the overlay
     overlay.set_child(Some(&stack));
+
+    // Set tooltip text for the DR badge overlay
     overlay.set_tooltip_text(tooltip_text);
 
     // Add UI elements to the main container
