@@ -279,6 +279,28 @@
   color: #ccc;
   font-size: 0.9em;
   margin-top: 4px;
+  font-family: monospace;
+}
+
+.player-bar .time-labels-box {
+  margin-top: 4px;
+  font-family: monospace;
+}
+
+.player-bar .time-label-end {
+  min-width: 40px;
+  font-family: monospace;
+}
+
+.player-bar .time-label-end,
+.player-bar .time-label-start {
+  min-width: 40px;
+  font-family: monospace;
+}
+
+.player-bar .time-label-start {
+  min-width: 40px;
+  font-family: monospace;
 }
 
 .player-bar .volume-slider {

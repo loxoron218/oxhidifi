@@ -1,7 +1,11 @@
-use std::{cell::RefCell, path::Path, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    path::Path,
+    rc::Rc,
+};
 
 use gtk4::{
-    Align::Start,
+    Align::{End, Start},
     Box, Button, Image, Label,
     Orientation::{Horizontal, Vertical},
     Scale,
@@ -47,8 +51,10 @@ pub struct PlayerBar {
     pub format: Label,
     /// Progress bar showing current position in the track
     pub progress_bar: Scale,
-    /// Label displaying current time and total duration (e.g., "1:23 / 4:56")
-    pub time_label: Label,
+    /// Label displaying current playback position (e.g., "1:23")
+    pub time_label_start: Label,
+    /// Label displaying total track duration (e.g., "4:56")
+    pub time_label_end: Label,
     /// Volume control slider
     pub _volume_slider: Scale,
     /// Placeholder for bit perfect indicator
@@ -65,6 +71,8 @@ pub struct PlayerBar {
     main_content_area: Rc<RefCell<Option<Box>>>,
     /// Signal handler ID for visibility change notifications
     visibility_handler_id: Option<Rc<SignalHandlerId>>,
+    /// Duration of the current track in seconds
+    duration: Rc<Cell<f64>>,
 }
 
 impl PlayerBar {
@@ -202,11 +210,35 @@ impl PlayerBar {
         progress_bar.set_range(0.0, 100.0);
         progress_box.append(&progress_bar);
 
-        // Create time label
-        let time_label = Label::builder().label("0:0 / 0:00").halign(Start).build();
-        time_label.add_css_class("time-label");
-        time_label.set_margin_top(4);
-        progress_box.append(&time_label);
+        // Create time labels container
+        let time_labels_box = Box::builder().orientation(Horizontal).hexpand(true).build();
+        time_labels_box.add_css_class("time-labels-box");
+        time_labels_box.set_spacing(8);
+        progress_box.append(&time_labels_box);
+
+        // Create start time label (current position)
+        let time_label_start = Label::builder().label("0:00").halign(Start).build();
+        time_label_start.add_css_class("time-label");
+        time_label_start.add_css_class("time-label-start");
+        time_label_start.set_hexpand(false);
+        time_label_start.set_halign(Start);
+        time_label_start.set_width_chars(5);
+        time_label_start.set_xalign(0.0);
+        time_labels_box.append(&time_label_start);
+
+        // Add a spacer to push the end label to the right
+        let spacer = Box::builder().hexpand(true).build();
+        time_labels_box.append(&spacer);
+
+        // Create end time label (total duration)
+        let time_label_end = Label::builder().label("0:00").halign(End).build();
+        time_label_end.add_css_class("time-label");
+        time_label_end.add_css_class("time-label-end");
+        time_label_end.set_hexpand(false);
+        time_label_end.set_halign(End);
+        time_label_end.set_width_chars(5);
+        time_label_end.set_xalign(1.0);
+        time_labels_box.append(&time_label_end);
 
         // Create a container for media control buttons
         let controls_box = Box::builder().orientation(Horizontal).spacing(8).build();
@@ -266,7 +298,8 @@ impl PlayerBar {
             bit_depth_sample_rate,
             format,
             progress_bar,
-            time_label,
+            time_label_start,
+            time_label_end,
             _volume_slider: volume_slider,
             _bit_perfect_indicator: bit_perfect_indicator,
             _gapless_indicator: gapless_indicator,
@@ -275,6 +308,7 @@ impl PlayerBar {
             _next_button: next_button,
             main_content_area: Rc::new(RefCell::new(None)),
             visibility_handler_id: None,
+            duration: Rc::new(Cell::new(0.0)),
         }
     }
 
@@ -406,20 +440,23 @@ impl PlayerBar {
         self.format.set_visible(false);
 
         // Determine the label and progress range based on the duration
-        let (label, range_end) = if let Some(duration_secs) = duration {
+        let range_end = if let Some(duration_secs) = duration {
             let minutes = duration_secs / 60;
             let seconds = duration_secs % 60;
+
             // Note the {:02} to correctly pad seconds (e.g., 1:07)
-            (
-                format!("0:00 / {}:{:02}", minutes, seconds),
-                duration_secs as f64,
-            )
+            let duration_text = format!("{}:{:02}", minutes, seconds);
+            self.time_label_end.set_label(&duration_text);
+            duration_secs as f64
         } else {
-            ("0:00 / 0:0".to_string(), 100.0)
+            self.time_label_end.set_label("0:00");
+            100.0
         };
 
-        // Now, perform the UI updates once
-        self.time_label.set_label(&label);
+        // Set the initial start time to 0:00
+        self.time_label_start.set_label("0:00");
+
+        // Set the progress bar range
         self.progress_bar.set_range(0.0, range_end);
 
         // Chain the operations: start with an optional path, then try to load from it.
@@ -445,5 +482,33 @@ impl PlayerBar {
             // plus some padding from the CSS (12px top/bottom), so we'll use 120 pixels
             content_area.set_margin_bottom(120);
         }
+
+        // Store the duration for progress calculations
+        self.duration.set(range_end);
+    }
+
+    /// Updates the progress bar position and time label during playback.
+    ///
+    /// This method should be called periodically during playback to update
+    /// the progress bar position and time display according to GNOME HIG.
+    /// In a complete implementation with audio playback, this would be called
+    /// by the playback system as the track progresses.
+    ///
+    /// # Parameters
+    /// - `position`: Current playback position in seconds
+    #[allow(dead_code)]
+    pub fn update_progress(&self, position: f64) {
+        // Update the progress bar position
+        self.progress_bar.set_value(position);
+
+        // Format the current position
+        let position_minutes = (position / 60.0) as u32;
+        let position_seconds = (position % 60.0) as u32;
+
+        // Create the time label text for current position
+        let position_text = format!("{}:{:02}", position_minutes, position_seconds);
+
+        // Update the start time label
+        self.time_label_start.set_label(&position_text);
     }
 }
