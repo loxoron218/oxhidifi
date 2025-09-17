@@ -222,18 +222,31 @@
 }
 
 .player-bar .album-title {
-  font-weight: bold;
-  font-size: 1.1em;
+  color: #ccc;
+  font-size: 1.0em;
   margin-bottom: 4px;
 }
 
 .player-bar .artist-name {
   color: #ccc;
+  font-size: 1.0em;
+  margin-bottom: 4px;
+}
+
+.player-bar .bit-depth-sample-rate {
+  color: #aaa;
+  font-size: 0.85em;
   margin-bottom: 4px;
 }
 
 .player-bar .bit-perfect-indicator {
   background-color: #4a86e8;
+}
+
+.player-bar .format {
+  color: #aaa;
+  font-size: 0.85em;
+  margin-bottom: 8px;
 }
 
 .player-bar .gapless-indicator {
@@ -256,10 +269,10 @@
   min-height: 40px;
 }
 
-.player-bar .technical-info {
-  color: #aaa;
-  font-size: 0.9em;
-  margin-bottom: 8px;
+.player-bar .song-title {
+  font-weight: bold;
+  font-size: 1.15em;
+  margin-bottom: 4px;
 }
 
 .player-bar .time-label {

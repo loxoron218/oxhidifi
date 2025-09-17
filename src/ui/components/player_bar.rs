@@ -17,10 +17,11 @@ use crate::utils::formatting::format_sample_rate_value;
 ///
 /// The player bar is only visible when a track is playing. It shows:
 /// - Album art (96x96 pixels)
-/// - Album title (ellipsized when too long)
 /// - Song title (ellipsized when too long)
 /// - Artist name (ellipsized when too long)
-/// - Technical information (bit depth, sample rate, format) (ellipsized when too long)
+/// - Album title (ellipsized when too long)
+/// - Bit depth and sample rate information (ellipsized when too long)
+/// - Audio format (ellipsized when too long)
 /// - Media controls (previous, play, next)
 ///
 /// The text information is contained in a fixed-width box that maintains consistent sizing
@@ -34,14 +35,16 @@ pub struct PlayerBar {
     pub container: Box,
     /// Display for album art, defaults to a placeholder icon when no art is available
     pub album_art: Image,
-    /// Label displaying the album title
-    pub album_title: Label,
     /// Label displaying the currently playing song title
     pub song_title: Label,
     /// Label displaying the artist of the currently playing song
     pub song_artist: Label,
-    /// Label displaying technical information (bit depth, sample rate, format)
-    pub technical_info: Label,
+    /// Label displaying the album title
+    pub album_title: Label,
+    /// Label displaying bit depth and sample rate information
+    pub bit_depth_sample_rate: Label,
+    /// Label displaying the audio format (combined with bit depth/sample rate)
+    pub format: Label,
     /// Progress bar showing current position in the track
     pub progress_bar: Scale,
     /// Label displaying current time and total duration (e.g., "1:23 / 4:56")
@@ -73,7 +76,7 @@ impl PlayerBar {
     /// # UI Structure
     /// The player bar layout consists of:
     /// 1. Album art (96x96 pixels) on the left
-    /// 2. Track information (album title, song title, artist, technical info) in a fixed-width container in the center
+    /// 2. Track information (song title, artist, album title, bit depth/sample rate, format) in a fixed-width container in the center
     /// 3. Media controls (prev, play, next) aligned to the right
     ///
     /// The track information container has a fixed width of 300 pixels and automatically ellipsizes
@@ -115,21 +118,9 @@ impl PlayerBar {
         info_box.set_vexpand(false);
         container.append(&info_box);
 
-        // Initialize album title label with placeholder text
-        let album_title = Label::builder().label("Album Title").halign(Start).build();
-        album_title.add_css_class("album-title");
-
-        // Apply ellipsizing to prevent text overflow
-        album_title.set_ellipsize(EllipsizeMode::End);
-        album_title.set_xalign(0.0);
-
-        // Prevent horizontal expansion and set max width chars for ellipsizing
-        album_title.set_hexpand(false);
-        album_title.set_max_width_chars(25);
-        info_box.append(&album_title);
-
         // Initialize track title label with placeholder text
         let song_title = Label::builder().label("Song Title").halign(Start).build();
+        song_title.add_css_class("song-title");
 
         // Apply ellipsizing to prevent text overflow
         song_title.set_ellipsize(EllipsizeMode::End);
@@ -153,21 +144,47 @@ impl PlayerBar {
         song_artist.set_max_width_chars(25);
         info_box.append(&song_artist);
 
-        // Initialize technical info label with placeholder text
-        let technical_info = Label::builder()
-            .label("24-Bit/96 kHz FLAC")
-            .halign(Start)
-            .build();
-        technical_info.add_css_class("technical-info");
+        // Initialize album title label with placeholder text
+        let album_title = Label::builder().label("Album Title").halign(Start).build();
+        album_title.add_css_class("album-title");
 
         // Apply ellipsizing to prevent text overflow
-        technical_info.set_ellipsize(EllipsizeMode::End);
-        technical_info.set_xalign(0.0);
+        album_title.set_ellipsize(EllipsizeMode::End);
+        album_title.set_xalign(0.0);
 
         // Prevent horizontal expansion and set max width chars for ellipsizing
-        technical_info.set_hexpand(false);
-        technical_info.set_max_width_chars(25);
-        info_box.append(&technical_info);
+        album_title.set_hexpand(false);
+        album_title.set_max_width_chars(25);
+        info_box.append(&album_title);
+
+        // Initialize bit depth/sample rate label with placeholder text
+        let bit_depth_sample_rate = Label::builder()
+            .label("24-Bit/96 kHz")
+            .halign(Start)
+            .build();
+        bit_depth_sample_rate.add_css_class("bit-depth-sample-rate");
+
+        // Apply ellipsizing to prevent text overflow
+        bit_depth_sample_rate.set_ellipsize(EllipsizeMode::End);
+        bit_depth_sample_rate.set_xalign(0.0);
+
+        // Prevent horizontal expansion and set max width chars for ellipsizing
+        bit_depth_sample_rate.set_hexpand(false);
+        bit_depth_sample_rate.set_max_width_chars(25);
+        info_box.append(&bit_depth_sample_rate);
+
+        // Initialize format label with placeholder text (combined display with bit depth/sample rate)
+        let format = Label::builder().label("").halign(Start).build();
+        format.add_css_class("format");
+
+        // Apply ellipsizing to prevent text overflow
+        format.set_ellipsize(EllipsizeMode::End);
+        format.set_xalign(0.0);
+
+        // Prevent horizontal expansion and set max width chars for ellipsizing
+        format.set_hexpand(false);
+        format.set_max_width_chars(25);
+        info_box.append(&format);
 
         // Create a container for progress bar and time label
         let progress_box = Box::builder().orientation(Vertical).hexpand(true).build();
@@ -240,10 +257,11 @@ impl PlayerBar {
         Self {
             container,
             album_art,
-            album_title,
             song_title,
             song_artist,
-            technical_info,
+            album_title,
+            bit_depth_sample_rate,
+            format,
             progress_bar,
             time_label,
             _volume_slider: volume_slider,
@@ -311,7 +329,13 @@ impl PlayerBar {
     /// Updates the player bar with track metadata and makes it visible.
     ///
     /// This method is called when a track starts playing to display its information
-    /// in the player bar at the bottom of the window.
+    /// in the player bar at the bottom of the window. The information is displayed
+    /// in the following order to follow GNOME Human Interface Guidelines:
+    /// 1. Song title
+    /// 2. Artist name
+    /// 3. Album title
+    /// 4. Bit depth and sample rate
+    /// 5. Audio format
     ///
     /// # Parameters
     /// - `album_title`: The title of the album
@@ -339,42 +363,44 @@ impl PlayerBar {
         format: Option<&str>,
         duration: Option<u32>,
     ) {
-        // Update the album title label
-        self.album_title.set_label(album_title);
-
         // Update the song title label with the provided track title
         self.song_title.set_label(song_title);
 
         // Update the artist label with the provided artist name
         self.song_artist.set_label(song_artist);
 
-        // Format and update technical information
-        let technical_text = match (bit_depth, sample_rate, format) {
-            (Some(bit), Some(freq), Some(fmt)) => {
-                format!(
-                    "{}-Bit/{} kHz {}",
-                    bit,
-                    format_sample_rate_value(freq),
-                    fmt.to_uppercase()
-                )
-            }
-            (Some(bit), None, Some(fmt)) => format!("{}-Bit {}", bit, fmt.to_uppercase()),
-            (None, Some(freq), Some(fmt)) => {
-                format!(
-                    "{} kHz {}",
-                    format_sample_rate_value(freq),
-                    fmt.to_uppercase()
-                )
-            }
-            (None, None, Some(fmt)) => fmt.to_uppercase(),
-            (Some(bit), Some(freq), None) => {
+        // Update the album title label
+        self.album_title.set_label(album_title);
+
+        // Format and update bit depth/sample rate information
+        let bit_depth_sample_rate_text = match (bit_depth, sample_rate) {
+            (Some(bit), Some(freq)) => {
                 format!("{}-Bit/{} kHz", bit, format_sample_rate_value(freq))
             }
-            (Some(bit), None, None) => format!("{}-Bit", bit),
-            (None, Some(freq), None) => format!("{} kHz", format_sample_rate_value(freq)),
-            (None, None, None) => String::new(),
+            (Some(bit), None) => format!("{}-Bit", bit),
+            (None, Some(freq)) => format!("{} kHz", format_sample_rate_value(freq)),
+            (None, None) => String::new(),
         };
-        self.technical_info.set_label(&technical_text);
+
+        // Format information
+        let format_text = format.map(|f| f.to_uppercase()).unwrap_or_default();
+
+        // Combine bit depth/sample rate and format information with a separator
+        let combined_text = if !bit_depth_sample_rate_text.is_empty() && !format_text.is_empty() {
+            format!("{} · {}", bit_depth_sample_rate_text, format_text)
+        } else if !bit_depth_sample_rate_text.is_empty() {
+            bit_depth_sample_rate_text
+        } else if !format_text.is_empty() {
+            format_text
+        } else {
+            String::new()
+        };
+
+        // Update the bit depth/sample rate label with the combined information
+        self.bit_depth_sample_rate.set_label(&combined_text);
+
+        // Hide the separate format label since we're now combining the information
+        self.format.set_visible(false);
 
         // Determine the label and progress range based on the duration
         let (label, range_end) = if let Some(duration_secs) = duration {
