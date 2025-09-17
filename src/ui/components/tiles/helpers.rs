@@ -1,7 +1,6 @@
 use std::path::Path;
 
-use gdk_pixbuf::Pixbuf;
-use gtk4::{Align::Start, Label, Picture, pango};
+use gtk4::{Align::Start, Label, Picture, gdk_pixbuf::Pixbuf, pango};
 use libadwaita::prelude::WidgetExt;
 
 /// Helper to create the album cover as a Picture widget.

@@ -3,8 +3,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use gdk_pixbuf::Pixbuf;
-use gtk4::glib::{FileError::Noent, user_cache_dir};
+use gtk4::{
+    gdk_pixbuf::Pixbuf,
+    glib::{FileError::Noent, user_cache_dir},
+};
 
 use crate::utils::image::{cache::memory::hash_to_hex, error::ImageLoaderError};
 

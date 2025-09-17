@@ -6,7 +6,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use gdk_pixbuf::Pixbuf;
+use gtk4::gdk_pixbuf::Pixbuf;
 
 use crate::utils::image::cache::lru::LruCache;
 

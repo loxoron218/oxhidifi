@@ -1,9 +1,9 @@
 use std::path::Path;
 
-use gdk_pixbuf::{Colorspace::Rgb, Pixbuf};
 use gtk4::{
     Align::{End, Start},
     Label, Picture,
+    gdk_pixbuf::{Colorspace::Rgb, Pixbuf},
     pango::{EllipsizeMode, WrapMode},
 };
 use libadwaita::prelude::WidgetExt;

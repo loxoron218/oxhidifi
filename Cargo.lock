@@ -1743,7 +1743,6 @@ dependencies = [
 name = "oxhidifi"
 version = "0.1.0"
 dependencies = [
- "gdk-pixbuf",
  "gtk4",
  "image",
  "libadwaita",

@@ -9,8 +9,7 @@
 
 use std::path::PathBuf;
 
-use gdk_pixbuf::Pixbuf;
-use gtk4::{Align::Start, Box, Image, Label, Orientation::Horizontal, Picture};
+use gtk4::{Align::Start, Box, Image, Label, Orientation::Horizontal, Picture, gdk_pixbuf::Pixbuf};
 use libadwaita::prelude::{BoxExt, WidgetExt};
 
 use crate::{

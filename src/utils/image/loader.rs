@@ -1,6 +1,6 @@
 use std::{io::Cursor, path::Path, time::Duration};
 
-use gdk_pixbuf::{Pixbuf, PixbufLoader};
+use gtk4::gdk_pixbuf::{Pixbuf, PixbufLoader};
 use image::{
     ImageFormat::Jpeg,
     ImageReader,
