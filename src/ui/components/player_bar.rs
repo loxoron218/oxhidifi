@@ -11,6 +11,8 @@ use gtk4::{
     prelude::{BoxExt, ObjectExt, RangeExt, WidgetExt},
 };
 
+use crate::utils::formatting::format_sample_rate_value;
+
 /// A UI component that displays currently playing track information at the bottom of the window.
 ///
 /// The player bar is only visible when a track is playing. It shows:
@@ -349,14 +351,28 @@ impl PlayerBar {
         // Format and update technical information
         let technical_text = match (bit_depth, sample_rate, format) {
             (Some(bit), Some(freq), Some(fmt)) => {
-                format!("{}-Bit/{} kHz {}", bit, freq / 100, fmt.to_uppercase())
+                format!(
+                    "{}-Bit/{} kHz {}",
+                    bit,
+                    format_sample_rate_value(freq),
+                    fmt.to_uppercase()
+                )
             }
             (Some(bit), None, Some(fmt)) => format!("{}-Bit {}", bit, fmt.to_uppercase()),
             (None, Some(freq), Some(fmt)) => {
-                format!("{} kHz {}", freq / 1000, fmt.to_uppercase())
+                format!(
+                    "{} kHz {}",
+                    format_sample_rate_value(freq),
+                    fmt.to_uppercase()
+                )
             }
             (None, None, Some(fmt)) => fmt.to_uppercase(),
-            _ => String::new(),
+            (Some(bit), Some(freq), None) => {
+                format!("{}-Bit/{} kHz", bit, format_sample_rate_value(freq))
+            }
+            (Some(bit), None, None) => format!("{}-Bit", bit),
+            (None, Some(freq), None) => format!("{} kHz", format_sample_rate_value(freq)),
+            (None, None, None) => String::new(),
         };
         self.technical_info.set_label(&technical_text);
 
