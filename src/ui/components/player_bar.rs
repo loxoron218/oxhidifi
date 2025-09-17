@@ -7,16 +7,23 @@ use gtk4::{
     Scale,
     gdk_pixbuf::Pixbuf,
     glib::SignalHandlerId,
+    pango::EllipsizeMode,
     prelude::{BoxExt, ObjectExt, RangeExt, WidgetExt},
 };
 
 /// A UI component that displays currently playing track information at the bottom of the window.
 ///
 /// The player bar is only visible when a track is playing. It shows:
-/// - Album art (48x48 pixels)
-/// - Song title
-/// - Artist name
+/// - Album art (96x96 pixels)
+/// - Album title (ellipsized when too long)
+/// - Song title (ellipsized when too long)
+/// - Artist name (ellipsized when too long)
+/// - Technical information (bit depth, sample rate, format) (ellipsized when too long)
 /// - Media controls (previous, play, next)
+///
+/// The text information is contained in a fixed-width box that maintains consistent sizing
+/// regardless of text length. Text that exceeds the available space is automatically
+/// ellipsized following GNOME Human Interface Guidelines.
 ///
 /// When no track is playing, the player bar is hidden from view.
 #[derive(Clone)]
@@ -63,9 +70,12 @@ impl PlayerBar {
     ///
     /// # UI Structure
     /// The player bar layout consists of:
-    /// 1. Album art (48x48 pixels) on the left
-    /// 2. Track information (title and artist) in the center
+    /// 1. Album art (96x96 pixels) on the left
+    /// 2. Track information (album title, song title, artist, technical info) in a fixed-width container in the center
     /// 3. Media controls (prev, play, next) aligned to the right
+    ///
+    /// The track information container has a fixed width of 300 pixels and automatically ellipsizes
+    /// text that exceeds the available space, following GNOME Human Interface Guidelines.
     ///
     /// # Returns
     /// A new `PlayerBar` instance with all widgets created but not yet visible
@@ -77,6 +87,9 @@ impl PlayerBar {
             .css_classes(vec!["player-bar"])
             .build();
 
+        // Ensure the container properly distributes space among children
+        container.set_homogeneous(false);
+
         // Initialize album art display with a default placeholder icon
         let album_art = Image::builder()
             .width_request(96)
@@ -87,20 +100,55 @@ impl PlayerBar {
 
         // Create a vertical box to hold track information
         let info_box = Box::builder().orientation(Vertical).build();
+
+        // Set a fixed width for the info box to ensure consistent sizing
+        info_box.set_size_request(300, -1);
+
+        // Prevent the info box from expanding horizontally
+        info_box.set_hexpand(false);
+        info_box.set_halign(Start);
+        info_box.set_valign(Start);
+
+        // Ensure the info box maintains its size
+        info_box.set_vexpand(false);
         container.append(&info_box);
 
         // Initialize album title label with placeholder text
         let album_title = Label::builder().label("Album Title").halign(Start).build();
         album_title.add_css_class("album-title");
+
+        // Apply ellipsizing to prevent text overflow
+        album_title.set_ellipsize(EllipsizeMode::End);
+        album_title.set_xalign(0.0);
+
+        // Prevent horizontal expansion and set max width chars for ellipsizing
+        album_title.set_hexpand(false);
+        album_title.set_max_width_chars(25);
         info_box.append(&album_title);
 
         // Initialize track title label with placeholder text
         let song_title = Label::builder().label("Song Title").halign(Start).build();
+
+        // Apply ellipsizing to prevent text overflow
+        song_title.set_ellipsize(EllipsizeMode::End);
+        song_title.set_xalign(0.0);
+
+        // Prevent horizontal expansion and set max width chars for ellipsizing
+        song_title.set_hexpand(false);
+        song_title.set_max_width_chars(25);
         info_box.append(&song_title);
 
         // Initialize artist label with placeholder text
         let song_artist = Label::builder().label("Artist").halign(Start).build();
         song_artist.add_css_class("artist-name");
+
+        // Apply ellipsizing to prevent text overflow
+        song_artist.set_ellipsize(EllipsizeMode::End);
+        song_artist.set_xalign(0.0);
+
+        // Prevent horizontal expansion and set max width chars for ellipsizing
+        song_artist.set_hexpand(false);
+        song_artist.set_max_width_chars(25);
         info_box.append(&song_artist);
 
         // Initialize technical info label with placeholder text
@@ -109,10 +157,19 @@ impl PlayerBar {
             .halign(Start)
             .build();
         technical_info.add_css_class("technical-info");
+
+        // Apply ellipsizing to prevent text overflow
+        technical_info.set_ellipsize(EllipsizeMode::End);
+        technical_info.set_xalign(0.0);
+
+        // Prevent horizontal expansion and set max width chars for ellipsizing
+        technical_info.set_hexpand(false);
+        technical_info.set_max_width_chars(25);
         info_box.append(&technical_info);
 
         // Create a container for progress bar and time label
         let progress_box = Box::builder().orientation(Vertical).hexpand(true).build();
+        progress_box.set_halign(Start);
         container.append(&progress_box);
 
         // Create progress bar
