@@ -188,7 +188,8 @@ impl PlayerBar {
 
         // Create a container for progress bar and time label
         let progress_box = Box::builder().orientation(Vertical).hexpand(true).build();
-        progress_box.set_halign(Start);
+
+        // Removed halign(Start) to allow the progress box to expand and fill available space
         container.append(&progress_box);
 
         // Create progress bar
@@ -197,12 +198,14 @@ impl PlayerBar {
             .draw_value(false)
             .hexpand(true)
             .build();
+        progress_bar.add_css_class("player-progress-bar");
         progress_bar.set_range(0.0, 100.0);
         progress_box.append(&progress_bar);
 
         // Create time label
         let time_label = Label::builder().label("0:0 / 0:00").halign(Start).build();
         time_label.add_css_class("time-label");
+        time_label.set_margin_top(4);
         progress_box.append(&time_label);
 
         // Create a container for media control buttons

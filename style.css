@@ -286,6 +286,16 @@
   min-width: 80px;
 }
 
+.player-bar scale {
+  min-height: 24px;
+}
+
+.player-progress-bar {
+  min-height: 24px;
+  margin-top: 8px;
+  margin-bottom: 4px;
+}
+
 /* =====================
    Component: Column View (List View)
    ===================== */
