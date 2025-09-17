@@ -50,4 +50,6 @@ pub struct WindowSharedState {
     pub current_zoom_level: Rc<Cell<ZoomLevel>>,
     /// Stores the current view mode (GridView or ListView).
     pub current_view_mode: Rc<Cell<ViewMode>>,
+    /// Flag to indicate if the initial library scan is ongoing.
+    pub initial_scan_ongoing: Rc<Cell<bool>>,
 }

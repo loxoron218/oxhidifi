@@ -85,5 +85,7 @@ pub fn spawn_scanning_label_refresh_task_handler(
         refresh_library_ui.clone(),
         shared_state.sort_ascending.clone(),
         shared_state.sort_ascending_artists.clone(),
+        shared_state.initial_scan_ongoing.clone(),
+        shared_state.current_view_mode.clone(),
     );
 }

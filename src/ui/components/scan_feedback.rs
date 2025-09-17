@@ -35,6 +35,7 @@ pub fn create_scanning_label() -> Label {
 /// * `scanning_label_albums` - A `Rc<Label>` for the albums scanning label.
 /// * `scanning_label_artists` - A `Rc<Label>` for the artists scanning label.
 /// * `stack` - A `libadwaita::ViewStack` to determine the currently visible page.
+use crate::ui::components::view_controls::view_mode::ViewMode;
 /// * `refresh_library_ui` - A `Rc<dyn Fn(bool, bool)>` closure to refresh the library UI.
 /// * `sort_ascending` - A `Rc<Cell<bool>>` indicating the current album sort order.
 /// * `sort_ascending_artists` - A `Rc<Cell<bool>>` indicating the current artist sort order.
@@ -46,6 +47,8 @@ pub fn spawn_scanning_label_refresh_task(
     refresh_library_ui: Rc<dyn Fn(bool, bool)>,
     sort_ascending: Rc<Cell<bool>>,
     sort_ascending_artists: Rc<Cell<bool>>,
+    initial_scan_ongoing: Rc<Cell<bool>>,
+    current_view_mode: Rc<Cell<ViewMode>>,
 ) {
     let refresh_library_ui_clone = refresh_library_ui.clone();
     let sort_ascending_for_refresh = sort_ascending.clone();
@@ -56,17 +59,31 @@ pub fn spawn_scanning_label_refresh_task(
 
         // Loop indefinitely, waiting for scan completion signals.
         while receiver.recv().await.is_some() {
-            let page = stack_clone.visible_child_name().unwrap_or_default();
+            if initial_scan_ongoing.get() {
+                initial_scan_ongoing.set(false);
+                scanning_label_albums.set_visible(false);
+                scanning_label_artists.set_visible(false);
 
-            // Hide the appropriate scanning label based on the currently visible page.
-            scanning_label_albums.set_visible(page == "albums");
-            scanning_label_artists.set_visible(page == "artists");
+                // Only perform the initial refresh if we are in GridView, as ListView is already populated.
+                if current_view_mode.get() == ViewMode::GridView {
+                    refresh_library_ui_clone(
+                        sort_ascending_for_refresh.get(),
+                        sort_ascending_artists_for_refresh.get(),
+                    );
+                }
+            } else {
+                let page = stack_clone.visible_child_name().unwrap_or_default();
 
-            // Refresh the library UI to reflect any changes from the scan.
-            refresh_library_ui_clone(
-                sort_ascending_for_refresh.get(),
-                sort_ascending_artists_for_refresh.get(),
-            );
+                // Hide the appropriate scanning label based on the currently visible page.
+                scanning_label_albums.set_visible(page == "albums");
+                scanning_label_artists.set_visible(page == "artists");
+
+                // Refresh the library UI to reflect any changes from the scan.
+                refresh_library_ui_clone(
+                    sort_ascending_for_refresh.get(),
+                    sort_ascending_artists_for_refresh.get(),
+                );
+            }
         }
     });
 }

@@ -142,6 +142,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         column_view_zoom_manager,
         current_zoom_level: Rc::new(Cell::new(settings.current_zoom_level)),
         current_view_mode: Rc::new(Cell::new(settings.view_mode)),
+        initial_scan_ongoing: Rc::new(Cell::new(true)),
     };
 
     // Initialize `Rc<RefCell<Option<FlowBox>>>` and `Rc<RefCell<Option<Stack>>>` for grids and stacks
