@@ -26,7 +26,9 @@ use crate::utils::formatting::format_sample_rate_value;
 /// - Album title (ellipsized when too long)
 /// - Bit depth and sample rate information (ellipsized when too long)
 /// - Audio format (ellipsized when too long)
-/// - Media controls (previous, play, next)
+/// - Progress bar
+/// - Time labels (start and end) with play controls between them
+/// - Additional controls (volume, indicators) on the right
 ///
 /// The text information is contained in a fixed-width box that maintains consistent sizing
 /// regardless of text length. Text that exceeds the available space is automatically
@@ -85,7 +87,9 @@ impl PlayerBar {
     /// The player bar layout consists of:
     /// 1. Album art (96x96 pixels) on the left
     /// 2. Track information (song title, artist, album title, bit depth/sample rate, format) in a fixed-width container in the center
-    /// 3. Media controls (prev, play, next) aligned to the right
+    /// 3. Progress bar
+    /// 4. Time labels (start and end) with play controls between them
+    /// 5. Additional controls (volume, indicators) aligned to the right
     ///
     /// The track information container has a fixed width of 300 pixels and automatically ellipsizes
     /// text that exceeds the available space, following GNOME Human Interface Guidelines.
@@ -210,11 +214,11 @@ impl PlayerBar {
         progress_bar.set_range(0.0, 100.0);
         progress_box.append(&progress_bar);
 
-        // Create time labels container
-        let time_labels_box = Box::builder().orientation(Horizontal).hexpand(true).build();
-        time_labels_box.add_css_class("time-labels-box");
-        time_labels_box.set_spacing(8);
-        progress_box.append(&time_labels_box);
+        // Create a container for the bottom row (time labels and play controls)
+        let bottom_row_box = Box::builder().orientation(Horizontal).hexpand(true).build();
+        bottom_row_box.add_css_class("player-bottom-row");
+        bottom_row_box.set_spacing(0);
+        progress_box.append(&bottom_row_box);
 
         // Create start time label (current position)
         let time_label_start = Label::builder().label("0:00").halign(Start).build();
@@ -224,11 +228,38 @@ impl PlayerBar {
         time_label_start.set_halign(Start);
         time_label_start.set_width_chars(5);
         time_label_start.set_xalign(0.0);
-        time_labels_box.append(&time_label_start);
+        bottom_row_box.append(&time_label_start);
 
-        // Add a spacer to push the end label to the right
-        let spacer = Box::builder().hexpand(true).build();
-        time_labels_box.append(&spacer);
+        // Add a spacer to push the play controls to the center with reduced size
+        let spacer_left = Box::builder().hexpand(true).build();
+        spacer_left.set_size_request(-1, -1);
+        bottom_row_box.append(&spacer_left);
+
+        // Create a container for play control buttons
+        let play_controls_box = Box::builder().orientation(Horizontal).spacing(2).build();
+        play_controls_box.add_css_class("play-controls-box");
+        play_controls_box.set_halign(Start);
+        bottom_row_box.append(&play_controls_box);
+
+        // Add previous track button with standard media icon
+        let prev_button = Button::from_icon_name("media-skip-backward");
+        prev_button.add_css_class("media-button");
+        play_controls_box.append(&prev_button);
+
+        // Add play button with standard media icon
+        let play_button = Button::from_icon_name("media-playback-start");
+        play_button.add_css_class("media-button");
+        play_controls_box.append(&play_button);
+
+        // Add next track button with standard media icon
+        let next_button = Button::from_icon_name("media-skip-forward");
+        next_button.add_css_class("media-button");
+        play_controls_box.append(&next_button);
+
+        // Add a spacer to push the end time label to the right with reduced size
+        let spacer_right = Box::builder().hexpand(true).build();
+        spacer_right.set_size_request(-1, -1);
+        bottom_row_box.append(&spacer_right);
 
         // Create end time label (total duration)
         let time_label_end = Label::builder().label("0:00").halign(End).build();
@@ -238,9 +269,9 @@ impl PlayerBar {
         time_label_end.set_halign(End);
         time_label_end.set_width_chars(5);
         time_label_end.set_xalign(1.0);
-        time_labels_box.append(&time_label_end);
+        bottom_row_box.append(&time_label_end);
 
-        // Create a container for media control buttons
+        // Create a container for additional control buttons (volume, indicators)
         let controls_box = Box::builder().orientation(Horizontal).spacing(8).build();
         container.append(&controls_box);
 
@@ -268,21 +299,6 @@ impl PlayerBar {
             .css_classes(vec!["indicator", "gapless-indicator"])
             .build();
         controls_box.append(&gapless_indicator);
-
-        // Add previous track button with standard media icon
-        let prev_button = Button::from_icon_name("media-skip-backward");
-        prev_button.add_css_class("media-button");
-        controls_box.append(&prev_button);
-
-        // Add play button with standard media icon
-        let play_button = Button::from_icon_name("media-playback-start");
-        play_button.add_css_class("media-button");
-        controls_box.append(&play_button);
-
-        // Add next track button with standard media icon
-        let next_button = Button::from_icon_name("media-skip-forward");
-        next_button.add_css_class("media-button");
-        controls_box.append(&next_button);
 
         // Initially hide the player bar until a track is played
         container.set_visible(false);

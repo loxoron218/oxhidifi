@@ -217,8 +217,8 @@
 
 .player-bar {
   background-color: #333;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  padding: 12px 16px;
+  border-top: 1px solid rgba(255, 255, 25, 0.1);
+  padding: 8px 12px;
 }
 
 .player-bar .album-title {
@@ -264,21 +264,28 @@
 }
 
 .player-bar .media-button {
-  padding: 8px;
+  padding: 4px;
   min-width: 40px;
   min-height: 40px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.player-bar .play-controls-box {
+  margin-bottom: 2px;
 }
 
 .player-bar .song-title {
   font-weight: bold;
   font-size: 1.15em;
-  margin-bottom: 4px;
 }
 
 .player-bar .time-label {
   color: #ccc;
   font-size: 0.9em;
-  margin-top: 4px;
+  font-family: monospace;
+  min-width: 40px;
   font-family: monospace;
 }
 
@@ -314,8 +321,7 @@
 
 .player-progress-bar {
   min-height: 24px;
-  margin-top: 8px;
-  margin-bottom: 4px;
+  margin-top: 4px;
 }
 
 /* =====================
