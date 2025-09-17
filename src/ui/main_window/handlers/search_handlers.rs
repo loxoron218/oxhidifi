@@ -1,7 +1,6 @@
 use std::{rc::Rc, sync::Arc};
 
-use glib::Object;
-use gtk4::{Box, gio::ListStore};
+use gtk4::{Box, gio::ListStore, glib::Object};
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 

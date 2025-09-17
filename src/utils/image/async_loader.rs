@@ -1,7 +1,9 @@
 use std::{path::Path, sync::Arc};
 
-use glib::{MainContext, Priority};
-use gtk4::Picture;
+use gtk4::{
+    Picture,
+    glib::{MainContext, Priority},
+};
 use libadwaita::prelude::ObjectExt;
 
 use crate::{

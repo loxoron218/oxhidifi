@@ -4,7 +4,7 @@ use std::{
 };
 
 use gdk_pixbuf::Pixbuf;
-use glib::{FileError::Noent, user_cache_dir};
+use gtk4::glib::{FileError::Noent, user_cache_dir};
 
 use crate::utils::image::{cache::memory::hash_to_hex, error::ImageLoaderError};
 

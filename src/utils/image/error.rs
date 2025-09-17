@@ -4,7 +4,7 @@ use std::{
     io,
 };
 
-use glib;
+use gtk4::glib;
 use image::ImageError;
 
 use crate::utils::image::ImageLoaderError::{Glib, Image, InvalidPath, Io};

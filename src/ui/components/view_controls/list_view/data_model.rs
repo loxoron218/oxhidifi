@@ -1,7 +1,9 @@
 use std::path::PathBuf;
 
-use glib::{Object, wrapper};
-use gtk4::subclass::prelude::ObjectSubclassIsExt;
+use gtk4::{
+    glib::{Object, wrapper},
+    subclass::prelude::ObjectSubclassIsExt,
+};
 
 /// Represents an album item in the column view.
 /// This struct contains all the necessary information about an album
@@ -87,8 +89,10 @@ impl AlbumListItem {
 /// which allows AlbumListItem to be used with GTK's object system
 mod imp {
     use super::AlbumListItem;
-    use glib::object_subclass;
-    use gtk4::subclass::prelude::{ObjectImpl, ObjectSubclass};
+    use gtk4::{
+        glib::{self, object_subclass},
+        subclass::prelude::{ObjectImpl, ObjectSubclass},
+    };
     use std::cell::RefCell;
 
     /// The internal structure for AlbumListItemObject

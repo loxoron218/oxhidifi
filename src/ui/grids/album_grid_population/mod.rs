@@ -5,8 +5,10 @@ use std::{
     time::Duration,
 };
 
-use glib::{ControlFlow::Continue, MainContext, timeout_add_local};
-use gtk4::{FlowBox, Label, Stack};
+use gtk4::{
+    FlowBox, Label, Stack,
+    glib::{ControlFlow::Continue, MainContext, timeout_add_local},
+};
 use libadwaita::prelude::WidgetExt;
 use sqlx::SqlitePool;
 use tokio_stream::{StreamExt, wrappers::UnboundedReceiverStream};

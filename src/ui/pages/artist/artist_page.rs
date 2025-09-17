@@ -5,12 +5,12 @@ use std::{
     sync::Arc,
 };
 
-use glib::{WeakRef, clone::Downgrade};
 use gtk4::{
     Align::{Center, Start},
     Box, FlowBox, Justification, Label,
     Orientation::Vertical,
     SelectionMode,
+    glib::{WeakRef, clone::Downgrade},
 };
 use libadwaita::{
     Clamp, ViewStack,

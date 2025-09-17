@@ -4,8 +4,11 @@ use std::{
     sync::Arc,
 };
 
-use glib::{MainContext, WeakRef};
-use gtk4::{Button, ColumnView, FlowBox, Label, Stack, Window, gio::ListStore};
+use gtk4::{
+    Button, ColumnView, FlowBox, Label, Stack, Window,
+    gio::ListStore,
+    glib::{MainContext, WeakRef},
+};
 use libadwaita::{
     Clamp, ViewStack,
     prelude::{ButtonExt, Cast, ListModelExt, ObjectExt},

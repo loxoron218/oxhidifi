@@ -1,11 +1,11 @@
 use std::{cell::RefCell, rc::Rc};
 
-use glib::MainContext;
 use gtk4::{
     Align::{Center, Start},
     Box, CheckButton, EventControllerMotion, Label,
     Orientation::Horizontal,
     Overlay, Stack, StackTransitionType,
+    glib::MainContext,
 };
 use libadwaita::prelude::{BoxExt, CheckButtonExt, WidgetExt};
 use sqlx::SqlitePool;

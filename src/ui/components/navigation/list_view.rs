@@ -5,9 +5,9 @@ use std::{
     sync::Arc,
 };
 
-use glib::{MainContext, WeakRef, clone::Downgrade};
 use gtk4::{
     ColumnView,
+    glib::{MainContext, WeakRef, clone::Downgrade},
     prelude::{CastNone, ListModelExt, WidgetExt},
 };
 use libadwaita::{Clamp, ViewStack};

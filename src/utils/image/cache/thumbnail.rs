@@ -7,7 +7,7 @@ use std::{
     time::Instant,
 };
 
-use glib::user_cache_dir;
+use gtk4::glib::user_cache_dir;
 use image::{
     ImageError::{self, IoError},
     codecs::jpeg::JpegEncoder,

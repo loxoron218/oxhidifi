@@ -4,8 +4,7 @@ use std::{
     sync::Arc,
 };
 
-use glib::MainContext;
-use gtk4::{Label, Stack};
+use gtk4::{Label, Stack, glib::MainContext};
 use libadwaita::{PreferencesPage, prelude::PreferencesPageExt};
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;

@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
-use glib::markup_escape_text;
 use gtk4::{Align::End, Button, Label};
 use libadwaita::{
     ActionRow, PreferencesGroup,
+    glib::markup_escape_text,
     prelude::{ActionRowExt, ButtonExt, PreferencesGroupExt, WidgetExt},
 };
 

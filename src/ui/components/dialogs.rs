@@ -6,7 +6,6 @@ use std::{
     thread::spawn,
 };
 
-use glib::MainContext;
 use gtk4::{
     Button,
     ButtonsType::OkCancel,
@@ -18,6 +17,7 @@ use gtk4::{
     ResponseType::{self, Accept, Cancel, Close, Other},
     ScrolledWindow, Stack, TextView, Window,
     WrapMode::Word,
+    glib::MainContext,
 };
 use libadwaita::prelude::{
     BoxExt, ButtonExt, DialogExt, FileChooserExt, FileExt, GtkWindowExt, IsA, OrientableExt,

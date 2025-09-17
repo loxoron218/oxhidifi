@@ -1,9 +1,9 @@
 use std::{cell::Cell, rc::Rc, sync::Arc};
 
-use glib::WeakRef;
 use gtk4::{Box, Orientation::Vertical, PolicyType::Never, ScrolledWindow};
 use libadwaita::{
     Clamp, ViewStack,
+    glib::WeakRef,
     prelude::{BoxExt, WidgetExt},
 };
 use sqlx::SqlitePool;

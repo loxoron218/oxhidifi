@@ -1,12 +1,12 @@
 use std::{cell::RefCell, path::Path, rc::Rc};
 
 use gdk_pixbuf::Pixbuf;
-use glib::SignalHandlerId;
 use gtk4::{
     Align::Start,
     Box, Button, Image, Label,
     Orientation::{Horizontal, Vertical},
     Scale,
+    glib::SignalHandlerId,
     prelude::{BoxExt, ObjectExt, RangeExt, WidgetExt},
 };
 

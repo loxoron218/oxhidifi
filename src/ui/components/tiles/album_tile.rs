@@ -5,12 +5,12 @@ use std::{
     sync::Arc,
 };
 
-use glib::{MainContext, prelude::ObjectExt};
 use gtk4::{
     Align::{Center, End, Start},
     Box, Button, EventControllerMotion, Fixed, FlowBoxChild, GestureClick,
     Orientation::{Horizontal, Vertical},
     Overlay,
+    glib::{MainContext, prelude::ObjectExt},
     pango::{EllipsizeMode, WrapMode::WordChar},
 };
 use libadwaita::{

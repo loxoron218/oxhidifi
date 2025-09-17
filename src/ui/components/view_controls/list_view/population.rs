@@ -4,8 +4,7 @@ use std::{
     sync::Arc,
 };
 
-use glib::MainContext;
-use gtk4::{Label, Stack, gio::ListStore};
+use gtk4::{Label, Stack, gio::ListStore, glib::MainContext};
 use sqlx::SqlitePool;
 use tokio_stream::{StreamExt, wrappers::UnboundedReceiverStream};
 

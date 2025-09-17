@@ -5,8 +5,11 @@ use std::{
     time::Duration,
 };
 
-use glib::{MainContext, SourceId};
-use gtk4::{Entry, Stack, gio::ListStore};
+use gtk4::{
+    Entry, Stack,
+    gio::ListStore,
+    glib::{MainContext, SourceId},
+};
 use libadwaita::{Clamp, ViewStack, prelude::EditableExt};
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;

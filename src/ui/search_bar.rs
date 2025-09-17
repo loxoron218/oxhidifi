@@ -1,7 +1,7 @@
-use glib::Propagation::{Proceed, Stop};
 use gtk4::{
     Box, Button, Entry, EventControllerFocus, EventControllerKey, GestureClick,
     Orientation::Horizontal,
+    glib::Propagation::{Proceed, Stop},
 };
 use libadwaita::{
     ApplicationWindow,

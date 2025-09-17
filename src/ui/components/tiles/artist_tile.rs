@@ -4,11 +4,11 @@ use std::{
     sync::Arc,
 };
 
-use glib::{MainContext, prelude::ObjectExt};
 use gtk4::{
     Align::{Center, End, Fill, Start},
     Box, FlowBoxChild, GestureClick, Image,
     Orientation::Vertical,
+    glib::{MainContext, prelude::ObjectExt},
     pango::{EllipsizeMode, WrapMode::WordChar},
 };
 use libadwaita::{

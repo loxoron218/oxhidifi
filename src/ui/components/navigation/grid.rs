@@ -5,8 +5,11 @@ use std::{
     sync::Arc,
 };
 
-use glib::{MainContext, WeakRef, clone::Downgrade};
-use gtk4::{FlowBox, prelude::WidgetExt};
+use gtk4::{
+    FlowBox,
+    glib::{MainContext, WeakRef, clone::Downgrade},
+    prelude::WidgetExt,
+};
 use libadwaita::{Clamp, ViewStack};
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;

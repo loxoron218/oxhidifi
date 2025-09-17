@@ -1,6 +1,6 @@
 use std::{path::PathBuf, rc::Rc, thread::spawn, time::Duration};
 
-use glib::timeout_future;
+use gtk4::glib::timeout_future;
 use libadwaita::prelude::WidgetExt;
 use tokio::runtime::Runtime;
 

@@ -1,4 +1,4 @@
-use glib::markup_escape_text;
+use gtk4::glib::markup_escape_text;
 
 /// Helper function to highlight matching text.
 ///

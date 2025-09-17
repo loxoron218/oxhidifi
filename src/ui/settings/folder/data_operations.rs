@@ -4,8 +4,11 @@ use std::{
     sync::Arc,
 };
 
-use glib::{MainContext, idle_add_local_once};
-use gtk4::{Label, ListBox, Stack, prelude::WidgetExt};
+use gtk4::{
+    Label, ListBox, Stack,
+    glib::{MainContext, idle_add_local_once},
+    prelude::WidgetExt,
+};
 use libadwaita::PreferencesGroup;
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;

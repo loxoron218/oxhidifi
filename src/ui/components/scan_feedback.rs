@@ -3,8 +3,7 @@ use std::{
     rc::Rc,
 };
 
-use glib::MainContext;
-use gtk4::Label;
+use gtk4::{Label, glib::MainContext};
 use libadwaita::{ViewStack, prelude::WidgetExt};
 use tokio::sync::mpsc::UnboundedReceiver;
 

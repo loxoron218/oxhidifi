@@ -4,8 +4,13 @@ use std::{
     sync::Arc,
 };
 
-use glib::Propagation::{Proceed, Stop};
-use gtk4::{EventControllerKey, Label, Stack, Window};
+use gtk4::{
+    EventControllerKey, Label, Stack, Window,
+    glib::{
+        self,
+        Propagation::{Proceed, Stop},
+    },
+};
 use libadwaita::{
     PreferencesWindow,
     gdk::Key,

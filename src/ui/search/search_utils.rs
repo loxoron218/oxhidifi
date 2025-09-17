@@ -4,8 +4,10 @@ use std::{
     time::Duration,
 };
 
-use glib::{SourceId, source::timeout_add_local_once};
-use gtk4::FlowBox;
+use gtk4::{
+    FlowBox,
+    glib::{SourceId, source::timeout_add_local_once},
+};
 use libadwaita::prelude::WidgetExt;
 
 use crate::ui::grids::album_grid_state::AlbumGridItem;

@@ -5,10 +5,10 @@ use std::{
     time::Duration,
 };
 
-use glib::{SendValue, Type, clone::Downgrade, timeout_add_local_once};
 use gtk4::{
     DragSource, DropTarget, ListBox, ListBoxRow, Widget,
     gdk::{ContentProvider, DragAction},
+    glib::{SendValue, Type, clone::Downgrade, timeout_add_local_once},
 };
 use libadwaita::{
     ActionRow,

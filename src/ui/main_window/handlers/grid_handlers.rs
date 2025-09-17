@@ -1,6 +1,6 @@
 use std::{rc::Rc, sync::Arc};
 
-use glib::MainContext;
+use gtk4::glib::MainContext;
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
