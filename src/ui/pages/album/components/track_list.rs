@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, path::Path};
 
 use gtk4::{Align::End, Button, Label};
 use libadwaita::{
@@ -134,9 +134,11 @@ pub fn build_track_row(
     let track_sample_rate = t.sample_rate;
     let track_format = t.format.clone();
     let track_duration = t.duration;
+    let track_path = t.path.clone();
 
-    // Connect the play button to update the player bar with track metadata
+    // Connect the play button to load and play the track
     play_pause_button.connect_clicked(move |_| {
+        // Update the player bar with track metadata
         player_bar_clone.update_with_metadata(
             &album_clone.title,
             &track_title,
@@ -147,6 +149,9 @@ pub fn build_track_row(
             track_format.as_deref(),
             track_duration,
         );
+
+        // Load and play the track
+        player_bar_clone.load_and_play_track(Path::new(&track_path));
     });
 
     // Add the play button to the row

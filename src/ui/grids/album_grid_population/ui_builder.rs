@@ -264,13 +264,13 @@ pub fn create_album_tile(
         let album_artist = album_artist.clone();
         let album_cover_art = album_cover_art.clone();
 
-        // Spawn async task to fetch track information
+        // Spawn async task to fetch track information and start playback
         MainContext::default().spawn_local(async move {
             // Fetch the first track of the album for playback information
             match fetch_tracks_by_album(&db_pool_clone, album_id).await {
                 Ok(tracks) => {
                     if let Some(first_track) = tracks.first() {
-                        // Use first track information for the player bar
+                        // Update player bar with first track information
                         player_bar_clone.update_with_metadata(
                             &album_title,
                             &first_track.title,
@@ -281,8 +281,13 @@ pub fn create_album_tile(
                             first_track.format.as_deref(),
                             first_track.duration,
                         );
+
+                        // Load and play the first track
+                        player_bar_clone.load_and_play_track(Path::new(&first_track.path));
                     } else {
-                        // Fallback if no tracks found
+                        println!("No tracks found for album ID: {}", album_id);
+
+                        // Fallback if no tracks found - just update metadata
                         player_bar_clone.update_with_metadata(
                             &album_title,
                             &album_title,
@@ -295,8 +300,12 @@ pub fn create_album_tile(
                         );
                     }
                 }
-                Err(_) => {
-                    // Fallback if database query fails
+
+                // Handle database query error by updating player with available metadata
+                Err(e) => {
+                    println!("Error fetching tracks for album ID {}: {}", album_id, e);
+
+                    // Fallback if database query fails - just update metadata
                     player_bar_clone.update_with_metadata(
                         &album_title,
                         &album_title,

@@ -1,4 +1,5 @@
 mod data;
+mod playback;
 mod ui;
 mod utils;
 

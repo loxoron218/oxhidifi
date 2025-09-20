@@ -2,6 +2,8 @@ use std::{
     cell::{Cell, RefCell},
     path::Path,
     rc::Rc,
+    sync::{Arc, Mutex},
+    time::Duration,
 };
 
 use gtk4::{
@@ -10,12 +12,21 @@ use gtk4::{
     Orientation::{Horizontal, Vertical},
     Scale,
     gdk_pixbuf::Pixbuf,
-    glib::SignalHandlerId,
+    glib::{MainContext, SignalHandlerId, timeout_future},
     pango::EllipsizeMode,
-    prelude::{BoxExt, ObjectExt, RangeExt, WidgetExt},
 };
+use libadwaita::prelude::{BoxExt, ButtonExt, ObjectExt, RangeExt, WidgetExt};
 
-use crate::utils::formatting::format_sample_rate_value;
+use crate::{
+    playback::{
+        controller::PlaybackController,
+        events::{
+            PlaybackEvent::{self, EndOfStream, Error},
+            PlaybackState::{Paused, Playing, Stopped},
+        },
+    },
+    utils::formatting::format_sample_rate_value,
+};
 
 /// A UI component that displays currently playing track information at the bottom of the window.
 ///
@@ -75,6 +86,8 @@ pub struct PlayerBar {
     visibility_handler_id: Option<Rc<SignalHandlerId>>,
     /// Duration of the current track in seconds
     duration: Rc<Cell<f64>>,
+    /// Playback controller for managing audio playback
+    playback_controller: Option<Arc<Mutex<PlaybackController>>>,
 }
 
 impl PlayerBar {
@@ -211,7 +224,7 @@ impl PlayerBar {
             .hexpand(true)
             .build();
         progress_bar.add_css_class("player-progress-bar");
-        progress_bar.set_range(0.0, 100.0);
+        progress_bar.set_range(0.0, 10.0);
         progress_box.append(&progress_bar);
 
         // Create a container for the bottom row (time labels and play controls)
@@ -281,7 +294,7 @@ impl PlayerBar {
             .draw_value(false)
             .width_request(80)
             .build();
-        volume_slider.set_range(0.0, 100.0);
+        volume_slider.set_range(0.0, 10.0);
         volume_slider.set_value(100.0);
         volume_slider.add_css_class("volume-slider");
         controls_box.append(&volume_slider);
@@ -325,6 +338,7 @@ impl PlayerBar {
             main_content_area: Rc::new(RefCell::new(None)),
             visibility_handler_id: None,
             duration: Rc::new(Cell::new(0.0)),
+            playback_controller: None,
         }
     }
 
@@ -526,5 +540,160 @@ impl PlayerBar {
 
         // Update the start time label
         self.time_label_start.set_label(&position_text);
+    }
+
+    /// Loads and plays a track
+    ///
+    /// This method stops the current playback, loads a new track using the playback controller,
+    /// updates the UI with track metadata, and starts playback.
+    ///
+    /// # Parameters
+    /// * `track_path` - The path to the audio file
+    pub fn load_and_play_track(&self, track_path: &Path) {
+        // If we have a playback controller, use it to load and play the track
+        if let Some(controller) = &self.playback_controller {
+            match controller.lock() {
+                Ok(mut controller) => {
+                    // Stop the current playback
+                    match controller.stop() {
+                        Ok(_) => (),
+                        Err(e) => eprintln!("Error stopping current playback: {}", e),
+                    }
+
+                    // Load the track
+                    match controller.load_track(track_path.to_path_buf()) {
+                        Ok(_) => (),
+                        Err(e) => eprintln!("Error loading track {:?}: {}", track_path, e),
+                    }
+
+                    // Start playback
+                    match controller.play() {
+                        Ok(_) => (),
+                        Err(e) => eprintln!("Error starting playback: {}", e),
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Failed to acquire lock on playback controller: {}", e);
+                }
+            }
+        } else {
+            eprintln!("No playback controller available");
+        }
+    }
+
+    /// Handles playback events from the controller
+    ///
+    /// This method updates the UI based on playback events from the controller.
+    ///
+    /// # Parameters
+    /// * `event` - The playback event to handle
+    pub fn handle_playback_event(&self, event: PlaybackEvent) {
+        match event {
+            PlaybackEvent::StateChanged(state) => {
+                // Update the play button icon based on the new state
+                match state {
+                    Playing => {
+                        self._play_button.set_icon_name("media-playback-pause");
+                    }
+
+                    Paused => {
+                        self._play_button.set_icon_name("media-playback-start");
+                    }
+
+                    Stopped => {
+                        self._play_button.set_icon_name("media-playback-start");
+                    }
+                    _ => {}
+                }
+            }
+            PlaybackEvent::PositionChanged(position_ns) => {
+                // Update the progress bar with the new position
+                let position_secs = position_ns as f64 / 1_000_000.0;
+                self.progress_bar.set_value(position_secs);
+
+                // Format the current position
+                let position_minutes = (position_secs / 60.0) as u32;
+                let position_seconds = (position_secs % 60.0) as u32;
+
+                // Create the time label text for current position
+                let position_text = format!("{}:{:02}", position_minutes, position_seconds);
+
+                // Update the start time label
+                self.time_label_start.set_label(&position_text);
+            }
+
+            EndOfStream => {
+                // When the track ends, reset the play button icon
+                self._play_button.set_icon_name("media-playback-start");
+            }
+
+            Error(error) => {
+                // Log the error
+                eprintln!("Playback error: {}", error);
+            }
+        }
+    }
+
+    /// Connects the playback controller to the player bar
+    ///
+    /// This method stores a reference to the playback controller and connects
+    /// the UI button signals to controller methods.
+    ///
+    /// # Parameters
+    /// * `controller` - The playback controller to connect
+    pub fn connect_playback_controller(&mut self, controller: Arc<Mutex<PlaybackController>>) {
+        // Store the controller for later use
+        self.playback_controller = Some(controller.clone());
+
+        // Connect play button signal to controller play/pause methods
+        let play_button = self._play_button.clone();
+        let controller_clone = controller.clone();
+        self._play_button.connect_clicked(move |_| {
+            if let Ok(mut controller) = controller_clone.lock() {
+                // Check current state and toggle between play and pause
+                let current_state = controller.get_current_state().clone();
+                match current_state {
+                    Playing => {
+                        let _ = controller.pause();
+                        play_button.set_icon_name("media-playback-start");
+                    }
+
+                    _ => {
+                        let _ = controller.play();
+                        play_button.set_icon_name("media-playback-pause");
+                    }
+                }
+            }
+        });
+
+        // Connect previous button signal to controller previous method
+        let controller_clone = controller.clone();
+        self._prev_button.connect_clicked(move |_| {
+            if let Ok(_controller) = controller_clone.lock() {
+                // TODO: Implement previous track functionality
+            }
+        });
+
+        // Connect next button signal to controller next method
+        let controller_clone = controller.clone();
+        self._next_button.connect_clicked(move |_| {
+            if let Ok(_controller) = controller_clone.lock() {
+                // TODO: Implement next track functionality
+            }
+        });
+
+        // Spawn a task to periodically handle events from the controller
+        let controller_clone = controller.clone();
+        MainContext::default().spawn_local(async move {
+            loop {
+                // Sleep for a short time to avoid busy waiting
+                timeout_future(Duration::from_millis(100)).await;
+
+                // Handle events from the playback controller
+                if let Ok(mut controller) = controller_clone.lock() {
+                    controller.handle_events();
+                }
+            }
+        });
     }
 }

@@ -1,7 +1,7 @@
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,
-    sync::Arc,
+    sync::{Arc, Mutex},
     thread,
 };
 
@@ -20,6 +20,7 @@ use tokio::runtime::Runtime;
 
 use crate::{
     data::scanner::library_ops::run_full_scan,
+    playback::controller::PlaybackController,
     ui::{
         components::{
             config::{load_settings, save_settings},
@@ -111,6 +112,20 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     // Create the player bar
     let player_bar = PlayerBar::new();
 
+    // Create the playback controller
+    let (playback_controller, _) =
+        PlaybackController::new_with_player_bar(Arc::new(Mutex::new(player_bar.clone())))
+            .expect("Failed to create playback controller");
+    let playback_controller = Arc::new(Mutex::new(playback_controller));
+
+    // Connect the playback controller to the player bar
+    let mut player_bar_mut = player_bar.clone();
+    player_bar_mut.connect_playback_controller(playback_controller.clone());
+
+    // Update the player bar in WindowWidgets to ensure it has the playback controller connected
+    // This is necessary because some parts of the application use the player bar from WindowWidgets
+    let player_bar = player_bar_mut.clone();
+
     // Create the zoom managers
     let zoom_manager = Rc::new(ZoomManager::new(settings.current_zoom_level));
     let column_view_zoom_manager = Rc::new(ColumnViewZoomManager::new(Normal));
@@ -157,7 +172,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     // Bundle all static widgets into `WindowWidgets` struct for cleaner passing
     // This struct holds references to all the GTK widgets that are created once and
     // remain static throughout the application's lifetime.
-    let widgets = WindowWidgets {
+    let mut widgets = WindowWidgets {
         window: window.clone(),
         stack: stack.clone(),
         left_btn_stack: app_header_bar_widgets.left_btn_stack.clone(),
@@ -280,6 +295,10 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     let mut player_bar_mut = player_bar.clone();
     player_bar_mut.set_main_content_area(vbox_inner.clone());
     player_bar_mut.connect_visibility_changes();
+
+    // Update the player bar in WindowWidgets to ensure it has the playback controller connected
+    // This is necessary because some parts of the application use the player bar from WindowWidgets
+    widgets.player_bar = player_bar_mut.clone();
 
     // Connect the zoom managers to the view control button
     widgets.button.set_zoom_managers(

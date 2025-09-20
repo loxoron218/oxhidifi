@@ -94,7 +94,7 @@ pub fn build_album_header(
     let tracks_clone = tracks.to_vec();
     play_pause_button.connect_clicked(move |_| {
         // Determine the track-specific details, providing a fallback if no tracks exist.
-        let (track_title, bit_depth, sample_rate, format, duration) = tracks_clone
+        let (track_title, bit_depth, sample_rate, format, duration, track_path) = tracks_clone
             .first()
             .map(|track| {
                 // Case 1: A track exists. Use its details.
@@ -104,11 +104,12 @@ pub fn build_album_header(
                     track.sample_rate,
                     track.format.clone(),
                     track.duration,
+                    Some(track.path.clone()),
                 )
             })
             .unwrap_or_else(|| {
                 // Case 2: No track exists. Use album title and None for details.
-                (album_clone.title.clone(), None, None, None, None)
+                (album_clone.title.clone(), None, None, None, None, None)
             });
 
         // Now, call the update function just once with the determined values.
@@ -122,6 +123,11 @@ pub fn build_album_header(
             format.as_deref(),
             duration,
         );
+
+        // If we have a track path, load and play the track
+        if let Some(path) = track_path {
+            player_bar_clone.load_and_play_track(&path);
+        }
     });
 
     // Add the play button as an overlay on the album cover
