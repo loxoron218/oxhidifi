@@ -122,7 +122,7 @@ pub fn connect_remove_folder_handler(
         let artists_stack_cell = artists_stack_cell.clone();
         show_remove_folder_confirmation_dialog(parent_widget, move || {
             // Handle the folder removal (delegated to data_operations module)
-            handle_folder_removal(
+            let folder_settings_page = FolderSettingsPage {
                 folders_group,
                 list_box,
                 db_pool,
@@ -135,8 +135,10 @@ pub fn connect_remove_folder_handler(
                 scanning_label_artists,
                 albums_stack_cell,
                 artists_stack_cell,
-                folder_id,
-            );
+            };
+
+            // Handle the folder removal (delegated to data_operations module)
+            handle_folder_removal(&folder_settings_page, folder_id);
         });
     });
 }

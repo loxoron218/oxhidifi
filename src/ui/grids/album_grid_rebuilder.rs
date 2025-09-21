@@ -159,7 +159,7 @@ pub fn rebuild_albums_grid_for_window(
                                 // Extract the album ID from the AlbumListItemObject's wrapped AlbumListItem
                                 if let Some(album) = album_item.item().as_ref() {
                                     // Extract the album ID from the AlbumListItemObject's wrapped AlbumListItem
-                                    let album_id = album.id;
+                                    let album_id = album.basic_info.id;
 
                                     // Clone the necessary values for the async block
                                     let stack_clone = stack_clone.clone();

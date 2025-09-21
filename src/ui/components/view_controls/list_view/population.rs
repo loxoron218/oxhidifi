@@ -13,8 +13,13 @@ use crate::{
     ui::{
         components::{
             player_bar::PlayerBar,
-            view_controls::list_view::data_model::{AlbumListItem, AlbumListItemObject},
-            view_controls::sorting_controls::types::SortOrder,
+            view_controls::{
+                list_view::data_model::{
+                    AlbumBasicInfo, AlbumListItem, AlbumListItemObject, AlbumMetadata,
+                    AudioQualityInfo,
+                },
+                sorting_controls::types::SortOrder,
+            },
         },
         grids::{
             album_grid_population::sorting::sort_albums,
@@ -195,20 +200,35 @@ async fn process_albums_in_batches(
     column_view_model.remove_all();
 
     for album_info in &albums {
-        // Create the album list item
+        // Create the album list item with grouped parameters
+        let basic_info = AlbumBasicInfo {
+            id: album_info.id,
+            title: album_info.title.clone(),
+            artist: album_info.artist.clone(),
+            folder_path: album_info.folder_path.clone(),
+        };
+
+        // Group album metadata (year and original release date)
+        let metadata = AlbumMetadata {
+            year: album_info.year,
+            original_release_date: album_info.original_release_date.clone(),
+        };
+
+        // Group audio quality information (DR value, format, bit depth, sample rate)
+        let audio_quality = AudioQualityInfo {
+            dr_value: album_info.dr_value,
+            dr_is_best: album_info.dr_is_best,
+            format: album_info.format.clone(),
+            bit_depth: album_info.bit_depth,
+            sample_rate: album_info.sample_rate,
+        };
+
+        // Create the album list item with all the collected information
         let album_list_item = AlbumListItem::new(
-            album_info.id,
-            album_info.title.clone(),
-            album_info.artist.clone(),
+            basic_info,
+            metadata,
+            audio_quality,
             album_info.cover_art.clone(),
-            album_info.year,
-            album_info.original_release_date.clone(),
-            album_info.dr_value,
-            album_info.dr_is_best,
-            album_info.format.clone(),
-            album_info.bit_depth,
-            album_info.sample_rate,
-            album_info.folder_path.clone(),
         );
 
         // Create an AlbumListItemObject wrapper for the album data and append it to the column view model.

@@ -21,6 +21,45 @@ use crate::{
     utils::screen::ScreenInfo,
 };
 
+/// Albums-related UI components
+pub struct AlbumsUIComponents {
+    pub grid_cell: Rc<RefCell<Option<FlowBox>>>,
+    pub stack_cell: Rc<RefCell<Option<Stack>>>,
+    pub scanning_label: Label,
+    pub count_label: Rc<Label>,
+}
+
+/// Artists-related UI components
+pub struct ArtistsUIComponents {
+    pub grid_cell: Rc<RefCell<Option<FlowBox>>>,
+    pub stack_cell: Rc<RefCell<Option<Stack>>>,
+    pub scanning_label: Label,
+    pub count_label: Rc<Label>,
+}
+
+/// Navigation-related UI components
+pub struct NavigationComponents {
+    pub stack: Rc<ViewStack>,
+    pub left_btn_stack: Rc<ViewStack>,
+    pub right_btn_box: Clamp,
+    pub nav_history: Rc<RefCell<Vec<String>>>,
+}
+
+/// Sorting-related components
+pub struct SortingComponents {
+    pub orders: Rc<RefCell<Vec<SortOrder>>>,
+    pub ascending: Rc<Cell<bool>>,
+    pub ascending_artists: Rc<Cell<bool>>,
+}
+
+/// Display settings
+pub struct DisplaySettings {
+    pub screen_info: Rc<RefCell<ScreenInfo>>,
+    pub show_dr_badges: Rc<Cell<bool>>,
+    pub use_original_year: Rc<Cell<bool>>,
+    pub current_zoom_level: Option<Rc<Cell<ZoomLevel>>>,
+}
+
 /// A service struct that encapsulates all the shared state and logic required for refreshing
 /// the library UI. This centralizes the management of UI components and data, simplifying
 /// function signatures and improving maintainability.
@@ -57,59 +96,44 @@ pub struct RefreshService {
 impl RefreshService {
     /// Creates a new `RefreshService` instance, initializing it with all necessary UI components
     /// and shared data.
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         db_pool: Arc<SqlitePool>,
-        albums_grid_cell: Rc<RefCell<Option<FlowBox>>>,
-        albums_stack_cell: Rc<RefCell<Option<Stack>>>,
-        artist_grid_cell: Rc<RefCell<Option<FlowBox>>>,
-        artists_stack_cell: Rc<RefCell<Option<Stack>>>,
-        sort_orders: Rc<RefCell<Vec<SortOrder>>>,
-        stack: Rc<ViewStack>,
-        left_btn_stack: Rc<ViewStack>,
-        right_btn_box: Clamp,
-        screen_info: Rc<RefCell<ScreenInfo>>,
-        sort_ascending: Rc<Cell<bool>>,
-        sort_ascending_artists: Rc<Cell<bool>>,
-        scanning_label_albums: Label,
-        scanning_label_artists: Label,
-        album_count_label: Rc<Label>,
-        artist_count_label: Rc<Label>,
-        nav_history: Rc<RefCell<Vec<String>>>,
+        albums_components: AlbumsUIComponents,
+        artists_components: ArtistsUIComponents,
+        navigation_components: NavigationComponents,
+        sorting_components: SortingComponents,
+        display_settings: DisplaySettings,
         sender: UnboundedSender<()>,
-        show_dr_badges: Rc<Cell<bool>>,
-        use_original_year: Rc<Cell<bool>>,
         player_bar: PlayerBar,
         window: Window,
-        current_zoom_level: Option<Rc<Cell<ZoomLevel>>>,
     ) -> Self {
         Self {
             db_pool,
-            albums_grid_cell,
-            albums_stack_cell,
-            artist_grid_cell,
-            artists_stack_cell,
-            sort_orders,
-            stack,
-            left_btn_stack,
-            right_btn_box,
-            screen_info,
-            sort_ascending,
-            sort_ascending_artists,
-            scanning_label_albums,
-            scanning_label_artists,
-            album_count_label,
-            artist_count_label,
-            nav_history,
+            albums_grid_cell: albums_components.grid_cell,
+            albums_stack_cell: albums_components.stack_cell,
+            artist_grid_cell: artists_components.grid_cell,
+            artists_stack_cell: artists_components.stack_cell,
+            sort_orders: sorting_components.orders,
+            stack: navigation_components.stack,
+            left_btn_stack: navigation_components.left_btn_stack,
+            right_btn_box: navigation_components.right_btn_box,
+            screen_info: display_settings.screen_info,
+            sort_ascending: sorting_components.ascending,
+            sort_ascending_artists: sorting_components.ascending_artists,
+            scanning_label_albums: albums_components.scanning_label,
+            scanning_label_artists: artists_components.scanning_label,
+            album_count_label: albums_components.count_label,
+            artist_count_label: artists_components.count_label,
+            nav_history: navigation_components.nav_history,
             sender,
-            show_dr_badges: show_dr_badges.clone(),
-            use_original_year,
+            show_dr_badges: display_settings.show_dr_badges.clone(),
+            use_original_year: display_settings.use_original_year,
             player_bar,
             column_view_model: Rc::new(RefCell::new(None)),
             column_view_widget: Rc::new(RefCell::new(None)),
-            previous_show_dr_badges: Cell::new(show_dr_badges.get()),
+            previous_show_dr_badges: Cell::new(display_settings.show_dr_badges.get()),
             window,
-            current_zoom_level,
+            current_zoom_level: display_settings.current_zoom_level,
         }
     }
 

@@ -5,23 +5,31 @@ use gtk4::{
     subclass::prelude::ObjectSubclassIsExt,
 };
 
-/// Represents an album item in the column view.
-/// This struct contains all the necessary information about an album
-/// to be displayed in the list view.
+/// Basic album information
 #[derive(Debug, Clone)]
-pub struct AlbumListItem {
+pub struct AlbumBasicInfo {
     /// The unique identifier for the album
     pub id: i64,
     /// The title of the album
     pub title: String,
     /// The artist who created the album
     pub artist: String,
-    /// Optional path to the album's cover art image
-    pub cover_art: Option<String>,
+    /// The file system path to the album's folder
+    pub folder_path: PathBuf,
+}
+
+/// Album metadata information
+#[derive(Debug, Clone)]
+pub struct AlbumMetadata {
     /// The release year of the album, if available
     pub year: Option<i32>,
     /// The original release date of the album as a string, if available
     pub original_release_date: Option<String>,
+}
+
+/// Audio quality information
+#[derive(Debug, Clone)]
+pub struct AudioQualityInfo {
     /// The DR (Dynamic Range) value of the album, if available
     pub dr_value: Option<i32>,
     /// Indicates whether the DR (Dynamic Range) analysis for this album is the best
@@ -32,54 +40,42 @@ pub struct AlbumListItem {
     pub bit_depth: Option<i32>,
     /// The sample rate of the audio files in Hz, if available
     pub sample_rate: Option<i32>,
-    /// The file system path to the album's folder
-    pub folder_path: PathBuf,
+}
+
+/// Represents an album item in the column view.
+/// This struct contains all the necessary information about an album
+/// to be displayed in the list view.
+#[derive(Debug, Clone)]
+pub struct AlbumListItem {
+    /// Basic album information
+    pub basic_info: AlbumBasicInfo,
+    /// Album metadata
+    pub metadata: AlbumMetadata,
+    /// Audio quality information
+    pub audio_quality: AudioQualityInfo,
+    /// Optional path to the album's cover art image
+    pub cover_art: Option<String>,
 }
 
 impl AlbumListItem {
     /// Creates a new AlbumListItem with the provided album information
     ///
     /// # Parameters
-    /// - `id`: The unique identifier for the album
-    /// - `title`: The title of the album
-    /// - `artist`: The artist who created the album
+    /// - `basic_info`: Basic album information (id, title, artist, folder_path)
+    /// - `metadata`: Album metadata (year, original_release_date)
+    /// - `audio_quality`: Audio quality information (dr_value, dr_is_best, format, bit_depth, sample_rate)
     /// - `cover_art`: Optional path to the album's cover art image
-    /// - `year`: The release year of the album, if available
-    /// - `original_release_date`: The original release date of the album as a string, if available
-    /// - `dr_value`: The DR (Dynamic Range) value of the album, if available
-    /// - `dr_is_best`: Indicates whether the DR analysis for this album is the best
-    /// - `format`: The audio format of the album files (e.g., "FLAC", "MP3"), if available
-    /// - `bit_depth`: The bit depth of the audio files, if available
-    /// - `sample_rate`: The sample rate of the audio files in Hz, if available
-    /// - `folder_path`: The file system path to the album's folder
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
-        id: i64,
-        title: String,
-        artist: String,
+        basic_info: AlbumBasicInfo,
+        metadata: AlbumMetadata,
+        audio_quality: AudioQualityInfo,
         cover_art: Option<String>,
-        year: Option<i32>,
-        original_release_date: Option<String>,
-        dr_value: Option<i32>,
-        dr_is_best: bool,
-        format: Option<String>,
-        bit_depth: Option<i32>,
-        sample_rate: Option<i32>,
-        folder_path: PathBuf,
     ) -> Self {
         Self {
-            id,
-            title,
-            artist,
+            basic_info,
+            metadata,
+            audio_quality,
             cover_art,
-            year,
-            original_release_date,
-            dr_value,
-            dr_is_best,
-            format,
-            bit_depth,
-            sample_rate,
-            folder_path,
         }
     }
 }
@@ -152,7 +148,7 @@ impl AlbumListItemObject {
     /// The album title, or an empty string if the item is not set
     pub fn title(&self) -> String {
         if let Some(ref item) = *self.imp().item.borrow() {
-            item.title.clone()
+            item.basic_info.title.clone()
         } else {
             String::new()
         }
@@ -176,7 +172,7 @@ impl AlbumListItemObject {
     /// The album artist, or an empty string if the item is not set
     pub fn artist(&self) -> String {
         if let Some(ref item) = *self.imp().item.borrow() {
-            item.artist.clone()
+            item.basic_info.artist.clone()
         } else {
             String::new()
         }
@@ -188,7 +184,7 @@ impl AlbumListItemObject {
     /// The audio format of the album files, or None if not available or item not set
     pub fn format(&self) -> Option<String> {
         if let Some(ref item) = *self.imp().item.borrow() {
-            item.format.clone()
+            item.audio_quality.format.clone()
         } else {
             None
         }
@@ -200,7 +196,7 @@ impl AlbumListItemObject {
     /// The bit depth of the audio files, or None if not available or item not set
     pub fn bit_depth(&self) -> Option<i32> {
         if let Some(ref item) = *self.imp().item.borrow() {
-            item.bit_depth
+            item.audio_quality.bit_depth
         } else {
             None
         }
@@ -212,7 +208,7 @@ impl AlbumListItemObject {
     /// The sample rate of the audio files in Hz, or None if not available or item not set
     pub fn sample_rate(&self) -> Option<i32> {
         if let Some(ref item) = *self.imp().item.borrow() {
-            item.sample_rate
+            item.audio_quality.sample_rate
         } else {
             None
         }
@@ -224,7 +220,7 @@ impl AlbumListItemObject {
     /// The release year of the album, or None if not available or item not set
     pub fn year(&self) -> Option<i32> {
         if let Some(ref item) = *self.imp().item.borrow() {
-            item.year
+            item.metadata.year
         } else {
             None
         }
@@ -236,7 +232,7 @@ impl AlbumListItemObject {
     /// The DR (Dynamic Range) value of the album, or None if not available or item not set
     pub fn dr_value(&self) -> Option<i32> {
         if let Some(ref item) = *self.imp().item.borrow() {
-            item.dr_value
+            item.audio_quality.dr_value
         } else {
             None
         }
@@ -248,7 +244,7 @@ impl AlbumListItemObject {
     /// Whether the DR (Dynamic Range) analysis for this album is the best
     pub fn dr_is_best(&self) -> bool {
         if let Some(ref item) = *self.imp().item.borrow() {
-            item.dr_is_best
+            item.audio_quality.dr_is_best
         } else {
             false
         }
@@ -260,7 +256,7 @@ impl AlbumListItemObject {
     /// The original release date of the album, or None if not available or item not set
     pub fn original_release_date(&self) -> Option<String> {
         if let Some(ref item) = *self.imp().item.borrow() {
-            item.original_release_date.clone()
+            item.metadata.original_release_date.clone()
         } else {
             None
         }

@@ -16,7 +16,10 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use crate::{
     ui::components::{
         player_bar::PlayerBar,
-        refresh::RefreshService,
+        refresh::{
+            AlbumsUIComponents, ArtistsUIComponents, DisplaySettings, NavigationComponents,
+            RefreshService, SortingComponents,
+        },
         view_controls::{ZoomLevel, sorting_controls::types::SortOrder},
     },
     utils::screen::ScreenInfo,
@@ -29,7 +32,6 @@ use crate::{
 /// - `UnboundedSender<()>`: A sender to trigger UI refreshes from other parts of the application.
 /// - `UnboundedReceiver<()>`: A receiver for the refresh signals.
 /// - `Rc<dyn Fn(bool, bool)>`: A refresh closure that can be called to explicitly refresh the UI.
-#[allow(clippy::too_many_arguments)]
 pub fn setup_library_refresh_channel(
     db_pool: Arc<SqlitePool>,
     albums_grid_cell: Rc<RefCell<Option<FlowBox>>>,
@@ -61,31 +63,56 @@ pub fn setup_library_refresh_channel(
 ) {
     let (sender, receiver) = unbounded_channel::<()>();
 
+    // Create grouping structs
+    let albums_components = AlbumsUIComponents {
+        grid_cell: albums_grid_cell,
+        stack_cell: albums_stack_cell,
+        scanning_label: scanning_label_albums,
+        count_label: album_count_label,
+    };
+
+    // Group UI components related to artists display (grid, stack, labels)
+    let artists_components = ArtistsUIComponents {
+        grid_cell: artist_grid_cell,
+        stack_cell: artists_stack_cell,
+        scanning_label: scanning_label_artists,
+        count_label: artist_count_label,
+    };
+
+    // Group navigation-related UI components (stacks, buttons, history)
+    let navigation_components = NavigationComponents {
+        stack,
+        left_btn_stack,
+        right_btn_box,
+        nav_history,
+    };
+
+    // Group sorting-related components (orders, ascending flags)
+    let sorting_components = SortingComponents {
+        orders: sort_orders,
+        ascending: sort_ascending,
+        ascending_artists: sort_ascending_artists,
+    };
+
+    // Group display settings (screen info, badges, year format, zoom level)
+    let display_settings = DisplaySettings {
+        screen_info,
+        show_dr_badges,
+        use_original_year,
+        current_zoom_level,
+    };
+
     // Create the RefreshService instance
     let service = Rc::new(RefreshService::new(
         db_pool,
-        albums_grid_cell,
-        albums_stack_cell,
-        artist_grid_cell,
-        artists_stack_cell,
-        sort_orders,
-        stack.clone(),
-        left_btn_stack,
-        right_btn_box,
-        screen_info,
-        sort_ascending,
-        sort_ascending_artists,
-        scanning_label_albums,
-        scanning_label_artists,
-        album_count_label,
-        artist_count_label,
-        nav_history,
+        albums_components,
+        artists_components,
+        navigation_components,
+        sorting_components,
+        display_settings,
         sender.clone(),
-        show_dr_badges,
-        use_original_year,
         player_bar,
         window,
-        current_zoom_level,
     ));
 
     // Create the refresh UI closure from the service

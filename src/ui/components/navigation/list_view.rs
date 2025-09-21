@@ -135,7 +135,7 @@ pub fn connect_list_view_album_navigation<Fut, F>(
         if let Some(album_item) = item.and_downcast::<AlbumListItemObject>() {
             // Extract the album ID from the AlbumListItemObject's wrapped AlbumListItem
             // The album ID is used to fetch the full album details from the database
-            let album_id = album_item.item().as_ref().unwrap().id;
+            let album_id = album_item.item().as_ref().unwrap().basic_info.id;
 
             // If there's a current visible page, push it onto the navigation history
             // This enables the back button to navigate to the previous page

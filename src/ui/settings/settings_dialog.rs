@@ -24,7 +24,7 @@ use crate::ui::{
         view_controls::sorting_controls::types::SortOrder,
     },
     settings::{
-        audio_page::create_audio_page, general_page::create_general_page,
+        audio_page::create_audio_page, general_page::GeneralSettingsPage,
         library_page::create_library_page,
     },
 };
@@ -105,14 +105,15 @@ pub fn show_settings_dialog(
     );
 
     // Create the General page
-    let general_page = create_general_page(
-        parent,
+    let general_settings_page = GeneralSettingsPage::new(
+        parent.clone(),
         refresh_library_ui.clone(),
         sort_ascending.clone(),
         sort_ascending_artists.clone(),
         show_dr_badges_setting.clone(),
         use_original_year_setting.clone(),
     );
+    let general_page = general_settings_page.create_page();
 
     // Create the Audio page
     let audio_page = create_audio_page();

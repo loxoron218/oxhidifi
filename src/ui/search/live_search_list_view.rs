@@ -19,7 +19,9 @@ use crate::{
     ui::{
         components::{
             player_bar::PlayerBar,
-            view_controls::list_view::data_model::{AlbumListItem, AlbumListItemObject},
+            view_controls::list_view::data_model::{
+                AlbumBasicInfo, AlbumListItem, AlbumListItemObject, AlbumMetadata, AudioQualityInfo,
+            },
         },
         search::search_utils::{debounce_search, sort_albums_by_relevance},
     },
@@ -169,20 +171,35 @@ pub fn connect_live_search_list_view(
                             // Populate the ListStore with search results
                             if !albums.is_empty() {
                                 for album in &albums {
-                                    // Create the album list item
+                                    // Create the album list item with grouped parameters
+                                    let basic_info = AlbumBasicInfo {
+                                        id: album.id,
+                                        title: album.title.clone(),
+                                        artist: album.artist.clone(),
+                                        folder_path: album.folder_path.clone(),
+                                    };
+
+                                    // Group album metadata (year and original release date)
+                                    let metadata = AlbumMetadata {
+                                        year: album.year,
+                                        original_release_date: album.original_release_date.clone(),
+                                    };
+
+                                    // Group audio quality information (DR value, format, bit depth, sample rate)
+                                    let audio_quality = AudioQualityInfo {
+                                        dr_value: album.dr_value,
+                                        dr_is_best: album.dr_is_best,
+                                        format: album.format.clone(),
+                                        bit_depth: album.bit_depth,
+                                        sample_rate: album.sample_rate,
+                                    };
+
+                                    // Create the album list item with all the collected information
                                     let album_list_item = AlbumListItem::new(
-                                        album.id,
-                                        album.title.clone(),
-                                        album.artist.clone(),
+                                        basic_info,
+                                        metadata,
+                                        audio_quality,
                                         album.cover_art.clone(),
-                                        album.year,
-                                        album.original_release_date.clone(),
-                                        album.dr_value,
-                                        album.dr_is_best,
-                                        album.format.clone(),
-                                        album.bit_depth,
-                                        album.sample_rate,
-                                        album.folder_path.clone(),
                                     );
 
                                     // Create an AlbumListItemObject wrapper for the album data and append it to the column view model.

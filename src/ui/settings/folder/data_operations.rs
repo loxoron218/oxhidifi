@@ -1,17 +1,6 @@
-use std::{
-    cell::{Cell, RefCell},
-    rc::Rc,
-    sync::Arc,
-};
+use std::rc::Rc;
 
-use gtk4::{
-    Label, ListBox, Stack,
-    glib::{MainContext, idle_add_local_once},
-    prelude::WidgetExt,
-};
-use libadwaita::PreferencesGroup;
-use sqlx::SqlitePool;
-use tokio::sync::mpsc::UnboundedSender;
+use gtk4::{glib::idle_add_local_once, prelude::WidgetExt};
 
 use crate::{
     data::db::{cleanup::remove_folder_and_albums, query::fetch_all_folders},
@@ -136,48 +125,22 @@ pub async fn refresh_display(folder_settings_page: &FolderSettingsPage) {
 ///
 /// # Arguments
 ///
-/// * `folders_group` - The preferences group
-/// * `list_box` - The list box containing folders
-/// * `db_pool` - The database connection pool
-/// * `refresh_library_ui` - Callback to refresh the main library UI
-/// * `sort_ascending` - Shared state for album sort direction
-/// * `sort_ascending_artists` - Shared state for artist sort direction
-/// * `main_context` - The GLib main context for spawning UI tasks
-/// * `sender` - Optional sender to notify UI refresh after scanning
-/// * `scanning_label_albums` - The scanning label for albums
-/// * `scanning_label_artists` - The scanning label for artists
-/// * `albums_stack_cell` - The albums stack cell
-/// * `artists_stack_cell` - The artists stack cell
+/// * `folder_settings_page` - The folder settings page instance
 /// * `folder_id` - The ID of the folder to remove
-#[allow(clippy::too_many_arguments)]
-pub fn handle_folder_removal(
-    folders_group: Rc<PreferencesGroup>,
-    list_box: Rc<ListBox>,
-    db_pool: Arc<SqlitePool>,
-    refresh_library_ui: Rc<dyn Fn(bool, bool)>,
-    sort_ascending: Rc<Cell<bool>>,
-    sort_ascending_artists: Rc<Cell<bool>>,
-    main_context: Rc<MainContext>,
-    sender: Option<UnboundedSender<()>>,
-    scanning_label_albums: Rc<Label>,
-    scanning_label_artists: Rc<Label>,
-    albums_stack_cell: Rc<RefCell<Option<Stack>>>,
-    artists_stack_cell: Rc<RefCell<Option<Stack>>>,
-    folder_id: i64,
-) {
+pub fn handle_folder_removal(folder_settings_page: &FolderSettingsPage, folder_id: i64) {
     // Spawn an asynchronous task on the main context.
-    let folders_group = folders_group.clone();
-    let list_box = list_box.clone();
-    let db_pool = db_pool.clone();
-    let refresh_library_ui = refresh_library_ui.clone();
-    let sort_ascending = sort_ascending.clone();
-    let sort_ascending_artists = sort_ascending_artists.clone();
-    let main_context = main_context.clone();
-    let sender = sender.clone();
-    let scanning_label_albums = scanning_label_albums.clone();
-    let scanning_label_artists = scanning_label_artists.clone();
-    let albums_stack_cell = albums_stack_cell.clone();
-    let artists_stack_cell = artists_stack_cell.clone();
+    let folders_group = folder_settings_page.folders_group.clone();
+    let list_box = folder_settings_page.list_box.clone();
+    let db_pool = folder_settings_page.db_pool.clone();
+    let refresh_library_ui = folder_settings_page.refresh_library_ui.clone();
+    let sort_ascending = folder_settings_page.sort_ascending.clone();
+    let sort_ascending_artists = folder_settings_page.sort_ascending_artists.clone();
+    let main_context = folder_settings_page.main_context.clone();
+    let sender = folder_settings_page.sender.clone();
+    let scanning_label_albums = folder_settings_page.scanning_label_albums.clone();
+    let scanning_label_artists = folder_settings_page.scanning_label_artists.clone();
+    let albums_stack_cell = folder_settings_page.albums_stack_cell.clone();
+    let artists_stack_cell = folder_settings_page.artists_stack_cell.clone();
     main_context.clone().spawn_local(async move {
         // Perform database deletion.
         let _ = remove_folder_and_albums(&db_pool, folder_id).await;
