@@ -2,7 +2,7 @@ use std::sync::mpsc::Sender;
 
 use gstreamer::{
     ClockTime, Message,
-    MessageView::{Eos, Error, StateChanged as GstStateChanged},
+    MessageView::{Eos, Error, StateChanged},
     Pipeline,
     State::{Null, Paused, Playing, Ready},
     bus::BusWatchGuard,
@@ -13,7 +13,7 @@ use gstreamer::{
 use super::{
     error::PlaybackError,
     events::{
-        PlaybackEvent::{self, EndOfStream, PositionChanged, StateChanged},
+        PlaybackEvent::{self, EndOfStream, PositionChanged},
         PlaybackState,
     },
 };
@@ -125,7 +125,9 @@ impl BusHandler {
         event_sender: &Sender<PlaybackEvent>,
         message: &Message,
     ) -> Result<(), PlaybackError> {
+        // Process different types of GStreamer messages and convert them to playback events
         match message.view() {
+            // Handle end of stream message - playback has completed
             Eos(..) => {
                 // End of stream reached, send EndOfStream event
                 // This indicates that playback has finished normally
@@ -134,15 +136,21 @@ impl BusHandler {
                     eprintln!("BusHandler: Error sending EndOfStream event: {}", e);
                 }
             }
+
+            // Handle error message - pipeline encountered an error
             Error(err) => {
                 // Error occurred in the GStreamer pipeline
                 // Extract the error message and send it as a PlaybackEvent::Error
                 let error_msg = format!("GStreamer error: {}", err.error());
+
+                // Send error event to playback system
                 let _ = event_sender.send(PlaybackEvent::Error(error_msg));
                 // The result is ignored here because there's not much we can do
                 // if sending the error event also fails
             }
-            GstStateChanged(state_changed) => {
+
+            // Handle state change message - pipeline state has changed
+            StateChanged(state_changed) => {
                 // Handle state change messages
                 let new_state = match state_changed.current() {
                     Playing => PlaybackState::Playing,
@@ -161,8 +169,12 @@ impl BusHandler {
                         }
                     }
                 };
-                let _ = event_sender.send(StateChanged(new_state));
+
+                // Send state change event to playback system
+                let _ = event_sender.send(PlaybackEvent::StateChanged(new_state));
             }
+
+            // Handle all other message types - ignore them
             _ => {
                 // Ignore other message types
                 // GStreamer produces many message types, but we only care about
