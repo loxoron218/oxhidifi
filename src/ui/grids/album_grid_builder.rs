@@ -167,13 +167,13 @@ pub fn build_albums_grid(
         .label(&*album_count_label.text())
         .halign(Center)
         .margin_top(12)
-        .css_classes(&*["dim-label"].as_ref())
+        .css_classes(["dim-label"].as_ref())
         .build();
 
     // Synchronize the grid view label with the original label
     let grid_view_album_count_label_clone = grid_view_album_count_label.clone();
     album_count_label.connect_label_notify(move |orig_label| {
-        grid_view_album_count_label_clone.set_text(&*orig_label.text());
+        grid_view_album_count_label_clone.set_text(&orig_label.text());
     });
     albums_content_box.prepend(&grid_view_album_count_label);
 
@@ -283,13 +283,13 @@ where
         .label(&*album_count_label.text())
         .halign(Center)
         .margin_top(12)
-        .css_classes(&*["dim-label"].as_ref())
+        .css_classes(["dim-label"].as_ref())
         .build();
 
     // Synchronize the list view label with the original label
     let list_view_album_count_label_clone = list_view_album_count_label.clone();
     album_count_label.connect_label_notify(move |orig_label| {
-        list_view_album_count_label_clone.set_text(&*orig_label.text());
+        list_view_album_count_label_clone.set_text(&orig_label.text());
     });
     albums_content_box.prepend(&list_view_album_count_label);
     albums_content_box.append(&column_view_scrolled);

@@ -61,14 +61,14 @@ pub async fn run_full_scan(db_pool: &Arc<SqlitePool>, sender: &UnboundedSender<(
     // This iterates over folders fetched *before* the scan, ensuring that if
     // a folder was added during the scan, it's not prematurely removed.
     for folder in &folders {
-        if !folder.path.exists() {
-            if let Err(e) = remove_folder_and_albums(db_pool, folder.id).await {
-                eprintln!(
-                    "Error removing folder and albums for {}: {}",
-                    folder.path.display(),
-                    e
-                );
-            }
+        if !folder.path.exists()
+            && let Err(e) = remove_folder_and_albums(db_pool, folder.id).await
+        {
+            eprintln!(
+                "Error removing folder and albums for {}: {}",
+                folder.path.display(),
+                e
+            );
         }
     }
     let albums_to_check = match query("SELECT id FROM albums").fetch_all(&**db_pool).await {
@@ -100,13 +100,11 @@ pub async fn run_full_scan(db_pool: &Arc<SqlitePool>, sender: &UnboundedSender<(
                 false
             }
         };
-        if !tracks_exist {
-            if let Err(e) = remove_album_and_tracks(db_pool, album_id).await {
-                eprintln!(
-                    "Error removing album and tracks for album {}: {}",
-                    album_id, e
-                );
-            }
+        if !tracks_exist && let Err(e) = remove_album_and_tracks(db_pool, album_id).await {
+            eprintln!(
+                "Error removing album and tracks for album {}: {}",
+                album_id, e
+            );
         }
     }
 

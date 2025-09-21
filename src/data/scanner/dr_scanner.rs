@@ -54,54 +54,54 @@ pub async fn scan_dr_value(folder_path: &Path) -> Result<Option<u8>, Box<dyn Err
         .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?
     {
         let path = entry.path();
-        if path.is_file() {
-            if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-                let ext = ext.to_lowercase();
-                if ext == "txt" || ext == "log" {
-                    // Attempt to open and read the file. If it fails, print error and continue.
-                    let file = match File::open(&path).await {
-                        Ok(f) => f,
-                        Err(e) => {
-                            eprintln!("Error opening DR log file {}: {}", path.display(), e);
+        if path.is_file()
+            && let Some(ext) = path.extension().and_then(|e| e.to_str())
+        {
+            let ext = ext.to_lowercase();
+            if ext == "txt" || ext == "log" {
+                // Attempt to open and read the file. If it fails, print error and continue.
+                let file = match File::open(&path).await {
+                    Ok(f) => f,
+                    Err(e) => {
+                        eprintln!("Error opening DR log file {}: {}", path.display(), e);
 
-                            // Skip to the next entry
-                            continue;
-                        }
-                    };
-                    let mut reader = BufReader::new(file);
-                    let mut buffer = Vec::with_capacity(256);
-                    loop {
-                        // Clear buffer for each new line
-                        buffer.clear();
-                        let bytes_read = reader
-                            .read_until(b'\n', &mut buffer)
-                            .await
-                            .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
-                        if bytes_read == 0 {
-                            // EOF
-                            break;
-                        }
-                        let line = String::from_utf8_lossy(&buffer).into_owned();
-                        if let Some(caps) = dr_regex.captures(&line) {
-                            // Iterate through all possible capture groups (1 to 4 for this regex).
-                            // The first successful capture will be used.
-                            for i in 1..=4 {
-                                if let Some(dr_str_match) = caps.get(i) {
-                                    let dr_str = dr_str_match.as_str();
+                        // Skip to the next entry
+                        continue;
+                    }
+                };
+                let mut reader = BufReader::new(file);
+                let mut buffer = Vec::with_capacity(256);
+                loop {
+                    // Clear buffer for each new line
+                    buffer.clear();
+                    let bytes_read = reader
+                        .read_until(b'\n', &mut buffer)
+                        .await
+                        .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
+                    if bytes_read == 0 {
+                        // EOF
+                        break;
+                    }
+                    let line = String::from_utf8_lossy(&buffer).into_owned();
+                    if let Some(caps) = dr_regex.captures(&line) {
+                        // Iterate through all possible capture groups (1 to 4 for this regex).
+                        // The first successful capture will be used.
+                        for i in 1..=4 {
+                            if let Some(dr_str_match) = caps.get(i) {
+                                let dr_str = dr_str_match.as_str();
 
-                                    // Only parse if the captured string is not "ERR".
-                                    if dr_str.to_uppercase() != "ERR" {
-                                        if let Ok(dr) = dr_str.parse::<u8>() {
-                                            // Validate DR value is within the typical range [1, 20].
-                                            if (1..=20).contains(&dr) {
-                                                // Update `highest_dr` if the current `dr` is higher
-                                                // or if `highest_dr` is currently `None`.
-                                                highest_dr = match highest_dr {
-                                                    Some(current_max) => Some(current_max.max(dr)),
-                                                    None => Some(dr),
-                                                };
-                                            }
-                                        }
+                                // Only parse if the captured string is not "ERR".
+                                if dr_str.to_uppercase() != "ERR"
+                                    && let Ok(dr) = dr_str.parse::<u8>()
+                                {
+                                    // Validate DR value is within the typical range [1, 20].
+                                    if (1..=20).contains(&dr) {
+                                        // Update `highest_dr` if the current `dr` is higher
+                                        // or if `highest_dr` is currently `None`.
+                                        highest_dr = match highest_dr {
+                                            Some(current_max) => Some(current_max.max(dr)),
+                                            None => Some(dr),
+                                        };
                                     }
                                 }
                             }

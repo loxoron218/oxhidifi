@@ -95,10 +95,10 @@ where
             self.order.push_front(key);
 
             // If we've exceeded capacity, remove the least recently used entry
-            if self.order.len() > self.capacity.get() {
-                if let Some(key_to_remove) = self.order.pop_back() {
-                    self.map.remove(&key_to_remove);
-                }
+            if self.order.len() > self.capacity.get()
+                && let Some(key_to_remove) = self.order.pop_back()
+            {
+                self.map.remove(&key_to_remove);
             }
             None
         }
@@ -124,10 +124,10 @@ where
     {
         if self.map.get(key).is_some() {
             // Key exists, update its position in the order
-            if let Some(index) = self.order.iter().position(|k| k.borrow() == key) {
-                if let Some(k) = self.order.remove(index) {
-                    self.order.push_front(k);
-                }
+            if let Some(index) = self.order.iter().position(|k| k.borrow() == key)
+                && let Some(k) = self.order.remove(index)
+            {
+                self.order.push_front(k);
             }
             self.map.get(key)
         } else {
@@ -175,10 +175,10 @@ where
     /// * `Some((K, V))` - The key-value pair of the least recently used entry.
     /// * `None` - If the cache is empty.
     pub fn pop_lru(&mut self) -> Option<(K, V)> {
-        if let Some(key) = self.order.pop_back() {
-            if let Some(value) = self.map.remove(&key) {
-                return Some((key, value));
-            }
+        if let Some(key) = self.order.pop_back()
+            && let Some(value) = self.map.remove(&key)
+        {
+            return Some((key, value));
         }
         None
     }

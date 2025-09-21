@@ -103,7 +103,7 @@ impl RefreshService {
         // We need to track the previous state of this setting as well
         thread_local! {
             // Default to true to force initial population
-            static PREVIOUS_USE_ORIGINAL_YEAR: Cell<bool> = Cell::new(true);
+            static PREVIOUS_USE_ORIGINAL_YEAR: Cell<bool> = const { Cell::new(true) };
         }
         let current_use_original_year = self.use_original_year.get();
         let previous_use_original_year = PREVIOUS_USE_ORIGINAL_YEAR.with(|cell| cell.get());
@@ -180,7 +180,6 @@ impl RefreshService {
                         self.player_bar.clone(),
                     )
                     .await;
-                } else {
                 }
             } else {
                 // If we don't have a model but we have a stack, set it to a default state

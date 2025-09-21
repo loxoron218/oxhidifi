@@ -49,7 +49,7 @@ pub fn update_sorting_criteria(
         // Create an ActionRow for each sort criterion
         let numbered_label = format!("{}. {}", index + 1, sort_order_label(order));
         let row = ActionRow::builder().title(numbered_label).build();
-        row.set_widget_name(&sort_order_label(order));
+        row.set_widget_name(sort_order_label(order));
         let list_row = ListBoxRow::new();
         list_row.set_child(Some(&row));
 
@@ -110,16 +110,15 @@ pub fn update_sorting_row_numbers(listbox: &ListBox) {
     let mut child = listbox.first_child();
     let mut idx = 1;
     while let Some(row) = child {
-        if let Some(list_row) = row.downcast_ref::<ListBoxRow>() {
-            if let Some(action_row) = list_row
+        if let Some(list_row) = row.downcast_ref::<ListBoxRow>()
+            && let Some(action_row) = list_row
                 .child()
                 .and_then(|c| c.downcast::<ActionRow>().ok())
-            {
-                let order_str = action_row.widget_name();
-                if !order_str.is_empty() {
-                    let label = format!("{}. {}", idx, order_str);
-                    action_row.set_title(&label);
-                }
+        {
+            let order_str = action_row.widget_name();
+            if !order_str.is_empty() {
+                let label = format!("{}. {}", idx, order_str);
+                action_row.set_title(&label);
             }
         }
         child = row.next_sibling();

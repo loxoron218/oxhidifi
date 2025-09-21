@@ -103,7 +103,7 @@ pub(crate) fn format_bit_sample_rate(bit: Option<u32>, sample_rate: Option<u32>)
     let bit_str = bit.map(|b| format!("{}-Bit", b));
 
     // Use the helper function here
-    let sample_rate_str = sample_rate.map(|f| format_khz_display(f));
+    let sample_rate_str = sample_rate.map(format_khz_display);
     match (bit_str, sample_rate_str) {
         // Add kHz suffix here
         (Some(b), Some(f)) => format!("{}/{} kHz", b, f),

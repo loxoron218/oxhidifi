@@ -142,10 +142,9 @@ pub fn connect_tab_navigation(
         if stack_artists_clone
             .child_by_name(VIEW_STACK_ARTISTS)
             .is_none()
+            && let Some(ref rebuild_artist_grid) = rebuild_artist_grid_opt
         {
-            if let Some(ref rebuild_artist_grid) = rebuild_artist_grid_opt {
-                rebuild_artist_grid();
-            }
+            rebuild_artist_grid();
         }
 
         // Step 2: Unconditionally try to switch to the child.

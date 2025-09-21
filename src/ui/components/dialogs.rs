@@ -83,64 +83,63 @@ pub fn create_add_folder_dialog_handler<T: IsA<Window> + Clone + 'static>(
         let sender_for_response = sender_cloned.clone();
         let albums_inner_stack_for_response = albums_inner_stack_cloned.clone();
         dialog.connect_response(move |dialog, resp| {
-            if resp == Accept {
-                if let Some(folder) = dialog.file() {
-                    if let Some(folder_path) = folder.path() {
-                        let folder_path_string = folder_path.to_string_lossy().to_string();
+            if resp == Accept
+                && let Some(folder) = dialog.file()
+                && let Some(folder_path) = folder.path()
+            {
+                let folder_path_string = folder_path.to_string_lossy().to_string();
 
-                        // This action always happens, so we perform it first.
-                        scanning_label_for_response.set_visible(true);
+                // This action always happens, so we perform it first.
+                scanning_label_for_response.set_visible(true);
 
-                        // Then, we conditionally perform the action that depends on the stack.
-                        if let Some(stack) = albums_inner_stack_for_response.borrow().as_ref() {
-                            stack.set_visible_child_name("scanning_state");
+                // Then, we conditionally perform the action that depends on the stack.
+                if let Some(stack) = albums_inner_stack_for_response.borrow().as_ref() {
+                    stack.set_visible_child_name("scanning_state");
+                }
+
+                // Clone for the spawned thread, which needs its own ownership
+                let db_pool_for_spawn = db_pool_for_response.clone();
+                let folder_path_string_for_spawn = folder_path_string.clone();
+                let sender_for_spawn = sender_for_response.clone();
+
+                // Spawn a new thread for blocking I/O and async operations
+                spawn(move || {
+                    // Create a new Tokio runtime for this thread
+                    let rt = Runtime::new().unwrap();
+                    rt.block_on(async {
+                        // Insert folder into DB or get existing ID
+                        let folder_id = match insert_or_get_folder(
+                            &db_pool_for_spawn,
+                            std::path::Path::new(&folder_path_string_for_spawn),
+                        )
+                        .await
+                        {
+                            Ok(id) => id,
+                            Err(e) => {
+                                eprintln!("Error inserting or getting folder: {:?}", e);
+
+                                // Exit on error
+                                return;
+                            }
+                        };
+
+                        // Scan the folder for music files
+                        if let Err(e) = scan_folder(
+                            &db_pool_for_spawn,
+                            std::path::Path::new(&folder_path_string_for_spawn),
+                            folder_id,
+                        )
+                        .await
+                        {
+                            eprintln!("Error scanning folder: {:?}", e);
                         }
 
-                        // Clone for the spawned thread, which needs its own ownership
-                        let db_pool_for_spawn = db_pool_for_response.clone();
-                        let folder_path_string_for_spawn = folder_path_string.clone();
-                        let sender_for_spawn = sender_for_response.clone();
-
-                        // Spawn a new thread for blocking I/O and async operations
-                        spawn(move || {
-                            // Create a new Tokio runtime for this thread
-                            let rt = Runtime::new().unwrap();
-                            rt.block_on(async {
-                                // Insert folder into DB or get existing ID
-                                let folder_id = match insert_or_get_folder(
-                                    &db_pool_for_spawn,
-                                    std::path::Path::new(&folder_path_string_for_spawn),
-                                )
-                                .await
-                                {
-                                    Ok(id) => id,
-                                    Err(e) => {
-                                        eprintln!("Error inserting or getting folder: {:?}", e);
-
-                                        // Exit on error
-                                        return;
-                                    }
-                                };
-
-                                // Scan the folder for music files
-                                if let Err(e) = scan_folder(
-                                    &db_pool_for_spawn,
-                                    std::path::Path::new(&folder_path_string_for_spawn),
-                                    folder_id,
-                                )
-                                .await
-                                {
-                                    eprintln!("Error scanning folder: {:?}", e);
-                                }
-
-                                // Notify the main thread to refresh the UI
-                                if let Err(e) = sender_for_spawn.send(()) {
-                                    eprintln!("Error sending refresh signal: {:?}", e);
-                                }
-                            });
-                        });
-                    }
-                }
+                        // Notify the main thread to refresh the UI
+                        if let Err(e) = sender_for_spawn.send(()) {
+                            eprintln!("Error sending refresh signal: {:?}", e);
+                        }
+                    });
+                });
             }
             // Close the dialog regardless of response
             dialog.close();

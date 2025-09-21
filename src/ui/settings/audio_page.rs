@@ -9,9 +9,9 @@ use libadwaita::PreferencesPage;
 /// A configured `PreferencesPage` for audio settings.
 pub fn create_audio_page() -> PreferencesPage {
     // --- Audio Page (Currently empty, but kept for potential future use) ---
-    let audio_page = PreferencesPage::builder()
+
+    PreferencesPage::builder()
         .title("Audio")
         .icon_name("audio-speakers-symbolic")
-        .build();
-    audio_page
+        .build()
 }

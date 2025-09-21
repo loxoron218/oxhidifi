@@ -34,11 +34,13 @@ async fn main() {
     let config_dir = PathBuf::from(home_dir).join(CONFIG_DIR);
 
     // Ensure the configuration directory exists
-    create_dir_all(&config_dir).expect(&format!(
-        "Failed to create config directory at {}: {}",
-        config_dir.display(),
-        "Error creating directory"
-    ));
+    create_dir_all(&config_dir).unwrap_or_else(|_| {
+        panic!(
+            "Failed to create config directory at {}: {}",
+            config_dir.display(),
+            "Error creating directory"
+        )
+    });
 
     // Construct the database path within the configuration directory
     let db_path = config_dir.join("music_library.db");
@@ -53,11 +55,13 @@ async fn main() {
         .max_lifetime(Duration::from_secs(300))
         .connect(&db_url)
         .await
-        .expect(&format!(
-            "Failed to connect to DB at {}: {}",
-            db_path.display(),
-            "Error connecting to database"
-        ));
+        .unwrap_or_else(|_| {
+            panic!(
+                "Failed to connect to DB at {}: {}",
+                db_path.display(),
+                "Error connecting to database"
+            )
+        });
     init_db(&pool).await.expect("Failed to initialize DB");
     let pool = Arc::new(pool);
 

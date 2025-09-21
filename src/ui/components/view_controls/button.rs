@@ -121,64 +121,63 @@ impl ViewControlButton {
         stack: Rc<ViewStack>,
     ) {
         // Get the popover content box
-        if let Some(popover) = self.split_button.popover() {
-            if let Some(popover_child) = popover.child() {
-                if let Some(popover_box) = popover_child.downcast_ref::<Box>() {
-                    // Create our custom sorting widget
-                    let sorting_widget = create_sorting_control_row(
-                        sort_orders,
-                        sort_ascending,
-                        sort_ascending_artists,
-                        on_sort_changed,
-                        stack.clone(),
-                    );
+        if let Some(popover) = self.split_button.popover()
+            && let Some(popover_child) = popover.child()
+            && let Some(popover_box) = popover_child.downcast_ref::<Box>()
+        {
+            // Create our custom sorting widget
+            let sorting_widget = create_sorting_control_row(
+                sort_orders,
+                sort_ascending,
+                sort_ascending_artists,
+                on_sort_changed,
+                stack.clone(),
+            );
 
-                    // Store the sorting widget for visibility control
-                    let sorting_widget_rc = Rc::new(sorting_widget);
-                    self.sorting_widget
-                        .borrow_mut()
-                        .replace(sorting_widget_rc.clone());
-                    popover_box.append(&*sorting_widget_rc);
+            // Store the sorting widget for visibility control
+            let sorting_widget_rc = Rc::new(sorting_widget);
+            self.sorting_widget
+                .borrow_mut()
+                .replace(sorting_widget_rc.clone());
+            popover_box.append(&*sorting_widget_rc);
 
-                    // Get references to the child widgets we want to control
-                    // The sorting widget is a vertical box with:
-                    // 0: sorting_box (label + direction button) - always visible
-                    // 1: criteria_label ("Drag to reorder criteria:") - hide on artist view
-                    // 2: sort_listbox (sort criteria) - hide on artist view
-                    let mut children = Vec::new();
-                    let mut child = sorting_widget_rc.first_child();
-                    while let Some(c) = child {
-                        children.push(c.clone());
-                        child = c.next_sibling();
-                    }
+            // Get references to the child widgets we want to control
+            // The sorting widget is a vertical box with:
+            // 0: sorting_box (label + direction button) - always visible
+            // 1: criteria_label ("Drag to reorder criteria:") - hide on artist view
+            // 2: sort_listbox (sort criteria) - hide on artist view
+            let mut children = Vec::new();
+            let mut child = sorting_widget_rc.first_child();
+            while let Some(c) = child {
+                children.push(c.clone());
+                child = c.next_sibling();
+            }
 
-                    // Get the criteria label and listbox (indices 1 and 2)
-                    if children.len() >= 3 {
-                        let criteria_label = children[1].clone();
-                        let sort_listbox = children[2].clone();
+            // Get the criteria label and listbox (indices 1 and 2)
+            if children.len() >= 3 {
+                let criteria_label = children[1].clone();
+                let sort_listbox = children[2].clone();
 
-                        // Set initial visibility based on current view
-                        let current_view = stack
-                            .visible_child_name()
-                            .unwrap_or_else(|| VIEW_STACK_ALBUMS.into());
-                        let is_albums_view = current_view.as_str() == VIEW_STACK_ALBUMS;
-                        criteria_label.set_visible(is_albums_view);
-                        sort_listbox.set_visible(is_albums_view);
+                // Set initial visibility based on current view
+                let current_view = stack
+                    .visible_child_name()
+                    .unwrap_or_else(|| VIEW_STACK_ALBUMS.into());
+                let is_albums_view = current_view.as_str() == VIEW_STACK_ALBUMS;
+                criteria_label.set_visible(is_albums_view);
+                sort_listbox.set_visible(is_albums_view);
 
-                        // Connect to view changes to update sorting criteria visibility
-                        let stack_clone = stack.clone();
-                        let criteria_label_clone = criteria_label.clone();
-                        let sort_listbox_clone = sort_listbox.clone();
-                        stack.connect_visible_child_notify(move |_| {
-                            let current_view = stack_clone
-                                .visible_child_name()
-                                .unwrap_or_else(|| VIEW_STACK_ALBUMS.into());
-                            let is_albums_view = current_view.as_str() == VIEW_STACK_ALBUMS;
-                            criteria_label_clone.set_visible(is_albums_view);
-                            sort_listbox_clone.set_visible(is_albums_view);
-                        });
-                    }
-                }
+                // Connect to view changes to update sorting criteria visibility
+                let stack_clone = stack.clone();
+                let criteria_label_clone = criteria_label.clone();
+                let sort_listbox_clone = sort_listbox.clone();
+                stack.connect_visible_child_notify(move |_| {
+                    let current_view = stack_clone
+                        .visible_child_name()
+                        .unwrap_or_else(|| VIEW_STACK_ALBUMS.into());
+                    let is_albums_view = current_view.as_str() == VIEW_STACK_ALBUMS;
+                    criteria_label_clone.set_visible(is_albums_view);
+                    sort_listbox_clone.set_visible(is_albums_view);
+                });
             }
         }
     }
@@ -282,61 +281,57 @@ impl ViewControlButton {
     /// It removes any existing zoom controls and adds the correct ones.
     pub fn update_zoom_controls(&self) {
         // Get the popover content box
-        if let Some(popover) = self.split_button.popover() {
-            if let Some(popover_child) = popover.child() {
-                if let Some(popover_box) = popover_child.downcast_ref::<Box>() {
-                    // Remove existing zoom controls if they exist
-                    if let Some(existing_zoom_widget) = self.zoom_controls_widget.borrow().as_ref()
-                    {
-                        popover_box.remove(existing_zoom_widget.as_ref());
-                    }
-
-                    // Remove existing separator if it exists
-                    if let Some(existing_separator) = self.zoom_separator.borrow().as_ref() {
-                        popover_box.remove(existing_separator.as_ref());
-                    }
-
-                    // Create the appropriate zoom controls based on current view mode
-                    let zoom_widget = match *self.view_mode.borrow() {
-                        GridView => {
-                            // Clone the zoom manager to avoid borrowing issues
-                            let grid_zoom_manager =
-                                self.grid_zoom_manager.borrow().as_ref().cloned();
-                            if let Some(grid_zoom_manager) = grid_zoom_manager {
-                                create_zoom_control_row(&grid_zoom_manager)
-                            } else {
-                                // Fallback if grid zoom manager is not set
-                                return;
-                            }
-                        }
-                        ListView => {
-                            // Clone the zoom manager to avoid borrowing issues
-                            let column_view_zoom_manager =
-                                self.column_view_zoom_manager.borrow().as_ref().cloned();
-                            if let Some(column_view_zoom_manager) = column_view_zoom_manager {
-                                create_column_view_zoom_control_row(&column_view_zoom_manager)
-                            } else {
-                                // Fallback if column view zoom manager is not set
-                                return;
-                            }
-                        }
-                    };
-
-                    // Wrap the zoom widget in an Rc for storage
-                    let zoom_widget_rc = Rc::new(zoom_widget);
-                    *self.zoom_controls_widget.borrow_mut() = Some(zoom_widget_rc.clone());
-
-                    // Create a separator after the zoom controls
-                    let separator = Separator::new(Horizontal);
-                    let separator_rc = Rc::new(separator);
-                    *self.zoom_separator.borrow_mut() = Some(separator_rc.clone());
-
-                    // Insert the zoom controls and separator at the beginning of the popover
-                    popover_box.insert_child_after(zoom_widget_rc.as_ref(), None::<&Widget>);
-                    popover_box
-                        .insert_child_after(separator_rc.as_ref(), Some(zoom_widget_rc.as_ref()));
-                }
+        if let Some(popover) = self.split_button.popover()
+            && let Some(popover_child) = popover.child()
+            && let Some(popover_box) = popover_child.downcast_ref::<Box>()
+        {
+            // Remove existing zoom controls if they exist
+            if let Some(existing_zoom_widget) = self.zoom_controls_widget.borrow().as_ref() {
+                popover_box.remove(existing_zoom_widget.as_ref());
             }
+
+            // Remove existing separator if it exists
+            if let Some(existing_separator) = self.zoom_separator.borrow().as_ref() {
+                popover_box.remove(existing_separator.as_ref());
+            }
+
+            // Create the appropriate zoom controls based on current view mode
+            let zoom_widget = match *self.view_mode.borrow() {
+                GridView => {
+                    // Clone the zoom manager to avoid borrowing issues
+                    let grid_zoom_manager = self.grid_zoom_manager.borrow().as_ref().cloned();
+                    if let Some(grid_zoom_manager) = grid_zoom_manager {
+                        create_zoom_control_row(&grid_zoom_manager)
+                    } else {
+                        // Fallback if grid zoom manager is not set
+                        return;
+                    }
+                }
+                ListView => {
+                    // Clone the zoom manager to avoid borrowing issues
+                    let column_view_zoom_manager =
+                        self.column_view_zoom_manager.borrow().as_ref().cloned();
+                    if let Some(column_view_zoom_manager) = column_view_zoom_manager {
+                        create_column_view_zoom_control_row(&column_view_zoom_manager)
+                    } else {
+                        // Fallback if column view zoom manager is not set
+                        return;
+                    }
+                }
+            };
+
+            // Wrap the zoom widget in an Rc for storage
+            let zoom_widget_rc = Rc::new(zoom_widget);
+            *self.zoom_controls_widget.borrow_mut() = Some(zoom_widget_rc.clone());
+
+            // Create a separator after the zoom controls
+            let separator = Separator::new(Horizontal);
+            let separator_rc = Rc::new(separator);
+            *self.zoom_separator.borrow_mut() = Some(separator_rc.clone());
+
+            // Insert the zoom controls and separator at the beginning of the popover
+            popover_box.insert_child_after(zoom_widget_rc.as_ref(), None::<&Widget>);
+            popover_box.insert_child_after(separator_rc.as_ref(), Some(zoom_widget_rc.as_ref()));
         }
     }
 }

@@ -58,10 +58,10 @@ pub fn handle_folder_addition(folder_settings_page: &FolderSettingsPage, path: P
             }
 
             // Notify the main thread that scanning is complete
-            if let Some(sender) = sender {
-                if let Err(e) = sender.send(()) {
-                    eprintln!("Error sending refresh signal: {:?}", e);
-                }
+            if let Some(sender) = sender
+                && let Err(e) = sender.send(())
+            {
+                eprintln!("Error sending refresh signal: {:?}", e);
             }
         });
     });

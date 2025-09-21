@@ -182,7 +182,7 @@ pub fn build_dr_badge(
         // Spawn async task to handle database and persistence updates
         MainContext::default().spawn_local(async move {
             // Update the album's DR best status in the database
-            if let Err(_e) = update_album_dr_is_best(&*current_db_pool, album_id, is_best).await {}
+            if let Err(_e) = update_album_dr_is_best(&current_db_pool, album_id, is_best).await {}
 
             // Notify UI of changes through the channel
             if let Err(_e) = sender.send(()) {

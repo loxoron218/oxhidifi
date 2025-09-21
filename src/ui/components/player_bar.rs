@@ -327,19 +327,18 @@ impl PlayerBar {
             let position_ns = (value * 1_000_000_000.0) as u64;
 
             // Get the player bar reference and seek
-            if let Some(player_bar_weak) = &*player_bar_ref_clone.borrow() {
-                if let Some(player_bar) = player_bar_weak.upgrade() {
-                    if let Some(controller) = &player_bar.playback_controller {
-                        match controller.lock() {
-                            Ok(mut controller) => {
-                                if let Err(e) = controller.seek(position_ns) {
-                                    eprintln!("Error seeking to position: {}", e);
-                                }
-                            }
-                            Err(e) => {
-                                eprintln!("Failed to acquire lock on playback controller: {}", e);
-                            }
+            if let Some(player_bar_weak) = &*player_bar_ref_clone.borrow()
+                && let Some(player_bar) = player_bar_weak.upgrade()
+                && let Some(controller) = &player_bar.playback_controller
+            {
+                match controller.lock() {
+                    Ok(mut controller) => {
+                        if let Err(e) = controller.seek(position_ns) {
+                            eprintln!("Error seeking to position: {}", e);
                         }
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to acquire lock on playback controller: {}", e);
                     }
                 }
             }

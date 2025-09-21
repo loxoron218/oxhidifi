@@ -145,8 +145,7 @@ impl PlaybackController {
     ///
     /// This function will return an error if the playback engine fails to start playback.
     pub fn play(&mut self) -> Result<(), PlaybackError> {
-        let result = self.engine.play();
-        result
+        self.engine.play()
     }
 
     /// Pauses playback of the currently playing track.
@@ -512,7 +511,6 @@ impl PlaybackController {
                 } else {
                     println!("Controller: No next track found");
                 }
-            } else {
             }
         } else {
             println!("Controller: Current index is None");

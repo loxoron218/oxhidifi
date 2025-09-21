@@ -90,10 +90,10 @@ impl BusHandler {
             }
 
             // Send periodic position updates
-            if let Some(pipeline) = pipeline_weak.upgrade() {
-                if let Some(position) = pipeline.query_position::<ClockTime>() {
-                    let _ = event_sender.send(PositionChanged(position.nseconds()));
-                }
+            if let Some(pipeline) = pipeline_weak.upgrade()
+                && let Some(position) = pipeline.query_position::<ClockTime>()
+            {
+                let _ = event_sender.send(PositionChanged(position.nseconds()));
             }
 
             // Continue watching for more messages (don't remove the watch)

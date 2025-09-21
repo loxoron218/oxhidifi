@@ -90,7 +90,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
             .label("0 Albums")
             .halign(Center)
             .margin_top(12)
-            .css_classes(&*["dim-label"].as_ref())
+            .css_classes(["dim-label"].as_ref())
             .build(),
     );
     let artist_count_label = Rc::new(
@@ -98,7 +98,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
             .label("0 Artists")
             .halign(Center)
             .margin_top(12)
-            .css_classes(&*["dim-label"].as_ref())
+            .css_classes(["dim-label"].as_ref())
             .build(),
     );
 

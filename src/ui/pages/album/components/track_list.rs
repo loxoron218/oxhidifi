@@ -55,10 +55,10 @@ pub fn build_track_row(
     let mut subtitle_fields = Vec::with_capacity(4);
 
     // Add track artist if different from album artist OR if it's a "Various Artists" album
-    if t.artist_id != album_artist_id || is_various_artists_album {
-        if let Some(artist_name) = track_artists.get(&t.artist_id) {
-            subtitle_fields.push(artist_name.clone());
-        }
+    if (t.artist_id != album_artist_id || is_various_artists_album)
+        && let Some(artist_name) = track_artists.get(&t.artist_id)
+    {
+        subtitle_fields.push(artist_name.clone());
     }
 
     // Add audio format if available
@@ -89,7 +89,7 @@ pub fn build_track_row(
     let disc = t.disc_no.unwrap_or(1);
     let track = t.track_no.unwrap_or(0);
     let number_label = Label::builder()
-        .label(&format!("{}-{:02}", disc, track))
+        .label(format!("{}-{:02}", disc, track))
         .css_classes(["dim-label"])
         .xalign(0.0)
         .width_chars(5)

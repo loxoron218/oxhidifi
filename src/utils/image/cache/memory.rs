@@ -90,15 +90,15 @@ impl MemoryCache {
         let now = Instant::now();
 
         // Check if the entry exists and hasn't expired
-        if let Some(entry) = cache.get(key) {
-            if entry.expires_at > now {
-                // Entry is valid, return a clone of the pixbuf
-                // The get() operation already promoted it to most recently used
-                return Some(entry.pixbuf.clone());
-            }
-
-            // Entry is expired, fall through to return None
+        if let Some(entry) = cache.get(key)
+            && entry.expires_at > now
+        {
+            // Entry is valid, return a clone of the pixbuf
+            // The get() operation already promoted it to most recently used
+            return Some(entry.pixbuf.clone());
         }
+
+        // Entry is expired, fall through to return None
 
         // Remove expired entry if it exists
         if cache.contains(key) {

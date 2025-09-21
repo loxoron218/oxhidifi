@@ -32,13 +32,13 @@ use crate::{
 ///
 /// A GTK Picture widget containing the album cover or a placeholder
 pub fn build_album_cover(path: &Option<PathBuf>) -> Picture {
-    if let Some(path) = path {
-        if let Ok(pixbuf) = Pixbuf::from_file_at_scale(path, 300, 300, true) {
-            let pic = Picture::for_pixbuf(&pixbuf);
-            pic.set_size_request(300, 300);
-            pic.add_css_class("album-cover-border");
-            return pic;
-        }
+    if let Some(path) = path
+        && let Ok(pixbuf) = Pixbuf::from_file_at_scale(path, 300, 300, true)
+    {
+        let pic = Picture::for_pixbuf(&pixbuf);
+        pic.set_size_request(300, 300);
+        pic.add_css_class("album-cover-border");
+        return pic;
     }
     let pic = Picture::new();
     pic.set_size_request(300, 300);
@@ -169,17 +169,17 @@ pub fn build_technical_info(tracks: &[Track], _album: &Album) -> Option<Box> {
                 Some("album-technical-label"),
             ));
         }
-        if let Some(format) = most_common_format_opt {
-            if !format.is_empty() {
-                // Add separator if we already have bit/freq info
-                if !bit_freq_str.is_empty() {
-                    lines_box.append(&build_info_label(" · ", Some("album-technical-label")));
-                }
-                lines_box.append(&build_info_label(
-                    &format.to_uppercase(),
-                    Some("album-technical-label"),
-                ));
+        if let Some(format) = most_common_format_opt
+            && !format.is_empty()
+        {
+            // Add separator if we already have bit/freq info
+            if !bit_freq_str.is_empty() {
+                lines_box.append(&build_info_label(" · ", Some("album-technical-label")));
             }
+            lines_box.append(&build_info_label(
+                &format.to_uppercase(),
+                Some("album-technical-label"),
+            ));
         }
         outer_row.append(&lines_box);
         Some(outer_row)

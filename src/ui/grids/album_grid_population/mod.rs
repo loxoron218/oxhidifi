@@ -72,7 +72,7 @@ pub async fn populate_albums_grid(
     // A thread-local static to prevent multiple simultaneous population calls,
     // ensuring data consistency and preventing redundant work.
     thread_local! {
-        static IS_BUSY: Cell<bool> = Cell::new(false);
+        static IS_BUSY: Cell<bool> = const { Cell::new(false) };
     }
 
     // Check and set the busy flag. If already busy, return immediately.

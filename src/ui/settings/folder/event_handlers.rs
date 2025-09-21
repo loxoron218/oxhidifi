@@ -63,13 +63,12 @@ fn handle_add_folder_clicked(folder_settings_page: &FolderSettingsPage) {
     // Clone the necessary state for the response handler closure.
     let self_clone = Rc::new(folder_settings_page.clone_for_closure());
     dialog.connect_response(move |dialog, response| {
-        if response == Accept {
-            if let Some(folder) = dialog.file() {
-                if let Some(path) = folder.path() {
-                    // Handle the folder addition (delegated to scanning_operations module)
-                    handle_folder_addition(&self_clone, path);
-                }
-            }
+        if response == Accept
+            && let Some(folder) = dialog.file()
+            && let Some(path) = folder.path()
+        {
+            // Handle the folder addition (delegated to scanning_operations module)
+            handle_folder_addition(&self_clone, path);
         }
         dialog.close();
     });

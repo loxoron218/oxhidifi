@@ -152,24 +152,25 @@ pub fn rebuild_albums_grid_for_window(
                 &add_music_button_list,
                 Some(move |column_view: &ColumnView, position: u32| {
                     // Get the item at the activated position from the ColumnView's model
-                    if let Some(model) = column_view.model() {
-                        if let Some(item) = model.item(position) {
-                            // Try to cast the generic item to AlbumListItemObject to access album data
-                            if let Some(album_item) = item.downcast_ref::<AlbumListItemObject>() {
+                    if let Some(model) = column_view.model()
+                        && let Some(item) = model.item(position)
+                    {
+                        // Try to cast the generic item to AlbumListItemObject to access album data
+                        if let Some(album_item) = item.downcast_ref::<AlbumListItemObject>() {
+                            // Extract the album ID from the AlbumListItemObject's wrapped AlbumListItem
+                            if let Some(album) = album_item.item().as_ref() {
                                 // Extract the album ID from the AlbumListItemObject's wrapped AlbumListItem
-                                if let Some(album) = album_item.item().as_ref() {
-                                    // Extract the album ID from the AlbumListItemObject's wrapped AlbumListItem
-                                    let album_id = album.basic_info.id;
+                                let album_id = album.basic_info.id;
 
-                                    // Clone the necessary values for the async block
-                                    let stack_clone = stack_clone.clone();
-                                    let db_pool_clone = db_pool_clone.clone();
-                                    let sender_clone = sender_clone.clone();
-                                    let show_dr_badges_clone = show_dr_badges_clone.clone();
-                                    let refresh_service_clone = refresh_service_clone.clone();
+                                // Clone the necessary values for the async block
+                                let stack_clone = stack_clone.clone();
+                                let db_pool_clone = db_pool_clone.clone();
+                                let sender_clone = sender_clone.clone();
+                                let show_dr_badges_clone = show_dr_badges_clone.clone();
+                                let refresh_service_clone = refresh_service_clone.clone();
 
-                                    // Spawn an async task to load and display the album detail page
-                                    MainContext::default().spawn_local(async move {
+                                // Spawn an async task to load and display the album detail page
+                                MainContext::default().spawn_local(async move {
                                         // Create weak references for the UI components
                                         let stack_weak = stack_clone.downgrade();
 
@@ -210,7 +211,6 @@ pub fn rebuild_albums_grid_for_window(
                                             println!("Cannot navigate to album detail page: PlayerBar not available");
                                         }
                                     });
-                                }
                             }
                         }
                     }

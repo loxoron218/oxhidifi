@@ -128,10 +128,10 @@ pub fn start_watching_library(pool: Arc<SqlitePool>, sender: UnboundedSender<()>
         // Create the file system watcher with the channel sender.
         let mut watcher: Box<dyn Watcher + Send> = match create_watcher(
             move |res| {
-                if let Ok(event) = res {
-                    if let Err(e) = tx.send(event) {
-                        eprintln!("Failed to send event from watcher: {}", e);
-                    }
+                if let Ok(event) = res
+                    && let Err(e) = tx.send(event)
+                {
+                    eprintln!("Failed to send event from watcher: {}", e);
                 }
             },
             true,
@@ -195,14 +195,14 @@ fn process_events(rx: Receiver<Event>, pool: Arc<SqlitePool>, sender: UnboundedS
     let rt = Arc::new(Runtime::new().expect("Failed to create Tokio runtime for event processor"));
     loop {
         // Try to receive an event from the channel.
-        if let Ok(event) = rx.try_recv() {
-            if matches!(
+        if let Ok(event) = rx.try_recv()
+            && matches!(
                 event.kind,
                 Create(_) | Remove(_) | Modify(Name(_)) | Modify(Data(_)) | Modify(Metadata(_))
-            ) {
-                event_queue.push_back(event);
-                last_event_time = Instant::now();
-            }
+            )
+        {
+            event_queue.push_back(event);
+            last_event_time = Instant::now();
         }
 
         // If the debounce duration has passed and there are events in the queue,

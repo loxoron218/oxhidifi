@@ -64,7 +64,7 @@ pub fn populate_artist_grid(
     // `thread_local!` is used to prevent multiple concurrent calls to this function,
     // which could lead to race conditions or unnecessary re-population of the grid.
     thread_local! {
-        static BUSY: Cell<bool> = Cell::new(false);
+        static BUSY: Cell<bool> = const { Cell::new(false) };
     }
     let already_busy = BUSY.with(|b| b.replace(true));
     if already_busy {

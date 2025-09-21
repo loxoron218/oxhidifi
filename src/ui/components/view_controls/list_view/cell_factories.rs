@@ -84,7 +84,7 @@ pub fn create_cover_image_column(
             // Create an AsyncImageLoader to load the image asynchronously
             if let Ok(loader) = AsyncImageLoader::new() {
                 // Convert the cover art path to a Path if it exists
-                let path = cover_art_path.as_ref().map(|p| Path::new(p));
+                let path = cover_art_path.as_ref().map(Path::new);
 
                 // Load the image asynchronously with the size based on zoom level
                 loader.load_image_async(picture, path, cover_size);

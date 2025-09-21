@@ -123,14 +123,14 @@ pub fn scan_folder<'a>(
 
         // Process all collected audio files in a batch, associating them with the current folder
         // and any DR value found in the folder. Errors are logged but don't halt the scan.
-        if !audio_files.is_empty() {
-            if let Err(e) = process_files_batch(pool, &audio_files, folder_id, dr_value).await {
-                eprintln!(
-                    "Error processing batch for folder {}: {}",
-                    folder_path.display(),
-                    e
-                );
-            }
+        if !audio_files.is_empty()
+            && let Err(e) = process_files_batch(pool, &audio_files, folder_id, dr_value).await
+        {
+            eprintln!(
+                "Error processing batch for folder {}: {}",
+                folder_path.display(),
+                e
+            );
         }
         Ok(())
     })
@@ -274,15 +274,14 @@ async fn scan_single_directory(
 
     // Process all collected audio files in a batch, associating them with the current folder
     // and any DR value found in the folder. Errors are logged but don't halt the scan.
-    if !audio_files.is_empty() {
-        if let Err(e) = process_files_batch(pool.as_ref(), &audio_files, folder_id, dr_value).await
-        {
-            eprintln!(
-                "Error processing batch for folder {}: {}",
-                folder_path.display(),
-                e
-            );
-        }
+    if !audio_files.is_empty()
+        && let Err(e) = process_files_batch(pool.as_ref(), &audio_files, folder_id, dr_value).await
+    {
+        eprintln!(
+            "Error processing batch for folder {}: {}",
+            folder_path.display(),
+            e
+        );
     }
     Ok(())
 }
