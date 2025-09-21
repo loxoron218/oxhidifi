@@ -7,7 +7,7 @@ use std::{
 use gstreamer::{LoggableError, StateChangeError, glib::BoolError};
 
 use crate::playback::error::PlaybackError::{
-    FileNotFound, GStreamer, GStreamerBool, GStreamerGLib, GStreamerState, InvalidState, Pipeline,
+    FileNotFound, GStreamer, GStreamerBool, GStreamerGLib, GStreamerState, Pipeline,
 };
 
 /// Errors that can occur during playback operations
@@ -29,8 +29,6 @@ pub enum PlaybackError {
     Pipeline(String),
     /// File not found error
     FileNotFound(PathBuf),
-    /// Invalid state error
-    InvalidState(String),
     /// Database error
     DatabaseError(String),
 }
@@ -48,7 +46,6 @@ impl Display for PlaybackError {
             GStreamerState(e) => write!(f, "GStreamer state change error: {}", e),
             Pipeline(s) => write!(f, "Pipeline error: {}", s),
             FileNotFound(p) => write!(f, "File not found: {}", p.display()),
-            InvalidState(s) => write!(f, "Invalid state: {}", s),
             PlaybackError::DatabaseError(s) => write!(f, "Database error: {}", s),
         }
     }
@@ -68,7 +65,6 @@ impl Error for PlaybackError {
             GStreamerState(e) => Some(e),
             Pipeline(_) => None,
             FileNotFound(_) => None,
-            InvalidState(_) => None,
             PlaybackError::DatabaseError(_) => None,
         }
     }
