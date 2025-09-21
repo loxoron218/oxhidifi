@@ -1,6 +1,7 @@
-use std::{path::Path, sync::mpsc::Sender};
+use std::{cell::RefCell, path::Path, sync::mpsc::Sender};
 
 use super::{
+    bus_handler::BusHandler,
     error::PlaybackError,
     events::{
         PlaybackEvent::{self, Error, PositionChanged, StateChanged},
@@ -26,10 +27,12 @@ pub type PlaybackEventSender = Sender<PlaybackEvent>;
 ///
 /// * `pipeline_manager` - Manages the underlying GStreamer pipeline for audio operations
 /// * `event_sender` - Channel sender for notifying UI components of playback events
+/// * `bus_handler` - Handles GStreamer bus messages and converts them to playback events
 /// * `current_state` - The current playback state (Stopped, Playing, Paused)
 pub struct PlaybackEngine {
     pipeline_manager: PipelineManager,
     event_sender: PlaybackEventSender,
+    bus_handler: RefCell<BusHandler>,
     pub current_state: PlaybackState,
 }
 
@@ -63,9 +66,21 @@ impl PlaybackEngine {
     /// ```
     pub fn new(event_sender: PlaybackEventSender) -> Result<Self, PlaybackError> {
         let pipeline_manager = PipelineManager::new()?;
+
+        // Create the bus handler with the pipeline and event sender
+        let bus_handler = BusHandler::new(
+            pipeline_manager.get_pipeline().clone(),
+            event_sender.clone(),
+        );
+
+        // Set up the bus watch
+        let mut bus_handler_mut = bus_handler;
+        bus_handler_mut.setup_bus_watch()?;
+
         Ok(Self {
             pipeline_manager,
             event_sender,
+            bus_handler: RefCell::new(bus_handler_mut),
             current_state: Stopped,
         })
     }

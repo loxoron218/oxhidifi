@@ -5,6 +5,7 @@ use gtk4::{
     Box, Button, Label,
     Orientation::{Horizontal, Vertical},
     Overlay,
+    glib::MainContext,
     pango::{EllipsizeMode, WrapMode::Word},
 };
 use libadwaita::prelude::{BoxExt, ButtonExt, WidgetExt};
@@ -87,46 +88,29 @@ pub fn build_album_header(
     play_pause_button.set_margin_bottom(12);
     play_pause_button.set_margin_end(12);
 
-    // Connect the play button click handler to update the player bar
+    // Connect the play button click handler to queue the album
     let player_bar_clone = player_bar.clone();
-    let album_clone = album.clone();
-    let artist_clone = artist.clone();
-    let tracks_clone = tracks.to_vec();
+    let album_id = album.id;
     play_pause_button.connect_clicked(move |_| {
-        // Determine the track-specific details, providing a fallback if no tracks exist.
-        let (track_title, bit_depth, sample_rate, format, duration, track_path) = tracks_clone
-            .first()
-            .map(|track| {
-                // Case 1: A track exists. Use its details.
-                (
-                    track.title.clone(),
-                    track.bit_depth,
-                    track.sample_rate,
-                    track.format.clone(),
-                    track.duration,
-                    Some(track.path.clone()),
-                )
-            })
-            .unwrap_or_else(|| {
-                // Case 2: No track exists. Use album title and None for details.
-                (album_clone.title.clone(), None, None, None, None, None)
+        // Get the playback controller from the player bar
+        if let Some(controller) = player_bar_clone.get_playback_controller() {
+            // Spawn async task to queue the album
+            let context = MainContext::default();
+            context.spawn_local(async move {
+                // Queue the album for playback
+                match controller.lock() {
+                    Ok(mut controller) => {
+                        if let Err(e) = controller.queue_album(album_id).await {
+                            eprintln!("Error queuing album {}: {}", album_id, e);
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to acquire lock on playback controller: {}", e);
+                    }
+                }
             });
-
-        // Now, call the update function just once with the determined values.
-        player_bar_clone.update_with_metadata(
-            &album_clone.title,
-            &track_title,
-            &artist_clone.name,
-            album_clone.cover_art.as_deref(),
-            bit_depth,
-            sample_rate,
-            format.as_deref(),
-            duration,
-        );
-
-        // If we have a track path, load and play the track
-        if let Some(path) = track_path {
-            player_bar_clone.load_and_play_track(&path);
+        } else {
+            eprintln!("No playback controller available");
         }
     });
 

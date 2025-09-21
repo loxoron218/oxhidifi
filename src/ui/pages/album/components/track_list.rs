@@ -1,11 +1,12 @@
-use std::{collections::HashMap, path::Path};
+use std::{collections::HashMap, sync::Arc};
 
 use gtk4::{Align::End, Button, Label};
 use libadwaita::{
     ActionRow, PreferencesGroup,
-    glib::markup_escape_text,
+    glib::{MainContext, markup_escape_text},
     prelude::{ActionRowExt, ButtonExt, PreferencesGroupExt, WidgetExt},
 };
+use sqlx::SqlitePool;
 
 use crate::{
     data::models::{Album, Artist, Track},
@@ -35,6 +36,7 @@ use crate::{
 /// * `player_bar` - Reference to the application's player bar for playback control
 /// * `album` - Reference to the `Album` model containing album information
 /// * `artist` - Reference to the `Artist` model containing artist information
+/// * `db_pool` - Database connection pool for fetching track information
 ///
 /// # Returns
 ///
@@ -47,6 +49,7 @@ pub fn build_track_row(
     player_bar: &PlayerBar,
     album: &Album,
     artist: &Artist,
+    db_pool: Arc<SqlitePool>,
 ) -> ActionRow {
     // Prepare subtitle fields with track metadata
     let mut subtitle_fields = Vec::with_capacity(4);
@@ -114,44 +117,32 @@ pub fn build_track_row(
 
     // Clone necessary values for the closure
     let player_bar_clone = player_bar.clone();
-    let album_clone = album.clone();
-    let track_title = t.title.clone();
+    let album_id = album.id;
+    let track_id = t.id;
 
-    // Determine the artist name to display for this track
-    // Start with the album artist's name as the default
-    let mut artist_name = artist.name.clone();
-
-    // If this is a "various artists" situation, try to find a more specific artist
-    if t.artist_id != album_artist_id || is_various_artists_album {
-        if let Some(specific_artist_name) = track_artists.get(&t.artist_id) {
-            // If found, override the default with the specific track artist
-            artist_name = specific_artist_name.clone();
-        }
-    }
-
-    // Clone track values to move into closure
-    let track_bit_depth = t.bit_depth;
-    let track_sample_rate = t.sample_rate;
-    let track_format = t.format.clone();
-    let track_duration = t.duration;
-    let track_path = t.path.clone();
-
-    // Connect the play button to load and play the track
+    // Connect the play button to queue the track and subsequent tracks
     play_pause_button.connect_clicked(move |_| {
-        // Update the player bar with track metadata
-        player_bar_clone.update_with_metadata(
-            &album_clone.title,
-            &track_title,
-            &artist_name,
-            album_clone.cover_art.as_deref(),
-            track_bit_depth,
-            track_sample_rate,
-            track_format.as_deref(),
-            track_duration,
-        );
-
-        // Load and play the track
-        player_bar_clone.load_and_play_track(Path::new(&track_path));
+        // Clone the player bar again for the async context
+        let player_bar_async = player_bar_clone.clone();
+        // Spawn async task to queue the tracks
+        MainContext::default().spawn_local(async move {
+            // If we have a playback controller, use it to queue the tracks
+            if let Some(controller) = player_bar_async.get_playback_controller() {
+                match controller.lock() {
+                    Ok(mut controller) => {
+                        // Queue tracks from the selected track onwards
+                        if let Err(e) = controller.queue_tracks_from(album_id, track_id).await {
+                            eprintln!("Error queuing tracks: {}", e);
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to acquire lock on playback controller: {}", e);
+                    }
+                }
+            } else {
+                eprintln!("No playback controller available");
+            }
+        });
     });
 
     // Add the play button to the row
@@ -172,6 +163,7 @@ pub fn build_track_row(
 /// * `track_artists` - A map of artist IDs to artist names for tracks with different artists
 /// * `is_various_artists_album` - Whether this is a "Various Artists" compilation album
 /// * `player_bar` - Reference to the application's player bar for playback control
+/// * `db_pool` - Database connection pool for fetching track information
 ///
 /// # Returns
 ///
@@ -183,6 +175,7 @@ pub fn build_track_list(
     track_artists: &HashMap<i64, String>,
     is_various_artists_album: bool,
     player_bar: &PlayerBar,
+    db_pool: Arc<SqlitePool>,
 ) -> PreferencesGroup {
     // Create the main container for the track list
     let group = PreferencesGroup::builder().build();
@@ -197,6 +190,7 @@ pub fn build_track_list(
             player_bar,
             album,
             artist,
+            db_pool.clone(),
         ));
     }
 

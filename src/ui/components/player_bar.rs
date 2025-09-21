@@ -515,6 +515,9 @@ impl PlayerBar {
 
         // Store the duration for progress calculations
         self.duration.set(range_end);
+
+        // Update navigation button states as the queue position may have changed
+        self.update_navigation_button_states();
     }
 
     /// Updates the progress bar position and time label during playback.
@@ -625,6 +628,9 @@ impl PlayerBar {
             EndOfStream => {
                 // When the track ends, reset the play button icon
                 self._play_button.set_icon_name("media-playback-start");
+
+                // Update navigation button states as the queue position may have changed
+                self.update_navigation_button_states();
             }
 
             Error(error) => {
@@ -668,19 +674,36 @@ impl PlayerBar {
 
         // Connect previous button signal to controller previous method
         let controller_clone = controller.clone();
+        let player_bar = self.clone();
         self._prev_button.connect_clicked(move |_| {
-            if let Ok(_controller) = controller_clone.lock() {
-                // TODO: Implement previous track functionality
+            if let Ok(mut controller) = controller_clone.lock() {
+                // Play the previous track in the queue
+                if let Err(e) = controller.previous_track() {
+                    eprintln!("Error playing previous track: {}", e);
+                }
+
+                // Update button states after navigation
+                player_bar.update_navigation_button_states();
             }
         });
 
         // Connect next button signal to controller next method
         let controller_clone = controller.clone();
+        let player_bar = self.clone();
         self._next_button.connect_clicked(move |_| {
-            if let Ok(_controller) = controller_clone.lock() {
-                // TODO: Implement next track functionality
+            if let Ok(mut controller) = controller_clone.lock() {
+                // Play the next track in the queue
+                if let Err(e) = controller.next_track() {
+                    eprintln!("Error playing next track: {}", e);
+                }
+
+                // Update button states after navigation
+                player_bar.update_navigation_button_states();
             }
         });
+
+        // Update button states initially
+        self.update_navigation_button_states();
 
         // Spawn a task to periodically handle events from the controller
         let controller_clone = controller.clone();
@@ -695,5 +718,46 @@ impl PlayerBar {
                 }
             }
         });
+    }
+
+    /// Gets a reference to the playback controller
+    ///
+    /// This method returns a clone of the playback controller reference,
+    /// which can be used to control playback and access queue functionality.
+    ///
+    /// # Returns
+    /// * `Option<Arc<Mutex<PlaybackController>>>` - The playback controller reference, if available
+    pub fn get_playback_controller(&self) -> Option<Arc<Mutex<PlaybackController>>> {
+        self.playback_controller.clone()
+    }
+
+    /// Updates the state of the previous and next buttons based on queue navigation possibilities
+    ///
+    /// This method checks if navigation to the previous or next track is possible
+    /// and enables or disables the buttons accordingly.
+    pub fn update_navigation_button_states(&self) {
+        if let Some(controller) = &self.playback_controller {
+            match controller.lock() {
+                Ok(controller) => {
+                    // Enable/disable previous button based on navigation possibility
+                    self._prev_button
+                        .set_sensitive(controller.can_go_previous());
+
+                    // Enable/disable next button based on navigation possibility
+                    self._next_button.set_sensitive(controller.can_go_next());
+                }
+                Err(e) => {
+                    eprintln!("Failed to acquire lock on playback controller: {}", e);
+
+                    // If we can't check the controller state, disable both buttons for safety
+                    self._prev_button.set_sensitive(false);
+                    self._next_button.set_sensitive(false);
+                }
+            }
+        } else {
+            // If no controller is connected, disable both buttons
+            self._prev_button.set_sensitive(false);
+            self._next_button.set_sensitive(false);
+        }
     }
 }

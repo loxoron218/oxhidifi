@@ -121,6 +121,7 @@ pub async fn album_page(
         &track_artists,
         is_various_artists_album,
         &player_bar,
+        db_pool.clone(),
     );
     page.append(&track_list);
 

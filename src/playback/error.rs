@@ -31,6 +31,8 @@ pub enum PlaybackError {
     FileNotFound(PathBuf),
     /// Invalid state error
     InvalidState(String),
+    /// Database error
+    DatabaseError(String),
 }
 
 impl Display for PlaybackError {
@@ -47,6 +49,7 @@ impl Display for PlaybackError {
             Pipeline(s) => write!(f, "Pipeline error: {}", s),
             FileNotFound(p) => write!(f, "File not found: {}", p.display()),
             InvalidState(s) => write!(f, "Invalid state: {}", s),
+            PlaybackError::DatabaseError(s) => write!(f, "Database error: {}", s),
         }
     }
 }
@@ -66,6 +69,7 @@ impl Error for PlaybackError {
             Pipeline(_) => None,
             FileNotFound(_) => None,
             InvalidState(_) => None,
+            PlaybackError::DatabaseError(_) => None,
         }
     }
 }

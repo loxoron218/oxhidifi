@@ -6,15 +6,21 @@ use std::{
     },
 };
 
-use crate::ui::components::player_bar::PlayerBar;
+use sqlx::SqlitePool;
+
+use crate::{
+    data::db::crud::{fetch_album_by_id, fetch_artist_by_id, fetch_tracks_by_album},
+    ui::components::player_bar::PlayerBar,
+};
 
 use super::{
     engine::PlaybackEngine,
-    error::PlaybackError::{self, FileNotFound},
+    error::PlaybackError::{self, DatabaseError, FileNotFound},
     events::{
         PlaybackEvent::{self, EndOfStream, Error, PositionChanged, StateChanged},
         PlaybackState,
     },
+    queue::{PlaybackQueue, QueueItem},
 };
 
 /// Controls playback and handles communication between the UI and playback engine.
@@ -31,6 +37,7 @@ use super::{
 /// * `duration` - Duration of the current track in nanoseconds, if available
 /// * `position` - Current playback position in nanoseconds
 /// * `player_bar` - Optional reference to the UI player bar component
+/// * `queue` - The playback queue managing tracks to be played
 pub struct PlaybackController {
     /// The playback engine responsible for actual audio operations
     engine: PlaybackEngine,
@@ -44,6 +51,10 @@ pub struct PlaybackController {
     position: u64,
     /// Optional reference to the UI player bar component for event forwarding
     player_bar: Option<Arc<Mutex<PlayerBar>>>,
+    /// The playback queue managing tracks to be played
+    queue: PlaybackQueue,
+    /// Database connection pool for fetching album and track information
+    db_pool: Arc<SqlitePool>,
 }
 
 impl PlaybackController {
@@ -69,7 +80,7 @@ impl PlaybackController {
     /// let (controller, event_sender) = PlaybackController::new()
     ///     .expect("Failed to create playback controller");
     /// ```
-    pub fn new() -> Result<(Self, Sender<PlaybackEvent>), PlaybackError> {
+    pub fn new(db_pool: Arc<SqlitePool>) -> Result<(Self, Sender<PlaybackEvent>), PlaybackError> {
         println!("Creating new playback controller");
         let (event_sender, event_receiver) = channel();
         let engine = PlaybackEngine::new(event_sender.clone())?;
@@ -80,6 +91,8 @@ impl PlaybackController {
             duration: None,
             position: 0,
             player_bar: None,
+            queue: PlaybackQueue::new(),
+            db_pool,
         };
         Ok((controller, event_sender))
     }
@@ -104,6 +117,7 @@ impl PlaybackController {
     /// Returns a [`PlaybackError`] if the playback engine fails to initialize.
     pub fn new_with_player_bar(
         player_bar: Arc<Mutex<PlayerBar>>,
+        db_pool: Arc<SqlitePool>,
     ) -> Result<(Self, Sender<PlaybackEvent>), PlaybackError> {
         let (event_sender, event_receiver) = channel();
         let engine = PlaybackEngine::new(event_sender.clone())?;
@@ -114,6 +128,8 @@ impl PlaybackController {
             duration: None,
             position: 0,
             player_bar: Some(player_bar),
+            queue: PlaybackQueue::new(),
+            db_pool,
         };
         Ok((controller, event_sender))
     }
@@ -255,7 +271,7 @@ impl PlaybackController {
             }
 
             match event {
-                StateChanged(state) => {
+                StateChanged(_state) => {
                     // State changes are handled by the player bar
                 }
                 PositionChanged(position) => {
@@ -263,7 +279,10 @@ impl PlaybackController {
                     self.position = position;
                 }
                 EndOfStream => {
-                    // End of stream is handled by the player bar
+                    // When the current track ends, try to play the next track in the queue
+                    if let Err(e) = self.next_track() {
+                        eprintln!("Error playing next track: {}", e);
+                    }
                 }
                 Error(error) => {
                     // Handle playback errors
@@ -282,7 +301,7 @@ impl PlaybackController {
     /// # Parameters
     ///
     /// * `event` - The playback event to send to the player bar
-    pub fn send_event(&self, event: PlaybackEvent) {
+    pub fn send_event(&self, _event: PlaybackEvent) {
         // In a real implementation, this would send the event to the player bar
         // For now, we'll just print the event
     }
@@ -348,5 +367,353 @@ impl PlaybackController {
     /// This function will return an error if the playback engine fails to query the position.
     pub fn query_position(&mut self) -> Result<Option<u64>, PlaybackError> {
         self.engine.get_position()
+    }
+
+    /// Checks if navigation to the next track is possible
+    ///
+    /// Returns true if there is a next track in the queue, false otherwise
+    pub fn can_go_next(&self) -> bool {
+        self.queue.can_go_next()
+    }
+
+    /// Checks if navigation to the previous track is possible
+    ///
+    /// Returns true if there is a previous track in the queue, false otherwise
+    pub fn can_go_previous(&self) -> bool {
+        self.queue.can_go_previous()
+    }
+
+    /// Queues all tracks from an album for playback
+    ///
+    /// This method fetches album, artist, and track information from the database,
+    /// creates QueueItem objects for each track, clears the existing queue,
+    /// adds the new items, sets the current album ID and index, and loads and plays
+    /// the first track.
+    ///
+    /// # Arguments
+    /// * `album_id` - The ID of the album to queue
+    ///
+    /// # Returns
+    /// A `Result` indicating success or a `PlaybackError` on failure
+    pub async fn queue_album(&mut self, album_id: i64) -> Result<(), PlaybackError> {
+        // Fetch album information
+        let album = fetch_album_by_id(&self.db_pool, album_id)
+            .await
+            .map_err(|e| DatabaseError(format!("Failed to fetch album: {}", e)))?;
+
+        // Fetch artist information
+        let artist = fetch_artist_by_id(&self.db_pool, album.artist_id)
+            .await
+            .map_err(|e| DatabaseError(format!("Failed to fetch artist: {}", e)))?;
+
+        // Fetch tracks for the album
+        let tracks = fetch_tracks_by_album(&self.db_pool, album_id)
+            .await
+            .map_err(|e| DatabaseError(format!("Failed to fetch tracks: {}", e)))?;
+
+        // Clear existing queue
+        self.queue.clear();
+
+        // Create QueueItem for each track
+        let queue_items: Vec<QueueItem> = tracks
+            .into_iter()
+            .map(|track| QueueItem {
+                track_id: track.id,
+                track_title: track.title,
+                album_title: album.title.clone(),
+                artist_name: artist.name.clone(),
+                track_path: track.path,
+                cover_art_path: album.cover_art.clone(),
+                bit_depth: track.bit_depth,
+                sample_rate: track.sample_rate,
+                format: track.format,
+                duration: track.duration,
+            })
+            .collect();
+
+        // Add new items to queue
+        self.queue.items = queue_items;
+
+        // Set current album ID and index
+        self.queue.current_album_id = Some(album_id);
+        self.queue.current_index = if self.queue.items.is_empty() {
+            None
+        } else {
+            Some(0)
+        };
+
+        // Load and play the first track if there are tracks
+        if let Some(first_track) = self.queue.current_track() {
+            // Update the player bar with track metadata if it exists
+            if let Some(player_bar) = &self.player_bar {
+                match player_bar.lock() {
+                    Ok(player_bar) => {
+                        player_bar.update_with_metadata(
+                            &first_track.album_title,
+                            &first_track.track_title,
+                            &first_track.artist_name,
+                            first_track.cover_art_path.as_deref(),
+                            first_track.bit_depth,
+                            first_track.sample_rate,
+                            first_track.format.as_deref(),
+                            first_track.duration,
+                        );
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to acquire lock on player bar: {}", e);
+                    }
+                }
+            }
+
+            self.load_track(first_track.track_path.clone())?;
+            self.play()?;
+        }
+        Ok(())
+    }
+
+    /// Queues tracks from a specific track onwards
+    ///
+    /// This method fetches album, artist, and track information from the database,
+    /// finds the starting track position, creates QueueItem objects for each track
+    /// from the starting position onwards, clears the existing queue, adds the new items,
+    /// sets the current album ID and index, and loads and plays the first track.
+    ///
+    /// # Arguments
+    /// * `album_id` - The ID of the album
+    /// * `start_track_id` - The ID of the track to start queuing from
+    ///
+    /// # Returns
+    /// A `Result` indicating success or a `PlaybackError` on failure
+    pub async fn queue_tracks_from(
+        &mut self,
+        album_id: i64,
+        start_track_id: i64,
+    ) -> Result<(), PlaybackError> {
+        // Fetch album information
+        let album = fetch_album_by_id(&self.db_pool, album_id)
+            .await
+            .map_err(|e| DatabaseError(format!("Failed to fetch album: {}", e)))?;
+
+        // Fetch artist information
+        let artist = fetch_artist_by_id(&self.db_pool, album.artist_id)
+            .await
+            .map_err(|e| DatabaseError(format!("Failed to fetch artist: {}", e)))?;
+
+        // Fetch tracks for the album
+        let tracks = fetch_tracks_by_album(&self.db_pool, album_id)
+            .await
+            .map_err(|e| DatabaseError(format!("Failed to fetch tracks: {}", e)))?;
+
+        // Find the starting track position
+        let start_index = tracks
+            .iter()
+            .position(|track| track.id == start_track_id)
+            .ok_or_else(|| DatabaseError("Start track not found in album".to_string()))?;
+
+        // Get tracks from the starting position onwards
+        let tracks_from_start = &tracks[start_index..];
+
+        // Clear existing queue
+        self.queue.clear();
+
+        // Create QueueItem for each track from starting position onwards
+        let queue_items: Vec<QueueItem> = tracks_from_start
+            .iter()
+            .map(|track| QueueItem {
+                track_id: track.id,
+                track_title: track.title.clone(),
+                album_title: album.title.clone(),
+                artist_name: artist.name.clone(),
+                track_path: track.path.clone(),
+                cover_art_path: album.cover_art.clone(),
+                bit_depth: track.bit_depth,
+                sample_rate: track.sample_rate,
+                format: track.format.clone(),
+                duration: track.duration,
+            })
+            .collect();
+
+        // Add new items to queue
+        self.queue.items = queue_items;
+
+        // Set current album ID and index
+        self.queue.current_album_id = Some(album_id);
+        self.queue.current_index = if self.queue.items.is_empty() {
+            None
+        } else {
+            Some(0)
+        };
+
+        // Load and play the first track if there are tracks
+        if let Some(first_track) = self.queue.current_track() {
+            // Update the player bar with track metadata if it exists
+            if let Some(player_bar) = &self.player_bar {
+                match player_bar.lock() {
+                    Ok(player_bar) => {
+                        player_bar.update_with_metadata(
+                            &first_track.album_title,
+                            &first_track.track_title,
+                            &first_track.artist_name,
+                            first_track.cover_art_path.as_deref(),
+                            first_track.bit_depth,
+                            first_track.sample_rate,
+                            first_track.format.as_deref(),
+                            first_track.duration,
+                        );
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to acquire lock on player bar: {}", e);
+                    }
+                }
+            }
+
+            self.load_track(first_track.track_path.clone())?;
+            self.play()?;
+        }
+        Ok(())
+    }
+
+    /// Clears the current playback queue
+    ///
+    /// This method clears all items from the queue and resets the current index and album ID.
+    pub fn reset_queue(&mut self) {
+        self.queue.clear();
+    }
+
+    /// Plays the next track in the queue
+    ///
+    /// This method checks if there is a next track, increments the current index,
+    /// and loads and plays the next track.
+    ///
+    /// # Returns
+    /// A `Result` indicating success or a `PlaybackError` on failure
+    pub fn next_track(&mut self) -> Result<(), PlaybackError> {
+        // Get current index
+        let current_index = self.queue.current_index;
+
+        // Check if there is a next track
+        if let Some(index) = current_index {
+            if index + 1 < self.queue.items.len() {
+                // Increment current index
+                self.queue.current_index = Some(index + 1);
+
+                // Get the next track
+                if let Some(next_track) = self.queue.current_track() {
+                    // Update the player bar with track metadata if it exists
+                    if let Some(player_bar) = &self.player_bar {
+                        match player_bar.lock() {
+                            Ok(player_bar) => {
+                                player_bar.update_with_metadata(
+                                    &next_track.album_title,
+                                    &next_track.track_title,
+                                    &next_track.artist_name,
+                                    next_track.cover_art_path.as_deref(),
+                                    next_track.bit_depth,
+                                    next_track.sample_rate,
+                                    next_track.format.as_deref(),
+                                    next_track.duration,
+                                );
+                            }
+                            Err(e) => {
+                                eprintln!("Failed to acquire lock on player bar: {}", e);
+                            }
+                        }
+                    }
+
+                    // Load and play the next track
+                    self.load_track(next_track.track_path.clone())?;
+                    self.play()?;
+                    return Ok(());
+                } else {
+                    println!("Controller: No next track found");
+                }
+            } else {
+                println!("Controller: No next track (index + 1 >= queue length)");
+            }
+        } else {
+            println!("Controller: Current index is None");
+        }
+
+        // No next track, stop playback
+        self.stop()?;
+        Ok(())
+    }
+
+    /// Plays the previous track in the queue
+    ///
+    /// This method checks if there is a previous track, decrements the current index,
+    /// and loads and plays the previous track.
+    ///
+    /// # Returns
+    /// A `Result` indicating success or a `PlaybackError` on failure
+    pub fn previous_track(&mut self) -> Result<(), PlaybackError> {
+        // Get current index
+        let current_index = self.queue.current_index;
+
+        // Check if there is a previous track
+        if let Some(index) = current_index {
+            if index > 0 {
+                // Decrement current index
+                self.queue.current_index = Some(index - 1);
+
+                // Get the previous track
+                if let Some(prev_track) = self.queue.current_track() {
+                    // Update the player bar with track metadata if it exists
+                    if let Some(player_bar) = &self.player_bar {
+                        match player_bar.lock() {
+                            Ok(player_bar) => {
+                                player_bar.update_with_metadata(
+                                    &prev_track.album_title,
+                                    &prev_track.track_title,
+                                    &prev_track.artist_name,
+                                    prev_track.cover_art_path.as_deref(),
+                                    prev_track.bit_depth,
+                                    prev_track.sample_rate,
+                                    prev_track.format.as_deref(),
+                                    prev_track.duration,
+                                );
+                            }
+                            Err(e) => {
+                                eprintln!("Failed to acquire lock on player bar: {}", e);
+                            }
+                        }
+                    }
+
+                    // Load and play the previous track
+                    self.load_track(prev_track.track_path.clone())?;
+                    self.play()?;
+                    return Ok(());
+                }
+            } else {
+                // No previous track, just restart current track from beginning
+                self.stop()?;
+                if let Some(current_track) = self.queue.current_track() {
+                    // Update the player bar with track metadata if it exists
+                    if let Some(player_bar) = &self.player_bar {
+                        match player_bar.lock() {
+                            Ok(player_bar) => {
+                                player_bar.update_with_metadata(
+                                    &current_track.album_title,
+                                    &current_track.track_title,
+                                    &current_track.artist_name,
+                                    current_track.cover_art_path.as_deref(),
+                                    current_track.bit_depth,
+                                    current_track.sample_rate,
+                                    current_track.format.as_deref(),
+                                    current_track.duration,
+                                );
+                            }
+                            Err(e) => {
+                                eprintln!("Failed to acquire lock on player bar: {}", e);
+                            }
+                        }
+                    }
+                    self.load_track(current_track.track_path.clone())?;
+                    self.play()?;
+                }
+                return Ok(());
+            }
+        }
+        Ok(())
     }
 }

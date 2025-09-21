@@ -83,6 +83,8 @@ impl PipelineManager {
     ///     .expect("Failed to set URI");
     /// ```
     pub fn set_uri(&self, uri: &str) -> Result<(), PlaybackError> {
+        // Stop any existing playback before setting the new URI
+        self.pipeline.set_state(Null)?;
         self.playbin.set_property("uri", uri);
         Ok(())
     }
@@ -233,5 +235,17 @@ impl PipelineManager {
         // Query the pipeline state with no timeout (ZERO)
         let (_, state, _pending) = self.pipeline.state(ClockTime::ZERO);
         Ok(state)
+    }
+
+    /// Gets a reference to the underlying GStreamer pipeline.
+    ///
+    /// This method provides access to the GStreamer pipeline for components
+    /// that need to interact with it directly, such as the bus handler.
+    ///
+    /// # Returns
+    ///
+    /// Returns a reference to the GStreamer pipeline.
+    pub fn get_pipeline(&self) -> &Pipeline {
+        &self.pipeline
     }
 }
