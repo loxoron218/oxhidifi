@@ -3,8 +3,6 @@ use std::path::PathBuf;
 /// Represents a single item in the playback queue.
 #[derive(Clone, Debug)]
 pub struct QueueItem {
-    /// Unique identifier for the track
-    pub track_id: i64,
     /// Title of the track
     pub track_title: String,
     /// Title of the album containing the track
@@ -53,16 +51,6 @@ impl PlaybackQueue {
         self.current_album_id = None;
     }
 
-    /// Checks if the queue is empty
-    pub fn is_empty(&self) -> bool {
-        self.items.is_empty()
-    }
-
-    /// Gets the number of items in the queue
-    pub fn len(&self) -> usize {
-        self.items.len()
-    }
-
     /// Gets a reference to the current track, if any
     pub fn current_track(&self) -> Option<&QueueItem> {
         if let Some(index) = self.current_index {
@@ -72,16 +60,6 @@ impl PlaybackQueue {
         }
     }
 
-    /// Gets a reference to the next track in the queue, if any
-    pub fn next_track(&self) -> Option<&QueueItem> {
-        if let Some(index) = self.current_index {
-            if index + 1 < self.items.len() {
-                return self.items.get(index + 1);
-            }
-        }
-        None
-    }
-
     /// Checks if navigation to the next track is possible
     pub fn can_go_next(&self) -> bool {
         if let Some(index) = self.current_index {
@@ -89,16 +67,6 @@ impl PlaybackQueue {
         } else {
             false
         }
-    }
-
-    /// Gets a reference to the previous track in the queue, if any
-    pub fn previous_track(&self) -> Option<&QueueItem> {
-        if let Some(index) = self.current_index {
-            if index > 0 {
-                return self.items.get(index - 1);
-            }
-        }
-        None
     }
 
     /// Checks if navigation to the previous track is possible

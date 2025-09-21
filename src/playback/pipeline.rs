@@ -1,6 +1,6 @@
 use gstreamer::{
     ClockTime, Element, ElementFactory, Pipeline, SeekFlags,
-    State::{self, Null, Paused, Playing},
+    State::{Null, Paused, Playing},
     prelude::{ElementExt, ElementExtManual, GstBinExt, ObjectExt},
 };
 
@@ -203,38 +203,6 @@ impl PipelineManager {
 
         // Convert ClockTime to nanoseconds if duration is available
         Ok(duration.map(|d| d.nseconds()))
-    }
-
-    /// Gets the current position of the playback.
-    ///
-    /// Queries the pipeline for the current playback position in nanoseconds.
-    ///
-    /// # Returns
-    ///
-    /// Returns `Ok(Some(u64))` with the current position in nanoseconds if available,
-    /// `Ok(None)` if the position is not available, or a [`PlaybackError`] if
-    /// querying the position fails.
-    pub fn get_position(&self) -> Result<Option<u64>, PlaybackError> {
-        // Query the pipeline for the current playback position
-        let position = self.pipeline.query_position::<ClockTime>();
-
-        // Convert ClockTime to nanoseconds if position is available
-        Ok(position.map(|p| p.nseconds()))
-    }
-
-    /// Gets the current state of the pipeline.
-    ///
-    /// Queries the pipeline for its current state, which indicates whether
-    /// it is stopped, playing, paused, or buffering.
-    ///
-    /// # Returns
-    ///
-    /// Returns `Ok(State)` with the current pipeline state, or a [`PlaybackError`]
-    /// if querying the state fails.
-    pub fn get_state(&self) -> Result<State, PlaybackError> {
-        // Query the pipeline state with no timeout (ZERO)
-        let (_, state, _pending) = self.pipeline.state(ClockTime::ZERO);
-        Ok(state)
     }
 
     /// Gets a reference to the underlying GStreamer pipeline.

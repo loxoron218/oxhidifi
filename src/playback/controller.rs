@@ -58,45 +58,6 @@ pub struct PlaybackController {
 }
 
 impl PlaybackController {
-    /// Creates a new playback controller without a player bar.
-    ///
-    /// Initializes a new [`PlaybackController`] instance with a new [`PlaybackEngine`]
-    /// and sets up the communication channels for event handling.
-    ///
-    /// # Returns
-    ///
-    /// Returns a `Result` containing a tuple with:
-    /// * The new `PlaybackController` instance
-    /// * A `Sender<PlaybackEvent>` for sending events to the controller
-    ///
-    /// # Errors
-    ///
-    /// Returns a [`PlaybackError`] if the playback engine fails to initialize.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// # use crate::playback::controller::PlaybackController;
-    /// let (controller, event_sender) = PlaybackController::new()
-    ///     .expect("Failed to create playback controller");
-    /// ```
-    pub fn new(db_pool: Arc<SqlitePool>) -> Result<(Self, Sender<PlaybackEvent>), PlaybackError> {
-        println!("Creating new playback controller");
-        let (event_sender, event_receiver) = channel();
-        let engine = PlaybackEngine::new(event_sender.clone())?;
-        let controller = Self {
-            engine,
-            event_receiver,
-            current_track: None,
-            duration: None,
-            position: 0,
-            player_bar: None,
-            queue: PlaybackQueue::new(),
-            db_pool,
-        };
-        Ok((controller, event_sender))
-    }
-
     /// Creates a new playback controller with a player bar.
     ///
     /// Initializes a new [`PlaybackController`] instance with a reference to a
@@ -294,29 +255,6 @@ impl PlaybackController {
         }
     }
 
-    /// Sends a playback event to the player bar.
-    ///
-    /// Forwards a playback event to the connected player bar component for UI updates.
-    /// This method is primarily used internally but can be called externally for
-    /// custom event handling.
-    ///
-    /// # Parameters
-    ///
-    /// * `event` - The playback event to send to the player bar
-    pub fn send_event(&self, event: PlaybackEvent) {
-        // Send the event to the player bar if it exists
-        if let Some(player_bar) = &self.player_bar {
-            match player_bar.lock() {
-                Ok(player_bar) => {
-                    player_bar.handle_playback_event(event);
-                }
-                Err(e) => {
-                    eprintln!("Failed to acquire lock on player bar: {}", e);
-                }
-            }
-        }
-    }
-
     /// Gets the current playback state.
     ///
     /// Returns a reference to the current playback state of the engine.
@@ -326,58 +264,6 @@ impl PlaybackController {
     /// A reference to the current [`PlaybackState`].
     pub fn get_current_state(&self) -> &PlaybackState {
         &self.engine.current_state
-    }
-
-    /// Gets the path of the currently loaded track.
-    ///
-    /// Returns an optional reference to the path of the currently loaded track.
-    ///
-    /// # Returns
-    ///
-    /// `Some(&PathBuf)` if a track is loaded, `None` otherwise.
-    pub fn get_current_track(&self) -> Option<&PathBuf> {
-        self.current_track.as_ref()
-    }
-
-    /// Gets the duration of the currently loaded track.
-    ///
-    /// Returns the duration of the currently loaded track in nanoseconds, if available.
-    ///
-    /// # Returns
-    ///
-    /// `Some(u64)` with the duration in nanoseconds if available, `None` otherwise.
-    pub fn get_duration(&self) -> Option<u64> {
-        self.duration
-    }
-
-    /// Gets the current playback position.
-    ///
-    /// Returns the current playback position in nanoseconds based on internal tracking.
-    /// For the most up-to-date position from the engine, use [`query_position`](Self::query_position).
-    ///
-    /// # Returns
-    ///
-    /// The current playback position in nanoseconds.
-    pub fn get_position(&self) -> u64 {
-        self.position
-    }
-
-    /// Queries the current playback position from the engine.
-    ///
-    /// Requests the current playback position directly from the playback engine,
-    /// which queries the underlying GStreamer pipeline.
-    ///
-    /// # Returns
-    ///
-    /// Returns a `Result` containing `Ok(Some(u64))` with the position in nanoseconds
-    /// if successful, `Ok(None)` if the position is not available, or a [`PlaybackError`]
-    /// if querying the position failed.
-    ///
-    /// # Errors
-    ///
-    /// This function will return an error if the playback engine fails to query the position.
-    pub fn query_position(&mut self) -> Result<Option<u64>, PlaybackError> {
-        self.engine.get_position()
     }
 
     /// Checks if navigation to the next track is possible
@@ -429,7 +315,6 @@ impl PlaybackController {
         let queue_items: Vec<QueueItem> = tracks
             .into_iter()
             .map(|track| QueueItem {
-                track_id: track.id,
                 track_title: track.title,
                 album_title: album.title.clone(),
                 artist_name: artist.name.clone(),
@@ -528,7 +413,6 @@ impl PlaybackController {
         let queue_items: Vec<QueueItem> = tracks
             .iter()
             .map(|track| QueueItem {
-                track_id: track.id,
                 track_title: track.title.clone(),
                 album_title: album.title.clone(),
                 artist_name: artist.name.clone(),
@@ -579,13 +463,6 @@ impl PlaybackController {
             self.play()?;
         }
         Ok(())
-    }
-
-    /// Clears the current playback queue
-    ///
-    /// This method clears all items from the queue and resets the current index and album ID.
-    pub fn reset_queue(&mut self) {
-        self.queue.clear();
     }
 
     /// Plays the next track in the queue

@@ -267,27 +267,6 @@ impl PlaybackEngine {
         Ok(())
     }
 
-    /// Gets the current playback state
-    ///
-    /// Returns a reference to the current playback state of the engine.
-    ///
-    /// # Returns
-    ///
-    /// A reference to the current [`PlaybackState`].
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// # use std::sync::mpsc::channel;
-    /// # use crate::playback::engine::PlaybackEngine;
-    /// # let (sender, receiver) = channel();
-    /// # let engine = PlaybackEngine::new(sender).unwrap();
-    /// let state = engine.get_current_state();
-    /// ```
-    pub fn get_current_state(&self) -> &PlaybackState {
-        &self.current_state
-    }
-
     /// Gets the duration of the current track
     ///
     /// Queries the pipeline for the total duration of the currently loaded track.
@@ -315,33 +294,5 @@ impl PlaybackEngine {
     /// ```
     pub fn get_duration(&self) -> Result<Option<u64>, PlaybackError> {
         self.pipeline_manager.get_duration()
-    }
-
-    /// Gets the current position of playback
-    ///
-    /// Queries the pipeline for the current playback position in nanoseconds.
-    ///
-    /// # Returns
-    ///
-    /// Returns `Ok(Some(u64))` with the current position in nanoseconds if available,
-    /// `Ok(None)` if the position is not available, or a [`PlaybackError`] if
-    /// querying the position fails.
-    ///
-    /// # Errors
-    ///
-    /// This function will return an error if the [`PipelineManager`] fails to query the position.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// # use std::sync::mpsc::channel;
-    /// # use crate::playback::engine::PlaybackEngine;
-    /// # let (sender, receiver) = channel();
-    /// # let engine = PlaybackEngine::new(sender).unwrap();
-    /// let position = engine.get_position()
-    ///     .expect("Failed to get position");
-    /// ```
-    pub fn get_position(&self) -> Result<Option<u64>, PlaybackError> {
-        self.pipeline_manager.get_position()
     }
 }

@@ -645,67 +645,6 @@ impl PlayerBar {
         self.update_navigation_button_states();
     }
 
-    /// Updates the progress bar position and time label during playback.
-    ///
-    /// This method updates the progress bar position and time display according to GNOME HIG.
-    /// It's called by the playback system as the track progresses.
-    ///
-    /// # Parameters
-    /// - `position`: Current playback position in seconds
-    pub fn update_progress(&self, position: f64) {
-        // Update the progress bar position
-        self.progress_bar.set_value(position);
-
-        // Format the current position
-        let position_minutes = (position / 60.0) as u32;
-        let position_seconds = (position % 60.0) as u32;
-
-        // Create the time label text for current position
-        let position_text = format!("{}:{:02}", position_minutes, position_seconds);
-
-        // Update the start time label
-        self.time_label_start.set_label(&position_text);
-    }
-
-    /// Loads and plays a track
-    ///
-    /// This method stops the current playback, loads a new track using the playback controller,
-    /// updates the UI with track metadata, and starts playback.
-    ///
-    /// # Parameters
-    /// * `track_path` - The path to the audio file
-    pub fn load_and_play_track(&self, track_path: &Path) {
-        // If we have a playback controller, use it to load and play the track
-        if let Some(controller) = &self.playback_controller {
-            match controller.lock() {
-                Ok(mut controller) => {
-                    // Stop the current playback
-                    match controller.stop() {
-                        Ok(_) => (),
-                        Err(e) => eprintln!("Error stopping current playback: {}", e),
-                    }
-
-                    // Load the track
-                    match controller.load_track(track_path.to_path_buf()) {
-                        Ok(_) => (),
-                        Err(e) => eprintln!("Error loading track {:?}: {}", track_path, e),
-                    }
-
-                    // Start playback
-                    match controller.play() {
-                        Ok(_) => (),
-                        Err(e) => eprintln!("Error starting playback: {}", e),
-                    }
-                }
-                Err(e) => {
-                    eprintln!("Failed to acquire lock on playback controller: {}", e);
-                }
-            }
-        } else {
-            eprintln!("No playback controller available");
-        }
-    }
-
     /// Handles playback events from the controller
     ///
     /// This method updates the UI based on playback events from the controller.

@@ -17,7 +17,6 @@ use sqlx::{Error, Row, SqlitePool, query};
 ///     id: 1,
 ///     title: "Album Title".to_string(),
 ///     year: Some(2023),
-///     artist: "Artist Name".to_string(),
 ///     cover_art: Some(PathBuf::from("/path/to/cover.jpg")),
 ///     format: Some("FLAC".to_string()),
 ///     bit_depth: Some(24),
@@ -35,8 +34,6 @@ pub struct AlbumDisplayInfoWithYear {
     pub title: String,
     /// Release year of the album (may be None if unknown)
     pub year: Option<i32>,
-    /// Name of the artist who created the album
-    pub artist: String,
     /// Path to the album's cover art image, if available
     pub cover_art: Option<PathBuf>,
     /// Audio format of the tracks (e.g., "FLAC", "MP3", "WAV")
@@ -92,7 +89,7 @@ pub async fn fetch_album_display_info_by_artist(
     artist_id: i64,
 ) -> Result<Vec<AlbumDisplayInfoWithYear>, Error> {
     let rows = query(
-        r#"SELECT albums.id, albums.title, albums.year, artists.name as artist, albums.cover_art,
+        r#"SELECT albums.id, albums.title, albums.year, albums.cover_art,
                      tracks.format, tracks.bit_depth, tracks.sample_rate, albums.dr_value, albums.dr_is_best, albums.original_release_date
            FROM albums
            JOIN artists ON albums.artist_id = artists.id
@@ -110,7 +107,6 @@ pub async fn fetch_album_display_info_by_artist(
             id: row.get("id"),
             title: row.get("title"),
             year: row.get("year"),
-            artist: row.get("artist"),
             cover_art: row.get::<Option<String>, _>("cover_art").map(PathBuf::from),
             format: row.get("format"),
             bit_depth: row.get("bit_depth"),
