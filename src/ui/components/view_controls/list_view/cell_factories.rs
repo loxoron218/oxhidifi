@@ -27,7 +27,6 @@ use crate::utils::image::AsyncImageLoader;
 /// The function connects two signals to the factory:
 /// - `setup`: Called when a new cell needs to be created, sets up the Picture widget
 /// - `bind`: Called when a cell needs to be updated with data, loads the album cover
-
 pub fn create_cover_image_column(
     column: &ColumnViewColumn,
     zoom_manager: Option<Rc<ColumnViewZoomManager>>,

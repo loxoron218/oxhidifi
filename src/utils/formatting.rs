@@ -3,7 +3,6 @@
 /// This module provides functions to format durations, bit depth, sample rates,
 /// and years for display within the application's user interface, ensuring consistency
 /// and adherence to common presentation standards.
-
 /// Formats a duration in seconds into a "H:MM:SS" string (e.g., 1:23:45).
 ///
 /// This function is primarily used for displaying total album or track durations
