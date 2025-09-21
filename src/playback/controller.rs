@@ -277,6 +277,8 @@ impl PlaybackController {
                 PositionChanged(position) => {
                     // Update our internal position tracking
                     self.position = position;
+
+                    // Forward to player bar for UI updates
                 }
                 EndOfStream => {
                     // When the current track ends, try to play the next track in the queue
@@ -301,9 +303,18 @@ impl PlaybackController {
     /// # Parameters
     ///
     /// * `event` - The playback event to send to the player bar
-    pub fn send_event(&self, _event: PlaybackEvent) {
-        // In a real implementation, this would send the event to the player bar
-        // For now, we'll just print the event
+    pub fn send_event(&self, event: PlaybackEvent) {
+        // Send the event to the player bar if it exists
+        if let Some(player_bar) = &self.player_bar {
+            match player_bar.lock() {
+                Ok(player_bar) => {
+                    player_bar.handle_playback_event(event);
+                }
+                Err(e) => {
+                    eprintln!("Failed to acquire lock on player bar: {}", e);
+                }
+            }
+        }
     }
 
     /// Gets the current playback state.

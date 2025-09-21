@@ -12,7 +12,7 @@ use gtk4::{
     Orientation::{Horizontal, Vertical},
     Scale,
     gdk_pixbuf::Pixbuf,
-    glib::{MainContext, SignalHandlerId, timeout_future},
+    glib::{MainContext, Propagation::Proceed, SignalHandlerId, WeakRef, timeout_future},
     pango::EllipsizeMode,
 };
 use libadwaita::prelude::{BoxExt, ButtonExt, ObjectExt, RangeExt, WidgetExt};
@@ -21,8 +21,8 @@ use crate::{
     playback::{
         controller::PlaybackController,
         events::{
-            PlaybackEvent::{self, EndOfStream, Error},
-            PlaybackState::{Paused, Playing, Stopped},
+            PlaybackEvent::{self, EndOfStream, Error, PositionChanged, StateChanged},
+            PlaybackState::{Buffering, Paused, Playing, Stopped},
         },
     },
     utils::formatting::format_sample_rate_value,
@@ -92,6 +92,93 @@ pub struct PlayerBar {
     can_go_prev: Cell<bool>,
     /// Whether navigation to the next track is possible
     can_go_next: Cell<bool>,
+}
+
+impl PlayerBar {
+    /// Creates a weak reference to this PlayerBar instance
+    fn downgrade(&self) -> PlayerBarWeak {
+        PlayerBarWeak {
+            container: self.container.downgrade(),
+            album_art: self.album_art.downgrade(),
+            song_title: self.song_title.downgrade(),
+            song_artist: self.song_artist.downgrade(),
+            album_title: self.album_title.downgrade(),
+            bit_depth_sample_rate: self.bit_depth_sample_rate.downgrade(),
+            format: self.format.downgrade(),
+            progress_bar: self.progress_bar.downgrade(),
+            time_label_start: self.time_label_start.downgrade(),
+            time_label_end: self.time_label_end.downgrade(),
+            _volume_slider: self._volume_slider.downgrade(),
+            _bit_perfect_indicator: self._bit_perfect_indicator.downgrade(),
+            _gapless_indicator: self._gapless_indicator.downgrade(),
+            _prev_button: self._prev_button.downgrade(),
+            _play_button: self._play_button.downgrade(),
+            _next_button: self._next_button.downgrade(),
+            main_content_area: self.main_content_area.clone(),
+            visibility_handler_id: self.visibility_handler_id.clone(),
+            duration: self.duration.clone(),
+            playback_controller: self.playback_controller.clone(),
+            can_go_prev: self.can_go_prev.clone(),
+            can_go_next: self.can_go_next.clone(),
+        }
+    }
+}
+
+/// Weak reference to a PlayerBar instance
+#[derive(Clone)]
+pub struct PlayerBarWeak {
+    container: WeakRef<Box>,
+    album_art: WeakRef<Image>,
+    song_title: WeakRef<Label>,
+    song_artist: WeakRef<Label>,
+    album_title: WeakRef<Label>,
+    bit_depth_sample_rate: WeakRef<Label>,
+    format: WeakRef<Label>,
+    progress_bar: WeakRef<Scale>,
+    time_label_start: WeakRef<Label>,
+    time_label_end: WeakRef<Label>,
+    _volume_slider: WeakRef<Scale>,
+    _bit_perfect_indicator: WeakRef<Button>,
+    _gapless_indicator: WeakRef<Button>,
+    _prev_button: WeakRef<Button>,
+    _play_button: WeakRef<Button>,
+    _next_button: WeakRef<Button>,
+    main_content_area: Rc<RefCell<Option<Box>>>,
+    visibility_handler_id: Option<Rc<SignalHandlerId>>,
+    duration: Rc<Cell<f64>>,
+    playback_controller: Option<Arc<Mutex<PlaybackController>>>,
+    can_go_prev: Cell<bool>,
+    can_go_next: Cell<bool>,
+}
+
+impl PlayerBarWeak {
+    /// Attempts to upgrade the weak reference to a PlayerBar instance
+    pub fn upgrade(&self) -> Option<PlayerBar> {
+        Some(PlayerBar {
+            container: self.container.upgrade()?,
+            album_art: self.album_art.upgrade()?,
+            song_title: self.song_title.upgrade()?,
+            song_artist: self.song_artist.upgrade()?,
+            album_title: self.album_title.upgrade()?,
+            bit_depth_sample_rate: self.bit_depth_sample_rate.upgrade()?,
+            format: self.format.upgrade()?,
+            progress_bar: self.progress_bar.upgrade()?,
+            time_label_start: self.time_label_start.upgrade()?,
+            time_label_end: self.time_label_end.upgrade()?,
+            _volume_slider: self._volume_slider.upgrade()?,
+            _bit_perfect_indicator: self._bit_perfect_indicator.upgrade()?,
+            _gapless_indicator: self._gapless_indicator.upgrade()?,
+            _prev_button: self._prev_button.upgrade()?,
+            _play_button: self._play_button.upgrade()?,
+            _next_button: self._next_button.upgrade()?,
+            main_content_area: self.main_content_area.clone(),
+            visibility_handler_id: self.visibility_handler_id.clone(),
+            duration: self.duration.clone(),
+            playback_controller: self.playback_controller.clone(),
+            can_go_prev: self.can_go_prev.clone(),
+            can_go_next: self.can_go_next.clone(),
+        })
+    }
 }
 
 impl PlayerBar {
@@ -231,6 +318,34 @@ impl PlayerBar {
         progress_bar.set_range(0.0, 10.0);
         progress_box.append(&progress_bar);
 
+        // Connect change event to seek functionality
+        // Create a cell to store a weak reference to self
+        let player_bar_ref: Rc<RefCell<Option<PlayerBarWeak>>> = Rc::new(RefCell::new(None));
+        let player_bar_ref_clone = player_bar_ref.clone();
+        progress_bar.connect_change_value(move |_scale, _, value| {
+            // Convert value to nanoseconds for seeking
+            let position_ns = (value * 1_000_000_000.0) as u64;
+
+            // Get the player bar reference and seek
+            if let Some(player_bar_weak) = &*player_bar_ref_clone.borrow() {
+                if let Some(player_bar) = player_bar_weak.upgrade() {
+                    if let Some(controller) = &player_bar.playback_controller {
+                        match controller.lock() {
+                            Ok(mut controller) => {
+                                if let Err(e) = controller.seek(position_ns) {
+                                    eprintln!("Error seeking to position: {}", e);
+                                }
+                            }
+                            Err(e) => {
+                                eprintln!("Failed to acquire lock on playback controller: {}", e);
+                            }
+                        }
+                    }
+                }
+            }
+            Proceed
+        });
+
         // Create a container for the bottom row (time labels and play controls)
         let bottom_row_box = Box::builder().orientation(Horizontal).hexpand(true).build();
         bottom_row_box.add_css_class("player-bottom-row");
@@ -322,7 +437,7 @@ impl PlayerBar {
 
         // Construct and return the PlayerBar instance with all initialized components
         // This struct initialization makes all the UI components accessible to the caller
-        Self {
+        let player_bar = Self {
             container,
             album_art,
             song_title,
@@ -330,7 +445,7 @@ impl PlayerBar {
             album_title,
             bit_depth_sample_rate,
             format,
-            progress_bar,
+            progress_bar: progress_bar.clone(),
             time_label_start,
             time_label_end,
             _volume_slider: volume_slider,
@@ -345,7 +460,11 @@ impl PlayerBar {
             playback_controller: None,
             can_go_prev: Cell::new(false),
             can_go_next: Cell::new(false),
-        }
+        };
+
+        // Store a weak reference to self in the progress bar handler
+        *player_bar_ref.borrow_mut() = Some(player_bar.downgrade());
+        player_bar
     }
 
     /// Sets the main content area that needs padding adjustment when player bar visibility changes.
@@ -528,14 +647,11 @@ impl PlayerBar {
 
     /// Updates the progress bar position and time label during playback.
     ///
-    /// This method should be called periodically during playback to update
-    /// the progress bar position and time display according to GNOME HIG.
-    /// In a complete implementation with audio playback, this would be called
-    /// by the playback system as the track progresses.
+    /// This method updates the progress bar position and time display according to GNOME HIG.
+    /// It's called by the playback system as the track progresses.
     ///
     /// # Parameters
     /// - `position`: Current playback position in seconds
-    #[allow(dead_code)]
     pub fn update_progress(&self, position: f64) {
         // Update the progress bar position
         self.progress_bar.set_value(position);
@@ -598,7 +714,7 @@ impl PlayerBar {
     /// * `event` - The playback event to handle
     pub fn handle_playback_event(&self, event: PlaybackEvent) {
         match event {
-            PlaybackEvent::StateChanged(state) => {
+            StateChanged(state) => {
                 // Update the play button icon based on the new state
                 match state {
                     Playing => {
@@ -612,12 +728,15 @@ impl PlayerBar {
                     Stopped => {
                         self._play_button.set_icon_name("media-playback-start");
                     }
-                    _ => {}
+                    Buffering => {
+                        // Could show a buffering indicator here
+                        // For now, we'll just keep the current icon
+                    }
                 }
             }
-            PlaybackEvent::PositionChanged(position_ns) => {
+            PositionChanged(position_ns) => {
                 // Update the progress bar with the new position
-                let position_secs = position_ns as f64 / 1_000_000.0;
+                let position_secs = position_ns as f64 / 1_000_000_000.0;
                 self.progress_bar.set_value(position_secs);
 
                 // Format the current position

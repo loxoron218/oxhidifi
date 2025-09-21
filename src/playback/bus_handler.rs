@@ -1,16 +1,21 @@
 use std::sync::mpsc::Sender;
 
 use gstreamer::{
-    Message,
-    MessageView::{Eos, Error, StateChanged},
+    ClockTime, Message,
+    MessageView::{Eos, Error, StateChanged as GstStateChanged},
     Pipeline,
+    State::{Null, Paused, Playing, Ready},
+    bus::BusWatchGuard,
     glib::ControlFlow::Continue,
-    prelude::ElementExt,
+    prelude::{ElementExt, ElementExtManual, ObjectExt},
 };
 
 use super::{
     error::PlaybackError,
-    events::{PlaybackEvent, PlaybackEvent::EndOfStream},
+    events::{
+        PlaybackEvent::{self, EndOfStream, PositionChanged, StateChanged},
+        PlaybackState,
+    },
 };
 
 /// Handles GStreamer bus messages and converts them to playback events
@@ -26,7 +31,7 @@ use super::{
 pub struct BusHandler {
     pipeline: Pipeline,
     event_sender: Sender<PlaybackEvent>,
-    bus_watch: Option<gstreamer::bus::BusWatchGuard>,
+    bus_watch: Option<BusWatchGuard>,
 }
 
 impl BusHandler {
@@ -73,6 +78,7 @@ impl BusHandler {
         // Clone the event sender for use in the callback closure
         // This is necessary because the closure takes ownership of captured variables
         let event_sender = self.event_sender.clone();
+        let pipeline_weak = self.pipeline.downgrade();
 
         // Add a watch to handle bus messages asynchronously
         // The closure is called for each message received on the bus
@@ -81,6 +87,13 @@ impl BusHandler {
             // Errors during message handling are logged but don't stop the watch
             if let Err(e) = Self::handle_message(&event_sender, message) {
                 eprintln!("Error handling GStreamer message: {}", e);
+            }
+
+            // Send periodic position updates
+            if let Some(pipeline) = pipeline_weak.upgrade() {
+                if let Some(position) = pipeline.query_position::<ClockTime>() {
+                    let _ = event_sender.send(PositionChanged(position.nseconds()));
+                }
             }
 
             // Continue watching for more messages (don't remove the watch)
@@ -129,10 +142,31 @@ impl BusHandler {
                 // The result is ignored here because there's not much we can do
                 // if sending the error event also fails
             }
+            GstStateChanged(state_changed) => {
+                // Handle state change messages
+                let new_state = match state_changed.current() {
+                    Playing => PlaybackState::Playing,
+                    Paused => PlaybackState::Paused,
+                    Ready => PlaybackState::Stopped,
+                    Null => PlaybackState::Stopped,
+
+                    // Map buffering state to our Buffering variant
+                    _ => {
+                        // Check if it's a buffering state
+                        if state_changed.current() == Playing && state_changed.pending() == Playing
+                        {
+                            PlaybackState::Buffering
+                        } else {
+                            PlaybackState::Stopped
+                        }
+                    }
+                };
+                let _ = event_sender.send(StateChanged(new_state));
+            }
             _ => {
                 // Ignore other message types
                 // GStreamer produces many message types, but we only care about
-                // end-of-stream, errors, and potentially state changes
+                // end-of-stream, errors, and state changes
             }
         }
         Ok(())
