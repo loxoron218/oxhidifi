@@ -129,11 +129,6 @@ impl BusHandler {
                 // The result is ignored here because there's not much we can do
                 // if sending the error event also fails
             }
-            StateChanged(state_changed) => {
-                // State changed, we could send StateChanged events here
-                // but the engine already handles state tracking
-                // This is left empty intentionally to avoid duplicate state notifications
-            }
             _ => {
                 // Ignore other message types
                 // GStreamer produces many message types, but we only care about

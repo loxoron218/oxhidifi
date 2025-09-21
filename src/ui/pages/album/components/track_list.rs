@@ -48,8 +48,8 @@ pub fn build_track_row(
     is_various_artists_album: bool,
     player_bar: &PlayerBar,
     album: &Album,
-    artist: &Artist,
-    db_pool: Arc<SqlitePool>,
+    _artist: &Artist,
+    _db_pool: Arc<SqlitePool>,
 ) -> ActionRow {
     // Prepare subtitle fields with track metadata
     let mut subtitle_fields = Vec::with_capacity(4);
@@ -139,6 +139,9 @@ pub fn build_track_row(
                         eprintln!("Failed to acquire lock on playback controller: {}", e);
                     }
                 }
+
+                // Update navigation button states after queue initialization
+                player_bar_async.update_navigation_button_states();
             } else {
                 eprintln!("No playback controller available");
             }

@@ -272,6 +272,10 @@
   box-shadow: none;
 }
 
+.player-bar .media-button.navigation-disabled {
+  opacity: 0.5;
+}
+
 .player-bar .play-controls-box {
   margin-bottom: 2px;
 }

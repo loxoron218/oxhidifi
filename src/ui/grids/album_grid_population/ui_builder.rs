@@ -17,7 +17,6 @@ use libadwaita::prelude::{BoxExt, ButtonExt, FixedExt, ObjectExt, WidgetExt};
 use sqlx::SqlitePool;
 
 use crate::{
-    data::db::crud::fetch_tracks_by_album,
     ui::{
         components::{player_bar::PlayerBar, view_controls::ZoomLevel},
         grids::{
@@ -56,7 +55,7 @@ pub fn create_album_tile(
     show_dr_badges: &Rc<Cell<bool>>,
     use_original_year: &Rc<Cell<bool>>,
     player_bar: &PlayerBar,
-    db_pool: Arc<SqlitePool>,
+    _db_pool: Arc<SqlitePool>,
     zoom_level: ZoomLevel,
 ) -> FlowBoxChild {
     let cover_size = screen_info.borrow().cover_size;
@@ -251,72 +250,40 @@ pub fn create_album_tile(
 
     // Add click handler to play button to update player bar
     let player_bar_clone = player_bar.clone();
-    let db_pool_clone = db_pool.clone();
     let album_id = album_info.id;
-    let album_title = album_info.title.clone();
-    let album_artist = album_info.artist.clone();
-    let album_cover_art = album_info.cover_art.clone();
     play_button.connect_clicked(move |_| {
         // Clone values for the async block
         let player_bar_clone = player_bar_clone.clone();
-        let db_pool_clone = db_pool_clone.clone();
-        let album_title = album_title.clone();
-        let album_artist = album_artist.clone();
-        let album_cover_art = album_cover_art.clone();
+        let album_id = album_id; // Clone album_id for the async block
 
-        // Spawn async task to fetch track information and start playback
+        // Spawn async task to initialize the queue and start playback
         MainContext::default().spawn_local(async move {
-            // Fetch the first track of the album for playback information
-            match fetch_tracks_by_album(&db_pool_clone, album_id).await {
-                Ok(tracks) => {
-                    if let Some(first_track) = tracks.first() {
-                        // Update player bar with first track information
-                        player_bar_clone.update_with_metadata(
-                            &album_title,
-                            &first_track.title,
-                            &album_artist,
-                            album_cover_art.as_deref().map(Path::new),
-                            first_track.bit_depth,
-                            first_track.sample_rate,
-                            first_track.format.as_deref(),
-                            first_track.duration,
-                        );
-
-                        // Load and play the first track
-                        player_bar_clone.load_and_play_track(Path::new(&first_track.path));
-                    } else {
-                        println!("No tracks found for album ID: {}", album_id);
-
-                        // Fallback if no tracks found - just update metadata
-                        player_bar_clone.update_with_metadata(
-                            &album_title,
-                            &album_title,
-                            &album_artist,
-                            album_cover_art.as_deref().map(Path::new),
-                            None,
-                            None,
-                            None,
-                            None,
-                        );
+            // Get the playback controller from the player bar
+            if let Some(controller) = player_bar_clone.get_playback_controller() {
+                // Lock the controller and queue the album
+                let queue_result = {
+                    match controller.lock() {
+                        Ok(mut controller) => {
+                            // Queue all tracks from the album and start playback
+                            controller.queue_album(album_id).await
+                        }
+                        Err(e) => {
+                            eprintln!("Failed to acquire lock on playback controller: {}", e);
+                            return;
+                        }
                     }
+                };
+
+                // Handle any errors from queuing the album
+                if let Err(e) = queue_result {
+                    eprintln!("Error queuing album {}: {}", album_id, e);
+                    return;
                 }
 
-                // Handle database query error by updating player with available metadata
-                Err(e) => {
-                    println!("Error fetching tracks for album ID {}: {}", album_id, e);
-
-                    // Fallback if database query fails - just update metadata
-                    player_bar_clone.update_with_metadata(
-                        &album_title,
-                        &album_title,
-                        &album_artist,
-                        album_cover_art.as_deref().map(Path::new),
-                        None,
-                        None,
-                        None,
-                        None,
-                    );
-                }
+                // Update navigation button states after queue initialization
+                player_bar_clone.update_navigation_button_states();
+            } else {
+                eprintln!("No playback controller available");
             }
         });
     });

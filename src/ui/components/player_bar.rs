@@ -88,6 +88,10 @@ pub struct PlayerBar {
     duration: Rc<Cell<f64>>,
     /// Playback controller for managing audio playback
     playback_controller: Option<Arc<Mutex<PlaybackController>>>,
+    /// Whether navigation to the previous track is possible
+    can_go_prev: Cell<bool>,
+    /// Whether navigation to the next track is possible
+    can_go_next: Cell<bool>,
 }
 
 impl PlayerBar {
@@ -339,6 +343,8 @@ impl PlayerBar {
             visibility_handler_id: None,
             duration: Rc::new(Cell::new(0.0)),
             playback_controller: None,
+            can_go_prev: Cell::new(false),
+            can_go_next: Cell::new(false),
         }
     }
 
@@ -676,30 +682,56 @@ impl PlayerBar {
         let controller_clone = controller.clone();
         let player_bar = self.clone();
         self._prev_button.connect_clicked(move |_| {
-            if let Ok(mut controller) = controller_clone.lock() {
-                // Play the previous track in the queue
-                if let Err(e) = controller.previous_track() {
-                    eprintln!("Error playing previous track: {}", e);
+            // Clone the controller for use in the async block
+            let controller_clone = controller_clone.clone();
+            let player_bar = player_bar.clone();
+
+            // Spawn async task to handle the previous track operation
+            MainContext::default().spawn_local(async move {
+                // Lock the controller and play the previous track
+                match controller_clone.lock() {
+                    Ok(mut controller) => {
+                        // Play the previous track in the queue
+                        if let Err(e) = controller.previous_track() {
+                            eprintln!("Error playing previous track: {}", e);
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to acquire lock on playback controller: {}", e);
+                    }
                 }
 
                 // Update button states after navigation
                 player_bar.update_navigation_button_states();
-            }
+            });
         });
 
         // Connect next button signal to controller next method
         let controller_clone = controller.clone();
         let player_bar = self.clone();
         self._next_button.connect_clicked(move |_| {
-            if let Ok(mut controller) = controller_clone.lock() {
-                // Play the next track in the queue
-                if let Err(e) = controller.next_track() {
-                    eprintln!("Error playing next track: {}", e);
+            // Clone the controller for use in the async block
+            let controller_clone = controller_clone.clone();
+            let player_bar = player_bar.clone();
+
+            // Spawn async task to handle the next track operation
+            MainContext::default().spawn_local(async move {
+                // Lock the controller and play the next track
+                match controller_clone.lock() {
+                    Ok(mut controller) => {
+                        // Play the next track in the queue
+                        if let Err(e) = controller.next_track() {
+                            eprintln!("Error playing next track: {}", e);
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to acquire lock on playback controller: {}", e);
+                    }
                 }
 
                 // Update button states after navigation
                 player_bar.update_navigation_button_states();
-            }
+            });
         });
 
         // Update button states initially
@@ -734,30 +766,35 @@ impl PlayerBar {
     /// Updates the state of the previous and next buttons based on queue navigation possibilities
     ///
     /// This method checks if navigation to the previous or next track is possible
-    /// and enables or disables the buttons accordingly.
+    /// and updates internal state accordingly. The buttons remain visually enabled
+    /// but will only function when navigation is actually possible.
     pub fn update_navigation_button_states(&self) {
-        if let Some(controller) = &self.playback_controller {
+        let (can_prev, can_next) = if let Some(controller) = &self.playback_controller {
             match controller.lock() {
-                Ok(controller) => {
-                    // Enable/disable previous button based on navigation possibility
-                    self._prev_button
-                        .set_sensitive(controller.can_go_previous());
-
-                    // Enable/disable next button based on navigation possibility
-                    self._next_button.set_sensitive(controller.can_go_next());
-                }
+                Ok(controller) => (controller.can_go_previous(), controller.can_go_next()),
                 Err(e) => {
                     eprintln!("Failed to acquire lock on playback controller: {}", e);
-
-                    // If we can't check the controller state, disable both buttons for safety
-                    self._prev_button.set_sensitive(false);
-                    self._next_button.set_sensitive(false);
+                    (false, false)
                 }
             }
         } else {
-            // If no controller is connected, disable both buttons
-            self._prev_button.set_sensitive(false);
-            self._next_button.set_sensitive(false);
+            (false, false)
+        };
+
+        // Update internal state
+        self.can_go_prev.set(can_prev);
+        self.can_go_next.set(can_next);
+
+        // Update button styling based on navigation possibility
+        if can_prev {
+            self._prev_button.remove_css_class("navigation-disabled");
+        } else {
+            self._prev_button.add_css_class("navigation-disabled");
+        }
+        if can_next {
+            self._next_button.remove_css_class("navigation-disabled");
+        } else {
+            self._next_button.add_css_class("navigation-disabled");
         }
     }
 }

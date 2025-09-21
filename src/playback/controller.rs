@@ -471,16 +471,16 @@ impl PlaybackController {
         Ok(())
     }
 
-    /// Queues tracks from a specific track onwards
+    /// Queues all tracks from an album, starting playback from a specific track
     ///
     /// This method fetches album, artist, and track information from the database,
-    /// finds the starting track position, creates QueueItem objects for each track
-    /// from the starting position onwards, clears the existing queue, adds the new items,
-    /// sets the current album ID and index, and loads and plays the first track.
+    /// creates QueueItem objects for all tracks in the album, clears the existing queue,
+    /// adds all items to the queue, sets the current album ID and index to the selected track,
+    /// and loads and plays the selected track.
     ///
     /// # Arguments
     /// * `album_id` - The ID of the album
-    /// * `start_track_id` - The ID of the track to start queuing from
+    /// * `start_track_id` - The ID of the track to start playing from
     ///
     /// # Returns
     /// A `Result` indicating success or a `PlaybackError` on failure
@@ -510,14 +510,11 @@ impl PlaybackController {
             .position(|track| track.id == start_track_id)
             .ok_or_else(|| DatabaseError("Start track not found in album".to_string()))?;
 
-        // Get tracks from the starting position onwards
-        let tracks_from_start = &tracks[start_index..];
-
         // Clear existing queue
         self.queue.clear();
 
-        // Create QueueItem for each track from starting position onwards
-        let queue_items: Vec<QueueItem> = tracks_from_start
+        // Create QueueItem for each track in the album
+        let queue_items: Vec<QueueItem> = tracks
             .iter()
             .map(|track| QueueItem {
                 track_id: track.id,
@@ -533,32 +530,32 @@ impl PlaybackController {
             })
             .collect();
 
-        // Add new items to queue
+        // Add all items to queue
         self.queue.items = queue_items;
 
-        // Set current album ID and index
+        // Set current album ID and index to the selected track
         self.queue.current_album_id = Some(album_id);
         self.queue.current_index = if self.queue.items.is_empty() {
             None
         } else {
-            Some(0)
+            Some(start_index)
         };
 
-        // Load and play the first track if there are tracks
-        if let Some(first_track) = self.queue.current_track() {
+        // Load and play the selected track if there are tracks
+        if let Some(selected_track) = self.queue.current_track() {
             // Update the player bar with track metadata if it exists
             if let Some(player_bar) = &self.player_bar {
                 match player_bar.lock() {
                     Ok(player_bar) => {
                         player_bar.update_with_metadata(
-                            &first_track.album_title,
-                            &first_track.track_title,
-                            &first_track.artist_name,
-                            first_track.cover_art_path.as_deref(),
-                            first_track.bit_depth,
-                            first_track.sample_rate,
-                            first_track.format.as_deref(),
-                            first_track.duration,
+                            &selected_track.album_title,
+                            &selected_track.track_title,
+                            &selected_track.artist_name,
+                            selected_track.cover_art_path.as_deref(),
+                            selected_track.bit_depth,
+                            selected_track.sample_rate,
+                            selected_track.format.as_deref(),
+                            selected_track.duration,
                         );
                     }
                     Err(e) => {
@@ -567,7 +564,7 @@ impl PlaybackController {
                 }
             }
 
-            self.load_track(first_track.track_path.clone())?;
+            self.load_track(selected_track.track_path.clone())?;
             self.play()?;
         }
         Ok(())
@@ -628,7 +625,6 @@ impl PlaybackController {
                     println!("Controller: No next track found");
                 }
             } else {
-                println!("Controller: No next track (index + 1 >= queue length)");
             }
         } else {
             println!("Controller: Current index is None");

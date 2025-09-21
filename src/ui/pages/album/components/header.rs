@@ -95,6 +95,7 @@ pub fn build_album_header(
         // Get the playback controller from the player bar
         if let Some(controller) = player_bar_clone.get_playback_controller() {
             // Spawn async task to queue the album
+            let player_bar_async = player_bar_clone.clone();
             let context = MainContext::default();
             context.spawn_local(async move {
                 // Queue the album for playback
@@ -108,6 +109,9 @@ pub fn build_album_header(
                         eprintln!("Failed to acquire lock on playback controller: {}", e);
                     }
                 }
+
+                // Update navigation button states after queue initialization
+                player_bar_async.update_navigation_button_states();
             });
         } else {
             eprintln!("No playback controller available");
