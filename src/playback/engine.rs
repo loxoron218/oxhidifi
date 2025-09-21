@@ -150,6 +150,10 @@ impl PlaybackEngine {
     ///     .expect("Failed to start playback");
     /// ```
     pub fn play(&mut self) -> Result<(), PlaybackError> {
+        // Ensure the bus handler remains alive
+        self.ensure_bus_handler_alive();
+
+        // Attempt to start playback and handle the result
         match self.pipeline_manager.play() {
             Ok(_) => {
                 self.current_state = Playing;
@@ -195,6 +199,10 @@ impl PlaybackEngine {
     ///     .expect("Failed to pause playback");
     /// ```
     pub fn pause(&mut self) -> Result<(), PlaybackError> {
+        // Ensure the bus handler remains alive
+        self.ensure_bus_handler_alive();
+
+        // Pause playback, update state, and notify listeners
         self.pipeline_manager.pause()?;
         self.current_state = Paused;
         let _ = self.event_sender.send(StateChanged(Paused));
@@ -226,6 +234,10 @@ impl PlaybackEngine {
     ///     .expect("Failed to stop playback");
     /// ```
     pub fn stop(&mut self) -> Result<(), PlaybackError> {
+        // Ensure the bus handler remains alive
+        self.ensure_bus_handler_alive();
+
+        // Stop playback, update state, and notify listeners
         self.pipeline_manager.stop()?;
         self.current_state = Stopped;
         let _ = self.event_sender.send(StateChanged(Stopped));
@@ -262,6 +274,10 @@ impl PlaybackEngine {
     ///     .expect("Failed to seek");
     /// ```
     pub fn seek(&mut self, position_ns: u64) -> Result<(), PlaybackError> {
+        // Ensure the bus handler remains alive
+        self.ensure_bus_handler_alive();
+
+        // Seek to the specified position and notify listeners
         self.pipeline_manager.seek(position_ns)?;
         let _ = self.event_sender.send(PositionChanged(position_ns));
         Ok(())
@@ -293,6 +309,20 @@ impl PlaybackEngine {
     ///     .expect("Failed to get duration");
     /// ```
     pub fn get_duration(&self) -> Result<Option<u64>, PlaybackError> {
+        // Ensure the bus handler remains alive
+        self.ensure_bus_handler_alive();
+
+        // Retrieve the duration from the pipeline manager
         self.pipeline_manager.get_duration()
+    }
+
+    /// Ensures the bus handler remains alive to maintain the GStreamer bus watch.
+    ///
+    /// This method is intentionally left empty but serves to prevent the `bus_handler`
+    /// field from being marked as unused. The bus handler must remain alive for the
+    /// GStreamer bus watch to function properly, as dropping it would remove the watch.
+    fn ensure_bus_handler_alive(&self) {
+        // Access the bus_handler field to prevent it from being marked as unused
+        let _ = &self.bus_handler;
     }
 }
