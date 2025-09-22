@@ -1,4 +1,6 @@
-use std::{borrow::Cow, collections::HashSet, error::Error, path::PathBuf, time::Instant};
+use std::{
+    borrow::Cow, collections::HashSet, error::Error, path::Path, path::PathBuf, time::Instant,
+};
 
 use lofty::{
     prelude::{
@@ -12,9 +14,12 @@ use lofty::{
 use sqlx::SqlitePool;
 
 use crate::{
-    data::db::crud::{
-        AlbumForInsert, TrackForInsert, insert_or_get_artists_batch, upsert_albums_batch,
-        upsert_tracks_batch_enhanced,
+    data::{
+        db::crud::{
+            AlbumForInsert, TrackForInsert, insert_or_get_artists_batch, upsert_albums_batch,
+            upsert_tracks_batch_enhanced,
+        },
+        scanner::individual_dr_scanner::scan_individual_dr_values,
     },
     utils::{
         image::cache::thumbnail::process_images_concurrently, performance_monitor::get_metrics,
@@ -99,6 +104,19 @@ pub async fn process_files_batch_optimized(
 ) -> Result<(), Box<dyn Error>> {
     let start_time = Instant::now();
     let file_count = paths.len();
+
+    // Extract the folder path from the first file path to scan for individual DR values
+    let folder_path = if let Some(first_path) = paths.first() {
+        first_path.parent().unwrap_or_else(|| Path::new(""))
+    } else {
+        Path::new("")
+    };
+
+    // Scan for individual DR values in the folder
+    let individual_dr_values = scan_individual_dr_values(folder_path).unwrap_or_else(|e| {
+        eprintln!("Error scanning individual DR values: {}", e);
+        Vec::new()
+    });
 
     // Process files in batches to reduce memory usage
     for chunk in paths.chunks(batch_size) {
@@ -258,23 +276,31 @@ pub async fn process_files_batch_optimized(
 
         // Prepare track records for batch upsert
         let mut tracks_to_insert = Vec::new();
-        for meta in all_metadata {
+        for (index, meta) in all_metadata.iter().enumerate() {
             let artist_id = *artist_ids.get(&meta.artist_name).unwrap();
             let album_artist_id = *artist_ids.get(&meta.album_artist_name).unwrap();
             let album_id = *album_ids
                 .get(&(meta.album_title.clone(), album_artist_id, folder_id))
                 .unwrap();
+
+            // Get the DR value for this track if available
+            let dr_value = if index < individual_dr_values.len() {
+                individual_dr_values[index]
+            } else {
+                None
+            };
             tracks_to_insert.push(TrackForInsert {
-                title: meta.title,
+                title: meta.title.clone(),
                 album_id,
                 artist_id,
-                path: meta.path,
+                path: meta.path.clone(),
                 duration: Some(meta.duration),
                 track_no: meta.track_no,
                 disc_no: meta.disc_no,
-                format: meta.format,
+                format: meta.format.clone(),
                 bit_depth: meta.bit_depth,
                 sample_rate: meta.sample_rate,
+                dr_value,
             });
         }
 

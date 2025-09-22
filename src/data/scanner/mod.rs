@@ -1,5 +1,6 @@
 mod dr_scanner;
 mod file_processor;
+mod individual_dr_scanner;
 
 pub mod library_ops;
 

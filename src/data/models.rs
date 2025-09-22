@@ -80,4 +80,6 @@ pub struct Track {
     pub bit_depth: Option<u32>,
     /// The sample rate of the audio (e.g., 44100, 96000).
     pub sample_rate: Option<u32>,
+    /// The Dynamic Range (DR) value of the track, if calculated or available.
+    pub dr_value: Option<u8>,
 }

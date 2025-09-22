@@ -1,6 +1,9 @@
 use std::{collections::HashMap, sync::Arc};
 
-use gtk4::{Align::End, Button, Label};
+use gtk4::{
+    Align::{Center, End},
+    Button, Label,
+};
 use libadwaita::{
     ActionRow, PreferencesGroup,
     glib::{MainContext, markup_escape_text},
@@ -14,6 +17,55 @@ use crate::{
     utils::formatting::{format_duration_mmss, format_sample_rate_khz},
 };
 
+/// Build a DR badge widget for an individual track's DR value.
+///
+/// Creates a UI component that displays the track's DR value as a color-coded badge
+/// similar to the album DR badges.
+///
+/// # Parameters
+/// - `dr_value`: The DR value of the track (if available)
+///
+/// # Returns
+/// A GTK Label widget containing the DR badge UI element
+fn build_track_dr_badge(dr_value: Option<u8>) -> Label {
+    // Determine the display values based on whether DR is available
+    let (dr_str, tooltip_text, css_class) = match dr_value {
+        Some(value) => (
+            // Format DR value as two-digit number (e.g., "08", "12")
+            format!("{:02}", value),
+            Some("Official Dynamic Range Value"),
+            // CSS class for color coding based on DR value
+            format!("dr-{:02}", value),
+        ),
+        None => (
+            // Display "N/A" when DR value is not available
+            "N/A".to_string(),
+            Some("Dynamic Range Value not available"),
+            // CSS class for "not available" state
+            "dr-na".to_string(),
+        ),
+    };
+
+    // Create the DR value label with styling
+    let dr_label = Label::builder()
+        .label(&dr_str)
+        .halign(Center)
+        .valign(Center)
+        .build();
+
+    // Set fixed size to ensure consistent layout
+    dr_label.set_size_request(24, 24);
+
+    // Apply base styling class and value-specific class
+    dr_label.add_css_class("dr-badge-label");
+    dr_label.add_css_class("dr-badge-label-list"); // Use existing class for list context
+    dr_label.add_css_class(&css_class);
+
+    // Set tooltip text for the DR badge
+    dr_label.set_tooltip_text(tooltip_text);
+    dr_label
+}
+
 /// Builds a single track row for display in the album track list.
 ///
 /// This function creates an `ActionRow` widget that represents a single track
@@ -23,6 +75,7 @@ use crate::{
 /// - Track metadata (artist, format, bit depth, sample rate)
 /// - Track duration
 /// - Play button
+/// - Track DR value
 ///
 /// The row is designed to be added to a `PreferencesGroup` to create a complete
 /// track list for an album.
@@ -150,6 +203,13 @@ pub fn build_track_row(
 
     // Add the play button to the row
     row.add_suffix(&play_pause_button);
+
+    // Add track DR value if available
+    if let Some(dr_value) = t.dr_value {
+        let dr_badge = build_track_dr_badge(Some(dr_value));
+        dr_badge.set_margin_end(8);
+        row.add_suffix(&dr_badge);
+    }
     row
 }
 

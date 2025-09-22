@@ -75,12 +75,20 @@ pub async fn init_db(pool: &SqlitePool) -> Result<()> {
             format TEXT,
             bit_depth INTEGER,
             sample_rate INTEGER,
+            dr_value INTEGER,
             FOREIGN KEY(album_id) REFERENCES albums(id),
             FOREIGN KEY(artist_id) REFERENCES artists(id)
         )",
     )
     .execute(pool)
     .await?;
+
+    // Add dr_value column if it doesn't exist
+    // `.ok()` is used here to gracefully handle the error if the column already exists.
+    query("ALTER TABLE tracks ADD COLUMN dr_value INTEGER")
+        .execute(pool)
+        .await
+        .ok();
 
     // Create indexes for faster queries. `IF NOT EXISTS` ensures that these statements
     // can be run safely multiple times.
