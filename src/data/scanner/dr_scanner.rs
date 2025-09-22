@@ -18,15 +18,25 @@ fn get_dr_regex() -> &'static Regex {
         // The regex is compiled here only on the first call.
         // `unwrap` is safe as the pattern is hardcoded and valid.
         Regex::new(
-            r"(?i)DR(\d+|ERR)|Official DR value:\s*(\d+|ERR)|Реальные значения DR:\s*(\d+|ERR)|Official EP/Album DR:\s*(\d+|ERR)",
+            r"(?i)DR(\d+|ERR)|Official DR value:\s*(?:DR)?\s*(\d+|ERR)|Реальные значения DR:\s*(\d+|ERR)|Official EP/Album DR:\s*(\d+|ERR)",
         ).unwrap()
     })
 }
 
 /// Scans `.txt` and `.log` files within a specified folder for Dynamic Range (DR) values.
-/// It parses various common DR value formats and returns the highest valid DR value found.
+/// It parses various common DR value formats and returns the official album DR value when present,
+/// or the highest individual track DR value otherwise.
 ///
 /// The function uses a regular expression to find DR values in lines of text files.
+/// It supports multiple formats including:
+/// - Simple "DR" followed by digits or "ERR" (treated as individual track DR values)
+/// - "Official DR value:" followed by optional "DR" and digits or "ERR" (treated as official album DR)
+/// - Russian "Реальные значения DR:" followed by digits or "ERR" (treated as official album DR)
+/// - "Official EP/Album DR:" followed by digits or "ERR" (treated as official album DR)
+///
+/// When both official album DR values and individual track DR values are present in a file,
+/// the official album DR value is prioritized.
+///
 /// It iterates through entries in the folder, and for each `.txt` or `.log` file,
 /// it reads line by line, attempting to capture DR values.
 ///
@@ -47,7 +57,8 @@ pub async fn scan_dr_value(folder_path: &Path) -> Result<Option<u8>, Box<dyn Err
 
     // Lazily initialize the regex to capture DR values.
     let dr_regex = get_dr_regex();
-    let mut highest_dr: Option<u8> = None;
+    let mut official_dr: Option<u8> = None;
+    let mut highest_individual_dr: Option<u8> = None;
     while let Some(entry) = entries
         .next_entry()
         .await
@@ -84,10 +95,17 @@ pub async fn scan_dr_value(folder_path: &Path) -> Result<Option<u8>, Box<dyn Err
                     }
                     let line = String::from_utf8_lossy(&buffer).into_owned();
                     if let Some(caps) = dr_regex.captures(&line) {
-                        // Iterate through all possible capture groups (1 to 4 for this regex).
-                        // The first successful capture will be used.
-                        for i in 1..=4 {
-                            if let Some(dr_str_match) = caps.get(i) {
+                        // Check which capture group matched to determine if it's an official DR value
+                        // Group 1: Simple DR(\d+|ERR)
+                        // Group 2: Official DR value: (?:DR)?\s*(\d+|ERR)
+                        // Group 3: Реальные значения DR: (\d+|ERR)
+                        // Group 4: Official EP/Album DR: (\d+|ERR)
+                        // If we found an official DR value (groups 2, 3, or 4), use it
+                        if caps.get(2).is_some() || caps.get(3).is_some() || caps.get(4).is_some() {
+                            // Extract the DR value from the official DR capture groups
+                            let dr_str_match =
+                                caps.get(2).or_else(|| caps.get(3)).or_else(|| caps.get(4));
+                            if let Some(dr_str_match) = dr_str_match {
                                 let dr_str = dr_str_match.as_str();
 
                                 // Only parse if the captured string is not "ERR".
@@ -96,13 +114,28 @@ pub async fn scan_dr_value(folder_path: &Path) -> Result<Option<u8>, Box<dyn Err
                                 {
                                     // Validate DR value is within the typical range [1, 20].
                                     if (1..=20).contains(&dr) {
-                                        // Update `highest_dr` if the current `dr` is higher
-                                        // or if `highest_dr` is currently `None`.
-                                        highest_dr = match highest_dr {
-                                            Some(current_max) => Some(current_max.max(dr)),
-                                            None => Some(dr),
-                                        };
+                                        // For official DR values, we take the first one we find
+                                        // since there should only be one per file
+                                        official_dr = Some(dr);
                                     }
+                                }
+                            }
+                        } else if let Some(dr_str_match) = caps.get(1) {
+                            // For simple DR patterns, treat as individual track DR values
+                            let dr_str = dr_str_match.as_str();
+
+                            // Only parse if the captured string is not "ERR".
+                            if dr_str.to_uppercase() != "ERR"
+                                && let Ok(dr) = dr_str.parse::<u8>()
+                            {
+                                // Validate DR value is within the typical range [1, 20].
+                                if (1..=20).contains(&dr) {
+                                    // Update highest_individual_dr if the current dr is higher
+                                    // or if highest_individual_dr is currently None.
+                                    highest_individual_dr = match highest_individual_dr {
+                                        Some(current_max) => Some(current_max.max(dr)),
+                                        None => Some(dr),
+                                    };
                                 }
                             }
                         }
@@ -111,5 +144,7 @@ pub async fn scan_dr_value(folder_path: &Path) -> Result<Option<u8>, Box<dyn Err
             }
         }
     }
-    Ok(highest_dr)
+
+    // Prioritize official DR values over individual track DR values
+    Ok(official_dr.or(highest_individual_dr))
 }
