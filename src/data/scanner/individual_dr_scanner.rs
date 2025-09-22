@@ -5,6 +5,15 @@ use std::{
     path::Path,
 };
 
+/// Enum representing the different DR log file formats
+#[derive(Debug, PartialEq)]
+pub enum DrFormat {
+    MAAT,
+    Foobar2000,
+    TTDR,
+    Unknown,
+}
+
 /// Scans `.txt` and `.log` files within a specified folder for individual song Dynamic Range (DR) values.
 /// It parses the table-like structure in DR log files and extracts the DR value for each song in order.
 ///
@@ -69,6 +78,55 @@ fn parse_dr_file(file_path: &Path) -> Result<Vec<Option<u8>>, Box<dyn Error + Se
     // Read all lines from the file, skipping any that cannot be read as UTF-8
     let lines: Vec<String> = reader.lines().filter_map(|line| line.ok()).collect();
 
+    // Detect format
+    let format = detect_format(&lines);
+
+    // Parse based on detected format
+    match format {
+        DrFormat::MAAT => parse_maat_format(&lines),
+        DrFormat::Foobar2000 => parse_foobar2000_format(&lines),
+        DrFormat::TTDR => parse_ttdr_format(&lines),
+        DrFormat::Unknown => Ok(vec![]),
+    }
+}
+
+/// Detects the format of a DR log file based on header patterns
+///
+/// # Arguments
+/// * `lines` - The lines of the DR log file
+///
+/// # Returns
+/// The detected `DrFormat`
+pub fn detect_format(lines: &[String]) -> DrFormat {
+    for line in lines {
+        // MAAT DROffline Format: Look for lines with pipe delimiters and "File Name" + "DR" headers
+        if line.contains("|") && line.contains("File Name") && line.contains("DR") {
+            return DrFormat::MAAT;
+        }
+
+        // Foobar2000 Format: Look for "Analyzed:" line and then a line with table headers containing "DR", "Peak", "RMS"
+        if line.contains("Analyzed:") {
+            // Look for the next line that contains the table headers
+            return DrFormat::Foobar2000;
+        }
+
+        // TT DR Offline Meter Format: Look for "Analyzed folder:" or "Analyzed Folder:" and then a line with table headers containing "DR", "Peak", "RMS"
+        if line.contains("Analyzed folder:") || line.contains("Analyzed Folder:") {
+            // Look for the next line that contains the table headers
+            return DrFormat::TTDR;
+        }
+    }
+    DrFormat::Unknown
+}
+
+/// Parses the MAAT DROffline format (pipe-delimited)
+///
+/// # Arguments
+/// * `lines` - The lines of the DR log file
+///
+/// # Returns
+/// A `Result` containing `Vec<Option<u8>>` with DR values for each song
+fn parse_maat_format(lines: &[String]) -> Result<Vec<Option<u8>>, Box<dyn Error + Send + Sync>> {
     let mut dr_values = Vec::new();
 
     // Flag to track if we're currently parsing within a table structure
@@ -132,4 +190,167 @@ fn parse_dr_file(file_path: &Path) -> Result<Vec<Option<u8>>, Box<dyn Error + Se
         }
     }
     Ok(dr_values)
+}
+
+/// Parses the Foobar2000 format
+///
+/// # Arguments
+/// * `lines` - The lines of the DR log file
+///
+/// # Returns
+/// A `Result` containing `Vec<Option<u8>>` with DR values for each song
+fn parse_foobar2000_format(
+    lines: &[String],
+) -> Result<Vec<Option<u8>>, Box<dyn Error + Send + Sync>> {
+    let mut dr_values = Vec::new();
+    let mut in_table = false;
+    let mut dr_column_index = None;
+
+    // Process each line in the file
+    for line in lines {
+        // Look for the start of the table with dashed line separator
+        if is_separator_line(line) && line.len() > 10 {
+            in_table = true;
+            continue;
+        }
+
+        // If we're in the table, look for the header line
+        if in_table
+            && !line.is_empty()
+            && line.contains("DR")
+            && line.contains("Peak")
+            && line.contains("RMS")
+        {
+            // Find the DR column index by splitting the header line
+            let headers: Vec<&str> = line.split_whitespace().collect();
+            for (i, header) in headers.iter().enumerate() {
+                if header.trim() == "DR" {
+                    dr_column_index = Some(i);
+                    break;
+                }
+            }
+            continue;
+        }
+
+        // If we're in the table and have identified the DR column
+        if in_table && dr_column_index.is_some() && !line.is_empty() && !is_separator_line(line) {
+            // Split the line into columns using whitespace
+            let columns: Vec<&str> = line.split_whitespace().collect();
+
+            // Check if this looks like a data row (has enough columns to include the DR column)
+            if columns.len() > dr_column_index.unwrap() {
+                // Extract the DR column content
+                let dr_column = columns[dr_column_index.unwrap()];
+
+                // Try to parse the DR value from the DR column (e.g., "DR13" -> 13)
+                if let Some(dr_str) = dr_column.strip_prefix("DR") {
+                    if let Ok(dr) = dr_str.parse::<u8>() {
+                        // Validate DR value is within the typical range [1, 20]
+                        if (1..=20).contains(&dr) {
+                            dr_values.push(Some(dr));
+                        } else {
+                            dr_values.push(None);
+                        }
+                    } else {
+                        dr_values.push(None);
+                    }
+                } else {
+                    dr_values.push(None);
+                }
+            }
+        }
+
+        // Stop parsing if we reach the end of the table
+        // Look for lines with "Number of tracks:" or another dashed line
+        if line.starts_with("Number of")
+            || (is_separator_line(line) && in_table && dr_column_index.is_some())
+        {
+            break;
+        }
+    }
+    Ok(dr_values)
+}
+
+/// Parses the TT DR Offline Meter format
+///
+/// # Arguments
+/// * `lines` - The lines of the DR log file
+///
+/// # Returns
+/// A `Result` containing `Vec<Option<u8>>` with DR values for each song
+pub fn parse_ttdr_format(
+    lines: &[String],
+) -> Result<Vec<Option<u8>>, Box<dyn Error + Send + Sync>> {
+    let mut dr_values = Vec::new();
+    let mut in_table = false;
+    let mut dr_column_index = None;
+
+    // Process each line in the file
+    for line in lines {
+        // Look for the start of the table with dashed line separator
+        if is_separator_line(line) && line.len() > 10 {
+            in_table = true;
+            continue;
+        }
+
+        // If we're in the table, look for the header line
+        if in_table
+            && !line.is_empty()
+            && line.contains("DR")
+            && line.contains("Peak")
+            && line.contains("RMS")
+        {
+            // Find the DR column index by splitting the header line
+            let headers: Vec<&str> = line.split_whitespace().collect();
+            for (i, header) in headers.iter().enumerate() {
+                if header.trim() == "DR" {
+                    dr_column_index = Some(i);
+                    break;
+                }
+            }
+            continue;
+        }
+
+        // If we're in the table and have identified the DR column
+        if in_table && dr_column_index.is_some() && !line.is_empty() && !is_separator_line(line) {
+            // Split the line into columns using whitespace
+            let columns: Vec<&str> = line.split_whitespace().collect();
+
+            // Check if this looks like a data row (has enough columns to include the DR column)
+            if columns.len() > dr_column_index.unwrap() {
+                // Extract the DR column content
+                let dr_column = columns[dr_column_index.unwrap()];
+
+                // Try to parse the DR value from the DR column (e.g., "DR13" -> 13)
+                if let Some(dr_str) = dr_column.strip_prefix("DR") {
+                    if let Ok(dr) = dr_str.parse::<u8>() {
+                        // Validate DR value is within the typical range [1, 20]
+                        if (1..=20).contains(&dr) {
+                            dr_values.push(Some(dr));
+                        } else {
+                            dr_values.push(None);
+                        }
+                    } else {
+                        dr_values.push(None);
+                    }
+                } else {
+                    dr_values.push(None);
+                }
+            }
+        }
+
+        // Stop parsing if we reach the end of the table
+        // Look for lines with "Number of files:" or another dashed line
+        if line.starts_with("Number of")
+            || (is_separator_line(line) && in_table && dr_column_index.is_some())
+        {
+            break;
+        }
+    }
+    Ok(dr_values)
+}
+
+/// Helper function to check if a line is a separator line (dashed line)
+fn is_separator_line(line: &str) -> bool {
+    line.chars().all(|c| c == '-' || c == ' ') && line.len() > 10
 }
