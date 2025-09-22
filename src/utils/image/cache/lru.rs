@@ -53,7 +53,7 @@ where
     /// # Arguments
     ///
     /// * `capacity` - The maximum number of entries the cache can hold.
-    ///                Must be a non-zero value.
+    ///   Must be a non-zero value.
     ///
     /// # Returns
     ///

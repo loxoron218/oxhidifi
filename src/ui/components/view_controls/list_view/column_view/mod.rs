@@ -22,13 +22,13 @@ use super::data_model::{AlbumListItem, AlbumListItemObject};
 /// # Generic Parameters
 ///
 /// * `F` - The type of the activation callback function, which must have the signature
-///         `Fn(&ColumnView, u32) + 'static` where the u32 parameter is the selected item's position
+///   `Fn(&ColumnView, u32) + 'static` where the u32 parameter is the selected item's position
 ///
 /// # Arguments
 ///
 /// * `albums` - A vector of [`AlbumListItem`] to display in the ColumnView
 /// * `on_activate` - An optional callback function to handle item activation events.
-///                   If `None`, a default handler will print the position to stdout.
+///   If `None`, a default handler will print the position to stdout.
 /// * `use_original_year` - Whether to display the original release year instead of the release year
 /// * `show_dr_badges` - A `Rc<Cell<bool>>` indicating whether to show DR badges
 ///

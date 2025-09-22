@@ -24,7 +24,7 @@ use super::super::{state::WindowSharedState, widgets::WindowWidgets};
 /// # Arguments
 ///
 /// * `shared_state` - A reference to the `WindowSharedState` containing shared application state,
-///                   including screen information and settings dialog status.
+///   including screen information and settings dialog status.
 /// * `refresh_service` - An `Rc<RefreshService>` instance that provides the refresh functionality.
 pub fn setup_live_monitor_refresh_handler(
     shared_state: &WindowSharedState,

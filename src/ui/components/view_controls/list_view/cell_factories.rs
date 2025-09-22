@@ -106,7 +106,7 @@ pub fn create_cover_image_column(
 /// # Type Parameters
 ///
 /// * `F` - The type of the field_getter closure, which must implement `Fn(&AlbumListItemObject) -> String`
-///        and have a static lifetime so it can be moved into the callbacks
+///   and have a static lifetime so it can be moved into the callbacks
 ///
 /// # Implementation Details
 ///

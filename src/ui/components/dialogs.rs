@@ -50,7 +50,7 @@ use crate::{
 /// * `db_pool` - An `Arc<SqlitePool>` for database operations.
 /// * `sender` - An `UnboundedSender<()>` to send a signal to the main thread upon scan completion.
 /// * `albums_inner_stack` - An `Rc<RefCell<Option<Stack>>>` to control the visibility of UI elements
-///                          (e.g., showing a "scanning" state or the album grid).
+///   (e.g., showing a "scanning" state or the album grid).
 ///
 /// # Returns
 /// A `Box<dyn Fn() + 'static>` closure that can be connected to a GTK button's `clicked` signal.
@@ -245,7 +245,7 @@ pub fn connect_settings_dialog(
 /// # Arguments
 /// * `parent` - The parent `gtk4::Window` for the dialog, ensuring it's modal and transient.
 /// * `on_confirm` - A closure that will be executed if the user confirms the removal.
-///                  It must be `FnOnce` as it's typically called only once.
+///   It must be `FnOnce` as it's typically called only once.
 pub fn show_remove_folder_confirmation_dialog<F: FnOnce() + 'static>(
     parent: &impl IsA<Window>,
     on_confirm: F,

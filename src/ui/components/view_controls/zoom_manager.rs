@@ -191,7 +191,7 @@ impl ZoomManager {
     /// # Arguments
     ///
     /// * `callback` - A function that takes a `ZoomLevel` parameter and will be
-    ///                called whenever the zoom level changes.
+    ///   called whenever the zoom level changes.
     ///
     /// # Examples
     ///

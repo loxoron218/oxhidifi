@@ -27,7 +27,7 @@ use crate::data::{
 /// 4. Removes albums with no associated tracks.
 /// 5. Removes artists with no associated albums.
 /// 6. Synchronizes DR completion statuses from the persistent store.
-/// Finally, it sends a signal to the UI to indicate scan completion.
+///    Finally, it sends a signal to the UI to indicate scan completion.
 ///
 /// # Arguments
 /// * `db_pool` - An `Arc` reference to the SQLite database connection pool.

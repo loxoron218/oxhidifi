@@ -127,7 +127,7 @@ pub fn setup_library_refresh_channel(
 /// * `refresh_service` - An `Rc` wrapped `RefreshService` instance containing the shared state.
 /// * `screen_width` - The initial width of the primary screen.
 /// * `is_settings_open` - A `Rc<Cell<bool>>` indicating whether the settings dialog is currently open.
-///                        The UI will not refresh if settings are open to prevent visual glitches.
+///   The UI will not refresh if settings are open to prevent visual glitches.
 pub fn setup_live_monitor_refresh(
     refresh_service: Rc<RefreshService>,
     screen_info: Rc<RefCell<ScreenInfo>>,

@@ -39,14 +39,14 @@ use crate::ui::{
 ///
 /// * `parent` - The parent `gtk4::Window` for the settings dialog, making it modal.
 /// * `sort_orders` - An `Rc<RefCell<Vec<SortOrder>>>` holding the current sort order preferences.
-///                   Changes made in the dialog are reflected in this shared state.
+///   Changes made in the dialog are reflected in this shared state.
 /// * `refresh_library_ui` - A callback `Rc<dyn Fn(bool, bool)>` to trigger a refresh of the
-///                          main library UI after settings changes (e.g., folder removal).
+///   main library UI after settings changes (e.g., folder removal).
 /// * `sort_ascending` - An `Rc<Cell<bool>>` indicating the current sort direction for albums.
 /// * `sort_ascending_artists` - An `Rc<Cell<bool>>` indicating the current sort direction for artists.
 /// * `db_pool` - An `Arc<SqlitePool>` for database operations, particularly for managing library folders.
 /// * `is_settings_open` - An `Rc<Cell<bool>>` flag used to track whether the settings dialog is
-///                        currently open, preventing multiple instances.
+///   currently open, preventing multiple instances.
 /// * `show_dr_badges_setting` - An `Rc<Cell<bool>>` flag for showing DR badges.
 /// * `use_original_year_setting` - An `Rc<Cell<bool>>` flag for using original release year.
 /// * `sender` - Optional sender to notify UI refresh after scanning.

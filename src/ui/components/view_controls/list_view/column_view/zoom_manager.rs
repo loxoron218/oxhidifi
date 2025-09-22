@@ -203,7 +203,7 @@ impl ColumnViewZoomManager {
     /// # Arguments
     ///
     /// * `callback` - A function that takes a `ColumnViewZoomLevel` parameter and will be
-    ///                called whenever the zoom level changes.
+    ///   called whenever the zoom level changes.
     ///
     /// # Examples
     ///

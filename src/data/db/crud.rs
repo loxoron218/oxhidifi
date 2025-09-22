@@ -149,7 +149,7 @@ pub async fn upsert_tracks_batch_enhanced(
 /// A `Result` containing a `HashMap<(String, i64, i64), i64>` where:
 /// - Keys are tuples of (album_title, artist_id, folder_id)
 /// - Values are the corresponding database IDs
-/// Returns an `sqlx::Error` on failure.
+///   Returns an `sqlx::Error` on failure.
 pub async fn upsert_albums_batch(
     tx: &mut Transaction<'_, Sqlite>,
     albums: &[AlbumForInsert],
