@@ -75,7 +75,7 @@ fn build_track_dr_badge(dr_value: Option<u8>) -> Label {
 /// - Track metadata (artist, format, bit depth, sample rate)
 /// - Track duration
 /// - Play button
-/// - Track DR value
+/// - Track DR value (if show_dr_badges is enabled)
 ///
 /// The row is designed to be added to a `PreferencesGroup` to create a complete
 /// track list for an album.
@@ -90,6 +90,7 @@ fn build_track_dr_badge(dr_value: Option<u8>) -> Label {
 /// * `album` - Reference to the `Album` model containing album information
 /// * `artist` - Reference to the `Artist` model containing artist information
 /// * `db_pool` - Database connection pool for fetching track information
+/// * `show_dr_badges` - Whether to display DR badges for tracks
 ///
 /// # Returns
 ///
@@ -103,6 +104,7 @@ pub fn build_track_row(
     album: &Album,
     _artist: &Artist,
     _db_pool: Arc<SqlitePool>,
+    show_dr_badges: bool,
 ) -> ActionRow {
     // Prepare subtitle fields with track metadata
     let mut subtitle_fields = Vec::with_capacity(4);
@@ -204,8 +206,8 @@ pub fn build_track_row(
     // Add the play button to the row
     row.add_suffix(&play_pause_button);
 
-    // Add track DR value if available
-    if let Some(dr_value) = t.dr_value {
+    // Add track DR value if available and show_dr_badges is enabled
+    if show_dr_badges && let Some(dr_value) = t.dr_value {
         let dr_badge = build_track_dr_badge(Some(dr_value));
         dr_badge.set_margin_end(8);
         row.add_suffix(&dr_badge);
@@ -227,6 +229,7 @@ pub fn build_track_row(
 /// * `is_various_artists_album` - Whether this is a "Various Artists" compilation album
 /// * `player_bar` - Reference to the application's player bar for playback control
 /// * `db_pool` - Database connection pool for fetching track information
+/// * `show_dr_badges` - Whether to display DR badges for tracks
 ///
 /// # Returns
 ///
@@ -239,6 +242,7 @@ pub fn build_track_list(
     is_various_artists_album: bool,
     player_bar: &PlayerBar,
     db_pool: Arc<SqlitePool>,
+    show_dr_badges: bool,
 ) -> PreferencesGroup {
     // Create the main container for the track list
     let group = PreferencesGroup::builder().build();
@@ -254,6 +258,7 @@ pub fn build_track_list(
             album,
             artist,
             db_pool.clone(),
+            show_dr_badges,
         ));
     }
 

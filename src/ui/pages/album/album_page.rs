@@ -122,6 +122,7 @@ pub async fn album_page(
         is_various_artists_album,
         &player_bar,
         db_pool.clone(),
+        show_dr_badges.get(),
     );
     page.append(&track_list);
 
