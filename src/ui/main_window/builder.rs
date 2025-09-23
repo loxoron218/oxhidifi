@@ -1,7 +1,7 @@
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,
-    sync::{Arc, Mutex},
+    sync::Arc,
     thread,
 };
 
@@ -16,7 +16,7 @@ use libadwaita::{
     prelude::{AdwApplicationWindowExt, BoxExt, ButtonExt, GtkWindowExt, WidgetExt},
 };
 use sqlx::SqlitePool;
-use tokio::runtime::Runtime;
+use tokio::{runtime::Runtime, sync::Mutex};
 
 use crate::{
     data::scanner::library_ops::run_full_scan,
@@ -113,11 +113,8 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     let player_bar = PlayerBar::new();
 
     // Create the playback controller
-    let (playback_controller, _) = PlaybackController::new_with_player_bar(
-        Arc::new(Mutex::new(player_bar.clone())),
-        db_pool.clone(),
-    )
-    .expect("Failed to create playback controller");
+    let (playback_controller, _) =
+        PlaybackController::new(db_pool.clone()).expect("Failed to create playback controller");
     let playback_controller = Arc::new(Mutex::new(playback_controller));
 
     // Connect the playback controller to the player bar

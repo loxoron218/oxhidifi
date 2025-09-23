@@ -183,16 +183,11 @@ pub fn build_track_row(
         MainContext::default().spawn_local(async move {
             // If we have a playback controller, use it to queue the tracks
             if let Some(controller) = player_bar_async.get_playback_controller() {
-                match controller.lock() {
-                    Ok(mut controller) => {
-                        // Queue tracks from the selected track onwards
-                        if let Err(e) = controller.queue_tracks_from(album_id, track_id).await {
-                            eprintln!("Error queuing tracks: {}", e);
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!("Failed to acquire lock on playback controller: {}", e);
-                    }
+                let mut controller = controller.lock().await;
+
+                // Queue tracks from the selected track onwards
+                if let Err(e) = controller.queue_tracks_from(album_id, track_id).await {
+                    eprintln!("Error queuing tracks: {}", e);
                 }
 
                 // Update navigation button states after queue initialization

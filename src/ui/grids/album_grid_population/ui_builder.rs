@@ -261,21 +261,8 @@ pub fn create_album_tile(
             // Get the playback controller from the player bar
             if let Some(controller) = player_bar_clone.get_playback_controller() {
                 // Lock the controller and queue the album
-                let queue_result = {
-                    match controller.lock() {
-                        Ok(mut controller) => {
-                            // Queue all tracks from the album and start playback
-                            controller.queue_album(album_id).await
-                        }
-                        Err(e) => {
-                            eprintln!("Failed to acquire lock on playback controller: {}", e);
-                            return;
-                        }
-                    }
-                };
-
-                // Handle any errors from queuing the album
-                if let Err(e) = queue_result {
+                let mut controller = controller.lock().await;
+                if let Err(e) = controller.queue_album(album_id).await {
                     eprintln!("Error queuing album {}: {}", album_id, e);
                     return;
                 }

@@ -1,14 +1,5 @@
-/// Events that can occur during audio playback, used for communication between
-/// playback components and the UI.
-///
-/// These events are sent from the [`PlaybackEngine`] to notify the [`PlaybackController`]
-/// and ultimately the UI components (like [`PlayerBar`]) about changes in the playback state.
-/// Events are transmitted through a channel mechanism to ensure decoupled communication
-/// between the playback system and the user interface.
-///
-/// # Examples
-///
-/// ```
+use super::queue::QueueItem;
+
 /// use crate::playback::events::{PlaybackEvent, PlaybackState};
 ///
 /// // State change event
@@ -19,6 +10,8 @@
 /// ```
 #[derive(Debug, Clone)]
 pub enum PlaybackEvent {
+    /// A new track has been loaded for playback
+    TrackChanged(Box<QueueItem>),
     /// Playback state changed
     StateChanged(PlaybackState),
     /// Position changed (in nanoseconds)

@@ -2,7 +2,7 @@ use std::{
     cell::{Cell, RefCell},
     path::Path,
     rc::Rc,
-    sync::{Arc, Mutex},
+    sync::Arc,
     time::Duration,
 };
 
@@ -16,12 +16,15 @@ use gtk4::{
     pango::EllipsizeMode,
 };
 use libadwaita::prelude::{BoxExt, ButtonExt, ObjectExt, RangeExt, WidgetExt};
+use tokio::sync::Mutex;
 
 use crate::{
     playback::{
         controller::PlaybackController,
         events::{
-            PlaybackEvent::{self, EndOfStream, Error, PositionChanged, StateChanged},
+            PlaybackEvent::{
+                self, EndOfStream, Error, PositionChanged, StateChanged, TrackChanged,
+            },
             PlaybackState::{Buffering, Paused, Playing, Stopped},
         },
     },
@@ -331,16 +334,13 @@ impl PlayerBar {
                 && let Some(player_bar) = player_bar_weak.upgrade()
                 && let Some(controller) = &player_bar.playback_controller
             {
-                match controller.lock() {
-                    Ok(mut controller) => {
-                        if let Err(e) = controller.seek(position_ns) {
-                            eprintln!("Error seeking to position: {}", e);
-                        }
+                let controller_clone = controller.clone();
+                MainContext::default().spawn_local(async move {
+                    let mut controller = controller_clone.lock().await;
+                    if let Err(e) = controller.seek(position_ns) {
+                        eprintln!("Error seeking to position: {}", e);
                     }
-                    Err(e) => {
-                        eprintln!("Failed to acquire lock on playback controller: {}", e);
-                    }
-                }
+                });
             }
             Proceed
         });
@@ -652,6 +652,18 @@ impl PlayerBar {
     /// * `event` - The playback event to handle
     pub fn handle_playback_event(&self, event: PlaybackEvent) {
         match event {
+            TrackChanged(item) => {
+                self.update_with_metadata(
+                    &item.album_title,
+                    &item.track_title,
+                    &item.artist_name,
+                    item.cover_art_path.as_deref(),
+                    item.bit_depth,
+                    item.sample_rate,
+                    item.format.as_deref(),
+                    item.duration,
+                );
+            }
             StateChanged(state) => {
                 // Update the play button icon based on the new state
                 match state {
@@ -718,7 +730,11 @@ impl PlayerBar {
         let play_button = self._play_button.clone();
         let controller_clone = controller.clone();
         self._play_button.connect_clicked(move |_| {
-            if let Ok(mut controller) = controller_clone.lock() {
+            let controller_clone = controller_clone.clone();
+            let play_button = play_button.clone();
+            MainContext::default().spawn_local(async move {
+                let mut controller = controller_clone.lock().await;
+
                 // Check current state and toggle between play and pause
                 let current_state = controller.get_current_state().clone();
                 match current_state {
@@ -726,13 +742,12 @@ impl PlayerBar {
                         let _ = controller.pause();
                         play_button.set_icon_name("media-playback-start");
                     }
-
                     _ => {
                         let _ = controller.play();
                         play_button.set_icon_name("media-playback-pause");
                     }
                 }
-            }
+            });
         });
 
         // Connect previous button signal to controller previous method
@@ -746,16 +761,11 @@ impl PlayerBar {
             // Spawn async task to handle the previous track operation
             MainContext::default().spawn_local(async move {
                 // Lock the controller and play the previous track
-                match controller_clone.lock() {
-                    Ok(mut controller) => {
-                        // Play the previous track in the queue
-                        if let Err(e) = controller.previous_track() {
-                            eprintln!("Error playing previous track: {}", e);
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!("Failed to acquire lock on playback controller: {}", e);
-                    }
+                let mut controller = controller_clone.lock().await;
+
+                // Play the previous track in the queue
+                if let Err(e) = controller.previous_track() {
+                    eprintln!("Error playing previous track: {}", e);
                 }
 
                 // Update button states after navigation
@@ -774,16 +784,11 @@ impl PlayerBar {
             // Spawn async task to handle the next track operation
             MainContext::default().spawn_local(async move {
                 // Lock the controller and play the next track
-                match controller_clone.lock() {
-                    Ok(mut controller) => {
-                        // Play the next track in the queue
-                        if let Err(e) = controller.next_track() {
-                            eprintln!("Error playing next track: {}", e);
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!("Failed to acquire lock on playback controller: {}", e);
-                    }
+                let mut controller = controller_clone.lock().await;
+
+                // Play the next track in the queue
+                if let Err(e) = controller.next_track() {
+                    eprintln!("Error playing next track: {}", e);
                 }
 
                 // Update button states after navigation
@@ -796,14 +801,24 @@ impl PlayerBar {
 
         // Spawn a task to periodically handle events from the controller
         let controller_clone = controller.clone();
+        let player_bar_weak = self.downgrade();
         MainContext::default().spawn_local(async move {
             loop {
                 // Sleep for a short time to avoid busy waiting
                 timeout_future(Duration::from_millis(100)).await;
 
-                // Handle events from the playback controller
-                if let Ok(mut controller) = controller_clone.lock() {
-                    controller.handle_events();
+                // Lock the controller to handle events and get a list of events back
+                let events = {
+                    let mut controller = controller_clone.lock().await;
+                    controller.handle_events()
+                    // Controller is unlocked here
+                };
+
+                // Process events in the player bar UI
+                if let Some(player_bar) = player_bar_weak.upgrade() {
+                    for event in events {
+                        player_bar.handle_playback_event(event);
+                    }
                 }
             }
         });
@@ -827,12 +842,9 @@ impl PlayerBar {
     /// but will only function when navigation is actually possible.
     pub fn update_navigation_button_states(&self) {
         let (can_prev, can_next) = if let Some(controller) = &self.playback_controller {
-            match controller.lock() {
+            match controller.try_lock() {
                 Ok(controller) => (controller.can_go_previous(), controller.can_go_next()),
-                Err(e) => {
-                    eprintln!("Failed to acquire lock on playback controller: {}", e);
-                    (false, false)
-                }
+                Err(_) => (self.can_go_prev.get(), self.can_go_next.get()),
             }
         } else {
             (false, false)

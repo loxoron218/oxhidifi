@@ -240,15 +240,9 @@ pub fn build_album_card(
             let player_bar_async = player_bar_clone.clone();
             MainContext::default().spawn_local(async move {
                 // Queue the album for playback
-                match controller.lock() {
-                    Ok(mut controller) => {
-                        if let Err(e) = controller.queue_album(album_id).await {
-                            eprintln!("Error queuing album {}: {}", album_id, e);
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!("Failed to acquire lock on playback controller: {}", e);
-                    }
+                let mut controller = controller.lock().await;
+                if let Err(e) = controller.queue_album(album_id).await {
+                    eprintln!("Error queuing album {}: {}", album_id, e);
                 }
 
                 // Update navigation button states after queue initialization
