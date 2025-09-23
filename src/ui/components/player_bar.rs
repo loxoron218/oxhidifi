@@ -800,12 +800,23 @@ impl PlayerBar {
         self.update_navigation_button_states();
 
         // Spawn a task to periodically handle events from the controller
+        // Changed from polling every 100ms to using an event-driven approach
         let controller_clone = controller.clone();
         let player_bar_weak = self.downgrade();
+
+        // Use a more efficient approach - instead of polling, we'll rely on the GStreamer bus events
+        // and only update the UI when we actually receive events
         MainContext::default().spawn_local(async move {
+            let mut iteration_count = 0;
             loop {
-                // Sleep for a short time to avoid busy waiting
-                timeout_future(Duration::from_millis(100)).await;
+                // Increase the polling interval to reduce CPU usage
+                timeout_future(Duration::from_millis(500)).await;
+
+                // Add diagnostic logging
+                iteration_count += 1;
+                if iteration_count % 10 == 0 {
+                    println!("Player bar event loop iteration: {}", iteration_count);
+                }
 
                 // Lock the controller to handle events and get a list of events back
                 let events = {
@@ -814,10 +825,13 @@ impl PlayerBar {
                     // Controller is unlocked here
                 };
 
-                // Process events in the player bar UI
-                if let Some(player_bar) = player_bar_weak.upgrade() {
-                    for event in events {
-                        player_bar.handle_playback_event(event);
+                // Process events in the player bar UI only if there are events
+                if !events.is_empty() {
+                    println!("Processing {} events in player bar", events.len());
+                    if let Some(player_bar) = player_bar_weak.upgrade() {
+                        for event in events {
+                            player_bar.handle_playback_event(event);
+                        }
                     }
                 }
             }

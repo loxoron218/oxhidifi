@@ -135,10 +135,19 @@ pub fn setup_live_monitor_refresh(
     current_zoom_level: Option<Rc<Cell<ZoomLevel>>>,
 ) {
     let is_settings_open_cloned = is_settings_open.clone();
-    timeout_add_local(Duration::from_secs(3), move || {
+
+    // Increase the interval to reduce CPU usage and prevent excessive refreshing
+    timeout_add_local(Duration::from_secs(10), move || {
+        // Add diagnostic logging
+        println!("Live monitor refresh check triggered");
         if !is_settings_open_cloned.get() {
             let new_screen_info = ScreenInfo::new();
             if new_screen_info.width != screen_info.borrow().width {
+                println!(
+                    "Screen width changed from {} to {}, triggering refresh",
+                    screen_info.borrow().width,
+                    new_screen_info.width
+                );
                 *screen_info.borrow_mut() = new_screen_info;
 
                 // Apply zoom level if available

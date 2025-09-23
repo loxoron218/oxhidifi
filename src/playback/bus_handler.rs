@@ -82,18 +82,34 @@ impl BusHandler {
 
         // Add a watch to handle bus messages asynchronously
         // The closure is called for each message received on the bus
-        let bus_watch = bus.add_watch(move |_, message| {
+        let bus_watch = bus.add_watch_local(move |_, message| {
+            // Add diagnostic logging
+            println!("GStreamer bus message received: {:?}", message.type_());
+
             // Process the GStreamer message and convert it to a playback event
             // Errors during message handling are logged but don't stop the watch
             if let Err(e) = Self::handle_message(&event_sender, message) {
                 eprintln!("Error handling GStreamer message: {}", e);
             }
 
-            // Send periodic position updates
-            if let Some(pipeline) = pipeline_weak.upgrade()
-                && let Some(position) = pipeline.query_position::<ClockTime>()
-            {
-                let _ = event_sender.send(PositionChanged(position.nseconds()));
+            // Send periodic position updates only for specific message types to reduce frequency
+            // Only send position updates for messages that indicate playback progress
+            match message.view() {
+                StateChanged(_) | Eos(_) | Error(_) => {
+                    // Send position update for state changes, end of stream, and errors
+                    if let Some(pipeline) = pipeline_weak.upgrade()
+                        && let Some(position) = pipeline.query_position::<ClockTime>()
+                    {
+                        println!(
+                            "Sending position update: {} nanoseconds",
+                            position.nseconds()
+                        );
+                        let _ = event_sender.send(PositionChanged(position.nseconds()));
+                    }
+                }
+                _ => {
+                    // For other message types, we don't send position updates to reduce event frequency
+                }
             }
 
             // Continue watching for more messages (don't remove the watch)
