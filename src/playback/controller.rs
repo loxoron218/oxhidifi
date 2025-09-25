@@ -62,7 +62,9 @@ impl PlaybackController {
     /// # Errors
     ///
     /// Returns a [`PlaybackError`] if the playback engine fails to initialize.
-    pub fn new(db_pool: Arc<SqlitePool>) -> Result<(Self, UnboundedSender<PlaybackEvent>), PlaybackError> {
+    pub fn new(
+        db_pool: Arc<SqlitePool>,
+    ) -> Result<(Self, UnboundedSender<PlaybackEvent>), PlaybackError> {
         let (event_sender, event_receiver) = unbounded_channel();
         let engine = PlaybackEngine::new(event_sender.clone())?;
         let controller = Self {
@@ -111,12 +113,17 @@ impl PlaybackController {
         // Query the duration from GStreamer
         self.duration = self.engine.get_duration()?;
 
-        // If there's a current track in the queue, send a TrackChanged event
+        // Send a TrackChanged event if there's a current track in the queue
         if let Some(track_item) = self.queue.current_track() {
             let event = TrackChanged(Box::new(track_item.clone()));
             if self.event_sender.send(event).is_err() {
                 eprintln!("Failed to send TrackChanged event");
             }
+        } else {
+            // If there's no current track in the queue but we're loading a track,
+            // we might be in a state where the queue was set up but not yet processed
+            // Let's try to ensure the current track is properly set in the queue
+            eprintln!("Warning: No current track found in queue when loading track");
         }
         Ok(())
     }
@@ -221,7 +228,10 @@ impl PlaybackController {
             event
         } else {
             // If no event is immediately available, await the next one
-            let event = self.event_receiver.recv().await
+            let event = self
+                .event_receiver
+                .recv()
+                .await
                 .expect("Event channel closed unexpectedly");
             self.process_event(event.clone());
             event

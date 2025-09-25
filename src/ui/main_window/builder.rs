@@ -110,7 +110,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     let screen_info = ScreenInfo::new();
 
     // Create the player bar
-    let player_bar = PlayerBar::new();
+    let mut player_bar = PlayerBar::new();
 
     // Create the playback controller
     let (playback_controller, _) =
@@ -118,12 +118,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     let playback_controller = Arc::new(Mutex::new(playback_controller));
 
     // Connect the playback controller to the player bar
-    let mut player_bar_mut = player_bar.clone();
-    player_bar_mut.connect_playback_controller(playback_controller.clone());
-
-    // Update the player bar in WindowWidgets to ensure it has the playback controller connected
-    // This is necessary because some parts of the application use the player bar from WindowWidgets
-    let player_bar = player_bar_mut.clone();
+    player_bar.connect_playback_controller(playback_controller.clone());
 
     // Create the zoom managers
     let zoom_manager = Rc::new(ZoomManager::new(settings.current_zoom_level));
@@ -168,10 +163,29 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     let artist_grid_cell: Rc<RefCell<Option<FlowBox>>> = Rc::new(RefCell::new(None));
     let artists_stack_cell: Rc<RefCell<Option<Stack>>> = Rc::new(RefCell::new(None));
 
+    // Build the main `gtk4::HeaderBar` by composing its left, center (tab bar), and right sections.
+    // The header bar provides primary navigation and actions for the application.
+    let center_inner = Box::builder().orientation(Horizontal).spacing(6).build();
+    center_inner.append(&tab_bar);
+    let center_box = Clamp::builder().child(&center_inner).build();
+
+    // Artists toggle button frame is removed for a cleaner, tab-like appearance.
+    artists_btn.set_has_frame(false);
+    let header_bar = build_main_headerbar(
+        &app_header_bar_widgets.left_btn_stack,
+        &app_header_bar_widgets.right_btn_box,
+        &center_box,
+    );
+
+    // The main vertical box arranges the header bar at the top and the content `ViewStack` below it.
+    let vbox_inner = Box::new(Vertical, 0);
+    vbox_inner.append(&header_bar);
+    vbox_inner.append(&stack);
+
     // Bundle all static widgets into `WindowWidgets` struct for cleaner passing
     // This struct holds references to all the GTK widgets that are created once and
     // remain static throughout the application's lifetime.
-    let mut widgets = WindowWidgets {
+    let widgets = WindowWidgets {
         window: window.clone(),
         stack: stack.clone(),
         left_btn_stack: app_header_bar_widgets.left_btn_stack.clone(),
@@ -265,39 +279,15 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     artist_grid_cell.borrow_mut().replace(artist_grid);
     artists_stack_cell.borrow_mut().replace(artists_stack);
 
-    // Build the main `gtk4::HeaderBar` by composing its left, center (tab bar), and right sections.
-    // The header bar provides primary navigation and actions for the application.
-    let center_inner = Box::builder().orientation(Horizontal).spacing(6).build();
-    center_inner.append(&tab_bar);
-    let center_box = Clamp::builder().child(&center_inner).build();
-
-    // Artists toggle button frame is removed for a cleaner, tab-like appearance.
-    widgets.artists_btn.set_has_frame(false);
-    let header_bar = build_main_headerbar(
-        &widgets.search_bar.left_btn_stack,
-        &widgets.search_bar.right_btn_box,
-        &center_box,
-    );
-
-    // The main vertical box arranges the header bar at the top and the content `ViewStack` below it.
-    let vbox_inner = Box::new(Vertical, 0);
-    vbox_inner.append(&header_bar);
-    vbox_inner.append(&widgets.stack);
+    // Set the main content area for the player bar and connect visibility changes
+    player_bar.set_main_content_area(vbox_inner.clone());
+    player_bar.connect_visibility_changes();
 
     // Create the overlay and add the main content and player bar
     let overlay = Overlay::new();
     overlay.set_child(Some(&vbox_inner));
     overlay.add_overlay(&player_bar.container);
     player_bar.container.set_valign(End);
-
-    // Set the main content area for the player bar and connect visibility changes
-    let mut player_bar_mut = player_bar.clone();
-    player_bar_mut.set_main_content_area(vbox_inner.clone());
-    player_bar_mut.connect_visibility_changes();
-
-    // Update the player bar in WindowWidgets to ensure it has the playback controller connected
-    // This is necessary because some parts of the application use the player bar from WindowWidgets
-    widgets.player_bar = player_bar_mut.clone();
 
     // Connect the zoom managers to the view control button
     widgets.button.set_zoom_managers(

@@ -269,6 +269,9 @@ pub fn create_album_tile(
 
                 // Update navigation button states after queue initialization
                 player_bar_clone.update_navigation_button_states();
+
+                // Ensure the player bar is visible when playback starts
+                player_bar_clone.ensure_visible();
             } else {
                 eprintln!("No playback controller available");
             }

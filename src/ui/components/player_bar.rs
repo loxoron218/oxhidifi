@@ -6,6 +6,7 @@ use std::{
     time::Duration,
 };
 
+use tokio::select;
 use tokio_util::sync::CancellationToken;
 
 use gtk4::{
@@ -677,8 +678,15 @@ impl PlayerBar {
                 match state {
                     Playing => {
                         self._play_button.set_icon_name("media-playback-pause");
-                    }
 
+                        // Ensure player bar is visible when playing starts
+                        if !self.container.is_visible() {
+                            self.container.set_visible(true);
+                            if let Some(content_area) = self.main_content_area.borrow().as_ref() {
+                                content_area.set_margin_bottom(120);
+                            }
+                        }
+                    }
                     Paused => {
                         self._play_button.set_icon_name("media-playback-start");
                     }
@@ -831,17 +839,17 @@ impl PlayerBar {
                 };
 
                 // Process events in the player bar UI only if there are events
-                if !events.is_empty() {
-                    if let Some(player_bar) = player_bar_weak.upgrade() {
-                        for event in events {
-                            player_bar.handle_playback_event(event);
-                        }
+                if !events.is_empty()
+                    && let Some(player_bar) = player_bar_weak.upgrade()
+                {
+                    for event in events {
+                        player_bar.handle_playback_event(event);
                     }
                 }
 
                 // Wait for either the timeout or cancellation
-                tokio::select! {
-                    _ = timeout_future(Duration::from_millis(50)) => {
+                select! {
+                    _ = timeout_future(Duration::from_millis(100)) => {
                         // Continue the loop after the timeout
                     }
                     _ = cancellation_token.cancelled() => {
@@ -863,6 +871,19 @@ impl PlayerBar {
     /// * `Option<Arc<Mutex<PlaybackController>>>` - The playback controller reference, if available
     pub fn get_playback_controller(&self) -> Option<Arc<Mutex<PlaybackController>>> {
         self.playback_controller.clone()
+    }
+
+    /// Ensures the player bar is visible, typically called when playback starts
+    ///
+    /// This method can be called directly to make sure the player bar is visible
+    /// when playback begins, providing an additional guarantee beyond event handling.
+    pub fn ensure_visible(&self) {
+        if !self.container.is_visible() {
+            self.container.set_visible(true);
+            if let Some(content_area) = self.main_content_area.borrow().as_ref() {
+                content_area.set_margin_bottom(120);
+            }
+        }
     }
 
     /// Updates the state of the previous and next buttons based on queue navigation possibilities
