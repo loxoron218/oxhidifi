@@ -251,15 +251,46 @@ pub fn create_album_tile(
     // Add click handler to play button to update player bar
     let player_bar_clone = player_bar.clone();
     let album_id = album_info.id;
+
+    // Clone album metadata for direct update
+    let album_title = album_info.title.clone();
+    let artist_name = album_info.artist.clone();
+    let cover_art_path = album_info.cover_art.clone();
+    let album_format_bit_depth = album_info.bit_depth;
+    let album_format_sample_rate = album_info.sample_rate;
+    let album_format = album_info.format.clone();
     play_button.connect_clicked(move |_| {
         // Clone values for the async block
-        let player_bar_clone = player_bar_clone.clone();
-        let album_id = album_id; // Clone album_id for the async block
+        let player_bar_async = player_bar_clone.clone();
+
+        // Clone album_id for the async block
+        let album_id = album_id;
+
+        // Clone metadata for direct update
+        let album_title_local = album_title.clone();
+        let artist_name_local = artist_name.clone();
+        let cover_art_path_local = cover_art_path.clone();
+        let album_format_bit_depth_local = album_format_bit_depth;
+        let album_format_sample_rate_local = album_format_sample_rate;
+        let album_format_local = album_format.clone();
+
+        // Update the player bar with album metadata directly to ensure it's updated before visibility
+        // This ensures the player bar shows correct metadata even if the TrackChanged event is delayed
+        player_bar_clone.update_with_metadata(
+            &album_title_local,
+            &album_title_local,
+            &artist_name_local,
+            cover_art_path_local.as_deref().map(Path::new),
+            album_format_bit_depth_local.map(|d| d as u32),
+            album_format_sample_rate_local.map(|d| d as u32),
+            album_format_local.as_deref(),
+            None,
+        );
 
         // Spawn async task to initialize the queue and start playback
         MainContext::default().spawn_local(async move {
             // Get the playback controller from the player bar
-            if let Some(controller) = player_bar_clone.get_playback_controller() {
+            if let Some(controller) = player_bar_async.get_playback_controller() {
                 // Lock the controller and queue the album
                 let mut controller = controller.lock().await;
                 if let Err(e) = controller.queue_album(album_id).await {
@@ -268,10 +299,10 @@ pub fn create_album_tile(
                 }
 
                 // Update navigation button states after queue initialization
-                player_bar_clone.update_navigation_button_states();
+                player_bar_async.update_navigation_button_states();
 
                 // Ensure the player bar is visible when playback starts
-                player_bar_clone.ensure_visible();
+                player_bar_async.ensure_visible();
             } else {
                 eprintln!("No playback controller available");
             }

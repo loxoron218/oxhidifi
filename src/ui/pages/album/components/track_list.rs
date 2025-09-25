@@ -102,7 +102,7 @@ pub fn build_track_row(
     is_various_artists_album: bool,
     player_bar: &PlayerBar,
     album: &Album,
-    _artist: &Artist,
+    artist: &Artist,
     _db_pool: Arc<SqlitePool>,
     show_dr_badges: bool,
 ) -> ActionRow {
@@ -175,10 +175,43 @@ pub fn build_track_row(
     let album_id = album.id;
     let track_id = t.id;
 
+    // Clone track and album data to ensure it's owned by the closure
+    let track_title = t.title.clone();
+    let album_title = album.title.clone();
+    let artist_name = artist.name.clone();
+    let cover_art_path = album.cover_art.clone();
+    let bit_depth = t.bit_depth;
+    let sample_rate = t.sample_rate;
+    let format = t.format.clone();
+    let duration = t.duration;
+
     // Connect the play button to queue the track and subsequent tracks
     play_pause_button.connect_clicked(move |_| {
         // Clone the player bar again for the async context
         let player_bar_async = player_bar_clone.clone();
+
+        // Clone all the metadata needed for the direct update
+        let album_title_clone = album_title.clone();
+        let track_title_clone = track_title.clone();
+        let artist_name_clone = artist_name.clone();
+        let cover_art_path_clone = cover_art_path.clone();
+        let bit_depth_clone = bit_depth;
+        let sample_rate_clone = sample_rate;
+        let format_clone = format.clone();
+        let duration_clone = duration;
+
+        // Update the player bar with metadata directly to ensure it's updated before visibility
+        player_bar_clone.update_with_metadata(
+            &album_title_clone,
+            &track_title_clone,
+            &artist_name_clone,
+            cover_art_path_clone.as_deref(),
+            bit_depth_clone,
+            sample_rate_clone,
+            format_clone.as_deref(),
+            duration_clone,
+        );
+
         // Spawn async task to queue the tracks
         MainContext::default().spawn_local(async move {
             // If we have a playback controller, use it to queue the tracks

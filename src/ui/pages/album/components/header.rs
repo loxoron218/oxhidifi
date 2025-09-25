@@ -91,11 +91,56 @@ pub fn build_album_header(
     // Connect the play button click handler to queue the album
     let player_bar_clone = player_bar.clone();
     let album_id = album.id;
+
+    // Clone album metadata for direct update
+    let album_title = album.title.clone();
+    let artist_name = artist.name.clone();
+    let cover_art_path = album.cover_art.clone();
+
+    // Get the first track's metadata if available for better initial display
+    let first_track_title = if !tracks.is_empty() {
+        tracks[0].title.clone()
+    } else {
+        // fallback to album title if no tracks
+        album.title.clone()
+    };
+    let first_track_bit_depth = if !tracks.is_empty() {
+        tracks[0].bit_depth
+    } else {
+        None
+    };
+    let first_track_sample_rate = if !tracks.is_empty() {
+        tracks[0].sample_rate
+    } else {
+        None
+    };
+    let first_track_format = if !tracks.is_empty() {
+        tracks[0].format.clone()
+    } else {
+        None
+    };
+    let first_track_duration = if !tracks.is_empty() {
+        tracks[0].duration
+    } else {
+        None
+    };
+
+    // Handle play/pause button click to queue the album and update player bar
     play_pause_button.connect_clicked(move |_| {
         // Get the playback controller from the player bar
-        if let Some(controller) = player_bar_clone.get_playback_controller() {
+        let player_bar_async = player_bar_clone.clone();
+
+        // Clone metadata for direct update
+        let album_title_local = album_title.clone();
+        let artist_name_local = artist_name.clone();
+        let cover_art_path_local = cover_art_path.clone();
+        let first_track_title_local = first_track_title.clone();
+        let first_track_bit_depth_local = first_track_bit_depth;
+        let first_track_sample_rate_local = first_track_sample_rate;
+        let first_track_format_local = first_track_format.clone();
+        let first_track_duration_local = first_track_duration;
+        if let Some(controller) = player_bar_async.get_playback_controller() {
             // Spawn async task to queue the album
-            let player_bar_async = player_bar_clone.clone();
             let context = MainContext::default();
             context.spawn_local(async move {
                 // Queue the album for playback
@@ -113,6 +158,19 @@ pub fn build_album_header(
         } else {
             eprintln!("No playback controller available");
         }
+
+        // Update the player bar with metadata directly to ensure it's updated before visibility
+        // This ensures the player bar shows correct metadata even if the TrackChanged event is delayed
+        player_bar_clone.update_with_metadata(
+            &album_title_local,
+            &first_track_title_local, // Using first track title for "Play Album" action
+            &artist_name_local,
+            cover_art_path_local.as_deref(),
+            first_track_bit_depth_local,
+            first_track_sample_rate_local,
+            first_track_format_local.as_deref(),
+            first_track_duration_local,
+        );
     });
 
     // Add the play button as an overlay on the album cover

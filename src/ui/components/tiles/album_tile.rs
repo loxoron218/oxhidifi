@@ -248,11 +248,40 @@ pub fn create_album_tile(
     // Add click handler to play button to update player bar
     let player_bar_clone = player_bar.clone();
     let album_id = album.id;
+
+    // Clone all necessary data to avoid lifetime issues
+    let album_title = album.title.clone();
+    let artist_name = album.artist.clone();
+    let cover_art_path = album.cover_art.clone();
+    let album_format_bit_depth = album.bit_depth;
+    let album_format_sample_rate = album.sample_rate;
+    let album_format = album.format.clone();
     play_button.connect_clicked(move |_| {
+        // Clone metadata for direct update
+        let album_title_local = album_title.clone();
+        let artist_name_local = artist_name.clone();
+        let cover_art_path_local = cover_art_path.clone();
+        let album_format_bit_depth_local = album_format_bit_depth;
+        let album_format_sample_rate_local = album_format_sample_rate;
+        let album_format_local = album_format.clone();
+
+        // Update the player bar with album metadata directly to ensure it's updated before visibility
+        // This ensures the player bar shows correct metadata even if the TrackChanged event is delayed
+        player_bar_clone.update_with_metadata(
+            &album_title_local,
+            &album_title_local,
+            &artist_name_local,
+            cover_art_path_local.as_deref().map(Path::new),
+            album_format_bit_depth_local.map(|d| d as u32),
+            album_format_sample_rate_local.map(|d| d as u32),
+            album_format_local.as_deref(),
+            None,
+        );
+
         // Get the playback controller from the player bar
-        if let Some(controller) = player_bar_clone.get_playback_controller() {
+        let player_bar_async = player_bar_clone.clone();
+        if let Some(controller) = player_bar_async.get_playback_controller() {
             // Spawn async task to queue the album
-            let player_bar_async = player_bar_clone.clone();
             MainContext::default().spawn_local(async move {
                 // Queue the album for playback
                 let mut controller = controller.lock().await;
