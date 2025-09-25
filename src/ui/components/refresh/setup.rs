@@ -140,7 +140,6 @@ pub fn setup_live_monitor_refresh(
     // Changed from 10 seconds to 60 seconds to significantly reduce resource usage
     timeout_add_local(Duration::from_secs(60), move || {
         // Add diagnostic logging
-        println!("Live monitor refresh check triggered");
         if !is_settings_open_cloned.get() {
             let new_screen_info = ScreenInfo::new();
             if new_screen_info.width != screen_info.borrow().width {

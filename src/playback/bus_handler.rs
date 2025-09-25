@@ -83,9 +83,6 @@ impl BusHandler {
         // Add a watch to handle bus messages asynchronously
         // The closure is called for each message received on the bus
         let bus_watch = bus.add_watch_local(move |_, message| {
-            // Add diagnostic logging
-            println!("GStreamer bus message received: {:?}", message.type_());
-
             // Process the GStreamer message and convert it to a playback event
             // Errors during message handling are logged but don't stop the watch
             if let Err(e) = Self::handle_message(&event_sender, message) {
@@ -100,10 +97,6 @@ impl BusHandler {
                     if let Some(pipeline) = pipeline_weak.upgrade()
                         && let Some(position) = pipeline.query_position::<ClockTime>()
                     {
-                        println!(
-                            "Sending position update: {} nanoseconds",
-                            position.nseconds()
-                        );
                         let _ = event_sender.send(PositionChanged(position.nseconds()));
                     }
                 }

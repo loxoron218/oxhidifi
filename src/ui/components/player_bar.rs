@@ -854,7 +854,6 @@ impl PlayerBar {
                     }
                     _ = cancellation_token.cancelled() => {
                         // Exit the loop if cancellation is requested
-                        println!("Player bar event loop cancelled");
                         break;
                     }
                 }
@@ -923,6 +922,5 @@ impl Drop for PlayerBar {
     fn drop(&mut self) {
         // Cancel any running tasks when the PlayerBar is dropped
         self.cancellation_token.cancel();
-        println!("PlayerBar dropped, cancellation token triggered");
     }
 }
