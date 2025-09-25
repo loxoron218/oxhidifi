@@ -202,42 +202,6 @@ impl PlaybackController {
         self.engine.seek(position_ns)
     }
 
-    /// Gets a mutable reference to the event receiver for async event handling
-    ///
-    /// This allows external components to await events from the playback engine
-    /// using an async approach instead of polling.
-    ///
-    /// # Returns
-    ///
-    /// A mutable reference to the UnboundedReceiver<PlaybackEvent>
-    pub fn get_event_receiver(&mut self) -> &mut UnboundedReceiver<PlaybackEvent> {
-        &mut self.event_receiver
-    }
-
-    /// Waits for and handles the next incoming playback event from the engine.
-    ///
-    /// Processes the next event from the playback engine, updating internal
-    /// state and acting on it (e.g., playing the next track on EndOfStream).
-    ///
-    /// # Returns
-    ///
-    /// A `PlaybackEvent` when one is received.
-    pub async fn wait_for_next_event(&mut self) -> PlaybackEvent {
-        if let Ok(event) = self.event_receiver.try_recv() {
-            self.process_event(event.clone());
-            event
-        } else {
-            // If no event is immediately available, await the next one
-            let event = self
-                .event_receiver
-                .recv()
-                .await
-                .expect("Event channel closed unexpectedly");
-            self.process_event(event.clone());
-            event
-        }
-    }
-
     /// Attempts to get an event from the receiver without blocking.
     ///
     /// # Returns
