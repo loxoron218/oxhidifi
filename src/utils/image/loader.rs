@@ -65,6 +65,8 @@ impl ImageLoader {
         // 1. Check memory cache
         if let Some(pixbuf) = self.memory_cache.get(&cache_key) {
             return Ok(pixbuf);
+        } else {
+            println!("Memory cache miss for: {} (size: {})", path.display(), size);
         }
 
         // 2. Check disk cache
@@ -72,6 +74,8 @@ impl ImageLoader {
             // Store in memory cache
             self.memory_cache.insert(cache_key.clone(), pixbuf.clone());
             return Ok(pixbuf);
+        } else {
+            println!("Disk cache miss for: {} (size: {})", path.display(), size);
         }
 
         // 3. Load and scale the original image with adaptive filtering

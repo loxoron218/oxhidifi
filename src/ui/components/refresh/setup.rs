@@ -137,7 +137,8 @@ pub fn setup_live_monitor_refresh(
     let is_settings_open_cloned = is_settings_open.clone();
 
     // Increase the interval to reduce CPU usage and prevent excessive refreshing
-    timeout_add_local(Duration::from_secs(10), move || {
+    // Changed from 10 seconds to 60 seconds to significantly reduce resource usage
+    timeout_add_local(Duration::from_secs(60), move || {
         // Add diagnostic logging
         println!("Live monitor refresh check triggered");
         if !is_settings_open_cloned.get() {

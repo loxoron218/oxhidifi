@@ -71,11 +71,8 @@ impl AsyncImageLoader {
 
             // Use a lower priority to avoid overwhelming the UI thread
             context.spawn_local_with_priority(Priority::LOW, async move {
-                println!("Starting to load image: {}", path.display());
                 match image_loader.load_image_adaptive(&path, cover_size) {
                     Ok(pixbuf) => {
-                        println!("Successfully loaded image: {}", path.display());
-
                         // Update the UI with the loaded image
                         if let Some(pic) = weak_picture.upgrade() {
                             pic.set_pixbuf(Some(&pixbuf));

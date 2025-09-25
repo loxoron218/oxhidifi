@@ -1,4 +1,6 @@
-use std::{cell::RefCell, path::Path, sync::mpsc::Sender};
+use std::{cell::RefCell, path::Path};
+
+use tokio::sync::mpsc::UnboundedSender;
 
 use super::{
     bus_handler::BusHandler,
@@ -14,7 +16,7 @@ use super::{
 ///
 /// This alias simplifies the type signature for sending playback events
 /// from the engine to the UI components.
-pub type PlaybackEventSender = Sender<PlaybackEvent>;
+pub type PlaybackEventSender = UnboundedSender<PlaybackEvent>;
 
 /// The core playback engine that manages audio playback
 ///

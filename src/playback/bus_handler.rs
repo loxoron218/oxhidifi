@@ -1,4 +1,4 @@
-use std::sync::mpsc::Sender;
+use tokio::sync::mpsc::UnboundedSender;
 
 use gstreamer::{
     ClockTime, Message,
@@ -30,7 +30,7 @@ use super::{
 /// * `event_sender` - Channel sender for transmitting playback events
 pub struct BusHandler {
     pipeline: Pipeline,
-    event_sender: Sender<PlaybackEvent>,
+    event_sender: UnboundedSender<PlaybackEvent>,
     bus_watch: Option<BusWatchGuard>,
 }
 
@@ -45,7 +45,7 @@ impl BusHandler {
     /// # Returns
     ///
     /// Returns a new `BusHandler` instance
-    pub fn new(pipeline: Pipeline, event_sender: Sender<PlaybackEvent>) -> Self {
+    pub fn new(pipeline: Pipeline, event_sender: UnboundedSender<PlaybackEvent>) -> Self {
         Self {
             pipeline,
             event_sender,
@@ -138,7 +138,7 @@ impl BusHandler {
     /// Returns `Ok(())` if the message was successfully processed,
     /// or a [`PlaybackError`] if processing the message fails.
     fn handle_message(
-        event_sender: &Sender<PlaybackEvent>,
+        event_sender: &UnboundedSender<PlaybackEvent>,
         message: &Message,
     ) -> Result<(), PlaybackError> {
         // Process different types of GStreamer messages and convert them to playback events
@@ -147,8 +147,7 @@ impl BusHandler {
             Eos(..) => {
                 // End of stream reached, send EndOfStream event
                 // This indicates that playback has finished normally
-                let result = event_sender.send(EndOfStream);
-                if let Err(e) = result {
+                if let Err(e) = event_sender.send(EndOfStream) {
                     eprintln!("BusHandler: Error sending EndOfStream event: {}", e);
                 }
             }

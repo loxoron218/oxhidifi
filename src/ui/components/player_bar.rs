@@ -6,6 +6,8 @@ use std::{
     time::Duration,
 };
 
+use tokio_util::sync::CancellationToken;
+
 use gtk4::{
     Align::{End, Start},
     Box, Button, Image, Label,
@@ -95,6 +97,8 @@ pub struct PlayerBar {
     can_go_prev: Cell<bool>,
     /// Whether navigation to the next track is possible
     can_go_next: Cell<bool>,
+    /// Cancellation token for stopping the event listening task
+    cancellation_token: CancellationToken,
 }
 
 impl PlayerBar {
@@ -123,6 +127,7 @@ impl PlayerBar {
             playback_controller: self.playback_controller.clone(),
             can_go_prev: self.can_go_prev.clone(),
             can_go_next: self.can_go_next.clone(),
+            cancellation_token: self.cancellation_token.clone(),
         }
     }
 }
@@ -152,6 +157,7 @@ pub struct PlayerBarWeak {
     playback_controller: Option<Arc<Mutex<PlaybackController>>>,
     can_go_prev: Cell<bool>,
     can_go_next: Cell<bool>,
+    cancellation_token: CancellationToken,
 }
 
 impl PlayerBarWeak {
@@ -180,6 +186,7 @@ impl PlayerBarWeak {
             playback_controller: self.playback_controller.clone(),
             can_go_prev: self.can_go_prev.clone(),
             can_go_next: self.can_go_next.clone(),
+            cancellation_token: self.cancellation_token.clone(),
         })
     }
 }
@@ -459,6 +466,7 @@ impl PlayerBar {
             playback_controller: None,
             can_go_prev: Cell::new(false),
             can_go_next: Cell::new(false),
+            cancellation_token: CancellationToken::new(),
         };
 
         // Store a weak reference to self in the progress bar handler
@@ -799,39 +807,47 @@ impl PlayerBar {
         // Update button states initially
         self.update_navigation_button_states();
 
-        // Spawn a task to periodically handle events from the controller
-        // Changed from polling every 100ms to using an event-driven approach
+        // Set up event-driven approach using the controller's event handling
         let controller_clone = controller.clone();
         let player_bar_weak = self.downgrade();
+        let cancellation_token = self.cancellation_token.clone();
 
-        // Use a more efficient approach - instead of polling, we'll rely on the GStreamer bus events
-        // and only update the UI when we actually receive events
+        // Spawn a task to listen for events from the controller using an event-driven approach
+        // Instead of polling, we'll set up a channel to receive events directly
         MainContext::default().spawn_local(async move {
-            let mut iteration_count = 0;
             loop {
-                // Increase the polling interval to reduce CPU usage
-                timeout_future(Duration::from_millis(500)).await;
-
-                // Add diagnostic logging
-                iteration_count += 1;
-                if iteration_count % 10 == 0 {
-                    println!("Player bar event loop iteration: {}", iteration_count);
-                }
-
-                // Lock the controller to handle events and get a list of events back
+                // Check for events from the controller
                 let events = {
                     let mut controller = controller_clone.lock().await;
-                    controller.handle_events()
-                    // Controller is unlocked here
+
+                    // Use the new try_get_event method to get events without blocking
+                    let mut events = Vec::new();
+
+                    // Get all available events without blocking
+                    while let Some(event) = controller.try_get_event() {
+                        events.push(event);
+                    }
+                    events
                 };
 
                 // Process events in the player bar UI only if there are events
                 if !events.is_empty() {
-                    println!("Processing {} events in player bar", events.len());
                     if let Some(player_bar) = player_bar_weak.upgrade() {
                         for event in events {
                             player_bar.handle_playback_event(event);
                         }
+                    }
+                }
+
+                // Wait for either the timeout or cancellation
+                tokio::select! {
+                    _ = timeout_future(Duration::from_millis(50)) => {
+                        // Continue the loop after the timeout
+                    }
+                    _ = cancellation_token.cancelled() => {
+                        // Exit the loop if cancellation is requested
+                        println!("Player bar event loop cancelled");
+                        break;
                     }
                 }
             }
@@ -879,5 +895,13 @@ impl PlayerBar {
         } else {
             self._next_button.add_css_class("navigation-disabled");
         }
+    }
+}
+
+impl Drop for PlayerBar {
+    fn drop(&mut self) {
+        // Cancel any running tasks when the PlayerBar is dropped
+        self.cancellation_token.cancel();
+        println!("PlayerBar dropped, cancellation token triggered");
     }
 }

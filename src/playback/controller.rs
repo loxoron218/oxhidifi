@@ -1,12 +1,7 @@
-use std::{
-    path::PathBuf,
-    sync::{
-        Arc,
-        mpsc::{Receiver, Sender, channel},
-    },
-};
+use std::{path::PathBuf, sync::Arc};
 
 use sqlx::SqlitePool;
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
 use crate::data::db::crud::{fetch_album_by_id, fetch_artist_by_id, fetch_tracks_by_album};
 
@@ -30,7 +25,7 @@ use super::{
 ///
 /// * `engine` - The underlying playback engine that handles actual audio operations
 /// * `event_receiver` - Receives playback events from the engine
-/// * `current_track` - Path to the currently loaded track, if any
+/// * `current_track` - Path to thecurrently loaded track, if any
 /// * `duration` - Duration of the current track in nanoseconds, if available
 /// * `position` - Current playback position in nanoseconds
 /// * `queue` - The playback queue managing tracks to be played
@@ -38,9 +33,9 @@ pub struct PlaybackController {
     /// The playback engine responsible for actual audio operations
     engine: PlaybackEngine,
     /// Sender for playback events to the engine
-    event_sender: Sender<PlaybackEvent>,
+    event_sender: UnboundedSender<PlaybackEvent>,
     /// Receiver for playback events from the engine
-    event_receiver: Receiver<PlaybackEvent>,
+    event_receiver: UnboundedReceiver<PlaybackEvent>,
     /// Path to the currently loaded track, if any
     current_track: Option<PathBuf>,
     /// Duration of the current track in nanoseconds, if available
@@ -62,13 +57,13 @@ impl PlaybackController {
     ///
     /// Returns a `Result` containing a tuple with:
     /// * The new `PlaybackController` instance
-    /// * A `Sender<PlaybackEvent>` for sending events to the controller
+    /// * A `UnboundedSender<PlaybackEvent>` for sending events to the controller
     ///
     /// # Errors
     ///
     /// Returns a [`PlaybackError`] if the playback engine fails to initialize.
-    pub fn new(db_pool: Arc<SqlitePool>) -> Result<(Self, Sender<PlaybackEvent>), PlaybackError> {
-        let (event_sender, event_receiver) = channel();
+    pub fn new(db_pool: Arc<SqlitePool>) -> Result<(Self, UnboundedSender<PlaybackEvent>), PlaybackError> {
+        let (event_sender, event_receiver) = unbounded_channel();
         let engine = PlaybackEngine::new(event_sender.clone())?;
         let controller = Self {
             engine,
@@ -200,45 +195,88 @@ impl PlaybackController {
         self.engine.seek(position_ns)
     }
 
-    /// Handles incoming playback events from the engine.
+    /// Gets a mutable reference to the event receiver for async event handling
     ///
-    /// Processes all pending events from the playback engine, updating internal
-    /// state and acting on them (e.g., playing the next track on EndOfStream).
-    /// This method should be called regularly to ensure events are processed
-    /// in a timely manner.
+    /// This allows external components to await events from the playback engine
+    /// using an async approach instead of polling.
     ///
     /// # Returns
     ///
-    /// A `Vec<PlaybackEvent>` containing all events received from the engine
-    /// since the last call.
-    pub fn handle_events(&mut self) -> Vec<PlaybackEvent> {
-        let mut events = Vec::new();
-        while let Ok(event) = self.event_receiver.try_recv() {
-            match &event {
-                TrackChanged(_) => {
-                    // Metadata changes are handled by the player bar
-                }
-                StateChanged(_state) => {
-                    // State changes are handled by the player bar
-                }
-                PositionChanged(position) => {
-                    // Update our internal position tracking
-                    self.position = *position;
-                }
-                EndOfStream => {
-                    // When the current track ends, try to play the next track in the queue
-                    if let Err(e) = self.next_track() {
-                        eprintln!("Error playing next track: {}", e);
-                    }
-                }
-                Error(error) => {
-                    // Handle playback errors
-                    eprintln!("Playback error: {}", error);
+    /// A mutable reference to the UnboundedReceiver<PlaybackEvent>
+    pub fn get_event_receiver(&mut self) -> &mut UnboundedReceiver<PlaybackEvent> {
+        &mut self.event_receiver
+    }
+
+    /// Waits for and handles the next incoming playback event from the engine.
+    ///
+    /// Processes the next event from the playback engine, updating internal
+    /// state and acting on it (e.g., playing the next track on EndOfStream).
+    ///
+    /// # Returns
+    ///
+    /// A `PlaybackEvent` when one is received.
+    pub async fn wait_for_next_event(&mut self) -> PlaybackEvent {
+        if let Ok(event) = self.event_receiver.try_recv() {
+            self.process_event(event.clone());
+            event
+        } else {
+            // If no event is immediately available, await the next one
+            let event = self.event_receiver.recv().await
+                .expect("Event channel closed unexpectedly");
+            self.process_event(event.clone());
+            event
+        }
+    }
+
+    /// Attempts to get an event from the receiver without blocking.
+    ///
+    /// # Returns
+    ///
+    /// An `Option<PlaybackEvent>` containing the event if one was available,
+    /// or `None` if no event was immediately available.
+    pub fn try_get_event(&mut self) -> Option<PlaybackEvent> {
+        match self.event_receiver.try_recv() {
+            Ok(event) => {
+                self.process_event(event.clone());
+                Some(event)
+            }
+
+            // No event available
+            Err(_) => None,
+        }
+    }
+
+    /// Processes a playback event and updates internal state
+    ///
+    /// This method handles the internal processing of playback events,
+    /// updating the controller's state as needed.
+    ///
+    /// # Parameters
+    ///
+    /// * `event` - The playback event to process
+    fn process_event(&mut self, event: PlaybackEvent) {
+        match &event {
+            TrackChanged(_) => {
+                // Metadata changes are handled by the player bar
+            }
+            StateChanged(_state) => {
+                // State changes are handled by the player bar
+            }
+            PositionChanged(position) => {
+                // Update our internal position tracking
+                self.position = *position;
+            }
+            EndOfStream => {
+                // When the current track ends, try to play the next track in the queue
+                if let Err(e) = self.next_track() {
+                    eprintln!("Error playing next track: {}", e);
                 }
             }
-            events.push(event);
+            Error(error) => {
+                // Handle playback errors
+                eprintln!("Playback error: {}", error);
+            }
         }
-        events
     }
 
     /// Gets the current playback state.
