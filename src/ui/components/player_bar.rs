@@ -6,9 +6,6 @@ use std::{
     time::Duration,
 };
 
-use tokio::select;
-use tokio_util::sync::CancellationToken;
-
 use gtk4::{
     Align::{End, Start},
     Box, Button, Image, Label,
@@ -19,7 +16,8 @@ use gtk4::{
     pango::EllipsizeMode,
 };
 use libadwaita::prelude::{BoxExt, ButtonExt, ObjectExt, RangeExt, WidgetExt};
-use tokio::sync::Mutex;
+use tokio::{select, sync::Mutex};
+use tokio_util::sync::CancellationToken;
 
 use crate::{
     playback::{
