@@ -923,28 +923,44 @@ impl PlayerBar {
     /// and updates internal state accordingly. The buttons remain visually enabled
     /// but will only function when navigation is actually possible.
     pub fn update_navigation_button_states(&self) {
-        let (can_prev, can_next) = if let Some(controller) = &self.playback_controller {
-            match controller.try_lock() {
-                Ok(controller) => (controller.can_go_previous(), controller.can_go_next()),
-                Err(_) => (self.can_go_prev.get(), self.can_go_next.get()),
-            }
-        } else {
-            (false, false)
-        };
+        // Only proceed if we have a playback controller
+        if let Some(controller) = &self.playback_controller {
+            let controller_clone = controller.clone();
+            let prev_button = self._prev_button.clone();
+            let next_button = self._next_button.clone();
+            let can_go_prev = self.can_go_prev.clone();
+            let can_go_next = self.can_go_next.clone();
 
-        // Update internal state
-        self.can_go_prev.set(can_prev);
-        self.can_go_next.set(can_next);
+            // Use the main context to ensure UI updates happen on the main thread
+            MainContext::default().spawn_local(async move {
+                // Lock the controller to get the current state
+                let controller = controller_clone.lock().await;
 
-        // Update button styling based on navigation possibility
-        if can_prev {
-            self._prev_button.remove_css_class("navigation-disabled");
+                // Get the current navigation capabilities
+                let current_can_prev = controller.can_go_previous();
+                let current_can_next = controller.can_go_next();
+
+                // Update internal state
+                can_go_prev.set(current_can_prev);
+                can_go_next.set(current_can_next);
+
+                // Update button styling based on navigation possibility
+                if current_can_prev {
+                    prev_button.remove_css_class("navigation-disabled");
+                } else {
+                    prev_button.add_css_class("navigation-disabled");
+                }
+                if current_can_next {
+                    next_button.remove_css_class("navigation-disabled");
+                } else {
+                    next_button.add_css_class("navigation-disabled");
+                }
+            });
         } else {
+            // If no controller is available, disable both buttons
+            self.can_go_prev.set(false);
+            self.can_go_next.set(false);
             self._prev_button.add_css_class("navigation-disabled");
-        }
-        if can_next {
-            self._next_button.remove_css_class("navigation-disabled");
-        } else {
             self._next_button.add_css_class("navigation-disabled");
         }
     }
