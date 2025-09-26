@@ -779,7 +779,24 @@ impl PlayerBar {
                 // Lock the controller and play the previous track
                 let mut controller = controller_clone.lock().await;
 
-                // Play the previous track in the queue
+                // Before navigating, get the previous track info to update UI immediately
+                let prev_track_info = controller.get_previous_track_info();
+
+                // Update the player bar UI immediately with the previous track's metadata
+                if let Some(track_info) = prev_track_info {
+                    player_bar.update_with_metadata(
+                        &track_info.album_title,
+                        &track_info.track_title,
+                        &track_info.artist_name,
+                        track_info.cover_art_path.as_deref(),
+                        track_info.bit_depth,
+                        track_info.sample_rate,
+                        track_info.format.as_deref(),
+                        track_info.duration,
+                    );
+                }
+
+                // Now actually navigate to the previous track
                 if let Err(e) = controller.previous_track() {
                     eprintln!("Error playing previous track: {}", e);
                 }
@@ -802,7 +819,24 @@ impl PlayerBar {
                 // Lock the controller and play the next track
                 let mut controller = controller_clone.lock().await;
 
-                // Play the next track in the queue
+                // Before navigating, get the next track info to update UI immediately
+                let next_track_info = controller.get_next_track_info();
+
+                // Update the player bar UI immediately with the next track's metadata
+                if let Some(track_info) = next_track_info {
+                    player_bar.update_with_metadata(
+                        &track_info.album_title,
+                        &track_info.track_title,
+                        &track_info.artist_name,
+                        track_info.cover_art_path.as_deref(),
+                        track_info.bit_depth,
+                        track_info.sample_rate,
+                        track_info.format.as_deref(),
+                        track_info.duration,
+                    );
+                }
+
+                // Now actually navigate to the next track
                 if let Err(e) = controller.next_track() {
                     eprintln!("Error playing next track: {}", e);
                 }

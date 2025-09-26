@@ -493,4 +493,37 @@ impl PlaybackController {
         }
         Ok(())
     }
+
+    /// Gets the previous track information from the queue
+    ///
+    /// # Returns
+    /// An `Option<QueueItem>` containing the previous track information if available
+    pub fn get_previous_track_info(&self) -> Option<QueueItem> {
+        if let Some(current_index) = self.queue.current_index {
+            if current_index > 0 && current_index <= self.queue.items.len() {
+                self.queue.items.get(current_index - 1).cloned()
+            } else {
+                // If at the first track, return the current track (for restart behavior)
+                self.queue.current_track().cloned()
+            }
+        } else {
+            None
+        }
+    }
+
+    /// Gets the next track information from the queue
+    ///
+    /// # Returns
+    /// An `Option<QueueItem>` containing the next track information if available
+    pub fn get_next_track_info(&self) -> Option<QueueItem> {
+        if let Some(current_index) = self.queue.current_index {
+            if current_index + 1 < self.queue.items.len() {
+                self.queue.items.get(current_index + 1).cloned()
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
 }
