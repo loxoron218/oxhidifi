@@ -649,6 +649,9 @@ impl PlayerBar {
 
         // Update navigation button states as the queue position may have changed
         self.update_navigation_button_states();
+
+        // Update play button state to reflect current playback state
+        self.update_play_button_state();
     }
 
     /// Handles playback events from the controller
@@ -847,6 +850,9 @@ impl PlayerBar {
         // Update button states initially
         self.update_navigation_button_states();
 
+        // Update the play button state based on the current playback state
+        self.update_play_button_state();
+
         // Set up event-driven approach using the controller's event handling
         let controller_clone = controller.clone();
         let player_bar_weak = self.downgrade();
@@ -915,6 +921,9 @@ impl PlayerBar {
                 content_area.set_margin_bottom(120);
             }
         }
+
+        // Update play button state to reflect current playback state
+        self.update_play_button_state();
     }
 
     /// Updates the state of the previous and next buttons based on queue navigation possibilities
@@ -962,6 +971,36 @@ impl PlayerBar {
             self.can_go_next.set(false);
             self._prev_button.add_css_class("navigation-disabled");
             self._next_button.add_css_class("navigation-disabled");
+        }
+    }
+
+    /// Updates the play button icon based on the current playback state
+    ///
+    /// This method queries the playback controller for the current state
+    /// and updates the play button icon accordingly.
+    pub fn update_play_button_state(&self) {
+        if let Some(controller) = &self.playback_controller {
+            let controller_clone = controller.clone();
+            let play_button = self._play_button.clone();
+
+            // Use the main context to ensure UI updates happen on the main thread
+            MainContext::default().spawn_local(async move {
+                // Lock the controller to get the current state
+                let controller = controller_clone.lock().await;
+
+                // Get the current playback state and update the button icon
+                match controller.get_current_state() {
+                    Playing => {
+                        play_button.set_icon_name("media-playback-pause");
+                    }
+                    _ => {
+                        play_button.set_icon_name("media-playback-start");
+                    }
+                }
+            });
+        } else {
+            // If no controller is available, default to showing the play icon
+            self._play_button.set_icon_name("media-playback-start");
         }
     }
 }
