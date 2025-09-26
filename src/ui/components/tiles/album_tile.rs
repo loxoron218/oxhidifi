@@ -21,6 +21,7 @@ use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::{
+    data::db::crud::fetch_tracks_by_album,
     ui::{
         components::{
             player_bar::PlayerBar,
@@ -256,6 +257,9 @@ pub fn create_album_tile(
     let album_format_bit_depth = album.bit_depth;
     let album_format_sample_rate = album.sample_rate;
     let album_format = album.format.clone();
+    // Clone db_pool before the play_button closure to avoid moving the original
+    let db_pool_for_play_button = db_pool.clone();
+
     play_button.connect_clicked(move |_| {
         // Clone metadata for direct update
         let album_title_local = album_title.clone();
@@ -264,29 +268,45 @@ pub fn create_album_tile(
         let album_format_bit_depth_local = album_format_bit_depth;
         let album_format_sample_rate_local = album_format_sample_rate;
         let album_format_local = album_format.clone();
-
-        // Update the player bar with album metadata directly to ensure it's updated before visibility
-        // This ensures the player bar shows correct metadata even if the TrackChanged event is delayed
-        player_bar_clone.update_with_metadata(
-            &album_title_local,
-            &album_title_local,
-            &artist_name_local,
-            cover_art_path_local.as_deref().map(Path::new),
-            album_format_bit_depth_local.map(|d| d as u32),
-            album_format_sample_rate_local.map(|d| d as u32),
-            album_format_local.as_deref(),
-            None,
-        );
+        let db_pool_for_tracks = db_pool_for_play_button.clone();
+        let album_id_local = album_id;
 
         // Get the playback controller from the player bar
         let player_bar_async = player_bar_clone.clone();
         if let Some(controller) = player_bar_async.get_playback_controller() {
-            // Spawn async task to queue the album
+            // Spawn async task to fetch the first track's duration and queue the album
             MainContext::default().spawn_local(async move {
+                // Fetch the first track's duration from the database first
+                let db_pool_tracks = db_pool_for_tracks.clone();
+                let duration = if let Ok(tracks) =
+                    fetch_tracks_by_album(&db_pool_tracks, album_id_local).await
+                {
+                    if let Some(first_track) = tracks.first() {
+                        first_track.duration
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
+                // Update the player bar with album metadata directly to ensure it's updated before visibility
+                // This ensures the player bar shows correct metadata even if the TrackChanged event is delayed
+                player_bar_async.update_with_metadata(
+                    &album_title_local,
+                    &album_title_local,
+                    &artist_name_local,
+                    cover_art_path_local.as_deref().map(Path::new),
+                    album_format_bit_depth_local.map(|d| d as u32),
+                    album_format_sample_rate_local.map(|d| d as u32),
+                    album_format_local.as_deref(),
+                    duration,
+                );
+
                 // Queue the album for playback
                 let mut controller = controller.lock().await;
-                if let Err(e) = controller.queue_album(album_id).await {
-                    eprintln!("Error queuing album {}: {}", album_id, e);
+                if let Err(e) = controller.queue_album(album_id_local).await {
+                    eprintln!("Error queuing album {}: {}", album_id_local, e);
                 }
 
                 // Update navigation button states after queue initialization
@@ -401,9 +421,10 @@ pub fn create_album_tile(
                     nav_history.borrow_mut().push(current_page.to_string());
                 }
                 // Navigate to the album detail page asynchronously
+                let db_pool_for_navigation = Arc::clone(&db_pool);
                 MainContext::default().spawn_local(album_page(
                     stack.downgrade(),
-                    db_pool.clone(),
+                    db_pool_for_navigation,
                     album_id,
                     header_btn_stack.downgrade(),
                     right_btn_box_for_closure.downgrade(),

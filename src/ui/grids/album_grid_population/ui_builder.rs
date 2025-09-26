@@ -17,6 +17,7 @@ use libadwaita::prelude::{BoxExt, ButtonExt, FixedExt, ObjectExt, WidgetExt};
 use sqlx::SqlitePool;
 
 use crate::{
+    data::db::crud::fetch_tracks_by_album,
     ui::{
         components::{player_bar::PlayerBar, view_controls::ZoomLevel},
         grids::{
@@ -260,9 +261,6 @@ pub fn create_album_tile(
     let album_format_sample_rate = album_info.sample_rate;
     let album_format = album_info.format.clone();
     play_button.connect_clicked(move |_| {
-        // Clone values for the async block
-        let player_bar_async = player_bar_clone.clone();
-
         // Clone album_id for the async block
         let album_id = album_id;
 
@@ -273,24 +271,40 @@ pub fn create_album_tile(
         let album_format_bit_depth_local = album_format_bit_depth;
         let album_format_sample_rate_local = album_format_sample_rate;
         let album_format_local = album_format.clone();
+        let db_pool_for_tracks = _db_pool.clone();
 
-        // Update the player bar with album metadata directly to ensure it's updated before visibility
-        // This ensures the player bar shows correct metadata even if the TrackChanged event is delayed
-        player_bar_clone.update_with_metadata(
-            &album_title_local,
-            &album_title_local,
-            &artist_name_local,
-            cover_art_path_local.as_deref().map(Path::new),
-            album_format_bit_depth_local.map(|d| d as u32),
-            album_format_sample_rate_local.map(|d| d as u32),
-            album_format_local.as_deref(),
-            None,
-        );
+        // Get the playback controller from the player bar
+        let player_bar_async = player_bar_clone.clone();
+        if let Some(controller) = player_bar_async.get_playback_controller() {
+            // Spawn async task to fetch the first track's duration and queue the album
+            MainContext::default().spawn_local(async move {
+                // Fetch the first track's duration from the database first
+                let duration = if let Ok(tracks) =
+                    fetch_tracks_by_album(&db_pool_for_tracks, album_id).await
+                {
+                    if let Some(first_track) = tracks.first() {
+                        first_track.duration
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
 
-        // Spawn async task to initialize the queue and start playback
-        MainContext::default().spawn_local(async move {
-            // Get the playback controller from the player bar
-            if let Some(controller) = player_bar_async.get_playback_controller() {
+                // Update the player bar with album metadata directly to ensure it's updated before visibility
+                // This ensures the player bar shows correct metadata even if the TrackChanged event is delayed
+                player_bar_async.update_with_metadata(
+                    &album_title_local,
+                    &album_title_local,
+                    &artist_name_local,
+                    cover_art_path_local.as_deref().map(Path::new),
+                    album_format_bit_depth_local.map(|d| d as u32),
+                    album_format_sample_rate_local.map(|d| d as u32),
+                    album_format_local.as_deref(),
+                    duration,
+                );
+
+                // Spawn async task to initialize the queue and start playback
                 // Lock the controller and queue the album
                 let mut controller = controller.lock().await;
                 if let Err(e) = controller.queue_album(album_id).await {
@@ -303,10 +317,10 @@ pub fn create_album_tile(
 
                 // Ensure the player bar is visible when playback starts
                 player_bar_async.ensure_visible();
-            } else {
-                eprintln!("No playback controller available");
-            }
-        });
+            });
+        } else {
+            eprintln!("No playback controller available");
+        }
     });
 
     // Connect hover events for the play button visibility.
