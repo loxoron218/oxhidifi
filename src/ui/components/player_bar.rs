@@ -628,9 +628,15 @@ impl PlayerBar {
         // Now we have an Option<Pixbuf>. We can act on it in one place.
         if let Some(p) = pixbuf.as_ref() {
             self.album_art.set_from_pixbuf(Some(p));
+
+            // Ensure the image maintains its requested size after setting the pixbuf
+            self.album_art.set_pixel_size(96);
         } else {
             // This single else block now handles both "no path" and "failed to load" cases.
             self.album_art.set_icon_name(Some("image-missing"));
+
+            // Ensure the image maintains its requested size when showing icon
+            self.album_art.set_pixel_size(96);
         }
 
         // Make the player bar visible now that it has track information
