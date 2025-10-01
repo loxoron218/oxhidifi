@@ -12,7 +12,9 @@ use gtk4::{
     Orientation::{Horizontal, Vertical},
     Scale,
     gdk_pixbuf::Pixbuf,
-    glib::{MainContext, Propagation::Proceed, SignalHandlerId, WeakRef, timeout_future},
+    glib::{
+        MainContext, Propagation::Proceed, SignalHandlerId, WeakRef, object::Cast, timeout_future,
+    },
     pango::EllipsizeMode,
 };
 use libadwaita::prelude::{BoxExt, ButtonExt, ObjectExt, RangeExt, WidgetExt};
@@ -254,6 +256,9 @@ impl PlayerBar {
         // Prevent horizontal expansion and set max width chars for ellipsizing
         song_title.set_hexpand(false);
         song_title.set_max_width_chars(25);
+
+        // Set up tooltip to show full text when ellipsized
+        setup_ellipsized_tooltip(&song_title);
         info_box.append(&song_title);
 
         // Initialize artist label with placeholder text
@@ -267,6 +272,9 @@ impl PlayerBar {
         // Prevent horizontal expansion and set max width chars for ellipsizing
         song_artist.set_hexpand(false);
         song_artist.set_max_width_chars(25);
+
+        // Set up tooltip to show full text when ellipsized
+        setup_ellipsized_tooltip(&song_artist);
         info_box.append(&song_artist);
 
         // Initialize album title label with placeholder text
@@ -280,6 +288,9 @@ impl PlayerBar {
         // Prevent horizontal expansion and set max width chars for ellipsizing
         album_title.set_hexpand(false);
         album_title.set_max_width_chars(25);
+
+        // Set up tooltip to show full text when ellipsized
+        setup_ellipsized_tooltip(&album_title);
         info_box.append(&album_title);
 
         // Initialize bit depth/sample rate label with placeholder text
@@ -296,6 +307,9 @@ impl PlayerBar {
         // Prevent horizontal expansion and set max width chars for ellipsizing
         bit_depth_sample_rate.set_hexpand(false);
         bit_depth_sample_rate.set_max_width_chars(25);
+
+        // Set up tooltip to show full text when ellipsized
+        setup_ellipsized_tooltip(&bit_depth_sample_rate);
         info_box.append(&bit_depth_sample_rate);
 
         // Initialize format label with placeholder text (combined display with bit depth/sample rate)
@@ -309,6 +323,9 @@ impl PlayerBar {
         // Prevent horizontal expansion and set max width chars for ellipsizing
         format.set_hexpand(false);
         format.set_max_width_chars(25);
+
+        // Set up tooltip to show full text when ellipsized
+        setup_ellipsized_tooltip(&format);
         info_box.append(&format);
 
         // Create a container for progress bar and time label
@@ -1016,4 +1033,28 @@ impl Drop for PlayerBar {
         // Cancel any running tasks when the PlayerBar is dropped
         self.cancellation_token.cancel();
     }
+}
+
+/// Sets up a tooltip for a label that shows the full text on hover
+///
+/// This function connects to the label's notify::label signal to update the tooltip
+/// text when the label content changes. The tooltip will show the full text
+/// when the user hovers over the label, which is useful when the text is ellipsized.
+fn setup_ellipsized_tooltip(label: &Label) {
+    // Initially set the tooltip to the label's text
+    let initial_text = label.text();
+    label.set_tooltip_text(Some(&initial_text));
+
+    // Connect to the label text change to update the tooltip
+    label.connect_notify_local(Some("label"), {
+        move |label_obj, _| {
+            // Get the actual label widget from the object
+            if let Some(label_widget) = label_obj.downcast_ref::<Label>() {
+                let text = label_widget.text();
+
+                // Set the tooltip to the current text
+                label_widget.set_tooltip_text(Some(&text));
+            }
+        }
+    });
 }
