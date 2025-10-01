@@ -124,6 +124,7 @@ pub fn build_technical_info(tracks: &[Track], _album: &Album) -> Option<Box> {
                         let hires_pic = Picture::for_pixbuf(&pixbuf);
                         hires_pic.set_size_request(40, 40);
                         hires_pic.set_halign(Start);
+                        hires_pic.set_tooltip_text(Some("Hi-Res Audio: 24-bit/88.2kHz or higher"));
                         outer_row.append(&hires_pic);
                     }
                     Err(e) => {
@@ -134,6 +135,8 @@ pub fn build_technical_info(tracks: &[Track], _album: &Album) -> Option<Box> {
                         let fallback_icon = Image::from_icon_name("image-missing-symbolic");
                         fallback_icon.set_pixel_size(44);
                         fallback_icon.set_halign(Start);
+                        fallback_icon
+                            .set_tooltip_text(Some("Hi-Res Audio: 24-bit/88.2kHz or higher"));
                         outer_row.append(&fallback_icon);
                     }
                 }
@@ -152,6 +155,21 @@ pub fn build_technical_info(tracks: &[Track], _album: &Album) -> Option<Box> {
                 let icon = Image::from_icon_name(icon_name);
                 icon.set_pixel_size(44);
                 icon.set_halign(Start);
+
+                // Add tooltip based on the icon type
+                match icon_name {
+                    "audio-x-generic-symbolic" => {
+                        icon.set_tooltip_text(Some(
+                            "Lossy Audio: Compressed format (MP3, AAC, etc.)",
+                        ));
+                    }
+                    "media-optical-symbolic" => {
+                        icon.set_tooltip_text(Some("CD Quality: 16-bit/44.1kHz"));
+                    }
+                    _ => {
+                        icon.set_tooltip_text(Some("Audio Quality Indicator"));
+                    }
+                }
                 outer_row.append(&icon);
             }
         }
