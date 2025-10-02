@@ -59,11 +59,36 @@ pub fn create_sorting_control_row(
         .build();
 
     // Create a label for the sorting section
+    // Use "Sort By" for albums view (has sorting categories) and "Direction" for artists view (only ascending/descending)
+    let current_tab = stack
+        .visible_child_name()
+        .unwrap_or_else(|| "albums".into());
+    let is_currently_albums = current_tab.as_str() == "albums";
+    let initial_label = if is_currently_albums {
+        "Sort By"
+    } else {
+        "Direction"
+    };
     let sorting_label = Label::builder()
-        .label("Sort By")
+        .label(initial_label)
         .halign(Start)
         .hexpand(true)
         .build();
+
+    // Connect to view changes to update the label text
+    let sorting_label_clone = sorting_label.clone();
+    stack.connect_visible_child_notify(move |stack| {
+        let current_tab = stack
+            .visible_child_name()
+            .unwrap_or_else(|| "albums".into());
+        let is_currently_albums = current_tab.as_str() == "albums";
+        let new_label = if is_currently_albums {
+            "Sort By"
+        } else {
+            "Direction"
+        };
+        sorting_label_clone.set_label(new_label);
+    });
 
     // Create a button group container for the sort direction button
     let sort_direction_button_box = Box::builder().orientation(Horizontal).build();
