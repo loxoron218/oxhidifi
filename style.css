@@ -216,49 +216,49 @@
    ===================== */
 
 .player-bar {
-  background-color: #333;
-  border-top: 1px solid rgba(255, 255, 25, 0.1);
+  background-color: alpha(currentColor, 0.08);
+  border-top: 1px solid alpha(currentColor, 0.15);
   padding: 8px 12px;
 }
 
 .player-bar .album-title {
-  color: #ccc;
+  color: alpha(currentColor, 0.8);
   font-size: 1.0em;
   margin-bottom: 4px;
 }
 
 .player-bar .artist-name {
-  color: #ccc;
+  color: alpha(currentColor, 0.8);
   font-size: 1.0em;
   margin-bottom: 4px;
 }
 
 .player-bar .bit-depth-sample-rate {
-  color: #aaa;
+  color: alpha(currentColor, 0.6);
   font-size: 0.85em;
   margin-bottom: 4px;
 }
 
 .player-bar .bit-perfect-indicator {
-  background-color: #4a86e8;
+  background-color: var(--accent_color, #4a86e8);
 }
 
 .player-bar .format {
-  color: #aaa;
+  color: alpha(currentColor, 0.6);
   font-size: 0.85em;
   margin-bottom: 8px;
 }
 
 .player-bar .gapless-indicator {
-  background-color: #34a853;
+  background-color: var(--success_color, #34a853);
 }
 
 .player-bar .indicator {
   min-width: 24px;
   min-height: 24px;
   border-radius: 50%;
-  background-color: #555;
-  color: #fff;
+  background-color: alpha(currentColor, 0.2);
+  color: currentColor;
   font-size: 0.7em;
   font-weight: bold;
 }
@@ -283,14 +283,14 @@
 .player-bar .song-title {
   font-weight: bold;
   font-size: 1.15em;
+  color: currentColor;
 }
 
 .player-bar .time-label {
-  color: #ccc;
+  color: alpha(currentColor, 0.9);
   font-size: 0.9em;
   font-family: monospace;
   min-width: 40px;
-  font-family: monospace;
 }
 
 .player-bar .time-labels-box {
