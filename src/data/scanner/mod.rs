@@ -1,6 +1,6 @@
-mod dr_scanner;
+mod album_dr_scanner;
 mod file_processor;
-mod individual_dr_scanner;
+mod song_dr_scanner;
 
 pub mod library_ops;
 
@@ -16,7 +16,7 @@ use tokio::{
     task::JoinSet,
 };
 
-pub use self::{dr_scanner::scan_dr_value, file_processor::process_files_batch};
+pub use self::{album_dr_scanner::scan_dr_value, file_processor::process_files_batch};
 
 /// Checks if a file path has a supported audio file extension.
 ///

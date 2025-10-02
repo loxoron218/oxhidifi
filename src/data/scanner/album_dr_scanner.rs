@@ -58,7 +58,7 @@ pub async fn scan_dr_value(folder_path: &Path) -> Result<Option<u8>, Box<dyn Err
     // Lazily initialize the regex to capture DR values.
     let dr_regex = get_dr_regex();
     let mut official_dr: Option<u8> = None;
-    let mut highest_individual_dr: Option<u8> = None;
+    let mut highest_song_dr: Option<u8> = None;
     while let Some(entry) = entries
         .next_entry()
         .await
@@ -130,9 +130,9 @@ pub async fn scan_dr_value(folder_path: &Path) -> Result<Option<u8>, Box<dyn Err
                             {
                                 // Validate DR value is within the typical range [1, 20].
                                 if (1..=20).contains(&dr) {
-                                    // Update highest_individual_dr if the current dr is higher
-                                    // or if highest_individual_dr is currently None.
-                                    highest_individual_dr = match highest_individual_dr {
+                                    // Update highest_song_dr if the current dr is higher
+                                    // or if highest_song_dr is currently None.
+                                    highest_song_dr = match highest_song_dr {
                                         Some(current_max) => Some(current_max.max(dr)),
                                         None => Some(dr),
                                     };
@@ -146,5 +146,5 @@ pub async fn scan_dr_value(folder_path: &Path) -> Result<Option<u8>, Box<dyn Err
     }
 
     // Prioritize official DR values over individual song DR values
-    Ok(official_dr.or(highest_individual_dr))
+    Ok(official_dr.or(highest_song_dr))
 }

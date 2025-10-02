@@ -24,7 +24,7 @@ pub enum DrFormat {
 /// A `Result` containing `Vec<Option<u8>>`:
 /// - `Vec<Option<u8>>` with DR values for each song (None if not available)
 /// - `Box<dyn Error>` if a critical I/O error occurs during directory reading.
-pub fn scan_individual_dr_values(
+pub fn scan_song_dr_values(
     folder_path: &Path,
 ) -> Result<Vec<Option<u8>>, Box<dyn Error + Send + Sync>> {
     // Attempt to read the directory entries at the given path

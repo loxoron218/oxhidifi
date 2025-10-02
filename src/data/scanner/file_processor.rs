@@ -19,7 +19,7 @@ use crate::{
             AlbumForInsert, SongForInsert, insert_or_get_artists_batch, upsert_albums_batch,
             upsert_songs_batch_enhanced,
         },
-        scanner::individual_dr_scanner::scan_individual_dr_values,
+        scanner::song_dr_scanner::scan_song_dr_values,
     },
     utils::{
         image::cache::thumbnail::process_images_concurrently, performance_monitor::get_metrics,
@@ -113,7 +113,7 @@ pub async fn process_files_batch_optimized(
     };
 
     // Scan for individual DR values in the folder
-    let individual_dr_values = scan_individual_dr_values(folder_path).unwrap_or_else(|e| {
+    let song_dr_values = scan_song_dr_values(folder_path).unwrap_or_else(|e| {
         eprintln!("Error scanning individual DR values: {}", e);
         Vec::new()
     });
@@ -284,8 +284,8 @@ pub async fn process_files_batch_optimized(
                 .unwrap();
 
             // Get the DR value for this song if available
-            let dr_value = if index < individual_dr_values.len() {
-                individual_dr_values[index]
+            let dr_value = if index < song_dr_values.len() {
+                song_dr_values[index]
             } else {
                 None
             };
