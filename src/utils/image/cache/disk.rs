@@ -14,27 +14,28 @@ use crate::utils::image::{cache::memory::hash_to_hex, error::ImageLoaderError};
 ///
 /// This cache stores scaled images on disk to avoid reprocessing the same
 /// images multiple times. It uses a hash-based naming scheme to ensure
-/// unique filenames for different image paths and sizes.
+/// unique filenames for different image paths, and stores images in
+/// size-specific subdirectories for better organization.
 pub struct DiskCache {
-    /// The directory where cached images are stored
+    /// The base directory where cached images are stored
     cache_dir: PathBuf,
 }
 
 impl DiskCache {
     /// Creates a new disk cache
     ///
-    /// This method initializes the disk cache by creating the cache directory
-    /// in the user's cache directory. The cache directory is located at
-    /// `~/.cache/oxhidifi/scaled_covers` on Unix-like systems.
+    /// This method initializes the disk cache by creating the base cache directory
+    /// in the user's cache directory. The base cache directory is located at
+    /// `~/.cache/oxhidifi` on Unix-like systems. Size-specific subdirectories
+    /// will be created automatically when needed.
     ///
     /// # Returns
     /// A `Result` containing the new `DiskCache` instance or an `ImageLoaderError`
     pub fn new() -> Result<Self, ImageLoaderError> {
         let mut cache_dir = user_cache_dir();
         cache_dir.push("oxhidifi");
-        cache_dir.push("scaled_covers");
 
-        // Create the directory if it doesn't exist
+        // Create the base directory if it doesn't exist
         create_dir_all(&cache_dir)?;
         Ok(Self { cache_dir })
     }
@@ -42,8 +43,9 @@ impl DiskCache {
     /// Generates a cache path for an image
     ///
     /// This method creates a unique filename for a cached image based on
-    /// the original image path and the desired size. The filename is a
-    /// hash of the original path combined with the size to ensure uniqueness.
+    /// the original image path. The filename is a hash of the original path
+    /// to ensure uniqueness. The image is stored in a size-specific subdirectory
+    /// (e.g., ~/.cache/oxhidifi/256/ for 256x256 images).
     ///
     /// # Arguments
     /// * `original_path` - The path to the original image file
@@ -52,13 +54,18 @@ impl DiskCache {
     /// # Returns
     /// The path where the cached image should be stored
     pub fn get_cache_path(&self, original_path: &Path, size: i32) -> PathBuf {
+        // Create a size-specific subdirectory
+        let size_dir = self.cache_dir.join(size.to_string());
+
+        // Create the size directory if it doesn't exist
+        create_dir_all(&size_dir).expect("Failed to create size-specific cache directory");
+
         // Create a hash-based filename to ensure uniqueness
         let filename = format!(
-            "{}_{}.jpg",
-            hash_to_hex(original_path.to_string_lossy().as_bytes()),
-            size
+            "{}.jpg",
+            hash_to_hex(original_path.to_string_lossy().as_bytes())
         );
-        self.cache_dir.join(filename)
+        size_dir.join(filename)
     }
 
     /// Loads an image from the disk cache
@@ -66,6 +73,7 @@ impl DiskCache {
     /// This method attempts to load a scaled image from the disk cache.
     /// If the image exists in the cache, it is loaded and returned.
     /// If the image is not in the cache, `Ok(None)` is returned.
+    /// The image is stored in a size-specific subdirectory.
     ///
     /// # Arguments
     /// * `original_path` - The path to the original image file
@@ -101,7 +109,8 @@ impl DiskCache {
     /// Saves an image to the disk cache
     ///
     /// This method saves a scaled image to the disk cache for future use.
-    /// The image is saved as a JPEG with quality 90.
+    /// The image is saved as a JPEG with quality 90 in a size-specific subdirectory
+    /// (e.g., ~/.cache/oxhidifi/256/ for 256x256 images).
     ///
     /// # Arguments
     /// * `original_path` - The path to the original image file

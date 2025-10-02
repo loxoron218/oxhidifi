@@ -24,7 +24,7 @@ use crate::utils::image::{
 /// managing memory usage. The loader uses a two-tier caching strategy:
 ///
 /// 1. Memory cache (LRU) for recently accessed images
-/// 2. Disk cache for scaled images to avoid reprocessing
+/// 2. Disk cache for scaled images to avoid reprocessing, stored in size-specific subdirectories
 ///
 /// The loader also handles image scaling using high-quality Lanczos filtering
 /// and converts images to the appropriate format for GTK widgets.

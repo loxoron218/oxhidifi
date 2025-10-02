@@ -98,9 +98,9 @@ impl From<ImageError> for ThumbnailError {
 /// if it doesn't already exist.
 ///
 /// The cache directory is located at:
-/// - Linux: `~/.cache/oxhidifi/covers`
-/// - macOS: `~/Library/Caches/oxhidifi/covers`
-/// - Windows: `%LOCALAPPDATA%\oxhidifi\covers`
+/// - Linux: `~/.cache/oxhidifi/original` (for original-sized covers)
+/// - macOS: `~/Library/Caches/oxhidifi/original`
+/// - Windows: `%LOCALAPPDATA%\oxhidifi\original`
 ///
 /// # Returns
 /// A `Result` containing the path to the cache directory or an `io::Error` if
@@ -108,7 +108,7 @@ impl From<ImageError> for ThumbnailError {
 fn get_or_create_cache_dir() -> Result<PathBuf, io::Error> {
     let mut cache_dir = user_cache_dir();
     cache_dir.push("oxhidifi");
-    cache_dir.push("covers");
+    cache_dir.push("original");
     create_dir_all(&cache_dir)?;
     Ok(cache_dir)
 }
