@@ -129,7 +129,7 @@ pub fn detect_format(lines: &[String]) -> DrFormat {
 fn parse_maat_format(lines: &[String]) -> Result<Vec<Option<u8>>, Box<dyn Error + Send + Sync>> {
     let mut dr_values = Vec::new();
 
-    // Flag to track if we're currently parsing within a table structure
+    // Flag to song if we're currently parsing within a table structure
     let mut in_table = false;
 
     // Store the column index where DR values are located
@@ -261,7 +261,7 @@ fn parse_foobar2000_format(
         }
 
         // Stop parsing if we reach the end of the table
-        // Look for lines with "Number of tracks:" or another dashed line
+        // Look for lines with "Number of songs:" or another dashed line
         if line.starts_with("Number of")
             || (is_separator_line(line) && in_table && dr_column_index.is_some())
         {

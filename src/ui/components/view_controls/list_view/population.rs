@@ -88,7 +88,7 @@ pub async fn populate_albums_column_view(
     let (receiver, _handle) = spawn_album_loader(db_pool.clone());
     let mut stream = UnboundedReceiverStream::new(receiver);
 
-    // Variables to track state
+    // Variables to song state
     let mut all_albums: Vec<AlbumGridItem> = Vec::new();
 
     // Process messages from the async loader

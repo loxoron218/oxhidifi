@@ -44,7 +44,7 @@ use crate::{
 /// - `artist_id`: Unique identifier of the artist to display
 /// - `header_btn_stack`: Weak reference to the header button stack for navigation controls
 /// - `right_btn_box`: Weak reference to the right header button container
-/// - `nav_history`: Shared reference to the navigation history tracker
+/// - `nav_history`: Shared reference to the navigation history songer
 /// - `sender`: Channel sender for communication with other parts of the application
 /// - `show_dr_badges`: Shared flag indicating whether to display DR badges
 /// - `use_original_year`: Shared flag for choosing between original and release years

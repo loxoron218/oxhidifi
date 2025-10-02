@@ -25,16 +25,16 @@ fn get_dr_regex() -> &'static Regex {
 
 /// Scans `.txt` and `.log` files within a specified folder for Dynamic Range (DR) values.
 /// It parses various common DR value formats and returns the official album DR value when present,
-/// or the highest individual track DR value otherwise.
+/// or the highest individual song DR value otherwise.
 ///
 /// The function uses a regular expression to find DR values in lines of text files.
 /// It supports multiple formats including:
-/// - Simple "DR" followed by digits or "ERR" (treated as individual track DR values)
+/// - Simple "DR" followed by digits or "ERR" (treated as individual song DR values)
 /// - "Official DR value:" followed by optional "DR" and digits or "ERR" (treated as official album DR)
 /// - Russian "Реальные значения DR:" followed by digits or "ERR" (treated as official album DR)
 /// - "Official EP/Album DR:" followed by digits or "ERR" (treated as official album DR)
 ///
-/// When both official album DR values and individual track DR values are present in a file,
+/// When both official album DR values and individual song DR values are present in a file,
 /// the official album DR value is prioritized.
 ///
 /// It iterates through entries in the folder, and for each `.txt` or `.log` file,
@@ -121,7 +121,7 @@ pub async fn scan_dr_value(folder_path: &Path) -> Result<Option<u8>, Box<dyn Err
                                 }
                             }
                         } else if let Some(dr_str_match) = caps.get(1) {
-                            // For simple DR patterns, treat as individual track DR values
+                            // For simple DR patterns, treat as individual song DR values
                             let dr_str = dr_str_match.as_str();
 
                             // Only parse if the captured string is not "ERR".
@@ -145,6 +145,6 @@ pub async fn scan_dr_value(folder_path: &Path) -> Result<Option<u8>, Box<dyn Err
         }
     }
 
-    // Prioritize official DR values over individual track DR values
+    // Prioritize official DR values over individual song DR values
     Ok(official_dr.or(highest_individual_dr))
 }

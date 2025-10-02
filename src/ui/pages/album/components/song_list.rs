@@ -12,22 +12,22 @@ use libadwaita::{
 use sqlx::SqlitePool;
 
 use crate::{
-    data::models::{Album, Artist, Track},
+    data::models::{Album, Artist, Song},
     ui::components::player_bar::PlayerBar,
     utils::formatting::{format_duration_mmss, format_sample_rate_khz},
 };
 
-/// Build a DR badge widget for an individual track's DR value.
+/// Build a DR badge widget for an individual song's DR value.
 ///
-/// Creates a UI component that displays the track's DR value as a color-coded badge
+/// Creates a UI component that displays the song's DR value as a color-coded badge
 /// similar to the album DR badges.
 ///
 /// # Parameters
-/// - `dr_value`: The DR value of the track (if available)
+/// - `dr_value`: The DR value of the song (if available)
 ///
 /// # Returns
 /// A GTK Label widget containing the DR badge UI element
-fn build_track_dr_badge(dr_value: Option<u8>) -> Label {
+fn build_song_dr_badge(dr_value: Option<u8>) -> Label {
     // Determine the display values based on whether DR is available
     let (dr_str, tooltip_text, css_class) = match dr_value {
         Some(value) => (
@@ -66,39 +66,39 @@ fn build_track_dr_badge(dr_value: Option<u8>) -> Label {
     dr_label
 }
 
-/// Builds a single track row for display in the album track list.
+/// Builds a single song row for display in the album song list.
 ///
-/// This function creates an `ActionRow` widget that represents a single track
+/// This function creates an `ActionRow` widget that represents a single song
 /// in the album view. Each row contains:
-/// - Track number (disc and track number)
-/// - Track title
-/// - Track metadata (artist, format, bit depth, sample rate)
-/// - Track duration
+/// - Song number (disc and song number)
+/// - Song title
+/// - Song metadata (artist, format, bit depth, sample rate)
+/// - Song duration
 /// - Play button
-/// - Track DR value (if show_dr_badges is enabled)
+/// - Song DR value (if show_dr_badges is enabled)
 ///
 /// The row is designed to be added to a `PreferencesGroup` to create a complete
-/// track list for an album.
+/// song list for an album.
 ///
 /// # Arguments
 ///
-/// * `t` - Reference to the `Track` model containing track information
+/// * `t` - Reference to the `Song` model containing song information
 /// * `album_artist_id` - The ID of the album's primary artist
-/// * `track_artists` - A map of artist IDs to artist names for tracks with different artists
+/// * `song_artists` - A map of artist IDs to artist names for songs with different artists
 /// * `is_various_artists_album` - Whether this is a "Various Artists" compilation album
 /// * `player_bar` - Reference to the application's player bar for playback control
 /// * `album` - Reference to the `Album` model containing album information
 /// * `artist` - Reference to the `Artist` model containing artist information
-/// * `db_pool` - Database connection pool for fetching track information
-/// * `show_dr_badges` - Whether to display DR badges for tracks
+/// * `db_pool` - Database connection pool for fetching song information
+/// * `show_dr_badges` - Whether to display DR badges for songs
 ///
 /// # Returns
 ///
-/// Returns a configured `ActionRow` widget representing the track
-pub fn build_track_row(
-    t: &Track,
+/// Returns a configured `ActionRow` widget representing the song
+pub fn build_song_row(
+    t: &Song,
     album_artist_id: i64,
-    track_artists: &HashMap<i64, String>,
+    song_artists: &HashMap<i64, String>,
     is_various_artists_album: bool,
     player_bar: &PlayerBar,
     album: &Album,
@@ -106,12 +106,12 @@ pub fn build_track_row(
     _db_pool: Arc<SqlitePool>,
     show_dr_badges: bool,
 ) -> ActionRow {
-    // Prepare subtitle fields with track metadata
+    // Prepare subtitle fields with song metadata
     let mut subtitle_fields = Vec::with_capacity(4);
 
-    // Add track artist if different from album artist OR if it's a "Various Artists" album
+    // Add song artist if different from album artist OR if it's a "Various Artists" album
     if (t.artist_id != album_artist_id || is_various_artists_album)
-        && let Some(artist_name) = track_artists.get(&t.artist_id)
+        && let Some(artist_name) = song_artists.get(&t.artist_id)
     {
         subtitle_fields.push(artist_name.clone());
     }
@@ -134,17 +134,17 @@ pub fn build_track_row(
     // Join all subtitle fields with a separator
     let subtitle = subtitle_fields.join(" · ");
 
-    // Create the main action row with track title and metadata
+    // Create the main action row with song title and metadata
     let row = ActionRow::builder()
         .title(markup_escape_text(&t.title))
         .subtitle(markup_escape_text(&subtitle))
         .build();
 
-    // Create and configure the track number label (disc-track format)
+    // Create and configure the song number label (disc-song format)
     let disc = t.disc_no.unwrap_or(1);
-    let track = t.track_no.unwrap_or(0);
+    let song = t.song_no.unwrap_or(0);
     let number_label = Label::builder()
-        .label(format!("{}-{:02}", disc, track))
+        .label(format!("{}-{:02}", disc, song))
         .css_classes(["dim-label"])
         .xalign(0.0)
         .width_chars(5)
@@ -152,7 +152,7 @@ pub fn build_track_row(
     number_label.set_margin_end(16);
     row.add_prefix(&number_label);
 
-    // Add track duration if available
+    // Add song duration if available
     if let Some(length) = t.duration.map(format_duration_mmss) {
         let length_label = Label::builder()
             .label(&length)
@@ -163,7 +163,7 @@ pub fn build_track_row(
         row.add_suffix(&length_label);
     }
 
-    // Create the play button for this track
+    // Create the play button for this song
     let play_pause_button = Button::builder()
         .icon_name("media-playback-start")
         .css_classes(["flat"])
@@ -173,10 +173,10 @@ pub fn build_track_row(
     // Clone necessary values for the closure
     let player_bar_clone = player_bar.clone();
     let album_id = album.id;
-    let track_id = t.id;
+    let song_id = t.id;
 
-    // Clone track and album data to ensure it's owned by the closure
-    let track_title = t.title.clone();
+    // Clone song and album data to ensure it's owned by the closure
+    let song_title = t.title.clone();
     let album_title = album.title.clone();
     let artist_name = artist.name.clone();
     let cover_art_path = album.cover_art.clone();
@@ -185,14 +185,14 @@ pub fn build_track_row(
     let format = t.format.clone();
     let duration = t.duration;
 
-    // Connect the play button to queue the track and subsequent tracks
+    // Connect the play button to queue the song and subsequent songs
     play_pause_button.connect_clicked(move |_| {
         // Clone the player bar again for the async context
         let player_bar_async = player_bar_clone.clone();
 
         // Clone all the metadata needed for the direct update
         let album_title_clone = album_title.clone();
-        let track_title_clone = track_title.clone();
+        let song_title_clone = song_title.clone();
         let artist_name_clone = artist_name.clone();
         let cover_art_path_clone = cover_art_path.clone();
         let bit_depth_clone = bit_depth;
@@ -203,7 +203,7 @@ pub fn build_track_row(
         // Update the player bar with metadata directly to ensure it's updated before visibility
         player_bar_clone.update_with_metadata(
             &album_title_clone,
-            &track_title_clone,
+            &song_title_clone,
             &artist_name_clone,
             cover_art_path_clone.as_deref(),
             bit_depth_clone,
@@ -212,15 +212,15 @@ pub fn build_track_row(
             duration_clone,
         );
 
-        // Spawn async task to queue the tracks
+        // Spawn async task to queue the songs
         MainContext::default().spawn_local(async move {
-            // If we have a playback controller, use it to queue the tracks
+            // If we have a playback controller, use it to queue the songs
             if let Some(controller) = player_bar_async.get_playback_controller() {
                 let mut controller = controller.lock().await;
 
-                // Queue tracks from the selected track onwards
-                if let Err(e) = controller.queue_tracks_from(album_id, track_id).await {
-                    eprintln!("Error queuing tracks: {}", e);
+                // Queue songs from the selected song onwards
+                if let Err(e) = controller.queue_songs_from(album_id, song_id).await {
+                    eprintln!("Error queuing songs: {}", e);
                 }
 
                 // Update navigation button states after queue initialization
@@ -237,53 +237,53 @@ pub fn build_track_row(
     // Add the play button to the row
     row.add_suffix(&play_pause_button);
 
-    // Add track DR value if available and show_dr_badges is enabled
+    // Add song DR value if available and show_dr_badges is enabled
     if show_dr_badges && let Some(dr_value) = t.dr_value {
-        let dr_badge = build_track_dr_badge(Some(dr_value));
+        let dr_badge = build_song_dr_badge(Some(dr_value));
         dr_badge.set_margin_end(8);
         row.add_suffix(&dr_badge);
     }
     row
 }
 
-/// Builds a complete track list group for display on an album page.
+/// Builds a complete song list group for display on an album page.
 ///
-/// This function creates a `PreferencesGroup` containing all tracks for an album,
-/// with each track represented as an `ActionRow` created by `build_track_row`.
+/// This function creates a `PreferencesGroup` containing all songs for an album,
+/// with each song represented as an `ActionRow` created by `build_song_row`.
 ///
 /// # Arguments
 ///
-/// * `tracks` - Slice of `Track` models to display in the list
+/// * `songs` - Slice of `Song` models to display in the list
 /// * `album` - Reference to the `Album` model containing album information
 /// * `artist` - Reference to the `Artist` model containing artist information
-/// * `track_artists` - A map of artist IDs to artist names for tracks with different artists
+/// * `song_artists` - A map of artist IDs to artist names for songs with different artists
 /// * `is_various_artists_album` - Whether this is a "Various Artists" compilation album
 /// * `player_bar` - Reference to the application's player bar for playback control
-/// * `db_pool` - Database connection pool for fetching track information
-/// * `show_dr_badges` - Whether to display DR badges for tracks
+/// * `db_pool` - Database connection pool for fetching song information
+/// * `show_dr_badges` - Whether to display DR badges for songs
 ///
 /// # Returns
 ///
-/// Returns a configured `PreferencesGroup` widget containing all track rows
-pub fn build_track_list(
-    tracks: &[Track],
+/// Returns a configured `PreferencesGroup` widget containing all song rows
+pub fn build_song_list(
+    songs: &[Song],
     album: &Album,
     artist: &Artist,
-    track_artists: &HashMap<i64, String>,
+    song_artists: &HashMap<i64, String>,
     is_various_artists_album: bool,
     player_bar: &PlayerBar,
     db_pool: Arc<SqlitePool>,
     show_dr_badges: bool,
 ) -> PreferencesGroup {
-    // Create the main container for the track list
+    // Create the main container for the song list
     let group = PreferencesGroup::builder().build();
 
-    // Add each track as a row to the group
-    for t in tracks {
-        group.add(&build_track_row(
+    // Add each song as a row to the group
+    for t in songs {
+        group.add(&build_song_row(
             t,
             album.artist_id,
-            track_artists,
+            song_artists,
             is_various_artists_album,
             player_bar,
             album,
@@ -293,6 +293,6 @@ pub fn build_track_list(
         ));
     }
 
-    // Return the constructed track list group
+    // Return the constructed song list group
     group
 }

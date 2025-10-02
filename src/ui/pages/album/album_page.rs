@@ -12,7 +12,7 @@ use tokio::sync::mpsc::UnboundedSender;
 use crate::ui::{
     components::player_bar::PlayerBar,
     pages::album::{
-        components::{header::build_album_header, track_list::build_track_list},
+        components::{header::build_album_header, song_list::build_song_list},
         data::album_data::fetch_album_page_data,
     },
 };
@@ -25,9 +25,9 @@ use crate::ui::{
 ///
 /// The function performs these key operations:
 /// 1. Upgrades weak references to UI components
-/// 2. Fetches album, artist, folder, and track data from the database
+/// 2. Fetches album, artist, folder, and song data from the database
 /// 3. Constructs the main page layout container
-/// 4. Builds the album header and track list components
+/// 4. Builds the album header and song list components
 /// 5. Manages the view stack to display the new page
 ///
 /// # Arguments
@@ -51,7 +51,7 @@ use crate::ui::{
 /// If data fetching fails, the function returns early without displaying the page.
 ///
 /// UI construction follows a modular approach, delegating to specialized
-/// functions for the header and track list components. This promotes code
+/// functions for the header and song list components. This promotes code
 /// reuse and maintainability.
 pub async fn album_page(
     stack: WeakRef<ViewStack>,
@@ -80,8 +80,8 @@ pub async fn album_page(
 
     // Fetch all required data for the album page asynchronously
     // This includes album metadata, artist information, folder details,
-    // track listing, and artist names for tracks (needed for various artists albums)
-    let (album, artist, folder, tracks, track_artists, is_various_artists_album) =
+    // song listing, and artist names for songs (needed for various artists albums)
+    let (album, artist, folder, songs, song_artists, is_various_artists_album) =
         match fetch_album_page_data(&db_pool, album_id).await {
             Ok(data) => data,
             Err(_) => return,
@@ -104,7 +104,7 @@ pub async fn album_page(
         &album,
         &artist,
         &folder,
-        &tracks,
+        &songs,
         show_dr_badges.clone(),
         db_pool.clone(),
         sender.clone(),
@@ -112,19 +112,19 @@ pub async fn album_page(
     );
     page.append(&header);
 
-    // Build the track list section showing all tracks in the album
-    // The track list handles various artists albums by displaying track-specific artists
-    let track_list = build_track_list(
-        &tracks,
+    // Build the song list section showing all songs in the album
+    // The song list handles various artists albums by displaying song-specific artists
+    let song_list = build_song_list(
+        &songs,
         &album,
         &artist,
-        &track_artists,
+        &song_artists,
         is_various_artists_album,
         &player_bar,
         db_pool.clone(),
         show_dr_badges.get(),
     );
-    page.append(&track_list);
+    page.append(&song_list);
 
     // Add bottom margin for visual spacing
     page.set_margin_bottom(32);

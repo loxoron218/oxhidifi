@@ -40,7 +40,7 @@ struct CacheEntry {
 /// exceeds its maximum capacity or size limits.
 ///
 /// This implementation uses the `lru` crate for efficient O(1) operations
-/// and tracks total cache size incrementally for O(1) size checks.
+/// and songs total cache size incrementally for O(1) size checks.
 pub struct MemoryCache {
     /// Thread-safe LRU cache storage
     cache: Arc<RwLock<LruCache<String, CacheEntry>>>,

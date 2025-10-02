@@ -52,34 +52,34 @@ pub struct Album {
     pub dr_is_best: bool,
 }
 
-/// Represents a single music track.
+/// Represents a single music song.
 ///
-/// This struct contains detailed metadata for an individual track, including its
+/// This struct contains detailed metadata for an individual song, including its
 /// associated album and artist, file path, duration, and audio technical specifications.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Track {
-    /// Unique identifier for the track.
+pub struct Song {
+    /// Unique identifier for the song.
     pub id: i64,
-    /// The title of the track.
+    /// The title of the song.
     pub title: String,
-    /// The ID of the album to which this track belongs.
+    /// The ID of the album to which this song belongs.
     pub album_id: i64,
-    /// The ID of the primary artist for this track.
+    /// The ID of the primary artist for this song.
     pub artist_id: i64,
-    /// The absolute file system path of the track file.
+    /// The absolute file system path of the song file.
     pub path: PathBuf,
-    /// The duration of the track in seconds.
+    /// The duration of the song in seconds.
     pub duration: Option<u32>,
-    /// The track number within its album (e.g., 1, 2, 3...).
-    pub track_no: Option<u32>,
+    /// The song number within its album (e.g., 1, 2, 3...).
+    pub song_no: Option<u32>,
     /// The disc number if the album spans multiple discs.
     pub disc_no: Option<u32>,
-    /// The audio format of the track (e.g., "FLAC", "MP3", "WAV").
+    /// The audio format of the song (e.g., "FLAC", "MP3", "WAV").
     pub format: Option<String>,
     /// The bit depth of the audio (e.g., 16, 24).
     pub bit_depth: Option<u32>,
     /// The sample rate of the audio (e.g., 44100, 96000).
     pub sample_rate: Option<u32>,
-    /// The Dynamic Range (DR) value of the track, if calculated or available.
+    /// The Dynamic Range (DR) value of the song, if calculated or available.
     pub dr_value: Option<u8>,
 }

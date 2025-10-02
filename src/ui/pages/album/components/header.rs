@@ -12,7 +12,7 @@ use libadwaita::prelude::{BoxExt, ButtonExt, WidgetExt};
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::{
-    data::models::{Album, Artist, Folder, Track},
+    data::models::{Album, Artist, Folder, Song},
     ui::{
         components::player_bar::PlayerBar,
         pages::album::components::{
@@ -27,7 +27,7 @@ use crate::{
 /// This function creates the top section of the album page which includes:
 /// - Album cover art with an overlay play button
 /// - Album title and artist name
-/// - Album metadata (year, track count, duration)
+/// - Album metadata (year, song count, duration)
 /// - Technical information (bit depth, sample rate, format)
 /// - Dynamic range (DR) badge if enabled
 ///
@@ -36,7 +36,7 @@ use crate::{
 /// * `album` - The album to display
 /// * `artist` - The album's artist
 /// * `folder` - The folder containing the album
-/// * `tracks` - The tracks in the album
+/// * `songs` - The songs in the album
 /// * `show_dr_badges` - Flag to control DR badge visibility
 /// * `db_pool` - Database connection pool for DR data
 /// * `sender` - Channel sender for UI updates
@@ -49,7 +49,7 @@ pub fn build_album_header(
     album: &Album,
     artist: &Artist,
     folder: &Folder,
-    tracks: &[Track],
+    songs: &[Song],
     show_dr_badges: Rc<Cell<bool>>,
     db_pool: Arc<sqlx::SqlitePool>,
     sender: UnboundedSender<()>,
@@ -97,30 +97,30 @@ pub fn build_album_header(
     let artist_name = artist.name.clone();
     let cover_art_path = album.cover_art.clone();
 
-    // Get the first track's metadata if available for better initial display
-    let first_track_title = if !tracks.is_empty() {
-        tracks[0].title.clone()
+    // Get the first song's metadata if available for better initial display
+    let first_song_title = if !songs.is_empty() {
+        songs[0].title.clone()
     } else {
-        // fallback to album title if no tracks
+        // fallback to album title if no songs
         album.title.clone()
     };
-    let first_track_bit_depth = if !tracks.is_empty() {
-        tracks[0].bit_depth
+    let first_song_bit_depth = if !songs.is_empty() {
+        songs[0].bit_depth
     } else {
         None
     };
-    let first_track_sample_rate = if !tracks.is_empty() {
-        tracks[0].sample_rate
+    let first_song_sample_rate = if !songs.is_empty() {
+        songs[0].sample_rate
     } else {
         None
     };
-    let first_track_format = if !tracks.is_empty() {
-        tracks[0].format.clone()
+    let first_song_format = if !songs.is_empty() {
+        songs[0].format.clone()
     } else {
         None
     };
-    let first_track_duration = if !tracks.is_empty() {
-        tracks[0].duration
+    let first_song_duration = if !songs.is_empty() {
+        songs[0].duration
     } else {
         None
     };
@@ -134,11 +134,11 @@ pub fn build_album_header(
         let album_title_local = album_title.clone();
         let artist_name_local = artist_name.clone();
         let cover_art_path_local = cover_art_path.clone();
-        let first_track_title_local = first_track_title.clone();
-        let first_track_bit_depth_local = first_track_bit_depth;
-        let first_track_sample_rate_local = first_track_sample_rate;
-        let first_track_format_local = first_track_format.clone();
-        let first_track_duration_local = first_track_duration;
+        let first_song_title_local = first_song_title.clone();
+        let first_song_bit_depth_local = first_song_bit_depth;
+        let first_song_sample_rate_local = first_song_sample_rate;
+        let first_song_format_local = first_song_format.clone();
+        let first_song_duration_local = first_song_duration;
         if let Some(controller) = player_bar_async.get_playback_controller() {
             // Spawn async task to queue the album
             let context = MainContext::default();
@@ -160,16 +160,16 @@ pub fn build_album_header(
         }
 
         // Update the player bar with metadata directly to ensure it's updated before visibility
-        // This ensures the player bar shows correct metadata even if the TrackChanged event is delayed
+        // This ensures the player bar shows correct metadata even if the SongChanged event is delayed
         player_bar_clone.update_with_metadata(
             &album_title_local,
-            &first_track_title_local, // Using first track title for "Play Album" action
+            &first_song_title_local, // Using first song title for "Play Album" action
             &artist_name_local,
             cover_art_path_local.as_deref(),
-            first_track_bit_depth_local,
-            first_track_sample_rate_local,
-            first_track_format_local.as_deref(),
-            first_track_duration_local,
+            first_song_bit_depth_local,
+            first_song_sample_rate_local,
+            first_song_format_local.as_deref(),
+            first_song_duration_local,
         );
     });
 
@@ -215,13 +215,13 @@ pub fn build_album_header(
     artist_label.set_css_classes(&["album-artist-label"]);
     info_box.append(&artist_label);
 
-    // Add album metadata (year, track count, duration) if available
-    if let Some(meta_box) = build_album_metadata(tracks, album) {
+    // Add album metadata (year, song count, duration) if available
+    if let Some(meta_box) = build_album_metadata(songs, album) {
         info_box.append(&meta_box);
     }
 
     // Add technical information (bit depth, sample rate, format, Hi-Res/Lossy icon) if available
-    if let Some(tech_box) = build_technical_info(tracks, album) {
+    if let Some(tech_box) = build_technical_info(songs, album) {
         info_box.append(&tech_box);
     }
 

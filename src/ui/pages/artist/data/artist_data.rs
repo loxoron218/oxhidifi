@@ -36,7 +36,7 @@ pub struct AlbumDisplayInfoWithYear {
     pub year: Option<i32>,
     /// Path to the album's cover art image, if available
     pub cover_art: Option<PathBuf>,
-    /// Audio format of the tracks (e.g., "FLAC", "MP3", "WAV")
+    /// Audio format of the songs (e.g., "FLAC", "MP3", "WAV")
     pub format: Option<String>,
     /// Bit depth of the audio files in bits (e.g., 16, 24)
     pub bit_depth: Option<u32>,
@@ -55,10 +55,10 @@ pub struct AlbumDisplayInfoWithYear {
 /// This function retrieves all albums associated with a specific artist from
 /// the database, along with relevant information needed for display on the
 /// artist page. For each album, it includes the album metadata, artist name,
-/// cover art path, and technical information from the tracks.
+/// cover art path, and technical information from the songs.
 ///
 /// The function performs a database query that:
-/// - Joins the albums, artists, and tracks tables
+/// - Joins the albums, artists, and songs tables
 /// - Groups results by album ID to avoid duplicates
 /// - Orders albums by year (descending) and title (case-insensitive)
 ///
@@ -90,10 +90,10 @@ pub async fn fetch_album_display_info_by_artist(
 ) -> Result<Vec<AlbumDisplayInfoWithYear>, Error> {
     let rows = query(
         r#"SELECT albums.id, albums.title, albums.year, albums.cover_art,
-                     tracks.format, tracks.bit_depth, tracks.sample_rate, albums.dr_value, albums.dr_is_best, albums.original_release_date
+                     songs.format, songs.bit_depth, songs.sample_rate, albums.dr_value, albums.dr_is_best, albums.original_release_date
            FROM albums
            JOIN artists ON albums.artist_id = artists.id
-           LEFT JOIN tracks ON tracks.album_id = albums.id
+           LEFT JOIN songs ON songs.album_id = albums.id
            WHERE albums.artist_id = ?
            GROUP BY albums.id
            ORDER BY albums.year DESC, albums.title COLLATE NOCASE"#,

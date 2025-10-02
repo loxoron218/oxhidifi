@@ -6,7 +6,7 @@ use std::{
 use sqlx::{QueryBuilder, Result, Row, Sqlite, SqlitePool, Transaction, query};
 
 use crate::{
-    data::models::{Album, Artist, Folder, Track},
+    data::models::{Album, Artist, Folder, Song},
     utils::performance_monitor::get_metrics,
 };
 
@@ -32,28 +32,28 @@ pub struct AlbumForInsert {
 }
 
 #[derive(Debug)]
-pub struct TrackForInsert {
-    /// The title of the track.
+pub struct SongForInsert {
+    /// The title of the song.
     pub title: String,
-    /// The ID of the album to which this track belongs.
+    /// The ID of the album to which this song belongs.
     pub album_id: i64,
-    /// The ID of the primary artist for this track.
+    /// The ID of the primary artist for this song.
     pub artist_id: i64,
-    /// The absolute file system path of the track file.
+    /// The absolute file system path of the song file.
     pub path: PathBuf,
-    /// The duration of the track in seconds.
+    /// The duration of the song in seconds.
     pub duration: Option<u32>,
-    /// The track number within its album (e.g., 1, 2, 3...).
-    pub track_no: Option<u32>,
+    /// The song number within its album (e.g., 1, 2, 3...).
+    pub song_no: Option<u32>,
     /// The disc number if the album spans multiple discs.
     pub disc_no: Option<u32>,
-    /// The audio format of the track (e.g., "FLAC", "MP3", "WAV").
+    /// The audio format of the song (e.g., "FLAC", "MP3", "WAV").
     pub format: Option<String>,
     /// The bit depth of the audio (e.g., 16, 24).
     pub bit_depth: Option<u32>,
     /// The sample rate of the audio (e.g., 44100, 96000).
     pub sample_rate: Option<u32>,
-    /// The Dynamic Range (DR) value of the track, if calculated or available.
+    /// The Dynamic Range (DR) value of the song, if calculated or available.
     pub dr_value: Option<u8>,
 }
 
@@ -87,33 +87,33 @@ pub async fn insert_or_get_folder(pool: &SqlitePool, path: &Path) -> Result<i64>
 }
 
 /// Enhanced batch processing with better error handling and performance optimizations
-pub async fn upsert_tracks_batch_enhanced(
+pub async fn upsert_songs_batch_enhanced(
     tx: &mut Transaction<'_, Sqlite>,
-    tracks: &[TrackForInsert],
+    songs: &[SongForInsert],
     batch_size: usize,
 ) -> Result<()> {
-    if tracks.is_empty() {
+    if songs.is_empty() {
         return Ok(());
     }
 
     // Process in chunks to avoid excessive memory usage and improve performance
-    for chunk in tracks.chunks(batch_size) {
+    for chunk in songs.chunks(batch_size) {
         let mut query_builder: QueryBuilder<Sqlite> = QueryBuilder::new(
-            "INSERT INTO tracks (title, album_id, artist_id, path, duration, track_no, disc_no, format, bit_depth, sample_rate, dr_value)",
+            "INSERT INTO songs (title, album_id, artist_id, path, duration, song_no, disc_no, format, bit_depth, sample_rate, dr_value)",
         );
-        query_builder.push_values(chunk, |mut b, track| {
-            let path_str = track.path.to_str().unwrap_or_default();
-            b.push_bind(&track.title)
-                .push_bind(track.album_id)
-                .push_bind(track.artist_id)
+        query_builder.push_values(chunk, |mut b, song| {
+            let path_str = song.path.to_str().unwrap_or_default();
+            b.push_bind(&song.title)
+                .push_bind(song.album_id)
+                .push_bind(song.artist_id)
                 .push_bind(path_str)
-                .push_bind(track.duration)
-                .push_bind(track.track_no)
-                .push_bind(track.disc_no)
-                .push_bind(&track.format)
-                .push_bind(track.bit_depth)
-                .push_bind(track.sample_rate)
-                .push_bind(track.dr_value);
+                .push_bind(song.duration)
+                .push_bind(song.song_no)
+                .push_bind(song.disc_no)
+                .push_bind(&song.format)
+                .push_bind(song.bit_depth)
+                .push_bind(song.sample_rate)
+                .push_bind(song.dr_value);
         });
         query_builder.push(
             " ON CONFLICT(path) DO UPDATE SET
@@ -121,7 +121,7 @@ pub async fn upsert_tracks_batch_enhanced(
                 album_id = excluded.album_id,
                 artist_id = excluded.artist_id,
                 duration = excluded.duration,
-                track_no = excluded.track_no,
+                song_no = excluded.song_no,
                 disc_no = excluded.disc_no,
                 format = excluded.format,
                 bit_depth = excluded.bit_depth,
@@ -296,30 +296,30 @@ pub async fn fetch_artist_by_id(pool: &SqlitePool, artist_id: i64) -> Result<Art
     })
 }
 
-/// Fetches all tracks associated with a given album, ordered by disc number and track number.
+/// Fetches all songs associated with a given album, ordered by disc number and song number.
 ///
 /// # Arguments
 /// * `pool` - A reference to the SQLite database connection pool.
-/// * `album_id` - The ID of the album for which to fetch tracks.
+/// * `album_id` - The ID of the album for which to fetch songs.
 ///
 /// # Returns
-/// A `Result` containing a `Vec<Track>` on success, or an `sqlx::Error` on failure.
-pub async fn fetch_tracks_by_album(pool: &SqlitePool, album_id: i64) -> Result<Vec<Track>> {
+/// A `Result` containing a `Vec<Song>` on success, or an `sqlx::Error` on failure.
+pub async fn fetch_songs_by_album(pool: &SqlitePool, album_id: i64) -> Result<Vec<Song>> {
     get_metrics().record_db_operation();
-    let rows = query("SELECT id, title, album_id, artist_id, path, duration, track_no, disc_no, format, bit_depth, sample_rate, dr_value FROM tracks WHERE album_id = ? ORDER BY disc_no, track_no")
+    let rows = query("SELECT id, title, album_id, artist_id, path, duration, song_no, disc_no, format, bit_depth, sample_rate, dr_value FROM songs WHERE album_id = ? ORDER BY disc_no, song_no")
         .bind(album_id)
         .fetch_all(pool)
         .await?;
     Ok(rows
         .into_iter()
-        .map(|row| Track {
+        .map(|row| Song {
             id: row.get("id"),
             title: row.get("title"),
             album_id: row.get("album_id"),
             artist_id: row.get("artist_id"),
             path: PathBuf::from(row.get::<String, _>("path")),
             duration: row.get("duration"),
-            track_no: row.get("track_no"),
+            song_no: row.get("song_no"),
             disc_no: row.get("disc_no"),
             format: row.get("format"),
             bit_depth: row.get("bit_depth"),

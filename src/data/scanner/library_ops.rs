@@ -6,8 +6,8 @@ use tokio::sync::mpsc::UnboundedSender;
 use crate::data::{
     db::{
         cleanup::{
-            remove_album_and_tracks, remove_albums_with_no_tracks, remove_artists_with_no_albums,
-            remove_folder_and_albums, remove_orphaned_tracks,
+            remove_album_and_songs, remove_albums_with_no_songs, remove_artists_with_no_albums,
+            remove_folder_and_albums, remove_orphaned_songs,
         },
         dr_sync::synchronize_dr_is_best_from_store,
         query::fetch_all_folders,
@@ -22,9 +22,9 @@ use crate::data::{
 /// scans each one to process audio files and update metadata. After scanning, it
 /// performs several cleanup tasks:
 /// 1. Removes folders from the database that no longer exist on disk.
-/// 2. Removes albums from the database that have no existing tracks on disk.
-/// 3. Removes orphaned tracks (files no longer existing on disk).
-/// 4. Removes albums with no associated tracks.
+/// 2. Removes albums from the database that have no existing songs on disk.
+/// 3. Removes orphaned songs (files no longer existing on disk).
+/// 4. Removes albums with no associated songs.
 /// 5. Removes artists with no associated albums.
 /// 6. Synchronizes DR completion statuses from the persistent store.
 ///    Finally, it sends a signal to the UI to indicate scan completion.
@@ -83,37 +83,37 @@ pub async fn run_full_scan(db_pool: &Arc<SqlitePool>, sender: &UnboundedSender<(
     for album_row in albums_to_check {
         let album_id: i64 = album_row.get("id");
 
-        // Check if any track for this album still exists on disk.
-        let tracks_exist = match query("SELECT path FROM tracks WHERE album_id = ?")
+        // Check if any song for this album still exists on disk.
+        let songs_exist = match query("SELECT path FROM songs WHERE album_id = ?")
             .bind(album_id)
             .fetch_all(&**db_pool)
             .await
         {
-            Ok(tracks) => tracks.into_iter().any(|r| {
+            Ok(songs) => songs.into_iter().any(|r| {
                 let path_str: String = r.get("path");
                 Path::new(&path_str).exists()
             }),
             Err(e) => {
-                eprintln!("Error checking tracks for album {}: {}", album_id, e);
+                eprintln!("Error checking songs for album {}: {}", album_id, e);
 
-                // Assume tracks don't exist if we can't query them.
+                // Assume songs don't exist if we can't query them.
                 false
             }
         };
-        if !tracks_exist && let Err(e) = remove_album_and_tracks(db_pool, album_id).await {
+        if !songs_exist && let Err(e) = remove_album_and_songs(db_pool, album_id).await {
             eprintln!(
-                "Error removing album and tracks for album {}: {}",
+                "Error removing album and songs for album {}: {}",
                 album_id, e
             );
         }
     }
 
     // Perform general cleanup operations using dedicated functions.
-    if let Err(e) = remove_orphaned_tracks(db_pool).await {
-        eprintln!("Error removing orphaned tracks: {}", e);
+    if let Err(e) = remove_orphaned_songs(db_pool).await {
+        eprintln!("Error removing orphaned songs: {}", e);
     }
-    if let Err(e) = remove_albums_with_no_tracks(db_pool).await {
-        eprintln!("Error removing albums with no tracks: {}", e);
+    if let Err(e) = remove_albums_with_no_songs(db_pool).await {
+        eprintln!("Error removing albums with no songs: {}", e);
     }
     if let Err(e) = remove_artists_with_no_albums(db_pool).await {
         eprintln!("Error removing artists with no albums: {}", e);

@@ -10,8 +10,8 @@ use super::queue::QueueItem;
 /// ```
 #[derive(Debug, Clone)]
 pub enum PlaybackEvent {
-    /// A new track has been loaded for playback
-    TrackChanged(Box<QueueItem>),
+    /// A new song has been loaded for playback
+    SongChanged(Box<QueueItem>),
     /// Playback state changed
     StateChanged(PlaybackState),
     /// Position changed (in nanoseconds)
@@ -24,7 +24,7 @@ pub enum PlaybackEvent {
 
 /// Represents the various states that audio playback can be in.
 ///
-/// These states help track and control the playback lifecycle. The state transitions
+/// These states help song and control the playback lifecycle. The state transitions
 /// follow a logical flow that matches typical media player behavior. The states are
 /// used by both the playback engine and UI components to maintain synchronization.
 ///

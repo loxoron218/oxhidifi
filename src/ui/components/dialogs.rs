@@ -165,7 +165,7 @@ pub fn create_add_folder_dialog_handler<T: IsA<Window> + Clone + 'static>(
 /// * `sort_ascending` - An `Rc<Cell<bool>>` indicating the sort direction for albums.
 /// * `sort_ascending_artists` - An `Rc<Cell<bool>>` indicating the sort direction for artists.
 /// * `db_pool` - An `Arc<SqlitePool>` for database operations within the settings dialog.
-/// * `is_settings_open` - An `Rc<Cell<bool>>` flag to track if the settings dialog is currently open.
+/// * `is_settings_open` - An `Rc<Cell<bool>>` flag to song if the settings dialog is currently open.
 /// * `show_dr_badges_setting` - An `Rc<Cell<bool>>` flag for showing DR badges.
 /// * `use_original_year_setting` - An `Rc<Cell<bool>>` flag for using original release year.
 /// * `sender` - Optional sender to notify UI refresh after scanning.

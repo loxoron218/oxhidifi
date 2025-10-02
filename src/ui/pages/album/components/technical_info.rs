@@ -4,7 +4,7 @@
 //! technical metadata about music albums, including:
 //! - Album cover images with proper scaling and fallbacks
 //! - Audio format information (bit depth, sample rate, codec)
-//! - Album metadata (year, track count, total duration)
+//! - Album metadata (year, song count, total duration)
 //! - Quality indicators (Hi-Res, Lossy, CD) with appropriate icons
 
 use std::path::PathBuf;
@@ -13,8 +13,8 @@ use gtk4::{Align::Start, Box, Image, Label, Orientation::Horizontal, Picture, gd
 use libadwaita::prelude::{BoxExt, WidgetExt};
 
 use crate::{
-    data::models::{Album, Track},
-    ui::pages::album::helpers::album_helpers::{get_most_common_track_properties, is_lossy_format},
+    data::models::{Album, Song},
+    ui::pages::album::helpers::album_helpers::{get_most_common_song_properties, is_lossy_format},
     utils::formatting::{format_album_year_display, format_bit_sample_rate, format_duration_hms},
 };
 
@@ -78,28 +78,27 @@ pub fn build_info_label(label: &str, css_class: Option<&str>) -> Label {
 ///
 /// # Arguments
 ///
-/// * `tracks` - A slice of Track objects containing the album's tracks
+/// * `songs` - A slice of Song objects containing the album's songs
 /// * `_album` - The Album object (currently unused but kept for API consistency)
 ///
 /// # Returns
 ///
 /// An optional GTK Box containing the technical information UI elements,
 /// or None if no relevant technical information is available
-pub fn build_technical_info(tracks: &[Track], _album: &Album) -> Option<Box> {
+pub fn build_technical_info(songs: &[Song], _album: &Album) -> Option<Box> {
     let (most_common_bit_depth, most_common_freq, most_common_format_opt) =
-        get_most_common_track_properties(tracks);
+        get_most_common_song_properties(songs);
 
     // Calculate if the album is mainly in a lossy format
-    let total_tracks = tracks.len();
-    let lossy_tracks_count = tracks.iter().filter(|t| is_lossy_format(&t.format)).count();
-    let is_lossy_album =
-        total_tracks > 0 && (lossy_tracks_count as f64 / total_tracks as f64) > 0.5;
+    let total_songs = songs.len();
+    let lossy_songs_count = songs.iter().filter(|t| is_lossy_format(&t.format)).count();
+    let is_lossy_album = total_songs > 0 && (lossy_songs_count as f64 / total_songs as f64) > 0.5;
 
     // Calculate if the album is mainly Hi-Res
-    let hires_tracks_count = tracks.iter()
+    let hires_songs_count = songs.iter()
         .filter(|t| matches!((t.bit_depth, t.sample_rate), (Some(bd), Some(fq)) if bd >= 24 && fq >= 8_200))
         .count();
-    let show_hires = total_tracks > 0 && (hires_tracks_count as f64 / total_tracks as f64) > 0.5;
+    let show_hires = total_songs > 0 && (hires_songs_count as f64 / total_songs as f64) > 0.5;
 
     // Bit depth / Sample Rate and Format, with Hi-Res icon aligned to both lines
     let bit_freq_str = format_bit_sample_rate(most_common_bit_depth, most_common_freq);
@@ -206,23 +205,23 @@ pub fn build_technical_info(tracks: &[Track], _album: &Album) -> Option<Box> {
     }
 }
 
-/// Build the album metadata section (year, track count, duration).
+/// Build the album metadata section (year, song count, duration).
 ///
 /// Creates a UI component displaying basic album metadata including:
 /// - Release year (with original release date if different)
-/// - Total number of tracks
-/// - Total duration of all tracks
+/// - Total number of songs
+/// - Total duration of all songs
 ///
 /// # Arguments
 ///
-/// * `tracks` - A slice of Track objects containing the album's tracks
+/// * `songs` - A slice of Song objects containing the album's songs
 /// * `album` - The Album object containing metadata
 ///
 /// # Returns
 ///
 /// An optional GTK Box containing the metadata UI elements,
 /// or None if no metadata is available
-pub fn build_album_metadata(tracks: &[Track], album: &Album) -> Option<Box> {
+pub fn build_album_metadata(songs: &[Song], album: &Album) -> Option<Box> {
     let year_display_text =
         format_album_year_display(album.year, album.original_release_date.as_deref());
     if !year_display_text.is_empty() {
@@ -237,13 +236,13 @@ pub fn build_album_metadata(tracks: &[Track], album: &Album) -> Option<Box> {
         }
 
         // Number of songs in the album
-        let total_songs_count = tracks.len();
+        let total_songs_count = songs.len();
         if total_songs_count > 0 {
             meta_fields.push(format!("{} Songs", total_songs_count));
         }
 
         // Duration as HH:MM:SS
-        let total_length: u32 = tracks.iter().filter_map(|t| t.duration).sum();
+        let total_length: u32 = songs.iter().filter_map(|t| t.duration).sum();
         meta_fields.push(format_duration_hms(total_length));
         let meta_text = meta_fields.join(" · ");
         if !meta_text.is_empty() {

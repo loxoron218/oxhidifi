@@ -87,7 +87,7 @@ impl PlaybackEngine {
         })
     }
 
-    /// Loads a track for playback
+    /// Loads a song for playback
     ///
     /// Prepares the specified audio file for playback by setting it as the source
     /// in the GStreamer pipeline. This operation does not start playback automatically;
@@ -95,11 +95,11 @@ impl PlaybackEngine {
     ///
     /// # Parameters
     ///
-    /// * `path` - A reference to the file path of the audio track to load
+    /// * `path` - A reference to the file path of the audio song to load
     ///
     /// # Returns
     ///
-    /// Returns `Ok(())` if the track was successfully loaded, or a [`PlaybackError`]
+    /// Returns `Ok(())` if the song was successfully loaded, or a [`PlaybackError`]
     /// if loading failed.
     ///
     /// # Errors
@@ -114,10 +114,10 @@ impl PlaybackEngine {
     /// # let (sender, receiver) = channel();
     /// # let mut engine = PlaybackEngine::new(sender).unwrap();
     /// let path = Path::new("/path/to/audio.mp3");
-    /// engine.load_track(path)
-    ///     .expect("Failed to load track");
+    /// engine.load_song(path)
+    ///     .expect("Failed to load song");
     /// ```
-    pub fn load_track(&mut self, path: &Path) -> Result<(), PlaybackError> {
+    pub fn load_song(&mut self, path: &Path) -> Result<(), PlaybackError> {
         let uri = format!("file://{}", path.display());
         self.pipeline_manager.set_uri(&uri)?;
         self.current_state = Stopped;
@@ -129,8 +129,8 @@ impl PlaybackEngine {
 
     /// Starts playback
     ///
-    /// Initiates playback of the currently loaded track by setting the pipeline
-    /// state to Playing. If no track is loaded, this method will have no effect.
+    /// Initiates playback of the currently loaded song by setting the pipeline
+    /// state to Playing. If no song is loaded, this method will have no effect.
     ///
     /// # Returns
     ///
@@ -213,8 +213,8 @@ impl PlaybackEngine {
 
     /// Stops playback
     ///
-    /// Stops playback and resets the position to the beginning of the track.
-    /// To resume playback, the track must be reloaded with [`load_track`](Self::load_track).
+    /// Stops playback and resets the position to the beginning of the song.
+    /// To resume playback, the song must be reloaded with [`load_song`](Self::load_song).
     ///
     /// # Returns
     ///
@@ -285,9 +285,9 @@ impl PlaybackEngine {
         Ok(())
     }
 
-    /// Gets the duration of the current track
+    /// Gets the duration of the current song
     ///
-    /// Queries the pipeline for the total duration of the currently loaded track.
+    /// Queries the pipeline for the total duration of the currently loaded song.
     /// The duration is returned in nanoseconds.
     ///
     /// # Returns

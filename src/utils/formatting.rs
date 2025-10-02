@@ -5,7 +5,7 @@
 /// and adherence to common presentation standards.
 /// Formats a duration in seconds into a "H:MM:SS" string (e.g., 1:23:45).
 ///
-/// This function is primarily used for displaying total album or track durations
+/// This function is primarily used for displaying total album or song durations
 /// where hours might be a relevant component.
 ///
 /// # Arguments
@@ -22,7 +22,7 @@ pub(crate) fn format_duration_hms(total_seconds: u32) -> String {
 
 /// Formats a duration in seconds into an "MM:SS" string (e.g., 03:45).
 ///
-/// This function is typically used for individual track durations where
+/// This function is typically used for individual song durations where
 /// hours are not expected or desired in the display.
 ///
 /// # Arguments

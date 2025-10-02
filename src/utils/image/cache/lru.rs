@@ -36,7 +36,7 @@ where
     /// The underlying HashMap storing key-value pairs for O(1) lookups.
     map: HashMap<K, V>,
 
-    /// A VecDeque tracking the order of key accesses, with the most recently
+    /// A VecDeque songing the order of key accesses, with the most recently
     /// used keys at the front and least recently used at the back.
     order: VecDeque<K>,
 
@@ -155,7 +155,7 @@ where
         Q: Hash + Eq,
     {
         if let Some(value) = self.map.remove(key) {
-            // Remove the key from the order tracking as well
+            // Remove the key from the order songing as well
             if let Some(index) = self.order.iter().position(|k| k.borrow() == key) {
                 self.order.remove(index);
             }

@@ -1,16 +1,16 @@
 use std::collections::HashMap;
 
-use crate::data::models::Track;
+use crate::data::models::Song;
 
-/// Determines the most common audio properties (bit depth, sample rate, and format) from a collection of tracks.
+/// Determines the most common audio properties (bit depth, sample rate, and format) from a collection of songs.
 ///
-/// This function analyzes a slice of [`Track`] objects to find the most frequently occurring
+/// This function analyzes a slice of [`Song`] objects to find the most frequently occurring
 /// technical audio specifications. It's primarily used in the album detail view to display
 /// representative technical information for the entire album.
 ///
 /// # Parameters
 ///
-/// * `tracks` - A slice of [`Track`] objects to analyze
+/// * `songs` - A slice of [`Song`] objects to analyze
 ///
 /// # Returns
 ///
@@ -22,31 +22,31 @@ use crate::data::models::Track;
 /// # Examples
 ///
 /// ```
-/// # use crate::data::models::Track;
-/// # let tracks = vec![]; // Vector of Track objects
-/// let (bit_depth, sample_rate, format) = get_most_common_track_properties(&tracks);
+/// # use crate::data::models::Song;
+/// # let songs = vec![]; // Vector of Song objects
+/// let (bit_depth, sample_rate, format) = get_most_common_song_properties(&songs);
 /// ```
 ///
 /// # See Also
 ///
-/// * [`Track`] - The data model containing track information
+/// * [`Song`] - The data model containing song information
 /// * [`crate::ui::pages::album::components::technical_info::build_technical_info`] - Where this function is used
-pub fn get_most_common_track_properties(
-    tracks: &[Track],
+pub fn get_most_common_song_properties(
+    songs: &[Song],
 ) -> (Option<u32>, Option<u32>, Option<String>) {
     let mut bit_depth_counts: HashMap<u32, usize> = HashMap::new();
     let mut sample_rate_counts: HashMap<u32, usize> = HashMap::new();
     let mut format_counts: HashMap<String, usize> = HashMap::new();
 
-    // Count occurrences of each property across all tracks
-    for track in tracks {
-        if let Some(bd) = track.bit_depth {
+    // Count occurrences of each property across all songs
+    for song in songs {
+        if let Some(bd) = song.bit_depth {
             *bit_depth_counts.entry(bd).or_insert(0) += 1;
         }
-        if let Some(sr) = track.sample_rate {
+        if let Some(sr) = song.sample_rate {
             *sample_rate_counts.entry(sr).or_insert(0) += 1;
         }
-        if let Some(fmt) = &track.format {
+        if let Some(fmt) = &song.format {
             *format_counts.entry(fmt.clone()).or_insert(0) += 1;
         }
     }

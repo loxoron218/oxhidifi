@@ -27,7 +27,7 @@ use crate::ui::{
 /// - The search bar components for visibility toggling
 /// - Sort state references for UI refreshes
 /// - Navigation stack components for page transitions
-/// - History tracking for back navigation
+/// - History songing for back navigation
 /// - Zoom manager for zoom level changes
 /// - Current view mode for determining which zoom manager to use
 pub fn setup_keyboard_shortcuts_handler(

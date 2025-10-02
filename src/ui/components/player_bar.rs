@@ -25,18 +25,16 @@ use crate::{
     playback::{
         controller::PlaybackController,
         events::{
-            PlaybackEvent::{
-                self, EndOfStream, Error, PositionChanged, StateChanged, TrackChanged,
-            },
+            PlaybackEvent::{self, EndOfStream, Error, PositionChanged, SongChanged, StateChanged},
             PlaybackState::{Buffering, Paused, Playing, Stopped},
         },
     },
     utils::formatting::format_sample_rate_value,
 };
 
-/// A UI component that displays currently playing track information at the bottom of the window.
+/// A UI component that displays currently playing song information at the bottom of the window.
 ///
-/// The player bar is only visible when a track is playing. It shows:
+/// The player bar is only visible when a song is playing. It shows:
 /// - Album art (96x96 pixels)
 /// - Song title (ellipsized when too long)
 /// - Artist name (ellipsized when too long)
@@ -51,7 +49,7 @@ use crate::{
 /// regardless of text length. Text that exceeds the available space is automatically
 /// ellipsized following GNOME Human Interface Guidelines.
 ///
-/// When no track is playing, the player bar is hidden from view.
+/// When no song is playing, the player bar is hidden from view.
 #[derive(Clone)]
 pub struct PlayerBar {
     /// The main container for all player bar elements, arranged horizontally
@@ -68,11 +66,11 @@ pub struct PlayerBar {
     pub bit_depth_sample_rate: Label,
     /// Label displaying the audio format (combined with bit depth/sample rate)
     pub format: Label,
-    /// Progress bar showing current position in the track
+    /// Progress bar showing current position in the song
     pub progress_bar: Scale,
     /// Label displaying current playback position (e.g., "1:23")
     pub time_label_start: Label,
-    /// Label displaying total track duration (e.g., "4:56")
+    /// Label displaying total song duration (e.g., "4:56")
     pub time_label_end: Label,
     /// Volume control slider
     pub _volume_slider: Scale,
@@ -80,23 +78,23 @@ pub struct PlayerBar {
     pub _bit_perfect_indicator: Button,
     /// Placeholder for gapless indicator
     pub _gapless_indicator: Button,
-    /// Previous track button
+    /// Previous song button
     pub _prev_button: Button,
     /// Play/pause button
     pub _play_button: Button,
-    /// Next track button
+    /// Next song button
     pub _next_button: Button,
     /// Reference to the main content area that needs padding adjustment
     main_content_area: Rc<RefCell<Option<Box>>>,
     /// Signal handler ID for visibility change notifications
     visibility_handler_id: Option<Rc<SignalHandlerId>>,
-    /// Duration of the current track in seconds
+    /// Duration of the current song in seconds
     duration: Rc<Cell<f64>>,
     /// Playback controller for managing audio playback
     playback_controller: Option<Arc<Mutex<PlaybackController>>>,
-    /// Whether navigation to the previous track is possible
+    /// Whether navigation to the previous song is possible
     can_go_prev: Cell<bool>,
-    /// Whether navigation to the next track is possible
+    /// Whether navigation to the next song is possible
     can_go_next: Cell<bool>,
     /// Cancellation token for stopping the event listening task
     cancellation_token: CancellationToken,
@@ -196,17 +194,17 @@ impl PlayerBar {
     /// Creates a new PlayerBar instance with all UI elements initialized.
     ///
     /// The player bar is initially hidden and will only become visible when
-    /// `update_with_metadata` is called with track information.
+    /// `update_with_metadata` is called with song information.
     ///
     /// # UI Structure
     /// The player bar layout consists of:
     /// 1. Album art (96x96 pixels) on the left
-    /// 2. Track information (song title, artist, album title, bit depth/sample rate, format) in a fixed-width container in the center
+    /// 2. Song information (song title, artist, album title, bit depth/sample rate, format) in a fixed-width container in the center
     /// 3. Progress bar
     /// 4. Time labels (start and end) with play controls between them
     /// 5. Additional controls (volume, indicators) aligned to the right
     ///
-    /// The track information container has a fixed width of 300 pixels and automatically ellipsizes
+    /// The song information container has a fixed width of 300 pixels and automatically ellipsizes
     /// text that exceeds the available space, following GNOME Human Interface Guidelines.
     ///
     /// # Returns
@@ -230,7 +228,7 @@ impl PlayerBar {
             .build();
         container.append(&album_art);
 
-        // Create a vertical box to hold track information
+        // Create a vertical box to hold song information
         let info_box = Box::builder().orientation(Vertical).build();
 
         // Set a fixed width for the info box to ensure consistent sizing
@@ -245,7 +243,7 @@ impl PlayerBar {
         info_box.set_vexpand(false);
         container.append(&info_box);
 
-        // Initialize track title label with placeholder text
+        // Initialize song title label with placeholder text
         let song_title = Label::builder().label("Song Title").halign(Start).build();
         song_title.add_css_class("song-title");
 
@@ -395,7 +393,7 @@ impl PlayerBar {
         play_controls_box.set_halign(Start);
         bottom_row_box.append(&play_controls_box);
 
-        // Add previous track button with standard media icon
+        // Add previous song button with standard media icon
         let prev_button = Button::from_icon_name("media-skip-backward");
         prev_button.add_css_class("media-button");
         play_controls_box.append(&prev_button);
@@ -405,7 +403,7 @@ impl PlayerBar {
         play_button.add_css_class("media-button");
         play_controls_box.append(&play_button);
 
-        // Add next track button with standard media icon
+        // Add next song button with standard media icon
         let next_button = Button::from_icon_name("media-skip-forward");
         next_button.add_css_class("media-button");
         play_controls_box.append(&next_button);
@@ -454,7 +452,7 @@ impl PlayerBar {
             .build();
         controls_box.append(&gapless_indicator);
 
-        // Initially hide the player bar until a track is played
+        // Initially hide the player bar until a song is played
         container.set_visible(false);
 
         // Construct and return the PlayerBar instance with all initialized components
@@ -541,9 +539,9 @@ impl PlayerBar {
         }
     }
 
-    /// Updates the player bar with track metadata and makes it visible.
+    /// Updates the player bar with song metadata and makes it visible.
     ///
-    /// This method is called when a track starts playing to display its information
+    /// This method is called when a song starts playing to display its information
     /// in the player bar at the bottom of the window. The information is displayed
     /// in the following order to follow GNOME Human Interface Guidelines:
     /// 1. Song title
@@ -554,13 +552,13 @@ impl PlayerBar {
     ///
     /// # Parameters
     /// - `album_title`: The title of the album
-    /// - `song_title`: The title of the currently playing track
-    /// - `song_artist`: The artist of the currently playing track
+    /// - `song_title`: The title of the currently playing song
+    /// - `song_artist`: The artist of the currently playing song
     /// - `cover_art_path`: Optional path to the album art image file
     /// - `bit_depth`: Optional bit depth of the audio file
     /// - `sample_rate`: Optional sample rate of the audio file
     /// - `format`: Optional format of the audio file
-    /// - `duration`: Optional duration of the track in seconds
+    /// - `duration`: Optional duration of the song in seconds
     ///
     /// # Behavior
     /// - Updates all labels with the provided metadata
@@ -578,7 +576,7 @@ impl PlayerBar {
         format: Option<&str>,
         duration: Option<u32>,
     ) {
-        // Update the song title label with the provided track title
+        // Update the song title label with the provided song title
         self.song_title.set_label(song_title);
 
         // Update the artist label with the provided artist name
@@ -656,7 +654,7 @@ impl PlayerBar {
             self.album_art.set_pixel_size(96);
         }
 
-        // Make the player bar visible now that it has track information
+        // Make the player bar visible now that it has song information
         self.container.set_visible(true);
 
         // Adjust the main content area padding to prevent overlap
@@ -685,10 +683,10 @@ impl PlayerBar {
     /// * `event` - The playback event to handle
     pub fn handle_playback_event(&self, event: PlaybackEvent) {
         match event {
-            TrackChanged(item) => {
+            SongChanged(item) => {
                 self.update_with_metadata(
                     &item.album_title,
-                    &item.track_title,
+                    &item.song_title,
                     &item.artist_name,
                     item.cover_art_path.as_deref(),
                     item.bit_depth,
@@ -741,7 +739,7 @@ impl PlayerBar {
             }
 
             EndOfStream => {
-                // When the track ends, reset the play button icon
+                // When the song ends, reset the play button icon
                 self._play_button.set_icon_name("media-playback-start");
 
                 // Update navigation button states as the queue position may have changed
@@ -798,31 +796,31 @@ impl PlayerBar {
             let controller_clone = controller_clone.clone();
             let player_bar = player_bar.clone();
 
-            // Spawn async task to handle the previous track operation
+            // Spawn async task to handle the previous song operation
             MainContext::default().spawn_local(async move {
-                // Lock the controller and play the previous track
+                // Lock the controller and play the previous song
                 let mut controller = controller_clone.lock().await;
 
-                // Before navigating, get the previous track info to update UI immediately
-                let prev_track_info = controller.get_previous_track_info();
+                // Before navigating, get the previous song info to update UI immediately
+                let prev_song_info = controller.get_previous_song_info();
 
-                // Update the player bar UI immediately with the previous track's metadata
-                if let Some(track_info) = prev_track_info {
+                // Update the player bar UI immediately with the previous song's metadata
+                if let Some(song_info) = prev_song_info {
                     player_bar.update_with_metadata(
-                        &track_info.album_title,
-                        &track_info.track_title,
-                        &track_info.artist_name,
-                        track_info.cover_art_path.as_deref(),
-                        track_info.bit_depth,
-                        track_info.sample_rate,
-                        track_info.format.as_deref(),
-                        track_info.duration,
+                        &song_info.album_title,
+                        &song_info.song_title,
+                        &song_info.artist_name,
+                        song_info.cover_art_path.as_deref(),
+                        song_info.bit_depth,
+                        song_info.sample_rate,
+                        song_info.format.as_deref(),
+                        song_info.duration,
                     );
                 }
 
-                // Now actually navigate to the previous track
-                if let Err(e) = controller.previous_track() {
-                    eprintln!("Error playing previous track: {}", e);
+                // Now actually navigate to the previous song
+                if let Err(e) = controller.previous_song() {
+                    eprintln!("Error playing previous song: {}", e);
                 }
 
                 // Update button states after navigation
@@ -838,31 +836,31 @@ impl PlayerBar {
             let controller_clone = controller_clone.clone();
             let player_bar = player_bar.clone();
 
-            // Spawn async task to handle the next track operation
+            // Spawn async task to handle the next song operation
             MainContext::default().spawn_local(async move {
-                // Lock the controller and play the next track
+                // Lock the controller and play the next song
                 let mut controller = controller_clone.lock().await;
 
-                // Before navigating, get the next track info to update UI immediately
-                let next_track_info = controller.get_next_track_info();
+                // Before navigating, get the next song info to update UI immediately
+                let next_song_info = controller.get_next_song_info();
 
-                // Update the player bar UI immediately with the next track's metadata
-                if let Some(track_info) = next_track_info {
+                // Update the player bar UI immediately with the next song's metadata
+                if let Some(song_info) = next_song_info {
                     player_bar.update_with_metadata(
-                        &track_info.album_title,
-                        &track_info.track_title,
-                        &track_info.artist_name,
-                        track_info.cover_art_path.as_deref(),
-                        track_info.bit_depth,
-                        track_info.sample_rate,
-                        track_info.format.as_deref(),
-                        track_info.duration,
+                        &song_info.album_title,
+                        &song_info.song_title,
+                        &song_info.artist_name,
+                        song_info.cover_art_path.as_deref(),
+                        song_info.bit_depth,
+                        song_info.sample_rate,
+                        song_info.format.as_deref(),
+                        song_info.duration,
                     );
                 }
 
-                // Now actually navigate to the next track
-                if let Err(e) = controller.next_track() {
-                    eprintln!("Error playing next track: {}", e);
+                // Now actually navigate to the next song
+                if let Err(e) = controller.next_song() {
+                    eprintln!("Error playing next song: {}", e);
                 }
 
                 // Update button states after navigation
@@ -951,7 +949,7 @@ impl PlayerBar {
 
     /// Updates the state of the previous and next buttons based on queue navigation possibilities
     ///
-    /// This method checks if navigation to the previous or next track is possible
+    /// This method checks if navigation to the previous or next song is possible
     /// and updates internal state accordingly. The buttons remain visually enabled
     /// but will only function when navigation is actually possible.
     pub fn update_navigation_button_states(&self) {

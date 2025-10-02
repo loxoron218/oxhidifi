@@ -99,7 +99,7 @@ pub fn populate_artist_grid(
         let (receiver, _handle) = spawn_artist_loader(db_pool.clone());
         let mut stream = UnboundedReceiverStream::new(receiver);
 
-        // Variables to track state
+        // Variables to song state
         let mut all_artists: Vec<Artist> = Vec::new();
 
         // Process messages from the async loader

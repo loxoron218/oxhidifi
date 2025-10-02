@@ -3,13 +3,13 @@ use std::{path::PathBuf, sync::Arc};
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
-use crate::data::db::crud::{fetch_album_by_id, fetch_artist_by_id, fetch_tracks_by_album};
+use crate::data::db::crud::{fetch_album_by_id, fetch_artist_by_id, fetch_songs_by_album};
 
 use super::{
     engine::PlaybackEngine,
     error::PlaybackError::{self, DatabaseError, FileNotFound},
     events::{
-        PlaybackEvent::{self, EndOfStream, Error, PositionChanged, StateChanged, TrackChanged},
+        PlaybackEvent::{self, EndOfStream, Error, PositionChanged, SongChanged, StateChanged},
         PlaybackState,
     },
     queue::{PlaybackQueue, QueueItem},
@@ -25,10 +25,10 @@ use super::{
 ///
 /// * `engine` - The underlying playback engine that handles actual audio operations
 /// * `event_receiver` - Receives playback events from the engine
-/// * `current_track` - Path to thecurrently loaded track, if any
-/// * `duration` - Duration of the current track in nanoseconds, if available
+/// * `current_song` - Path to thecurrently loaded song, if any
+/// * `duration` - Duration of the current song in nanoseconds, if available
 /// * `position` - Current playback position in nanoseconds
-/// * `queue` - The playback queue managing tracks to be played
+/// * `queue` - The playback queue managing songs to be played
 pub struct PlaybackController {
     /// The playback engine responsible for actual audio operations
     engine: PlaybackEngine,
@@ -36,15 +36,15 @@ pub struct PlaybackController {
     event_sender: UnboundedSender<PlaybackEvent>,
     /// Receiver for playback events from the engine
     event_receiver: UnboundedReceiver<PlaybackEvent>,
-    /// Path to the currently loaded track, if any
-    current_track: Option<PathBuf>,
-    /// Duration of the current track in nanoseconds, if available
+    /// Path to the currently loaded song, if any
+    current_song: Option<PathBuf>,
+    /// Duration of the current song in nanoseconds, if available
     duration: Option<u64>,
     /// Current playback position in nanoseconds
     position: u64,
-    /// The playback queue managing tracks to be played
+    /// The playback queue managing songs to be played
     queue: PlaybackQueue,
-    /// Database connection pool for fetching album and track information
+    /// Database connection pool for fetching album and song information
     db_pool: Arc<SqlitePool>,
 }
 
@@ -71,7 +71,7 @@ impl PlaybackController {
             engine,
             event_sender: event_sender.clone(),
             event_receiver,
-            current_track: None,
+            current_song: None,
             duration: None,
             position: 0,
             queue: PlaybackQueue::new(),
@@ -80,10 +80,10 @@ impl PlaybackController {
         Ok((controller, event_sender))
     }
 
-    /// Loads a track for playback.
+    /// Loads a song for playback.
     ///
     /// Prepares the specified audio file for playback by loading it into the
-    /// playback engine and querying its duration. The track is not automatically
+    /// playback engine and querying its duration. The song is not automatically
     /// played; use [`play`](Self::play) to start playback.
     ///
     /// # Parameters
@@ -92,46 +92,46 @@ impl PlaybackController {
     ///
     /// # Returns
     ///
-    /// Returns `Ok(())` if the track was successfully loaded, or a [`PlaybackError`]
+    /// Returns `Ok(())` if the song was successfully loaded, or a [`PlaybackError`]
     /// if loading failed.
     ///
     /// # Errors
     ///
     /// This function will return an error if:
     /// * The file at `path` does not exist ([`FileNotFound`](PlaybackError::FileNotFound))
-    /// * The playback engine fails to load the track
+    /// * The playback engine fails to load the song
     /// * The duration query fails
-    pub fn load_track(&mut self, path: PathBuf) -> Result<(), PlaybackError> {
+    pub fn load_song(&mut self, path: PathBuf) -> Result<(), PlaybackError> {
         // Check if the file exists before trying to load it
         if !path.exists() {
             println!("Playback controller: File not found: {:?}", path);
             return Err(FileNotFound(path.clone()));
         }
-        self.engine.load_track(&path)?;
-        self.current_track = Some(path.clone());
+        self.engine.load_song(&path)?;
+        self.current_song = Some(path.clone());
 
         // Query the duration from GStreamer
         self.duration = self.engine.get_duration()?;
 
-        // Send a TrackChanged event if there's a current track in the queue
-        if let Some(track_item) = self.queue.current_track() {
-            let event = TrackChanged(Box::new(track_item.clone()));
+        // Send a SongChanged event if there's a current song in the queue
+        if let Some(song_item) = self.queue.current_song() {
+            let event = SongChanged(Box::new(song_item.clone()));
             if self.event_sender.send(event).is_err() {
-                eprintln!("Failed to send TrackChanged event");
+                eprintln!("Failed to send SongChanged event");
             }
         } else {
-            // If there's no current track in the queue but we're loading a track,
+            // If there's no current song in the queue but we're loading a song,
             // we might be in a state where the queue was set up but not yet processed
-            // Let's try to ensure the current track is properly set in the queue
-            eprintln!("Warning: No current track found in queue when loading track");
+            // Let's try to ensure the current song is properly set in the queue
+            eprintln!("Warning: No current song found in queue when loading song");
         }
         Ok(())
     }
 
-    /// Starts playback of the currently loaded track.
+    /// Starts playback of the currently loaded song.
     ///
-    /// Initiates playback of the track that was previously loaded with
-    /// [`load_track`](Self::load_track). If no track is loaded, this method
+    /// Initiates playback of the song that was previously loaded with
+    /// [`load_song`](Self::load_song). If no song is loaded, this method
     /// will have no effect.
     ///
     /// # Returns
@@ -146,7 +146,7 @@ impl PlaybackController {
         self.engine.play()
     }
 
-    /// Pauses playback of the currently playing track.
+    /// Pauses playback of the currently playing song.
     ///
     /// Temporarily pauses playback, maintaining the current position.
     /// Playback can be resumed from the same position using [`play`](Self::play).
@@ -165,8 +165,8 @@ impl PlaybackController {
 
     /// Stops playback and resets the playback position.
     ///
-    /// Stops playback and resets the position to the beginning of the track.
-    /// To resume playback, the track must be reloaded with [`load_track`](Self::load_track)
+    /// Stops playback and resets the position to the beginning of the song.
+    /// To resume playback, the song must be reloaded with [`load_song`](Self::load_song)
     /// or playback must be restarted with [`play`](Self::play).
     ///
     /// # Returns
@@ -181,7 +181,7 @@ impl PlaybackController {
         self.engine.stop()
     }
 
-    /// Seeks to a specific position in the currently loaded track.
+    /// Seeks to a specific position in the currently loaded song.
     ///
     /// Changes the playback position to the specified time in nanoseconds.
     /// This operation can be performed during playback or when paused.
@@ -230,20 +230,20 @@ impl PlaybackController {
     /// * `event` - The playback event to process
     fn process_event(&mut self, event: PlaybackEvent) {
         match &event {
-            TrackChanged(_) => {
+            SongChanged(_) => {
                 // Metadata changes are handled by the player bar
             }
             StateChanged(_state) => {
                 // State changes are handled by the player bar
             }
             PositionChanged(position) => {
-                // Update our internal position tracking
+                // Update our internal position songing
                 self.position = *position;
             }
             EndOfStream => {
-                // When the current track ends, try to play the next track in the queue
-                if let Err(e) = self.next_track() {
-                    eprintln!("Error playing next track: {}", e);
+                // When the current song ends, try to play the next song in the queue
+                if let Err(e) = self.next_song() {
+                    eprintln!("Error playing next song: {}", e);
                 }
             }
             Error(error) => {
@@ -264,26 +264,26 @@ impl PlaybackController {
         &self.engine.current_state
     }
 
-    /// Checks if navigation to the next track is possible
+    /// Checks if navigation to the next song is possible
     ///
-    /// Returns true if there is a next track in the queue, false otherwise
+    /// Returns true if there is a next song in the queue, false otherwise
     pub fn can_go_next(&self) -> bool {
         self.queue.can_go_next()
     }
 
-    /// Checks if navigation to the previous track is possible
+    /// Checks if navigation to the previous song is possible
     ///
-    /// Returns true if there is a previous track in the queue, false otherwise
+    /// Returns true if there is a previous song in the queue, false otherwise
     pub fn can_go_previous(&self) -> bool {
         self.queue.can_go_previous()
     }
 
-    /// Queues all tracks from an album for playback
+    /// Queues all songs from an album for playback
     ///
-    /// This method fetches album, artist, and track information from the database,
-    /// creates QueueItem objects for each track, clears the existing queue,
+    /// This method fetches album, artist, and song information from the database,
+    /// creates QueueItem objects for each song, clears the existing queue,
     /// adds the new items, sets the current album ID and index, and loads and plays
-    /// the first track.
+    /// the first song.
     ///
     /// # Arguments
     /// * `album_id` - The ID of the album to queue
@@ -301,27 +301,27 @@ impl PlaybackController {
             .await
             .map_err(|e| DatabaseError(format!("Failed to fetch artist: {}", e)))?;
 
-        // Fetch tracks for the album
-        let tracks = fetch_tracks_by_album(&self.db_pool, album_id)
+        // Fetch songs for the album
+        let songs = fetch_songs_by_album(&self.db_pool, album_id)
             .await
-            .map_err(|e| DatabaseError(format!("Failed to fetch tracks: {}", e)))?;
+            .map_err(|e| DatabaseError(format!("Failed to fetch songs: {}", e)))?;
 
         // Clear existing queue
         self.queue.clear();
 
-        // Create QueueItem for each track
-        let queue_items: Vec<QueueItem> = tracks
+        // Create QueueItem for each song
+        let queue_items: Vec<QueueItem> = songs
             .into_iter()
-            .map(|track| QueueItem {
-                track_title: track.title,
+            .map(|song| QueueItem {
+                song_title: song.title,
                 album_title: album.title.clone(),
                 artist_name: artist.name.clone(),
-                track_path: track.path,
+                song_path: song.path,
                 cover_art_path: album.cover_art.clone(),
-                bit_depth: track.bit_depth,
-                sample_rate: track.sample_rate,
-                format: track.format,
-                duration: track.duration,
+                bit_depth: song.bit_depth,
+                sample_rate: song.sample_rate,
+                format: song.format,
+                duration: song.duration,
             })
             .collect();
 
@@ -336,31 +336,31 @@ impl PlaybackController {
             Some(0)
         };
 
-        // Load and play the first track if there are tracks
-        if let Some(first_track) = self.queue.current_track() {
-            self.load_track(first_track.track_path.clone())?;
+        // Load and play the first song if there are songs
+        if let Some(first_song) = self.queue.current_song() {
+            self.load_song(first_song.song_path.clone())?;
             self.play()?;
         }
         Ok(())
     }
 
-    /// Queues all tracks from an album, starting playback from a specific track
+    /// Queues all songs from an album, starting playback from a specific song
     ///
-    /// This method fetches album, artist, and track information from the database,
-    /// creates QueueItem objects for all tracks in the album, clears the existing queue,
-    /// adds all items to the queue, sets the current album ID and index to the selected track,
-    /// and loads and plays the selected track.
+    /// This method fetches album, artist, and song information from the database,
+    /// creates QueueItem objects for all songs in the album, clears the existing queue,
+    /// adds all items to the queue, sets the current album ID and index to the selected song,
+    /// and loads and plays the selected song.
     ///
     /// # Arguments
     /// * `album_id` - The ID of the album
-    /// * `start_track_id` - The ID of the track to start playing from
+    /// * `start_song_id` - The ID of the song to start playing from
     ///
     /// # Returns
     /// A `Result` indicating success or a `PlaybackError` on failure
-    pub async fn queue_tracks_from(
+    pub async fn queue_songs_from(
         &mut self,
         album_id: i64,
-        start_track_id: i64,
+        start_song_id: i64,
     ) -> Result<(), PlaybackError> {
         // Fetch album information
         let album = fetch_album_by_id(&self.db_pool, album_id)
@@ -372,40 +372,40 @@ impl PlaybackController {
             .await
             .map_err(|e| DatabaseError(format!("Failed to fetch artist: {}", e)))?;
 
-        // Fetch tracks for the album
-        let tracks = fetch_tracks_by_album(&self.db_pool, album_id)
+        // Fetch songs for the album
+        let songs = fetch_songs_by_album(&self.db_pool, album_id)
             .await
-            .map_err(|e| DatabaseError(format!("Failed to fetch tracks: {}", e)))?;
+            .map_err(|e| DatabaseError(format!("Failed to fetch songs: {}", e)))?;
 
-        // Find the starting track position
-        let start_index = tracks
+        // Find the starting song position
+        let start_index = songs
             .iter()
-            .position(|track| track.id == start_track_id)
-            .ok_or_else(|| DatabaseError("Start track not found in album".to_string()))?;
+            .position(|song| song.id == start_song_id)
+            .ok_or_else(|| DatabaseError("Start song not found in album".to_string()))?;
 
         // Clear existing queue
         self.queue.clear();
 
-        // Create QueueItem for each track in the album
-        let queue_items: Vec<QueueItem> = tracks
+        // Create QueueItem for each song in the album
+        let queue_items: Vec<QueueItem> = songs
             .iter()
-            .map(|track| QueueItem {
-                track_title: track.title.clone(),
+            .map(|song| QueueItem {
+                song_title: song.title.clone(),
                 album_title: album.title.clone(),
                 artist_name: artist.name.clone(),
-                track_path: track.path.clone(),
+                song_path: song.path.clone(),
                 cover_art_path: album.cover_art.clone(),
-                bit_depth: track.bit_depth,
-                sample_rate: track.sample_rate,
-                format: track.format.clone(),
-                duration: track.duration,
+                bit_depth: song.bit_depth,
+                sample_rate: song.sample_rate,
+                format: song.format.clone(),
+                duration: song.duration,
             })
             .collect();
 
         // Add all items to queue
         self.queue.items = queue_items;
 
-        // Set current album ID and index to the selected track
+        // Set current album ID and index to the selected song
         self.queue.current_album_id = Some(album_id);
         self.queue.current_index = if self.queue.items.is_empty() {
             None
@@ -413,79 +413,79 @@ impl PlaybackController {
             Some(start_index)
         };
 
-        // Load and play the selected track if there are tracks
-        if let Some(selected_track) = self.queue.current_track() {
-            self.load_track(selected_track.track_path.clone())?;
+        // Load and play the selected song if there are songs
+        if let Some(selected_song) = self.queue.current_song() {
+            self.load_song(selected_song.song_path.clone())?;
             self.play()?;
         }
         Ok(())
     }
 
-    /// Plays the next track in the queue
+    /// Plays the next song in the queue
     ///
-    /// This method checks if there is a next track, increments the current index,
-    /// and loads and plays the next track.
+    /// This method checks if there is a next song, increments the current index,
+    /// and loads and plays the next song.
     ///
     /// # Returns
     /// A `Result` indicating success or a `PlaybackError` on failure
-    pub fn next_track(&mut self) -> Result<(), PlaybackError> {
+    pub fn next_song(&mut self) -> Result<(), PlaybackError> {
         // Get current index
         let current_index = self.queue.current_index;
 
-        // Check if there is a next track
+        // Check if there is a next song
         if let Some(index) = current_index {
             if index + 1 < self.queue.items.len() {
                 // Increment current index
                 self.queue.current_index = Some(index + 1);
 
-                // Get the next track
-                if let Some(next_track) = self.queue.current_track() {
-                    // Load and play the next track
-                    self.load_track(next_track.track_path.clone())?;
+                // Get the next song
+                if let Some(next_song) = self.queue.current_song() {
+                    // Load and play the next song
+                    self.load_song(next_song.song_path.clone())?;
                     self.play()?;
                     return Ok(());
                 } else {
-                    println!("Controller: No next track found");
+                    println!("Controller: No next song found");
                 }
             }
         } else {
             println!("Controller: Current index is None");
         }
 
-        // No next track, stop playback
+        // No next song, stop playback
         self.stop()?;
         Ok(())
     }
 
-    /// Plays the previous track in the queue
+    /// Plays the previous song in the queue
     ///
-    /// This method checks if there is a previous track, decrements the current index,
-    /// and loads and plays the previous track.
+    /// This method checks if there is a previous song, decrements the current index,
+    /// and loads and plays the previous song.
     ///
     /// # Returns
     /// A `Result` indicating success or a `PlaybackError` on failure
-    pub fn previous_track(&mut self) -> Result<(), PlaybackError> {
+    pub fn previous_song(&mut self) -> Result<(), PlaybackError> {
         // Get current index
         let current_index = self.queue.current_index;
 
-        // Check if there is a previous track
+        // Check if there is a previous song
         if let Some(index) = current_index {
             if index > 0 {
                 // Decrement current index
                 self.queue.current_index = Some(index - 1);
 
-                // Get the previous track
-                if let Some(prev_track) = self.queue.current_track() {
-                    // Load and play the previous track
-                    self.load_track(prev_track.track_path.clone())?;
+                // Get the previous song
+                if let Some(prev_song) = self.queue.current_song() {
+                    // Load and play the previous song
+                    self.load_song(prev_song.song_path.clone())?;
                     self.play()?;
                     return Ok(());
                 }
             } else {
-                // No previous track, just restart current track from beginning
+                // No previous song, just restart current song from beginning
                 self.stop()?;
-                if let Some(current_track) = self.queue.current_track() {
-                    self.load_track(current_track.track_path.clone())?;
+                if let Some(current_song) = self.queue.current_song() {
+                    self.load_song(current_song.song_path.clone())?;
                     self.play()?;
                 }
                 return Ok(());
@@ -494,28 +494,28 @@ impl PlaybackController {
         Ok(())
     }
 
-    /// Gets the previous track information from the queue
+    /// Gets the previous song information from the queue
     ///
     /// # Returns
-    /// An `Option<QueueItem>` containing the previous track information if available
-    pub fn get_previous_track_info(&self) -> Option<QueueItem> {
+    /// An `Option<QueueItem>` containing the previous song information if available
+    pub fn get_previous_song_info(&self) -> Option<QueueItem> {
         if let Some(current_index) = self.queue.current_index {
             if current_index > 0 && current_index <= self.queue.items.len() {
                 self.queue.items.get(current_index - 1).cloned()
             } else {
-                // If at the first track, return the current track (for restart behavior)
-                self.queue.current_track().cloned()
+                // If at the first song, return the current song (for restart behavior)
+                self.queue.current_song().cloned()
             }
         } else {
             None
         }
     }
 
-    /// Gets the next track information from the queue
+    /// Gets the next song information from the queue
     ///
     /// # Returns
-    /// An `Option<QueueItem>` containing the next track information if available
-    pub fn get_next_track_info(&self) -> Option<QueueItem> {
+    /// An `Option<QueueItem>` containing the next song information if available
+    pub fn get_next_song_info(&self) -> Option<QueueItem> {
         if let Some(current_index) = self.queue.current_index {
             if current_index + 1 < self.queue.items.len() {
                 self.queue.items.get(current_index + 1).cloned()

@@ -16,8 +16,8 @@ use sqlx::SqlitePool;
 use crate::{
     data::{
         db::crud::{
-            AlbumForInsert, TrackForInsert, insert_or_get_artists_batch, upsert_albums_batch,
-            upsert_tracks_batch_enhanced,
+            AlbumForInsert, SongForInsert, insert_or_get_artists_batch, upsert_albums_batch,
+            upsert_songs_batch_enhanced,
         },
         scanner::individual_dr_scanner::scan_individual_dr_values,
     },
@@ -32,20 +32,20 @@ use crate::{
 /// extracted from audio files. The data is later used to create proper database records
 /// with assigned IDs after batch processing.
 struct TempMetadata {
-    /// The title of the track.
+    /// The title of the song.
     title: String,
-    /// The name of the track artist.
+    /// The name of the song artist.
     artist_name: String,
-    /// The title of the album the track belongs to.
+    /// The title of the album the song belongs to.
     album_title: String,
-    /// The name of the album artist (may differ from track artist).
+    /// The name of the album artist (may differ from song artist).
     album_artist_name: String,
     /// The file system path to the audio file.
     path: PathBuf,
-    /// The duration of the track in seconds.
+    /// The duration of the song in seconds.
     duration: u32,
-    /// The track number within the album, if available.
-    track_no: Option<u32>,
+    /// The song number within the album, if available.
+    song_no: Option<u32>,
     /// The disc number for multi-disc albums, if available.
     disc_no: Option<u32>,
     /// The release year of the album, if available.
@@ -69,7 +69,7 @@ struct TempMetadata {
 /// 2. Collects all unique artist names
 /// 3. Creates or retrieves artist IDs in a batch operation
 /// 4. Creates or updates album records with the provided DR value
-/// 5. Creates or updates track records with all extracted metadata
+/// 5. Creates or updates song records with all extracted metadata
 ///
 /// The function uses database transactions to ensure data consistency and efficiency
 /// when processing large batches of files.
@@ -164,7 +164,7 @@ pub async fn process_files_batch_optimized(
                 .map(Cow::into_owned)
                 .unwrap_or_else(|| "Unknown Album".to_string());
 
-            // Album Artist: Prefer dedicated tag, fallback to track artist name.
+            // Album Artist: Prefer dedicated tag, fallback to song artist name.
             let album_artist_name = tag
                 .and_then(|t| t.get_string(&AlbumArtist))
                 .map(|s| s.to_string())
@@ -181,7 +181,7 @@ pub async fn process_files_batch_optimized(
 
             // Other metadata fields, defaulting to None if not present.
             let year = tag.and_then(|t| t.year()).map(|y| y as i32);
-            let track_no = tag.and_then(|t| t.track());
+            let song_no = tag.and_then(|t| t.track());
             let disc_no = tag.and_then(|t| t.disk());
 
             // Parse original release date from string to Timestamp, then back to String for storage.
@@ -212,7 +212,7 @@ pub async fn process_files_batch_optimized(
                 album_artist_name,
                 path: path.to_path_buf(),
                 duration,
-                track_no,
+                song_no,
                 disc_no,
                 year,
                 original_release_date,
@@ -274,8 +274,8 @@ pub async fn process_files_batch_optimized(
         // Batch upsert albums and retrieve their IDs
         let album_ids = upsert_albums_batch(&mut tx, &albums_to_insert).await?;
 
-        // Prepare track records for batch upsert
-        let mut tracks_to_insert = Vec::new();
+        // Prepare song records for batch upsert
+        let mut songs_to_insert = Vec::new();
         for (index, meta) in all_metadata.iter().enumerate() {
             let artist_id = *artist_ids.get(&meta.artist_name).unwrap();
             let album_artist_id = *artist_ids.get(&meta.album_artist_name).unwrap();
@@ -283,19 +283,19 @@ pub async fn process_files_batch_optimized(
                 .get(&(meta.album_title.clone(), album_artist_id, folder_id))
                 .unwrap();
 
-            // Get the DR value for this track if available
+            // Get the DR value for this song if available
             let dr_value = if index < individual_dr_values.len() {
                 individual_dr_values[index]
             } else {
                 None
             };
-            tracks_to_insert.push(TrackForInsert {
+            songs_to_insert.push(SongForInsert {
                 title: meta.title.clone(),
                 album_id,
                 artist_id,
                 path: meta.path.clone(),
                 duration: Some(meta.duration),
-                track_no: meta.track_no,
+                song_no: meta.song_no,
                 disc_no: meta.disc_no,
                 format: meta.format.clone(),
                 bit_depth: meta.bit_depth,
@@ -304,8 +304,8 @@ pub async fn process_files_batch_optimized(
             });
         }
 
-        // Batch upsert tracks with enhanced batching
-        upsert_tracks_batch_enhanced(&mut tx, &tracks_to_insert, batch_size).await?;
+        // Batch upsert songs with enhanced batching
+        upsert_songs_batch_enhanced(&mut tx, &songs_to_insert, batch_size).await?;
 
         // Commit the transaction
         tx.commit().await?;

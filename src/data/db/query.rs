@@ -47,7 +47,7 @@ pub async fn fetch_all_folders(pool: &SqlitePool) -> Result<Vec<Folder>> {
 
 /// Searches for albums by matching a substring in their title or artist name (case-insensitive).
 ///
-/// Returns `AlbumGridItem` which combines data from `albums`, `artists`, `tracks`, and `folders`.
+/// Returns `AlbumGridItem` which combines data from `albums`, `artists`, `songs`, and `folders`.
 ///
 /// # Arguments
 /// * `pool` - A reference to the SQLite database connection pool.
@@ -69,16 +69,16 @@ pub async fn search_album_display_info(
             artists.name AS artist,
             albums.year,
             albums.cover_art,
-            tracks.format,
-            tracks.bit_depth,
-            tracks.sample_rate,
+            songs.format,
+            songs.bit_depth,
+            songs.sample_rate,
             albums.dr_value,
             albums.dr_is_best,
             albums.original_release_date,
             folders.path AS folder_path
         FROM albums
         JOIN artists ON albums.artist_id = artists.id
-        LEFT JOIN tracks ON tracks.album_id = albums.id
+        LEFT JOIN songs ON songs.album_id = albums.id
         JOIN folders ON albums.folder_id = folders.id
         WHERE lower(albums.title) LIKE ? OR lower(artists.name) LIKE ?
         GROUP BY albums.id

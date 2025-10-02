@@ -21,7 +21,7 @@ use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::{
-    data::db::crud::fetch_tracks_by_album,
+    data::db::crud::fetch_songs_by_album,
     ui::{
         components::{
             player_bar::PlayerBar,
@@ -52,7 +52,7 @@ use crate::{
 /// - `db_pool`: Database connection pool for fetching additional data
 /// - `header_btn_stack`: Weak reference to the header button stack
 /// - `right_btn_box`: Weak reference to the right button container
-/// - `nav_history`: Navigation history tracker
+/// - `nav_history`: Navigation history songer
 /// - `sender`: Channel sender for communication
 /// - `artist_page_name`: Name of the current artist page
 /// - `show_dr_badges`: Flag indicating whether to show DR badges
@@ -260,24 +260,23 @@ pub fn build_album_card(
         // Get the playback controller from the player bar
         let player_bar_async = player_bar_clone.clone();
         if let Some(controller) = player_bar_async.get_playback_controller() {
-            // Spawn async task to fetch the first track's duration and queue the album
+            // Spawn async task to fetch the first song's duration and queue the album
             MainContext::default().spawn_local(async move {
-                // Fetch the first track's duration from the database first
-                let db_pool_tracks = db_pool_clone.clone();
-                let duration = if let Ok(tracks) =
-                    fetch_tracks_by_album(&db_pool_tracks, album_id_local).await
-                {
-                    if let Some(first_track) = tracks.first() {
-                        first_track.duration
+                // Fetch the first song's duration from the database first
+                let db_pool_songs = db_pool_clone.clone();
+                let duration =
+                    if let Ok(songs) = fetch_songs_by_album(&db_pool_songs, album_id_local).await {
+                        if let Some(first_song) = songs.first() {
+                            first_song.duration
+                        } else {
+                            None
+                        }
                     } else {
                         None
-                    }
-                } else {
-                    None
-                };
+                    };
 
                 // Update the player bar with album metadata directly to ensure it's updated before visibility
-                // This ensures the player bar shows correct metadata even if the TrackChanged event is delayed
+                // This ensures the player bar shows correct metadata even if the SongChanged event is delayed
                 player_bar_async.update_with_metadata(
                     &album_title_local,
                     &album_title_local,

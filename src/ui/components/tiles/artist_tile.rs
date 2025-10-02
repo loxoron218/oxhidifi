@@ -46,7 +46,7 @@ use crate::{
 /// - `db_pool`: Database connection pool for data access
 /// - `left_btn_stack`: Reference to the left button stack in the header
 /// - `right_btn_box`: Reference to the right button container in the header
-/// - `nav_history`: Navigation history tracker
+/// - `nav_history`: Navigation history songer
 /// - `sender`: Channel sender for application communication
 /// - `show_dr_badges`: Flag indicating whether to display DR badges
 /// - `use_original_year`: Flag for choosing between original and release years

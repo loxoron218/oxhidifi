@@ -1,7 +1,7 @@
 use sqlx::{Result, SqlitePool, query};
 
 /// Initializes the database schema, creating tables if they do not already exist.
-/// This function ensures that the `folders`, `artists`, `albums`, and `tracks` tables
+/// This function ensures that the `folders`, `artists`, `albums`, and `songs` tables
 /// are present with the correct schema, including any necessary column additions via ALTER TABLE.
 ///
 /// # Arguments
@@ -61,16 +61,16 @@ pub async fn init_db(pool: &SqlitePool) -> Result<()> {
         .await
         .ok();
 
-    // Create tracks table if it doesn't exist
+    // Create songs table if it doesn't exist
     query(
-        "CREATE TABLE IF NOT EXISTS tracks (
+        "CREATE TABLE IF NOT EXISTS songs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT NOT NULL,
             album_id INTEGER NOT NULL,
             artist_id INTEGER NOT NULL,
             path TEXT NOT NULL UNIQUE,
             duration INTEGER,
-            track_no INTEGER,
+            song_no INTEGER,
             disc_no INTEGER,
             format TEXT,
             bit_depth INTEGER,
@@ -85,7 +85,7 @@ pub async fn init_db(pool: &SqlitePool) -> Result<()> {
 
     // Add dr_value column if it doesn't exist
     // `.ok()` is used here to gracefully handle the error if the column already exists.
-    query("ALTER TABLE tracks ADD COLUMN dr_value INTEGER")
+    query("ALTER TABLE songs ADD COLUMN dr_value INTEGER")
         .execute(pool)
         .await
         .ok();
@@ -102,18 +102,18 @@ pub async fn init_db(pool: &SqlitePool) -> Result<()> {
         .execute(pool)
         .await?;
 
-    // Index on track album ID for faster lookups of tracks by album
-    query("CREATE INDEX IF NOT EXISTS idx_track_album_id ON tracks(album_id)")
+    // Index on song album ID for faster lookups of songs by album
+    query("CREATE INDEX IF NOT EXISTS idx_song_album_id ON songs(album_id)")
         .execute(pool)
         .await?;
 
-    // Index on track artist ID for faster lookups of tracks by artist
-    query("CREATE INDEX IF NOT EXISTS idx_track_artist_id ON tracks(artist_id)")
+    // Index on song artist ID for faster lookups of songs by artist
+    query("CREATE INDEX IF NOT EXISTS idx_song_artist_id ON songs(artist_id)")
         .execute(pool)
         .await?;
 
-    // Index on tracks.path for faster file existence checks
-    query("CREATE INDEX IF NOT EXISTS idx_track_path ON tracks(path)")
+    // Index on songs.path for faster file existence checks
+    query("CREATE INDEX IF NOT EXISTS idx_song_path ON songs(path)")
         .execute(pool)
         .await?;
 
@@ -153,8 +153,8 @@ pub async fn init_db(pool: &SqlitePool) -> Result<()> {
         .execute(pool)
         .await?;
 
-    // Index on tracks.duration for potential query optimizations
-    query("CREATE INDEX IF NOT EXISTS idx_tracks_duration ON tracks(duration)")
+    // Index on songs.duration for potential query optimizations
+    query("CREATE INDEX IF NOT EXISTS idx_songs_duration ON songs(duration)")
         .execute(pool)
         .await?;
     Ok(())

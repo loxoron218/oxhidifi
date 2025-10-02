@@ -30,7 +30,7 @@ const DEBOUNCE_DURATION: Duration = Duration::from_secs(3);
 const DB_POLL_INTERVAL: Duration = Duration::from_secs(60);
 /// The interval for the file system watcher to scan for changes.
 const FS_POLL_INTERVAL: Duration = Duration::from_secs(5);
-/// Static flag to track if the fallback notification has been shown
+/// Static flag to song if the fallback notification has been shown
 static FALLBACK_OCCURRED: AtomicBool = AtomicBool::new(false);
 
 /// Checks if an error is specifically a MaxFilesWatch error that indicates

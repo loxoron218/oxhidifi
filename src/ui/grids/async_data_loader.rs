@@ -36,7 +36,7 @@ pub enum DataLoaderMessage {
 ///
 /// This function performs database queries in background threads and sends
 /// data to the UI in chunks, allowing the UI to remain responsive. It first
-/// queries the total count of albums to enable progress tracking, then loads
+/// queries the total count of albums to enable progress songing, then loads
 /// album data in chunks using pagination.
 ///
 /// # Parameters
@@ -46,14 +46,14 @@ pub enum DataLoaderMessage {
 ///
 /// # Database Query Details
 ///
-/// The query joins albums with artists and folders, and left joins with tracks
+/// The query joins albums with artists and folders, and left joins with songs
 /// to get format information. It groups by album ID to avoid duplicates and
 /// orders by artist name and album title (case-insensitive).
 pub async fn load_albums_async(
     db_pool: Arc<SqlitePool>,
     sender: UnboundedSender<DataLoaderMessage>,
 ) {
-    // First, get the total count of albums for progress tracking
+    // First, get the total count of albums for progress songing
     let total_count: Result<i64, sqlx::Error> = query(
         "SELECT COUNT(*) as count FROM (SELECT DISTINCT albums.id FROM albums
          JOIN artists ON albums.artist_id = artists.id
@@ -93,16 +93,16 @@ pub async fn load_albums_async(
                 artists.name AS artist,
                 albums.year,
                 albums.cover_art,
-                tracks.format,
-                tracks.bit_depth,
-                tracks.sample_rate,
+                songs.format,
+                songs.bit_depth,
+                songs.sample_rate,
                 albums.dr_value,
                 albums.dr_is_best,
                 albums.original_release_date,
                 folders.path AS folder_path
             FROM albums
             JOIN artists ON albums.artist_id = artists.id
-            LEFT JOIN tracks ON tracks.album_id = albums.id
+            LEFT JOIN songs ON songs.album_id = albums.id
             JOIN folders ON albums.folder_id = folders.id
             GROUP BY albums.id
             ORDER BY artists.name COLLATE NOCASE, albums.title COLLATE NOCASE
@@ -188,7 +188,7 @@ pub async fn load_albums_async(
 ///
 /// This function performs database queries in background threads to load
 /// artist data and sends it to the UI in chunks. It first queries the total
-/// count of artists for progress tracking, then loads artist data in chunks
+/// count of artists for progress songing, then loads artist data in chunks
 /// using pagination.
 ///
 /// # Parameters
@@ -199,7 +199,7 @@ pub async fn load_artists_async(
     db_pool: Arc<SqlitePool>,
     sender: UnboundedSender<DataLoaderMessage>,
 ) {
-    // First, get the total count of artists for progress tracking
+    // First, get the total count of artists for progress songing
     let total_count: Result<i64, sqlx::Error> = query(
         "SELECT COUNT(*) as count FROM (SELECT DISTINCT artists.id FROM artists
          WHERE artists.id IN (SELECT DISTINCT artist_id FROM albums))",
