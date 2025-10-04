@@ -24,7 +24,7 @@ use crate::{
     ui::{
         components::{player_bar::PlayerBar, view_controls::ZoomLevel},
         pages::artist::{
-            components::album_grid::build_album_card,
+            components::builder::build_album_card,
             data::artist_data::fetch_album_display_info_by_artist,
         },
     },
