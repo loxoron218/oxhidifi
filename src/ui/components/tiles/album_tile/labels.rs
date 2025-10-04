@@ -126,7 +126,6 @@ pub fn create_format_label(album: &AlbumGridItem, cover_size: i32, zoom_level: Z
 /// Creates the year label for displaying release year information
 pub fn create_year_label(
     album: &AlbumGridItem,
-    cover_size: i32,
     zoom_level: ZoomLevel,
     use_original_year: Rc<Cell<bool>>,
 ) -> Label {

@@ -8,16 +8,12 @@ use gtk4::{
     Button, FlowBoxChild, GestureClick,
     glib::{MainContext, prelude::ObjectExt},
 };
-use libadwaita::{
-    Clamp, ViewStack,
-    prelude::{FlowBoxChildExt, WidgetExt},
-};
+use libadwaita::{Clamp, ViewStack, prelude::WidgetExt};
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::ui::{
-    components::{player_bar::PlayerBar, view_controls::ZoomLevel},
-    grids::album_grid_state::AlbumGridItem,
+    components::player_bar::PlayerBar, grids::album_grid_state::AlbumGridItem,
     pages::album::album_page::album_page,
 };
 

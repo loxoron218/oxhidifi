@@ -1,11 +1,10 @@
 use std::{
     cell::{Cell, RefCell},
-    path::Path,
     rc::Rc,
     sync::Arc,
 };
 
-use gtk4::{Align::Start, Box, FlowBoxChild, Orientation::Vertical, glib::prelude::ObjectExt};
+use gtk4::{Align::Start, Box, FlowBoxChild, Orientation::Vertical};
 use libadwaita::{
     Clamp, ViewStack,
     prelude::{BoxExt, FlowBoxChildExt, WidgetExt},
@@ -77,13 +76,13 @@ pub fn create_album_tile(
 
     // Create format and year labels
     let format_label = create_format_label(album, cover_size, zoom_level);
-    let year_label = create_year_label(album, cover_size, zoom_level, use_original_year.clone());
+    let year_label = create_year_label(album, zoom_level, use_original_year.clone());
 
     // Create album cover section with DR badge
     let (overlay, _cover) = create_album_cover_section(album, cover_size, show_dr_badges.clone());
 
     // Create play button and add it to the overlay
-    let play_button = create_play_button(album, player_bar.clone(), db_pool.clone(), cover_size);
+    let play_button = create_play_button(album, player_bar.clone(), db_pool.clone());
     overlay.add_overlay(&play_button);
 
     // Add motion controller for hover effects

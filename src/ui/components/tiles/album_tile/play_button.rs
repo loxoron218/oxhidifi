@@ -18,7 +18,6 @@ pub fn create_play_button(
     album: &AlbumGridItem,
     player_bar: PlayerBar,
     db_pool: Arc<SqlitePool>,
-    cover_size: i32,
 ) -> Button {
     let play_button = Button::builder()
         .icon_name("media-playback-start")
