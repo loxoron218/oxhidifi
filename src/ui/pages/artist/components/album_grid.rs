@@ -21,7 +21,7 @@ use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::{
-    data::db::crud::{fetch_artist_by_id, fetch_songs_by_album},
+    data::db::crud::{fetch_album_by_id, fetch_artist_by_id, fetch_songs_by_album},
     ui::{
         components::{
             player_bar::PlayerBar,
@@ -295,16 +295,48 @@ pub fn build_album_card(
                     );
                 } else {
                     // Fallback to album metadata if we can't fetch the first song
-                    player_bar_async.update_with_metadata(
-                        &album_title_local,
-                        &album_title_local,
-                        &album_title_local,
-                        cover_art_path_local.as_deref().map(Path::new),
-                        album_format_bit_depth_local.map(|d| d),
-                        album_format_sample_rate_local.map(|d| d),
-                        album_format_local.as_deref(),
-                        None,
-                    );
+                    // In this case, we need to fetch the album information to get the artist_id
+                    if let Ok(album_info) = fetch_album_by_id(&db_pool_clone, album_id_local).await
+                    {
+                        if let Ok(artist) =
+                            fetch_artist_by_id(&db_pool_clone, album_info.artist_id).await
+                        {
+                            player_bar_async.update_with_metadata(
+                                &album_title_local,
+                                &album_title_local,
+                                &artist.name,
+                                cover_art_path_local.as_deref().map(Path::new),
+                                album_format_bit_depth_local.map(|d| d),
+                                album_format_sample_rate_local.map(|d| d),
+                                album_format_local.as_deref(),
+                                None,
+                            );
+                        } else {
+                            // If we can't get the artist, use a generic fallback
+                            player_bar_async.update_with_metadata(
+                                &album_title_local,
+                                &album_title_local,
+                                "Unknown Artist",
+                                cover_art_path_local.as_deref().map(Path::new),
+                                album_format_bit_depth_local.map(|d| d),
+                                album_format_sample_rate_local.map(|d| d),
+                                album_format_local.as_deref(),
+                                None,
+                            );
+                        }
+                    } else {
+                        // If we can't get album info either, use a generic fallback
+                        player_bar_async.update_with_metadata(
+                            &album_title_local,
+                            &album_title_local,
+                            "Unknown Artist",
+                            cover_art_path_local.as_deref().map(Path::new),
+                            album_format_bit_depth_local.map(|d| d),
+                            album_format_sample_rate_local.map(|d| d),
+                            album_format_local.as_deref(),
+                            None,
+                        );
+                    }
                 }
 
                 // Queue the album for playback

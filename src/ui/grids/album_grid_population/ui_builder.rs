@@ -278,23 +278,23 @@ pub fn create_album_tile(
         if let Some(controller) = player_bar_async.get_playback_controller() {
             // Spawn async task to fetch the first song's duration and queue the album
             MainContext::default().spawn_local(async move {
-                // Fetch the first song's duration from the database first
-                let duration =
+                // Fetch the first song's metadata from the database first
+                let (duration, first_song_title) =
                     if let Ok(songs) = fetch_songs_by_album(&db_pool_for_songs, album_id).await {
                         if let Some(first_song) = songs.first() {
-                            first_song.duration
+                            (first_song.duration, first_song.title.clone())
                         } else {
-                            None
+                            (None, album_title_local.clone())
                         }
                     } else {
-                        None
+                        (None, album_title_local.clone())
                     };
 
                 // Update the player bar with album metadata directly to ensure it's updated before visibility
                 // This ensures the player bar shows correct metadata even if the SongChanged event is delayed
                 player_bar_async.update_with_metadata(
                     &album_title_local,
-                    &album_title_local,
+                    &first_song_title,
                     &artist_name_local,
                     cover_art_path_local.as_deref().map(Path::new),
                     album_format_bit_depth_local.map(|d| d as u32),
