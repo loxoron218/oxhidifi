@@ -56,11 +56,19 @@
   box-shadow: none;
 }
 
-.album-tile:hover,
-.album-tile:selected,
-.album-tile:focus {
+.album-tile {
+  background: transparent;
+  box-shadow: none;
+}
+
+gridview.artist-grid listitem:hover,
+gridview.artist-grid listitem:focus,
+gridview.artist-grid listitem:selected {
   background: var(--accent_color, rgba(128, 128, 128, 0.08));
-  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  border-radius: 12px;
+  border-color: transparent;
+  outline: none;
 }
 
 /* =====================
