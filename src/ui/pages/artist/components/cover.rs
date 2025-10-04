@@ -36,10 +36,9 @@ pub fn create_album_overlay(
     overlay.set_valign(Start);
 
     // Conditionally add DR badge to overlay based on user settings
-    if show_dr_badges
-        && let Some(dr_label) = dr_badge {
-            overlay.add_overlay(&dr_label);
-        }
+    if show_dr_badges && let Some(dr_label) = dr_badge {
+        overlay.add_overlay(&dr_label);
+    }
     overlay
 }
 
