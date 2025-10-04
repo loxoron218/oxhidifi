@@ -21,7 +21,7 @@ use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::{
-    data::db::crud::fetch_songs_by_album,
+    data::db::crud::{fetch_artist_by_id, fetch_songs_by_album},
     ui::{
         components::{
             player_bar::PlayerBar,
@@ -239,7 +239,6 @@ pub fn build_album_card(
     // Clone all necessary data to avoid lifetime issues
     let album_title = album.title.clone();
     let cover_art_path = album.cover_art.clone();
-    let artist_name = artist_page_name.clone();
     let album_format_bit_depth = album.bit_depth;
     let album_format_sample_rate = album.sample_rate;
     let album_format = album.format.clone();
@@ -249,7 +248,6 @@ pub fn build_album_card(
     play_button.connect_clicked(move |_| {
         // Clone metadata for direct update
         let album_title_local = album_title.clone();
-        let artist_name_local = artist_name.clone();
         let cover_art_path_local = cover_art_path.clone();
         let album_format_bit_depth_local = album_format_bit_depth;
         let album_format_sample_rate_local = album_format_sample_rate;
@@ -260,14 +258,21 @@ pub fn build_album_card(
         // Get the playback controller from the player bar
         let player_bar_async = player_bar_clone.clone();
         if let Some(controller) = player_bar_async.get_playback_controller() {
-            // Spawn async task to fetch the first song's duration and queue the album
+            // Spawn async task to fetch the first song's metadata and queue the album
             MainContext::default().spawn_local(async move {
-                // Fetch the first song's duration from the database first
+                // Fetch the first song's metadata from the database first
                 let db_pool_songs = db_pool_clone.clone();
-                let duration =
+                let first_song_info =
                     if let Ok(songs) = fetch_songs_by_album(&db_pool_songs, album_id_local).await {
                         if let Some(first_song) = songs.first() {
-                            first_song.duration
+                            // Fetch artist information for the song
+                            if let Ok(artist) =
+                                fetch_artist_by_id(&db_pool_songs, first_song.artist_id).await
+                            {
+                                Some((first_song.clone(), artist))
+                            } else {
+                                None
+                            }
                         } else {
                             None
                         }
@@ -275,18 +280,32 @@ pub fn build_album_card(
                         None
                     };
 
-                // Update the player bar with album metadata directly to ensure it's updated before visibility
+                // Update the player bar with the first song's metadata directly to ensure it's updated before visibility
                 // This ensures the player bar shows correct metadata even if the SongChanged event is delayed
-                player_bar_async.update_with_metadata(
-                    &album_title_local,
-                    &album_title_local,
-                    &artist_name_local,
-                    cover_art_path_local.as_deref().map(Path::new),
-                    album_format_bit_depth_local.map(|d| d),
-                    album_format_sample_rate_local.map(|d| d),
-                    album_format_local.as_deref(),
-                    duration,
-                );
+                if let Some((first_song, artist)) = first_song_info {
+                    player_bar_async.update_with_metadata(
+                        &album_title_local,
+                        &first_song.title,
+                        &artist.name,
+                        cover_art_path_local.as_deref().map(Path::new),
+                        first_song.bit_depth,
+                        first_song.sample_rate,
+                        first_song.format.as_deref(),
+                        first_song.duration,
+                    );
+                } else {
+                    // Fallback to album metadata if we can't fetch the first song
+                    player_bar_async.update_with_metadata(
+                        &album_title_local,
+                        &album_title_local,
+                        &album_title_local,
+                        cover_art_path_local.as_deref().map(Path::new),
+                        album_format_bit_depth_local.map(|d| d),
+                        album_format_sample_rate_local.map(|d| d),
+                        album_format_local.as_deref(),
+                        None,
+                    );
+                }
 
                 // Queue the album for playback
                 let mut controller = controller.lock().await;
