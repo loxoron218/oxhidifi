@@ -76,7 +76,7 @@ fn parse_dr_file(file_path: &Path) -> Result<Vec<Option<u8>>, Box<dyn Error + Se
     let reader = BufReader::new(file);
 
     // Read all lines from the file, skipping any that cannot be read as UTF-8
-    let lines: Vec<String> = reader.lines().filter_map(|line| line.ok()).collect();
+    let lines: Vec<String> = reader.lines().map_while(Result::ok).collect();
 
     // Detect format
     let format = detect_format(&lines);
