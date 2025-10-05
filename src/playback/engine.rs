@@ -42,7 +42,8 @@ impl PlaybackEngine {
     /// Creates a new playback engine
     ///
     /// Initializes a new [`PlaybackEngine`] instance with a new [`PipelineManager`]
-    /// and sets up the communication channel for event handling.
+    /// and sets up the communication channel for event handling. It also
+    /// initializes the `BusHandler` and sets up its bus watch.
     ///
     /// # Parameters
     ///
@@ -55,36 +56,22 @@ impl PlaybackEngine {
     ///
     /// # Errors
     ///
-    /// This function will return an error if the [`PipelineManager`] fails to initialize.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// # use std::sync::mpsc::channel;
-    /// # use crate::playback::engine::PlaybackEngine;
-    /// let (sender, receiver) = channel();
-    /// let engine = PlaybackEngine::new(sender)
-    ///     .expect("Failed to create playback engine");
-    /// ```
+    /// This function will return an error if the [`PipelineManager`] fails to initialize
+    /// or if the `BusHandler` fails to set up its bus watch.
     pub fn new(event_sender: PlaybackEventSender) -> Result<Self, PlaybackError> {
         let pipeline_manager = PipelineManager::new()?;
-
-        // Create the bus handler with the pipeline and event sender
         let bus_handler = BusHandler::new(
             pipeline_manager.get_pipeline().clone(),
             event_sender.clone(),
         );
-
-        // Set up the bus watch
-        let mut bus_handler_mut = bus_handler;
-        bus_handler_mut.setup_bus_watch()?;
-
-        Ok(Self {
+        let engine = Self {
             pipeline_manager,
             event_sender,
-            bus_handler: RefCell::new(bus_handler_mut),
+            bus_handler: RefCell::new(bus_handler),
             current_state: Stopped,
-        })
+        };
+        engine.bus_handler.borrow_mut().setup_bus_watch()?;
+        Ok(engine)
     }
 
     /// Loads a song for playback

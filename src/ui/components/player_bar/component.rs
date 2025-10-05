@@ -32,7 +32,6 @@ use crate::playback::controller::PlaybackController;
 /// ellipsized following GNOME Human Interface Guidelines.
 ///
 /// When no song is playing, the player bar is hidden from view.
-#[derive(Clone)]
 pub struct PlayerBar {
     /// The main container for all player bar elements, arranged horizontally
     pub container: Box,
@@ -80,6 +79,42 @@ pub struct PlayerBar {
     pub can_go_next: Cell<bool>,
     /// Cancellation token for stopping the event listening task
     pub cancellation_token: CancellationToken,
+}
+
+impl Clone for PlayerBar {
+    /// Creates a new `PlayerBar` instance by cloning the existing one.
+    ///
+    /// This implementation performs a shallow clone of most fields, as they are
+    /// `Rc` or `Arc` wrapped, meaning they share ownership of the underlying data.
+    /// A new `CancellationToken` is created for the cloned instance to ensure
+    /// independent cancellation behavior.
+    fn clone(&self) -> Self {
+        Self {
+            container: self.container.clone(),
+            album_art: self.album_art.clone(),
+            song_title: self.song_title.clone(),
+            song_artist: self.song_artist.clone(),
+            album_title: self.album_title.clone(),
+            bit_depth_sample_rate: self.bit_depth_sample_rate.clone(),
+            format: self.format.clone(),
+            progress_bar: self.progress_bar.clone(),
+            time_label_start: self.time_label_start.clone(),
+            time_label_end: self.time_label_end.clone(),
+            _volume_slider: self._volume_slider.clone(),
+            _bit_perfect_indicator: self._bit_perfect_indicator.clone(),
+            _gapless_indicator: self._gapless_indicator.clone(),
+            _prev_button: self._prev_button.clone(),
+            _play_button: self._play_button.clone(),
+            _next_button: self._next_button.clone(),
+            main_content_area: self.main_content_area.clone(),
+            visibility_handler_id: self.visibility_handler_id.clone(),
+            duration: self.duration.clone(),
+            playback_controller: self.playback_controller.clone(),
+            can_go_prev: self.can_go_prev.clone(),
+            can_go_next: self.can_go_next.clone(),
+            cancellation_token: CancellationToken::new(),
+        }
+    }
 }
 
 impl PlayerBar {

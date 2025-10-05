@@ -183,45 +183,47 @@ impl PlayerBar {
         // Update the play button state based on the current playback state
         self.update_play_button_state();
 
-        // Set up event-driven approach using the controller's event handling
+        // Set up an event-driven approach using the controller's event handling.
+        // This involves spawning a local asynchronous task that continuously
+        // listens for playback events from the controller.
         let controller_clone = controller.clone();
-        let player_bar_weak = self.downgrade();
-        let cancellation_token = self.cancellation_token.clone();
+        let player_bar = self.clone();
+        let cancellation_token = player_bar.cancellation_token.clone();
 
-        // Spawn a task to listen for events from the controller using an event-driven approach
-        // Instead of polling, we'll set up a channel to receive events directly
+        // Spawn a task on the GLib main context to listen for events from the controller.
+        // This approach avoids blocking the UI thread and allows for efficient event processing.
         MainContext::default().spawn_local(async move {
             loop {
-                // Check for events from the controller
-                let events = {
-                    let mut controller = controller_clone.lock().await;
-
-                    // Use the new try_get_event method to get events without blocking
+                // Attempt to acquire a lock on the controller without blocking.
+                // This ensures the UI remains responsive even if the controller is busy.
+                if let Ok(mut controller) = controller_clone.try_lock() {
                     let mut events = Vec::new();
 
-                    // Get all available events without blocking
+                    // Collect all available events from the controller.
                     while let Some(event) = controller.try_get_event() {
                         events.push(event);
                     }
-                    events
-                };
 
-                // Process events in the player bar UI only if there are events
-                if !events.is_empty()
-                    && let Some(player_bar) = player_bar_weak.upgrade()
-                {
-                    for event in events {
-                        player_bar.handle_playback_event(event);
+                    // Explicitly drop the lock guard to release the controller lock
+                    // as soon as event collection is complete.
+                    drop(controller);
+
+                    // If any events were received, process them by calling the player bar's
+                    // event handler.
+                    if !events.is_empty() {
+                        for event in events {
+                            player_bar.handle_playback_event(event);
+                        }
                     }
                 }
 
-                // Wait for either the timeout or cancellation
+                // Wait for a short duration (100ms) or until the cancellation token is triggered.
+                // This prevents busy-waiting and allows the task to be gracefully shut down.
                 select! {
-                    _ = timeout_future(Duration::from_millis(100)) => {
-                        // Continue the loop after the timeout
-                    }
+                    // Wait for a short period
+                    _ = timeout_future(Duration::from_millis(100)) => {},
+                    // Break loop if cancellation is requested
                     _ = cancellation_token.cancelled() => {
-                        // Exit the loop if cancellation is requested
                         break;
                     }
                 }

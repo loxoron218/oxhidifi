@@ -1,14 +1,16 @@
-use tokio::sync::mpsc::UnboundedSender;
+use std::{cell::RefCell, rc::Rc, time::Duration};
 
 use gstreamer::{
-    ClockTime, Message,
-    MessageView::{Eos, Error, StateChanged},
-    Pipeline,
+    ClockTime, Message, MessageView, Pipeline,
     State::{Null, Paused, Playing, Ready},
     bus::BusWatchGuard,
-    glib::ControlFlow::Continue,
-    prelude::{ElementExt, ElementExtManual, ObjectExt},
+    glib::{
+        ControlFlow::{Break, Continue},
+        SourceId, WeakRef, timeout_add_local,
+    },
+    prelude::{Cast, ElementExt, ElementExtManual, ObjectExt},
 };
+use tokio::sync::mpsc::UnboundedSender;
 
 use super::{
     error::PlaybackError,
@@ -32,163 +34,169 @@ pub struct BusHandler {
     pipeline: Pipeline,
     event_sender: UnboundedSender<PlaybackEvent>,
     bus_watch: Option<BusWatchGuard>,
+    position_update_source: Rc<RefCell<Option<SourceId>>>,
 }
 
 impl BusHandler {
-    /// Creates a new bus handler
+    /// Creates a new `BusHandler` instance.
     ///
-    /// # Parameters
+    /// Initializes the handler with the GStreamer pipeline and a sender for
+    /// playback events. The `bus_watch` and `position_update_source` are
+    /// initialized to `None` and an empty `RefCell` respectively, as they
+    /// will be set up later when `setup_bus_watch` is called.
     ///
-    /// * `pipeline` - The GStreamer pipeline to watch for messages
-    /// * `event_sender` - A channel sender for transmitting playback events
+    /// # Arguments
+    ///
+    /// * `pipeline` - The GStreamer pipeline to monitor.
+    /// * `event_sender` - An `UnboundedSender` to send `PlaybackEvent`s to the UI or other components.
     ///
     /// # Returns
     ///
-    /// Returns a new `BusHandler` instance
+    /// A new `BusHandler` instance.
     pub fn new(pipeline: Pipeline, event_sender: UnboundedSender<PlaybackEvent>) -> Self {
         Self {
             pipeline,
             event_sender,
             bus_watch: None,
+            position_update_source: Rc::new(RefCell::new(None)),
         }
     }
 
-    /// Sets up the GStreamer bus watch
+    /// Sets up a watch on the GStreamer bus to handle pipeline messages.
     ///
-    /// This method gets the bus from the pipeline and adds a watch
-    /// to handle messages. The watch will call the message handler
-    /// function for each message received.
-    ///
-    /// # Returns
-    ///
-    /// Returns `Ok(())` if the bus watch was successfully set up,
-    /// or a [`PlaybackError`] if setting up the bus watch fails.
+    /// This method retrieves the GStreamer bus from the pipeline and adds a
+    /// local watch. The watch's callback (`handle_message`) processes incoming
+    /// messages (e.g., EndOfStream, Error, StateChanged) and converts them
+    /// into `PlaybackEvent`s, which are then sent via the `event_sender`.
+    /// It also manages a `SourceId` for position updates, ensuring it's
+    /// properly removed when playback state changes.
     ///
     /// # Errors
     ///
-    /// This function will return an error if:
-    /// * The pipeline bus cannot be obtained
+    /// Returns a `PlaybackError` if:
+    /// - The pipeline's bus cannot be retrieved.
+    /// - The bus watch cannot be added.
     pub fn setup_bus_watch(&mut self) -> Result<(), PlaybackError> {
-        // Get the bus from the pipeline, returning an error if it fails
         let bus = self
             .pipeline
             .bus()
             .ok_or_else(|| PlaybackError::Pipeline("Failed to get pipeline bus".to_string()))?;
-
-        // Clone the event sender for use in the callback closure
-        // This is necessary because the closure takes ownership of captured variables
         let event_sender = self.event_sender.clone();
         let pipeline_weak = self.pipeline.downgrade();
-
-        // Add a watch to handle bus messages asynchronously
-        // The closure is called for each message received on the bus
+        let position_update_source = self.position_update_source.clone();
         let bus_watch = bus.add_watch_local(move |_, message| {
-            // Process the GStreamer message and convert it to a playback event
-            // Errors during message handling are logged but don't stop the watch
-            if let Err(e) = Self::handle_message(&event_sender, message) {
-                eprintln!("Error handling GStreamer message: {}", e);
-            }
-
-            // Send periodic position updates only for specific message types to reduce frequency
-            // Only send position updates for messages that indicate playback progress
-            match message.view() {
-                StateChanged(_) | Eos(_) | Error(_) => {
-                    // Send position update for state changes, end of stream, and errors
-                    if let Some(pipeline) = pipeline_weak.upgrade()
-                        && let Some(position) = pipeline.query_position::<ClockTime>()
-                    {
-                        let _ = event_sender.send(PositionChanged(position.nseconds()));
-                    }
-                }
-                _ => {
-                    // For other message types, we don't send position updates to reduce event frequency
-                }
-            }
-
-            // Continue watching for more messages (don't remove the watch)
+            Self::handle_message(
+                &event_sender,
+                message,
+                &pipeline_weak,
+                &position_update_source,
+            );
             Continue
         })?;
-
-        // Store the bus watch guard to prevent it from being dropped
-        // This is necessary to keep the bus watch active
-        // Without storing the guard, the watch would be removed when it goes out of scope
         self.bus_watch = Some(bus_watch);
         Ok(())
     }
 
-    /// Handles GStreamer messages and converts them to playback events
+    /// Handles incoming GStreamer bus messages and dispatches corresponding `PlaybackEvent`s.
     ///
-    /// This method processes different types of GStreamer messages
-    /// and generates appropriate [`PlaybackEvent`]s.
+    /// This function is the core of the `BusHandler`, processing different types of
+    /// GStreamer messages:
+    /// - `Eos`: Sends an `EndOfStream` event.
+    /// - `Error`: Extracts the error message and sends a `PlaybackEvent::Error`.
+    /// - `StateChanged`: Filters for pipeline state changes, maps GStreamer states
+    ///   to `PlaybackState`, and sends a `PlaybackEvent::StateChanged`.
+    ///   When the state changes to `Playing`, it starts a 1-second interval timer
+    ///   to periodically send `PositionChanged` events. When the state changes to
+    ///   `Paused` or `Stopped`, it stops this timer.
     ///
-    /// # Parameters
+    /// # Arguments
     ///
-    /// * `event_sender` - The channel sender to use for transmitting events
-    /// * `message` - The GStreamer message to process
-    ///
-    /// # Returns
-    ///
-    /// Returns `Ok(())` if the message was successfully processed,
-    /// or a [`PlaybackError`] if processing the message fails.
+    /// * `event_sender` - A reference to the `UnboundedSender` for sending `PlaybackEvent`s.
+    /// * `message` - The GStreamer `Message` to handle.
+    /// * `pipeline_weak` - A `WeakRef` to the GStreamer `Pipeline` for querying position.
+    /// * `position_update_source` - An `Rc<RefCell<Option<SourceId>>>` to manage the
+    ///   timer for position updates.
     fn handle_message(
         event_sender: &UnboundedSender<PlaybackEvent>,
         message: &Message,
-    ) -> Result<(), PlaybackError> {
-        // Process different types of GStreamer messages and convert them to playback events
+        pipeline_weak: &WeakRef<Pipeline>,
+        position_update_source: &Rc<RefCell<Option<SourceId>>>,
+    ) {
         match message.view() {
-            // Handle end of stream message - playback has completed
-            Eos(..) => {
-                // End of stream reached, send EndOfStream event
-                // This indicates that playback has finished normally
-                if let Err(e) = event_sender.send(EndOfStream) {
-                    eprintln!("BusHandler: Error sending EndOfStream event: {}", e);
+            MessageView::Eos(..) => {
+                // End of stream message: send an EndOfStream event
+                let _ = event_sender.send(EndOfStream);
+            }
+            MessageView::Error(err) => {
+                // Error message: format the error and send a PlaybackEvent::Error
+                let error_msg = format!("GStreamer error: {}", err.error());
+                let _ = event_sender.send(PlaybackEvent::Error(error_msg));
+            }
+            MessageView::StateChanged(state_changed) => {
+                // Only process state changes from the main pipeline, not its elements
+                if state_changed
+                    .src()
+                    .is_none_or(|s| s.downcast_ref::<Pipeline>().is_none())
+                {
+                    return;
+                }
+
+                // Map GStreamer states to PlaybackState
+                let new_state = match state_changed.current() {
+                    Playing => Some(PlaybackState::Playing),
+                    Paused => Some(PlaybackState::Paused),
+                    Ready | Null => Some(PlaybackState::Stopped),
+                    // Ignore other GStreamer states
+                    _ => None,
+                };
+                if let Some(state) = new_state {
+                    match state {
+                        PlaybackState::Playing => {
+                            // When playing, start a timer to send position updates
+                            // Stop any existing timer before starting a new one
+                            if let Some(source) = position_update_source.borrow_mut().take() {
+                                source.remove();
+                            }
+                            let sender = event_sender.clone();
+                            let pipeline_clone = pipeline_weak.clone();
+
+                            // Set up a 1-second interval timer for position updates
+                            let source = timeout_add_local(Duration::from_secs(1), move || {
+                                if let Some(pipeline) = pipeline_clone.upgrade() {
+                                    if let Some(pos) = pipeline.query_position::<ClockTime>() {
+                                        // Send position changed event, break if sender fails
+                                        if sender.send(PositionChanged(pos.nseconds())).is_err() {
+                                            return Break;
+                                        }
+                                    }
+
+                                    // Continue the timer
+                                    Continue
+                                } else {
+                                    // Stop the timer if pipeline is no longer available
+                                    Break
+                                }
+                            });
+                            *position_update_source.borrow_mut() = Some(source);
+                        }
+                        PlaybackState::Paused | PlaybackState::Stopped => {
+                            // When paused or stopped, remove the position update timer
+                            if let Some(source) = position_update_source.borrow_mut().take() {
+                                source.remove();
+                            }
+                        }
+
+                        // Do nothing for other playback states
+                        _ => {}
+                    }
+
+                    // Send the state changed event
+                    let _ = event_sender.send(PlaybackEvent::StateChanged(state));
                 }
             }
 
-            // Handle error message - pipeline encountered an error
-            Error(err) => {
-                // Error occurred in the GStreamer pipeline
-                // Extract the error message and send it as a PlaybackEvent::Error
-                let error_msg = format!("GStreamer error: {}", err.error());
-
-                // Send error event to playback system
-                let _ = event_sender.send(PlaybackEvent::Error(error_msg));
-                // The result is ignored here because there's not much we can do
-                // if sending the error event also fails
-            }
-
-            // Handle state change message - pipeline state has changed
-            StateChanged(state_changed) => {
-                // Handle state change messages
-                let new_state = match state_changed.current() {
-                    Playing => PlaybackState::Playing,
-                    Paused => PlaybackState::Paused,
-                    Ready => PlaybackState::Stopped,
-                    Null => PlaybackState::Stopped,
-
-                    // Map buffering state to our Buffering variant
-                    _ => {
-                        // Check if it's a buffering state
-                        if state_changed.current() == Playing && state_changed.pending() == Playing
-                        {
-                            PlaybackState::Buffering
-                        } else {
-                            PlaybackState::Stopped
-                        }
-                    }
-                };
-
-                // Send state change event to playback system
-                let _ = event_sender.send(PlaybackEvent::StateChanged(new_state));
-            }
-
-            // Handle all other message types - ignore them
-            _ => {
-                // Ignore other message types
-                // GStreamer produces many message types, but we only care about
-                // end-of-stream, errors, and state changes
-            }
+            // Ignore other GStreamer messages
+            _ => (),
         }
-        Ok(())
     }
 }

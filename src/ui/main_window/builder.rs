@@ -110,15 +110,12 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     let screen_info = ScreenInfo::new();
 
     // Create the player bar
-    let mut player_bar = PlayerBar::new();
+    let player_bar = PlayerBar::new();
 
     // Create the playback controller
     let (playback_controller, _) =
         PlaybackController::new(db_pool.clone()).expect("Failed to create playback controller");
     let playback_controller = Arc::new(Mutex::new(playback_controller));
-
-    // Connect the playback controller to the player bar
-    player_bar.connect_playback_controller(playback_controller.clone());
 
     // Create the zoom managers
     let zoom_manager = Rc::new(ZoomManager::new(settings.current_zoom_level));
@@ -185,7 +182,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     // Bundle all static widgets into `WindowWidgets` struct for cleaner passing
     // This struct holds references to all the GTK widgets that are created once and
     // remain static throughout the application's lifetime.
-    let widgets = WindowWidgets {
+    let mut widgets = WindowWidgets {
         window: window.clone(),
         stack: stack.clone(),
         left_btn_stack: app_header_bar_widgets.left_btn_stack.clone(),
@@ -204,8 +201,13 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         albums_stack_cell: albums_stack_cell.clone(),
         artist_grid_cell: artist_grid_cell.clone(),
         artists_stack_cell: artists_stack_cell.clone(),
-        player_bar: player_bar.clone(),
+        player_bar,
     };
+
+    // Connect the playback controller to the player bar
+    widgets
+        .player_bar
+        .connect_playback_controller(playback_controller.clone());
 
     // Setup library refresh channel and service
     // `setup_library_refresh_channel` creates an MPSC channel for triggering UI refreshes
@@ -280,14 +282,14 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     artists_stack_cell.borrow_mut().replace(artists_stack);
 
     // Set the main content area for the player bar and connect visibility changes
-    player_bar.set_main_content_area(vbox_inner.clone());
-    player_bar.connect_visibility_changes();
+    widgets.player_bar.set_main_content_area(vbox_inner.clone());
+    widgets.player_bar.connect_visibility_changes();
 
     // Create the overlay and add the main content and player bar
     let overlay = Overlay::new();
     overlay.set_child(Some(&vbox_inner));
-    overlay.add_overlay(&player_bar.container);
-    player_bar.container.set_valign(End);
+    overlay.add_overlay(&widgets.player_bar.container);
+    widgets.player_bar.container.set_valign(End);
 
     // Connect the zoom managers to the view control button
     widgets.button.set_zoom_managers(
