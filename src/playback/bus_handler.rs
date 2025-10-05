@@ -1,4 +1,7 @@
-use std::{cell::RefCell, rc::Rc, time::Duration};
+use std::{
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 use gstreamer::{
     ClockTime, Message, MessageView, Pipeline,
@@ -34,7 +37,7 @@ pub struct BusHandler {
     pipeline: Pipeline,
     event_sender: UnboundedSender<PlaybackEvent>,
     bus_watch: Option<BusWatchGuard>,
-    position_update_source: Rc<RefCell<Option<SourceId>>>,
+    position_update_source: Arc<Mutex<Option<SourceId>>>,
 }
 
 impl BusHandler {
@@ -58,7 +61,7 @@ impl BusHandler {
             pipeline,
             event_sender,
             bus_watch: None,
-            position_update_source: Rc::new(RefCell::new(None)),
+            position_update_source: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -120,7 +123,7 @@ impl BusHandler {
         event_sender: &UnboundedSender<PlaybackEvent>,
         message: &Message,
         pipeline_weak: &WeakRef<Pipeline>,
-        position_update_source: &Rc<RefCell<Option<SourceId>>>,
+        position_update_source: &Arc<Mutex<Option<SourceId>>>,
     ) {
         match message.view() {
             MessageView::Eos(..) => {
@@ -154,7 +157,7 @@ impl BusHandler {
                         PlaybackState::Playing => {
                             // When playing, start a timer to send position updates
                             // Stop any existing timer before starting a new one
-                            if let Some(source) = position_update_source.borrow_mut().take() {
+                            if let Some(source) = position_update_source.lock().unwrap().take() {
                                 source.remove();
                             }
                             let sender = event_sender.clone();
@@ -177,11 +180,11 @@ impl BusHandler {
                                     Break
                                 }
                             });
-                            *position_update_source.borrow_mut() = Some(source);
+                            *position_update_source.lock().unwrap() = Some(source);
                         }
                         PlaybackState::Paused | PlaybackState::Stopped => {
                             // When paused or stopped, remove the position update timer
-                            if let Some(source) = position_update_source.borrow_mut().take() {
+                            if let Some(source) = position_update_source.lock().unwrap().take() {
                                 source.remove();
                             }
                         }

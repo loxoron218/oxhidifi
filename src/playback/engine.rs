@@ -1,4 +1,4 @@
-use std::{cell::RefCell, path::Path};
+use std::{path::Path, sync::Mutex};
 
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -28,7 +28,7 @@ use super::{
 pub struct PlaybackEngine {
     pipeline_manager: PipelineManager,
     event_sender: UnboundedSender<PlaybackEvent>,
-    bus_handler: RefCell<BusHandler>,
+    bus_handler: Mutex<BusHandler>,
     pub current_state: PlaybackState,
 }
 
@@ -61,10 +61,10 @@ impl PlaybackEngine {
         let engine = Self {
             pipeline_manager,
             event_sender,
-            bus_handler: RefCell::new(bus_handler),
+            bus_handler: Mutex::new(bus_handler),
             current_state: Stopped,
         };
-        engine.bus_handler.borrow_mut().setup_bus_watch()?;
+        engine.bus_handler.lock().unwrap().setup_bus_watch()?;
         Ok(engine)
     }
 
