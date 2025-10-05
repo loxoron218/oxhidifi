@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
-use libadwaita::{Application, prelude::ApplicationExt};
+use libadwaita::{
+    Application,
+    prelude::{ApplicationExt, ApplicationExtManual},
+};
 use sqlx::SqlitePool;
 
 use super::main_window::builder::build_main_window;
@@ -12,7 +15,9 @@ use crate::utils::image::AsyncImageLoader;
 /// instance, which is the core of the GTK/Libadwaita application. It acts as the
 /// initial bootstrap for the UI, connecting the application's lifecycle to the
 /// main window construction.
-pub struct App;
+pub struct App {
+    pub application: Application,
+}
 
 impl App {
     /// Creates a new `libadwaita::Application` instance and connects its `activate` signal.
@@ -30,8 +35,8 @@ impl App {
     ///
     /// # Returns
     ///
-    /// A `libadwaita::Application` instance, ready to be run.
-    pub fn new(db_pool: Arc<SqlitePool>, image_loader: AsyncImageLoader) -> Application {
+    /// An `App` instance containing the configured `libadwaita::Application`.
+    pub fn new(db_pool: Arc<SqlitePool>, image_loader: AsyncImageLoader) -> Self {
         // Create a new Libadwaita Application with a unique application ID.
         // The application ID is crucial for desktop integration (e.g., .desktop files).
         let app = Application::builder()
@@ -48,7 +53,12 @@ impl App {
             build_main_window(app, db_pool.clone(), image_loader.clone());
         });
 
-        // Return the configured application instance.
-        app
+        // Return the configured application instance wrapped in the App struct.
+        App { application: app }
+    }
+
+    /// Runs the application
+    pub fn run(&self) {
+        self.application.run();
     }
 }
