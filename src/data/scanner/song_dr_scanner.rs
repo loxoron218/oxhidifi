@@ -157,14 +157,14 @@ fn parse_maat_format(lines: &[String]) -> Result<Vec<Option<u8>>, Box<dyn Error 
         }
 
         // If we're in the table and have identified the DR column
-        if in_table && dr_column_index.is_some() {
+        if in_table && let Some(index) = dr_column_index {
             // Split the line into columns using the pipe delimiter
             let columns: Vec<&str> = line.split('|').collect();
 
             // Check if this looks like a data row (has enough columns to include the DR column)
-            if columns.len() > dr_column_index.unwrap() {
+            if columns.len() > index {
                 // Extract and trim the content of the DR column
-                let dr_column = columns[dr_column_index.unwrap()].trim();
+                let dr_column = columns[index].trim();
 
                 // Try to parse the DR value as an unsigned 8-bit integer
                 if let Ok(dr) = dr_column.parse::<u8>() {
@@ -233,14 +233,18 @@ fn parse_foobar2000_format(
         }
 
         // If we're in the table and have identified the DR column
-        if in_table && dr_column_index.is_some() && !line.is_empty() && !is_separator_line(line) {
+        if in_table
+            && !line.is_empty()
+            && !is_separator_line(line)
+            && let Some(index) = dr_column_index
+        {
             // Split the line into columns using whitespace
             let columns: Vec<&str> = line.split_whitespace().collect();
 
             // Check if this looks like a data row (has enough columns to include the DR column)
-            if columns.len() > dr_column_index.unwrap() {
+            if columns.len() > index {
                 // Extract the DR column content
-                let dr_column = columns[dr_column_index.unwrap()];
+                let dr_column = columns[index];
 
                 // Try to parse the DR value from the DR column (e.g., "DR13" -> 13)
                 if let Some(dr_str) = dr_column.strip_prefix("DR") {
@@ -312,14 +316,18 @@ pub fn parse_ttdr_format(
         }
 
         // If we're in the table and have identified the DR column
-        if in_table && dr_column_index.is_some() && !line.is_empty() && !is_separator_line(line) {
+        if in_table
+            && !line.is_empty()
+            && !is_separator_line(line)
+            && let Some(index) = dr_column_index
+        {
             // Split the line into columns using whitespace
             let columns: Vec<&str> = line.split_whitespace().collect();
 
             // Check if this looks like a data row (has enough columns to include the DR column)
-            if columns.len() > dr_column_index.unwrap() {
+            if columns.len() > index {
                 // Extract the DR column content
-                let dr_column = columns[dr_column_index.unwrap()];
+                let dr_column = columns[index];
 
                 // Try to parse the DR value from the DR column (e.g., "DR13" -> 13)
                 if let Some(dr_str) = dr_column.strip_prefix("DR") {

@@ -79,11 +79,14 @@ fn is_supported_audio_file(path: &Path) -> bool {
 /// Errors during file processing or subdirectory scanning are currently logged
 /// (implicitly, by returning `Ok(())` if an error occurs during `process_file` or `scan_folder` recursion)
 /// to allow the scan to continue, but a top-level error will halt the current scan operation.
+type ScanFolderFuture<'a> =
+    Pin<Box<dyn Future<Output = Result<(), Box<dyn Error + Send + Sync>>> + Send + 'a>>;
+
 pub fn scan_folder<'a>(
     pool: &'a SqlitePool,
     folder_path: &'a Path,
     folder_id: i64,
-) -> Pin<Box<dyn Future<Output = Result<(), Box<dyn Error + Send + Sync>>> + Send + 'a>> {
+) -> ScanFolderFuture<'a> {
     Box::pin(async move {
         // Scan for DR value in .txt/.log files in this folder.
         // If an error occurs during DR value scanning, it's propagated.
