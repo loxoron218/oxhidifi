@@ -86,7 +86,6 @@ pub fn connect_all_handlers(
         add_music_button_albums,
         add_music_button_artists,
     );
-
     connect_settings_dialog_handler(
         widgets,
         shared_state,

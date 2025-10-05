@@ -2,7 +2,7 @@ use std::{
     cell::{Cell, RefCell},
     rc::Rc,
     sync::Arc,
-    thread,
+    thread::spawn,
 };
 
 use gtk4::{
@@ -368,7 +368,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
     // ensuring the UI remains responsive during the initial data loading process.
     let db_pool_startup_scan = db_pool.clone();
     let sender_startup_scan = sender.clone();
-    thread::spawn(move || {
+    spawn(move || {
         let rt = Runtime::new().unwrap();
         rt.block_on(async {
             run_full_scan(&db_pool_startup_scan, &sender_startup_scan).await;
