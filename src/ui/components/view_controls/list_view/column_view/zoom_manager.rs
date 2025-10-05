@@ -6,6 +6,9 @@ use std::{
 
 use super::zoom::ColumnViewZoomLevel;
 
+/// Type alias for the zoom change callback function
+type ZoomChangedCallback = Box<dyn Fn(ColumnViewZoomLevel)>;
+
 /// Manages the zoom level state for ColumnView and provides methods to change zoom levels.
 ///
 /// The `ColumnViewZoomManager` is responsible for maintaining the current zoom level
@@ -39,7 +42,7 @@ pub struct ColumnViewZoomManager {
     /// zoom level is changed. The `RefCell` provides interior mutability for
     /// updating the callback, while `Rc` allows sharing the callback across
     /// multiple instances of `ColumnViewZoomManager` (after cloning).
-    on_zoom_changed: Rc<RefCell<Option<Box<dyn Fn(ColumnViewZoomLevel)>>>>,
+    on_zoom_changed: Rc<RefCell<Option<ZoomChangedCallback>>>,
 }
 
 impl Debug for ColumnViewZoomManager {

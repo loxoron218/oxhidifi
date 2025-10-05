@@ -25,6 +25,14 @@ use crate::{
     utils::{image::AsyncImageLoader, screen::ScreenInfo},
 };
 
+/// Type alias for the return type of the library refresh channel setup function
+type LibraryRefreshChannel = (
+    UnboundedSender<()>,
+    UnboundedReceiver<()>,
+    Rc<dyn Fn(bool, bool)>,
+    Rc<RefreshService>,
+);
+
 /// Sets up the library refresh channel and the refresh UI closure.
 /// This function is the primary entry point for initializing the refresh mechanism.
 ///
@@ -56,12 +64,7 @@ pub fn setup_library_refresh_channel(
     window: Window,
     current_zoom_level: Option<Rc<Cell<ZoomLevel>>>,
     image_loader: AsyncImageLoader,
-) -> (
-    UnboundedSender<()>,
-    UnboundedReceiver<()>,
-    Rc<dyn Fn(bool, bool)>,
-    Rc<RefreshService>,
-) {
+) -> LibraryRefreshChannel {
     let (sender, receiver) = unbounded_channel::<()>();
 
     // Create grouping structs

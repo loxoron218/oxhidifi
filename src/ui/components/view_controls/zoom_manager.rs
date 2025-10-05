@@ -6,6 +6,9 @@ use std::{
 
 use super::ZoomLevel;
 
+/// Type alias for the zoom change callback function
+type ZoomChangedCallback = Box<dyn Fn(ZoomLevel)>;
+
 /// Manages the zoom level state and provides methods to change zoom levels.
 ///
 /// The `ZoomManager` is responsible for maintaining the current zoom level
@@ -36,7 +39,7 @@ pub struct ZoomManager {
     /// zoom level is changed. The `RefCell` provides interior mutability for
     /// updating the callback, while `Rc` allows sharing the callback across
     /// multiple instances of `ZoomManager` (after cloning).
-    on_zoom_changed: Rc<RefCell<Option<Box<dyn Fn(ZoomLevel)>>>>,
+    on_zoom_changed: Rc<RefCell<Option<ZoomChangedCallback>>>,
 }
 
 impl Debug for ZoomManager {
