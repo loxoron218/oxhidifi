@@ -5,6 +5,7 @@ use gtk4::{ColumnView, ColumnViewColumn};
 use super::super::cell_factories::{
     create_cover_image_column, create_dr_badge_column, create_numeric_column, create_text_column,
 };
+use super::zoom_manager::ColumnViewZoomManager;
 use crate::utils::{
     formatting::{format_sample_rate_khz, format_year_info},
     image::AsyncImageLoader,
@@ -21,8 +22,6 @@ use crate::utils::{
 /// * `column_view` - A reference to the [`ColumnView`] to add columns to
 /// * `use_original_year` - Whether to display the original release year instead of the release year
 /// * `show_dr_badges` - A `Rc<Cell<bool>>` indicating whether to show DR badges
-use super::zoom_manager::ColumnViewZoomManager;
-
 pub fn create_columns(
     column_view: &ColumnView,
     use_original_year: bool,

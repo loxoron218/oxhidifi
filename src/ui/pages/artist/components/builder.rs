@@ -13,11 +13,6 @@ use libadwaita::{
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::ui::{
-    components::{player_bar::PlayerBar, tiles::text_utils::highlight, view_controls::ZoomLevel},
-    pages::artist::data::artist_data::AlbumDisplayInfoWithYear,
-};
-
 use super::{
     cover::{
         add_overlay_to_album_overlay, create_album_cover_container, create_album_overlay,
@@ -29,6 +24,10 @@ use super::{
         create_year_label,
     },
     play_button::{create_play_button, setup_hover_controller, setup_play_button_handler},
+};
+use crate::ui::{
+    components::{player_bar::PlayerBar, tiles::text_utils::highlight, view_controls::ZoomLevel},
+    pages::artist::data::artist_data::AlbumDisplayInfoWithYear,
 };
 
 /// Build an album card widget for the artist page.

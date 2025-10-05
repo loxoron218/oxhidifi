@@ -1,3 +1,4 @@
+use super::main::PlaybackController;
 use crate::{
     data::db::crud::{fetch_album_by_id, fetch_artist_by_id, fetch_songs_by_album},
     playback::{
@@ -5,8 +6,6 @@ use crate::{
         queue::QueueItem,
     },
 };
-
-use super::main::PlaybackController;
 
 impl PlaybackController {
     /// Queues all songs from an album for playback

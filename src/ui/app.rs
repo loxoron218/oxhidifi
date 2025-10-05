@@ -3,9 +3,8 @@ use std::sync::Arc;
 use libadwaita::{Application, prelude::ApplicationExt};
 use sqlx::SqlitePool;
 
-use crate::utils::image::AsyncImageLoader;
-
 use super::main_window::builder::build_main_window;
+use crate::utils::image::AsyncImageLoader;
 
 /// `App` struct represents the main application entry point and configuration.
 ///

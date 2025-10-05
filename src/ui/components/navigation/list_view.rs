@@ -14,11 +14,10 @@ use libadwaita::{Clamp, ViewStack};
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
+use super::VIEW_STACK_BACK_HEADER;
 use crate::ui::components::{
     player_bar::PlayerBar, view_controls::list_view::data_model::AlbumListItemObject,
 };
-
-use super::VIEW_STACK_BACK_HEADER;
 
 /// Connects album navigation for the list view.
 ///

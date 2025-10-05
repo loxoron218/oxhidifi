@@ -1,6 +1,5 @@
-use crate::playback::{error::PlaybackError, queue::QueueItem};
-
 use super::main::PlaybackController;
+use crate::playback::{error::PlaybackError, queue::QueueItem};
 
 impl PlaybackController {
     /// Checks if navigation to the next song is possible

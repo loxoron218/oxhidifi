@@ -7,9 +7,8 @@ use gtk4::{
 use libadwaita::prelude::{ButtonExt, ObjectExt, WidgetExt};
 use tokio::{select, sync::Mutex};
 
-use crate::playback::{controller::PlaybackController, events::PlaybackState::Playing};
-
 use super::PlayerBar;
+use crate::playback::{controller::PlaybackController, events::PlaybackState::Playing};
 
 impl PlayerBar {
     /// Sets the main content area that needs padding adjustment when player bar visibility changes.

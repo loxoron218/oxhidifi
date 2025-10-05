@@ -1,9 +1,8 @@
+use super::main::PlaybackController;
 use crate::playback::events::{
     PlaybackEvent,
     PlaybackEvent::{EndOfStream, Error, PositionChanged, SongChanged, StateChanged},
 };
-
-use super::main::PlaybackController;
 
 impl PlaybackController {
     /// Attempts to get an event from the receiver without blocking.

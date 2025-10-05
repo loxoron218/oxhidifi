@@ -14,9 +14,8 @@ use libadwaita::{Clamp, ViewStack};
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::{ui::components::player_bar::PlayerBar, utils::screen::ScreenInfo};
-
 use super::VIEW_STACK_BACK_HEADER;
+use crate::{ui::components::player_bar::PlayerBar, utils::screen::ScreenInfo};
 
 /// Connects a handler to the `albums_grid` to manage navigation to the album detail page.
 ///

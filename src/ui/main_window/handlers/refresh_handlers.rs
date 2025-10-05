@@ -3,6 +3,7 @@ use std::{cell::RefCell, rc::Rc, sync::Arc};
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
+use super::super::{state::WindowSharedState, widgets::WindowWidgets};
 use crate::{
     data::watcher::start_watching_library,
     ui::components::{
@@ -10,8 +11,6 @@ use crate::{
         scan_feedback::spawn_scanning_label_refresh_task,
     },
 };
-
-use super::super::{state::WindowSharedState, widgets::WindowWidgets};
 
 /// Sets up a periodic refresh mechanism that monitors screen size changes and adapts the UI accordingly.
 ///

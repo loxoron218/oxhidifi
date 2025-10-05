@@ -4,12 +4,11 @@ use gtk4::glib::timeout_future;
 use libadwaita::prelude::WidgetExt;
 use tokio::runtime::Runtime;
 
+use super::core::FolderSettingsPage;
 use crate::{
     data::{db::crud::insert_or_get_folder, scanner::scan_folder},
     ui::settings::folder::data_operations::refresh_display,
 };
-
-use super::core::FolderSettingsPage;
 
 /// Handles the addition of a new folder, including scanning and UI updates.
 ///

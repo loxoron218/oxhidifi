@@ -9,11 +9,10 @@ use libadwaita::{PreferencesGroup, prelude::PreferencesGroupExt};
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
+use super::ui_components::create_folder_ui;
 use crate::ui::settings::folder::{
     data_operations::refresh_display, event_handlers::connect_add_folder_handler,
 };
-
-use super::ui_components::create_folder_ui;
 
 /// Manages the UI and logic for the "Library Folders" section within the settings dialog.
 ///

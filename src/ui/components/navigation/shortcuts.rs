@@ -10,6 +10,7 @@ use libadwaita::{
     prelude::{EditableExt, ObjectExt, WidgetExt},
 };
 
+use super::{VIEW_STACK_ALBUMS, VIEW_STACK_ARTISTS, back::handle_back_navigation};
 use crate::ui::{
     components::view_controls::{
         ZoomManager,
@@ -18,8 +19,6 @@ use crate::ui::{
     },
     search_bar::SearchBar,
 };
-
-use super::{VIEW_STACK_ALBUMS, VIEW_STACK_ARTISTS, back::handle_back_navigation};
 
 /// Sets up keyboard shortcuts for the main application window.
 ///
