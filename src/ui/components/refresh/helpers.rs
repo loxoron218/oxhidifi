@@ -42,6 +42,7 @@ impl RefreshService {
                     .as_ref()
                     .map(|zoom| zoom.get())
                     .unwrap_or_default(),
+                self.image_loader.clone(),
             )
             .await;
         } else {
@@ -130,6 +131,7 @@ impl RefreshService {
                 self.show_dr_badges.clone(),
                 Some(Rc::new(self.clone())),
                 None,
+                self.image_loader.clone(),
             );
 
             // Set the ColumnView model in the RefreshService

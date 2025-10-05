@@ -18,6 +18,7 @@ use libadwaita::{
 use sqlx::SqlitePool;
 use tokio::{runtime::Runtime, sync::Mutex};
 
+use super::{handlers::connect_all_handlers, state::WindowSharedState, widgets::WindowWidgets};
 use crate::{
     data::scanner::library_ops::run_full_scan,
     playback::controller::PlaybackController,
@@ -40,10 +41,8 @@ use crate::{
         },
         header::{build_header_bar, build_main_headerbar, build_tab_bar},
     },
-    utils::screen::ScreenInfo,
+    utils::{image::AsyncImageLoader, screen::ScreenInfo},
 };
-
-use super::{handlers::connect_all_handlers, state::WindowSharedState, widgets::WindowWidgets};
 
 /// Build and present the main application window, including all UI widgets, search, and navigation.
 /// Handles all top-level UI logic, event connections, and async refresh flows.
@@ -57,7 +56,12 @@ use super::{handlers::connect_all_handlers, state::WindowSharedState, widgets::W
 ///
 /// * `app` - The `libadwaita::Application` instance, representing the GTK application.
 /// * `db_pool` - An `Arc<SqlitePool>` for database operations, shared across the application.
-pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
+/// * `image_loader` - An `AsyncImageLoader` instance for shared image caching.
+pub fn build_main_window(
+    app: &Application,
+    db_pool: Arc<SqlitePool>,
+    image_loader: AsyncImageLoader,
+) {
     // Initialize core GTK widgets and application window
     // The `ApplicationWindow` is the top-level window for the application.
     let window = ApplicationWindow::builder()
@@ -236,6 +240,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         widgets.player_bar.clone(),
         widgets.window.clone().into(),
         Some(shared_state.current_zoom_level.clone()),
+        image_loader.clone(),
     );
 
     // Get the albums stack from the cell (always available)
@@ -259,6 +264,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         shared_state.show_dr_badges.clone(),
         Some(refresh_service.clone()),
         Some(shared_state.column_view_zoom_manager.clone()),
+        image_loader.clone(),
     );
 
     // Build the artist grid
@@ -312,6 +318,7 @@ pub fn build_main_window(app: &Application, db_pool: Arc<SqlitePool>) {
         &vbox_inner,
         &add_music_button_albums,
         &add_music_button_artists,
+        image_loader.clone(),
     );
 
     // Connect the zoom manager callback to update screen info and rebuild grids

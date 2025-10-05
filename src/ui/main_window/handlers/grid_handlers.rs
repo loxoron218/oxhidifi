@@ -4,13 +4,16 @@ use gtk4::glib::MainContext;
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::ui::{
-    components::{
-        config::load_settings, refresh::RefreshService,
-        view_controls::list_view::population::populate_albums_column_view,
+use crate::{
+    ui::{
+        components::{
+            config::load_settings, refresh::RefreshService,
+            view_controls::list_view::population::populate_albums_column_view,
+        },
+        grids::album_grid_rebuilder::rebuild_albums_grid_for_window,
+        main_window::{state::WindowSharedState, widgets::WindowWidgets},
     },
-    grids::album_grid_rebuilder::rebuild_albums_grid_for_window,
-    main_window::{state::WindowSharedState, widgets::WindowWidgets},
+    utils::image::AsyncImageLoader,
 };
 
 /// Rebuild and populate initial grids for albums and artists.
@@ -25,6 +28,7 @@ use crate::ui::{
 /// * `sender` - An `UnboundedSender<()>` for sending UI refresh signals.
 /// * `_refresh_library_ui` - A closure for refreshing the library UI (currently unused).
 /// * `refresh_service` - An `Rc<RefreshService>` for managing UI refresh operations.
+/// * `image_loader` - An `AsyncImageLoader` instance for shared image caching.
 pub fn rebuild_and_populate_grids(
     widgets: &WindowWidgets,
     shared_state: &WindowSharedState,
@@ -32,6 +36,7 @@ pub fn rebuild_and_populate_grids(
     sender: UnboundedSender<()>,
     _refresh_library_ui: Rc<dyn Fn(bool, bool)>,
     refresh_service: Rc<RefreshService>,
+    image_loader: AsyncImageLoader,
 ) {
     // Load persistent user settings for initial sort orders and view mode.
     // This ensures the UI respects user preferences from previous sessions.
@@ -63,6 +68,7 @@ pub fn rebuild_and_populate_grids(
         show_dr_badges_cloned.clone(),
         Some(refresh_service.clone()),
         None,
+        image_loader,
     );
 
     // Update the view control button's mode to match the initial view mode from settings.

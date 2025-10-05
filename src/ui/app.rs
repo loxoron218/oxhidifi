@@ -3,6 +3,8 @@ use std::sync::Arc;
 use libadwaita::{Application, prelude::ApplicationExt};
 use sqlx::SqlitePool;
 
+use crate::utils::image::AsyncImageLoader;
+
 use super::main_window::builder::build_main_window;
 
 /// `App` struct represents the main application entry point and configuration.
@@ -25,11 +27,12 @@ impl App {
     /// * `db_pool` - An `Arc<SqlitePool>` representing the shared database connection pool.
     ///   This pool is cloned and moved into the `activate` signal handler closure,
     ///   allowing the main window to interact with the database.
+    /// * `image_loader` - An `AsyncImageLoader` instance for shared image caching.
     ///
     /// # Returns
     ///
     /// A `libadwaita::Application` instance, ready to be run.
-    pub fn new(db_pool: Arc<SqlitePool>) -> Application {
+    pub fn new(db_pool: Arc<SqlitePool>, image_loader: AsyncImageLoader) -> Application {
         // Create a new Libadwaita Application with a unique application ID.
         // The application ID is crucial for desktop integration (e.g., .desktop files).
         let app = Application::builder()
@@ -37,13 +40,13 @@ impl App {
             .build();
 
         // Connect the 'activate' signal to the main window builder.
-        // The `move` keyword ensures that `app` and `db_pool` are moved into the closure,
+        // The `move` keyword ensures that `app`, `db_pool`, and `image_loader` are moved into the closure,
         // allowing them to be used within the asynchronous context of the signal handler.
         app.connect_activate(move |app| {
             // Build and present the main application window.
-            // A clone of `db_pool` is passed to `build_main_window` to ensure
-            // the main window has access to the database.
-            build_main_window(app, db_pool.clone());
+            // Clones of `db_pool` and `image_loader` are passed to `build_main_window` to ensure
+            // the main window has access to the database and shared image cache.
+            build_main_window(app, db_pool.clone(), image_loader.clone());
         });
 
         // Return the configured application instance.

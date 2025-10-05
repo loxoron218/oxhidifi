@@ -10,7 +10,7 @@ use libadwaita::{gdk::Display, init, prelude::ApplicationExtManual};
 use sqlx::sqlite::SqlitePoolOptions;
 use tokio::main;
 
-use crate::{data::db::schema::init_db, ui::App};
+use crate::{data::db::schema::init_db, ui::App, utils::image::AsyncImageLoader};
 
 /// Entry point: initializes the app, sets up CSS, and launches the main event loop.
 #[main]
@@ -66,6 +66,7 @@ async fn main() {
     let pool = Arc::new(pool);
 
     // Create a new application instance and run the application
-    let app = App::new(pool.clone());
+    let image_loader = AsyncImageLoader::new().expect("Failed to create image loader");
+    let app = App::new(pool.clone(), image_loader);
     app.run();
 }

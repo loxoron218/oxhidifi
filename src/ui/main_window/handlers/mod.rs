@@ -12,29 +12,31 @@ use gtk4::{Box, Button};
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
-use crate::ui::{
-    components::refresh::RefreshService,
-    main_window::handlers::dialog_handlers::{
-        connect_add_folder_handlers, connect_settings_dialog_handler,
-    },
-    main_window::handlers::{
-        grid_handlers::rebuild_and_populate_grids,
-        keyboard_handlers::setup_keyboard_shortcuts_handler,
-        navigation_handlers::{
-            connect_album_navigation_handler, connect_artist_navigation_handler,
-            connect_back_button_handler, connect_list_view_album_navigation_handler,
-            connect_tab_navigation_handler,
-        },
-        refresh_handlers::{
-            setup_live_monitor_refresh_handler, spawn_scanning_label_refresh_task_handler,
-            start_library_watcher,
-        },
-        search_handlers::{connect_live_search_handler, setup_search_bar_logic},
-        view_mode_handlers::{connect_view_control_sorting, connect_view_mode_change_handler},
-    },
-};
-
 use super::{state::WindowSharedState, widgets::WindowWidgets};
+use crate::{
+    ui::{
+        components::refresh::RefreshService,
+        main_window::handlers::dialog_handlers::{
+            connect_add_folder_handlers, connect_settings_dialog_handler,
+        },
+        main_window::handlers::{
+            grid_handlers::rebuild_and_populate_grids,
+            keyboard_handlers::setup_keyboard_shortcuts_handler,
+            navigation_handlers::{
+                connect_album_navigation_handler, connect_artist_navigation_handler,
+                connect_back_button_handler, connect_list_view_album_navigation_handler,
+                connect_tab_navigation_handler,
+            },
+            refresh_handlers::{
+                setup_live_monitor_refresh_handler, spawn_scanning_label_refresh_task_handler,
+                start_library_watcher,
+            },
+            search_handlers::{connect_live_search_handler, setup_search_bar_logic},
+            view_mode_handlers::{connect_view_control_sorting, connect_view_mode_change_handler},
+        },
+    },
+    utils::image::AsyncImageLoader,
+};
 
 /// Connects all UI event handlers and initializes various components of the main window.
 ///
@@ -64,6 +66,7 @@ use super::{state::WindowSharedState, widgets::WindowWidgets};
 /// * `vbox_inner` - The main vertical box container.
 /// * `add_music_button_albums` - The "Add Music" button for albums.
 /// * `add_music_button_artists` - The "Add Music" button for artists.
+/// * `image_loader` - An `AsyncImageLoader` instance for shared image caching.
 pub fn connect_all_handlers(
     widgets: &WindowWidgets,
     shared_state: &WindowSharedState,
@@ -75,6 +78,7 @@ pub fn connect_all_handlers(
     vbox_inner: &Box,
     add_music_button_albums: &Button,
     add_music_button_artists: &Button,
+    image_loader: AsyncImageLoader,
 ) {
     // Connect dialog handlers for folder management and settings
     connect_add_folder_handlers(
@@ -103,6 +107,7 @@ pub fn connect_all_handlers(
         sender.clone(),
         refresh_library_ui.clone(),
         refresh_service.clone(),
+        image_loader,
     );
 
     // Connect navigation handlers after grids are built

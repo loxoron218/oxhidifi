@@ -17,6 +17,7 @@ use crate::{
 /// It integrates with the core ImageLoader to provide cached image loading while
 /// ensuring that UI operations happen on the main thread. The loader also displays
 /// placeholder images immediately while loading occurs in the background.
+#[derive(Clone)]
 pub struct AsyncImageLoader {
     /// Thread-safe reference to the core image loader
     image_loader: Arc<ImageLoader>,

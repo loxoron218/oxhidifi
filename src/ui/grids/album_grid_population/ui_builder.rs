@@ -47,6 +47,7 @@ use crate::{
 /// * `use_original_year` - A `Rc<Cell<bool>>` indicating whether to use original release year
 /// * `player_bar` - A `PlayerBar` instance for playback functionality
 /// * `zoom_level` - The current zoom level to determine display density
+/// * `image_loader` - An `AsyncImageLoader` instance for shared image caching.
 ///
 /// # Returns
 /// A `FlowBoxChild` widget with the complete album tile UI
@@ -58,6 +59,7 @@ pub fn create_album_tile(
     player_bar: &PlayerBar,
     _db_pool: Arc<SqlitePool>,
     zoom_level: ZoomLevel,
+    image_loader: AsyncImageLoader,
 ) -> FlowBoxChild {
     let cover_size = screen_info.borrow().cover_size;
     let tile_size = screen_info.borrow().tile_size;
@@ -207,15 +209,12 @@ pub fn create_album_tile(
         create_album_cover_picture(album_info.cover_art.as_deref().map(Path::new), cover_size);
     cover_container.append(&cover_picture);
 
-    // Load the image asynchronously
-    if let Ok(async_image_loader) = AsyncImageLoader::new() {
-        async_image_loader.load_image_async(
-            cover_picture.clone(),
-            album_info.cover_art.as_deref().map(Path::new),
-            cover_size,
-        );
-    }
-
+    // Load the image asynchronously using the shared image loader
+    image_loader.load_image_async(
+        cover_picture.clone(),
+        album_info.cover_art.as_deref().map(Path::new),
+        cover_size,
+    );
     let overlay = Overlay::new();
     overlay.set_size_request(cover_size, cover_size);
     overlay.set_child(Some(&cover_container));

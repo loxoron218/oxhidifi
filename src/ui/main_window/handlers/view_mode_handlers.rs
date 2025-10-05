@@ -127,6 +127,7 @@ pub fn connect_view_mode_change_handler(
                 show_dr_badges_clone.clone(),
                 Some(refresh_service_clone.clone()),
                 Some(column_view_zoom_manager_cloned.clone()),
+                refresh_service_clone.image_loader.clone(),
             );
 
             // Update the button's view mode to match the new view mode

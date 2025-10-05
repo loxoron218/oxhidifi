@@ -22,7 +22,7 @@ use crate::{
         },
         view_controls::{ZoomLevel, sorting_controls::types::SortOrder},
     },
-    utils::screen::ScreenInfo,
+    utils::{image::AsyncImageLoader, screen::ScreenInfo},
 };
 
 /// Sets up the library refresh channel and the refresh UI closure.
@@ -55,6 +55,7 @@ pub fn setup_library_refresh_channel(
     player_bar: PlayerBar,
     window: Window,
     current_zoom_level: Option<Rc<Cell<ZoomLevel>>>,
+    image_loader: AsyncImageLoader,
 ) -> (
     UnboundedSender<()>,
     UnboundedReceiver<()>,
@@ -113,6 +114,7 @@ pub fn setup_library_refresh_channel(
         sender.clone(),
         player_bar,
         window,
+        image_loader,
     ));
 
     // Create the refresh UI closure from the service

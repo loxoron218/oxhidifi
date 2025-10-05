@@ -2,10 +2,12 @@ use std::{cell::Cell, rc::Rc};
 
 use gtk4::{ColumnView, ColumnViewColumn};
 
-use crate::utils::formatting::{format_sample_rate_khz, format_year_info};
-
 use super::super::cell_factories::{
     create_cover_image_column, create_dr_badge_column, create_numeric_column, create_text_column,
+};
+use crate::utils::{
+    formatting::{format_sample_rate_khz, format_year_info},
+    image::AsyncImageLoader,
 };
 
 /// Creates and configures all columns for the ColumnView.
@@ -26,6 +28,7 @@ pub fn create_columns(
     use_original_year: bool,
     show_dr_badges: Rc<Cell<bool>>,
     zoom_manager: Option<Rc<ColumnViewZoomManager>>,
+    image_loader: AsyncImageLoader,
 ) {
     // Get the current zoom level or use default
     let (cover_width, dr_width) = if let Some(ref zoom_manager) = zoom_manager {
@@ -44,7 +47,7 @@ pub fn create_columns(
         .build();
 
     // Configure the cell factory for displaying cover images
-    create_cover_image_column(&cover_column, zoom_manager.clone());
+    create_cover_image_column(&cover_column, zoom_manager.clone(), image_loader);
 
     // Add the column to the ColumnView
     column_view.append_column(&cover_column);

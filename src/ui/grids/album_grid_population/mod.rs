@@ -1,3 +1,7 @@
+mod ui_builder;
+
+pub mod sorting;
+
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,
@@ -32,12 +36,8 @@ use crate::{
             },
         },
     },
-    utils::screen::ScreenInfo,
+    utils::{image::AsyncImageLoader, screen::ScreenInfo},
 };
-
-mod ui_builder;
-
-pub mod sorting;
 
 /// Populates the given `albums_grid` with album tiles, handling data fetching, sorting, and UI updates.
 ///
@@ -56,6 +56,7 @@ pub mod sorting;
 /// * `use_original_year` - A `Rc<Cell<bool>>` indicating whether to use original release year.
 /// * `player_bar` - A `PlayerBar` instance for playback functionality.
 /// * `zoom_level` - The current zoom level to determine display density.
+/// * `image_loader` - An `AsyncImageLoader` instance for shared image caching.
 pub async fn populate_albums_grid(
     albums_grid: &FlowBox,
     db_pool: Arc<SqlitePool>,
@@ -68,6 +69,7 @@ pub async fn populate_albums_grid(
     use_original_year: Rc<Cell<bool>>,
     player_bar: PlayerBar,
     zoom_level: ZoomLevel,
+    image_loader: AsyncImageLoader,
 ) {
     // A thread-local static to prevent multiple simultaneous population calls,
     // ensuring data consistency and preventing redundant work.
@@ -120,6 +122,7 @@ pub async fn populate_albums_grid(
                     player_bar.clone(),
                     db_pool.clone(),
                     zoom_level,
+                    image_loader.clone(),
                 )
                 .await;
             }
@@ -156,6 +159,7 @@ pub async fn populate_albums_grid(
                         player_bar.clone(),
                         db_pool.clone(),
                         zoom_level,
+                        image_loader.clone(),
                     )
                     .await;
                 } else {
@@ -201,6 +205,7 @@ async fn process_albums_in_batches(
     player_bar: PlayerBar,
     db_pool: Arc<SqlitePool>,
     zoom_level: ZoomLevel,
+    image_loader: AsyncImageLoader,
 ) {
     // BATCH_SIZE: The number of album tiles to process before yielding control
     // back to the GTK main thread. This helps prevent UI freezes during large
@@ -225,6 +230,7 @@ async fn process_albums_in_batches(
             &player_bar,
             db_pool.clone(),
             zoom_level,
+            image_loader.clone(),
         );
 
         // Insert the new album tile into the FlowBox.

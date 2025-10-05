@@ -15,14 +15,18 @@ use libadwaita::{
     prelude::{BoxExt, WidgetExt},
 };
 
-use crate::ui::{
-    components::{
-        scan_feedback::create_scanning_label,
-        view_controls::list_view::column_view::{
-            create_column_view_with_activate_and_year_setting, zoom_manager::ColumnViewZoomManager,
+use crate::{
+    ui::{
+        components::{
+            scan_feedback::create_scanning_label,
+            view_controls::list_view::column_view::{
+                create_column_view_with_activate_and_year_setting,
+                zoom_manager::ColumnViewZoomManager,
+            },
         },
+        grids::album_grid_state::AlbumGridState::{Empty, Loading, NoResults, Populated, Scanning},
     },
-    grids::album_grid_state::AlbumGridState::{Empty, Loading, NoResults, Populated, Scanning},
+    utils::image::AsyncImageLoader,
 };
 
 /// Builds the main `gtk4::Stack` and `gtk4::FlowBox` for the albums grid.
@@ -203,6 +207,7 @@ pub fn build_albums_list_view<F>(
     add_music_button: &Button,
     on_activate: Option<F>,
     zoom_manager: Option<Rc<ColumnViewZoomManager>>,
+    image_loader: AsyncImageLoader,
 ) -> (Stack, ScrolledWindow, ListStore, ColumnView)
 where
     F: Fn(&ColumnView, u32) + 'static,
@@ -246,6 +251,7 @@ where
             use_original_year,
             show_dr_badges,
             zoom_manager,
+            image_loader,
         );
 
     // --- Scanning State ---

@@ -18,7 +18,7 @@ use crate::{
         player_bar::PlayerBar,
         view_controls::{ZoomLevel, sorting_controls::types::SortOrder},
     },
-    utils::screen::ScreenInfo,
+    utils::{image::AsyncImageLoader, screen::ScreenInfo},
 };
 
 /// Albums-related UI components
@@ -91,6 +91,7 @@ pub struct RefreshService {
     pub previous_show_dr_badges: Cell<bool>,
     pub window: Window,
     pub current_zoom_level: Option<Rc<Cell<ZoomLevel>>>,
+    pub image_loader: AsyncImageLoader,
 }
 
 impl RefreshService {
@@ -106,6 +107,7 @@ impl RefreshService {
         sender: UnboundedSender<()>,
         player_bar: PlayerBar,
         window: Window,
+        image_loader: AsyncImageLoader,
     ) -> Self {
         Self {
             db_pool,
@@ -134,6 +136,7 @@ impl RefreshService {
             previous_show_dr_badges: Cell::new(display_settings.show_dr_badges.get()),
             window,
             current_zoom_level: display_settings.current_zoom_level,
+            image_loader,
         }
     }
 

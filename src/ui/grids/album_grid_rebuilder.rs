@@ -32,7 +32,7 @@ use crate::{
         grids::album_grid_builder::{build_albums_grid, build_albums_list_view},
         pages::album::album_page::album_page,
     },
-    utils::screen::ScreenInfo,
+    utils::{image::AsyncImageLoader, screen::ScreenInfo},
 };
 
 /// Rebuilds the albums grid in the main window.
@@ -55,6 +55,7 @@ use crate::{
 /// * `view_mode` - The current view mode (GridView or ListView).
 /// * `use_original_year` - Whether to display the original release year.
 /// * `show_dr_badges` - A `Rc<Cell<bool>>` indicating whether to show DR badges.
+/// * `image_loader` - An `AsyncImageLoader` instance for shared image caching.
 pub fn rebuild_albums_grid_for_window(
     stack: &ViewStack,
     scanning_label_albums: &Label,
@@ -70,6 +71,7 @@ pub fn rebuild_albums_grid_for_window(
     show_dr_badges: Rc<Cell<bool>>,
     refresh_service: Option<Rc<RefreshService>>,
     column_view_zoom_manager: Option<Rc<ColumnViewZoomManager>>,
+    image_loader: AsyncImageLoader,
 ) -> Option<ListStore> {
     // Remove old grid widget from the stack if it exists to prevent duplicates.
     if let Some(child) = stack.child_by_name("albums") {
@@ -216,6 +218,7 @@ pub fn rebuild_albums_grid_for_window(
                     }
                 }),
                 column_view_zoom_manager,
+                image_loader,
             );
 
             // Add the newly created albums stack to the main ViewStack.

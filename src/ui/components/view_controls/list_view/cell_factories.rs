@@ -8,7 +8,6 @@ use gtk4::{
 use libadwaita::prelude::{Cast, ListItemExt, WidgetExt};
 
 use super::{column_view::zoom_manager::ColumnViewZoomManager, data_model::AlbumListItemObject};
-
 use crate::utils::image::AsyncImageLoader;
 
 /// Creates a cell factory for displaying album cover images in a ColumnView column.
@@ -21,6 +20,8 @@ use crate::utils::image::AsyncImageLoader;
 /// # Arguments
 ///
 /// * `column` - The `ColumnViewColumn` to configure with the image cell factory
+/// * `zoom_manager` - Optional zoom manager for dynamic sizing
+/// * `image_loader` - Shared image loader for caching
 ///
 /// # Implementation Details
 ///
@@ -30,6 +31,7 @@ use crate::utils::image::AsyncImageLoader;
 pub fn create_cover_image_column(
     column: &ColumnViewColumn,
     zoom_manager: Option<Rc<ColumnViewZoomManager>>,
+    image_loader: AsyncImageLoader,
 ) {
     // Create a new SignalListItemFactory which will manage the creation and updating of cells
     let factory = SignalListItemFactory::new();
@@ -80,14 +82,12 @@ pub fn create_cover_image_column(
             // Update the picture size request
             picture.set_size_request(cover_size, cover_size);
 
-            // Create an AsyncImageLoader to load the image asynchronously
-            if let Ok(loader) = AsyncImageLoader::new() {
-                // Convert the cover art path to a Path if it exists
-                let path = cover_art_path.as_ref().map(Path::new);
-
-                // Load the image asynchronously with the size based on zoom level
-                loader.load_image_async(picture, path, cover_size);
-            }
+            // Load the image asynchronously with the size based on zoom level using the shared image loader
+            image_loader.load_image_async(
+                picture,
+                cover_art_path.as_ref().map(Path::new),
+                cover_size,
+            );
         }
     });
 }

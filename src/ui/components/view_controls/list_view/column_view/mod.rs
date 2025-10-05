@@ -7,11 +7,13 @@ use std::{cell::Cell, rc::Rc};
 
 use gtk4::{ColumnView, PolicyType::Automatic, ScrolledWindow, SingleSelection, gio::ListStore};
 
-use crate::ui::components::view_controls::list_view::column_view::{
-    columns::create_columns, zoom_manager::ColumnViewZoomManager,
-};
-
 use super::data_model::{AlbumListItem, AlbumListItemObject};
+use crate::{
+    ui::components::view_controls::list_view::column_view::{
+        columns::create_columns, zoom_manager::ColumnViewZoomManager,
+    },
+    utils::image::AsyncImageLoader,
+};
 
 /// Creates a ColumnView widget for displaying albums in a list format with an optional activation callback.
 ///
@@ -54,6 +56,7 @@ pub fn create_column_view_with_activate_and_year_setting<F>(
     use_original_year: bool,
     show_dr_badges: Rc<Cell<bool>>,
     zoom_manager: Option<Rc<ColumnViewZoomManager>>,
+    image_loader: AsyncImageLoader,
 ) -> (ScrolledWindow, ListStore, ColumnView)
 where
     F: Fn(&ColumnView, u32) + 'static,
@@ -103,6 +106,7 @@ where
         use_original_year,
         show_dr_badges,
         zoom_manager,
+        image_loader,
     );
 
     // Create a scrolled window to contain the ColumnView
