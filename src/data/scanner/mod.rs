@@ -208,11 +208,8 @@ pub async fn scan_folder_parallel(
         }
 
         // Wait for one task to complete
-        if let Some(result) = join_set.join_next().await {
-            // Handle any errors from completed tasks
-            if let Ok(Err(e)) = result {
-                eprintln!("Error scanning directory: {}", e);
-            }
+        if let Some(Ok(Err(e))) = join_set.join_next().await {
+            eprintln!("Error scanning directory: {}", e);
         }
     }
     Ok(())
