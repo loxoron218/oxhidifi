@@ -35,7 +35,7 @@ pub fn clear_grid(grid: &FlowBox) {
 /// the user is typing in the search field.
 ///
 /// # Arguments
-/// * `search_timer` - A reference to the `Rc<RefCell<Option<SourceId>>>` that songs the current timer
+/// * `search_timer` - A reference to the `Rc<RefCell<Option<SourceId>>>` that tracks the current timer
 /// * `delay` - The duration to wait before executing the closure
 /// * `closure` - The closure to execute when the timer fires
 pub fn debounce_search<F>(search_timer: &Rc<RefCell<Option<SourceId>>>, delay: Duration, closure: F)
