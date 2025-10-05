@@ -12,12 +12,6 @@ use super::{
     pipeline::PipelineManager,
 };
 
-/// Type alias for the playback event sender
-///
-/// This alias simplifies the type signature for sending playback events
-/// from the engine to the UI components.
-pub type PlaybackEventSender = UnboundedSender<PlaybackEvent>;
-
 /// The core playback engine that manages audio playback
 ///
 /// The `PlaybackEngine` is responsible for controlling audio playback operations
@@ -33,7 +27,7 @@ pub type PlaybackEventSender = UnboundedSender<PlaybackEvent>;
 /// * `current_state` - The current playback state (Stopped, Playing, Paused)
 pub struct PlaybackEngine {
     pipeline_manager: PipelineManager,
-    event_sender: PlaybackEventSender,
+    event_sender: UnboundedSender<PlaybackEvent>,
     bus_handler: RefCell<BusHandler>,
     pub current_state: PlaybackState,
 }
@@ -58,7 +52,7 @@ impl PlaybackEngine {
     ///
     /// This function will return an error if the [`PipelineManager`] fails to initialize
     /// or if the `BusHandler` fails to set up its bus watch.
-    pub fn new(event_sender: PlaybackEventSender) -> Result<Self, PlaybackError> {
+    pub fn new(event_sender: UnboundedSender<PlaybackEvent>) -> Result<Self, PlaybackError> {
         let pipeline_manager = PipelineManager::new()?;
         let bus_handler = BusHandler::new(
             pipeline_manager.get_pipeline().clone(),
