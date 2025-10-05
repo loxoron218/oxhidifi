@@ -1,4 +1,4 @@
-use std::{path::Path, sync::Arc};
+use std::{path::Path, rc::Rc};
 
 use gtk4::{
     Picture,
@@ -19,8 +19,8 @@ use crate::{
 /// placeholder images immediately while loading occurs in the background.
 #[derive(Clone)]
 pub struct AsyncImageLoader {
-    /// Thread-safe reference to the core image loader
-    image_loader: Arc<ImageLoader>,
+    /// Reference to the core image loader
+    image_loader: Rc<ImageLoader>,
 }
 
 impl AsyncImageLoader {
@@ -34,7 +34,7 @@ impl AsyncImageLoader {
     pub fn new() -> Result<Self, ImageLoaderError> {
         let image_loader = ImageLoader::new()?;
         Ok(Self {
-            image_loader: Arc::new(image_loader),
+            image_loader: Rc::new(image_loader),
         })
     }
 
@@ -63,7 +63,7 @@ impl AsyncImageLoader {
 
         // If we have a path, load the image asynchronously
         if let Some(path) = cover_art_path {
-            let image_loader = Arc::clone(&self.image_loader);
+            let image_loader = Rc::clone(&self.image_loader);
             let path = path.to_path_buf();
             let weak_picture = picture.downgrade();
 

@@ -1,8 +1,9 @@
 use std::{
+    cell::RefCell,
     collections::hash_map::DefaultHasher,
     hash::Hasher,
     num::NonZeroUsize,
-    sync::{Arc, RwLock},
+    rc::Rc,
     time::{Duration, Instant},
 };
 
@@ -42,12 +43,12 @@ struct CacheEntry {
 /// This implementation uses the `lru` crate for efficient O(1) operations
 /// and tracks total cache size incrementally for O(1) size checks.
 pub struct MemoryCache {
-    /// Thread-safe LRU cache storage
-    cache: Arc<RwLock<LruCache<String, CacheEntry>>>,
+    /// Thread-local LRU cache storage (not thread-safe, use from main thread only)
+    cache: Rc<RefCell<LruCache<String, CacheEntry>>>,
     /// Maximum total size of entries in the cache (in bytes)
     max_size: usize,
     /// Current total size of all entries in the cache
-    total_size: Arc<RwLock<usize>>,
+    total_size: Rc<RefCell<usize>>,
     /// Time-to-live for cache entries
     ttl: Duration,
 }
@@ -65,11 +66,11 @@ impl MemoryCache {
     pub fn new(max_entries: usize, max_size: usize, ttl: Duration) -> Self {
         // Create an LRU cache with the specified maximum entries
         Self {
-            cache: Arc::new(RwLock::new(LruCache::new(
+            cache: Rc::new(RefCell::new(LruCache::new(
                 NonZeroUsize::new(max_entries).unwrap(),
             ))),
             max_size,
-            total_size: Arc::new(RwLock::new(0)),
+            total_size: Rc::new(RefCell::new(0)),
             ttl,
         }
     }
@@ -86,7 +87,7 @@ impl MemoryCache {
     /// # Returns
     /// `Some(pixbuf)` if the image is in the cache and hasn't expired, `None` otherwise
     pub fn get(&self, key: &str) -> Option<Pixbuf> {
-        let mut cache = self.cache.write().unwrap();
+        let mut cache = self.cache.borrow_mut();
         let now = Instant::now();
 
         // Check if the entry exists and hasn't expired
@@ -116,8 +117,8 @@ impl MemoryCache {
     ///
     /// Time complexity: O(M) where M is the number of entries evicted
     fn evict_until_within_limit(&self) {
-        let mut cache = self.cache.write().unwrap();
-        let mut total_size = self.total_size.write().unwrap();
+        let mut cache = self.cache.borrow_mut();
+        let mut total_size = self.total_size.borrow_mut();
         while *total_size > self.max_size && !cache.is_empty() {
             // Efficiently remove the least recently used entry
             if let Some((_, entry)) = cache.pop_lru() {
@@ -150,8 +151,8 @@ impl MemoryCache {
         };
 
         {
-            let mut cache = self.cache.write().unwrap();
-            let mut total_size = self.total_size.write().unwrap();
+            let mut cache = self.cache.borrow_mut();
+            let mut total_size = self.total_size.borrow_mut();
 
             // If an entry with this key already exists, subtract its size from total
             if let Some(old_entry) = cache.pop(&key) {
@@ -176,14 +177,14 @@ impl Clone for MemoryCache {
         // For cloning, we create a new empty cache with the same parameters
         // This is a reasonable approach since cloning a cache is rarely needed
         // and recreating it is simpler than deep cloning all entries
-        let cache_size = self.cache.read().unwrap().cap();
+        let cache_size = self.cache.borrow().cap();
 
         // Clone implementation creates a new empty cache with the same parameters
         // This is a shallow clone that doesn't copy the actual cache entries
         Self {
-            cache: Arc::new(RwLock::new(LruCache::new(cache_size))),
+            cache: Rc::new(RefCell::new(LruCache::new(cache_size))),
             max_size: self.max_size,
-            total_size: Arc::new(RwLock::new(0)),
+            total_size: Rc::new(RefCell::new(0)),
             ttl: self.ttl,
         }
     }
