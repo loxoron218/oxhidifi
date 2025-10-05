@@ -147,10 +147,7 @@ pub fn create_year_label(
     );
     year_label.set_halign(End);
     year_label.set_hexpand(false);
-    year_label.set_visible(match zoom_level {
-        ExtraSmall | Small => false,
-        _ => true,
-    });
+    year_label.set_visible(!matches!(zoom_level, ExtraSmall | Small));
     year_label
 }
 

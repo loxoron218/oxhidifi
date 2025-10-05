@@ -178,10 +178,10 @@ pub fn create_album_tile(
         None,
     );
     year_label.set_halign(End);
-    year_label.set_visible(match zoom_level {
-        ZoomLevel::ExtraSmall | ZoomLevel::Small => false,
-        _ => true,
-    });
+    year_label.set_visible(!matches!(
+        zoom_level,
+        ZoomLevel::ExtraSmall | ZoomLevel::Small
+    ));
 
     // Do not allow year label to expand
     year_label.set_hexpand(false);
