@@ -16,7 +16,7 @@ use crate::ui::{
 /// * `sort_orders` - A `Rc<RefCell<Vec<SortOrder>>>` defining the multi-level sorting criteria
 /// * `sort_ascending` - A boolean indicating the overall sort direction (ascending/descending)
 pub fn sort_albums(
-    albums: &mut Vec<AlbumGridItem>,
+    albums: &mut [AlbumGridItem],
     sort_orders: &Rc<RefCell<Vec<SortOrder>>>,
     sort_ascending: bool,
 ) {

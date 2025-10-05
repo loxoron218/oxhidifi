@@ -76,7 +76,7 @@ where
 /// * `text` - The search query text
 /// * `sort_ascending` - A reference to the Cell<bool> indicating sort direction
 pub fn sort_albums_by_relevance(
-    albums: &mut Vec<AlbumGridItem>,
+    albums: &mut [AlbumGridItem],
     text: &str,
     sort_ascending: &Rc<Cell<bool>>,
 ) {
