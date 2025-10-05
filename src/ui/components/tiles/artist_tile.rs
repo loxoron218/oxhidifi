@@ -110,7 +110,6 @@ pub fn create_artist_tile(
     icon_container.set_size_request(cover_size, cover_size);
     icon_container.set_halign(Start);
     icon_container.set_valign(Start);
-    icon_container.add_css_class("album-cover-border");
     icon_container.append(&icon);
     tile.append(&icon_container);
 
