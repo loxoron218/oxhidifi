@@ -178,10 +178,7 @@ pub async fn upsert_albums_batch(
             original_release_date = excluded.original_release_date",
     );
     query_builder.build().execute(&mut **tx).await?;
-    let mut placeholders = Vec::new();
-    for _ in albums {
-        placeholders.push("(?, ?, ?)");
-    }
+    let placeholders = vec!["(?, ?, ?)"; albums.len()];
     let sql = format!(
         "SELECT id, title, artist_id, folder_id FROM albums WHERE (title, artist_id, folder_id) IN ({})",
         placeholders.join(", ")
