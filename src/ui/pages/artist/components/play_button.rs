@@ -108,8 +108,8 @@ pub fn setup_play_button_handler(
                                 &album_title_local,
                                 &artist.name,
                                 cover_art_path_local.as_deref().map(Path::new),
-                                album_format_bit_depth_local.map(|d| d),
-                                album_format_sample_rate_local.map(|d| d),
+                                album_format_bit_depth_local,
+                                album_format_sample_rate_local,
                                 album_format_local.as_deref(),
                                 None,
                             );
@@ -120,8 +120,8 @@ pub fn setup_play_button_handler(
                                 &album_title_local,
                                 "Unknown Artist",
                                 cover_art_path_local.as_deref().map(Path::new),
-                                album_format_bit_depth_local.map(|d| d),
-                                album_format_sample_rate_local.map(|d| d),
+                                album_format_bit_depth_local,
+                                album_format_sample_rate_local,
                                 album_format_local.as_deref(),
                                 None,
                             );
@@ -133,8 +133,8 @@ pub fn setup_play_button_handler(
                             &album_title_local,
                             "Unknown Artist",
                             cover_art_path_local.as_deref().map(Path::new),
-                            album_format_bit_depth_local.map(|d| d),
-                            album_format_sample_rate_local.map(|d| d),
+                            album_format_bit_depth_local,
+                            album_format_sample_rate_local,
                             album_format_local.as_deref(),
                             None,
                         );
