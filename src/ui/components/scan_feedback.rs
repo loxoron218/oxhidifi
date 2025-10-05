@@ -1,11 +1,14 @@
 use std::{
     cell::{Cell, RefCell},
+    mem::replace,
     rc::Rc,
 };
 
 use gtk4::{Label, glib::MainContext};
 use libadwaita::{ViewStack, prelude::WidgetExt};
-use tokio::sync::mpsc::UnboundedReceiver;
+use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
+
+use crate::ui::components::view_controls::view_mode::ViewMode::{self, GridView};
 
 /// Creates a new `gtk4::Label` widget configured for displaying scanning feedback.
 ///
@@ -34,7 +37,6 @@ pub fn create_scanning_label() -> Label {
 /// * `scanning_label_albums` - A `Rc<Label>` for the albums scanning label.
 /// * `scanning_label_artists` - A `Rc<Label>` for the artists scanning label.
 /// * `stack` - A `libadwaita::ViewStack` to determine the currently visible page.
-use crate::ui::components::view_controls::view_mode::ViewMode;
 /// * `refresh_library_ui` - A `Rc<dyn Fn(bool, bool)>` closure to refresh the library UI.
 /// * `sort_ascending` - A `Rc<Cell<bool>>` indicating the current album sort order.
 /// * `sort_ascending_artists` - A `Rc<Cell<bool>>` indicating the current artist sort order.
@@ -54,34 +56,55 @@ pub fn spawn_scanning_label_refresh_task(
     let sort_ascending_artists_for_refresh = sort_ascending_artists.clone();
     let stack_clone = stack.clone();
     MainContext::default().spawn_local(async move {
-        let mut receiver = receiver.borrow_mut();
+        // To avoid holding the RefCell reference across await points,
+        // we need to restructure the code. The receiver is moved out of the RefCell
+        // before the async block starts.
+        let receiver_local = {
+            // Take the receiver out of the RefCell by replacing it with a never-ending receiver
+            use unbounded_channel;
 
-        // Loop indefinitely, waiting for scan completion signals.
-        while receiver.recv().await.is_some() {
-            if initial_scan_ongoing.get() {
-                initial_scan_ongoing.set(false);
-                scanning_label_albums.set_visible(false);
-                scanning_label_artists.set_visible(false);
+            // This receiver will never get messages
+            let (_, never_ending_receiver) = unbounded_channel();
+            let mut borrowed = receiver.borrow_mut();
+            replace(&mut *borrowed, never_ending_receiver)
+        };
 
-                // Only perform the initial refresh if we are in GridView, as ListView is already populated.
-                if current_view_mode.get() == ViewMode::GridView {
-                    refresh_library_ui_clone(
-                        sort_ascending_for_refresh.get(),
-                        sort_ascending_artists_for_refresh.get(),
-                    );
+        // Now we can use the receiver without holding the RefCell borrow
+        let mut receiver_stream = receiver_local;
+        loop {
+            match receiver_stream.recv().await {
+                Some(()) => {
+                    // Process the received signal
+                    if initial_scan_ongoing.get() {
+                        initial_scan_ongoing.set(false);
+                        scanning_label_albums.set_visible(false);
+                        scanning_label_artists.set_visible(false);
+
+                        // Only perform the initial refresh if we are in GridView, as ListView is already populated.
+                        if current_view_mode.get() == GridView {
+                            refresh_library_ui_clone(
+                                sort_ascending_for_refresh.get(),
+                                sort_ascending_artists_for_refresh.get(),
+                            );
+                        }
+                    } else {
+                        let page = stack_clone.visible_child_name().unwrap_or_default();
+
+                        // Hide the appropriate scanning label based on the currently visible page.
+                        scanning_label_albums.set_visible(page == "albums");
+                        scanning_label_artists.set_visible(page == "artists");
+
+                        // Refresh the library UI to reflect any changes from the scan.
+                        refresh_library_ui_clone(
+                            sort_ascending_for_refresh.get(),
+                            sort_ascending_artists_for_refresh.get(),
+                        );
+                    }
                 }
-            } else {
-                let page = stack_clone.visible_child_name().unwrap_or_default();
-
-                // Hide the appropriate scanning label based on the currently visible page.
-                scanning_label_albums.set_visible(page == "albums");
-                scanning_label_artists.set_visible(page == "artists");
-
-                // Refresh the library UI to reflect any changes from the scan.
-                refresh_library_ui_clone(
-                    sort_ascending_for_refresh.get(),
-                    sort_ascending_artists_for_refresh.get(),
-                );
+                None => {
+                    // Channel is closed, exit the loop
+                    break;
+                }
             }
         }
     });

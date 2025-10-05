@@ -21,19 +21,21 @@ use crate::ui::{
 impl RefreshService {
     /// A new helper function specifically for the albums tab
     pub(crate) async fn repopulate_albums_tab(&self) {
-        if let (Some(grid), Some(stack)) = (
-            self.albums_grid_cell.borrow().as_ref(),
-            self.albums_stack_cell.borrow().as_ref(),
-        ) {
-            clear_grid(grid);
-            self.set_inner_stack_state(stack, self.scanning_label_albums.is_visible());
+        // Extract values before await to avoid holding RefCell references across await points
+        let (grid_opt, stack_opt) = (
+            self.albums_grid_cell.borrow().as_ref().cloned(),
+            self.albums_stack_cell.borrow().as_ref().cloned(),
+        );
+        if let (Some(grid), Some(stack)) = (grid_opt, stack_opt) {
+            clear_grid(&grid);
+            self.set_inner_stack_state(&stack, self.scanning_label_albums.is_visible());
             populate_albums_grid(
-                grid,
+                &grid,
                 self.db_pool.clone(),
                 self.sort_ascending.get(),
                 Rc::clone(&self.sort_orders),
                 &self.screen_info,
-                stack,
+                &stack,
                 &self.album_count_label,
                 self.show_dr_badges.clone(),
                 self.use_original_year.clone(),
@@ -48,7 +50,7 @@ impl RefreshService {
         } else {
             // If we don't have the grid or stack, but we have a stack, set it to a default state
             // to avoid leaving the UI in a loading state indefinitely
-            if let Some(stack) = self.albums_stack_cell.borrow().as_ref() {
+            if let Some(stack) = self.albums_stack_cell.borrow().as_ref().cloned() {
                 // Set to empty state as a fallback
                 stack.set_visible_child_name(Empty.as_str());
             }
@@ -88,8 +90,11 @@ impl RefreshService {
 
     /// A new helper function specifically for repopulating the ColumnView in ListView mode
     pub(crate) async fn repopulate_column_view(&self, window: &Window) {
+        // Extract the albums stack before any await points to avoid holding RefCell references
+        let albums_stack_opt = self.albums_stack_cell.borrow().as_ref().cloned();
+
         // Get the scanning label from the albums stack if it exists
-        let scanning_label = if self.albums_stack_cell.borrow().as_ref().is_some() {
+        let scanning_label = if albums_stack_opt.is_some() {
             // Check if scanning label is visible
             self.scanning_label_albums.is_visible()
         } else {
@@ -139,12 +144,10 @@ impl RefreshService {
 
             // If we have a model, populate the column view with data
             if let Some(model) = model {
-                // Get the albums stack to pass to the population function
-                if let Some(albums_stack) = self.albums_stack_cell.borrow().as_ref() {
-                    let albums_stack_clone = albums_stack.clone();
-
+                // Get the albums stack to pass to the population function (already extracted earlier)
+                if let Some(albums_stack) = albums_stack_opt {
                     // Set the inner stack state based on scanning visibility
-                    self.set_inner_stack_state(&albums_stack_clone, scanning_label);
+                    self.set_inner_stack_state(&albums_stack, scanning_label);
 
                     // Repopulate the ColumnView with updated data
                     populate_albums_column_view(
@@ -152,7 +155,7 @@ impl RefreshService {
                         self.db_pool.clone(),
                         self.sort_ascending.get(),
                         Rc::clone(&self.sort_orders),
-                        &albums_stack_clone,
+                        &albums_stack,
                         &self.album_count_label,
                         self.use_original_year.clone(),
                         self.player_bar.clone(),
@@ -162,21 +165,22 @@ impl RefreshService {
             }
         } else {
             // For refresh operations, we should use the existing model, not rebuild the grid
-            if let Some(model) = self.column_view_model.borrow().as_ref() {
-                // Get the albums stack to pass to the population function
-                if let Some(albums_stack) = self.albums_stack_cell.borrow().as_ref() {
-                    let albums_stack_clone = albums_stack.clone();
+            // Extract the column view model before await
+            let column_view_model_opt = self.column_view_model.borrow().as_ref().cloned();
 
+            // Get the albums stack to pass to the population function (already extracted earlier)
+            if let Some(model) = column_view_model_opt {
+                if let Some(albums_stack) = albums_stack_opt {
                     // Set the inner stack state based on scanning visibility
-                    self.set_inner_stack_state(&albums_stack_clone, scanning_label);
+                    self.set_inner_stack_state(&albums_stack, scanning_label);
 
                     // Repopulate the ColumnView with updated data
                     populate_albums_column_view(
-                        model,
+                        &model,
                         self.db_pool.clone(),
                         self.sort_ascending.get(),
                         Rc::clone(&self.sort_orders),
-                        &albums_stack_clone,
+                        &albums_stack,
                         &self.album_count_label,
                         self.use_original_year.clone(),
                         self.player_bar.clone(),
@@ -186,7 +190,7 @@ impl RefreshService {
             } else {
                 // If we don't have a model but we have a stack, set it to a default state
                 // to avoid leaving the UI in a loading state indefinitely
-                if let Some(stack) = self.albums_stack_cell.borrow().as_ref() {
+                if let Some(stack) = self.albums_stack_cell.borrow().as_ref().cloned() {
                     // Set to empty state as a fallback
                     stack.set_visible_child_name(Empty.as_str());
                 }
