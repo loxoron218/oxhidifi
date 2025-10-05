@@ -71,40 +71,32 @@ pub fn spawn_scanning_label_refresh_task(
 
         // Now we can use the receiver without holding the RefCell borrow
         let mut receiver_stream = receiver_local;
-        loop {
-            match receiver_stream.recv().await {
-                Some(()) => {
-                    // Process the received signal
-                    if initial_scan_ongoing.get() {
-                        initial_scan_ongoing.set(false);
-                        scanning_label_albums.set_visible(false);
-                        scanning_label_artists.set_visible(false);
+        while let Some(()) = receiver_stream.recv().await {
+            // Process the received signal
+            if initial_scan_ongoing.get() {
+                initial_scan_ongoing.set(false);
+                scanning_label_albums.set_visible(false);
+                scanning_label_artists.set_visible(false);
 
-                        // Only perform the initial refresh if we are in GridView, as ListView is already populated.
-                        if current_view_mode.get() == GridView {
-                            refresh_library_ui_clone(
-                                sort_ascending_for_refresh.get(),
-                                sort_ascending_artists_for_refresh.get(),
-                            );
-                        }
-                    } else {
-                        let page = stack_clone.visible_child_name().unwrap_or_default();
-
-                        // Hide the appropriate scanning label based on the currently visible page.
-                        scanning_label_albums.set_visible(page == "albums");
-                        scanning_label_artists.set_visible(page == "artists");
-
-                        // Refresh the library UI to reflect any changes from the scan.
-                        refresh_library_ui_clone(
-                            sort_ascending_for_refresh.get(),
-                            sort_ascending_artists_for_refresh.get(),
-                        );
-                    }
+                // Only perform the initial refresh if we are in GridView, as ListView is already populated.
+                if current_view_mode.get() == GridView {
+                    refresh_library_ui_clone(
+                        sort_ascending_for_refresh.get(),
+                        sort_ascending_artists_for_refresh.get(),
+                    );
                 }
-                None => {
-                    // Channel is closed, exit the loop
-                    break;
-                }
+            } else {
+                let page = stack_clone.visible_child_name().unwrap_or_default();
+
+                // Hide the appropriate scanning label based on the currently visible page.
+                scanning_label_albums.set_visible(page == "albums");
+                scanning_label_artists.set_visible(page == "artists");
+
+                // Refresh the library UI to reflect any changes from the scan.
+                refresh_library_ui_clone(
+                    sort_ascending_for_refresh.get(),
+                    sort_ascending_artists_for_refresh.get(),
+                );
             }
         }
     });
