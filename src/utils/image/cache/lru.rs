@@ -122,7 +122,7 @@ where
         K: Borrow<Q>,
         Q: Hash + Eq + ?Sized,
     {
-        if self.map.get(key).is_some() {
+        if self.map.contains_key(key) {
             // Key exists, update its position in the order
             if let Some(index) = self.order.iter().position(|k| k.borrow() == key)
                 && let Some(k) = self.order.remove(index)
