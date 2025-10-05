@@ -47,8 +47,8 @@ impl ImageLoader {
     /// A `Result` containing the new `ImageLoader` instance or an `ImageLoaderError`
     pub fn new() -> Result<Self, ImageLoaderError> {
         Ok(Self {
-            // 50MB, 5 minutes
-            memory_cache: MemoryCache::new(200, 50 * 1024 * 1024, Duration::from_secs(300)),
+            // 200MB, 10 minutes - Increased to handle larger images better
+            memory_cache: MemoryCache::new(200, 200 * 1024 * 1024, Duration::from_secs(600)),
             disk_cache: DiskCache::new()?,
         })
     }
