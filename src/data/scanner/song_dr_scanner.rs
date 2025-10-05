@@ -8,9 +8,9 @@ use std::{
 /// Enum representing the different DR log file formats
 #[derive(Debug, PartialEq)]
 pub enum DrFormat {
-    MAAT,
+    Maat,
     Foobar2000,
-    TTDR,
+    Ttdr,
     Unknown,
 }
 
@@ -83,9 +83,9 @@ fn parse_dr_file(file_path: &Path) -> Result<Vec<Option<u8>>, Box<dyn Error + Se
 
     // Parse based on detected format
     match format {
-        DrFormat::MAAT => parse_maat_format(&lines),
+        DrFormat::Maat => parse_maat_format(&lines),
         DrFormat::Foobar2000 => parse_foobar2000_format(&lines),
-        DrFormat::TTDR => parse_ttdr_format(&lines),
+        DrFormat::Ttdr => parse_ttdr_format(&lines),
         DrFormat::Unknown => Ok(vec![]),
     }
 }
@@ -101,7 +101,7 @@ pub fn detect_format(lines: &[String]) -> DrFormat {
     for line in lines {
         // MAAT DROffline Format: Look for lines with pipe delimiters and "File Name" + "DR" headers
         if line.contains("|") && line.contains("File Name") && line.contains("DR") {
-            return DrFormat::MAAT;
+            return DrFormat::Maat;
         }
 
         // Foobar2000 Format: Look for "Analyzed:" line and then a line with table headers containing "DR", "Peak", "RMS"
@@ -113,7 +113,7 @@ pub fn detect_format(lines: &[String]) -> DrFormat {
         // TT DR Offline Meter Format: Look for "Analyzed folder:" or "Analyzed Folder:" and then a line with table headers containing "DR", "Peak", "RMS"
         if line.contains("Analyzed folder:") || line.contains("Analyzed Folder:") {
             // Look for the next line that contains the table headers
-            return DrFormat::TTDR;
+            return DrFormat::Ttdr;
         }
     }
     DrFormat::Unknown
