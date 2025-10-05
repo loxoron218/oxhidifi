@@ -117,10 +117,10 @@ where
     ///
     /// * `Some(&V)` - Reference to the value if the key exists.
     /// * `None` - If the key does not exist in the cache.
-    pub fn get<Q: ?Sized>(&mut self, key: &Q) -> Option<&V>
+    pub fn get<Q>(&mut self, key: &Q) -> Option<&V>
     where
         K: Borrow<Q>,
-        Q: Hash + Eq,
+        Q: Hash + Eq + ?Sized,
     {
         if self.map.get(key).is_some() {
             // Key exists, update its position in the order
@@ -149,10 +149,10 @@ where
     ///
     /// * `Some(V)` - The value if the key existed and was removed.
     /// * `None` - If the key did not exist in the cache.
-    pub fn pop<Q: ?Sized>(&mut self, key: &Q) -> Option<V>
+    pub fn pop<Q>(&mut self, key: &Q) -> Option<V>
     where
         K: Borrow<Q>,
-        Q: Hash + Eq,
+        Q: Hash + Eq + ?Sized,
     {
         if let Some(value) = self.map.remove(key) {
             // Remove the key from the order songing as well
@@ -195,10 +195,10 @@ where
     ///
     /// * `true` - If the key exists in the cache.
     /// * `false` - If the key does not exist.
-    pub fn contains<Q: ?Sized>(&self, key: &Q) -> bool
+    pub fn contains<Q>(&self, key: &Q) -> bool
     where
         K: Borrow<Q>,
-        Q: Hash + Eq,
+        Q: Hash + Eq + ?Sized,
     {
         self.map.contains_key(key)
     }
