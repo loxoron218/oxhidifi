@@ -106,7 +106,6 @@ pub fn show_settings_dialog(
 
     // Create the General page
     let general_settings_page = GeneralSettingsPage::new(
-        parent.clone(),
         refresh_library_ui.clone(),
         sort_ascending.clone(),
         sort_ascending_artists.clone(),

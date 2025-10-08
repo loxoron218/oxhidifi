@@ -1,6 +1,4 @@
-use std::{
-    borrow::Cow, collections::HashSet, error::Error, path::Path, path::PathBuf, time::Instant,
-};
+use std::{borrow::Cow, collections::HashSet, error::Error, path::Path, path::PathBuf};
 
 use lofty::{
     prelude::{
@@ -21,9 +19,7 @@ use crate::{
         },
         scanner::song_dr_scanner::scan_song_dr_values,
     },
-    utils::{
-        image::cache::thumbnail::process_images_concurrently, performance_monitor::get_metrics,
-    },
+    utils::image::cache::thumbnail::process_images_concurrently,
 };
 
 /// A temporary struct to hold metadata extracted from audio files before we have database IDs.
@@ -102,9 +98,6 @@ pub async fn process_files_batch_optimized(
     dr_value: Option<u8>,
     batch_size: usize,
 ) -> Result<(), Box<dyn Error>> {
-    let start_time = Instant::now();
-    let file_count = paths.len();
-
     // Extract the folder path from the first file path to scan for individual DR values
     let folder_path = if let Some(first_path) = paths.first() {
         first_path.parent().unwrap_or_else(|| Path::new(""))
@@ -309,13 +302,6 @@ pub async fn process_files_batch_optimized(
 
         // Commit the transaction
         tx.commit().await?;
-    }
-
-    // Record metrics
-    let duration = start_time.elapsed();
-    get_metrics().record_scan_time(duration);
-    for _ in 0..file_count {
-        get_metrics().record_file_processed();
     }
     Ok(())
 }

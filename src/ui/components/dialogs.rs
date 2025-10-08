@@ -9,19 +9,15 @@ use std::{
 use gtk4::{
     Button,
     ButtonsType::OkCancel,
-    Dialog,
     FileChooserAction::SelectFolder,
     FileChooserDialog, Label, MessageDialog,
     MessageType::Warning,
-    Orientation::Vertical,
-    ResponseType::{self, Accept, Cancel, Close, Other},
-    ScrolledWindow, Stack, TextView, Window,
-    WrapMode::Word,
+    ResponseType::{self, Accept, Cancel},
+    Stack, Window,
     glib::MainContext,
 };
 use libadwaita::prelude::{
-    BoxExt, ButtonExt, DialogExt, FileChooserExt, FileExt, GtkWindowExt, IsA, OrientableExt,
-    TextBufferExt, TextViewExt, WidgetExt,
+    ButtonExt, DialogExt, FileChooserExt, FileExt, GtkWindowExt, IsA, WidgetExt,
 };
 use sqlx::SqlitePool;
 use tokio::{runtime::Runtime, sync::mpsc::UnboundedSender};
@@ -32,7 +28,6 @@ use crate::{
         components::view_controls::sorting_controls::types::SortOrder,
         settings::settings_dialog::show_settings_dialog,
     },
-    utils::performance_monitor::{format_metrics, get_metrics},
 };
 
 /// Handles the logic for displaying a folder chooser dialog and initiating a library scan.
@@ -278,56 +273,4 @@ pub fn show_remove_folder_confirmation_dialog<F: FnOnce() + 'static>(
 
     // Display the dialog
     dialog.show();
-}
-
-/// Shows a dialog with performance metrics
-pub fn show_performance_metrics_dialog(parent: &Window) {
-    let dialog = Dialog::builder()
-        .title("Performance Metrics")
-        .transient_for(parent)
-        .modal(true)
-        .default_width(600)
-        .default_height(400)
-        .build();
-    dialog.add_button("Close", Close);
-    dialog.add_button("Reset", Other(1));
-    let content_area = dialog.content_area();
-    content_area.set_orientation(Vertical);
-    content_area.set_spacing(12);
-    content_area.set_margin_top(12);
-    content_area.set_margin_bottom(12);
-    content_area.set_margin_start(12);
-    content_area.set_margin_end(12);
-
-    // Create a scrolled window for the metrics text
-    let scrolled_window = ScrolledWindow::builder()
-        .vexpand(true)
-        .hexpand(true)
-        .build();
-
-    // Create a text view to display the metrics
-    let text_view = TextView::builder().editable(false).wrap_mode(Word).build();
-
-    // Set the metrics text
-    let metrics_text = format_metrics();
-    let buffer = text_view.buffer();
-    buffer.set_text(&metrics_text);
-    scrolled_window.set_child(Some(&text_view));
-    content_area.append(&scrolled_window);
-
-    // Connect response handler
-    dialog.connect_response(|dialog, response| {
-        match response {
-            Close => {
-                dialog.close();
-            }
-            Other(1) => {
-                // Reset button clicked
-                get_metrics().reset();
-                dialog.close();
-            }
-            _ => dialog.close(),
-        }
-    });
-    dialog.present();
 }

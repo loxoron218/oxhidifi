@@ -1,22 +1,16 @@
 use std::{cell::Cell, rc::Rc};
 
-use gtk4::{Button, Switch, Window};
+use gtk4::Switch;
 use libadwaita::{
     ActionRow, PreferencesGroup, PreferencesPage,
-    prelude::{ActionRowExt, ButtonExt, PreferencesGroupExt, PreferencesPageExt},
+    prelude::{ActionRowExt, PreferencesGroupExt, PreferencesPageExt},
 };
-
-use crate::ui::components::dialogs::show_performance_metrics_dialog;
 
 /// Manages the UI and logic for the General settings page within the settings dialog.
 ///
 /// This struct encapsulates the parameters needed to create and configure the General
 /// preferences page, reducing the number of function arguments and improving code organization.
-pub struct GeneralSettingsPage<T: Clone + 'static>
-where
-    T: AsRef<Window>,
-{
-    parent: T,
+pub struct GeneralSettingsPage {
     refresh_library_ui: Rc<dyn Fn(bool, bool)>,
     sort_ascending: Rc<Cell<bool>>,
     sort_ascending_artists: Rc<Cell<bool>>,
@@ -24,15 +18,11 @@ where
     use_original_year_setting: Rc<Cell<bool>>,
 }
 
-impl<T: Clone + 'static> GeneralSettingsPage<T>
-where
-    T: AsRef<Window>,
-{
+impl GeneralSettingsPage {
     /// Creates a new `GeneralSettingsPage` instance, holding necessary shared state.
     ///
     /// # Arguments
     ///
-    /// * `parent` - The parent window for dialogs.
     /// * `refresh_library_ui` - Callback to refresh the main library UI.
     /// * `sort_ascending` - Shared state for album sort direction.
     /// * `sort_ascending_artists` - Shared state for artist sort direction.
@@ -43,7 +33,6 @@ where
     ///
     /// A new `GeneralSettingsPage` instance.
     pub fn new(
-        parent: T,
         refresh_library_ui: Rc<dyn Fn(bool, bool)>,
         sort_ascending: Rc<Cell<bool>>,
         sort_ascending_artists: Rc<Cell<bool>>,
@@ -51,7 +40,6 @@ where
         use_original_year_setting: Rc<Cell<bool>>,
     ) -> Self {
         Self {
-            parent,
             refresh_library_ui,
             sort_ascending,
             sort_ascending_artists,
@@ -76,30 +64,6 @@ where
 
         // Group for General settings
         let general_group = PreferencesGroup::builder().title("Display").build();
-
-        // Group for Performance settings
-        let performance_group = PreferencesGroup::builder().title("Performance").build();
-
-        // Button to show performance metrics
-        let performance_metrics_row = ActionRow::builder()
-            .title("Performance Metrics")
-            .subtitle("View detailed performance statistics and metrics.")
-            .activatable(true)
-            .build();
-        let performance_metrics_button = Button::builder()
-            .label("Show Metrics")
-            .valign(gtk4::Align::Center)
-            .build();
-        performance_metrics_row.add_suffix(&performance_metrics_button);
-        performance_metrics_row.set_activatable_widget(Some(&performance_metrics_button));
-
-        // Clone necessary variables for the button click handler
-        let parent_window_clone = self.parent.clone();
-        performance_metrics_button.connect_clicked(move |_| {
-            // We need to get the parent window for the dialog
-            show_performance_metrics_dialog(parent_window_clone.as_ref());
-        });
-        performance_group.add(&performance_metrics_row);
 
         // Toggle switch for DR Value badges
         let dr_badges_row = ActionRow::builder()
@@ -155,7 +119,6 @@ where
         });
         general_group.add(&use_original_year_row);
         general_page.add(&general_group);
-        general_page.add(&performance_group);
         general_page
     }
 }

@@ -5,10 +5,7 @@ use std::{
 
 use sqlx::{QueryBuilder, Result, Row, Sqlite, SqlitePool, Transaction, query};
 
-use crate::{
-    data::models::{Album, Artist, Folder, Song},
-    utils::performance_monitor::get_metrics,
-};
+use crate::data::models::{Album, Artist, Folder, Song};
 
 #[derive(Debug)]
 pub struct AlbumForInsert {
@@ -71,7 +68,6 @@ pub struct SongForInsert {
 /// A `Result` containing the ID (`i64`) of the inserted or existing folder on success,
 /// or an `sqlx::Error` on failure.
 pub async fn insert_or_get_folder(pool: &SqlitePool, path: &Path) -> Result<i64> {
-    get_metrics().record_db_operation();
     let path_str = path.to_str().unwrap_or_default();
 
     // Use a single query that handles both insert and select cases
@@ -255,7 +251,6 @@ pub async fn insert_or_get_artists_batch(
 /// A `Result` containing the `Album` struct on success, or an `sqlx::Error` on failure
 /// (e.g., if no album with the given ID is found).
 pub async fn fetch_album_by_id(pool: &SqlitePool, album_id: i64) -> Result<Album> {
-    get_metrics().record_db_operation();
     let row = query("SELECT id, title, artist_id, year, cover_art, folder_id, dr_value, dr_is_best, original_release_date FROM albums WHERE id = ?")
         .bind(album_id)
         .fetch_one(pool)
@@ -302,7 +297,6 @@ pub async fn fetch_artist_by_id(pool: &SqlitePool, artist_id: i64) -> Result<Art
 /// # Returns
 /// A `Result` containing a `Vec<Song>` on success, or an `sqlx::Error` on failure.
 pub async fn fetch_songs_by_album(pool: &SqlitePool, album_id: i64) -> Result<Vec<Song>> {
-    get_metrics().record_db_operation();
     let rows = query("SELECT id, title, album_id, artist_id, path, duration, song_no, disc_no, format, bit_depth, sample_rate, dr_value FROM songs WHERE album_id = ? ORDER BY disc_no, song_no")
         .bind(album_id)
         .fetch_all(pool)
