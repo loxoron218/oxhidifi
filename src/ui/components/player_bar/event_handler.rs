@@ -6,7 +6,7 @@ use libadwaita::prelude::{ButtonExt, RangeExt, WidgetExt};
 use crate::{
     playback::events::{
         PlaybackEvent::{self, EndOfStream, Error, PositionChanged, SongChanged, StateChanged},
-        PlaybackState::{Buffering, Paused, Playing, Stopped},
+        PlaybackState::{Paused, Playing, Stopped},
     },
     utils::formatting::format_sample_rate_value,
 };
@@ -189,10 +189,6 @@ impl PlayerBar {
                     }
                     Stopped => {
                         self._play_button.set_icon_name("media-playback-start");
-                    }
-                    Buffering => {
-                        // Could show a buffering indicator here
-                        // For now, we'll just keep the current icon
                     }
                 }
             }

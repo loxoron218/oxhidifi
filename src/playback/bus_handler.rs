@@ -188,9 +188,6 @@ impl BusHandler {
                                 source.remove();
                             }
                         }
-
-                        // Do nothing for other playback states
-                        _ => {}
                     }
 
                     // Send the state changed event

@@ -35,8 +35,6 @@ pub enum PlaybackEvent {
 /// Playing → Paused (when pause is initiated)
 /// Paused → Playing (when play is initiated)
 /// Playing → Stopped (when stop is initiated)
-/// Playing → Buffering (when data is being loaded)
-/// Buffering → Playing (when buffering is complete)
 /// Any → Stopped (when playback ends or is interrupted)
 /// ```
 ///
@@ -60,6 +58,4 @@ pub enum PlaybackState {
     Playing,
     /// Playback is paused
     Paused,
-    /// Buffering data
-    Buffering,
 }
