@@ -252,7 +252,7 @@ pub fn show_remove_folder_confirmation_dialog<F: FnOnce() + 'static>(
        .buttons(OkCancel)
        .message_type(Warning)
        .text("Remove Folder?")
-       .secondary_text("Removing this folder will delete all custom metadata associated with your music, including Best DR values. This action cannot be undone.")
+       .secondary_text("Removing this folder will delete all custom metadata associated with your music in the database. This action cannot be undone.")
        .build();
 
     // Make the "OK" button red to indicate a destructive action
