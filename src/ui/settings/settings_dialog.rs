@@ -5,16 +5,19 @@ use std::{
 };
 
 use gtk4::{
-    EventControllerKey, Label, Stack, Window,
+    Box, EventControllerKey, Label,
+    Orientation::Vertical,
+    Stack, Window,
     glib::{
-        self,
+        MainContext,
         Propagation::{Proceed, Stop},
     },
 };
 use libadwaita::{
-    PreferencesWindow,
+    HeaderBar, ViewStack, ViewSwitcher,
+    ViewSwitcherPolicy::Wide,
     gdk::Key,
-    prelude::{GtkWindowExt, IsA, PreferencesWindowExt, WidgetExt},
+    prelude::{AdwWindowExt, BoxExt, GtkWindowExt, IsA, WidgetExt},
 };
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -31,8 +34,8 @@ use crate::ui::{
 
 /// Shows the settings dialog, providing an interface for users to manage application preferences.
 ///
-/// This function constructs a `PreferencesWindow` and populates it with various settings
-/// pages and groups, including library folder management.
+/// This function constructs a modern libadwaita window with HeaderBar and ViewStack
+/// and populates it with various settings pages and groups, including library folder management.
 /// It interacts with shared application state to reflect and persist user choices.
 ///
 /// # Arguments
@@ -70,25 +73,41 @@ pub fn show_settings_dialog(
     albums_stack_cell: Rc<RefCell<Option<Stack>>>,
     artists_stack_cell: Rc<RefCell<Option<Stack>>>,
 ) {
-    // Create the settings window, configured as a modal dialog.
-    let dialog = PreferencesWindow::builder()
-        .transient_for(parent)
+    // Create the main window
+    let window = libadwaita::Window::builder()
+        .modal(true)
         .default_width(900)
         .default_height(700)
-        .modal(true)
+        .transient_for(parent)
+        .title("Settings")
         .build();
 
     // Set flag to indicate settings dialog is open.
     is_settings_open.set(true);
 
-    // Apply margins for consistent spacing, matching GNOME HIG.
-    dialog.set_margin_top(32);
-    dialog.set_margin_bottom(32);
-    dialog.set_margin_start(32);
-    dialog.set_margin_end(32);
+    // Create header bar
+    let header_bar = HeaderBar::builder().show_start_title_buttons(false).build();
+
+    // Create main content container
+    let main_box = Box::builder().orientation(Vertical).build();
+
+    // Add header bar to main box
+    main_box.append(&header_bar);
+
+    // Create ViewStack for pages
+    let view_stack = ViewStack::builder().build();
+
+    // Create ViewSwitcher to put in the header bar
+    let view_switcher = ViewSwitcher::builder()
+        .stack(&view_stack)
+        .policy(Wide)
+        .build();
+
+    // Set the view switcher as the title widget for the header bar
+    header_bar.set_title_widget(Some(&view_switcher));
 
     // Main GLib context for UI updates
-    let main_context = Rc::new(glib::MainContext::default());
+    let main_context = Rc::new(MainContext::default());
 
     // Create the Library page
     let library_page = create_library_page(
@@ -122,7 +141,7 @@ pub fn show_settings_dialog(
     let is_settings_open_clone = is_settings_open.clone();
     let show_dr_badges_setting_clone_for_close = show_dr_badges_setting.clone();
     let use_original_year_setting_clone_for_close = use_original_year_setting.clone();
-    dialog.connect_close_request(move |_| {
+    window.connect_close_request(move |_| {
         let current_orders = sort_orders_rc.borrow().clone();
         let prev_settings = load_settings();
         let mut settings = load_settings();
@@ -141,11 +160,11 @@ pub fn show_settings_dialog(
     // Connect ESC key to close the dialog.
     let key_controller = EventControllerKey::new();
     {
-        let dialog = dialog.clone();
+        let window = window.clone();
         key_controller.connect_key_pressed(move |_, keyval, _, _| {
             if keyval == Key::Escape {
                 // Close the dialog
-                dialog.close();
+                window.close();
 
                 // Stop further propagation of the event
                 return Stop;
@@ -156,14 +175,35 @@ pub fn show_settings_dialog(
         });
     }
 
-    // Add the key controller to the dialog
-    dialog.add_controller(key_controller);
+    // Add the key controller to the window
+    window.add_controller(key_controller);
 
-    // Add all defined pages to the preferences window.
-    dialog.add(&general_page);
-    dialog.add(&library_page);
-    dialog.add(&audio_page);
+    // Add all defined pages to the ViewStack with icons
+    view_stack.add_titled_with_icon(
+        &general_page,
+        Some("general"),
+        "General",
+        "preferences-system-symbolic",
+    );
+    view_stack.add_titled_with_icon(
+        &library_page,
+        Some("library"),
+        "Library",
+        "folder-music-symbolic",
+    );
+    view_stack.add_titled_with_icon(
+        &audio_page,
+        Some("audio"),
+        "Audio",
+        "audio-speakers-symbolic",
+    );
+
+    // Add the ViewStack to the main box
+    main_box.append(&view_stack);
+
+    // Set the content of the window
+    window.set_content(Some(&main_box));
 
     // Display the settings dialog to the user
-    dialog.present();
+    window.present();
 }

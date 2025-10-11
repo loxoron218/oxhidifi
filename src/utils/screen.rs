@@ -1,7 +1,5 @@
 use gtk4::gdk::{Display, Monitor};
-use libadwaita::{
-    prelude::{Cast, DisplayExt, ListModelExt, MonitorExt},
-};
+use libadwaita::prelude::{Cast, DisplayExt, ListModelExt, MonitorExt};
 
 /// Represents information about the primary display screen, including its dimensions
 /// and calculated UI element sizes (cover and tile sizes) derived from the screen width.
