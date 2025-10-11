@@ -1,6 +1,6 @@
 use std::{cell::Cell, rc::Rc};
 
-use gtk4::Switch;
+use gtk4::{Align::Center, Switch};
 use libadwaita::{
     ActionRow, PreferencesGroup, PreferencesPage,
     prelude::{ActionRowExt, PreferencesGroupExt, PreferencesPageExt},
@@ -16,6 +16,7 @@ pub struct GeneralSettingsPage {
     sort_ascending_artists: Rc<Cell<bool>>,
     show_dr_badges_setting: Rc<Cell<bool>>,
     use_original_year_setting: Rc<Cell<bool>>,
+    show_album_metadata_setting: Rc<Cell<bool>>,
 }
 
 impl GeneralSettingsPage {
@@ -28,6 +29,7 @@ impl GeneralSettingsPage {
     /// * `sort_ascending_artists` - Shared state for artist sort direction.
     /// * `show_dr_badges_setting` - Shared state for DR badges visibility.
     /// * `use_original_year_setting` - Shared state for original year display.
+    /// * `show_album_metadata_setting` - Shared state for album metadata visibility.
     ///
     /// # Returns
     ///
@@ -38,6 +40,7 @@ impl GeneralSettingsPage {
         sort_ascending_artists: Rc<Cell<bool>>,
         show_dr_badges_setting: Rc<Cell<bool>>,
         use_original_year_setting: Rc<Cell<bool>>,
+        show_album_metadata_setting: Rc<Cell<bool>>,
     ) -> Self {
         Self {
             refresh_library_ui,
@@ -45,6 +48,7 @@ impl GeneralSettingsPage {
             sort_ascending_artists,
             show_dr_badges_setting,
             use_original_year_setting,
+            show_album_metadata_setting,
         }
     }
 
@@ -118,6 +122,33 @@ impl GeneralSettingsPage {
             );
         });
         general_group.add(&use_original_year_row);
+
+        // Toggle switch for "Show Album Metadata"
+        let show_album_metadata_row = ActionRow::builder()
+            .title("Show Album Metadata")
+            .subtitle("Display album title, artist, and format information under album covers.")
+            .activatable(false)
+            .build();
+        let show_album_metadata_switch = Switch::builder()
+            .valign(Center)
+            .active(self.show_album_metadata_setting.get())
+            .build();
+        show_album_metadata_row.add_suffix(&show_album_metadata_switch);
+        show_album_metadata_row.set_activatable_widget(Some(&show_album_metadata_switch));
+        let show_album_metadata_setting_clone = self.show_album_metadata_setting.clone();
+        let refresh_library_ui_clone_for_metadata = self.refresh_library_ui.clone();
+        let sort_ascending_clone_for_metadata = self.sort_ascending.clone();
+        let sort_ascending_artists_clone_for_metadata = self.sort_ascending_artists.clone();
+        show_album_metadata_switch.connect_active_notify(move |switch| {
+            show_album_metadata_setting_clone.set(switch.is_active());
+
+            // Trigger a UI refresh to update the visibility of album metadata
+            (refresh_library_ui_clone_for_metadata)(
+                sort_ascending_clone_for_metadata.get(),
+                sort_ascending_artists_clone_for_metadata.get(),
+            );
+        });
+        general_group.add(&show_album_metadata_row);
         general_page.add(&general_group);
         general_page
     }

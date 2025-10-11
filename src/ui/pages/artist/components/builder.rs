@@ -49,6 +49,7 @@ use crate::ui::{
 /// - `artist_page_name`: Name of the current artist page
 /// - `show_dr_badges`: Flag indicating whether to show DR badges
 /// - `use_original_year`: Flag to determine which year to display
+/// - `show_album_metadata`: Flag to determine whether to show album metadata
 /// - `player_bar`: Player control bar
 ///
 /// # Returns
@@ -66,6 +67,7 @@ pub fn build_album_card(
     artist_page_name: String,
     show_dr_badges: Rc<Cell<bool>>,
     use_original_year: Rc<Cell<bool>>,
+    show_album_metadata: Rc<Cell<bool>>,
     player_bar: PlayerBar,
     search_text: &str,
     zoom_level: ZoomLevel,
@@ -82,8 +84,14 @@ pub fn build_album_card(
     // Main container for the album tile with vertical orientation
     let album_tile_box = Box::builder().orientation(Vertical).spacing(2).build();
 
-    // Set size: cover size plus additional space for text elements
-    album_tile_box.set_size_request(tile_size, tile_size + 80);
+    // Set size based on whether metadata is shown
+    if show_album_metadata.get() {
+        // Show metadata - use the current size with space for text
+        album_tile_box.set_size_request(tile_size, tile_size + 80);
+    } else {
+        // Hide metadata - only use space for cover
+        album_tile_box.set_size_request(tile_size, tile_size);
+    }
     album_tile_box.set_hexpand(false);
     album_tile_box.set_vexpand(false);
     album_tile_box.set_halign(Start);
@@ -115,13 +123,16 @@ pub fn build_album_card(
     let cover_fixed = create_cover_fixed(&overlay, cover_size);
     album_tile_box.append(&cover_fixed);
 
-    // Create title area box
-    let title_area_box = create_title_area_box(&title_label);
-    album_tile_box.append(&title_area_box);
+    // Conditionally add metadata based on setting
+    if show_album_metadata.get() {
+        // Create title area box
+        let title_area_box = create_title_area_box(&title_label);
+        album_tile_box.append(&title_area_box);
 
-    // Create metadata container
-    let metadata_container = create_metadata_container(&format_label, &year_label, cover_size);
-    album_tile_box.append(&metadata_container);
+        // Create metadata container
+        let metadata_container = create_metadata_container(&format_label, &year_label, cover_size);
+        album_tile_box.append(&metadata_container);
+    }
     album_tile_box.set_css_classes(&["album-tile"]);
 
     // Create FlowBoxChild container and set the album tile as its child

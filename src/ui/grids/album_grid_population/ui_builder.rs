@@ -45,6 +45,7 @@ use crate::{
 /// * `screen_info` - A `Rc<RefCell<ScreenInfo>>` providing screen dimensions for UI sizing
 /// * `show_dr_badges` - A `Rc<Cell<bool>>` indicating whether to show DR badges
 /// * `use_original_year` - A `Rc<Cell<bool>>` indicating whether to use original release year
+/// * `show_album_metadata` - A `Rc<Cell<bool>>` indicating whether to show album metadata (title, artist, format, year)
 /// * `player_bar` - A `PlayerBar` instance for playback functionality
 /// * `zoom_level` - The current zoom level to determine display density
 /// * `image_loader` - An `AsyncImageLoader` instance for shared image caching.
@@ -56,6 +57,7 @@ pub fn create_album_tile(
     screen_info: &Rc<RefCell<ScreenInfo>>,
     show_dr_badges: &Rc<Cell<bool>>,
     use_original_year: &Rc<Cell<bool>>,
+    show_album_metadata: &Rc<Cell<bool>>,
     player_bar: &PlayerBar,
     _db_pool: Arc<SqlitePool>,
     zoom_level: ZoomLevel,
@@ -197,8 +199,14 @@ pub fn create_album_tile(
         .css_classes(&["album-tile"] as &[&str])
         .build();
 
-    // Fixed size for the whole tile
-    album_tile_box.set_size_request(cover_size, tile_size + 80);
+    // Set tile size based on whether metadata is shown
+    if show_album_metadata.get() {
+        // Show metadata - use the current size with space for text
+        album_tile_box.set_size_request(cover_size, tile_size + 80);
+    } else {
+        // Hide metadata - only use space for cover
+        album_tile_box.set_size_request(cover_size, cover_size);
+    }
 
     // Cover container and overlay for DR badge and play button.
     let cover_container = Box::new(Vertical, 0);
@@ -347,32 +355,34 @@ pub fn create_album_tile(
     cover_fixed.put(&overlay, 0.0, 0.0);
     album_tile_box.append(&cover_fixed);
 
-    // Add title, artist, and metadata to the tile box.
-    let title_area_box = Box::builder()
-        .orientation(Vertical)
-        .height_request(40)
-        .margin_top(12)
-        .build();
+    // Conditionally add metadata based on setting
+    if show_album_metadata.get() {
+        // Add title, artist, and metadata to the tile box.
+        let title_area_box = Box::builder()
+            .orientation(Vertical)
+            .height_request(40)
+            .margin_top(12)
+            .build();
 
-    // Align title to the bottom of its allocated space
-    title_label.set_valign(End);
-    title_area_box.append(&title_label);
-    album_tile_box.append(&title_area_box);
-    album_tile_box.append(&artist_label);
+        // Align title to the bottom of its allocated space
+        title_label.set_valign(End);
+        title_area_box.append(&title_label);
+        album_tile_box.append(&title_area_box);
+        album_tile_box.append(&artist_label);
 
-    // Container to constrain metadata box width
-    let metadata_container = Box::builder().orientation(Vertical).hexpand(false).build();
-    metadata_container.set_size_request(cover_size - 16, -1);
-
-    let metadata_box = Box::builder()
-        .orientation(Horizontal)
-        .spacing(0)
-        .hexpand(false)
-        .build();
-    metadata_box.append(&format_label);
-    metadata_box.append(&year_label);
-    metadata_container.append(&metadata_box);
-    album_tile_box.append(&metadata_container);
+        // Container to constrain metadata box width
+        let metadata_container = Box::builder().orientation(Vertical).hexpand(false).build();
+        metadata_container.set_size_request(cover_size - 16, -1);
+        let metadata_box = Box::builder()
+            .orientation(Horizontal)
+            .spacing(0)
+            .hexpand(false)
+            .build();
+        metadata_box.append(&format_label);
+        metadata_box.append(&year_label);
+        metadata_container.append(&metadata_box);
+        album_tile_box.append(&metadata_container);
+    }
 
     // --- FlowBoxChild and Navigation ---
     let flow_child = FlowBoxChild::builder()

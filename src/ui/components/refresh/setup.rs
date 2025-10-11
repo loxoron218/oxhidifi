@@ -60,6 +60,7 @@ pub fn setup_library_refresh_channel(
     nav_history: Rc<RefCell<Vec<String>>>,
     show_dr_badges: Rc<Cell<bool>>,
     use_original_year: Rc<Cell<bool>>,
+    show_album_metadata: Rc<Cell<bool>>,
     player_bar: PlayerBar,
     window: Window,
     current_zoom_level: Option<Rc<Cell<ZoomLevel>>>,
@@ -103,6 +104,7 @@ pub fn setup_library_refresh_channel(
         screen_info,
         show_dr_badges,
         use_original_year,
+        show_album_metadata,
         current_zoom_level,
     };
 

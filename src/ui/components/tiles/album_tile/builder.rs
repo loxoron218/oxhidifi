@@ -49,6 +49,7 @@ use crate::ui::{
 /// * `sender` - Channel sender for UI update notifications
 /// * `show_dr_badges` - Flag controlling display of dynamic range badges
 /// * `use_original_year` - Flag controlling whether to show original release year
+/// * `show_album_metadata` - Flag controlling whether to show album metadata (title, artist, format, year)
 /// * `player_bar` - Reference to the application's player bar component
 ///
 /// # Returns
@@ -67,6 +68,7 @@ pub fn create_album_tile(
     sender: UnboundedSender<()>,
     show_dr_badges: Rc<Cell<bool>>,
     use_original_year: Rc<Cell<bool>>,
+    show_album_metadata: Rc<Cell<bool>>,
     player_bar: PlayerBar,
     zoom_level: ZoomLevel,
 ) -> FlowBoxChild {
@@ -94,7 +96,16 @@ pub fn create_album_tile(
 
     // Main vertical box for the album tile layout
     let album_tile_box = Box::builder().orientation(Vertical).spacing(2).build();
-    album_tile_box.set_size_request(cover_size, tile_size + 80);
+
+    // Set tile size based on whether metadata is shown
+    if show_album_metadata.get() {
+        // Show metadata - use the current size with space for text
+        album_tile_box.set_size_request(cover_size, tile_size + 80);
+    } else {
+        // Hide metadata - only use space for cover
+        album_tile_box.set_size_request(cover_size, cover_size);
+    }
+
     album_tile_box.set_hexpand(false);
     album_tile_box.set_vexpand(false);
     album_tile_box.set_halign(Start);
@@ -103,19 +114,22 @@ pub fn create_album_tile(
     // Add the cover section first
     album_tile_box.append(&cover_fixed);
 
-    // Box for title, with explicit height for two lines of text
-    let title_area_box = Box::builder()
-        .orientation(Vertical)
-        .height_request(40)
-        .margin_top(12)
-        .build();
-    title_area_box.append(&title_label);
-    album_tile_box.append(&title_area_box);
-    album_tile_box.append(&artist_label);
+    // Conditionally add metadata based on setting
+    if show_album_metadata.get() {
+        // Box for title, with explicit height for two lines of text
+        let title_area_box = Box::builder()
+            .orientation(Vertical)
+            .height_request(40)
+            .margin_top(12)
+            .build();
+        title_area_box.append(&title_label);
+        album_tile_box.append(&title_area_box);
+        album_tile_box.append(&artist_label);
 
-    // Create and add the metadata container
-    let metadata_container = create_metadata_container(&format_label, &year_label, cover_size);
-    album_tile_box.append(&metadata_container);
+        // Create and add the metadata container
+        let metadata_container = create_metadata_container(&format_label, &year_label, cover_size);
+        album_tile_box.append(&metadata_container);
+    }
     album_tile_box.set_css_classes(&["album-tile"]);
 
     // Create the FlowBoxChild and set its properties

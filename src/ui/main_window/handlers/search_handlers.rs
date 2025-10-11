@@ -61,6 +61,7 @@ pub fn connect_live_search_handler(
                 sender.clone(),
                 shared_state.show_dr_badges.clone(),
                 shared_state.use_original_year.clone(),
+                shared_state.show_album_metadata.clone(),
                 widgets.player_bar.clone(),
                 shared_state.screen_info.clone(),
                 shared_state.current_zoom_level.clone(),
@@ -96,6 +97,7 @@ pub fn connect_live_search_handler(
                     sender.clone(),
                     shared_state.show_dr_badges.clone(),
                     shared_state.use_original_year.clone(),
+                    shared_state.show_album_metadata.clone(),
                     widgets.player_bar.clone(),
                 );
             }

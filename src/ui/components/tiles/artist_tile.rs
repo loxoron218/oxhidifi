@@ -50,6 +50,7 @@ use crate::{
 /// - `sender`: Channel sender for application communication
 /// - `show_dr_badges`: Flag indicating whether to display DR badges
 /// - `use_original_year`: Flag for choosing between original and release years
+/// - `show_album_metadata`: Flag for showing album metadata on artist page
 /// - `player_bar`: Shared player control bar component
 /// - `screen_info`: Screen information for calculating cover and tile sizes
 /// - `current_zoom_level`: Current zoom level for consistent sizing across views
@@ -70,6 +71,7 @@ pub fn create_artist_tile(
     sender: UnboundedSender<()>,
     show_dr_badges: Rc<Cell<bool>>,
     use_original_year: Rc<Cell<bool>>,
+    show_album_metadata: Rc<Cell<bool>>,
     player_bar: PlayerBar,
     screen_info: Rc<RefCell<ScreenInfo>>,
     current_zoom_level: ZoomLevel,
@@ -165,6 +167,7 @@ pub fn create_artist_tile(
                 sender.clone(),
                 show_dr_badges.clone(),
                 use_original_year.clone(),
+                show_album_metadata.clone(),
                 player_bar.clone(),
                 screen_info.clone(),
                 current_zoom_level,

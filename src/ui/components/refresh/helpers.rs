@@ -39,6 +39,7 @@ impl RefreshService {
                 &self.album_count_label,
                 self.show_dr_badges.clone(),
                 self.use_original_year.clone(),
+                self.show_album_metadata.clone(),
                 self.player_bar.clone(),
                 self.current_zoom_level
                     .as_ref()
@@ -79,6 +80,7 @@ impl RefreshService {
                 self.artist_count_label.clone(),
                 self.show_dr_badges.clone(),
                 self.use_original_year.clone(),
+                self.show_album_metadata.clone(),
                 self.player_bar.clone(),
                 self.current_zoom_level
                     .as_ref()

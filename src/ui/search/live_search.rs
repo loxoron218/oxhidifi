@@ -50,6 +50,7 @@ pub fn connect_live_search(
     sender: UnboundedSender<()>,
     show_dr_badges: Rc<Cell<bool>>,
     use_original_year: Rc<Cell<bool>>,
+    show_album_metadata: Rc<Cell<bool>>,
     player_bar: PlayerBar,
     screen_info: Rc<RefCell<ScreenInfo>>,
     current_zoom_level: Rc<Cell<ZoomLevel>>,
@@ -71,6 +72,7 @@ pub fn connect_live_search(
     let sender_cloned = sender.clone();
     let show_dr_badges_cloned = show_dr_badges.clone();
     let use_original_year_cloned = use_original_year.clone();
+    let show_album_metadata_cloned = show_album_metadata.clone();
     let search_timer: Rc<RefCell<Option<SourceId>>> = Rc::new(RefCell::new(None));
 
     // Clone screen_info outside the closure to avoid move issues
@@ -94,6 +96,7 @@ pub fn connect_live_search(
         let sender_cloned = sender_cloned.clone();
         let show_dr_badges_cloned = show_dr_badges_cloned.clone();
         let use_original_year_cloned = use_original_year_cloned.clone();
+        let show_album_metadata_cloned = show_album_metadata_cloned.clone();
         let current_zoom_level_cloned = current_zoom_level.clone();
         let search_timer_cloned = search_timer.clone();
 
@@ -136,6 +139,7 @@ pub fn connect_live_search(
                 let sender = sender_cloned.clone();
                 let show_dr_badges = show_dr_badges_cloned.clone();
                 let use_original_year = use_original_year_cloned.clone();
+                let show_album_metadata = show_album_metadata_cloned.clone();
 
                 // Clone screen_info for the async closure
                 let screen_info_async = screen_info_debounce.clone();
@@ -178,6 +182,7 @@ pub fn connect_live_search(
                                         sender.clone(),
                                         show_dr_badges.clone(),
                                         use_original_year.clone(),
+                                        show_album_metadata.clone(),
                                         player_bar_clone_inner.clone(),
                                         current_zoom_level_cloned.get(),
                                     ));
@@ -218,6 +223,7 @@ pub fn connect_live_search(
                                         sender.clone(),
                                         show_dr_badges.clone(),
                                         use_original_year.clone(),
+                                        show_album_metadata.clone(),
                                         player_bar_clone_inner.clone(),
                                         screen_info_async.clone(),
                                         current_zoom_level_cloned.get(),

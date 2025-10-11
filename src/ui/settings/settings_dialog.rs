@@ -50,6 +50,7 @@ use crate::ui::{
 ///   currently open, preventing multiple instances.
 /// * `show_dr_badges_setting` - An `Rc<Cell<bool>>` flag for showing DR badges.
 /// * `use_original_year_setting` - An `Rc<Cell<bool>>` flag for using original release year.
+/// * `show_album_metadata_setting` - An `Rc<Cell<bool>>` flag for showing album metadata.
 /// * `sender` - Optional sender to notify UI refresh after scanning.
 /// * `scanning_label_albums` - The scanning label for albums.
 /// * `scanning_label_artists` - The scanning label for artists.
@@ -65,6 +66,7 @@ pub fn show_settings_dialog<P: IsA<Window> + IsA<Widget>>(
     is_settings_open: Rc<Cell<bool>>,
     show_dr_badges_setting: Rc<Cell<bool>>,
     use_original_year_setting: Rc<Cell<bool>>,
+    show_album_metadata_setting: Rc<Cell<bool>>,
     sender: Option<UnboundedSender<()>>,
     scanning_label_albums: Label,
     scanning_label_artists: Label,
@@ -108,6 +110,7 @@ pub fn show_settings_dialog<P: IsA<Window> + IsA<Widget>>(
         sort_ascending_artists.clone(),
         show_dr_badges_setting.clone(),
         use_original_year_setting.clone(),
+        show_album_metadata_setting.clone(),
     );
     let general_page = general_settings_page.create_page();
 
@@ -120,6 +123,7 @@ pub fn show_settings_dialog<P: IsA<Window> + IsA<Widget>>(
     let is_settings_open_clone = is_settings_open.clone();
     let show_dr_badges_setting_clone_for_close = show_dr_badges_setting.clone();
     let use_original_year_setting_clone_for_close = use_original_year_setting.clone();
+    let show_album_metadata_setting_clone_for_close = show_album_metadata_setting.clone();
     dialog.connect_closed(move |_| {
         let current_orders = sort_orders_rc.borrow().clone();
         let prev_settings = load_settings();
@@ -130,6 +134,7 @@ pub fn show_settings_dialog<P: IsA<Window> + IsA<Widget>>(
         settings.best_dr_albums = prev_settings.best_dr_albums;
         settings.show_dr_badges = show_dr_badges_setting_clone_for_close.get();
         settings.use_original_year = use_original_year_setting_clone_for_close.get();
+        settings.show_album_metadata = show_album_metadata_setting_clone_for_close.get();
         let _ = save_settings(&settings);
         is_settings_open_clone.set(false);
     });

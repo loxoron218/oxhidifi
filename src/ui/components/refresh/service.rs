@@ -57,6 +57,7 @@ pub struct DisplaySettings {
     pub screen_info: Rc<RefCell<ScreenInfo>>,
     pub show_dr_badges: Rc<Cell<bool>>,
     pub use_original_year: Rc<Cell<bool>>,
+    pub show_album_metadata: Rc<Cell<bool>>,
     pub current_zoom_level: Option<Rc<Cell<ZoomLevel>>>,
 }
 
@@ -85,6 +86,7 @@ pub struct RefreshService {
     pub sender: UnboundedSender<()>,
     pub show_dr_badges: Rc<Cell<bool>>,
     pub use_original_year: Rc<Cell<bool>>,
+    pub show_album_metadata: Rc<Cell<bool>>,
     pub player_bar: PlayerBar,
     pub column_view_model: Rc<RefCell<Option<ListStore>>>,
     pub column_view_widget: Rc<RefCell<Option<ColumnView>>>,
@@ -130,6 +132,7 @@ impl RefreshService {
             sender,
             show_dr_badges: display_settings.show_dr_badges.clone(),
             use_original_year: display_settings.use_original_year,
+            show_album_metadata: display_settings.show_album_metadata,
             player_bar,
             column_view_model: Rc::new(RefCell::new(None)),
             column_view_widget: Rc::new(RefCell::new(None)),

@@ -52,6 +52,7 @@ use crate::{
 /// * `sender` - Channel sender for communication
 /// * `show_dr_badges` - Cell for DR badge visibility
 /// * `use_original_year` - Cell for original year usage
+/// * `show_album_metadata` - Cell for album metadata visibility
 /// * `player_bar` - The player bar component
 pub fn connect_live_search_list_view(
     search_entry: &Entry,
@@ -70,6 +71,7 @@ pub fn connect_live_search_list_view(
     sender: UnboundedSender<()>,
     show_dr_badges: Rc<Cell<bool>>,
     use_original_year: Rc<Cell<bool>>,
+    show_album_metadata: Rc<Cell<bool>>,
     player_bar: PlayerBar,
 ) {
     // Clone shared resources for the closure to avoid moving them into the closure
@@ -89,6 +91,7 @@ pub fn connect_live_search_list_view(
     let sender_cloned = sender.clone();
     let show_dr_badges_cloned = show_dr_badges.clone();
     let use_original_year_cloned = use_original_year.clone();
+    let show_album_metadata_cloned = show_album_metadata.clone();
     let search_timer: Rc<RefCell<Option<SourceId>>> = Rc::new(RefCell::new(None));
 
     // Connect search entry changed signal
@@ -109,6 +112,7 @@ pub fn connect_live_search_list_view(
         let sender_cloned = sender_cloned.clone();
         let show_dr_badges_cloned = show_dr_badges_cloned.clone();
         let use_original_year_cloned = use_original_year_cloned.clone();
+        let show_album_metadata_cloned = show_album_metadata_cloned.clone();
         let search_timer_cloned = search_timer.clone();
 
         // Schedule a new timer.
@@ -147,6 +151,7 @@ pub fn connect_live_search_list_view(
                 let _sender = sender_cloned.clone();
                 let _show_dr_badges = show_dr_badges_cloned.clone();
                 let _use_original_year = use_original_year_cloned.clone();
+                let _show_album_metadata = show_album_metadata_cloned.clone();
 
                 // Spawn an asynchronous task to perform the search and update the UI
                 MainContext::default().spawn_local(async move {

@@ -75,6 +75,7 @@ pub fn connect_add_folder_handlers(
 /// - Library sorting preferences
 /// - Display options like DR badges
 /// - Year display preferences
+/// - Album metadata visibility
 /// - Other application behaviors
 ///
 /// # Parameters
@@ -103,6 +104,7 @@ pub fn connect_settings_dialog_handler(
         shared_state.is_settings_open.clone(),
         shared_state.show_dr_badges.clone(),
         shared_state.use_original_year.clone(),
+        shared_state.show_album_metadata.clone(),
         Some(sender.clone()),
         widgets.scanning_label_albums.clone(),
         widgets.scanning_label_artists.clone(),

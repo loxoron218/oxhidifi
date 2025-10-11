@@ -48,6 +48,7 @@ use crate::{
 /// - `sender`: Channel sender for communication with other parts of the application
 /// - `show_dr_badges`: Shared flag indicating whether to display DR badges
 /// - `use_original_year`: Shared flag for choosing between original and release years
+/// - `show_album_metadata`: Shared flag for showing album metadata
 /// - `player_bar`: Shared player control bar component
 /// - `screen_info`: Screen information for calculating cover and tile sizes
 ///
@@ -72,6 +73,7 @@ pub async fn artist_page(
     sender: UnboundedSender<()>,
     show_dr_badges: Rc<Cell<bool>>,
     use_original_year: Rc<Cell<bool>>,
+    show_album_metadata: Rc<Cell<bool>>,
     player_bar: PlayerBar,
     screen_info: Rc<RefCell<ScreenInfo>>,
     current_zoom_level: ZoomLevel,
@@ -176,6 +178,7 @@ pub async fn artist_page(
             page_name.clone(),
             show_dr_badges.clone(),
             use_original_year.clone(),
+            show_album_metadata.clone(),
             player_bar.clone(),
             // Empty search text for artist page
             "",

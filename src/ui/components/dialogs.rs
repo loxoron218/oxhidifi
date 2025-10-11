@@ -175,9 +175,10 @@ pub fn connect_settings_dialog<P: IsA<Window> + IsA<Widget> + Clone + 'static>(
     is_settings_open: Rc<Cell<bool>>,
     show_dr_badges_setting: Rc<Cell<bool>>,
     use_original_year_setting: Rc<Cell<bool>>,
+    show_album_metadata_setting: Rc<Cell<bool>>,
     sender: Option<UnboundedSender<()>>,
-    scanning_label_albums: gtk4::Label,
-    scanning_label_artists: gtk4::Label,
+    scanning_label_albums: Label,
+    scanning_label_artists: Label,
     albums_stack_cell: Rc<RefCell<Option<Stack>>>,
     artists_stack_cell: Rc<RefCell<Option<Stack>>>,
 ) {
@@ -191,6 +192,7 @@ pub fn connect_settings_dialog<P: IsA<Window> + IsA<Widget> + Clone + 'static>(
     let db_pool_cloned = db_pool;
     let is_settings_open_cloned = is_settings_open;
     let show_dr_badges_setting_cloned = show_dr_badges_setting;
+    let show_album_metadata_setting_cloned = show_album_metadata_setting;
     let sender_clone = sender.clone();
     settings_button.connect_clicked(move |_| {
         // Clone variables again for the `spawn_local` async block.
@@ -204,6 +206,7 @@ pub fn connect_settings_dialog<P: IsA<Window> + IsA<Widget> + Clone + 'static>(
         let is_settings_open_for_async = is_settings_open_cloned.clone();
         let show_dr_badges_setting_for_async = show_dr_badges_setting_cloned.clone();
         let use_original_year_setting_for_async = use_original_year_setting.clone();
+        let show_album_metadata_setting_for_async = show_album_metadata_setting_cloned.clone();
         let sender_for_async = sender_clone.clone();
         let scanning_label_albums_clone = scanning_label_albums.clone();
         let scanning_label_artists_clone = scanning_label_artists.clone();
@@ -220,6 +223,7 @@ pub fn connect_settings_dialog<P: IsA<Window> + IsA<Widget> + Clone + 'static>(
                 is_settings_open_for_async,
                 show_dr_badges_setting_for_async,
                 use_original_year_setting_for_async,
+                show_album_metadata_setting_for_async,
                 sender_for_async,
                 scanning_label_albums_clone,
                 scanning_label_artists_clone,

@@ -54,6 +54,7 @@ use crate::{
 /// * `album_count_label` - A `gtk4::Label` to display the number of albums.
 /// * `show_dr_badges` - A `Rc<Cell<bool>>` indicating whether to show DR badges.
 /// * `use_original_year` - A `Rc<Cell<bool>>` indicating whether to use original release year.
+/// * `show_album_metadata` - A `Rc<Cell<bool>>` indicating whether to show album metadata (title, artist, format, year).
 /// * `player_bar` - A `PlayerBar` instance for playback functionality.
 /// * `zoom_level` - The current zoom level to determine display density.
 /// * `image_loader` - An `AsyncImageLoader` instance for shared image caching.
@@ -67,6 +68,7 @@ pub async fn populate_albums_grid(
     album_count_label: &Label,
     show_dr_badges: Rc<Cell<bool>>,
     use_original_year: Rc<Cell<bool>>,
+    show_album_metadata: Rc<Cell<bool>>,
     player_bar: PlayerBar,
     zoom_level: ZoomLevel,
     image_loader: AsyncImageLoader,
@@ -119,6 +121,7 @@ pub async fn populate_albums_grid(
                     screen_info,
                     show_dr_badges.clone(),
                     use_original_year.clone(),
+                    show_album_metadata.clone(),
                     player_bar.clone(),
                     db_pool.clone(),
                     zoom_level,
@@ -156,6 +159,7 @@ pub async fn populate_albums_grid(
                         screen_info,
                         show_dr_badges.clone(),
                         use_original_year.clone(),
+                        show_album_metadata.clone(),
                         player_bar.clone(),
                         db_pool.clone(),
                         zoom_level,
@@ -202,6 +206,7 @@ async fn process_albums_in_batches(
     screen_info: &Rc<RefCell<ScreenInfo>>,
     show_dr_badges: Rc<Cell<bool>>,
     use_original_year: Rc<Cell<bool>>,
+    show_album_metadata: Rc<Cell<bool>>,
     player_bar: PlayerBar,
     db_pool: Arc<SqlitePool>,
     zoom_level: ZoomLevel,
@@ -227,6 +232,7 @@ async fn process_albums_in_batches(
             screen_info,
             &show_dr_badges,
             &use_original_year_clone_for_loop,
+            &show_album_metadata,
             &player_bar,
             db_pool.clone(),
             zoom_level,

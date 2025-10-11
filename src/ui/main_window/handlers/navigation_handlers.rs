@@ -346,6 +346,7 @@ pub fn connect_artist_navigation_handler(
         let show_dr_badges_clone = show_dr_badges_cloned.clone();
         let use_original_year_clone = use_original_year_cloned.clone();
         let player_bar_clone = player_bar_clone.clone();
+        let show_album_metadata = shared_state.show_album_metadata.clone();
 
         // Clone the necessary fields from shared_state outside the closure
         let screen_info = shared_state.screen_info.clone();
@@ -361,6 +362,7 @@ pub fn connect_artist_navigation_handler(
             sender.clone(),
             show_dr_badges_clone,
             use_original_year_clone,
+            show_album_metadata.clone(),
             player_bar_clone,
             screen_info.clone(),
             move |stack_weak,
@@ -372,6 +374,7 @@ pub fn connect_artist_navigation_handler(
                   sender,
                   show_dr_badges,
                   use_original_year,
+                  show_album_metadata,
                   player_bar,
                   screen_info_async| {
                 // Return an async block that builds and displays the artist detail page
@@ -386,6 +389,7 @@ pub fn connect_artist_navigation_handler(
                         sender,
                         show_dr_badges,
                         use_original_year,
+                        show_album_metadata,
                         player_bar,
                         screen_info_async,
                         current_zoom_level,

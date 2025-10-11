@@ -49,6 +49,9 @@ pub struct Settings {
     pub show_dr_badges: bool,
     /// Indicates whether the original release year should be used for display.
     pub use_original_year: bool,
+    /// Indicates whether album metadata (title, artist, format, year) should be displayed under covers
+    #[serde(default)]
+    pub show_album_metadata: bool,
     /// The current view mode (grid or list view)
     #[serde(default)]
     pub view_mode: ViewMode,
@@ -70,6 +73,7 @@ impl Default for Settings {
             best_dr_albums: HashMap::new(),
             show_dr_badges: true,
             use_original_year: true,
+            show_album_metadata: true,
             view_mode: GridView,
             current_zoom_level: ZoomLevel::Medium,
         }

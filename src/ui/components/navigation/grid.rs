@@ -125,9 +125,13 @@ pub fn connect_album_navigation<Fut, F>(
 /// * `right_btn_box` - The `Clamp` widget containing the right side buttons of the header bar.
 /// * `nav_history` - `Rc<RefCell<Vec<String>>>` storing the history of visited page names.
 /// * `sender` - `UnboundedSender<()>` for triggering UI refreshes.
+/// * `show_dr_badges` - Flag indicating whether to show DR badges
+/// * `use_original_year` - Flag indicating whether to use original release year
+/// * `player_bar` - Player bar component
+/// * `screen_info` - Screen information for sizing
 /// * `artist_page` - An async function that takes `WeakRef<ViewStack>`, `Arc<SqlitePool>`, `i64` (artist ID),
 ///   `WeakRef<ViewStack>`, `WeakRef<Clamp>`, `Rc<RefCell<Vec<String>>>`, `UnboundedSender<()>`, `Rc<Cell<bool>>`,
-///   `Rc<Cell<bool>>`, `PlayerBar`, and `Rc<RefCell<ScreenInfo>>` and returns a `Future`.
+///   `Rc<Cell<bool>>`, `Rc<Cell<bool>>`, `PlayerBar`, and `Rc<RefCell<ScreenInfo>>` and returns a `Future`.
 pub fn connect_artist_navigation<Fut, F>(
     artist_grid: &FlowBox,
     stack: &ViewStack,
@@ -138,6 +142,7 @@ pub fn connect_artist_navigation<Fut, F>(
     sender: UnboundedSender<()>,
     show_dr_badges: Rc<Cell<bool>>,
     use_original_year: Rc<Cell<bool>>,
+    show_album_metadata: Rc<Cell<bool>>,
     player_bar: PlayerBar,
     screen_info: Rc<RefCell<ScreenInfo>>,
     artist_page: F,
@@ -150,6 +155,7 @@ pub fn connect_artist_navigation<Fut, F>(
             WeakRef<Clamp>,
             Rc<RefCell<Vec<String>>>,
             UnboundedSender<()>,
+            Rc<Cell<bool>>,
             Rc<Cell<bool>>,
             Rc<Cell<bool>>,
             PlayerBar,
@@ -167,6 +173,7 @@ pub fn connect_artist_navigation<Fut, F>(
     let sender_clone_for_closure = sender.clone();
     let show_dr_badges_clone = show_dr_badges.clone();
     let use_original_year_clone = use_original_year.clone();
+    let show_album_metadata_clone = show_album_metadata.clone();
     let player_bar_clone = player_bar.clone();
     artist_grid.connect_child_activated(move |_, child| {
         // Upgrade weak references to strong references or return if they are no longer valid.
@@ -205,6 +212,7 @@ pub fn connect_artist_navigation<Fut, F>(
             sender_clone_for_closure.clone(),
             show_dr_badges_clone.clone(),
             use_original_year_clone.clone(),
+            show_album_metadata_clone.clone(),
             player_bar_clone.clone(),
             screen_info.clone(),
         ));

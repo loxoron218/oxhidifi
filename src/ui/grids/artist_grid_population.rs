@@ -58,6 +58,7 @@ pub fn populate_artist_grid(
     artist_count_label: Rc<Label>,
     show_dr_badges: Rc<Cell<bool>>,
     use_original_year: Rc<Cell<bool>>,
+    show_album_metadata: Rc<Cell<bool>>,
     player_bar: PlayerBar,
     current_zoom_level: ZoomLevel,
 ) {
@@ -83,6 +84,7 @@ pub fn populate_artist_grid(
     let artist_count_label = artist_count_label.clone();
     let show_dr_badges = show_dr_badges.clone();
     let use_original_year = use_original_year.clone();
+    let show_album_metadata = show_album_metadata.clone();
 
     // Spawn a local asynchronous task on the GLib main context.
     // This allows UI updates to happen on the main thread after data fetching.
@@ -121,6 +123,7 @@ pub fn populate_artist_grid(
                         &sender,
                         &show_dr_badges,
                         &use_original_year,
+                        &show_album_metadata,
                         &player_bar,
                         db_pool.clone(),
                         current_zoom_level,
@@ -168,6 +171,7 @@ pub fn populate_artist_grid(
                             &sender,
                             &show_dr_badges,
                             &use_original_year,
+                            &show_album_metadata,
                             &player_bar,
                             db_pool.clone(),
                             current_zoom_level,
@@ -213,6 +217,7 @@ async fn update_artist_grid_ui(
     sender: &UnboundedSender<()>,
     show_dr_badges: &Rc<Cell<bool>>,
     use_original_year: &Rc<Cell<bool>>,
+    show_album_metadata: &Rc<Cell<bool>>,
     player_bar: &PlayerBar,
     db_pool: Arc<SqlitePool>,
     current_zoom_level: ZoomLevel,
@@ -242,6 +247,7 @@ async fn update_artist_grid_ui(
             sender.clone(),
             show_dr_badges.clone(),
             use_original_year.clone(),
+            show_album_metadata.clone(),
             player_bar.clone(),
             screen_info.clone(),
             current_zoom_level,

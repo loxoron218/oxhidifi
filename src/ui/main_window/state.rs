@@ -42,6 +42,8 @@ pub struct WindowSharedState {
     pub show_dr_badges: Rc<Cell<bool>>,
     /// Indicates whether the original release year should be used for display.
     pub use_original_year: Rc<Cell<bool>>,
+    /// Indicates whether album metadata (title, artist, format, year) should be displayed under covers.
+    pub show_album_metadata: Rc<Cell<bool>>,
     /// Manages the zoom level for the grid and list views.
     pub zoom_manager: Rc<ZoomManager>,
     /// Manages the zoom level for the column view.
