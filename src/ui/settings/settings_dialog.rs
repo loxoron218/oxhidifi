@@ -5,19 +5,16 @@ use std::{
 };
 
 use gtk4::{
-    Box, EventControllerKey, Label,
-    Orientation::Vertical,
-    Stack, Window,
+    EventControllerKey, Label, Stack, Widget, Window,
+    gdk::Key,
     glib::{
         MainContext,
         Propagation::{Proceed, Stop},
     },
 };
 use libadwaita::{
-    HeaderBar, ViewStack, ViewSwitcher,
-    ViewSwitcherPolicy::Wide,
-    gdk::Key,
-    prelude::{AdwWindowExt, BoxExt, GtkWindowExt, IsA, WidgetExt},
+    PreferencesDialog,
+    prelude::{AdwDialogExt, IsA, PreferencesDialogExt, WidgetExt},
 };
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -34,13 +31,14 @@ use crate::ui::{
 
 /// Shows the settings dialog, providing an interface for users to manage application preferences.
 ///
-/// This function constructs a modern libadwaita window with HeaderBar and ViewStack
-/// and populates it with various settings pages and groups, including library folder management.
+/// This function constructs an `AdwPreferencesDialog` and populates it with various settings
+/// pages and groups, including library folder management.
 /// It interacts with shared application state to reflect and persist user choices.
 ///
 /// # Arguments
 ///
-/// * `parent` - The parent `gtk4::Window` for the settings dialog, making it modal.
+/// * `parent` - The parent `gtk4::Window` for the settings dialog. For `AdwPreferencesDialog` to
+///   function correctly, this should be an `adw::ApplicationWindow` or `adw::Window`.
 /// * `sort_orders` - An `Rc<RefCell<Vec<SortOrder>>>` holding the current sort order preferences.
 ///   Changes made in the dialog are reflected in this shared state.
 /// * `refresh_library_ui` - A callback `Rc<dyn Fn(bool, bool)>` to trigger a refresh of the
@@ -48,7 +46,7 @@ use crate::ui::{
 /// * `sort_ascending` - An `Rc<Cell<bool>>` indicating the current sort direction for albums.
 /// * `sort_ascending_artists` - An `Rc<Cell<bool>>` indicating the current sort direction for artists.
 /// * `db_pool` - An `Arc<SqlitePool>` for database operations, particularly for managing library folders.
-/// * `is_settings_open` - An `Rc<Cell<bool>>` flag used to song whether the settings dialog is
+/// * `is_settings_open` - An `Rc<Cell<bool>>` flag used to track whether the settings dialog is
 ///   currently open, preventing multiple instances.
 /// * `show_dr_badges_setting` - An `Rc<Cell<bool>>` flag for showing DR badges.
 /// * `use_original_year_setting` - An `Rc<Cell<bool>>` flag for using original release year.
@@ -57,8 +55,8 @@ use crate::ui::{
 /// * `scanning_label_artists` - The scanning label for artists.
 /// * `albums_stack_cell` - The albums stack cell.
 /// * `artists_stack_cell` - The artists stack cell.
-pub fn show_settings_dialog(
-    parent: &impl IsA<Window>,
+pub fn show_settings_dialog<P: IsA<Window> + IsA<Widget>>(
+    parent: &P,
     sort_orders: Rc<RefCell<Vec<SortOrder>>>,
     refresh_library_ui: Rc<dyn Fn(bool, bool)>,
     sort_ascending: Rc<Cell<bool>>,
@@ -73,38 +71,24 @@ pub fn show_settings_dialog(
     albums_stack_cell: Rc<RefCell<Option<Stack>>>,
     artists_stack_cell: Rc<RefCell<Option<Stack>>>,
 ) {
-    // Create the main window
-    let window = libadwaita::Window::builder()
-        .modal(true)
-        .default_width(900)
-        .default_height(700)
-        .transient_for(parent)
-        .title("Settings")
-        .build();
+    // Create the settings dialog.
+    let dialog = PreferencesDialog::new();
+
+    // Set the content size. This replaces default_width and default_height.
+    dialog.set_content_width(900);
+    dialog.set_content_height(700);
+
+    // Explicitly enable search, as it defaults to false in AdwPreferencesDialog.
+    dialog.set_search_enabled(true);
 
     // Set flag to indicate settings dialog is open.
     is_settings_open.set(true);
 
-    // Create header bar
-    let header_bar = HeaderBar::builder().show_start_title_buttons(false).build();
-
-    // Create main content container
-    let main_box = Box::builder().orientation(Vertical).build();
-
-    // Add header bar to main box
-    main_box.append(&header_bar);
-
-    // Create ViewStack for pages
-    let view_stack = ViewStack::builder().build();
-
-    // Create ViewSwitcher to put in the header bar
-    let view_switcher = ViewSwitcher::builder()
-        .stack(&view_stack)
-        .policy(Wide)
-        .build();
-
-    // Set the view switcher as the title widget for the header bar
-    header_bar.set_title_widget(Some(&view_switcher));
+    // Apply margins for consistent spacing. This still works on any GtkWidget.
+    dialog.set_margin_top(32);
+    dialog.set_margin_bottom(32);
+    dialog.set_margin_start(32);
+    dialog.set_margin_end(32);
 
     // Main GLib context for UI updates
     let main_context = Rc::new(MainContext::default());
@@ -136,12 +120,13 @@ pub fn show_settings_dialog(
     // Create the Audio page
     let audio_page = create_audio_page();
 
-    // Connect `close-request` signal to save sort order when the settings window is closed.
+    // Connect `closed` signal to save sort order when the settings dialog is closed.
+    // This replaces the `close-request` signal from GtkWindow.
     let sort_orders_rc = sort_orders.clone();
     let is_settings_open_clone = is_settings_open.clone();
     let show_dr_badges_setting_clone_for_close = show_dr_badges_setting.clone();
     let use_original_year_setting_clone_for_close = use_original_year_setting.clone();
-    window.connect_close_request(move |_| {
+    dialog.connect_closed(move |_| {
         let current_orders = sort_orders_rc.borrow().clone();
         let prev_settings = load_settings();
         let mut settings = load_settings();
@@ -153,18 +138,18 @@ pub fn show_settings_dialog(
         settings.use_original_year = use_original_year_setting_clone_for_close.get();
         let _ = save_settings(&settings);
         is_settings_open_clone.set(false);
-        Proceed
     });
 
-    // --- Window-level interactions ---
-    // Connect ESC key to close the dialog.
+    // --- Dialog-level interactions ---
+    // Connect ESC key to close the dialog. AdwDialog handles this by default,
+    // but an explicit controller is fine too. The `close()` method works on AdwDialog.
     let key_controller = EventControllerKey::new();
     {
-        let window = window.clone();
+        let dialog = dialog.clone();
         key_controller.connect_key_pressed(move |_, keyval, _, _| {
             if keyval == Key::Escape {
                 // Close the dialog
-                window.close();
+                dialog.close();
 
                 // Stop further propagation of the event
                 return Stop;
@@ -175,35 +160,15 @@ pub fn show_settings_dialog(
         });
     }
 
-    // Add the key controller to the window
-    window.add_controller(key_controller);
+    // Add the key controller to the dialog
+    dialog.add_controller(key_controller);
 
-    // Add all defined pages to the ViewStack with icons
-    view_stack.add_titled_with_icon(
-        &general_page,
-        Some("general"),
-        "General",
-        "preferences-system-symbolic",
-    );
-    view_stack.add_titled_with_icon(
-        &library_page,
-        Some("library"),
-        "Library",
-        "folder-music-symbolic",
-    );
-    view_stack.add_titled_with_icon(
-        &audio_page,
-        Some("audio"),
-        "Audio",
-        "audio-speakers-symbolic",
-    );
+    // Add all defined pages to the preferences dialog.
+    dialog.add(&general_page);
+    dialog.add(&library_page);
+    dialog.add(&audio_page);
 
-    // Add the ViewStack to the main box
-    main_box.append(&view_stack);
-
-    // Set the content of the window
-    window.set_content(Some(&main_box));
-
-    // Display the settings dialog to the user
-    window.present();
+    // Display the settings dialog within the parent window.
+    // This is the main difference from the old `present()` method.
+    dialog.present(Some(parent));
 }

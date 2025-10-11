@@ -13,7 +13,7 @@ use gtk4::{
     FileChooserDialog, Label, MessageDialog,
     MessageType::Warning,
     ResponseType::{self, Accept, Cancel},
-    Stack, Window,
+    Stack, Widget, Window,
     glib::MainContext,
 };
 use libadwaita::prelude::{
@@ -160,13 +160,13 @@ pub fn create_add_folder_dialog_handler<T: IsA<Window> + Clone + 'static>(
 /// * `sort_ascending` - An `Rc<Cell<bool>>` indicating the sort direction for albums.
 /// * `sort_ascending_artists` - An `Rc<Cell<bool>>` indicating the sort direction for artists.
 /// * `db_pool` - An `Arc<SqlitePool>` for database operations within the settings dialog.
-/// * `is_settings_open` - An `Rc<Cell<bool>>` flag to song if the settings dialog is currently open.
+/// * `is_settings_open` - An `Rc<Cell<bool>>` flag to track if the settings dialog is currently open.
 /// * `show_dr_badges_setting` - An `Rc<Cell<bool>>` flag for showing DR badges.
 /// * `use_original_year_setting` - An `Rc<Cell<bool>>` flag for using original release year.
 /// * `sender` - Optional sender to notify UI refresh after scanning.
-pub fn connect_settings_dialog(
+pub fn connect_settings_dialog<P: IsA<Window> + IsA<Widget> + Clone + 'static>(
     settings_button: &Button,
-    parent_window: impl IsA<Window> + Clone + 'static,
+    parent_window: P,
     sort_orders: Rc<RefCell<Vec<SortOrder>>>,
     refresh_library_ui: Rc<dyn Fn(bool, bool)>,
     sort_ascending: Rc<Cell<bool>>,
@@ -247,13 +247,13 @@ pub fn show_remove_folder_confirmation_dialog<F: FnOnce() + 'static>(
 ) {
     let on_confirm_rc = Rc::new(RefCell::new(Some(on_confirm)));
     let dialog = MessageDialog::builder()
-        .transient_for(parent)
-        .modal(true)
-        .buttons(OkCancel)
-        .message_type(Warning)
-        .text("Remove Folder?")
-        .secondary_text("Removing this folder will delete all custom metadata associated with your music, including Best DR values. This action cannot be undone.")
-        .build();
+       .transient_for(parent)
+       .modal(true)
+       .buttons(OkCancel)
+       .message_type(Warning)
+       .text("Remove Folder?")
+       .secondary_text("Removing this folder will delete all custom metadata associated with your music, including Best DR values. This action cannot be undone.")
+       .build();
 
     // Make the "OK" button red to indicate a destructive action
     if let Some(ok_button) = dialog.widget_for_response(ResponseType::Ok) {
