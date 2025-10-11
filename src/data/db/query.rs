@@ -69,19 +69,26 @@ pub async fn search_album_display_info(
             artists.name AS artist,
             albums.year,
             albums.cover_art,
-            songs.format,
-            songs.bit_depth,
-            songs.sample_rate,
+            (SELECT s.format FROM songs s
+             WHERE s.album_id = albums.id
+             GROUP BY s.format, s.bit_depth, s.sample_rate
+             ORDER BY COUNT(*) DESC LIMIT 1) AS format,
+            (SELECT s.bit_depth FROM songs s
+             WHERE s.album_id = albums.id
+             GROUP BY s.format, s.bit_depth, s.sample_rate
+             ORDER BY COUNT(*) DESC LIMIT 1) AS bit_depth,
+            (SELECT s.sample_rate FROM songs s
+             WHERE s.album_id = albums.id
+             GROUP BY s.format, s.bit_depth, s.sample_rate
+             ORDER BY COUNT(*) DESC LIMIT 1) AS sample_rate,
             albums.dr_value,
             albums.dr_is_best,
             albums.original_release_date,
             folders.path AS folder_path
         FROM albums
         JOIN artists ON albums.artist_id = artists.id
-        LEFT JOIN songs ON songs.album_id = albums.id
         JOIN folders ON albums.folder_id = folders.id
         WHERE lower(albums.title) LIKE ? OR lower(artists.name) LIKE ?
-        GROUP BY albums.id
         ORDER BY artists.name COLLATE NOCASE, albums.title COLLATE NOCASE
         "#,
     )

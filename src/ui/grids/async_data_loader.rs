@@ -55,9 +55,9 @@ pub async fn load_albums_async(
 ) {
     // First, get the total count of albums for progress songing
     let total_count: Result<i64, sqlx::Error> = query(
-        "SELECT COUNT(*) as count FROM (SELECT DISTINCT albums.id FROM albums
+        "SELECT COUNT(*) as count FROM albums
          JOIN artists ON albums.artist_id = artists.id
-         JOIN folders ON albums.folder_id = folders.id)",
+         JOIN folders ON albums.folder_id = folders.id",
     )
     .fetch_one(&*db_pool)
     .await
@@ -87,27 +87,34 @@ pub async fn load_albums_async(
         // Execute the query to fetch album display information in chunks
         let query_result = query(
             r#"
-            SELECT
-                albums.id,
-                albums.title,
-                artists.name AS artist,
-                albums.year,
-                albums.cover_art,
-                songs.format,
-                songs.bit_depth,
-                songs.sample_rate,
-                albums.dr_value,
-                albums.dr_is_best,
-                albums.original_release_date,
-                folders.path AS folder_path
-            FROM albums
-            JOIN artists ON albums.artist_id = artists.id
-            LEFT JOIN songs ON songs.album_id = albums.id
-            JOIN folders ON albums.folder_id = folders.id
-            GROUP BY albums.id
-            ORDER BY artists.name COLLATE NOCASE, albums.title COLLATE NOCASE
-            LIMIT ? OFFSET ?
-            "#,
+                SELECT
+                    albums.id,
+                    albums.title,
+                    artists.name AS artist,
+                    albums.year,
+                    albums.cover_art,
+                    (SELECT s.format FROM songs s
+                     WHERE s.album_id = albums.id
+                     GROUP BY s.format, s.bit_depth, s.sample_rate
+                     ORDER BY COUNT(*) DESC LIMIT 1) AS format,
+                    (SELECT s.bit_depth FROM songs s
+                     WHERE s.album_id = albums.id
+                     GROUP BY s.format, s.bit_depth, s.sample_rate
+                     ORDER BY COUNT(*) DESC LIMIT 1) AS bit_depth,
+                    (SELECT s.sample_rate FROM songs s
+                     WHERE s.album_id = albums.id
+                     GROUP BY s.format, s.bit_depth, s.sample_rate
+                     ORDER BY COUNT(*) DESC LIMIT 1) AS sample_rate,
+                    albums.dr_value,
+                    albums.dr_is_best,
+                    albums.original_release_date,
+                    folders.path AS folder_path
+                FROM albums
+                JOIN artists ON albums.artist_id = artists.id
+                JOIN folders ON albums.folder_id = folders.id
+                ORDER BY artists.name COLLATE NOCASE, albums.title COLLATE NOCASE
+                LIMIT ? OFFSET ?
+                "#,
         )
         .bind(DATA_CHUNK_SIZE as i64)
         .bind(offset as i64)

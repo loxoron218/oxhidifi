@@ -90,17 +90,27 @@ pub async fn fetch_album_display_info_by_artist(
 ) -> Result<Vec<AlbumDisplayInfoWithYear>, Error> {
     let rows = query(
         r#"SELECT albums.id, albums.title, albums.year, albums.cover_art,
-                     songs.format, songs.bit_depth, songs.sample_rate, albums.dr_value, albums.dr_is_best, albums.original_release_date
+                     (SELECT s.format FROM songs s
+                      WHERE s.album_id = albums.id
+                      GROUP BY s.format, s.bit_depth, s.sample_rate
+                      ORDER BY COUNT(*) DESC LIMIT 1) AS format,
+                     (SELECT s.bit_depth FROM songs s
+                      WHERE s.album_id = albums.id
+                      GROUP BY s.format, s.bit_depth, s.sample_rate
+                      ORDER BY COUNT(*) DESC LIMIT 1) AS bit_depth,
+                     (SELECT s.sample_rate FROM songs s
+                      WHERE s.album_id = albums.id
+                      GROUP BY s.format, s.bit_depth, s.sample_rate
+                      ORDER BY COUNT(*) DESC LIMIT 1) AS sample_rate,
+                     albums.dr_value, albums.dr_is_best, albums.original_release_date
            FROM albums
            JOIN artists ON albums.artist_id = artists.id
-           LEFT JOIN songs ON songs.album_id = albums.id
            WHERE albums.artist_id = ?
-           GROUP BY albums.id
            ORDER BY albums.year DESC, albums.title COLLATE NOCASE"#,
-   )
-   .bind(artist_id)
-   .fetch_all(pool)
-   .await?;
+    )
+    .bind(artist_id)
+    .fetch_all(pool)
+    .await?;
     Ok(rows
         .into_iter()
         .map(|row| AlbumDisplayInfoWithYear {
@@ -109,8 +119,8 @@ pub async fn fetch_album_display_info_by_artist(
             year: row.get("year"),
             cover_art: row.get::<Option<String>, _>("cover_art").map(PathBuf::from),
             format: row.get("format"),
-            bit_depth: row.get("bit_depth"),
-            sample_rate: row.get("sample_rate"),
+            bit_depth: row.get::<Option<u32>, _>("bit_depth"),
+            sample_rate: row.get::<Option<u32>, _>("sample_rate"),
             dr_value: row.get("dr_value"),
             dr_is_best: row.get("dr_is_best"),
             original_release_date: row.get("original_release_date"),
