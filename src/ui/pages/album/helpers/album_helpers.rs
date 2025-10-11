@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::data::models::Song;
 
@@ -68,6 +68,44 @@ pub fn get_most_common_song_properties(
         most_common_bit_depth,
         most_common_sample_rate,
         most_common_format,
+    )
+}
+
+/// Determines if an album has mixed audio properties (different formats, bit depths, or sample rates).
+///
+/// This function analyzes a slice of [`Song`] objects to check if there are multiple
+/// different technical audio specifications across the songs in an album.
+///
+/// # Parameters
+///
+/// * `songs` - A slice of [`Song`] objects to analyze
+///
+/// # Returns
+///
+/// A tuple containing:
+/// * `bool` - True if there are multiple different bit depths, false otherwise
+/// * `bool` - True if there are multiple different sample rates, false otherwise
+/// * `bool` - True if there are multiple different formats, false otherwise
+pub fn has_mixed_audio_properties(songs: &[Song]) -> (bool, bool, bool) {
+    let mut bit_depths: HashSet<Option<u32>> = HashSet::new();
+    let mut sample_rates: HashSet<Option<u32>> = HashSet::new();
+    let mut formats: HashSet<Option<String>> = HashSet::new();
+    for song in songs {
+        bit_depths.insert(song.bit_depth);
+        sample_rates.insert(song.sample_rate);
+        formats.insert(song.format.clone());
+    }
+
+    // Check for mixed values including the presence/absence of values
+    // If we have both Some and None values, that's mixed
+    // If we have multiple different Some values, that's also mixed
+    let has_mixed_bit_depths = bit_depths.len() > 1;
+    let has_mixed_sample_rates = sample_rates.len() > 1;
+    let has_mixed_formats = formats.len() > 1;
+    (
+        has_mixed_bit_depths,
+        has_mixed_sample_rates,
+        has_mixed_formats,
     )
 }
 

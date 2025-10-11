@@ -1,12 +1,3 @@
-//! UI components for displaying technical information about albums.
-//!
-//! This module provides functions for building UI elements that display
-//! technical metadata about music albums, including:
-//! - Album cover images with proper scaling and fallbacks
-//! - Audio format information (bit depth, sample rate, codec)
-//! - Album metadata (year, song count, total duration)
-//! - Quality indicators (Hi-Res, Lossy, CD) with appropriate icons
-
 use std::path::PathBuf;
 
 use gtk4::{Align::Start, Box, Image, Label, Orientation::Horizontal, Picture, gdk_pixbuf::Pixbuf};
@@ -14,7 +5,9 @@ use libadwaita::prelude::{BoxExt, WidgetExt};
 
 use crate::{
     data::models::{Album, Song},
-    ui::pages::album::helpers::album_helpers::{get_most_common_song_properties, is_lossy_format},
+    ui::pages::album::helpers::album_helpers::{
+        get_most_common_song_properties, has_mixed_audio_properties, is_lossy_format,
+    },
     utils::formatting::{format_album_year_display, format_bit_sample_rate, format_duration_hms},
 };
 
@@ -46,7 +39,7 @@ pub fn build_album_cover(path: &Option<PathBuf>) -> Picture {
     pic
 }
 
-/// Build a GTK label with optional CSS class.
+/// Build a GTK label with optional CSS class and tooltip.
 ///
 /// Creates a GTK Label widget with the specified text and optional CSS styling.
 /// The label is left-aligned by default.
@@ -55,14 +48,18 @@ pub fn build_album_cover(path: &Option<PathBuf>) -> Picture {
 ///
 /// * `label` - The text content for the label
 /// * `css_class` - An optional CSS class name to apply to the label
+/// * `tooltip` - An optional tooltip text to show on hover
 ///
 /// # Returns
 ///
 /// A configured GTK Label widget
-pub fn build_info_label(label: &str, css_class: Option<&str>) -> Label {
+pub fn build_info_label(label: &str, css_class: Option<&str>, tooltip: Option<&str>) -> Label {
     let l = Label::builder().label(label).halign(Start).build();
     if let Some(class) = css_class {
         l.add_css_class(class);
+    }
+    if let Some(tooltip_text) = tooltip {
+        l.set_tooltip_text(Some(tooltip_text));
     }
     l
 }
@@ -89,6 +86,10 @@ pub fn build_technical_info(songs: &[Song], _album: &Album) -> Option<Box> {
     let (most_common_bit_depth, most_common_freq, most_common_format_opt) =
         get_most_common_song_properties(songs);
 
+    // Check if the album has mixed audio properties
+    let (has_mixed_bit_depths, has_mixed_sample_rates, has_mixed_formats) =
+        has_mixed_audio_properties(songs);
+
     // Calculate if the album is mainly in a lossy format
     let total_songs = songs.len();
     let lossy_songs_count = songs.iter().filter(|t| is_lossy_format(&t.format)).count();
@@ -100,12 +101,57 @@ pub fn build_technical_info(songs: &[Song], _album: &Album) -> Option<Box> {
         .count();
     let show_hires = total_songs > 0 && (hires_songs_count as f64 / total_songs as f64) > 0.5;
 
+    // Determine if we should show "Mixed" instead of individual values
+    let show_mixed_indicator = has_mixed_bit_depths || has_mixed_sample_rates || has_mixed_formats;
+
     // Bit depth / Sample Rate and Format, with Hi-Res icon aligned to both lines
-    let bit_freq_str = format_bit_sample_rate(most_common_bit_depth, most_common_freq);
+    let bit_freq_str = if show_mixed_indicator {
+        if has_mixed_bit_depths && has_mixed_sample_rates {
+            "Mixed".to_string()
+        } else if has_mixed_bit_depths {
+            format!("Mixed/{}", format_bit_sample_rate(None, most_common_freq))
+        } else if has_mixed_sample_rates {
+            format!(
+                "{} (Mixed)",
+                format_bit_sample_rate(most_common_bit_depth, None)
+            )
+        } else {
+            format_bit_sample_rate(most_common_bit_depth, most_common_freq)
+        }
+    } else {
+        format_bit_sample_rate(most_common_bit_depth, most_common_freq)
+    };
+
+    // Format string with mixed indicator if needed
+    let format_str = if has_mixed_formats {
+        Some("Mixed".to_string())
+    } else {
+        most_common_format_opt.clone()
+    };
+
+    // Add tooltip to indicate what "Mixed" means with specific details
+    let tooltip_text = if show_mixed_indicator {
+        let mut mixed_parts = Vec::new();
+        if has_mixed_bit_depths {
+            mixed_parts.push("different bit depths");
+        }
+        if has_mixed_sample_rates {
+            mixed_parts.push("different sample rates");
+        }
+        if has_mixed_formats {
+            mixed_parts.push("different formats");
+        }
+        if !mixed_parts.is_empty() {
+            Some(format!("Mixed: {}", mixed_parts.join(", ")))
+        } else {
+            None
+        }
+    } else {
+        None
+    };
 
     // Only build this row if any content
-    if show_hires || is_lossy_album || !bit_freq_str.is_empty() || most_common_format_opt.is_some()
-    {
+    if show_hires || is_lossy_album || !bit_freq_str.is_empty() || format_str.is_some() {
         let outer_row = Box::builder()
             .orientation(Horizontal)
             .spacing(8)
@@ -181,21 +227,42 @@ pub fn build_technical_info(songs: &[Song], _album: &Album) -> Option<Box> {
             .margin_start(12)
             .build();
         if !bit_freq_str.is_empty() {
+            let bit_freq_tooltip =
+                if bit_freq_str == "Mixed" || (has_mixed_bit_depths && has_mixed_sample_rates) {
+                    tooltip_text.as_deref()
+                } else if has_mixed_bit_depths {
+                    Some("Mixed: different bit depths across songs")
+                } else if has_mixed_sample_rates {
+                    Some("Mixed: different sample rates across songs")
+                } else {
+                    None
+                };
             lines_box.append(&build_info_label(
                 &bit_freq_str,
                 Some("album-technical-label"),
+                bit_freq_tooltip,
             ));
         }
-        if let Some(format) = most_common_format_opt
+        if let Some(format) = format_str
             && !format.is_empty()
         {
             // Add separator if we already have bit/freq info
-            if !bit_freq_str.is_empty() {
-                lines_box.append(&build_info_label(" · ", Some("album-technical-label")));
+            if !bit_freq_str.is_empty() && bit_freq_str != "Mixed" {
+                lines_box.append(&build_info_label(
+                    " · ",
+                    Some("album-technical-label"),
+                    None,
+                ));
             }
+            let format_specific_tooltip = if format == "Mixed" {
+                tooltip_text.as_deref()
+            } else {
+                None
+            };
             lines_box.append(&build_info_label(
                 &format.to_uppercase(),
                 Some("album-technical-label"),
+                format_specific_tooltip,
             ));
         }
         outer_row.append(&lines_box);
@@ -246,7 +313,11 @@ pub fn build_album_metadata(songs: &[Song], album: &Album) -> Option<Box> {
         meta_fields.push(format_duration_hms(total_length));
         let meta_text = meta_fields.join(" · ");
         if !meta_text.is_empty() {
-            meta_box.append(&build_info_label(&meta_text, Some("album-meta-label")));
+            meta_box.append(&build_info_label(
+                &meta_text,
+                Some("album-meta-label"),
+                None,
+            ));
         }
         Some(meta_box)
     } else {
