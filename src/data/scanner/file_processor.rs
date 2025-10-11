@@ -165,10 +165,17 @@ pub async fn process_files_batch_optimized(
 
             // Extract cover art data for later concurrent processing
             let cover_art_data = tag.and_then(|t| t.pictures().first()).map(|picture| {
+                // Get the folder path for this audio file to ensure unique cover names
+                let file_folder_path = path
+                    .parent()
+                    .unwrap_or_else(|| Path::new(""))
+                    .to_string_lossy()
+                    .to_string();
                 (
                     picture.data().to_vec(),
                     album_title.clone(),
                     album_artist_name.clone(),
+                    file_folder_path,
                 )
             });
 

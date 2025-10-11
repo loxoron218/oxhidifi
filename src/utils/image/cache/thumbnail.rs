@@ -1,7 +1,9 @@
 use std::{
+    collections::hash_map::DefaultHasher,
     error::Error,
     fmt::{Display, Formatter, Result as FmtResult},
     fs::create_dir_all,
+    hash::{Hash, Hasher},
     io::{self, Cursor, ErrorKind::Other},
     path::PathBuf,
 };
@@ -112,19 +114,33 @@ fn get_or_create_cache_dir() -> Result<PathBuf, io::Error> {
 /// Generates a sanitized, unique filename for a cached thumbnail based on album details.
 ///
 /// This function creates a filesystem-safe filename by combining the album artist
-/// name and album title, then sanitizing the result to remove invalid characters.
+/// name, album title, and a hash of the folder path to ensure uniqueness across different
+/// folders that may have albums with the same artist/title.
 ///
 /// # Arguments
 /// * `album_title` - The title of the album
 /// * `album_artist_name` - The name of the album artist
+/// * `folder_path` - The path to the folder containing the album (used to disambiguate)
 ///
 /// # Returns
 /// A sanitized filename with a `.jpg` extension
-fn generate_cache_filename(album_title: &str, album_artist_name: &str) -> String {
-    let mut name = String::with_capacity(album_artist_name.len() + album_title.len() + 1);
+fn generate_cache_filename(
+    album_title: &str,
+    album_artist_name: &str,
+    folder_path: &str,
+) -> String {
+    // Create a hash of the folder path to ensure uniqueness
+    let mut hasher = DefaultHasher::new();
+    folder_path.hash(&mut hasher);
+    let folder_hash = hasher.finish();
+
+    // 17 for separator and hash
+    let mut name = String::with_capacity(album_artist_name.len() + album_title.len() + 17);
     name.push_str(album_artist_name);
     name.push('-');
     name.push_str(album_title);
+    name.push('-');
+    name.push_str(&format!("{:x}", folder_hash));
 
     // Sanitize the filename to remove characters that are invalid on most filesystems.
     let sanitized: String = name
@@ -149,6 +165,7 @@ fn generate_cache_filename(album_title: &str, album_artist_name: &str) -> String
 /// * `image_data` - The raw image data to process
 /// * `album_title` - The title of the album (used for filename generation)
 /// * `album_artist_name` - The name of the album artist (used for filename generation)
+/// * `folder_path` - The path to the folder containing the album (used to disambiguate)
 ///
 /// # Returns
 /// A `Result` containing the path to the cached thumbnail or a `ThumbnailError` if
@@ -157,9 +174,10 @@ pub async fn get_or_create_thumbnail_optimized(
     image_data: &[u8],
     album_title: &str,
     album_artist_name: &str,
+    folder_path: &str,
 ) -> Result<PathBuf, ThumbnailError> {
     let cache_dir = get_or_create_cache_dir()?;
-    let filename = generate_cache_filename(album_title, album_artist_name);
+    let filename = generate_cache_filename(album_title, album_artist_name, folder_path);
     let cache_path = cache_dir.join(filename);
 
     // If the thumbnail already exists, no need to process it again.
@@ -195,12 +213,12 @@ pub async fn get_or_create_thumbnail_optimized(
 /// many album covers.
 ///
 /// # Arguments
-/// * `images` - A vector of tuples containing (image_data, album_title, album_artist_name)
+/// * `images` - A vector of tuples containing (image_data, album_title, album_artist_name, folder_path)
 ///
 /// # Returns
 /// A vector of Results containing the cache paths or errors for each image
 pub async fn process_images_concurrently(
-    images: Vec<(Vec<u8>, String, String)>,
+    images: Vec<(Vec<u8>, String, String, String)>,
 ) -> Vec<Result<PathBuf, ThumbnailError>> {
     // Process images in smaller concurrent batches to avoid overwhelming the system
     const CONCURRENT_LIMIT: usize = 10;
@@ -219,12 +237,17 @@ pub async fn process_images_concurrently(
     // Process images with a concurrency limit
     loop {
         // Add tasks up to the concurrency limit
-        for (image_data, album_title, album_artist_name) in
+        for (image_data, album_title, album_artist_name, folder_path) in
             image_iter.by_ref().take(CONCURRENT_LIMIT - active_tasks)
         {
             join_set.spawn(async move {
-                get_or_create_thumbnail_optimized(&image_data, &album_title, &album_artist_name)
-                    .await
+                get_or_create_thumbnail_optimized(
+                    &image_data,
+                    &album_title,
+                    &album_artist_name,
+                    &folder_path,
+                )
+                .await
             });
             active_tasks += 1;
         }
