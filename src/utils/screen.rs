@@ -1,5 +1,5 @@
+use gtk4::gdk::{Display, Monitor};
 use libadwaita::{
-    gdk::{Display, Monitor},
     prelude::{Cast, DisplayExt, ListModelExt, MonitorExt},
 };
 

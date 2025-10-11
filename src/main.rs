@@ -5,8 +5,8 @@ mod utils;
 
 use std::{env::var, fs::create_dir_all, path::PathBuf, sync::Arc, time::Duration};
 
-use gtk4::{CssProvider, STYLE_PROVIDER_PRIORITY_APPLICATION, StyleContext};
-use libadwaita::{gdk::Display, init};
+use gtk4::{CssProvider, STYLE_PROVIDER_PRIORITY_APPLICATION, StyleContext, gdk::Display};
+use libadwaita::init;
 use sqlx::sqlite::SqlitePoolOptions;
 use tokio::main;
 

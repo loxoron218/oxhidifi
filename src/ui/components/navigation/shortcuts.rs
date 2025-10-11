@@ -3,10 +3,13 @@ use std::{
     rc::Rc,
 };
 
-use gtk4::{CallbackAction, KeyvalTrigger, Shortcut, ShortcutController, glib::Propagation::Stop};
+use gtk4::{
+    CallbackAction, KeyvalTrigger, Shortcut, ShortcutController,
+    gdk::{Key, ModifierType},
+    glib::Propagation::Stop,
+};
 use libadwaita::{
     ApplicationWindow, Clamp, ViewStack,
-    gdk::{Key, ModifierType},
     prelude::{EditableExt, ObjectExt, WidgetExt},
 };
 
