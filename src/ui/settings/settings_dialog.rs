@@ -84,12 +84,6 @@ pub fn show_settings_dialog<P: IsA<Window> + IsA<Widget>>(
     // Set flag to indicate settings dialog is open.
     is_settings_open.set(true);
 
-    // Apply margins for consistent spacing. This still works on any GtkWidget.
-    dialog.set_margin_top(32);
-    dialog.set_margin_bottom(32);
-    dialog.set_margin_start(32);
-    dialog.set_margin_end(32);
-
     // Main GLib context for UI updates
     let main_context = Rc::new(MainContext::default());
 
