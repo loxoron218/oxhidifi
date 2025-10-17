@@ -5,7 +5,10 @@ mod utils;
 
 use std::{env::var, fs::create_dir_all, path::PathBuf, sync::Arc, time::Duration};
 
-use gtk4::{CssProvider, STYLE_PROVIDER_PRIORITY_APPLICATION, StyleContext, gdk::Display};
+use gtk4::{
+    CssProvider, STYLE_PROVIDER_PRIORITY_APPLICATION, gdk::Display,
+    style_context_add_provider_for_display,
+};
 use libadwaita::init;
 use sqlx::sqlite::SqlitePoolOptions;
 use tokio::main;
@@ -21,8 +24,7 @@ async fn main() {
     // Load custom CSS
     let provider = CssProvider::new();
     provider.load_from_path("style.css");
-    #[allow(deprecated)]
-    StyleContext::add_provider_for_display(
+    style_context_add_provider_for_display(
         &Display::default().expect("No display found"),
         &provider,
         STYLE_PROVIDER_PRIORITY_APPLICATION,
