@@ -8,7 +8,7 @@ description = "A music player tailored for audiophiles, focusing on detailed col
 
 [dependencies]
 gstreamer = "0.24.2"
-gtk4 = "0.10.1"
+gtk4 = { version = "0.10.1", features = ["gio_v2_80", "v4_20"] }
 image = "0.25.8"
 libadwaita = { version = "0.8.0", features = ["v1_8"] }
 lofty = "0.22.4"
