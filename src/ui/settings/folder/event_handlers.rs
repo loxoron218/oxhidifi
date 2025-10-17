@@ -1,15 +1,7 @@
 use std::rc::Rc;
 
-use gtk4::{
-    Button,
-    FileChooserAction::SelectFolder,
-    FileChooserDialog,
-    ResponseType::{Accept, Cancel},
-    Window,
-};
-use libadwaita::prelude::{
-    ButtonExt, CastNone, DialogExt, FileChooserExt, FileExt, GtkWindowExt, StaticType, WidgetExt,
-};
+use gtk4::{Button, FileDialog, Window, glib::MainContext};
+use libadwaita::prelude::{ButtonExt, CastNone, FileExt, StaticType, WidgetExt};
 
 use crate::ui::{
     components::dialogs::show_remove_folder_confirmation_dialog,
@@ -40,7 +32,7 @@ pub fn connect_add_folder_handler(
 
 /// Handles the click event for the "Add Folder" button.
 ///
-/// This function creates and displays a `FileChooserDialog` to allow the user
+/// This function creates and displays a `FileDialog` to allow the user
 /// to select a folder. Upon confirmation, it triggers the process of adding
 /// the folder to the database, scanning it, and refreshing the UI.
 ///
@@ -51,28 +43,29 @@ fn handle_add_folder_clicked(folder_settings_page: &FolderSettingsPage) {
     let binding = folder_settings_page
         .folders_group
         .ancestor(Window::static_type());
-    let parent_window = binding.and_downcast_ref::<Window>();
-    let dialog = FileChooserDialog::new(
-        Some("Add Folder to Library"),
-        parent_window,
-        SelectFolder,
-        &[("Cancel", Cancel), ("Add", Accept)],
-    );
-    dialog.set_modal(true);
+    let parent_window = binding.and_downcast_ref::<Window>().cloned();
+    let dialog = FileDialog::new();
+    dialog.set_title("Add Folder to Library");
 
-    // Clone the necessary state for the response handler closure.
+    // Clone the necessary state for the async closure.
     let self_clone = Rc::new(folder_settings_page.clone_for_closure());
-    dialog.connect_response(move |dialog, response| {
-        if response == Accept
-            && let Some(folder) = dialog.file()
-            && let Some(path) = folder.path()
-        {
-            // Handle the folder addition (delegated to scanning_operations module)
-            handle_folder_addition(&self_clone, path);
-        }
-        dialog.close();
-    });
-    dialog.show();
+
+    // Spawn the async file dialog operation
+    if let Some(parent_window) = parent_window {
+        MainContext::default().spawn_local(async move {
+            match dialog.select_folder_future(Some(&parent_window)).await {
+                Ok(folder) => {
+                    if let Some(path) = folder.path() {
+                        // Handle the folder addition (delegated to scanning_operations module)
+                        handle_folder_addition(&self_clone, path);
+                    }
+                }
+                Err(_) => {
+                    // User cancelled the dialog - do nothing
+                }
+            }
+        });
+    }
 }
 
 /// Connects the remove folder handler to the provided button.
