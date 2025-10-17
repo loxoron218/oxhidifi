@@ -2,6 +2,7 @@ use gtk4::{
     Box, Button, Entry, EventControllerFocus, EventControllerKey, GestureClick,
     Orientation::Horizontal,
     glib::Propagation::{Proceed, Stop},
+    graphene::Point,
 };
 use libadwaita::{
     ApplicationWindow,
@@ -88,19 +89,26 @@ impl SearchBar {
         gesture_click_outside.connect_pressed(move |_, _, x, y| {
             // Only act if the entry is currently visible
             if search_entry_for_gesture.is_visible() {
-                // Get the allocation (position and size) of the search entry
-                let alloc = search_entry_for_gesture.allocation();
+                // Get the bounds (position and size) of the search entry
+                let bounds = search_entry_for_gesture
+                    .compute_bounds(&search_entry_for_gesture)
+                    .unwrap_or_default();
+                let bounds_width = bounds.width();
+                let bounds_height = bounds.height();
 
-                // Translate the search entry's coordinates relative to the vbox_inner
-                let (sx, sy) = search_entry_for_gesture
-                    .translate_coordinates(&vbox_inner_for_gesture, 0.0, 0.0)
-                    .unwrap_or((alloc.x() as f64, alloc.y() as f64));
+                // Compute the position of the search entry relative to the vbox_inner
+                let point = Point::new(0.0, 0.0);
+                let computed_point = search_entry_for_gesture
+                    .compute_point(&vbox_inner_for_gesture, &point)
+                    .unwrap_or_else(|| Point::new(bounds.x(), bounds.y()));
+                let sx = computed_point.x() as f64;
+                let sy = computed_point.y() as f64;
 
                 // Check if the click coordinates (x, y) are *inside* the search entry's bounds
                 let inside = x >= sx
-                    && x <= sx + alloc.width() as f64
+                    && x <= sx + bounds_width as f64
                     && y >= sy
-                    && y <= sy + alloc.height() as f64;
+                    && y <= sy + bounds_height as f64;
 
                 // If the click was outside the search entry, hide the search bar
                 if !inside {

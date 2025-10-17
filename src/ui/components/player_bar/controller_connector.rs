@@ -48,8 +48,7 @@ impl PlayerBar {
                             if container_strong.is_visible() {
                                 // When player bar becomes visible, add bottom margin to content area
                                 // Get the player bar height and use it as margin
-                                let allocation = container_strong.allocation();
-                                let height = allocation.height();
+                                let height = container_strong.height();
                                 content_area.set_margin_bottom(height);
                             } else {
                                 // When player bar becomes hidden, remove bottom margin from content area
@@ -221,6 +220,7 @@ impl PlayerBar {
                 select! {
                     // Wait for a short period
                     _ = timeout_future(Duration::from_millis(100)) => {},
+
                     // Break loop if cancellation is requested
                     _ = cancellation_token.cancelled() => {
                         break;

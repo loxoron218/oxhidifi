@@ -7,6 +7,7 @@ use std::{
 use gtk4::{
     Button, FlowBoxChild, GestureClick,
     glib::{MainContext, prelude::ObjectExt},
+    graphene::Point,
 };
 use libadwaita::{Clamp, ViewStack, prelude::WidgetExt};
 use sqlx::SqlitePool;
@@ -37,23 +38,36 @@ pub fn create_navigation_gesture(
     // The `move` keyword captures the needed variables safely.
     let album_id = album.id;
     let play_button_weak = play_button.downgrade();
+    let flow_child_weak = flow_child.downgrade();
     gesture.connect_pressed(move |_gesture, _, x, y| {
         // Check if the click was on the play button by checking if the play button is visible
         // and if the coordinates fall within the play button area
         let is_play_button_click = if let Some(play_btn) = play_button_weak.upgrade() {
             if play_btn.is_visible() {
-                // Get the play button allocation to check coordinates
-                let allocation = play_btn.allocation();
-                let play_btn_x = allocation.x() as f64;
-                let play_btn_y = allocation.y() as f64;
-                let play_btn_width = allocation.width() as f64;
-                let play_btn_height = allocation.height() as f64;
+                // Get the play button's position relative to the flow_child (where the gesture is)
+                // The click coordinates (x, y) are in the flow_child's coordinate system
+                if let Some(flow_child_strong) = flow_child_weak.upgrade() {
+                    let point = Point::new(0.0, 0.0);
+                    if let Some(computed_point) = play_btn.compute_point(&flow_child_strong, &point)
+                    {
+                        let play_btn_x = computed_point.x() as f64;
+                        let play_btn_y = computed_point.y() as f64;
+                        let play_btn_width = play_btn.width() as f64;
+                        let play_btn_height = play_btn.height() as f64;
 
-                // Check if click coordinates are within play button bounds
-                x >= play_btn_x
-                    && x <= play_btn_x + play_btn_width
-                    && y >= play_btn_y
-                    && y <= play_btn_y + play_btn_height
+                        // Check if click coordinates are within play button bounds
+                        x >= play_btn_x
+                            && x <= play_btn_x + play_btn_width
+                            && y >= play_btn_y
+                            && y <= play_btn_y + play_btn_height
+                    } else {
+                        // If we can't compute the position, assume it's not a play button click
+                        false
+                    }
+                } else {
+                    // If we can't get the flow child, assume it's not a play button click
+                    false
+                }
             } else {
                 false
             }
