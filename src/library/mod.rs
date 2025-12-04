@@ -4,7 +4,11 @@
 //! including database operations, data models, and schema management.
 
 pub mod database;
+pub mod dr_parser;
+pub mod file_watcher;
+pub mod incremental_updater;
 pub mod models;
+pub mod scanner;
 pub mod schema;
 
 pub use {

@@ -47,6 +47,9 @@ pub enum LibraryError {
     /// Record not found.
     #[error("Record not found: {entity} with id {id}")]
     NotFound { entity: String, id: i64 },
+    /// DR parsing error.
+    #[error("DR parsing error: {0}")]
+    DrError(#[from] crate::error::dr_error::DrError),
 }
 
 /// UI-related errors.

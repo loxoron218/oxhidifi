@@ -4,6 +4,7 @@
 //! handling and operational error context propagation for rich debugging information.
 
 pub mod domain;
+pub mod dr_error;
 pub mod operational;
 
 pub use {

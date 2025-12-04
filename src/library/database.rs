@@ -342,6 +342,170 @@ impl LibraryDatabase {
         Ok(())
     }
 
+    /// Updates multiple tracks in a single transaction.
+    ///
+    /// # Arguments
+    ///
+    /// * `tracks` - Vector of tracks to update or insert.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` indicating success or failure.
+    ///
+    /// # Errors
+    ///
+    /// Returns `LibraryError` if the batch update fails.
+    pub async fn batch_update_tracks(&self, tracks: Vec<Track>) -> Result<(), LibraryError> {
+        let mut tx = self.pool.begin().await?;
+
+        for track in tracks {
+            // Check if track exists
+            let existing_track: Option<i64> = query_scalar("SELECT id FROM tracks WHERE path = ?")
+                .bind(&track.path)
+                .fetch_optional(&mut *tx)
+                .await?;
+
+            if let Some(track_id) = existing_track {
+                // Update existing track
+                query(
+                    "UPDATE tracks SET album_id = ?, title = ?, track_number = ?, disc_number = ?, duration_ms = ?, file_size = ?, format = ?, sample_rate = ?, bits_per_sample = ?, channels = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+                )
+                .bind(track.album_id)
+                .bind(track.title)
+                .bind(track.track_number)
+                .bind(track.disc_number)
+                .bind(track.duration_ms)
+                .bind(track.file_size)
+                .bind(track.format)
+                .bind(track.sample_rate)
+                .bind(track.bits_per_sample)
+                .bind(track.channels)
+                .bind(track_id)
+                .execute(&mut *tx)
+                .await?;
+            } else {
+                // Insert new track
+                query(
+                    "INSERT INTO tracks (album_id, title, track_number, disc_number, duration_ms, path, file_size, format, sample_rate, bits_per_sample, channels) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                )
+                .bind(track.album_id)
+                .bind(track.title)
+                .bind(track.track_number)
+                .bind(track.disc_number)
+                .bind(track.duration_ms)
+                .bind(track.path)
+                .bind(track.file_size)
+                .bind(track.format)
+                .bind(track.sample_rate)
+                .bind(track.bits_per_sample)
+                .bind(track.channels)
+                .execute(&mut *tx)
+                .await?;
+            }
+        }
+
+        tx.commit().await?;
+        Ok(())
+    }
+
+    /// Updates multiple albums in a single transaction.
+    ///
+    /// # Arguments
+    ///
+    /// * `albums` - Vector of albums to update or insert.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` indicating success or failure.
+    ///
+    /// # Errors
+    ///
+    /// Returns `LibraryError` if the batch update fails.
+    pub async fn batch_update_albums(&self, albums: Vec<Album>) -> Result<(), LibraryError> {
+        let mut tx = self.pool.begin().await?;
+
+        for album in albums {
+            // Check if album exists
+            let existing_album: Option<i64> = query_scalar(
+                "SELECT id FROM albums WHERE artist_id = ? AND title = ? AND year IS ?"
+            )
+            .bind(album.artist_id)
+            .bind(&album.title)
+            .bind(album.year)
+            .fetch_optional(&mut *tx)
+            .await?;
+
+            if let Some(album_id) = existing_album {
+                // Update existing album
+                query(
+                    "UPDATE albums SET genre = ?, compilation = ?, path = ?, dr_value = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+                )
+                .bind(album.genre)
+                .bind(album.compilation)
+                .bind(album.path)
+                .bind(album.dr_value)
+                .bind(album_id)
+                .execute(&mut *tx)
+                .await?;
+            } else {
+                // Insert new album
+                query(
+                    "INSERT INTO albums (artist_id, title, year, genre, compilation, path, dr_value) VALUES (?, ?, ?, ?, ?, ?, ?)"
+                )
+                .bind(album.artist_id)
+                .bind(album.title)
+                .bind(album.year)
+                .bind(album.genre)
+                .bind(album.compilation)
+                .bind(album.path)
+                .bind(album.dr_value)
+                .execute(&mut *tx)
+                .await?;
+            }
+        }
+
+        tx.commit().await?;
+        Ok(())
+    }
+
+    /// Removes multiple tracks and cleans up empty albums/artists.
+    ///
+    /// # Arguments
+    ///
+    /// * `track_paths` - Vector of track paths to remove.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` indicating success or failure.
+    ///
+    /// # Errors
+    ///
+    /// Returns `LibraryError` if the batch removal fails.
+    pub async fn batch_remove_tracks(&self, track_paths: Vec<String>) -> Result<(), LibraryError> {
+        let mut tx = self.pool.begin().await?;
+
+        // Remove tracks
+        for path in track_paths {
+            query("DELETE FROM tracks WHERE path = ?")
+                .bind(path)
+                .execute(&mut *tx)
+                .await?;
+        }
+
+        // Clean up empty albums
+        query("DELETE FROM albums WHERE id NOT IN (SELECT DISTINCT album_id FROM tracks)")
+            .execute(&mut *tx)
+            .await?;
+
+        // Clean up empty artists
+        query("DELETE FROM artists WHERE id NOT IN (SELECT DISTINCT artist_id FROM albums)")
+            .execute(&mut *tx)
+            .await?;
+
+        tx.commit().await?;
+        Ok(())
+    }
+
     /// Gets the database connection pool for advanced operations.
     ///
     /// # Returns
