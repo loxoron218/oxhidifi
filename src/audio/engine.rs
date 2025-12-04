@@ -97,6 +97,20 @@ pub struct AudioEngine {
     stream_handle: Arc<RwLock<Option<StreamHandle>>>,
 }
 
+impl Clone for AudioEngine {
+    fn clone(&self) -> Self {
+        Self {
+            state: Arc::clone(&self.state),
+            current_track: Arc::clone(&self.current_track),
+            output_config: self.output_config.clone(),
+            state_tx: self.state_tx.clone(),
+            control_rx: self.control_rx.clone(),
+            control_tx: self.control_tx.clone(),
+            stream_handle: Arc::clone(&self.stream_handle),
+        }
+    }
+}
+
 /// Internal control messages for the audio engine.
 #[derive(Debug)]
 enum ControlMessage {
@@ -333,21 +347,6 @@ impl AudioEngine {
     /// A `broadcast::Receiver` that receives `PlaybackState` updates.
     pub fn subscribe_to_state_changes(&self) -> TokioReceiver<PlaybackState> {
         self.state_tx.subscribe()
-    }
-
-    /// Clones the audio engine handle.
-    ///
-    /// This allows multiple components to control the same engine instance.
-    pub fn clone(&self) -> Self {
-        Self {
-            state: Arc::clone(&self.state),
-            current_track: Arc::clone(&self.current_track),
-            output_config: self.output_config.clone(),
-            state_tx: self.state_tx.clone(),
-            control_rx: self.control_rx.clone(),
-            control_tx: self.control_tx.clone(),
-            stream_handle: Arc::clone(&self.stream_handle),
-        }
     }
 
     /// Main control loop that processes commands and manages playback.

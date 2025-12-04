@@ -304,61 +304,53 @@ impl AudioProducer {
     ///
     /// Returns `DecoderError` if decoding fails.
     pub fn run(mut self) -> Result<(), DecoderError> {
-        loop {
-            match self.decoder.decode_next_packet()? {
-                Some(buffer) => {
-                    // Convert audio buffer to f32 samples
-                    let samples = match buffer {
-                        F32(buf) => buf.chan(0).to_vec(),
-                        U16(buf) => buf
-                            .chan(0)
-                            .iter()
-                            .map(|&sample| sample as f32 / 65535.0)
-                            .collect(),
-                        U24(buf) => {
-                            // Handle u24 properly by converting to f32
-                            // u24 samples are stored as 32-bit integers with the upper 8 bits unused
-                            buf.chan(0)
-                                .iter()
-                                .map(|&sample| {
-                                    // Extract the lower 24 bits and normalize to [-1.0, 1.0]
-                                    let sample_u32 = sample.0;
-                                    let sample_24 = sample_u32 & 0x00FFFFFF;
-                                    if sample_24 & 0x00800000 != 0 {
-                                        // Negative number (sign bit set)
-                                        let signed_sample = sample_24 as i32 - 0x01000000;
-                                        signed_sample as f32 / 8388608.0
-                                    } else {
-                                        // Positive number
-                                        sample_24 as f32 / 8388607.0
-                                    }
-                                })
-                                .collect()
-                        }
-                        U32(buf) => buf
-                            .chan(0)
-                            .iter()
-                            .map(|&sample| sample as f32 / 4294967295.0)
-                            .collect(),
-                        _ => return Err(DecoderError::UnsupportedFormat),
-                    };
-
-                    // Write samples to ring buffer
-                    for &sample in &samples {
-                        loop {
-                            match self.producer.push(sample) {
-                                Ok(()) => break,
-                                Err(Full(_)) => {
-                                    // Buffer is full, wait a bit and retry
-                                    sleep(Duration::from_micros(100));
-                                }
+        while let Some(buffer) = self.decoder.decode_next_packet()? {
+            // Convert audio buffer to f32 samples
+            let samples = match buffer {
+                F32(buf) => buf.chan(0).to_vec(),
+                U16(buf) => buf
+                    .chan(0)
+                    .iter()
+                    .map(|&sample| sample as f32 / 65535.0)
+                    .collect(),
+                U24(buf) => {
+                    // Handle u24 properly by converting to f32
+                    // u24 samples are stored as 32-bit integers with the upper 8 bits unused
+                    buf.chan(0)
+                        .iter()
+                        .map(|&sample| {
+                            // Extract the lower 24 bits and normalize to [-1.0, 1.0]
+                            let sample_u32 = sample.0;
+                            let sample_24 = sample_u32 & 0x00FFFFFF;
+                            if sample_24 & 0x00800000 != 0 {
+                                // Negative number (sign bit set)
+                                let signed_sample = sample_24 as i32 - 0x01000000;
+                                signed_sample as f32 / 8388608.0
+                            } else {
+                                // Positive number
+                                sample_24 as f32 / 8388607.0
                             }
+                        })
+                        .collect()
+                }
+                U32(buf) => buf
+                    .chan(0)
+                    .iter()
+                    .map(|&sample| sample as f32 / 4294967295.0)
+                    .collect(),
+                _ => return Err(DecoderError::UnsupportedFormat),
+            };
+
+            // Write samples to ring buffer
+            for &sample in &samples {
+                loop {
+                    match self.producer.push(sample) {
+                        Ok(()) => break,
+                        Err(Full(_)) => {
+                            // Buffer is full, wait a bit and retry
+                            sleep(Duration::from_micros(100));
                         }
                     }
-                }
-                None => {
-                    // End of file reached
-                    break;
                 }
             }
         }

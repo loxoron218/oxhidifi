@@ -128,6 +128,12 @@ impl PlayerBar {
     }
 }
 
+impl Default for PlayerBar {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use libadwaita::{init, prelude::ButtonExt};

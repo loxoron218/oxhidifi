@@ -75,6 +75,12 @@ impl HeaderBar {
     }
 }
 
+impl Default for HeaderBar {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use libadwaita::{init, prelude::ButtonExt};
