@@ -34,10 +34,6 @@ pub use config::ScannerConfig;
 pub struct LibraryScanner {
     /// File system watcher.
     file_watcher: FileWatcher,
-    /// Database interface.
-    database: Arc<LibraryDatabase>,
-    /// User settings.
-    settings: Arc<RwLock<UserSettings>>,
     /// Configuration.
     config: ScannerConfig,
     /// Task handles for background operations.
@@ -110,8 +106,6 @@ impl LibraryScanner {
 
         Ok(LibraryScanner {
             file_watcher,
-            database,
-            settings,
             config,
             _tasks: tasks,
         })

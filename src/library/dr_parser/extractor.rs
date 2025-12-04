@@ -26,6 +26,12 @@ pub struct DrExtractor {
     dr_validator: Regex,
 }
 
+impl Default for DrExtractor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DrExtractor {
     /// Creates a new DR extractor.
     ///
@@ -33,13 +39,13 @@ impl DrExtractor {
     ///
     /// A new `DrExtractor` instance.
     pub fn new() -> Self {
-        let mut dr_patterns = Vec::new();
-
         // Add patterns for common DR log formats
-        dr_patterns.push(Regex::new(r"(?i)^\s*DR\s*(\d{1,2})\s*$").unwrap());
-        dr_patterns.push(Regex::new(r"(?i)DR\s*=\s*(\d{1,2})").unwrap());
-        dr_patterns.push(Regex::new(r"(?i)Dynamic Range\s*[:=]\s*(\d{1,2})").unwrap());
-        dr_patterns.push(Regex::new(r"(?i)^\s*(DR\d{1,2})\s*$").unwrap());
+        let dr_patterns = vec![
+            Regex::new(r"(?i)^\s*DR\s*(\d{1,2})\s*$").unwrap(),
+            Regex::new(r"(?i)DR\s*=\s*(\d{1,2})").unwrap(),
+            Regex::new(r"(?i)Dynamic Range\s*[:=]\s*(\d{1,2})").unwrap(),
+            Regex::new(r"(?i)^\s*(DR\d{1,2})\s*$").unwrap(),
+        ];
 
         let dr_validator = Regex::new(DR_VALUE_PATTERN).unwrap();
 

@@ -6,7 +6,7 @@
 
 use std::{
     collections::HashSet,
-    path::{Component::Normal, Path, PathBuf},
+    path::{Path, PathBuf},
     sync::Arc,
 };
 
@@ -19,7 +19,6 @@ use {
         event::{EventKind, ModifyKind},
     },
     parking_lot::RwLock,
-    regex::Regex,
     tracing::{debug, error},
 };
 
@@ -52,8 +51,6 @@ pub struct FileWatcher {
     watched_paths: Arc<RwLock<HashSet<PathBuf>>>,
     /// Configuration for watcher behavior.
     config: FileWatcherConfig,
-    /// Regex pattern for supported audio extensions.
-    audio_extension_regex: Regex,
 }
 
 impl FileWatcher {
@@ -77,19 +74,6 @@ impl FileWatcher {
     ) -> Result<Self, LibraryError> {
         let config = config.unwrap_or_default();
 
-        // Create regex pattern for supported audio extensions
-        let extensions_pattern = SUPPORTED_AUDIO_EXTENSIONS
-            .iter()
-            .map(|ext| format!(r"\.{}$", ext))
-            .collect::<Vec<_>>()
-            .join("|");
-        let audio_extension_regex =
-            Regex::new(&format!("(?i)({})", extensions_pattern)).map_err(|e| {
-                LibraryError::InvalidData {
-                    reason: format!("Failed to compile audio extension regex: {}", e),
-                }
-            })?;
-
         // Create notify watcher
         let mut watcher = RecommendedWatcher::new(
             move |res: Result<Event, notify::Error>| {
@@ -112,7 +96,6 @@ impl FileWatcher {
             _watcher: watcher,
             watched_paths: Arc::new(RwLock::new(HashSet::new())),
             config,
-            audio_extension_regex,
         };
 
         Ok(file_watcher)
@@ -167,29 +150,6 @@ impl FileWatcher {
                 error!("File system watcher error: {}", e);
             }
         }
-    }
-
-    /// Checks if a path is hidden (starts with a dot on Unix-like systems).
-    ///
-    /// # Arguments
-    ///
-    /// * `path` - Path to check.
-    ///
-    /// # Returns
-    ///
-    /// `true` if the path is hidden, `false` otherwise.
-    fn is_hidden_path(path: &Path) -> bool {
-        path.components().any(|component| {
-            if let Normal(os_str) = component {
-                if let Some(name) = os_str.to_str() {
-                    name.starts_with('.')
-                } else {
-                    false
-                }
-            } else {
-                false
-            }
-        })
     }
 
     /// Checks if a path corresponds to a supported audio file.
