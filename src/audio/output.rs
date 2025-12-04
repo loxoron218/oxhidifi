@@ -8,12 +8,11 @@ use std::time::Duration;
 use {
     cpal::{
         BufferSize::Default as CpalDefault,
-        BuildStreamError, ChannelCount, Device, Host, OutputCallbackInfo, PlayStreamError, Sample,
+        BuildStreamError, ChannelCount, Device, Host, OutputCallbackInfo, PlayStreamError,
         SampleFormat::{self, F32, I16, U16},
-        SampleRate, SizedSample, Stream, StreamConfig, default_host,
+        SampleRate, Stream, StreamConfig, default_host,
         traits::{DeviceTrait, HostTrait, StreamTrait},
     },
-    num_traits::{NumCast, cast},
     rtrb::{Consumer, PopError::Empty},
     rubato::FftFixedIn,
     thiserror::Error,
@@ -195,7 +194,7 @@ impl AudioOutput {
     pub fn create_stream(
         &self,
         stream_config: StreamConfig,
-        consumer: Consumer<f32>,
+        mut consumer: Consumer<f32>,
     ) -> Result<Stream, OutputError> {
         let sample_format = self
             .device
@@ -203,67 +202,86 @@ impl AudioOutput {
             .map_err(|_| OutputError::NoDeviceFound)?
             .sample_format();
 
-        let stream = match sample_format {
-            F32 => self.build_stream::<f32>(stream_config, consumer),
-            I16 => self.build_stream::<i16>(stream_config, consumer),
-            U16 => self.build_stream::<u16>(stream_config, consumer),
-            _ => {
-                return Err(OutputError::UnsupportedSampleFormat {
-                    format: sample_format,
-                });
-            }
-        }?;
-
-        Ok(stream)
-    }
-
-    /// Builds a typed audio stream.
-    fn build_stream<T>(
-        &self,
-        config: StreamConfig,
-        mut consumer: Consumer<f32>,
-    ) -> Result<Stream, OutputError>
-    where
-        T: Sample + SizedSample + Copy + NumCast + Default,
-    {
         let err_fn = |err| {
             eprintln!("Audio stream error: {}", err);
         };
 
         let timeout = Duration::from_millis(self.config.buffer_duration_ms as u64);
 
-        let stream = self.device.build_output_stream(
-            &config,
-            move |data: &mut [T], _: &OutputCallbackInfo| {
-                for sample in data.iter_mut() {
-                    match consumer.pop() {
-                        Ok(value) => {
-                            // Convert f32 to the target sample type
-                            *sample = match value {
-                                v if v >= 1.0 => {
-                                    // Use the maximum positive value for the type
-                                    cast(1.0f32).unwrap_or(T::default())
+        let stream = match sample_format {
+            F32 => {
+                self.device.build_output_stream(
+                    &stream_config,
+                    move |data: &mut [f32], _: &OutputCallbackInfo| {
+                        for sample in data.iter_mut() {
+                            match consumer.pop() {
+                                Ok(value) => {
+                                    // For f32, just clamp to valid range [-1.0, 1.0]
+                                    *sample = value.clamp(-1.0, 1.0);
                                 }
-                                v if v <= -1.0 => {
-                                    // Use the minimum negative value for the type
-                                    cast(-1.0f32).unwrap_or(T::default())
+                                Err(Empty) => {
+                                    // Buffer underrun - fill with silence
+                                    *sample = 0.0;
                                 }
-                                v => {
-                                    // Direct cast from f32 to target type
-                                    cast(v).unwrap_or(T::default())
-                                }
-                            };
+                            }
                         }
-                        Err(Empty) => {
-                            // Buffer underrun - fill with silence
-                            *sample = T::default();
+                    },
+                    err_fn,
+                    Some(timeout),
+                )?
+            }
+            I16 => {
+                self.device.build_output_stream(
+                    &stream_config,
+                    move |data: &mut [i16], _: &OutputCallbackInfo| {
+                        for sample in data.iter_mut() {
+                            match consumer.pop() {
+                                Ok(value) => {
+                                    // Convert f32 [-1.0, 1.0] to i16 [-32768, 32767]
+                                    // Clamp first to avoid overflow
+                                    let clamped = value.clamp(-1.0, 1.0);
+                                    *sample = (clamped * i16::MAX as f32) as i16;
+                                }
+                                Err(Empty) => {
+                                    // Buffer underrun - fill with silence
+                                    *sample = 0;
+                                }
+                            }
                         }
-                    }
-                }
-            },
-            err_fn,
-            Some(timeout),
-        )?;
+                    },
+                    err_fn,
+                    Some(timeout),
+                )?
+            }
+            U16 => {
+                self.device.build_output_stream(
+                    &stream_config,
+                    move |data: &mut [u16], _: &OutputCallbackInfo| {
+                        for sample in data.iter_mut() {
+                            match consumer.pop() {
+                                Ok(value) => {
+                                    // Convert f32 [-1.0, 1.0] to u16 [0, 65535]
+                                    // Map [-1.0, 1.0] to [0, 65535] where 0.0 maps to 32768
+                                    let clamped = value.clamp(-1.0, 1.0);
+                                    *sample = ((clamped + 1.0) * (u16::MAX as f32) / 2.0) as u16;
+                                }
+                                Err(Empty) => {
+                                    // Buffer underrun - fill with silence
+                                    *sample = 32768; // Midpoint for u16
+                                }
+                            }
+                        }
+                    },
+                    err_fn,
+                    Some(timeout),
+                )?
+            }
+            _ => {
+                return Err(OutputError::UnsupportedSampleFormat {
+                    format: sample_format,
+                });
+            }
+        };
 
         Ok(stream)
     }
