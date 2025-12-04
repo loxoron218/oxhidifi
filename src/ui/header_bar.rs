@@ -3,8 +3,7 @@
 //! This module implements the header bar component that provides
 //! essential controls for navigation, search, and application settings.
 
-use gtk::prelude::*;
-use libadwaita::prelude::*;
+use libadwaita::gtk::prelude::*;
 
 /// Basic header bar with essential controls.
 ///
@@ -14,11 +13,11 @@ pub struct HeaderBar {
     /// The underlying Libadwaita header bar widget.
     pub widget: libadwaita::HeaderBar,
     /// Search toggle button.
-    pub search_button: gtk::ToggleButton,
+    pub search_button: libadwaita::gtk::ToggleButton,
     /// View toggle button.
-    pub view_toggle: gtk::ToggleButton,
+    pub view_toggle: libadwaita::gtk::ToggleButton,
     /// Settings button.
-    pub settings_button: gtk::Button,
+    pub settings_button: libadwaita::gtk::Button,
 }
 
 impl HeaderBar {
@@ -31,21 +30,21 @@ impl HeaderBar {
         let widget = libadwaita::HeaderBar::builder().build();
 
         // Search button
-        let search_button = gtk::ToggleButton::builder()
+        let search_button = libadwaita::gtk::ToggleButton::builder()
             .icon_name("system-search-symbolic")
             .tooltip_text("Search")
             .build();
         widget.pack_start(&search_button);
 
         // View toggle button
-        let view_toggle = gtk::ToggleButton::builder()
+        let view_toggle = libadwaita::gtk::ToggleButton::builder()
             .icon_name("view-grid-symbolic")
             .tooltip_text("Toggle View")
             .build();
         widget.pack_start(&view_toggle);
 
         // Settings button
-        let settings_button = gtk::Button::builder()
+        let settings_button = libadwaita::gtk::Button::builder()
             .icon_name("preferences-system-symbolic")
             .tooltip_text("Settings")
             .build();
@@ -54,15 +53,12 @@ impl HeaderBar {
         // Tab navigation
         let tab_view = libadwaita::TabView::builder().build();
         
-        let albums_tab = libadwaita::TabPage::builder()
-            .title("Albums")
-            .build();
-        tab_view.append(&albums_tab);
+        // TabPage doesn't have a new() constructor, create pages differently
+        let albums_page = libadwaita::gtk::Label::new(Some("Albums"));
+        tab_view.append(&albums_page.upcast::<libadwaita::gtk::Widget>());
         
-        let artists_tab = libadwaita::TabPage::builder()
-            .title("Artists")
-            .build();
-        tab_view.append(&artists_tab);
+        let artists_page = libadwaita::gtk::Label::new(Some("Artists"));
+        tab_view.append(&artists_page.upcast::<libadwaita::gtk::Widget>());
         
         widget.set_title_widget(Some(&tab_view));
 
@@ -81,7 +77,7 @@ mod tests {
 
     #[test]
     fn test_header_bar_creation() {
-        gtk::init().unwrap_or(());
+        libadwaita::gtk::init().unwrap_or(());
         let header_bar = HeaderBar::new();
         assert!(header_bar.widget.is_valid());
         assert_eq!(header_bar.search_button.icon_name(), Some("system-search-symbolic"));

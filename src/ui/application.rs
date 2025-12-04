@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 
-use gtk::prelude::*;
+use libadwaita::gtk::prelude::*;
 use libadwaita::prelude::*;
 
 use crate::{
@@ -113,8 +113,8 @@ fn build_ui(
     let header_bar = create_header_bar(settings);
     
     // Create main content area
-    let main_content = gtk::Box::builder()
-        .orientation(gtk::Orientation::Vertical)
+    let main_content = libadwaita::gtk::Box::builder()
+        .orientation(libadwaita::gtk::Orientation::Vertical)
         .spacing(12)
         .margin_top(12)
         .margin_bottom(12)
@@ -123,10 +123,10 @@ fn build_ui(
         .build();
     
     // Add placeholder content
-    let placeholder_label = gtk::Label::builder()
+    let placeholder_label = libadwaita::gtk::Label::builder()
         .label("Welcome to Oxhidifi - High-Fidelity Music Player")
-        .halign(gtk::Align::Center)
-        .valign(gtk::Align::Center)
+        .halign(libadwaita::gtk::Align::Center)
+        .valign(libadwaita::gtk::Align::Center)
         .build();
     
     main_content.append(&placeholder_label);
@@ -135,8 +135,8 @@ fn build_ui(
     let player_bar = create_player_bar(app_state);
 
     // Assemble the main layout
-    let main_box = gtk::Box::builder()
-        .orientation(gtk::Orientation::Vertical)
+    let main_box = libadwaita::gtk::Box::builder()
+        .orientation(libadwaita::gtk::Orientation::Vertical)
         .build();
     
     main_box.append(&header_bar);
@@ -153,7 +153,7 @@ fn create_header_bar(settings: &UserSettings) -> libadwaita::HeaderBar {
     let header_bar = libadwaita::HeaderBar::builder().build();
 
     // Search button (placeholder)
-    let search_button = gtk::ToggleButton::builder()
+    let search_button = libadwaita::gtk::ToggleButton::builder()
         .icon_name("system-search-symbolic")
         .tooltip_text("Search")
         .build();
@@ -165,14 +165,14 @@ fn create_header_bar(settings: &UserSettings) -> libadwaita::HeaderBar {
     } else {
         "view-grid-symbolic"
     };
-    let view_toggle = gtk::ToggleButton::builder()
+    let view_toggle = libadwaita::gtk::ToggleButton::builder()
         .icon_name(view_toggle_icon)
         .tooltip_text("Toggle View")
         .build();
     header_bar.pack_start(&view_toggle);
 
     // Settings button (placeholder)
-    let settings_button = gtk::Button::builder()
+    let settings_button = libadwaita::gtk::Button::builder()
         .icon_name("preferences-system-symbolic")
         .tooltip_text("Settings")
         .build();
@@ -181,15 +181,12 @@ fn create_header_bar(settings: &UserSettings) -> libadwaita::HeaderBar {
     // Tab navigation (placeholder)
     let tab_view = libadwaita::TabView::builder().build();
     
-    let albums_tab = libadwaita::TabPage::builder()
-        .title("Albums")
-        .build();
-    tab_view.append(&albums_tab);
+    // TabPage doesn't have a new() constructor, create pages differently
+    let albums_page = libadwaita::gtk::Label::new(Some("Albums"));
+    tab_view.append(&albums_page.upcast::<libadwaita::gtk::Widget>());
     
-    let artists_tab = libadwaita::TabPage::builder()
-        .title("Artists")
-        .build();
-    tab_view.append(&artists_tab);
+    let artists_page = libadwaita::gtk::Label::new(Some("Artists"));
+    tab_view.append(&artists_page.upcast::<libadwaita::gtk::Widget>());
     
     header_bar.set_title_widget(Some(&tab_view));
 
@@ -197,9 +194,9 @@ fn create_header_bar(settings: &UserSettings) -> libadwaita::HeaderBar {
 }
 
 /// Creates the persistent player control bar.
-fn create_player_bar(_app_state: &Arc<AppState>) -> gtk::Box {
-    let player_bar = gtk::Box::builder()
-        .orientation(gtk::Orientation::Horizontal)
+fn create_player_bar(_app_state: &Arc<AppState>) -> libadwaita::gtk::Box {
+    let player_bar = libadwaita::gtk::Box::builder()
+        .orientation(libadwaita::gtk::Orientation::Horizontal)
         .spacing(12)
         .margin_top(6)
         .margin_bottom(6)
@@ -209,28 +206,28 @@ fn create_player_bar(_app_state: &Arc<AppState>) -> gtk::Box {
         .build();
 
     // Album artwork placeholder
-    let artwork = gtk::Picture::builder()
+    let artwork = libadwaita::gtk::Picture::builder()
         .width_request(48)
         .height_request(48)
         .build();
     player_bar.append(&artwork);
 
     // Track info placeholder
-    let track_info = gtk::Box::builder()
-        .orientation(gtk::Orientation::Vertical)
+    let track_info = libadwaita::gtk::Box::builder()
+        .orientation(libadwaita::gtk::Orientation::Vertical)
         .hexpand(true)
         .build();
     
-    let title_label = gtk::Label::builder()
+    let title_label = libadwaita::gtk::Label::builder()
         .label("Track Title")
-        .halign(gtk::Align::Start)
+        .halign(libadwaita::gtk::Align::Start)
         .xalign(0.0)
         .build();
     track_info.append(&title_label);
     
-    let artist_label = gtk::Label::builder()
+    let artist_label = libadwaita::gtk::Label::builder()
         .label("Artist Name")
-        .halign(gtk::Align::Start)
+        .halign(libadwaita::gtk::Align::Start)
         .xalign(0.0)
         .css_classes(vec!["dim-label".to_string()])
         .build();
@@ -239,24 +236,24 @@ fn create_player_bar(_app_state: &Arc<AppState>) -> gtk::Box {
     player_bar.append(&track_info);
 
     // Player controls
-    let controls = gtk::Box::builder()
-        .orientation(gtk::Orientation::Horizontal)
+    let controls = libadwaita::gtk::Box::builder()
+        .orientation(libadwaita::gtk::Orientation::Horizontal)
         .spacing(6)
         .build();
     
-    let prev_button = gtk::Button::builder()
+    let prev_button = libadwaita::gtk::Button::builder()
         .icon_name("media-skip-backward-symbolic")
         .tooltip_text("Previous")
         .build();
     controls.append(&prev_button);
     
-    let play_button = gtk::ToggleButton::builder()
+    let play_button = libadwaita::gtk::ToggleButton::builder()
         .icon_name("media-playback-start-symbolic")
         .tooltip_text("Play")
         .build();
     controls.append(&play_button);
     
-    let next_button = gtk::Button::builder()
+    let next_button = libadwaita::gtk::Button::builder()
         .icon_name("media-skip-forward-symbolic")
         .tooltip_text("Next")
         .build();
@@ -265,12 +262,13 @@ fn create_player_bar(_app_state: &Arc<AppState>) -> gtk::Box {
     player_bar.append(&controls);
 
     // Volume control
-    let volume_scale = gtk::Scale::builder()
-        .orientation(gtk::Orientation::Horizontal)
+    let volume_scale = libadwaita::gtk::Scale::builder()
+        .orientation(libadwaita::gtk::Orientation::Horizontal)
         .width_request(100)
-        .value(100.0)
+        // Remove value() from builder, set it after creation
         .draw_value(false)
         .build();
+    volume_scale.set_value(100.0);
     player_bar.append(&volume_scale);
 
     player_bar

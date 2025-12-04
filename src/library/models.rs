@@ -4,6 +4,7 @@
 //! including Album, Artist, and Track models with proper serde serialization.
 
 use serde::{Deserialize, Serialize};
+use chrono::NaiveDateTime;
 
 /// Represents a musical artist in the library.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, sqlx::FromRow)]
@@ -14,10 +15,10 @@ pub struct Artist {
     pub name: String,
     /// Timestamp when the artist was first added to the library.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub created_at: Option<String>,
+    pub created_at: Option<NaiveDateTime>,
     /// Timestamp when the artist was last updated.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub updated_at: Option<String>,
+    pub updated_at: Option<NaiveDateTime>,
 }
 
 /// Represents a musical album in the library.
@@ -31,7 +32,7 @@ pub struct Album {
     pub title: String,
     /// Release year (if available).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub year: Option<i32>,
+    pub year: Option<i64>,
     /// Genre (if available).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub genre: Option<String>,
@@ -44,10 +45,10 @@ pub struct Album {
     pub dr_value: Option<String>,
     /// Timestamp when the album was first added to the library.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub created_at: Option<String>,
+    pub created_at: Option<NaiveDateTime>,
     /// Timestamp when the album was last updated.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub updated_at: Option<String>,
+    pub updated_at: Option<NaiveDateTime>,
 }
 
 /// Represents a track in the library.
@@ -61,9 +62,9 @@ pub struct Track {
     pub title: String,
     /// Track number within the album.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub track_number: Option<i32>,
+    pub track_number: Option<i64>,
     /// Disc number (defaults to 1).
-    pub disc_number: i32,
+    pub disc_number: i64,
     /// Duration in milliseconds.
     pub duration_ms: i64,
     /// File system path to the audio file.
@@ -73,17 +74,17 @@ pub struct Track {
     /// Audio format (e.g., "FLAC", "MP3").
     pub format: String,
     /// Sample rate in Hz.
-    pub sample_rate: i32,
+    pub sample_rate: i64,
     /// Bits per sample.
-    pub bits_per_sample: i32,
+    pub bits_per_sample: i64,
     /// Number of audio channels.
-    pub channels: i32,
+    pub channels: i64,
     /// Timestamp when the track was first added to the library.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub created_at: Option<String>,
+    pub created_at: Option<NaiveDateTime>,
     /// Timestamp when the track was last updated.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub updated_at: Option<String>,
+    pub updated_at: Option<NaiveDateTime>,
 }
 
 /// Search results containing albums and artists that match a query.
@@ -153,8 +154,8 @@ mod tests {
         let artist = Artist {
             id: 1,
             name: "Test Artist".to_string(),
-            created_at: Some("2023-01-01T00:00:00Z".to_string()),
-            updated_at: Some("2023-01-02T00:00:00Z".to_string()),
+            created_at: Some("2023-01-01 00:00:00".parse().unwrap()),
+            updated_at: Some("2023-01-02 00:00:00".parse().unwrap()),
         };
 
         let serialized = serde_json::to_string(&artist).unwrap();
@@ -173,8 +174,8 @@ mod tests {
             compilation: false,
             path: "/path/to/album".to_string(),
             dr_value: Some("DR12".to_string()),
-            created_at: Some("2023-01-01T00:00:00Z".to_string()),
-            updated_at: Some("2023-01-02T00:00:00Z".to_string()),
+            created_at: Some("2023-01-01 00:00:00".parse().unwrap()),
+            updated_at: Some("2023-01-02 00:00:00".parse().unwrap()),
         };
 
         let serialized = serde_json::to_string(&album).unwrap();
@@ -197,8 +198,8 @@ mod tests {
             sample_rate: 96000,
             bits_per_sample: 24,
             channels: 2,
-            created_at: Some("2023-01-01T00:00:00Z".to_string()),
-            updated_at: Some("2023-01-02T00:00:00Z".to_string()),
+            created_at: Some("2023-01-01 00:00:00".parse().unwrap()),
+            updated_at: Some("2023-01-02 00:00:00".parse().unwrap()),
         };
 
         let serialized = serde_json::to_string(&track).unwrap();

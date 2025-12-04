@@ -4,7 +4,8 @@
 //! versioning capabilities for future migrations.
 
 use anyhow::Context;
-use sqlx::{sqlite::SqliteConnectOptions, ConnectOptions, SqlitePool};
+use sqlx::{sqlite::SqliteConnectOptions, SqlitePool};
+use std::str::FromStr;
 use thiserror::Error;
 
 /// Error type for schema operations.
@@ -231,9 +232,8 @@ pub fn get_database_url() -> String {
 pub async fn create_connection_pool() -> Result<SqlitePool, SchemaError> {
     let database_url = get_database_url();
     
-    let options = SqliteConnectOptions::from_str(&database_url)
-        .context("Invalid database URL")
-        .map_err(|e| SchemaError::ConnectionError(sqlx::Error::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, e))))?
+    let options = SqliteConnectOptions::new()
+        .filename(database_url.replace("sqlite://", ""))
         .create_if_missing(true)
         .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
         .synchronous(sqlx::sqlite::SqliteSynchronous::Normal);

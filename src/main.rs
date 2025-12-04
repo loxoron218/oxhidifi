@@ -12,7 +12,7 @@ use oxhidifi::ui::OxhidifiApplication;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize GTK and Libadwaita
-    gtk::init()?;
+    libadwaita::gtk::init()?;
     libadwaita::init();
 
     // Create and run the application

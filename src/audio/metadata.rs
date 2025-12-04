@@ -7,7 +7,13 @@
 use std::path::Path;
 
 use anyhow::Context;
-use lofty::{AudioFile, Probe, TaggedFileExt};
+use lofty::prelude::{AudioFile, TaggedFileExt};
+use lofty::probe::Probe;
+use lofty::error::{LoftyError, ErrorKind};
+use lofty::file::FileType;
+use lofty::properties::FileProperties;
+use lofty::tag::Accessor;
+use lofty::prelude::ItemKey;
 use thiserror::Error;
 
 /// Error type for metadata extraction operations.
@@ -15,7 +21,7 @@ use thiserror::Error;
 pub enum MetadataError {
     /// Failed to read or parse the audio file.
     #[error("Failed to read audio file: {0}")]
-    ReadError(#[from] lofty::LoftyError),
+    ReadError(#[from] LoftyError),
     /// The file format is not supported.
     #[error("Unsupported file format")]
     UnsupportedFormat,
@@ -116,7 +122,10 @@ impl TagReader {
         // Get file size
         let file_size = std::fs::metadata(path)
             .context("Failed to get file metadata")
-            .map_err(|e| MetadataError::ReadError(lofty::LoftyError::new(e.to_string())))?
+            .map_err(|e| {
+                let io_error = std::io::Error::new(std::io::ErrorKind::Other, e.to_string());
+                MetadataError::ReadError(LoftyError::new(ErrorKind::Io(io_error)))
+            })?
             .len();
 
         // Probe the audio file
@@ -131,37 +140,43 @@ impl TagReader {
 
         // Extract standard metadata
         let standard = StandardMetadata {
-            title: primary_tag.and_then(|tag| tag.title().map(|s| s.to_string())),
-            artist: primary_tag.and_then(|tag| tag.artist().map(|s| s.to_string())),
-            album: primary_tag.and_then(|tag| tag.album().map(|s| s.to_string())),
-            album_artist: primary_tag.and_then(|tag| tag.album_artist().map(|s| s.to_string())),
+            title: primary_tag.map(|tag| tag.title().map(|s| s.to_string())).flatten(),
+            artist: primary_tag.map(|tag| tag.artist().map(|s| s.to_string())).flatten(),
+            album: primary_tag.map(|tag| tag.album().map(|s| s.to_string())).flatten(),
+            album_artist: primary_tag.and_then(|tag| {
+                tag.get_string(&ItemKey::AlbumArtist)
+                    .map(|s| s.to_string())
+                    .or_else(|| {
+                        tag.artist().map(|s| s.to_string())
+                    })
+            }),
             track_number: primary_tag.and_then(|tag| tag.track()),
             total_tracks: primary_tag.and_then(|tag| tag.track_total()),
-            disc_number: primary_tag.and_then(|tag| tag.disc()),
-            total_discs: primary_tag.and_then(|tag| tag.disc_total()),
+            disc_number: primary_tag.and_then(|tag| tag.disk()),
+            total_discs: primary_tag.and_then(|tag| tag.disk_total()),
             year: primary_tag.and_then(|tag| tag.year()),
-            genre: primary_tag.and_then(|tag| tag.genre().map(|s| s.to_string())),
-            comment: primary_tag.and_then(|tag| tag.comment().map(|s| s.to_string())),
+            genre: primary_tag.map(|tag| tag.genre().map(|s| s.to_string())).flatten(),
+            comment: primary_tag.map(|tag| tag.comment().map(|s| s.to_string())).flatten(),
         };
 
         // Extract technical metadata
         let format_name = match tagged_file.file_type() {
-            lofty::FileType::Flac => "FLAC",
-            lofty::FileType::Mp3 => "MP3", 
-            lofty::FileType::Aac => "AAC",
-            lofty::FileType::Opus => "Opus",
-            lofty::FileType::Ogg => "Ogg Vorbis",
-            lofty::FileType::Wav => "WAV",
-            lofty::FileType::Aiff => "AIFF",
-            lofty::FileType::Mpc => "MPC",
+            FileType::Flac => "FLAC",
+            FileType::Mpeg => "MP3",
+            FileType::Aac => "AAC",
+            FileType::Opus => "Opus",
+            FileType::Vorbis => "Ogg Vorbis",
+            FileType::Wav => "WAV",
+            FileType::Aiff => "AIFF",
+            FileType::Mpc => "MPC",
             _ => return Err(MetadataError::UnsupportedFormat),
         };
 
         let technical = TechnicalMetadata {
             format: format_name.to_string(),
-            sample_rate: properties.sample_rate(),
-            bits_per_sample: properties.bits_per_sample(),
-            channels: properties.channels().count() as u32,
+            sample_rate: properties.sample_rate().unwrap_or(44100),
+            bits_per_sample: properties.bit_depth().unwrap_or(16) as u32,
+            channels: properties.channels().unwrap_or(2) as u32,
             duration_ms: properties.duration().as_millis() as u64,
             file_size,
         };

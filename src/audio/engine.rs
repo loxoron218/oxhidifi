@@ -3,12 +3,11 @@
 //! This module provides the main `AudioEngine` that coordinates the audio
 //! decoder, output, and playback state management for high-fidelity playback.
 
-use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, RwLock};
+use cpal::traits::StreamTrait;
 use std::thread;
 
-use anyhow::Context;
 use async_channel::{Receiver, Sender};
 use parking_lot::RwLock as ParkingRwLock;
 use rtrb::RingBuffer;
@@ -374,10 +373,7 @@ impl AudioEngine {
 
         // Create ring buffer for audio samples
         let buffer_size = 4096; // Should be power of 2 for rtrb
-        let (producer, consumer) = RingBuffer::<f32>::new(buffer_size)
-            .map_err(|e| AudioError::InvalidOperation { 
-                reason: format!("Failed to create ring buffer: {}", e) 
-            })?;
+        let (producer, consumer) = RingBuffer::<f32>::new(buffer_size);
 
         // Create audio output
         let output = AudioOutput::new(Some(self.output_config.clone()))?;
@@ -398,7 +394,9 @@ impl AudioEngine {
         let stream = consumer.run(&track_info.format)?;
         
         // Store stream handle
-        *self.stream_handle.write()? = Some(StreamHandle {
+        *self.stream_handle.write().map_err(|e| AudioError::InvalidOperation {
+            reason: format!("Failed to acquire stream handle lock: {}", e)
+        })? = Some(StreamHandle {
             stream,
             decoder_handle: Some(decoder_handle),
         });
@@ -448,10 +446,7 @@ impl AudioEngine {
             
             // Recreate the playback stream
             let buffer_size = 4096;
-            let (producer, consumer) = RingBuffer::<f32>::new(buffer_size)
-                .map_err(|e| AudioError::InvalidOperation { 
-                    reason: format!("Failed to create ring buffer: {}", e) 
-                })?;
+            let (producer, consumer) = RingBuffer::<f32>::new(buffer_size);
 
             let output = AudioOutput::new(Some(self.output_config.clone()))?;
             let consumer = AudioConsumer::new(output, consumer, &track_info.format)?;
@@ -463,7 +458,9 @@ impl AudioEngine {
 
             let stream = consumer.run(&track_info.format)?;
             
-            *self.stream_handle.write()? = Some(StreamHandle {
+            *self.stream_handle.write().map_err(|e| AudioError::InvalidOperation {
+                reason: format!("Failed to acquire stream handle lock: {}", e)
+            })? = Some(StreamHandle {
                 stream,
                 decoder_handle: Some(decoder_handle),
             });
