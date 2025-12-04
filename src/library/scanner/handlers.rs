@@ -62,6 +62,7 @@ pub async fn handle_files_changed(
                 }
                 Err(e) => {
                     warn!("Failed to read metadata for {:?}: {}", file_path, e);
+
                     // Continue processing other files
                 }
             }

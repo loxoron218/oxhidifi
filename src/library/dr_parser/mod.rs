@@ -100,6 +100,7 @@ impl DrParser {
                 }
                 Err(e) => {
                     debug!("Failed to parse DR file {:?}: {}", dr_file, e);
+
                     // Continue to next file
                 }
             }
