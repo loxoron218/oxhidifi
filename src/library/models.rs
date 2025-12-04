@@ -154,8 +154,8 @@ mod tests {
         let artist = Artist {
             id: 1,
             name: "Test Artist".to_string(),
-            created_at: Some("2023-01-01 00:00:00".parse().unwrap()),
-            updated_at: Some("2023-01-02 00:00:00".parse().unwrap()),
+            created_at: Some(NaiveDateTime::from_timestamp_opt(1672531200, 0).unwrap()),
+            updated_at: Some(NaiveDateTime::from_timestamp_opt(1672617600, 0).unwrap()),
         };
 
         let serialized = serde_json::to_string(&artist).unwrap();
@@ -174,8 +174,8 @@ mod tests {
             compilation: false,
             path: "/path/to/album".to_string(),
             dr_value: Some("DR12".to_string()),
-            created_at: Some("2023-01-01 00:00:00".parse().unwrap()),
-            updated_at: Some("2023-01-02 00:00:00".parse().unwrap()),
+            created_at: Some(NaiveDateTime::from_timestamp_opt(1672531200, 0).unwrap()),
+            updated_at: Some(NaiveDateTime::from_timestamp_opt(1672617600, 0).unwrap()),
         };
 
         let serialized = serde_json::to_string(&album).unwrap();
@@ -198,8 +198,8 @@ mod tests {
             sample_rate: 96000,
             bits_per_sample: 24,
             channels: 2,
-            created_at: Some("2023-01-01 00:00:00".parse().unwrap()),
-            updated_at: Some("2023-01-02 00:00:00".parse().unwrap()),
+            created_at: Some(NaiveDateTime::from_timestamp_opt(1672531200, 0).unwrap()),
+            updated_at: Some(NaiveDateTime::from_timestamp_opt(1672617600, 0).unwrap()),
         };
 
         let serialized = serde_json::to_string(&track).unwrap();

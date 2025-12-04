@@ -10,7 +10,6 @@ use cpal::{
     ChannelCount, Device, Host, SampleFormat, SampleRate, StreamConfig,
 };
 use rtrb::Consumer;
-use num_traits::{cast, Bounded};
 use rubato::FftFixedIn;
 use thiserror::Error;
 
@@ -127,7 +126,7 @@ impl AudioOutput {
         &self,
         source_format: &AudioFormat,
     ) -> Result<(StreamConfig, bool), OutputError> {
-        let mut supported_configs = self
+        let supported_configs = self
             .device
             .supported_output_configs()
             .map_err(|_| OutputError::NoDeviceFound)?;
@@ -159,9 +158,6 @@ impl AudioOutput {
         let config = best_config.ok_or(OutputError::NoDeviceFound)?;
         
         // Update our internal config based on what the device supports
-        let mut new_config = self.config.clone();
-        new_config.sample_rate = config.sample_rate();
-        new_config.channels = config.channels();
         
         // Return whether resampling is needed as part of the result
         // The caller will need to handle this appropriately
@@ -253,11 +249,6 @@ impl AudioOutput {
                             // Buffer underrun - fill with silence
                             *sample = T::default();
                         }
-                        Err(e) => {
-                            eprintln!("Ring buffer error: {}", e);
-                            // Fill with silence on error
-                            *sample = T::default();
-                        }
                     }
                 }
             },
@@ -331,12 +322,10 @@ impl AudioOutput {
 /// Audio consumer that reads samples from a ring buffer and feeds them to the output.
 ///
 /// This struct wraps an `AudioOutput` and continuously reads samples from the
-/// provided ring buffer consumer, handling resampling if necessary.
+/// provided ring buffer consumer.
 pub struct AudioConsumer {
     output: AudioOutput,
     consumer: Consumer<f32>,
-    resampler: Option<FftFixedIn<f32>>,
-    source_sample_rate: u32,
 }
 
 impl AudioConsumer {
@@ -352,29 +341,14 @@ impl AudioConsumer {
         consumer: Consumer<f32>,
         source_format: &AudioFormat,
     ) -> Result<Self, OutputError> {
-        let mut resampler = None;
-        let source_sample_rate = source_format.sample_rate;
-
         // Determine if resampling is needed by checking optimal config
         let (_, is_resampling) = output.get_optimal_config(source_format)?;
         let mut output = output;
         output.is_resampling = is_resampling;
-        
-        // Create resampler if needed
-        if output.is_resampling {
-            let target_rate = output.config.sample_rate.0;
-            resampler = Some(output.create_resampler(
-                source_sample_rate,
-                target_rate,
-                source_format.channels as usize,
-            )?);
-        }
 
         Ok(AudioConsumer {
             output,
             consumer,
-            resampler,
-            source_sample_rate,
         })
     }
 

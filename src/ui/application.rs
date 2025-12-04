@@ -96,8 +96,8 @@ impl OxhidifiApplication {
 /// Builds the main user interface.
 fn build_ui(
     app: &libadwaita::Application,
-    audio_engine: &Arc<AudioEngine>,
-    library_db: &Arc<LibraryDatabase>,
+    _audio_engine: &Arc<AudioEngine>,
+    _library_db: &Arc<LibraryDatabase>,
     app_state: &Arc<AppState>,
     settings: &UserSettings,
 ) {

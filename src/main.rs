@@ -13,7 +13,7 @@ use oxhidifi::ui::OxhidifiApplication;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize GTK and Libadwaita
     libadwaita::gtk::init()?;
-    libadwaita::init();
+    let _ = libadwaita::init();
 
     // Create and run the application
     let app = OxhidifiApplication::new().await?;

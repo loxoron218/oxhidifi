@@ -163,7 +163,7 @@ impl AudioDecoder {
     /// # Errors
     ///
     /// Returns `DecoderError` if decoding fails.
-    pub fn decode_next_packet(&mut self) -> Result<Option<AudioBufferRef>, DecoderError> {
+    pub fn decode_next_packet(&mut self) -> Result<Option<AudioBufferRef<'_>>, DecoderError> {
         loop {
             match self.format_reader.next_packet() {
                 Ok(packet) => {
@@ -173,7 +173,6 @@ impl AudioDecoder {
                     }
 
                     // Decode the packet
-                    let codec_params = &self.format_reader.tracks()[self.track_index].codec_params;
                     if let Some(ref mut decoder) = self.decoder {
                         let decoded = decoder.decode(&packet)
                             .map_err(DecoderError::SymphoniaError)?;
@@ -317,10 +316,6 @@ impl AudioProducer {
                                 Err(rtrb::PushError::Full(_)) => {
                                     // Buffer is full, wait a bit and retry
                                     std::thread::sleep(std::time::Duration::from_micros(100));
-                                }
-                                Err(_) => {
-                                    // Ring buffer disconnected, exit gracefully
-                                    return Ok(());
                                 }
                             }
                         }

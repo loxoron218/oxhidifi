@@ -11,7 +11,6 @@ use lofty::prelude::{AudioFile, TaggedFileExt};
 use lofty::probe::Probe;
 use lofty::error::{LoftyError, ErrorKind};
 use lofty::file::FileType;
-use lofty::properties::FileProperties;
 use lofty::tag::Accessor;
 use lofty::prelude::ItemKey;
 use thiserror::Error;
@@ -98,9 +97,12 @@ pub struct TrackMetadata {
 /// ```no_run
 /// use oxhidifi::audio::metadata::TagReader;
 ///
-/// let metadata = TagReader::read_metadata("/path/to/song.flac")?;
-/// println!("Title: {:?}", metadata.standard.title);
-/// println!("Sample rate: {} Hz", metadata.technical.sample_rate);
+/// fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     let metadata = TagReader::read_metadata("/path/to/song.flac")?;
+///     println!("Title: {:?}", metadata.standard.title);
+///     println!("Sample rate: {} Hz", metadata.technical.sample_rate);
+///     Ok(())
+/// }
 /// ```
 pub struct TagReader;
 
@@ -129,7 +131,7 @@ impl TagReader {
             .len();
 
         // Probe the audio file
-        let mut probe = Probe::open(path)
+        let probe = Probe::open(path)
             .map_err(MetadataError::ReadError)?;
         
         let tagged_file = probe.read()
@@ -191,7 +193,6 @@ impl TagReader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
 
     #[test]
     fn test_metadata_error_display() {

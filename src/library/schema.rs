@@ -3,9 +3,7 @@
 //! This module defines the SQLite database schema and provides schema
 //! versioning capabilities for future migrations.
 
-use anyhow::Context;
 use sqlx::{sqlite::SqliteConnectOptions, SqlitePool};
-use std::str::FromStr;
 use thiserror::Error;
 
 /// Error type for schema operations.

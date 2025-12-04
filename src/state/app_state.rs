@@ -5,7 +5,6 @@
 //! reactive update notifications.
 
 use std::sync::{Arc, Weak};
-use std::time::Duration;
 
 use parking_lot::RwLock;
 use tokio::sync::broadcast;
@@ -191,7 +190,7 @@ pub trait StateObserver {
     ///
     /// * `app_state` - The application state to observe.
     async fn start_observing(&mut self, app_state: Arc<AppState>) {
-        let mut receiver = app_state.subscribe();
+        let _receiver = app_state.subscribe();
         
         // Can't move self into async block due to lifetime issues
         // This pattern needs to be handled differently in actual implementation
