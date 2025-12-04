@@ -3,16 +3,16 @@
 //! This module defines error types specific to DR (Dynamic Range) value parsing
 //! operations, extending the existing error system.
 
-use {
-    thiserror::Error,
-};
+use std::io::Error;
+
+use thiserror::Error;
 
 /// Error type for DR parsing operations.
 #[derive(Error, Debug)]
 pub enum DrError {
     /// Failed to read or parse a DR file.
     #[error("Failed to read DR file: {0}")]
-    ReadError(#[from] std::io::Error),
+    ReadError(#[from] Error),
     /// The DR file content is malformed or invalid.
     #[error("Invalid DR file content: {reason}")]
     InvalidContent { reason: String },
@@ -58,11 +58,13 @@ impl DrError {
 
 #[cfg(test)]
 mod tests {
+    use std::io::{Error, ErrorKind::NotFound};
+
     use crate::error::dr_error::DrError;
 
     #[test]
     fn test_dr_error_display() {
-        let read_error = std::io::Error::new(std::io::ErrorKind::NotFound, "File not found");
+        let read_error = Error::new(NotFound, "File not found");
         let dr_error = DrError::ReadError(read_error);
         assert!(dr_error.to_string().contains("Failed to read DR file"));
 
@@ -73,7 +75,10 @@ mod tests {
         );
 
         let no_dr_value_error = DrError::NoDrValueFound;
-        assert_eq!(no_dr_value_error.to_string(), "No valid DR value found in file");
+        assert_eq!(
+            no_dr_value_error.to_string(),
+            "No valid DR value found in file"
+        );
 
         let invalid_format_error = DrError::invalid_dr_format("DR123");
         assert_eq!(

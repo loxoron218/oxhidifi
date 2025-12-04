@@ -3,14 +3,7 @@
 //! This module implements efficient incremental database updates that avoid
 //! full library rescans while maintaining data consistency and referential integrity.
 
-mod config;
-mod handlers;
-
-pub use config::IncrementalUpdaterConfig;
-
-use std::{
-    sync::Arc,
-};
+use std::sync::Arc;
 
 use {
     async_channel::Receiver,
@@ -21,12 +14,13 @@ use {
 use crate::{
     config::settings::UserSettings,
     error::domain::LibraryError,
-    library::{
-        database::LibraryDatabase,
-        dr_parser::DrParser,
-        file_watcher::DebouncedEvent,
-    },
+    library::{database::LibraryDatabase, dr_parser::DrParser, file_watcher::DebouncedEvent},
 };
+
+mod config;
+mod handlers;
+
+pub use config::IncrementalUpdaterConfig;
 
 /// Coordinates incremental library updates.
 ///
@@ -95,10 +89,7 @@ impl IncrementalUpdater {
     /// # Returns
     ///
     /// A task handle for the processing loop.
-    pub fn start_processing(
-        &self,
-        receiver: Receiver<DebouncedEvent>,
-    ) -> JoinHandle<()> {
+    pub fn start_processing(&self, receiver: Receiver<DebouncedEvent>) -> JoinHandle<()> {
         let database = self.database.clone();
         let dr_parser = self.dr_parser.clone();
         let settings = self.settings.clone();
@@ -122,22 +113,28 @@ impl IncrementalUpdater {
                 DebouncedEvent::FilesChanged { paths } => {
                     debug!("Processing {} changed files incrementally", paths.len());
                     if let Err(e) = handlers::handle_files_changed_incremental(
-                        paths, &database, &dr_parser, &settings, &config
-                    ).await {
+                        paths, &database, &dr_parser, &settings, &config,
+                    )
+                    .await
+                    {
                         error!("Error handling changed files incrementally: {}", e);
                     }
                 }
                 DebouncedEvent::FilesRemoved { paths } => {
                     debug!("Processing {} removed files incrementally", paths.len());
-                    if let Err(e) = handlers::handle_files_removed_incremental(paths, &database).await {
+                    if let Err(e) =
+                        handlers::handle_files_removed_incremental(paths, &database).await
+                    {
                         error!("Error handling removed files incrementally: {}", e);
                     }
                 }
                 DebouncedEvent::FilesRenamed { paths } => {
                     debug!("Processing {} renamed files incrementally", paths.len());
                     if let Err(e) = handlers::handle_files_renamed_incremental(
-                        paths, &database, &dr_parser, &settings, &config
-                    ).await {
+                        paths, &database, &dr_parser, &settings, &config,
+                    )
+                    .await
+                    {
                         error!("Error handling renamed files incrementally: {}", e);
                     }
                 }

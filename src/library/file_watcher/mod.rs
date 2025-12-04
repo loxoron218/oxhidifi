@@ -4,6 +4,27 @@
 //! for music library directories, with support for debouncing and
 //! event filtering for supported audio formats.
 
+use std::{
+    collections::HashSet,
+    path::{Component::Normal, Path, PathBuf},
+    sync::Arc,
+};
+
+use {
+    async_channel::Sender,
+    notify::{
+        Config, Error, Event, RecommendedWatcher,
+        RecursiveMode::Recursive,
+        Watcher,
+        event::{EventKind, ModifyKind},
+    },
+    parking_lot::RwLock,
+    regex::Regex,
+    tracing::{debug, error},
+};
+
+use crate::error::domain::LibraryError;
+
 mod config;
 mod debouncer;
 mod events;
@@ -12,27 +33,6 @@ pub use {
     config::FileWatcherConfig,
     debouncer::DebouncedEventProcessor,
     events::{DebouncedEvent, ProcessedEvent},
-};
-
-use std::{
-    collections::HashSet,
-    path::{Path, PathBuf},
-    sync::Arc,
-};
-
-use {
-    async_channel::Sender,
-    notify::{
-        event::{EventKind, ModifyKind},
-        Config, Event, RecommendedWatcher, RecursiveMode, Watcher,
-    },
-    parking_lot::RwLock,
-    regex::Regex,
-    tracing::{debug, error},
-};
-
-use crate::{
-    error::domain::LibraryError,
 };
 
 /// Supported audio file extensions for library monitoring.
@@ -76,16 +76,18 @@ impl FileWatcher {
         config: Option<FileWatcherConfig>,
     ) -> Result<Self, LibraryError> {
         let config = config.unwrap_or_default();
-        
+
         // Create regex pattern for supported audio extensions
         let extensions_pattern = SUPPORTED_AUDIO_EXTENSIONS
             .iter()
             .map(|ext| format!(r"\.{}$", ext))
             .collect::<Vec<_>>()
             .join("|");
-        let audio_extension_regex = Regex::new(&format!("(?i)({})", extensions_pattern))
-            .map_err(|e| LibraryError::InvalidData {
-                reason: format!("Failed to compile audio extension regex: {}", e),
+        let audio_extension_regex =
+            Regex::new(&format!("(?i)({})", extensions_pattern)).map_err(|e| {
+                LibraryError::InvalidData {
+                    reason: format!("Failed to compile audio extension regex: {}", e),
+                }
             })?;
 
         // Create notify watcher
@@ -120,11 +122,11 @@ impl FileWatcher {
     ///
     /// This method processes raw file system events, filters them based on
     /// supported audio formats, and sends processed events through the channel.
-    fn handle_raw_event(res: Result<Event, notify::Error>, sender: Sender<ProcessedEvent>) {
+    fn handle_raw_event(res: Result<Event, Error>, sender: Sender<ProcessedEvent>) {
         match res {
             Ok(event) => {
                 debug!("Raw file system event: {:?}", event);
-                
+
                 // Skip events without paths
                 if event.paths.is_empty() {
                     return;
@@ -142,9 +144,8 @@ impl FileWatcher {
                                 });
                             }
                             EventKind::Remove(_) => {
-                                let _ = sender.try_send(ProcessedEvent::FileRemoved {
-                                    path: path.clone(),
-                                });
+                                let _ = sender
+                                    .try_send(ProcessedEvent::FileRemoved { path: path.clone() });
                             }
                             EventKind::Other => {
                                 // Handle potential rename/move events
@@ -178,18 +179,17 @@ impl FileWatcher {
     ///
     /// `true` if the path is hidden, `false` otherwise.
     fn is_hidden_path(path: &Path) -> bool {
-        path.components()
-            .any(|component| {
-                if let std::path::Component::Normal(os_str) = component {
-                    if let Some(name) = os_str.to_str() {
-                        name.starts_with('.')
-                    } else {
-                        false
-                    }
+        path.components().any(|component| {
+            if let Normal(os_str) = component {
+                if let Some(name) = os_str.to_str() {
+                    name.starts_with('.')
                 } else {
                     false
                 }
-            })
+            } else {
+                false
+            }
+        })
     }
 
     /// Checks if a path corresponds to a supported audio file.
@@ -230,13 +230,13 @@ impl FileWatcher {
     /// Returns `LibraryError` if the directory cannot be watched.
     pub fn watch_directory<P: AsRef<Path>>(&mut self, path: P) -> Result<(), LibraryError> {
         let path = path.as_ref();
-        
+
         // Add to watched paths set
         self.watched_paths.write().insert(path.to_path_buf());
 
         // Start watching the directory recursively
         self._watcher
-            .watch(path, RecursiveMode::Recursive)
+            .watch(path, Recursive)
             .map_err(|e| LibraryError::InvalidData {
                 reason: format!("Failed to watch directory {:?}: {}", path, e),
             })?;
@@ -260,7 +260,7 @@ impl FileWatcher {
     /// Returns `LibraryError` if the directory cannot be unwatched.
     pub fn unwatch_directory<P: AsRef<Path>>(&mut self, path: P) -> Result<(), LibraryError> {
         let path = path.as_ref();
-        
+
         // Remove from watched paths set
         self.watched_paths.write().remove(path);
 

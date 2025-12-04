@@ -6,15 +6,16 @@ use std::{
 };
 
 use {
+    parking_lot::RwLock,
+    sqlx::{Sqlite, Transaction, query, query_scalar},
     tracing::{debug, warn},
 };
 
 use crate::{
     audio::metadata::{TagReader, TrackMetadata},
+    config::settings::UserSettings,
     error::domain::LibraryError,
-    library::{
-        database::LibraryDatabase,
-    },
+    library::database::LibraryDatabase,
 };
 
 /// Handles files that have been created or modified.
@@ -35,7 +36,7 @@ use crate::{
 pub async fn handle_files_changed(
     paths: Vec<PathBuf>,
     database: &LibraryDatabase,
-    _settings: &parking_lot::RwLock<crate::config::settings::UserSettings>,
+    _settings: &RwLock<UserSettings>,
 ) -> Result<(), LibraryError> {
     // Group files by album directory
     let mut files_by_album: HashMap<PathBuf, Vec<PathBuf>> = HashMap::new();
@@ -51,7 +52,7 @@ pub async fn handle_files_changed(
     // Process each album directory
     for (album_dir, album_files) in files_by_album {
         debug!("Processing album directory: {:?}", album_dir);
-        
+
         // Extract metadata for all files in the album
         let mut tracks_metadata = Vec::new();
         for file_path in &album_files {
@@ -74,8 +75,7 @@ pub async fn handle_files_changed(
         let is_compilation = is_compilation_album(&tracks_metadata);
 
         // Extract album and artist information
-        let (album_info, artist_info) = 
-            extract_album_artist_info(&tracks_metadata, is_compilation);
+        let (album_info, artist_info) = extract_album_artist_info(&tracks_metadata, is_compilation);
 
         // Update database with new/modified tracks
         update_album_in_database(
@@ -85,7 +85,8 @@ pub async fn handle_files_changed(
             &tracks_metadata,
             database,
             is_compilation,
-        ).await?;
+        )
+        .await?;
     }
 
     Ok(())
@@ -111,13 +112,13 @@ pub async fn handle_files_removed(
 ) -> Result<(), LibraryError> {
     // Remove tracks from database
     let pool = database.pool();
-    
+
     // Begin transaction
     let mut tx = pool.begin().await?;
 
     for path in paths {
         // Remove track from database
-        sqlx::query("DELETE FROM tracks WHERE path = ?")
+        query("DELETE FROM tracks WHERE path = ?")
             .bind(path.to_string_lossy().to_string())
             .execute(&mut *tx)
             .await?;
@@ -150,7 +151,7 @@ pub async fn handle_files_removed(
 pub async fn handle_files_renamed(
     paths: Vec<(PathBuf, PathBuf)>,
     database: &LibraryDatabase,
-    settings: &parking_lot::RwLock<crate::config::settings::UserSettings>,
+    settings: &RwLock<UserSettings>,
 ) -> Result<(), LibraryError> {
     // Handle renames as remove + add
     let removed_paths: Vec<PathBuf> = paths.iter().map(|(from, _)| from.clone()).collect();
@@ -270,31 +271,27 @@ async fn update_album_in_database(
     is_compilation: bool,
 ) -> Result<(), LibraryError> {
     let pool = database.pool();
-    
+
     // Begin transaction
     let mut tx = pool.begin().await?;
 
     // Get or create artist
-    let artist_id = get_or_create_artist(&mut tx, &artist_info).await?;
+    let artist_id = get_or_create_artist(&mut tx, artist_info).await?;
 
     // Get or create album
     let album_id = get_or_create_album(
         &mut tx,
         artist_id,
-        &album_info,
-        &tracks_metadata,
-        &album_dir,
+        album_info,
+        tracks_metadata,
+        album_dir,
         is_compilation,
-    ).await?;
+    )
+    .await?;
 
     // Update tracks
     for (track_path, metadata) in tracks_metadata {
-        update_track_in_transaction(
-            &mut tx,
-            album_id,
-            track_path,
-            metadata,
-        ).await?;
+        update_track_in_transaction(&mut tx, album_id, track_path, metadata).await?;
     }
 
     // Commit transaction
@@ -318,28 +315,24 @@ async fn update_album_in_database(
 ///
 /// Returns `LibraryError` if database operations fail.
 async fn get_or_create_artist(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    tx: &mut Transaction<'_, Sqlite>,
     artist_info: &Option<String>,
 ) -> Result<i64, LibraryError> {
     let artist_name = artist_info.as_deref().unwrap_or("Unknown Artist");
 
-    let existing_artist: Option<i64> = sqlx::query_scalar(
-        "SELECT id FROM artists WHERE name = ?"
-    )
-    .bind(artist_name)
-    .fetch_optional(&mut **tx)
-    .await?;
+    let existing_artist: Option<i64> = query_scalar("SELECT id FROM artists WHERE name = ?")
+        .bind(artist_name)
+        .fetch_optional(&mut **tx)
+        .await?;
 
     match existing_artist {
         Some(id) => Ok(id),
         None => {
             // Create new artist
-            let id: i64 = sqlx::query_scalar(
-                "INSERT INTO artists (name) VALUES (?) RETURNING id"
-            )
-            .bind(artist_name)
-            .fetch_one(&mut **tx)
-            .await?;
+            let id: i64 = query_scalar("INSERT INTO artists (name) VALUES (?) RETURNING id")
+                .bind(artist_name)
+                .fetch_one(&mut **tx)
+                .await?;
             Ok(id)
         }
     }
@@ -364,7 +357,7 @@ async fn get_or_create_artist(
 ///
 /// Returns `LibraryError` if database operations fail.
 async fn get_or_create_album(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    tx: &mut Transaction<'_, Sqlite>,
     artist_id: i64,
     album_info: &Option<String>,
     tracks_metadata: &[(PathBuf, TrackMetadata)],
@@ -381,19 +374,18 @@ async fn get_or_create_album(
         .find_map(|(_, metadata)| metadata.standard.genre.clone());
 
     // Check if album exists
-    let existing_album: Option<i64> = sqlx::query_scalar(
-        "SELECT id FROM albums WHERE artist_id = ? AND title = ? AND year IS ?"
-    )
-    .bind(artist_id)
-    .bind(album_title)
-    .bind(year)
-    .fetch_optional(&mut **tx)
-    .await?;
+    let existing_album: Option<i64> =
+        query_scalar("SELECT id FROM albums WHERE artist_id = ? AND title = ? AND year IS ?")
+            .bind(artist_id)
+            .bind(album_title)
+            .bind(year)
+            .fetch_optional(&mut **tx)
+            .await?;
 
     match existing_album {
         Some(id) => {
             // Update existing album
-            sqlx::query(
+            query(
                 "UPDATE albums SET path = ?, compilation = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
             )
             .bind(album_dir.to_string_lossy().to_string())
@@ -405,7 +397,7 @@ async fn get_or_create_album(
         }
         None => {
             // Create new album
-            let id: i64 = sqlx::query_scalar(
+            let id: i64 = query_scalar(
                 "INSERT INTO albums (artist_id, title, year, genre, compilation, path) VALUES (?, ?, ?, ?, ?, ?) RETURNING id"
             )
             .bind(artist_id)
@@ -438,12 +430,16 @@ async fn get_or_create_album(
 ///
 /// Returns `LibraryError` if database operations fail.
 async fn update_track_in_transaction(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    tx: &mut Transaction<'_, Sqlite>,
     album_id: i64,
     track_path: &Path,
     metadata: &TrackMetadata,
 ) -> Result<(), LibraryError> {
-    let track_title = metadata.standard.title.as_deref().unwrap_or("Unknown Track");
+    let track_title = metadata
+        .standard
+        .title
+        .as_deref()
+        .unwrap_or("Unknown Track");
     let track_number = metadata.standard.track_number.map(|n| n as i64);
     let disc_number = metadata.standard.disc_number.unwrap_or(1) as i64;
     let duration_ms = metadata.technical.duration_ms as i64;
@@ -454,16 +450,14 @@ async fn update_track_in_transaction(
     let channels = metadata.technical.channels as i64;
 
     // Check if track exists
-    let existing_track: Option<i64> = sqlx::query_scalar(
-        "SELECT id FROM tracks WHERE path = ?"
-    )
-    .bind(track_path.to_string_lossy().to_string())
-    .fetch_optional(&mut **tx)
-    .await?;
+    let existing_track: Option<i64> = query_scalar("SELECT id FROM tracks WHERE path = ?")
+        .bind(track_path.to_string_lossy().to_string())
+        .fetch_optional(&mut **tx)
+        .await?;
 
     if let Some(track_id) = existing_track {
         // Update existing track
-        sqlx::query(
+        query(
             "UPDATE tracks SET album_id = ?, title = ?, track_number = ?, disc_number = ?, duration_ms = ?, file_size = ?, format = ?, sample_rate = ?, bits_per_sample = ?, channels = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
         )
         .bind(album_id)
@@ -481,7 +475,7 @@ async fn update_track_in_transaction(
         .await?;
     } else {
         // Create new track
-        sqlx::query(
+        query(
             "INSERT INTO tracks (album_id, title, track_number, disc_number, duration_ms, path, file_size, format, sample_rate, bits_per_sample, channels) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
         .bind(album_id)

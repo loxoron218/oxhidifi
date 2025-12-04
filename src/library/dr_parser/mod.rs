@@ -3,27 +3,16 @@
 //! This module implements robust DR value extraction from various text file formats
 //! according to official DR meter specifications, with caching for performance.
 
+use std::{path::Path, sync::Arc};
+
+use tracing::{debug, warn};
+
+use crate::{error::dr_error::DrError, library::database::LibraryDatabase};
+
 mod cache;
 mod extractor;
 
-pub use {
-    cache::AlbumDrCache,
-    extractor::DrExtractor,
-};
-
-use std::{
-    path::Path,
-    sync::Arc,
-};
-
-use {
-    tracing::{debug, warn},
-};
-
-use crate::{
-    error::dr_error::DrError,
-    library::database::LibraryDatabase,
-};
+pub use {cache::AlbumDrCache, extractor::DrExtractor};
 
 /// Main DR parsing coordinator.
 ///
@@ -82,7 +71,7 @@ impl DrParser {
 
         // Look for DR files in the album directory
         let dr_files = self.extractor.find_dr_files(album_path)?;
-        
+
         if dr_files.is_empty() {
             // No DR files found - this is not an error, just no DR value
             return Ok(None);
@@ -94,12 +83,19 @@ impl DrParser {
                 Ok(dr_value) => {
                     // Cache the result
                     self.cache.insert(album_path, dr_value.clone());
-                    
+
                     // Update database
-                    if let Err(e) = self.database.update_dr_value(album_path, Some(&dr_value)).await {
-                        warn!("Failed to update DR value in database for {:?}: {}", album_path, e);
+                    if let Err(e) = self
+                        .database
+                        .update_dr_value(album_path, Some(&dr_value))
+                        .await
+                    {
+                        warn!(
+                            "Failed to update DR value in database for {:?}: {}",
+                            album_path, e
+                        );
                     }
-                    
+
                     return Ok(Some(dr_value));
                 }
                 Err(e) => {
@@ -134,16 +130,19 @@ impl DrParser {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
+    use std::fs::write;
 
-    use tempfile::TempDir;
+    use {tempfile::TempDir, tokio::main};
 
-    use crate::library::dr_parser::{DrExtractor, DrParser};
+    use crate::library::{
+        database::LibraryDatabase,
+        dr_parser::{DrExtractor, DrParser},
+    };
 
     #[test]
     fn test_dr_extractor_patterns() {
         let extractor = DrExtractor::new();
-        
+
         let test_cases = vec![
             ("DR12", true),
             ("DR 12", true),
@@ -166,7 +165,7 @@ mod tests {
     #[test]
     fn test_dr_extraction_from_content() {
         let extractor = DrExtractor::new();
-        
+
         let test_contents = vec![
             "DR12",
             "DR 12",
@@ -183,18 +182,20 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    #[test]
     async fn test_dr_parser_with_files() {
         let temp_dir = TempDir::new().unwrap();
         let album_dir = temp_dir.path();
-        
+
         // Create a DR file
         let dr_file = album_dir.join("dr.txt");
-        fs::write(&dr_file, "DR12").unwrap();
-        
+        write(&dr_file, "DR12").unwrap();
+
         // Test file finding
-        let files = DrParser::new(crate::library::LibraryDatabase::new().await.unwrap().into())
-            .extractor.find_dr_files(album_dir).unwrap();
+        let files = DrParser::new(LibraryDatabase::new().await.unwrap().into())
+            .extractor
+            .find_dr_files(album_dir)
+            .unwrap();
         assert!(!files.is_empty());
         assert!(files.iter().any(|f| f == &dr_file));
     }

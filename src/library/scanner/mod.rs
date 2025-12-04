@@ -3,19 +3,12 @@
 //! This module coordinates file system monitoring, metadata extraction,
 //! and database updates to maintain a real-time synchronized music library.
 
-mod config;
-mod handlers;
-
-pub use config::ScannerConfig;
-
-use std::{
-    path::Path,
-    sync::Arc,
-};
+use std::{path::Path, sync::Arc};
 
 use {
-    async_channel::{bounded, Receiver},
-    tokio::task::JoinHandle,
+    async_channel::{Receiver, bounded},
+    parking_lot::RwLock,
+    tokio::{spawn, task::JoinHandle},
     tracing::{debug, error, warn},
 };
 
@@ -25,8 +18,14 @@ use crate::{
     library::{
         database::LibraryDatabase,
         file_watcher::{DebouncedEvent, DebouncedEventProcessor, FileWatcher},
+        scanner::handlers::{handle_files_changed, handle_files_removed, handle_files_renamed},
     },
 };
+
+mod config;
+mod handlers;
+
+pub use config::ScannerConfig;
 
 /// Main library scanner coordinator.
 ///
@@ -38,7 +37,7 @@ pub struct LibraryScanner {
     /// Database interface.
     database: Arc<LibraryDatabase>,
     /// User settings.
-    settings: Arc<parking_lot::RwLock<UserSettings>>,
+    settings: Arc<RwLock<UserSettings>>,
     /// Configuration.
     config: ScannerConfig,
     /// Task handles for background operations.
@@ -63,7 +62,7 @@ impl LibraryScanner {
     /// Returns `LibraryError` if initialization fails.
     pub async fn new(
         database: Arc<LibraryDatabase>,
-        settings: Arc<parking_lot::RwLock<UserSettings>>,
+        settings: Arc<RwLock<UserSettings>>,
         config: Option<ScannerConfig>,
     ) -> Result<Self, LibraryError> {
         let config = config.unwrap_or_default();
@@ -74,7 +73,7 @@ impl LibraryScanner {
 
         // Clone config for file watcher to avoid move/borrow issues
         let file_watcher_config = config.file_watcher_config.clone();
-        
+
         // Create file watcher
         let mut file_watcher = FileWatcher::new(raw_event_sender, Some(file_watcher_config))?;
 
@@ -97,14 +96,14 @@ impl LibraryScanner {
         let mut tasks = Vec::new();
 
         // Spawn debounced event processor task
-        tasks.push(tokio::spawn(async move {
+        tasks.push(spawn(async move {
             debounced_processor.start_processing().await;
         }));
 
         // Spawn debounced event handler task
         let database_clone = database.clone();
         let settings_clone = settings.clone();
-        tasks.push(tokio::spawn(async move {
+        tasks.push(spawn(async move {
             Self::handle_debounced_events(debounced_event_receiver, database_clone, settings_clone)
                 .await;
         }));
@@ -125,25 +124,25 @@ impl LibraryScanner {
     async fn handle_debounced_events(
         receiver: Receiver<DebouncedEvent>,
         database: Arc<LibraryDatabase>,
-        settings: Arc<parking_lot::RwLock<UserSettings>>,
+        settings: Arc<RwLock<UserSettings>>,
     ) {
         while let Ok(event) = receiver.recv().await {
             match event {
                 DebouncedEvent::FilesChanged { paths } => {
                     debug!("Processing {} changed files", paths.len());
-                    if let Err(e) = handlers::handle_files_changed(paths, &database, &settings).await {
+                    if let Err(e) = handle_files_changed(paths, &database, &settings).await {
                         error!("Error handling changed files: {}", e);
                     }
                 }
                 DebouncedEvent::FilesRemoved { paths } => {
                     debug!("Processing {} removed files", paths.len());
-                    if let Err(e) = handlers::handle_files_removed(paths, &database).await {
+                    if let Err(e) = handle_files_removed(paths, &database).await {
                         error!("Error handling removed files: {}", e);
                     }
                 }
                 DebouncedEvent::FilesRenamed { paths } => {
                     debug!("Processing {} renamed files", paths.len());
-                    if let Err(e) = handlers::handle_files_renamed(paths, &database, &settings).await {
+                    if let Err(e) = handle_files_renamed(paths, &database, &settings).await {
                         error!("Error handling renamed files: {}", e);
                     }
                 }
@@ -181,7 +180,10 @@ impl LibraryScanner {
     /// # Errors
     ///
     /// Returns `LibraryError` if the directory cannot be removed.
-    pub fn remove_library_directory<P: AsRef<Path>>(&mut self, path: P) -> Result<(), LibraryError> {
+    pub fn remove_library_directory<P: AsRef<Path>>(
+        &mut self,
+        path: P,
+    ) -> Result<(), LibraryError> {
         self.file_watcher.unwatch_directory(path)
     }
 

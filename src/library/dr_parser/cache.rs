@@ -38,10 +38,7 @@ impl AlbumDrCache {
     ///
     /// The cached DR value if it exists, `None` otherwise.
     pub fn get<P: AsRef<Path>>(&self, album_path: P) -> Option<String> {
-        self.cache
-            .read()
-            .get(album_path.as_ref())
-            .cloned()
+        self.cache.read().get(album_path.as_ref()).cloned()
     }
 
     /// Inserts a DR value into the cache.
@@ -62,9 +59,7 @@ impl AlbumDrCache {
     ///
     /// * `album_path` - Album directory path.
     pub fn remove<P: AsRef<Path>>(&self, album_path: P) {
-        self.cache
-            .write()
-            .remove(album_path.as_ref());
+        self.cache.write().remove(album_path.as_ref());
     }
 
     /// Clears the entire cache.

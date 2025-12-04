@@ -427,7 +427,7 @@ impl LibraryDatabase {
         for album in albums {
             // Check if album exists
             let existing_album: Option<i64> = query_scalar(
-                "SELECT id FROM albums WHERE artist_id = ? AND title = ? AND year IS ?"
+                "SELECT id FROM albums WHERE artist_id = ? AND title = ? AND year IS ?",
             )
             .bind(album.artist_id)
             .bind(&album.title)

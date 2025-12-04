@@ -1,10 +1,11 @@
 //! DR value extraction and validation logic.
 
-use std::path::Path;
-
-use {
-    regex::Regex,
+use std::{
+    fs::{read_dir, read_to_string},
+    path::{Path, PathBuf},
 };
+
+use regex::Regex;
 
 use crate::error::dr_error::DrError;
 
@@ -12,12 +13,7 @@ use crate::error::dr_error::DrError;
 const DR_VALUE_PATTERN: &str = r"^DR(\d{1,2})$";
 
 /// Supported DR file patterns.
-const DR_FILE_PATTERNS: &[&str] = &[
-    "dr*.txt",
-    "*dr*.txt",
-    "dr*",
-    "*dr*",
-];
+const DR_FILE_PATTERNS: &[&str] = &["dr*.txt", "*dr*.txt", "dr*", "*dr*"];
 
 /// Extracts and validates DR values from album directories.
 ///
@@ -67,7 +63,7 @@ impl DrExtractor {
     ///
     /// Returns `DrError` if the file cannot be read or parsed.
     pub fn extract_dr_from_file<P: AsRef<Path>>(&self, file_path: P) -> Result<String, DrError> {
-        let content = std::fs::read_to_string(file_path)?;
+        let content = read_to_string(file_path)?;
         self.extract_dr_from_content(&content)
     }
 
@@ -91,7 +87,7 @@ impl DrExtractor {
                 if let Some(captures) = pattern.captures(line) {
                     let dr_number = &captures[1];
                     let dr_value = format!("DR{}", dr_number);
-                    
+
                     // Validate the extracted DR value
                     if self.validate_dr_value(&dr_value) {
                         return Ok(dr_value);
@@ -118,10 +114,10 @@ impl DrExtractor {
         }
 
         // Extract the number part and validate range (1-20 is reasonable)
-        if let Some(captures) = self.dr_validator.captures(dr_value) {
-            if let Ok(number) = captures[1].parse::<u32>() {
-                return number >= 1 && number <= 20;
-            }
+        if let Some(captures) = self.dr_validator.captures(dr_value)
+            && let Ok(number) = captures[1].parse::<u32>()
+        {
+            return (1..=20).contains(&number);
         }
 
         false
@@ -140,27 +136,27 @@ impl DrExtractor {
     /// # Errors
     ///
     /// Returns `DrError` if the directory cannot be read.
-    pub fn find_dr_files<P: AsRef<Path>>(&self, album_path: P) -> Result<Vec<std::path::PathBuf>, DrError> {
+    pub fn find_dr_files<P: AsRef<Path>>(&self, album_path: P) -> Result<Vec<PathBuf>, DrError> {
         let album_path = album_path.as_ref();
-        
+
         if !album_path.exists() || !album_path.is_dir() {
             return Ok(Vec::new());
         }
 
         let mut dr_files = Vec::new();
-        
-        for entry in std::fs::read_dir(album_path)? {
+
+        for entry in read_dir(album_path)? {
             let entry = entry?;
             let path = entry.path();
-            
-            if path.is_file() {
-                if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
-                    // Check against supported DR file patterns
-                    for pattern in DR_FILE_PATTERNS {
-                        if self.matches_dr_pattern(filename, pattern) {
-                            dr_files.push(path.clone());
-                            break;
-                        }
+
+            if path.is_file()
+                && let Some(filename) = path.file_name().and_then(|n| n.to_str())
+            {
+                // Check against supported DR file patterns
+                for pattern in DR_FILE_PATTERNS {
+                    if self.matches_dr_pattern(filename, pattern) {
+                        dr_files.push(path.clone());
+                        break;
                     }
                 }
             }
@@ -190,7 +186,7 @@ impl DrExtractor {
         } else if pattern == "*dr*" {
             return filename.contains("dr");
         }
-        
+
         false
     }
 }
