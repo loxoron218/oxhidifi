@@ -13,7 +13,7 @@ use {
         SampleRate, SizedSample, Stream, StreamConfig, default_host,
         traits::{DeviceTrait, HostTrait, StreamTrait},
     },
-    num_traits::{self, cast},
+    num_traits::{NumCast, cast},
     rtrb::{Consumer, PopError::Empty},
     rubato::FftFixedIn,
     thiserror::Error,
@@ -147,13 +147,15 @@ impl AudioOutput {
             let channels = config.channels();
 
             // Prefer exact match
-            if sample_rate == source_sample_rate && u32::from(channels) == source_channels {
+            if sample_rate == source_sample_rate
+                && <u32 as From<u16>>::from(channels) == source_channels
+            {
                 best_config = Some(config.with_max_sample_rate());
                 break;
             }
 
             // Fallback to compatible configurations
-            if u32::from(channels) >= source_channels
+            if <u32 as From<u16>>::from(channels) >= source_channels
                 && (best_config.is_none()
                     || (config.max_sample_rate().0 > best_config.as_ref().unwrap().sample_rate().0))
             {
@@ -163,13 +165,8 @@ impl AudioOutput {
 
         let config = best_config.ok_or(OutputError::NoDeviceFound)?;
 
-        // Update our internal config based on what the device supports
-
-        // Return whether resampling is needed as part of the result
-        // The caller will need to handle this appropriately
-
         let is_resampling = config.sample_rate().0 != source_sample_rate
-            || u32::from(config.channels()) != source_channels;
+            || <u32 as From<u16>>::from(config.channels()) != source_channels;
 
         Ok((
             StreamConfig {
@@ -227,7 +224,7 @@ impl AudioOutput {
         mut consumer: Consumer<f32>,
     ) -> Result<Stream, OutputError>
     where
-        T: Sample + SizedSample + Copy + num_traits::NumCast + Default,
+        T: Sample + SizedSample + Copy + NumCast + Default,
     {
         let err_fn = |err| {
             eprintln!("Audio stream error: {}", err);
