@@ -3,20 +3,28 @@
 //! This module provides user settings management with proper XDG directory
 //! usage for config and cache files.
 
-use std::path::PathBuf;
+use std::{
+    fs::{create_dir_all, read_to_string, write},
+    io::Error as StdError,
+    path::PathBuf,
+};
 
-use serde::{Deserialize, Serialize};
-use thiserror::Error;
+use {
+    dirs::{cache_dir, config_dir},
+    serde::{Deserialize, Serialize},
+    serde_json::{Error as SerdeJsonError, from_str, to_string_pretty},
+    thiserror::Error,
+};
 
 /// Error type for settings operations.
 #[derive(Error, Debug)]
 pub enum SettingsError {
     /// Failed to read or write settings file.
     #[error("IO error: {0}")]
-    IoError(#[from] std::io::Error),
+    IoError(#[from] StdError),
     /// Failed to serialize or deserialize settings.
     #[error("Serialization error: {0}")]
-    SerializationError(#[from] serde_json::Error),
+    SerializationError(#[from] SerdeJsonError),
     /// Invalid settings value.
     #[error("Invalid settings value: {reason}")]
     InvalidValue { reason: String },
@@ -76,15 +84,15 @@ impl SettingsManager {
     /// Returns `SettingsError` if settings cannot be loaded from disk.
     pub fn new() -> Result<Self, SettingsError> {
         let config_path = get_config_path();
-        
+
         // Ensure config directory exists
         if let Some(parent) = config_path.parent() {
-            std::fs::create_dir_all(parent)?;
+            create_dir_all(parent)?;
         }
 
         let settings = if config_path.exists() {
-            let contents = std::fs::read_to_string(&config_path)?;
-            serde_json::from_str(&contents)?
+            let contents = read_to_string(&config_path)?;
+            from_str(&contents)?
         } else {
             UserSettings::default()
         };
@@ -132,8 +140,8 @@ impl SettingsManager {
     ///
     /// Returns `SettingsError` if settings cannot be saved to disk.
     fn save_settings(&self) -> Result<(), SettingsError> {
-        let contents = serde_json::to_string_pretty(&self.settings)?;
-        std::fs::write(&self.config_path, contents)?;
+        let contents = to_string_pretty(&self.settings)?;
+        write(&self.config_path, contents)?;
         Ok(())
     }
 }
@@ -141,10 +149,10 @@ impl SettingsManager {
 /// Ensures proper XDG directory usage for config and cache files.
 ///
 /// # Returns
-/// 
+///
 /// The path to the configuration file.
 pub fn get_config_path() -> PathBuf {
-    let mut config_dir = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
+    let mut config_dir = config_dir().unwrap_or_else(|| PathBuf::from("."));
     config_dir.push("oxhidifi");
     config_dir.push("settings.json");
     config_dir
@@ -156,14 +164,18 @@ pub fn get_config_path() -> PathBuf {
 ///
 /// The path to the cache directory.
 pub fn get_cache_dir() -> PathBuf {
-    let mut cache_dir = dirs::cache_dir().unwrap_or_else(|| PathBuf::from("."));
+    let mut cache_dir = cache_dir().unwrap_or_else(|| PathBuf::from("."));
     cache_dir.push("oxhidifi");
     cache_dir
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::io::{Error, ErrorKind::NotFound};
+
+    use serde_json::{from_str, to_string};
+
+    use crate::config::settings::{SettingsError, UserSettings};
 
     #[test]
     fn test_user_settings_default() {
@@ -189,20 +201,23 @@ mod tests {
             theme_preference: "dark".to_string(),
         };
 
-        let serialized = serde_json::to_string(&settings).unwrap();
-        let deserialized: UserSettings = serde_json::from_str(&serialized).unwrap();
+        let serialized = to_string(&settings).unwrap();
+        let deserialized: UserSettings = from_str(&serialized).unwrap();
         assert_eq!(settings, deserialized);
     }
 
     #[test]
     fn test_settings_error_display() {
-        let io_error = std::io::Error::new(std::io::ErrorKind::NotFound, "File not found");
+        let io_error = Error::new(NotFound, "File not found");
         let settings_error = SettingsError::IoError(io_error);
         assert!(settings_error.to_string().contains("IO error"));
 
-        let invalid_value_error = SettingsError::InvalidValue { 
-            reason: "test reason".to_string() 
+        let invalid_value_error = SettingsError::InvalidValue {
+            reason: "test reason".to_string(),
         };
-        assert_eq!(invalid_value_error.to_string(), "Invalid settings value: test reason");
+        assert_eq!(
+            invalid_value_error.to_string(),
+            "Invalid settings value: test reason"
+        );
     }
 }

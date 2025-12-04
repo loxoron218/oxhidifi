@@ -4,16 +4,20 @@
 //! (artist, album, title, etc.) and technical Hi-Fi metadata (format,
 //! bit depth, sample rate, duration) from audio files.
 
-use std::path::Path;
+use std::{fs::metadata, io::Error as StdError, path::Path};
 
-use anyhow::Context;
-use lofty::prelude::{AudioFile, TaggedFileExt};
-use lofty::probe::Probe;
-use lofty::error::{LoftyError, ErrorKind};
-use lofty::file::FileType;
-use lofty::tag::Accessor;
-use lofty::prelude::ItemKey;
-use thiserror::Error;
+use {
+    anyhow::Context,
+    lofty::{
+        error::{ErrorKind::Io, LoftyError},
+        file::FileType::{Aac, Aiff, Flac, Mpc, Mpeg, Opus, Vorbis, Wav},
+        prelude::{AudioFile, ItemKey::AlbumArtist, TaggedFileExt},
+        probe::Probe,
+        tag::Accessor,
+    },
+    serde::{Deserialize, Serialize},
+    thiserror::Error,
+};
 
 /// Error type for metadata extraction operations.
 #[derive(Error, Debug)]
@@ -30,7 +34,7 @@ pub enum MetadataError {
 }
 
 /// Standard audio metadata extracted from tags.
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StandardMetadata {
     /// Track title.
     pub title: Option<String>,
@@ -57,7 +61,7 @@ pub struct StandardMetadata {
 }
 
 /// Technical Hi-Fi metadata about the audio file.
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TechnicalMetadata {
     /// Audio format (e.g., "FLAC", "MP3", "WAV").
     pub format: String,
@@ -74,7 +78,7 @@ pub struct TechnicalMetadata {
 }
 
 /// Combined metadata containing both standard and technical information.
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TrackMetadata {
     /// Standard tag-based metadata.
     pub standard: StandardMetadata,
@@ -120,57 +124,53 @@ impl TagReader {
     /// - Required technical metadata cannot be determined
     pub fn read_metadata<P: AsRef<Path>>(path: P) -> Result<TrackMetadata, MetadataError> {
         let path = path.as_ref();
-        
+
         // Get file size
-        let file_size = std::fs::metadata(path)
+        let file_size = metadata(path)
             .context("Failed to get file metadata")
             .map_err(|e| {
-                let io_error = std::io::Error::new(std::io::ErrorKind::Other, e.to_string());
-                MetadataError::ReadError(LoftyError::new(ErrorKind::Io(io_error)))
+                let io_error = StdError::other(e.to_string());
+                MetadataError::ReadError(LoftyError::new(Io(io_error)))
             })?
             .len();
 
         // Probe the audio file
-        let probe = Probe::open(path)
-            .map_err(MetadataError::ReadError)?;
-        
-        let tagged_file = probe.read()
-            .map_err(MetadataError::ReadError)?;
-        
+        let probe = Probe::open(path).map_err(MetadataError::ReadError)?;
+
+        let tagged_file = probe.read().map_err(MetadataError::ReadError)?;
+
         let primary_tag = tagged_file.primary_tag();
         let properties = tagged_file.properties();
 
         // Extract standard metadata
         let standard = StandardMetadata {
-            title: primary_tag.map(|tag| tag.title().map(|s| s.to_string())).flatten(),
-            artist: primary_tag.map(|tag| tag.artist().map(|s| s.to_string())).flatten(),
-            album: primary_tag.map(|tag| tag.album().map(|s| s.to_string())).flatten(),
+            title: primary_tag.and_then(|tag| tag.title().map(|s| s.to_string())),
+            artist: primary_tag.and_then(|tag| tag.artist().map(|s| s.to_string())),
+            album: primary_tag.and_then(|tag| tag.album().map(|s| s.to_string())),
             album_artist: primary_tag.and_then(|tag| {
-                tag.get_string(&ItemKey::AlbumArtist)
+                tag.get_string(&AlbumArtist)
                     .map(|s| s.to_string())
-                    .or_else(|| {
-                        tag.artist().map(|s| s.to_string())
-                    })
+                    .or_else(|| tag.artist().map(|s| s.to_string()))
             }),
             track_number: primary_tag.and_then(|tag| tag.track()),
             total_tracks: primary_tag.and_then(|tag| tag.track_total()),
             disc_number: primary_tag.and_then(|tag| tag.disk()),
             total_discs: primary_tag.and_then(|tag| tag.disk_total()),
             year: primary_tag.and_then(|tag| tag.year()),
-            genre: primary_tag.map(|tag| tag.genre().map(|s| s.to_string())).flatten(),
-            comment: primary_tag.map(|tag| tag.comment().map(|s| s.to_string())).flatten(),
+            genre: primary_tag.and_then(|tag| tag.genre().map(|s| s.to_string())),
+            comment: primary_tag.and_then(|tag| tag.comment().map(|s| s.to_string())),
         };
 
         // Extract technical metadata
         let format_name = match tagged_file.file_type() {
-            FileType::Flac => "FLAC",
-            FileType::Mpeg => "MP3",
-            FileType::Aac => "AAC",
-            FileType::Opus => "Opus",
-            FileType::Vorbis => "Ogg Vorbis",
-            FileType::Wav => "WAV",
-            FileType::Aiff => "AIFF",
-            FileType::Mpc => "MPC",
+            Flac => "FLAC",
+            Mpeg => "MP3",
+            Aac => "AAC",
+            Opus => "Opus",
+            Vorbis => "Ogg Vorbis",
+            Wav => "WAV",
+            Aiff => "AIFF",
+            Mpc => "MPC",
             _ => return Err(MetadataError::UnsupportedFormat),
         };
 
@@ -192,17 +192,22 @@ impl TagReader {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use serde_json::{from_str, to_string};
+
+    use crate::audio::metadata::{MetadataError, StandardMetadata, TechnicalMetadata};
 
     #[test]
     fn test_metadata_error_display() {
         let error = MetadataError::UnsupportedFormat;
         assert_eq!(error.to_string(), "Unsupported file format");
-        
-        let missing_field_error = MetadataError::MissingField { 
-            field: "title".to_string() 
+
+        let missing_field_error = MetadataError::MissingField {
+            field: "title".to_string(),
         };
-        assert_eq!(missing_field_error.to_string(), "Missing required metadata field: title");
+        assert_eq!(
+            missing_field_error.to_string(),
+            "Missing required metadata field: title"
+        );
     }
 
     #[test]
@@ -221,8 +226,8 @@ mod tests {
             comment: Some("Test comment".to_string()),
         };
 
-        let serialized = serde_json::to_string(&metadata).unwrap();
-        let deserialized: StandardMetadata = serde_json::from_str(&serialized).unwrap();
+        let serialized = to_string(&metadata).unwrap();
+        let deserialized: StandardMetadata = from_str(&serialized).unwrap();
         assert_eq!(metadata, deserialized);
     }
 
@@ -237,8 +242,8 @@ mod tests {
             file_size: 1024,
         };
 
-        let serialized = serde_json::to_string(&metadata).unwrap();
-        let deserialized: TechnicalMetadata = serde_json::from_str(&serialized).unwrap();
+        let serialized = to_string(&metadata).unwrap();
+        let deserialized: TechnicalMetadata = from_str(&serialized).unwrap();
         assert_eq!(metadata, deserialized);
     }
 }

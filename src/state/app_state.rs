@@ -6,11 +6,16 @@
 
 use std::sync::{Arc, Weak};
 
-use parking_lot::RwLock;
-use tokio::sync::broadcast;
+use {
+    async_trait::async_trait,
+    parking_lot::RwLock,
+    tokio::sync::broadcast::{Receiver, Sender, channel},
+};
 
-use crate::{AudioEngine, PlaybackState, TrackInfo};
-use crate::library::{Album, Artist, Track};
+use crate::{
+    audio::engine::{AudioEngine, PlaybackState, TrackInfo},
+    library::{Album, Artist, Track},
+};
 
 /// Central state container with thread-safe access.
 ///
@@ -27,7 +32,7 @@ pub struct AppState {
     /// Audio engine reference.
     pub audio_engine: Weak<AudioEngine>,
     /// Broadcast channel for state change notifications.
-    state_tx: broadcast::Sender<AppStateEvent>,
+    state_tx: Sender<AppStateEvent>,
 }
 
 /// Current library view state.
@@ -83,8 +88,8 @@ impl AppState {
     ///
     /// A new `AppState` instance.
     pub fn new(audio_engine: Weak<AudioEngine>) -> Self {
-        let (state_tx, _) = broadcast::channel(16);
-        
+        let (state_tx, _) = channel(16);
+
         Self {
             playback: Arc::new(RwLock::new(PlaybackState::Stopped)),
             current_track: Arc::new(RwLock::new(None)),
@@ -101,7 +106,9 @@ impl AppState {
     /// * `state` - New playback state.
     pub fn update_playback_state(&self, state: PlaybackState) {
         *self.playback.write() = state.clone();
-        let _ = self.state_tx.send(AppStateEvent::PlaybackStateChanged(state));
+        let _ = self
+            .state_tx
+            .send(AppStateEvent::PlaybackStateChanged(state));
     }
 
     /// Updates the current track and notifies subscribers.
@@ -111,7 +118,9 @@ impl AppState {
     /// * `track` - New current track information.
     pub fn update_current_track(&self, track: Option<TrackInfo>) {
         *self.current_track.write() = track.clone();
-        let _ = self.state_tx.send(AppStateEvent::CurrentTrackChanged(track));
+        let _ = self
+            .state_tx
+            .send(AppStateEvent::CurrentTrackChanged(track));
     }
 
     /// Updates the library state and notifies subscribers.
@@ -121,7 +130,9 @@ impl AppState {
     /// * `library_state` - New library state.
     pub fn update_library_state(&self, library_state: LibraryState) {
         *self.library.write() = library_state.clone();
-        let _ = self.state_tx.send(AppStateEvent::LibraryStateChanged(library_state));
+        let _ = self
+            .state_tx
+            .send(AppStateEvent::LibraryStateChanged(library_state));
     }
 
     /// Updates the search filter and notifies subscribers.
@@ -131,7 +142,9 @@ impl AppState {
     /// * `filter` - New search filter.
     pub fn update_search_filter(&self, filter: Option<String>) {
         self.library.write().search_filter = filter.clone();
-        let _ = self.state_tx.send(AppStateEvent::SearchFilterChanged(filter));
+        let _ = self
+            .state_tx
+            .send(AppStateEvent::SearchFilterChanged(filter));
     }
 
     /// Subscribes to application state changes.
@@ -139,7 +152,7 @@ impl AppState {
     /// # Returns
     ///
     /// A broadcast receiver for state change events.
-    pub fn subscribe(&self) -> broadcast::Receiver<AppStateEvent> {
+    pub fn subscribe(&self) -> Receiver<AppStateEvent> {
         self.state_tx.subscribe()
     }
 
@@ -175,7 +188,7 @@ impl AppState {
 ///
 /// This trait allows UI components to react to application state changes
 /// without tight coupling to the state management system.
-#[async_trait::async_trait]
+#[async_trait]
 pub trait StateObserver {
     /// Handles a state change event.
     ///
@@ -183,7 +196,7 @@ pub trait StateObserver {
     ///
     /// * `event` - The state change event to handle.
     async fn handle_state_change(&mut self, event: AppStateEvent);
-    
+
     /// Starts observing state changes.
     ///
     /// # Arguments
@@ -191,7 +204,7 @@ pub trait StateObserver {
     /// * `app_state` - The application state to observe.
     async fn start_observing(&mut self, app_state: Arc<AppState>) {
         let _receiver = app_state.subscribe();
-        
+
         // Can't move self into async block due to lifetime issues
         // This pattern needs to be handled differently in actual implementation
         // For now, we'll comment out the problematic code to allow compilation
@@ -206,15 +219,19 @@ pub trait StateObserver {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::audio::engine::AudioEngine;
+    use std::sync::Arc;
+
+    use crate::{
+        audio::engine::{AudioEngine, PlaybackState},
+        state::{AppState, LibraryState, ViewMode},
+    };
 
     #[test]
     fn test_app_state_creation() {
         let engine = AudioEngine::new().unwrap();
         let engine_weak = Arc::downgrade(&Arc::new(engine));
         let app_state = AppState::new(engine_weak);
-        
+
         assert_eq!(app_state.get_playback_state(), PlaybackState::Stopped);
         assert!(app_state.get_current_track().is_none());
         assert_eq!(app_state.get_library_state().view_mode, ViewMode::Grid);

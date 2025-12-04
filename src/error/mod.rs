@@ -6,5 +6,7 @@
 pub mod domain;
 pub mod operational;
 
-pub use domain::{AudioError, LibraryError, UiError};
-pub use operational::{ErrorReporter, ResultExt};
+pub use {
+    domain::{AudioError, LibraryError, UiError},
+    operational::{ErrorReporter, ResultExt},
+};

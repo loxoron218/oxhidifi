@@ -3,11 +3,14 @@
 //! This module defines the core data structures used throughout the library system,
 //! including Album, Artist, and Track models with proper serde serialization.
 
-use serde::{Deserialize, Serialize};
-use chrono::NaiveDateTime;
+use {
+    chrono::NaiveDateTime,
+    serde::{Deserialize, Serialize},
+    sqlx::FromRow,
+};
 
 /// Represents a musical artist in the library.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, FromRow, Default)]
 pub struct Artist {
     /// Unique database ID.
     pub id: i64,
@@ -22,7 +25,7 @@ pub struct Artist {
 }
 
 /// Represents a musical album in the library.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, FromRow, Default)]
 pub struct Album {
     /// Unique database ID.
     pub id: i64,
@@ -52,7 +55,7 @@ pub struct Album {
 }
 
 /// Represents a track in the library.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, FromRow)]
 pub struct Track {
     /// Unique database ID.
     pub id: i64,
@@ -117,37 +120,14 @@ impl Default for Track {
     }
 }
 
-impl Default for Album {
-    fn default() -> Self {
-        Self {
-            id: 0,
-            artist_id: 0,
-            title: String::new(),
-            year: None,
-            genre: None,
-            compilation: false,
-            path: String::new(),
-            dr_value: None,
-            created_at: None,
-            updated_at: None,
-        }
-    }
-}
-
-impl Default for Artist {
-    fn default() -> Self {
-        Self {
-            id: 0,
-            name: String::new(),
-            created_at: None,
-            updated_at: None,
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use {
+        chrono::NaiveDateTime,
+        serde_json::{from_str, to_string},
+    };
+
+    use crate::library::models::{Album, Artist, Track};
 
     #[test]
     fn test_artist_serialization() {
@@ -158,8 +138,8 @@ mod tests {
             updated_at: Some(NaiveDateTime::from_timestamp_opt(1672617600, 0).unwrap()),
         };
 
-        let serialized = serde_json::to_string(&artist).unwrap();
-        let deserialized: Artist = serde_json::from_str(&serialized).unwrap();
+        let serialized = to_string(&artist).unwrap();
+        let deserialized: Artist = from_str(&serialized).unwrap();
         assert_eq!(artist, deserialized);
     }
 
@@ -178,8 +158,8 @@ mod tests {
             updated_at: Some(NaiveDateTime::from_timestamp_opt(1672617600, 0).unwrap()),
         };
 
-        let serialized = serde_json::to_string(&album).unwrap();
-        let deserialized: Album = serde_json::from_str(&serialized).unwrap();
+        let serialized = to_string(&album).unwrap();
+        let deserialized: Album = from_str(&serialized).unwrap();
         assert_eq!(album, deserialized);
     }
 
@@ -202,8 +182,8 @@ mod tests {
             updated_at: Some(NaiveDateTime::from_timestamp_opt(1672617600, 0).unwrap()),
         };
 
-        let serialized = serde_json::to_string(&track).unwrap();
-        let deserialized: Track = serde_json::from_str(&serialized).unwrap();
+        let serialized = to_string(&track).unwrap();
+        let deserialized: Track = from_str(&serialized).unwrap();
         assert_eq!(track, deserialized);
     }
 

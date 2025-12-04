@@ -7,6 +7,8 @@ pub mod database;
 pub mod models;
 pub mod schema;
 
-pub use database::LibraryDatabase;
-pub use models::{Album, Artist, SearchResults, Track};
-pub use schema::{create_connection_pool, get_database_url, SchemaManager, CURRENT_SCHEMA_VERSION};
+pub use {
+    database::LibraryDatabase,
+    models::{Album, Artist, SearchResults, Track},
+    schema::{CURRENT_SCHEMA_VERSION, SchemaManager, create_connection_pool, get_database_url},
+};

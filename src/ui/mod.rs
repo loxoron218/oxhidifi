@@ -7,6 +7,4 @@ pub mod application;
 pub mod header_bar;
 pub mod player_bar;
 
-pub use application::OxhidifiApplication;
-pub use header_bar::HeaderBar;
-pub use player_bar::PlayerBar;
+pub use {application::OxhidifiApplication, header_bar::HeaderBar, player_bar::PlayerBar};

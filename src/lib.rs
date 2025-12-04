@@ -13,9 +13,11 @@ pub mod state;
 pub mod ui;
 
 // Re-export key types for convenience
-pub use audio::engine::{AudioEngine, AudioError, PlaybackState, TrackInfo};
-pub use config::{SettingsManager, UserSettings};
-pub use error::{AudioError as Error, LibraryError, UiError};
-pub use library::{Album, Artist, LibraryDatabase, SearchResults, Track};
-pub use state::{AppState, AppStateEvent, LibraryState, StateObserver, ViewMode};
-pub use ui::OxhidifiApplication;
+pub use {
+    audio::engine::{AudioEngine, AudioError, PlaybackState, TrackInfo},
+    config::{SettingsManager, UserSettings},
+    error::{AudioError as Error, LibraryError, UiError},
+    library::{Album, Artist, LibraryDatabase, SearchResults, Track},
+    state::{AppState, AppStateEvent, LibraryState, StateObserver, ViewMode},
+    ui::OxhidifiApplication,
+};

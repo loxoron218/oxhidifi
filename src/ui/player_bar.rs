@@ -3,7 +3,15 @@
 //! This module implements the player bar component that provides
 //! playback controls, progress display, and Hi-Fi metadata information.
 
-use libadwaita::gtk::prelude::*;
+use libadwaita::{
+    gtk::{
+        Align::Start,
+        Box, Button, Label,
+        Orientation::{Horizontal, Vertical},
+        Picture, Scale, ToggleButton,
+    },
+    prelude::{BoxExt, RangeExt},
+};
 
 /// Minimal player bar placeholder with basic structure.
 ///
@@ -11,17 +19,17 @@ use libadwaita::gtk::prelude::*;
 /// current track information and technical metadata.
 pub struct PlayerBar {
     /// The underlying GTK box widget.
-    pub widget: libadwaita::gtk::Box,
+    pub widget: Box,
     /// Play/pause toggle button.
-    pub play_button: libadwaita::gtk::ToggleButton,
+    pub play_button: ToggleButton,
     /// Previous track button.
-    pub prev_button: libadwaita::gtk::Button,
+    pub prev_button: Button,
     /// Next track button.
-    pub next_button: libadwaita::gtk::Button,
+    pub next_button: Button,
     /// Progress scale.
-    pub progress_scale: libadwaita::gtk::Scale,
+    pub progress_scale: Scale,
     /// Volume scale.
-    pub volume_scale: libadwaita::gtk::Scale,
+    pub volume_scale: Scale,
 }
 
 impl PlayerBar {
@@ -31,8 +39,8 @@ impl PlayerBar {
     ///
     /// A new `PlayerBar` instance.
     pub fn new() -> Self {
-        let widget = libadwaita::gtk::Box::builder()
-            .orientation(libadwaita::gtk::Orientation::Horizontal)
+        let widget = Box::builder()
+            .orientation(Horizontal)
             .spacing(12)
             .margin_top(6)
             .margin_bottom(6)
@@ -42,72 +50,66 @@ impl PlayerBar {
             .build();
 
         // Album artwork placeholder
-        let artwork = libadwaita::gtk::Picture::builder()
+        let artwork = Picture::builder()
             .width_request(48)
             .height_request(48)
             .build();
         widget.append(&artwork);
 
         // Track info placeholder
-        let track_info = libadwaita::gtk::Box::builder()
-            .orientation(libadwaita::gtk::Orientation::Vertical)
-            .hexpand(true)
-            .build();
-        
-        let title_label = libadwaita::gtk::Label::builder()
+        let track_info = Box::builder().orientation(Vertical).hexpand(true).build();
+
+        let title_label = Label::builder()
             .label("Track Title")
-            .halign(libadwaita::gtk::Align::Start)
+            .halign(Start)
             .xalign(0.0)
             .build();
         track_info.append(&title_label);
-        
-        let artist_label = libadwaita::gtk::Label::builder()
+
+        let artist_label = Label::builder()
             .label("Artist Name")
-            .halign(libadwaita::gtk::Align::Start)
+            .halign(Start)
             .xalign(0.0)
             .css_classes(vec!["dim-label".to_string()])
             .build();
         track_info.append(&artist_label);
-        
+
         widget.append(&track_info);
 
         // Player controls
-        let controls = libadwaita::gtk::Box::builder()
-            .orientation(libadwaita::gtk::Orientation::Horizontal)
-            .spacing(6)
-            .build();
-        
-        let prev_button = libadwaita::gtk::Button::builder()
+        let controls = Box::builder().orientation(Horizontal).spacing(6).build();
+
+        let prev_button = Button::builder()
             .icon_name("media-skip-backward-symbolic")
             .tooltip_text("Previous")
             .build();
         controls.append(&prev_button);
-        
-        let play_button = libadwaita::gtk::ToggleButton::builder()
+
+        let play_button = ToggleButton::builder()
             .icon_name("media-playback-start-symbolic")
             .tooltip_text("Play")
             .build();
         controls.append(&play_button);
-        
-        let next_button = libadwaita::gtk::Button::builder()
+
+        let next_button = Button::builder()
             .icon_name("media-skip-forward-symbolic")
             .tooltip_text("Next")
             .build();
         controls.append(&next_button);
-        
+
         widget.append(&controls);
 
         // Progress bar
-        let progress_scale = libadwaita::gtk::Scale::builder()
-            .orientation(libadwaita::gtk::Orientation::Horizontal)
+        let progress_scale = Scale::builder()
+            .orientation(Horizontal)
             .hexpand(true)
             .draw_value(false)
             .build();
         widget.append(&progress_scale);
 
         // Volume control
-        let volume_scale = libadwaita::gtk::Scale::builder()
-            .orientation(libadwaita::gtk::Orientation::Horizontal)
+        let volume_scale = Scale::builder()
+            .orientation(Horizontal)
             .width_request(100)
             // Remove value() from builder, set it after creation
             .draw_value(false)
@@ -128,19 +130,31 @@ impl PlayerBar {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use libadwaita::{init, prelude::ButtonExt};
+
+    use crate::ui::player_bar::PlayerBar;
 
     #[test]
     fn test_player_bar_creation() {
         // Skip this test if we can't initialize GTK (e.g., in CI environments)
-        if libadwaita::gtk::init().is_err() {
+        if init().is_err() {
             return;
         }
-        
+
         let player_bar = PlayerBar::new();
+
         // Check icon names without requiring widget realization
-        assert_eq!(player_bar.play_button.icon_name().as_deref(), Some("media-playback-start-symbolic"));
-        assert_eq!(player_bar.prev_button.icon_name().as_deref(), Some("media-skip-backward-symbolic"));
-        assert_eq!(player_bar.next_button.icon_name().as_deref(), Some("media-skip-forward-symbolic"));
+        assert_eq!(
+            player_bar.play_button.icon_name().as_deref(),
+            Some("media-playback-start-symbolic")
+        );
+        assert_eq!(
+            player_bar.prev_button.icon_name().as_deref(),
+            Some("media-skip-backward-symbolic")
+        );
+        assert_eq!(
+            player_bar.next_button.icon_name().as_deref(),
+            Some("media-skip-forward-symbolic")
+        );
     }
 }

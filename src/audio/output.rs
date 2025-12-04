@@ -5,13 +5,19 @@
 
 use std::time::Duration;
 
-use cpal::{
-    traits::{DeviceTrait, HostTrait, StreamTrait},
-    ChannelCount, Device, Host, SampleFormat, SampleRate, StreamConfig,
+use {
+    cpal::{
+        BufferSize::Default as CpalDefault,
+        BuildStreamError, ChannelCount, Device, Host, OutputCallbackInfo, PlayStreamError, Sample,
+        SampleFormat::{self, F32, I16, U16},
+        SampleRate, SizedSample, Stream, StreamConfig, default_host,
+        traits::{DeviceTrait, HostTrait, StreamTrait},
+    },
+    num_traits::{self, cast},
+    rtrb::{Consumer, PopError::Empty},
+    rubato::FftFixedIn,
+    thiserror::Error,
 };
-use rtrb::Consumer;
-use rubato::FftFixedIn;
-use thiserror::Error;
 
 use crate::audio::decoder::AudioFormat;
 
@@ -20,10 +26,10 @@ use crate::audio::decoder::AudioFormat;
 pub enum OutputError {
     /// CPAL host or device error.
     #[error("Audio output error: {0}")]
-    CpalError(#[from] cpal::BuildStreamError),
+    CpalError(#[from] BuildStreamError),
     /// Failed to start audio stream.
     #[error("Failed to start audio stream: {0}")]
-    StreamStartError(#[from] cpal::PlayStreamError),
+    StreamStartError(#[from] PlayStreamError),
     /// No suitable audio device found.
     #[error("No suitable audio device found")]
     NoDeviceFound,
@@ -95,7 +101,7 @@ impl AudioOutput {
     /// - No suitable audio device is found
     /// - Device enumeration fails
     pub fn new(config: Option<OutputConfig>) -> Result<Self, OutputError> {
-        let host = cpal::default_host();
+        let host = default_host();
         let device = host
             .default_output_device()
             .ok_or(OutputError::NoDeviceFound)?;
@@ -147,31 +153,31 @@ impl AudioOutput {
             }
 
             // Fallback to compatible configurations
-            if u32::from(channels) >= source_channels {
-                if best_config.is_none() || 
-                   (config.max_sample_rate().0 > best_config.as_ref().unwrap().sample_rate().0) {
-                    best_config = Some(config.with_max_sample_rate());
-                }
+            if u32::from(channels) >= source_channels
+                && (best_config.is_none()
+                    || (config.max_sample_rate().0 > best_config.as_ref().unwrap().sample_rate().0))
+            {
+                best_config = Some(config.with_max_sample_rate());
             }
         }
 
         let config = best_config.ok_or(OutputError::NoDeviceFound)?;
-        
+
         // Update our internal config based on what the device supports
-        
+
         // Return whether resampling is needed as part of the result
         // The caller will need to handle this appropriately
 
-        let is_resampling = config.sample_rate().0 != source_sample_rate ||
-                           u32::from(config.channels()) != source_channels;
-        
+        let is_resampling = config.sample_rate().0 != source_sample_rate
+            || u32::from(config.channels()) != source_channels;
+
         Ok((
             StreamConfig {
                 channels: config.channels(),
                 sample_rate: config.sample_rate(),
-                buffer_size: cpal::BufferSize::Default,
+                buffer_size: CpalDefault,
             },
-            is_resampling
+            is_resampling,
         ))
     }
 
@@ -193,16 +199,22 @@ impl AudioOutput {
         &self,
         stream_config: StreamConfig,
         consumer: Consumer<f32>,
-    ) -> Result<cpal::Stream, OutputError> {
-        let sample_format = self.device.default_output_config()
+    ) -> Result<Stream, OutputError> {
+        let sample_format = self
+            .device
+            .default_output_config()
             .map_err(|_| OutputError::NoDeviceFound)?
             .sample_format();
 
         let stream = match sample_format {
-            SampleFormat::F32 => self.build_stream::<f32>(stream_config, consumer),
-            SampleFormat::I16 => self.build_stream::<i16>(stream_config, consumer),
-            SampleFormat::U16 => self.build_stream::<u16>(stream_config, consumer),
-            _ => return Err(OutputError::UnsupportedSampleFormat { format: sample_format }),
+            F32 => self.build_stream::<f32>(stream_config, consumer),
+            I16 => self.build_stream::<i16>(stream_config, consumer),
+            U16 => self.build_stream::<u16>(stream_config, consumer),
+            _ => {
+                return Err(OutputError::UnsupportedSampleFormat {
+                    format: sample_format,
+                });
+            }
         }?;
 
         Ok(stream)
@@ -213,9 +225,9 @@ impl AudioOutput {
         &self,
         config: StreamConfig,
         mut consumer: Consumer<f32>,
-    ) -> Result<cpal::Stream, OutputError>
+    ) -> Result<Stream, OutputError>
     where
-        T: cpal::Sample + cpal::SizedSample + Copy + num_traits::NumCast + Default,
+        T: Sample + SizedSample + Copy + num_traits::NumCast + Default,
     {
         let err_fn = |err| {
             eprintln!("Audio stream error: {}", err);
@@ -225,7 +237,7 @@ impl AudioOutput {
 
         let stream = self.device.build_output_stream(
             &config,
-            move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
+            move |data: &mut [T], _: &OutputCallbackInfo| {
                 for sample in data.iter_mut() {
                     match consumer.pop() {
                         Ok(value) => {
@@ -233,19 +245,19 @@ impl AudioOutput {
                             *sample = match value {
                                 v if v >= 1.0 => {
                                     // Use the maximum positive value for the type
-                                    num_traits::cast(1.0f32).unwrap_or(T::default())
-                                },
+                                    cast(1.0f32).unwrap_or(T::default())
+                                }
                                 v if v <= -1.0 => {
                                     // Use the minimum negative value for the type
-                                    num_traits::cast(-1.0f32).unwrap_or(T::default())
-                                },
+                                    cast(-1.0f32).unwrap_or(T::default())
+                                }
                                 v => {
                                     // Direct cast from f32 to target type
-                                    num_traits::cast(v).unwrap_or(T::default())
+                                    cast(v).unwrap_or(T::default())
                                 }
                             };
                         }
-                        Err(rtrb::PopError::Empty) => {
+                        Err(Empty) => {
                             // Buffer underrun - fill with silence
                             *sample = T::default();
                         }
@@ -281,7 +293,9 @@ impl AudioOutput {
         channels: usize,
     ) -> Result<FftFixedIn<f32>, OutputError> {
         if source_rate == target_rate {
-            return Err(OutputError::ResamplingError("Source and target rates are identical".to_string()));
+            return Err(OutputError::ResamplingError(
+                "Source and target rates are identical".to_string(),
+            ));
         }
 
         let resampler = FftFixedIn::<f32>::new(
@@ -290,7 +304,8 @@ impl AudioOutput {
             1024, // chunk_size_in - reasonable default
             1,    // sub_chunks
             channels,
-        ).map_err(|e| OutputError::ResamplingError(e.to_string()))?;
+        )
+        .map_err(|e| OutputError::ResamplingError(e.to_string()))?;
 
         Ok(resampler)
     }
@@ -302,9 +317,7 @@ impl AudioOutput {
     /// A vector of device names.
     pub fn get_available_devices(&self) -> Vec<String> {
         match self.host.output_devices() {
-            Ok(devices) => devices
-                .filter_map(|device| device.name().ok())
-                .collect(),
+            Ok(devices) => devices.filter_map(|device| device.name().ok()).collect(),
             Err(_) => Vec::new(),
         }
     }
@@ -346,10 +359,7 @@ impl AudioConsumer {
         let mut output = output;
         output.is_resampling = is_resampling;
 
-        Ok(AudioConsumer {
-            output,
-            consumer,
-        })
+        Ok(AudioConsumer { output, consumer })
     }
 
     /// Runs the audio consumption loop.
@@ -364,7 +374,7 @@ impl AudioConsumer {
     /// # Errors
     ///
     /// Returns `OutputError` if stream creation or startup fails.
-    pub fn run(self, source_format: &AudioFormat) -> Result<cpal::Stream, OutputError> {
+    pub fn run(self, source_format: &AudioFormat) -> Result<Stream, OutputError> {
         let (stream_config, _) = self.output.get_optimal_config(source_format)?;
         let stream = self.output.create_stream(stream_config, self.consumer)?;
         stream.play()?;
@@ -374,7 +384,7 @@ impl AudioConsumer {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::audio::output::{OutputConfig, OutputError};
 
     #[test]
     fn test_output_config_default() {
@@ -388,6 +398,9 @@ mod tests {
     #[test]
     fn test_output_error_display() {
         let no_device_error = OutputError::NoDeviceFound;
-        assert_eq!(no_device_error.to_string(), "No suitable audio device found");
+        assert_eq!(
+            no_device_error.to_string(),
+            "No suitable audio device found"
+        );
     }
 }

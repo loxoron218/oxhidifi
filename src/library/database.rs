@@ -6,12 +6,14 @@
 
 use std::path::Path;
 
-use sqlx::SqlitePool;
-use thiserror::Error;
+use {
+    sqlx::{SqlitePool, query, query_as, query_scalar},
+    thiserror::Error,
+};
 
 use crate::library::{
     models::{Album, Artist, SearchResults, Track},
-    schema::{create_connection_pool, SchemaManager},
+    schema::{SchemaManager, create_connection_pool},
 };
 
 /// Error type for library database operations.
@@ -77,27 +79,27 @@ impl LibraryDatabase {
         let albums = match filter {
             Some(filter_str) => {
                 let search_pattern = format!("%{}%", filter_str);
-                sqlx::query_as::<_, Album>(
+                query_as::<_, Album>(
                     r#"
                     SELECT id, artist_id, title, year, genre, compilation, path, dr_value,
                            created_at, updated_at
                     FROM albums
                     WHERE title LIKE ?
                     ORDER BY title, year
-                    "#
+                    "#,
                 )
                 .bind(search_pattern)
                 .fetch_all(&self.pool)
                 .await?
             }
             None => {
-                sqlx::query_as::<_, Album>(
+                query_as::<_, Album>(
                     r#"
                     SELECT id, artist_id, title, year, genre, compilation, path, dr_value,
                            created_at, updated_at
                     FROM albums
                     ORDER BY title, year
-                    "#
+                    "#,
                 )
                 .fetch_all(&self.pool)
                 .await?
@@ -124,25 +126,25 @@ impl LibraryDatabase {
         let artists = match filter {
             Some(filter_str) => {
                 let search_pattern = format!("%{}%", filter_str);
-                sqlx::query_as::<_, Artist>(
+                query_as::<_, Artist>(
                     r#"
                     SELECT id, name, created_at, updated_at
                     FROM artists
                     WHERE name LIKE ?
                     ORDER BY name
-                    "#
+                    "#,
                 )
                 .bind(search_pattern)
                 .fetch_all(&self.pool)
                 .await?
             }
             None => {
-                sqlx::query_as::<_, Artist>(
+                query_as::<_, Artist>(
                     r#"
                     SELECT id, name, created_at, updated_at
                     FROM artists
                     ORDER BY name
-                    "#
+                    "#,
                 )
                 .fetch_all(&self.pool)
                 .await?
@@ -167,7 +169,7 @@ impl LibraryDatabase {
     /// Returns `LibraryError` if the query fails or the album doesn't exist.
     pub async fn get_tracks_by_album(&self, album_id: i64) -> Result<Vec<Track>, LibraryError> {
         // Verify album exists
-        let album_exists: Option<i64> = sqlx::query_scalar("SELECT id FROM albums WHERE id = ?")
+        let album_exists: Option<i64> = query_scalar("SELECT id FROM albums WHERE id = ?")
             .bind(album_id)
             .fetch_optional(&self.pool)
             .await?;
@@ -179,14 +181,14 @@ impl LibraryDatabase {
             });
         }
 
-        let tracks = sqlx::query_as::<_, Track>(
+        let tracks = query_as::<_, Track>(
             r#"
             SELECT id, album_id, title, track_number, disc_number, duration_ms, path,
                    file_size, format, sample_rate, bits_per_sample, channels, created_at, updated_at
             FROM tracks
             WHERE album_id = ?
             ORDER BY disc_number, track_number, title
-            "#
+            "#,
         )
         .bind(album_id)
         .fetch_all(&self.pool)
@@ -210,7 +212,7 @@ impl LibraryDatabase {
     /// Returns `LibraryError` if the query fails or the artist doesn't exist.
     pub async fn get_tracks_by_artist(&self, artist_id: i64) -> Result<Vec<Track>, LibraryError> {
         // Verify artist exists
-        let artist_exists: Option<i64> = sqlx::query_scalar("SELECT id FROM artists WHERE id = ?")
+        let artist_exists: Option<i64> = query_scalar("SELECT id FROM artists WHERE id = ?")
             .bind(artist_id)
             .fetch_optional(&self.pool)
             .await?;
@@ -222,7 +224,7 @@ impl LibraryDatabase {
             });
         }
 
-        let tracks = sqlx::query_as::<_, Track>(
+        let tracks = query_as::<_, Track>(
             r#"
             SELECT t.id, t.album_id, t.title, t.track_number, t.disc_number, t.duration_ms, t.path,
                    t.file_size, t.format, t.sample_rate, t.bits_per_sample, t.channels, t.created_at, t.updated_at
@@ -255,26 +257,26 @@ impl LibraryDatabase {
     pub async fn search_library(&self, query: &str) -> Result<SearchResults, LibraryError> {
         let search_pattern = format!("%{}%", query);
 
-        let albums = sqlx::query_as::<_, Album>(
+        let albums = query_as::<_, Album>(
             r#"
             SELECT id, artist_id, title, year, genre, compilation, path, dr_value,
                    created_at, updated_at
             FROM albums
             WHERE title LIKE ?
             ORDER BY title, year
-            "#
+            "#,
         )
         .bind(&search_pattern)
         .fetch_all(&self.pool)
         .await?;
 
-        let artists = sqlx::query_as::<_, Artist>(
+        let artists = query_as::<_, Artist>(
             r#"
             SELECT id, name, created_at, updated_at
             FROM artists
             WHERE name LIKE ?
             ORDER BY name
-            "#
+            "#,
         )
         .bind(&search_pattern)
         .fetch_all(&self.pool)
@@ -296,10 +298,13 @@ impl LibraryDatabase {
     /// # Errors
     ///
     /// Returns `LibraryError` if the query fails.
-    pub async fn get_dr_value<P: AsRef<Path>>(&self, album_path: P) -> Result<Option<String>, LibraryError> {
+    pub async fn get_dr_value<P: AsRef<Path>>(
+        &self,
+        album_path: P,
+    ) -> Result<Option<String>, LibraryError> {
         let album_path_str = album_path.as_ref().to_string_lossy().to_string();
-        
-        let dr_value: Option<String> = sqlx::query_scalar("SELECT dr_value FROM albums WHERE path = ?")
+
+        let dr_value: Option<String> = query_scalar("SELECT dr_value FROM albums WHERE path = ?")
             .bind(album_path_str)
             .fetch_optional(&self.pool)
             .await?;
@@ -327,8 +332,8 @@ impl LibraryDatabase {
         dr_value: Option<&str>,
     ) -> Result<(), LibraryError> {
         let album_path_str = album_path.as_ref().to_string_lossy().to_string();
-        
-        sqlx::query("UPDATE albums SET dr_value = ?, updated_at = CURRENT_TIMESTAMP WHERE path = ?")
+
+        query("UPDATE albums SET dr_value = ?, updated_at = CURRENT_TIMESTAMP WHERE path = ?")
             .bind(dr_value)
             .bind(album_path_str)
             .execute(&self.pool)
@@ -349,7 +354,7 @@ impl LibraryDatabase {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::library::database::LibraryError;
 
     #[test]
     fn test_library_error_display() {
@@ -357,8 +362,11 @@ mod tests {
             entity: "album".to_string(),
             id: 123,
         };
-        assert_eq!(not_found_error.to_string(), "Record not found: album with id 123");
-        
+        assert_eq!(
+            not_found_error.to_string(),
+            "Record not found: album with id 123"
+        );
+
         let invalid_data_error = LibraryError::InvalidData {
             reason: "test reason".to_string(),
         };

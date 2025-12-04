@@ -3,7 +3,11 @@
 //! This module implements the header bar component that provides
 //! essential controls for navigation, search, and application settings.
 
-use libadwaita::gtk::prelude::*;
+use libadwaita::{
+    HeaderBar as LibadwaitaHeaderBar, TabView,
+    gtk::{Button, Label, ToggleButton, Widget},
+    prelude::Cast,
+};
 
 /// Basic header bar with essential controls.
 ///
@@ -11,13 +15,13 @@ use libadwaita::gtk::prelude::*;
 /// navigation, search functionality, and settings access.
 pub struct HeaderBar {
     /// The underlying Libadwaita header bar widget.
-    pub widget: libadwaita::HeaderBar,
+    pub widget: LibadwaitaHeaderBar,
     /// Search toggle button.
-    pub search_button: libadwaita::gtk::ToggleButton,
+    pub search_button: ToggleButton,
     /// View toggle button.
-    pub view_toggle: libadwaita::gtk::ToggleButton,
+    pub view_toggle: ToggleButton,
     /// Settings button.
-    pub settings_button: libadwaita::gtk::Button,
+    pub settings_button: Button,
 }
 
 impl HeaderBar {
@@ -27,39 +31,39 @@ impl HeaderBar {
     ///
     /// A new `HeaderBar` instance.
     pub fn new() -> Self {
-        let widget = libadwaita::HeaderBar::builder().build();
+        let widget = LibadwaitaHeaderBar::builder().build();
 
         // Search button
-        let search_button = libadwaita::gtk::ToggleButton::builder()
+        let search_button = ToggleButton::builder()
             .icon_name("system-search-symbolic")
             .tooltip_text("Search")
             .build();
         widget.pack_start(&search_button);
 
         // View toggle button
-        let view_toggle = libadwaita::gtk::ToggleButton::builder()
+        let view_toggle = ToggleButton::builder()
             .icon_name("view-grid-symbolic")
             .tooltip_text("Toggle View")
             .build();
         widget.pack_start(&view_toggle);
 
         // Settings button
-        let settings_button = libadwaita::gtk::Button::builder()
+        let settings_button = Button::builder()
             .icon_name("preferences-system-symbolic")
             .tooltip_text("Settings")
             .build();
         widget.pack_end(&settings_button);
 
         // Tab navigation
-        let tab_view = libadwaita::TabView::builder().build();
-        
+        let tab_view = TabView::builder().build();
+
         // TabPage doesn't have a new() constructor, create pages differently
-        let albums_page = libadwaita::gtk::Label::new(Some("Albums"));
-        tab_view.append(&albums_page.upcast::<libadwaita::gtk::Widget>());
-        
-        let artists_page = libadwaita::gtk::Label::new(Some("Artists"));
-        tab_view.append(&artists_page.upcast::<libadwaita::gtk::Widget>());
-        
+        let albums_page = Label::new(Some("Albums"));
+        tab_view.append(&albums_page.upcast::<Widget>());
+
+        let artists_page = Label::new(Some("Artists"));
+        tab_view.append(&artists_page.upcast::<Widget>());
+
         widget.set_title_widget(Some(&tab_view));
 
         Self {
@@ -73,19 +77,31 @@ impl HeaderBar {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use libadwaita::{init, prelude::ButtonExt};
+
+    use crate::ui::header_bar::HeaderBar;
 
     #[test]
     fn test_header_bar_creation() {
         // Skip this test if we can't initialize GTK (e.g., in CI environments)
-        if libadwaita::gtk::init().is_err() {
+        if init().is_err() {
             return;
         }
-        
+
         let header_bar = HeaderBar::new();
+
         // Check icon names without requiring widget realization
-        assert_eq!(header_bar.search_button.icon_name().as_deref(), Some("system-search-symbolic"));
-        assert_eq!(header_bar.view_toggle.icon_name().as_deref(), Some("view-grid-symbolic"));
-        assert_eq!(header_bar.settings_button.icon_name().as_deref(), Some("preferences-system-symbolic"));
+        assert_eq!(
+            header_bar.search_button.icon_name().as_deref(),
+            Some("system-search-symbolic")
+        );
+        assert_eq!(
+            header_bar.view_toggle.icon_name().as_deref(),
+            Some("view-grid-symbolic")
+        );
+        assert_eq!(
+            header_bar.settings_button.icon_name().as_deref(),
+            Some("preferences-system-symbolic")
+        );
     }
 }

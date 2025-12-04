@@ -3,23 +3,35 @@
 //! This module handles audio file format detection, decoding, and provides
 //! decoded audio samples to the output system via ring buffers.
 
-use std::path::Path;
-
-use rtrb::Producer;
-use symphonia::{
-    core::{
-        audio::{AudioBufferRef, Signal},
-        codecs::{CODEC_TYPE_NULL, DecoderOptions},
-        errors::Error as SymphoniaError,
-        formats::{FormatOptions, FormatReader, SeekMode, SeekTo},
-        io::MediaSourceStream,
-        meta::MetadataOptions,
-        probe::Hint,
-        units::Time,
-    },
-    default::{get_codecs, get_probe},
+use std::{
+    fs::File,
+    io::{Error as StdError, ErrorKind::InvalidData},
+    path::Path,
+    thread::sleep,
+    time::Duration,
 };
-use thiserror::Error;
+
+use {
+    rtrb::{Producer, PushError::Full},
+    serde::{Deserialize, Serialize},
+    symphonia::{
+        core::{
+            audio::{
+                AudioBufferRef::{self, F32, U16, U24, U32},
+                Signal,
+            },
+            codecs::{CODEC_TYPE_NULL, Decoder, DecoderOptions},
+            errors::Error as SymphoniaError,
+            formats::{FormatOptions, FormatReader, SeekMode::Accurate, SeekTo::Time},
+            io::MediaSourceStream,
+            meta::MetadataOptions,
+            probe::Hint,
+            units::Time as OtherTime,
+        },
+        default::{get_codecs, get_probe},
+    },
+    thiserror::Error,
+};
 
 use crate::audio::metadata::{TagReader, TechnicalMetadata};
 
@@ -28,7 +40,7 @@ use crate::audio::metadata::{TagReader, TechnicalMetadata};
 pub enum DecoderError {
     /// Failed to open or read the audio file.
     #[error("IO error: {0}")]
-    IoError(#[from] std::io::Error),
+    IoError(#[from] StdError),
     /// Symphonia decoding error.
     #[error("Decoding error: {0}")]
     SymphoniaError(#[from] SymphoniaError),
@@ -44,7 +56,7 @@ pub enum DecoderError {
 }
 
 /// Audio format information extracted during decoding setup.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AudioFormat {
     /// Sample rate in Hz.
     pub sample_rate: u32,
@@ -64,7 +76,7 @@ pub struct AudioDecoder {
     /// The underlying format reader.
     format_reader: Box<dyn FormatReader>,
     /// The active audio decoder.
-    decoder: Option<Box<dyn symphonia::core::codecs::Decoder>>,
+    decoder: Option<Box<dyn Decoder>>,
     /// The active audio track index.
     track_index: usize,
     /// Audio format information.
@@ -92,14 +104,14 @@ impl AudioDecoder {
     /// - No audio track is found in the file
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, DecoderError> {
         let path = path.as_ref();
-        
+
         // Extract technical metadata first
         let technical_metadata = TagReader::read_metadata(path)
-            .map_err(|e| DecoderError::IoError(std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string())))?
+            .map_err(|e| DecoderError::IoError(StdError::new(InvalidData, e.to_string())))?
             .technical;
 
         // Create media source stream
-        let file = std::fs::File::open(path)?;
+        let file = File::open(path)?;
         let mss = MediaSourceStream::new(Box::new(file), Default::default());
 
         // Create format hint
@@ -113,7 +125,8 @@ impl AudioDecoder {
         let metadata_opts: MetadataOptions = Default::default();
         let probe = get_probe();
 
-        let probed = probe.format(&hint, mss, &format_opts, &metadata_opts)
+        let probed = probe
+            .format(&hint, mss, &format_opts, &metadata_opts)
             .map_err(DecoderError::SymphoniaError)?;
 
         let mut format_reader = probed.format;
@@ -127,7 +140,13 @@ impl AudioDecoder {
 
         // Select the audio track
         format_reader
-            .seek(SeekMode::Accurate, SeekTo::Time { time: Time::new(0, 0.0), track_id: None })
+            .seek(
+                Accurate,
+                Time {
+                    time: OtherTime::new(0, 0.0),
+                    track_id: None,
+                },
+            )
             .map_err(DecoderError::SymphoniaError)?;
 
         let track = &format_reader.tracks()[track_index];
@@ -141,7 +160,8 @@ impl AudioDecoder {
         };
 
         // Create decoder
-        let decoder = get_codecs().make(codec_params, &DecoderOptions::default())
+        let decoder = get_codecs()
+            .make(codec_params, &DecoderOptions::default())
             .map_err(DecoderError::SymphoniaError)?;
 
         Ok(AudioDecoder {
@@ -174,26 +194,29 @@ impl AudioDecoder {
 
                     // Decode the packet
                     if let Some(ref mut decoder) = self.decoder {
-                        let decoded = decoder.decode(&packet)
+                        let decoded = decoder
+                            .decode(&packet)
                             .map_err(DecoderError::SymphoniaError)?;
-                        
+
                         return Ok(Some(decoded));
                     } else {
-                        return Err(DecoderError::SymphoniaError(SymphoniaError::Unsupported("No decoder available")));
+                        return Err(DecoderError::SymphoniaError(SymphoniaError::Unsupported(
+                            "No decoder available",
+                        )));
                     }
                 }
-                Err(symphonia::core::errors::Error::IoError(e)) => {
+                Err(SymphoniaError::IoError(e)) => {
                     return Err(DecoderError::IoError(e));
                 }
-                Err(symphonia::core::errors::Error::ResetRequired) => {
+                Err(SymphoniaError::ResetRequired) => {
                     // Try to reset the decoder - not directly supported, skip for now
                     continue;
                 }
-                Err(symphonia::core::errors::Error::DecodeError(_)) => {
+                Err(SymphoniaError::DecodeError(_)) => {
                     // Skip corrupted packets and continue
                     continue;
                 }
-                Err(symphonia::core::errors::Error::SeekError(_)) => {
+                Err(SymphoniaError::SeekError(_)) => {
                     // End of file reached
                     return Ok(None);
                 }
@@ -218,8 +241,15 @@ impl AudioDecoder {
     ///
     /// Returns `DecoderError` if seeking fails.
     pub fn seek(&mut self, position_ms: u64) -> Result<(), DecoderError> {
-        let time = Time::new((position_ms / 1000) as u64, ((position_ms % 1000) as f64) / 1000.0);
-        self.format_reader.seek(SeekMode::Accurate, SeekTo::Time { time, track_id: None })
+        let time = OtherTime::new(position_ms / 1000, ((position_ms % 1000) as f64) / 1000.0);
+        self.format_reader
+            .seek(
+                Accurate,
+                Time {
+                    time,
+                    track_id: None,
+                },
+            )
             .map_err(DecoderError::SymphoniaError)?;
         Ok(())
     }
@@ -279,32 +309,37 @@ impl AudioProducer {
                 Some(buffer) => {
                     // Convert audio buffer to f32 samples
                     let samples = match buffer {
-                        AudioBufferRef::F32(buf) => {
-                            buf.chan(0).to_vec()
-                        }
-                        AudioBufferRef::U16(buf) => {
-                            buf.chan(0).iter().map(|&sample| sample as f32 / 65535.0).collect()
-                        }
-                        AudioBufferRef::U24(buf) => {
+                        F32(buf) => buf.chan(0).to_vec(),
+                        U16(buf) => buf
+                            .chan(0)
+                            .iter()
+                            .map(|&sample| sample as f32 / 65535.0)
+                            .collect(),
+                        U24(buf) => {
                             // Handle u24 properly by converting to f32
                             // u24 samples are stored as 32-bit integers with the upper 8 bits unused
-                            buf.chan(0).iter().map(|&sample| {
-                                // Extract the lower 24 bits and normalize to [-1.0, 1.0]
-                                let sample_u32 = sample.0;
-                                let sample_24 = sample_u32 & 0x00FFFFFF;
-                                if sample_24 & 0x00800000 != 0 {
-                                    // Negative number (sign bit set)
-                                    let signed_sample = sample_24 as i32 - 0x01000000;
-                                    signed_sample as f32 / 8388608.0
-                                } else {
-                                    // Positive number
-                                    sample_24 as f32 / 8388607.0
-                                }
-                            }).collect()
+                            buf.chan(0)
+                                .iter()
+                                .map(|&sample| {
+                                    // Extract the lower 24 bits and normalize to [-1.0, 1.0]
+                                    let sample_u32 = sample.0;
+                                    let sample_24 = sample_u32 & 0x00FFFFFF;
+                                    if sample_24 & 0x00800000 != 0 {
+                                        // Negative number (sign bit set)
+                                        let signed_sample = sample_24 as i32 - 0x01000000;
+                                        signed_sample as f32 / 8388608.0
+                                    } else {
+                                        // Positive number
+                                        sample_24 as f32 / 8388607.0
+                                    }
+                                })
+                                .collect()
                         }
-                        AudioBufferRef::U32(buf) => {
-                            buf.chan(0).iter().map(|&sample| sample as f32 / 4294967295.0).collect()
-                        }
+                        U32(buf) => buf
+                            .chan(0)
+                            .iter()
+                            .map(|&sample| sample as f32 / 4294967295.0)
+                            .collect(),
                         _ => return Err(DecoderError::UnsupportedFormat),
                     };
 
@@ -313,9 +348,9 @@ impl AudioProducer {
                         loop {
                             match self.producer.push(sample) {
                                 Ok(()) => break,
-                                Err(rtrb::PushError::Full(_)) => {
+                                Err(Full(_)) => {
                                     // Buffer is full, wait a bit and retry
-                                    std::thread::sleep(std::time::Duration::from_micros(100));
+                                    sleep(Duration::from_micros(100));
                                 }
                             }
                         }
@@ -333,11 +368,13 @@ impl AudioProducer {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::io::{Error, ErrorKind::NotFound};
+
+    use crate::audio::decoder::{AudioFormat, DecoderError};
 
     #[test]
     fn test_decoder_error_display() {
-        let io_error = std::io::Error::new(std::io::ErrorKind::NotFound, "File not found");
+        let io_error = Error::new(NotFound, "File not found");
         let decoder_error = DecoderError::IoError(io_error);
         assert!(decoder_error.to_string().contains("IO error"));
 

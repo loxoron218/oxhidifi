@@ -3,24 +3,33 @@
 //! This module provides the main `AudioEngine` that coordinates the audio
 //! decoder, output, and playback state management for high-fidelity playback.
 
-use std::path::Path;
-use std::sync::{Arc, RwLock};
-use cpal::traits::StreamTrait;
-use std::thread;
+use std::{
+    path::Path,
+    sync::{Arc, RwLock},
+    thread::{JoinHandle, spawn},
+};
 
-use async_channel::{Receiver, Sender};
-use parking_lot::RwLock as ParkingRwLock;
-use rtrb::RingBuffer;
-use tokio::sync::broadcast;
+use {
+    async_channel::{Receiver, Sender, unbounded},
+    cpal::{Stream, traits::StreamTrait},
+    parking_lot::RwLock as ParkingRwLock,
+    rtrb::RingBuffer,
+    serde::{Deserialize, Serialize},
+    thiserror::Error,
+    tokio::{
+        runtime::Builder,
+        sync::broadcast::{Receiver as TokioReceiver, Sender as TokioSender, channel},
+    },
+};
 
 use crate::audio::{
-    decoder::{AudioDecoder, AudioProducer},
-    metadata::TagReader,
-    output::{AudioConsumer, AudioOutput, OutputConfig},
+    decoder::{AudioDecoder, AudioFormat, AudioProducer, DecoderError},
+    metadata::{MetadataError, TagReader, TrackMetadata},
+    output::{AudioConsumer, AudioOutput, OutputConfig, OutputError},
 };
 
 /// Current playback state.
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum PlaybackState {
     /// No track is loaded or playing.
     Stopped,
@@ -35,30 +44,30 @@ pub enum PlaybackState {
 }
 
 /// Information about the currently loaded track.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TrackInfo {
     /// Path to the audio file.
     pub path: String,
     /// Extracted metadata.
-    pub metadata: crate::audio::metadata::TrackMetadata,
+    pub metadata: TrackMetadata,
     /// Audio format information.
-    pub format: crate::audio::decoder::AudioFormat,
+    pub format: AudioFormat,
     /// Duration in milliseconds.
     pub duration_ms: u64,
 }
 
 /// Error type for audio engine operations.
-#[derive(thiserror::Error, Debug)]
+#[derive(Error, Debug)]
 pub enum AudioError {
     /// Decoder error.
     #[error("Decoder error: {0}")]
-    DecoderError(#[from] crate::audio::decoder::DecoderError),
+    DecoderError(#[from] DecoderError),
     /// Output error.
     #[error("Output error: {0}")]
-    OutputError(#[from] crate::audio::output::OutputError),
+    OutputError(#[from] OutputError),
     /// Metadata error.
     #[error("Metadata error: {0}")]
-    MetadataError(#[from] crate::audio::metadata::MetadataError),
+    MetadataError(#[from] MetadataError),
     /// Invalid operation for current state.
     #[error("Invalid operation: {reason}")]
     InvalidOperation { reason: String },
@@ -79,7 +88,7 @@ pub struct AudioEngine {
     /// Audio output configuration.
     output_config: OutputConfig,
     /// Broadcast channel for state change notifications.
-    state_tx: broadcast::Sender<PlaybackState>,
+    state_tx: TokioSender<PlaybackState>,
     /// Receiver for internal control messages.
     control_rx: Receiver<ControlMessage>,
     /// Sender for internal control messages.
@@ -100,9 +109,9 @@ enum ControlMessage {
 /// Handle to a running audio stream.
 struct StreamHandle {
     /// The CPAL audio stream.
-    stream: cpal::Stream,
+    stream: Stream,
     /// Join handle for the decoder thread.
-    decoder_handle: Option<thread::JoinHandle<Result<(), crate::audio::decoder::DecoderError>>>,
+    decoder_handle: Option<JoinHandle<Result<(), DecoderError>>>,
 }
 
 impl AudioEngine {
@@ -116,8 +125,8 @@ impl AudioEngine {
     ///
     /// Returns `AudioError` if initialization fails.
     pub fn new() -> Result<Self, AudioError> {
-        let (state_tx, _) = broadcast::channel(16);
-        let (control_tx, control_rx) = async_channel::unbounded();
+        let (state_tx, _) = channel(16);
+        let (control_tx, control_rx) = unbounded();
 
         let engine = AudioEngine {
             state: Arc::new(ParkingRwLock::new(PlaybackState::Stopped)),
@@ -131,7 +140,7 @@ impl AudioEngine {
 
         // Start the control loop in a background thread
         let engine_clone = engine.clone();
-        thread::spawn(move || {
+        spawn(move || {
             engine_clone.control_loop();
         });
 
@@ -153,14 +162,16 @@ impl AudioEngine {
     /// Returns `AudioError` if the track cannot be loaded or metadata extracted.
     pub async fn load_track<P: AsRef<Path>>(&self, track_path: P) -> Result<(), AudioError> {
         let path = track_path.as_ref();
-        
+
         // Extract metadata
         let metadata = TagReader::read_metadata(path)?;
-        
+
         // Create decoder to get format info
         let decoder = AudioDecoder::new(path)?;
-        let duration_ms = decoder.duration_ms().unwrap_or(metadata.technical.duration_ms);
-        
+        let duration_ms = decoder
+            .duration_ms()
+            .unwrap_or(metadata.technical.duration_ms);
+
         let track_info = TrackInfo {
             path: path.to_string_lossy().to_string(),
             metadata,
@@ -189,9 +200,11 @@ impl AudioEngine {
             return Err(AudioError::NoTrackLoaded);
         }
 
-        self.control_tx.send(ControlMessage::Play).await
-            .map_err(|e| AudioError::InvalidOperation { 
-                reason: format!("Failed to send play command: {}", e) 
+        self.control_tx
+            .send(ControlMessage::Play)
+            .await
+            .map_err(|e| AudioError::InvalidOperation {
+                reason: format!("Failed to send play command: {}", e),
             })?;
 
         Ok(())
@@ -209,14 +222,16 @@ impl AudioEngine {
     pub async fn pause(&self) -> Result<(), AudioError> {
         let state = self.state.read().clone();
         if matches!(state, PlaybackState::Stopped | PlaybackState::Ready) {
-            return Err(AudioError::InvalidOperation { 
-                reason: "Cannot pause when not playing".to_string() 
+            return Err(AudioError::InvalidOperation {
+                reason: "Cannot pause when not playing".to_string(),
             });
         }
 
-        self.control_tx.send(ControlMessage::Pause).await
-            .map_err(|e| AudioError::InvalidOperation { 
-                reason: format!("Failed to send pause command: {}", e) 
+        self.control_tx
+            .send(ControlMessage::Pause)
+            .await
+            .map_err(|e| AudioError::InvalidOperation {
+                reason: format!("Failed to send pause command: {}", e),
             })?;
 
         Ok(())
@@ -234,14 +249,16 @@ impl AudioEngine {
     pub async fn resume(&self) -> Result<(), AudioError> {
         let state = self.state.read().clone();
         if !matches!(state, PlaybackState::Paused) {
-            return Err(AudioError::InvalidOperation { 
-                reason: "Cannot resume when not paused".to_string() 
+            return Err(AudioError::InvalidOperation {
+                reason: "Cannot resume when not paused".to_string(),
             });
         }
 
-        self.control_tx.send(ControlMessage::Play).await
-            .map_err(|e| AudioError::InvalidOperation { 
-                reason: format!("Failed to send resume command: {}", e) 
+        self.control_tx
+            .send(ControlMessage::Play)
+            .await
+            .map_err(|e| AudioError::InvalidOperation {
+                reason: format!("Failed to send resume command: {}", e),
             })?;
 
         Ok(())
@@ -253,9 +270,11 @@ impl AudioEngine {
     ///
     /// A `Result` indicating success or failure.
     pub async fn stop(&self) -> Result<(), AudioError> {
-        self.control_tx.send(ControlMessage::Stop).await
-            .map_err(|e| AudioError::InvalidOperation { 
-                reason: format!("Failed to send stop command: {}", e) 
+        self.control_tx
+            .send(ControlMessage::Stop)
+            .await
+            .map_err(|e| AudioError::InvalidOperation {
+                reason: format!("Failed to send stop command: {}", e),
             })?;
 
         Ok(())
@@ -279,9 +298,11 @@ impl AudioEngine {
             return Err(AudioError::NoTrackLoaded);
         }
 
-        self.control_tx.send(ControlMessage::Seek(position_ms)).await
-            .map_err(|e| AudioError::InvalidOperation { 
-                reason: format!("Failed to send seek command: {}", e) 
+        self.control_tx
+            .send(ControlMessage::Seek(position_ms))
+            .await
+            .map_err(|e| AudioError::InvalidOperation {
+                reason: format!("Failed to send seek command: {}", e),
             })?;
 
         Ok(())
@@ -310,7 +331,7 @@ impl AudioEngine {
     /// # Returns
     ///
     /// A `broadcast::Receiver` that receives `PlaybackState` updates.
-    pub fn subscribe_to_state_changes(&self) -> broadcast::Receiver<PlaybackState> {
+    pub fn subscribe_to_state_changes(&self) -> TokioReceiver<PlaybackState> {
         self.state_tx.subscribe()
     }
 
@@ -331,7 +352,7 @@ impl AudioEngine {
 
     /// Main control loop that processes commands and manages playback.
     fn control_loop(&self) {
-        tokio::runtime::Builder::new_current_thread()
+        Builder::new_current_thread()
             .enable_all()
             .build()
             .unwrap()
@@ -365,7 +386,10 @@ impl AudioEngine {
 
     /// Handles the play command.
     async fn handle_play(&self) -> Result<(), AudioError> {
-        let track_info = self.current_track.read().clone()
+        let track_info = self
+            .current_track
+            .read()
+            .clone()
             .ok_or(AudioError::NoTrackLoaded)?;
 
         // Stop any existing playback
@@ -377,26 +401,27 @@ impl AudioEngine {
 
         // Create audio output
         let output = AudioOutput::new(Some(self.output_config.clone()))?;
-        
+
         // Create audio consumer
         let consumer = AudioConsumer::new(output, consumer, &track_info.format)?;
-        
+
         // Create audio producer
         let decoder = AudioDecoder::new(&track_info.path)?;
         let producer = AudioProducer::new(decoder, producer);
-        
+
         // Start decoder thread
-        let decoder_handle = thread::spawn(move || {
-            producer.run()
-        });
+        let decoder_handle = spawn(move || producer.run());
 
         // Start audio stream
         let stream = consumer.run(&track_info.format)?;
-        
+
         // Store stream handle
-        *self.stream_handle.write().map_err(|e| AudioError::InvalidOperation {
-            reason: format!("Failed to acquire stream handle lock: {}", e)
-        })? = Some(StreamHandle {
+        *self
+            .stream_handle
+            .write()
+            .map_err(|e| AudioError::InvalidOperation {
+                reason: format!("Failed to acquire stream handle lock: {}", e),
+            })? = Some(StreamHandle {
             stream,
             decoder_handle: Some(decoder_handle),
         });
@@ -412,7 +437,7 @@ impl AudioEngine {
         // For now, we'll just stop the stream and keep the track loaded
         // In a more sophisticated implementation, we'd actually pause the stream
         self.stop_stream().await;
-        
+
         *self.state.write() = PlaybackState::Paused;
         self.notify_state_change();
 
@@ -422,7 +447,7 @@ impl AudioEngine {
     /// Handles the stop command.
     async fn handle_stop(&self) -> Result<(), AudioError> {
         self.stop_stream().await;
-        
+
         *self.state.write() = PlaybackState::Stopped;
         *self.current_track.write() = None;
         self.notify_state_change();
@@ -436,14 +461,14 @@ impl AudioEngine {
         // A more sophisticated implementation would seek within the current stream
         let current_state = self.state.read().clone();
         let was_playing = matches!(current_state, PlaybackState::Playing);
-        
+
         self.stop_stream().await;
-        
+
         if let Some(track_info) = self.current_track.read().clone() {
             // Create new decoder and seek
             let mut decoder = AudioDecoder::new(&track_info.path)?;
             decoder.seek(position_ms)?;
-            
+
             // Recreate the playback stream
             let buffer_size = 4096;
             let (producer, consumer) = RingBuffer::<f32>::new(buffer_size);
@@ -451,16 +476,17 @@ impl AudioEngine {
             let output = AudioOutput::new(Some(self.output_config.clone()))?;
             let consumer = AudioConsumer::new(output, consumer, &track_info.format)?;
             let producer = AudioProducer::new(decoder, producer);
-            
-            let decoder_handle = thread::spawn(move || {
-                producer.run()
-            });
+
+            let decoder_handle = spawn(move || producer.run());
 
             let stream = consumer.run(&track_info.format)?;
-            
-            *self.stream_handle.write().map_err(|e| AudioError::InvalidOperation {
-                reason: format!("Failed to acquire stream handle lock: {}", e)
-            })? = Some(StreamHandle {
+
+            *self
+                .stream_handle
+                .write()
+                .map_err(|e| AudioError::InvalidOperation {
+                    reason: format!("Failed to acquire stream handle lock: {}", e),
+                })? = Some(StreamHandle {
                 stream,
                 decoder_handle: Some(decoder_handle),
             });
@@ -481,7 +507,7 @@ impl AudioEngine {
         if let Some(mut handle) = self.stream_handle.write().ok().and_then(|mut h| h.take()) {
             // Stop the stream
             let _ = handle.stream.pause();
-            
+
             // Wait for decoder thread to finish
             if let Some(decoder_handle) = handle.decoder_handle.take() {
                 let _ = decoder_handle.join();
@@ -498,7 +524,9 @@ impl AudioEngine {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use serde_json::{from_str, to_string};
+
+    use crate::{audio::engine::PlaybackState, error::AudioError};
 
     #[test]
     fn test_playback_state_serialization() {
@@ -511,8 +539,8 @@ mod tests {
         ];
 
         for state in states {
-            let serialized = serde_json::to_string(&state).unwrap();
-            let deserialized: PlaybackState = serde_json::from_str(&serialized).unwrap();
+            let serialized = to_string(&state).unwrap();
+            let deserialized: PlaybackState = from_str(&serialized).unwrap();
             assert_eq!(state, deserialized);
         }
     }
@@ -521,10 +549,13 @@ mod tests {
     fn test_audio_error_display() {
         let no_track_error = AudioError::NoTrackLoaded;
         assert_eq!(no_track_error.to_string(), "No track loaded");
-        
-        let invalid_op_error = AudioError::InvalidOperation { 
-            reason: "test reason".to_string() 
+
+        let invalid_op_error = AudioError::InvalidOperation {
+            reason: "test reason".to_string(),
         };
-        assert_eq!(invalid_op_error.to_string(), "Invalid operation: test reason");
+        assert_eq!(
+            invalid_op_error.to_string(),
+            "Invalid operation: test reason"
+        );
     }
 }

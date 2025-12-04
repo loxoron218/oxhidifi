@@ -3,10 +3,21 @@
 //! This module implements the `OxhidifiApplication` which serves as the
 //! main entry point for the Libadwaita-based user interface.
 
-use std::sync::Arc;
+use std::{error::Error, sync::Arc};
 
-use libadwaita::gtk::prelude::*;
-use libadwaita::prelude::*;
+use libadwaita::{
+    Application, ApplicationWindow, HeaderBar, TabView,
+    gtk::{
+        Align::{Center, Start},
+        Box as GtkBox, Button, Label,
+        Orientation::{Horizontal, Vertical},
+        Picture, Scale, ToggleButton, Widget,
+    },
+    prelude::{
+        AdwApplicationWindowExt, ApplicationExt, ApplicationExtManual, BoxExt, Cast, GtkWindowExt,
+        RangeExt,
+    },
+};
 
 use crate::{
     audio::engine::AudioEngine,
@@ -22,7 +33,7 @@ use crate::{
 /// different UI components.
 pub struct OxhidifiApplication {
     /// The main application instance.
-    pub app: libadwaita::Application,
+    pub app: Application,
     /// Audio engine for playback functionality.
     pub audio_engine: Arc<AudioEngine>,
     /// Library database for music library operations.
@@ -43,15 +54,15 @@ impl OxhidifiApplication {
     /// # Errors
     ///
     /// Returns an error if audio engine, library database, or settings initialization fails.
-    pub async fn new() -> Result<Self, Box<dyn std::error::Error>> {
+    pub async fn new() -> Result<Self, Box<dyn Error>> {
         // Initialize settings
-        let settings = SettingsManager::new()
-            .map_err(|e| format!("Failed to initialize settings: {}", e))?;
-        
+        let settings =
+            SettingsManager::new().map_err(|e| format!("Failed to initialize settings: {}", e))?;
+
         // Initialize audio engine
-        let audio_engine = AudioEngine::new()
-            .map_err(|e| format!("Failed to initialize audio engine: {}", e))?;
-        
+        let audio_engine =
+            AudioEngine::new().map_err(|e| format!("Failed to initialize audio engine: {}", e))?;
+
         // Initialize library database
         let library_db = LibraryDatabase::new()
             .await
@@ -60,7 +71,7 @@ impl OxhidifiApplication {
         // Create application state
         let app_state = AppState::new(Arc::downgrade(&Arc::new(audio_engine.clone())));
 
-        let app = libadwaita::Application::builder()
+        let app = Application::builder()
             .application_id("com.example.oxhidifi")
             .build();
 
@@ -83,9 +94,15 @@ impl OxhidifiApplication {
             let library_db_clone = self.library_db.clone();
             let app_state_clone = self.app_state.clone();
             let settings_clone = self.settings.get_settings().clone();
-            
+
             move |_| {
-                build_ui(&app_clone, &audio_engine_clone, &library_db_clone, &app_state_clone, &settings_clone);
+                build_ui(
+                    &app_clone,
+                    &audio_engine_clone,
+                    &library_db_clone,
+                    &app_state_clone,
+                    &settings_clone,
+                );
             }
         });
 
@@ -95,14 +112,14 @@ impl OxhidifiApplication {
 
 /// Builds the main user interface.
 fn build_ui(
-    app: &libadwaita::Application,
+    app: &Application,
     _audio_engine: &Arc<AudioEngine>,
     _library_db: &Arc<LibraryDatabase>,
     app_state: &Arc<AppState>,
     settings: &UserSettings,
 ) {
     // Create the main window
-    let window = libadwaita::ApplicationWindow::builder()
+    let window = ApplicationWindow::builder()
         .application(app)
         .title("Oxhidifi")
         .default_width(1200)
@@ -111,34 +128,32 @@ fn build_ui(
 
     // Create header bar
     let header_bar = create_header_bar(settings);
-    
+
     // Create main content area
-    let main_content = libadwaita::gtk::Box::builder()
-        .orientation(libadwaita::gtk::Orientation::Vertical)
+    let main_content = GtkBox::builder()
+        .orientation(Vertical)
         .spacing(12)
         .margin_top(12)
         .margin_bottom(12)
         .margin_start(12)
         .margin_end(12)
         .build();
-    
+
     // Add placeholder content
-    let placeholder_label = libadwaita::gtk::Label::builder()
+    let placeholder_label = Label::builder()
         .label("Welcome to Oxhidifi - High-Fidelity Music Player")
-        .halign(libadwaita::gtk::Align::Center)
-        .valign(libadwaita::gtk::Align::Center)
+        .halign(Center)
+        .valign(Center)
         .build();
-    
+
     main_content.append(&placeholder_label);
 
     // Create player bar
     let player_bar = create_player_bar(app_state);
 
     // Assemble the main layout
-    let main_box = libadwaita::gtk::Box::builder()
-        .orientation(libadwaita::gtk::Orientation::Vertical)
-        .build();
-    
+    let main_box = GtkBox::builder().orientation(Vertical).build();
+
     main_box.append(&header_bar);
     main_box.append(&main_content);
     main_box.append(&player_bar);
@@ -149,11 +164,11 @@ fn build_ui(
 }
 
 /// Creates the application header bar.
-fn create_header_bar(settings: &UserSettings) -> libadwaita::HeaderBar {
-    let header_bar = libadwaita::HeaderBar::builder().build();
+fn create_header_bar(settings: &UserSettings) -> HeaderBar {
+    let header_bar = HeaderBar::builder().build();
 
     // Search button (placeholder)
-    let search_button = libadwaita::gtk::ToggleButton::builder()
+    let search_button = ToggleButton::builder()
         .icon_name("system-search-symbolic")
         .tooltip_text("Search")
         .build();
@@ -165,38 +180,38 @@ fn create_header_bar(settings: &UserSettings) -> libadwaita::HeaderBar {
     } else {
         "view-grid-symbolic"
     };
-    let view_toggle = libadwaita::gtk::ToggleButton::builder()
+    let view_toggle = ToggleButton::builder()
         .icon_name(view_toggle_icon)
         .tooltip_text("Toggle View")
         .build();
     header_bar.pack_start(&view_toggle);
 
     // Settings button (placeholder)
-    let settings_button = libadwaita::gtk::Button::builder()
+    let settings_button = Button::builder()
         .icon_name("preferences-system-symbolic")
         .tooltip_text("Settings")
         .build();
     header_bar.pack_end(&settings_button);
 
     // Tab navigation (placeholder)
-    let tab_view = libadwaita::TabView::builder().build();
-    
+    let tab_view = TabView::builder().build();
+
     // TabPage doesn't have a new() constructor, create pages differently
-    let albums_page = libadwaita::gtk::Label::new(Some("Albums"));
-    tab_view.append(&albums_page.upcast::<libadwaita::gtk::Widget>());
-    
-    let artists_page = libadwaita::gtk::Label::new(Some("Artists"));
-    tab_view.append(&artists_page.upcast::<libadwaita::gtk::Widget>());
-    
+    let albums_page = Label::new(Some("Albums"));
+    tab_view.append(&albums_page.upcast::<Widget>());
+
+    let artists_page = Label::new(Some("Artists"));
+    tab_view.append(&artists_page.upcast::<Widget>());
+
     header_bar.set_title_widget(Some(&tab_view));
 
     header_bar
 }
 
 /// Creates the persistent player control bar.
-fn create_player_bar(_app_state: &Arc<AppState>) -> libadwaita::gtk::Box {
-    let player_bar = libadwaita::gtk::Box::builder()
-        .orientation(libadwaita::gtk::Orientation::Horizontal)
+fn create_player_bar(_app_state: &Arc<AppState>) -> GtkBox {
+    let player_bar = GtkBox::builder()
+        .orientation(Horizontal)
         .spacing(12)
         .margin_top(6)
         .margin_bottom(6)
@@ -206,64 +221,61 @@ fn create_player_bar(_app_state: &Arc<AppState>) -> libadwaita::gtk::Box {
         .build();
 
     // Album artwork placeholder
-    let artwork = libadwaita::gtk::Picture::builder()
+    let artwork = Picture::builder()
         .width_request(48)
         .height_request(48)
         .build();
     player_bar.append(&artwork);
 
     // Track info placeholder
-    let track_info = libadwaita::gtk::Box::builder()
-        .orientation(libadwaita::gtk::Orientation::Vertical)
+    let track_info = GtkBox::builder()
+        .orientation(Vertical)
         .hexpand(true)
         .build();
-    
-    let title_label = libadwaita::gtk::Label::builder()
+
+    let title_label = Label::builder()
         .label("Track Title")
-        .halign(libadwaita::gtk::Align::Start)
+        .halign(Start)
         .xalign(0.0)
         .build();
     track_info.append(&title_label);
-    
-    let artist_label = libadwaita::gtk::Label::builder()
+
+    let artist_label = Label::builder()
         .label("Artist Name")
-        .halign(libadwaita::gtk::Align::Start)
+        .halign(Start)
         .xalign(0.0)
         .css_classes(vec!["dim-label".to_string()])
         .build();
     track_info.append(&artist_label);
-    
+
     player_bar.append(&track_info);
 
     // Player controls
-    let controls = libadwaita::gtk::Box::builder()
-        .orientation(libadwaita::gtk::Orientation::Horizontal)
-        .spacing(6)
-        .build();
-    
-    let prev_button = libadwaita::gtk::Button::builder()
+    let controls = GtkBox::builder().orientation(Horizontal).spacing(6).build();
+
+    let prev_button = Button::builder()
         .icon_name("media-skip-backward-symbolic")
         .tooltip_text("Previous")
         .build();
     controls.append(&prev_button);
-    
-    let play_button = libadwaita::gtk::ToggleButton::builder()
+
+    let play_button = ToggleButton::builder()
         .icon_name("media-playback-start-symbolic")
         .tooltip_text("Play")
         .build();
     controls.append(&play_button);
-    
-    let next_button = libadwaita::gtk::Button::builder()
+
+    let next_button = Button::builder()
         .icon_name("media-skip-forward-symbolic")
         .tooltip_text("Next")
         .build();
     controls.append(&next_button);
-    
+
     player_bar.append(&controls);
 
     // Volume control
-    let volume_scale = libadwaita::gtk::Scale::builder()
-        .orientation(libadwaita::gtk::Orientation::Horizontal)
+    let volume_scale = Scale::builder()
+        .orientation(Horizontal)
         .width_request(100)
         // Remove value() from builder, set it after creation
         .draw_value(false)

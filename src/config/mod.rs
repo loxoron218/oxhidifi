@@ -5,4 +5,4 @@
 
 pub mod settings;
 
-pub use settings::{get_cache_dir, get_config_path, SettingsError, SettingsManager, UserSettings};
+pub use settings::{SettingsError, SettingsManager, UserSettings, get_cache_dir, get_config_path};

@@ -3,8 +3,16 @@
 //! This module defines the SQLite database schema and provides schema
 //! versioning capabilities for future migrations.
 
-use sqlx::{sqlite::SqliteConnectOptions, SqlitePool};
-use thiserror::Error;
+use std::{fs::create_dir_all, path::PathBuf};
+
+use {
+    dirs::config_dir,
+    sqlx::{
+        SqlitePool, query, query_scalar,
+        sqlite::{SqliteConnectOptions, SqliteJournalMode::Wal, SqliteSynchronous::Normal},
+    },
+    thiserror::Error,
+};
 
 /// Error type for schema operations.
 #[derive(Error, Debug)]
@@ -53,7 +61,7 @@ impl SchemaManager {
     /// Returns `SchemaError` if schema initialization fails.
     pub async fn initialize_schema(&self) -> Result<(), SchemaError> {
         // Create schema version table if it doesn't exist
-        sqlx::query(
+        query(
             r#"
             CREATE TABLE IF NOT EXISTS schema_version (
                 version INTEGER NOT NULL
@@ -64,15 +72,16 @@ impl SchemaManager {
         .await?;
 
         // Check current schema version
-        let current_version: Option<i32> = sqlx::query_scalar("SELECT version FROM schema_version LIMIT 1")
-            .fetch_optional(&self.pool)
-            .await?;
+        let current_version: Option<i32> =
+            query_scalar("SELECT version FROM schema_version LIMIT 1")
+                .fetch_optional(&self.pool)
+                .await?;
 
         match current_version {
             None => {
                 // Fresh database, create all tables and set version
                 self.create_tables().await?;
-                sqlx::query("INSERT INTO schema_version (version) VALUES (?)")
+                query("INSERT INTO schema_version (version) VALUES (?)")
                     .bind(CURRENT_SCHEMA_VERSION)
                     .execute(&self.pool)
                     .await?;
@@ -102,7 +111,7 @@ impl SchemaManager {
     /// Returns `SchemaError` if table creation fails.
     async fn create_tables(&self) -> Result<(), SchemaError> {
         // Artists table
-        sqlx::query(
+        query(
             r#"
             CREATE TABLE artists (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -116,7 +125,7 @@ impl SchemaManager {
         .await?;
 
         // Albums table
-        sqlx::query(
+        query(
             r#"
             CREATE TABLE albums (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -138,7 +147,7 @@ impl SchemaManager {
         .await?;
 
         // Tracks table
-        sqlx::query(
+        query(
             r#"
             CREATE TABLE tracks (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -163,23 +172,23 @@ impl SchemaManager {
         .await?;
 
         // Create indexes for performance
-        sqlx::query("CREATE INDEX idx_artists_name ON artists (name)")
+        query("CREATE INDEX idx_artists_name ON artists (name)")
             .execute(&self.pool)
             .await?;
 
-        sqlx::query("CREATE INDEX idx_albums_artist_id ON albums (artist_id)")
+        query("CREATE INDEX idx_albums_artist_id ON albums (artist_id)")
             .execute(&self.pool)
             .await?;
 
-        sqlx::query("CREATE INDEX idx_albums_title ON albums (title)")
+        query("CREATE INDEX idx_albums_title ON albums (title)")
             .execute(&self.pool)
             .await?;
 
-        sqlx::query("CREATE INDEX idx_tracks_album_id ON tracks (album_id)")
+        query("CREATE INDEX idx_tracks_album_id ON tracks (album_id)")
             .execute(&self.pool)
             .await?;
 
-        sqlx::query("CREATE INDEX idx_tracks_path ON tracks (path)")
+        query("CREATE INDEX idx_tracks_path ON tracks (path)")
             .execute(&self.pool)
             .await?;
 
@@ -192,7 +201,7 @@ impl SchemaManager {
     ///
     /// The current schema version, or 0 if not initialized.
     pub async fn get_current_version(&self) -> Result<i32, SchemaError> {
-        let version: Option<i32> = sqlx::query_scalar("SELECT version FROM schema_version LIMIT 1")
+        let version: Option<i32> = query_scalar("SELECT version FROM schema_version LIMIT 1")
             .fetch_optional(&self.pool)
             .await?;
 
@@ -206,13 +215,13 @@ impl SchemaManager {
 ///
 /// The database connection string.
 pub fn get_database_url() -> String {
-    let mut config_dir = dirs::config_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
+    let mut config_dir = config_dir().unwrap_or_else(|| PathBuf::from("."));
     config_dir.push("oxhidifi");
     config_dir.push("library.db");
 
     // Create parent directories if they don't exist
     if let Some(parent) = config_dir.parent() {
-        std::fs::create_dir_all(parent).ok();
+        create_dir_all(parent).ok();
     }
 
     format!("sqlite://{}", config_dir.to_string_lossy())
@@ -229,12 +238,12 @@ pub fn get_database_url() -> String {
 /// Returns `SchemaError` if connection pool creation fails.
 pub async fn create_connection_pool() -> Result<SqlitePool, SchemaError> {
     let database_url = get_database_url();
-    
+
     let options = SqliteConnectOptions::new()
         .filename(database_url.replace("sqlite://", ""))
         .create_if_missing(true)
-        .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
-        .synchronous(sqlx::sqlite::SqliteSynchronous::Normal);
+        .journal_mode(Wal)
+        .synchronous(Normal);
 
     let pool = SqlitePool::connect_with(options).await?;
     Ok(pool)
@@ -242,7 +251,7 @@ pub async fn create_connection_pool() -> Result<SqlitePool, SchemaError> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::library::{CURRENT_SCHEMA_VERSION, schema::SchemaError};
 
     #[test]
     fn test_schema_version_constant() {
@@ -251,9 +260,12 @@ mod tests {
 
     #[test]
     fn test_schema_error_display() {
-        let migration_error = SchemaError::MigrationError { 
-            reason: "test error".to_string() 
+        let migration_error = SchemaError::MigrationError {
+            reason: "test error".to_string(),
         };
-        assert_eq!(migration_error.to_string(), "Schema migration error: test error");
+        assert_eq!(
+            migration_error.to_string(),
+            "Schema migration error: test error"
+        );
     }
 }

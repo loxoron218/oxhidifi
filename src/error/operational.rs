@@ -3,7 +3,12 @@
 //! This module provides extension traits and utilities for enhancing
 //! error context and centralized error reporting.
 
-use anyhow::{Context, Result as AnyhowResult};
+use std::{error::Error as StdError, fmt::Display};
+
+use {
+    anyhow::{Context, Error, Result as AnyhowResult},
+    tracing::{debug, error, info, warn},
+};
 
 /// Extension trait for enhanced error context.
 ///
@@ -13,25 +18,25 @@ pub trait ResultExt<T, E> {
     /// Adds context to an error with a static string.
     fn add_context(self, context: &'static str) -> AnyhowResult<T>
     where
-        E: std::error::Error + Send + Sync + 'static;
+        E: StdError + Send + Sync + 'static;
 
     /// Adds context to an error with a formatted string.
-    fn add_contextf(self, format: impl std::fmt::Display) -> AnyhowResult<T>
+    fn add_contextf(self, format: impl Display) -> AnyhowResult<T>
     where
-        E: std::error::Error + Send + Sync + 'static;
+        E: StdError + Send + Sync + 'static;
 }
 
 impl<T, E> ResultExt<T, E> for Result<T, E> {
     fn add_context(self, context: &'static str) -> AnyhowResult<T>
     where
-        E: std::error::Error + Send + Sync + 'static,
+        E: StdError + Send + Sync + 'static,
     {
         self.context(context)
     }
 
-    fn add_contextf(self, format: impl std::fmt::Display) -> AnyhowResult<T>
+    fn add_contextf(self, format: impl Display) -> AnyhowResult<T>
     where
-        E: std::error::Error + Send + Sync + 'static,
+        E: StdError + Send + Sync + 'static,
     {
         self.context(format.to_string())
     }
@@ -45,30 +50,30 @@ pub struct ErrorReporter;
 
 impl ErrorReporter {
     /// Reports a debug-level error (development only).
-    pub fn debug(error: &anyhow::Error, context: &str) {
-        tracing::debug!(context = context, error = %error, "Debug error");
+    pub fn debug(error: &Error, context: &str) {
+        debug!(context = context, error = %error, "Debug error");
     }
 
     /// Reports an info-level error (user actions and system events).
-    pub fn info(error: &anyhow::Error, context: &str) {
-        tracing::info!(context = context, error = %error, "Info error");
+    pub fn info(error: &Error, context: &str) {
+        info!(context = context, error = %error, "Info error");
     }
 
     /// Reports a warning-level error (recoverable issues).
-    pub fn warn(error: &anyhow::Error, context: &str) {
-        tracing::warn!(context = context, error = %error, "Warning error");
+    pub fn warn(error: &Error, context: &str) {
+        warn!(context = context, error = %error, "Warning error");
     }
 
     /// Reports an error-level error (non-recoverable issues).
-    pub fn error(error: &anyhow::Error, context: &str) {
-        tracing::error!(context = context, error = %error, "Error error");
+    pub fn error(error: &Error, context: &str) {
+        error!(context = context, error = %error, "Error error");
     }
 
     /// Converts an error to a user-friendly message.
     ///
     /// This method extracts the most relevant information from an error
     /// chain and formats it for display to end users.
-    pub fn to_user_message(error: &anyhow::Error) -> String {
+    pub fn to_user_message(error: &Error) -> String {
         // For now, just return the top-level error message
         // In a more sophisticated implementation, we'd have specific
         // user-friendly messages for different error types
@@ -78,25 +83,32 @@ impl ErrorReporter {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::{
+        error::Error,
+        fmt::{Display, Formatter, Result as FmtResult},
+    };
+
     use anyhow::anyhow;
+
+    use crate::error::operational::{ErrorReporter, ResultExt};
 
     #[test]
     fn test_result_ext_with_context() {
         #[derive(Debug)]
         struct TestError;
-        impl std::fmt::Display for TestError {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        impl Display for TestError {
+            fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
                 write!(f, "Test error")
             }
         }
-        impl std::error::Error for TestError {}
-        
+        impl Error for TestError {}
+
         let result: Result<i32, TestError> = Err(TestError);
         let with_context = result.add_context("Additional context");
-        
+
         assert!(with_context.is_err());
         let error = with_context.unwrap_err();
+
         // The error should contain the context, not necessarily the original error message
         assert!(error.to_string().contains("Additional context"));
     }
@@ -105,18 +117,19 @@ mod tests {
     fn test_result_ext_with_contextf() {
         #[derive(Debug)]
         struct TestError;
-        impl std::fmt::Display for TestError {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        impl Display for TestError {
+            fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
                 write!(f, "Test error")
             }
         }
-        impl std::error::Error for TestError {}
-        
+        impl Error for TestError {}
+
         let result: Result<i32, TestError> = Err(TestError);
         let with_context = result.add_contextf("Formatted context: test");
-        
+
         assert!(with_context.is_err());
         let error = with_context.unwrap_err();
+
         // The error should contain the context, not necessarily the original error message
         assert!(error.to_string().contains("Formatted context: test"));
     }
