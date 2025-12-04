@@ -12,12 +12,12 @@ pub use {
 };
 
 use std::{
-    path::{Path, PathBuf},
+    path::Path,
     sync::Arc,
 };
 
 use {
-    tracing::warn,
+    tracing::{debug, warn},
 };
 
 use crate::{

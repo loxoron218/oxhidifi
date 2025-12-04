@@ -24,16 +24,15 @@ use {
     async_channel::Sender,
     notify::{
         event::{EventKind, ModifyKind},
-        Config, Event, RecommendedWatcher, RecursiveMode,
+        Config, Event, RecommendedWatcher, RecursiveMode, Watcher,
     },
     parking_lot::RwLock,
     regex::Regex,
-    tracing::{debug, error, warn},
+    tracing::{debug, error},
 };
 
 use crate::{
     error::domain::LibraryError,
-    library::models::Track,
 };
 
 /// Supported audio file extensions for library monitoring.
@@ -100,14 +99,12 @@ impl FileWatcher {
             reason: format!("Failed to create file watcher: {}", e),
         })?;
 
-        // Apply configuration
-        if !config.include_hidden {
-            watcher
-                .configure(notify::Config::default().with_ignore_hidden(true))
-                .map_err(|e| LibraryError::InvalidData {
-                    reason: format!("Failed to configure watcher: {}", e),
-                })?;
-        }
+        // Apply configuration - hidden file handling is done in our event filter
+        watcher
+            .configure(Config::default())
+            .map_err(|e| LibraryError::InvalidData {
+                reason: format!("Failed to configure watcher: {}", e),
+            })?;
 
         let file_watcher = Self {
             _watcher: watcher,
@@ -169,6 +166,30 @@ impl FileWatcher {
                 error!("File system watcher error: {}", e);
             }
         }
+    }
+
+    /// Checks if a path is hidden (starts with a dot on Unix-like systems).
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - Path to check.
+    ///
+    /// # Returns
+    ///
+    /// `true` if the path is hidden, `false` otherwise.
+    fn is_hidden_path(path: &Path) -> bool {
+        path.components()
+            .any(|component| {
+                if let std::path::Component::Normal(os_str) = component {
+                    if let Some(name) = os_str.to_str() {
+                        name.starts_with('.')
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            })
     }
 
     /// Checks if a path corresponds to a supported audio file.

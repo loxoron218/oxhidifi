@@ -14,7 +14,6 @@ use crate::{
     error::domain::LibraryError,
     library::{
         database::LibraryDatabase,
-        models::{Album, Artist, Track},
     },
 };
 
@@ -36,7 +35,7 @@ use crate::{
 pub async fn handle_files_changed(
     paths: Vec<PathBuf>,
     database: &LibraryDatabase,
-    settings: &parking_lot::RwLock<crate::config::settings::UserSettings>,
+    _settings: &parking_lot::RwLock<crate::config::settings::UserSettings>,
 ) -> Result<(), LibraryError> {
     // Group files by album directory
     let mut files_by_album: HashMap<PathBuf, Vec<PathBuf>> = HashMap::new();

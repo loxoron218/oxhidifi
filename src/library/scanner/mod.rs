@@ -9,12 +9,12 @@ mod handlers;
 pub use config::ScannerConfig;
 
 use std::{
-    path::{Path, PathBuf},
+    path::Path,
     sync::Arc,
 };
 
 use {
-    async_channel::{bounded, Receiver, Sender},
+    async_channel::{bounded, Receiver},
     tokio::task::JoinHandle,
     tracing::{debug, error, warn},
 };
@@ -24,7 +24,7 @@ use crate::{
     error::domain::LibraryError,
     library::{
         database::LibraryDatabase,
-        file_watcher::{DebouncedEvent, DebouncedEventProcessor, FileWatcher, FileWatcherConfig},
+        file_watcher::{DebouncedEvent, DebouncedEventProcessor, FileWatcher},
     },
 };
 
@@ -72,8 +72,11 @@ impl LibraryScanner {
         let (raw_event_sender, raw_event_receiver) = bounded(100);
         let (debounced_event_sender, debounced_event_receiver) = bounded(50);
 
+        // Clone config for file watcher to avoid move/borrow issues
+        let file_watcher_config = config.file_watcher_config.clone();
+        
         // Create file watcher
-        let mut file_watcher = FileWatcher::new(raw_event_sender, Some(config.file_watcher_config))?;
+        let mut file_watcher = FileWatcher::new(raw_event_sender, Some(file_watcher_config))?;
 
         // Start watching configured library directories
         let library_dirs = settings.read().library_directories.clone();
@@ -120,7 +123,7 @@ impl LibraryScanner {
     /// This method processes debounced events and coordinates metadata extraction
     /// and database updates.
     async fn handle_debounced_events(
-        mut receiver: Receiver<DebouncedEvent>,
+        receiver: Receiver<DebouncedEvent>,
         database: Arc<LibraryDatabase>,
         settings: Arc<parking_lot::RwLock<UserSettings>>,
     ) {

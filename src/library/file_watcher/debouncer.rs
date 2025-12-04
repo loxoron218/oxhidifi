@@ -61,7 +61,7 @@ impl DebouncedEventProcessor {
     /// Starts the debounced event processing loop.
     ///
     /// This method should be run in a dedicated task/thread.
-    pub async fn start_processing(mut self) {
+    pub async fn start_processing(self) {
         let mut changed_files = Vec::new();
         let mut removed_files = Vec::new();
         let mut renamed_files = Vec::new();

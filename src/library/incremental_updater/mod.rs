@@ -9,7 +9,6 @@ mod handlers;
 pub use config::IncrementalUpdaterConfig;
 
 use std::{
-    path::{Path, PathBuf},
     sync::Arc,
 };
 
@@ -76,7 +75,7 @@ impl IncrementalUpdater {
             None
         };
 
-        let mut tasks = Vec::new();
+        let tasks = Vec::new();
 
         Ok(IncrementalUpdater {
             database,
@@ -112,7 +111,7 @@ impl IncrementalUpdater {
 
     /// Main event processing loop.
     async fn process_events_loop(
-        mut receiver: Receiver<DebouncedEvent>,
+        receiver: Receiver<DebouncedEvent>,
         database: Arc<LibraryDatabase>,
         dr_parser: Option<Arc<DrParser>>,
         settings: Arc<parking_lot::RwLock<UserSettings>>,

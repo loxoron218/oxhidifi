@@ -15,7 +15,6 @@ use crate::{
     library::{
         database::LibraryDatabase,
         dr_parser::DrParser,
-        models::{Album, Artist, Track},
     },
 };
 
@@ -71,7 +70,7 @@ pub async fn process_file_batch(
     batch: &[PathBuf],
     database: &LibraryDatabase,
     dr_parser: &Option<std::sync::Arc<DrParser>>,
-    settings: &parking_lot::RwLock<crate::config::settings::UserSettings>,
+    _settings: &parking_lot::RwLock<crate::config::settings::UserSettings>,
 ) -> Result<(), LibraryError> {
     let pool = database.pool();
     let mut tx = pool.begin().await?;

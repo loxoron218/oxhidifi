@@ -4,7 +4,6 @@ use std::path::Path;
 
 use {
     regex::Regex,
-    tracing::debug,
 };
 
 use crate::error::dr_error::DrError;

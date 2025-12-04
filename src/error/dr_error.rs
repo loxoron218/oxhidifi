@@ -4,7 +4,6 @@
 //! operations, extending the existing error system.
 
 use {
-    std::fmt::Display,
     thiserror::Error,
 };
 
