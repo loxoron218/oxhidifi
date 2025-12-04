@@ -40,11 +40,15 @@ impl DrExtractor {
     /// A new `DrExtractor` instance.
     pub fn new() -> Self {
         // Add patterns for common DR log formats
+        // All patterns should capture only the numeric part (group 1)
         let dr_patterns = vec![
             Regex::new(r"(?i)^\s*DR\s*(\d{1,2})\s*$").unwrap(),
             Regex::new(r"(?i)DR\s*=\s*(\d{1,2})").unwrap(),
             Regex::new(r"(?i)Dynamic Range\s*[:=]\s*(\d{1,2})").unwrap(),
-            Regex::new(r"(?i)^\s*(DR\d{1,2})\s*$").unwrap(),
+            // Pattern for canonical DR format - capture the number after DR
+            Regex::new(r"(?i)^\s*DR(\d{1,2})\s*$").unwrap(),
+            // Pattern to match DR values embedded in text (like "Track 1: DR12")
+            Regex::new(r"(?i)\bDR(\d{1,2})\b").unwrap(),
         ];
 
         let dr_validator = Regex::new(DR_VALUE_PATTERN).unwrap();
@@ -115,15 +119,28 @@ impl DrExtractor {
     ///
     /// `true` if the DR value is valid, `false` otherwise.
     pub fn validate_dr_value(&self, dr_value: &str) -> bool {
-        if !self.dr_validator.is_match(dr_value) {
-            return false;
-        }
-
-        // Extract the number part and validate range (1-20 is reasonable)
-        if let Some(captures) = self.dr_validator.captures(dr_value)
+        // First try the canonical format (DR12)
+        if self.dr_validator.is_match(dr_value)
+            && let Some(captures) = self.dr_validator.captures(dr_value)
             && let Ok(number) = captures[1].parse::<u32>()
         {
             return (1..=20).contains(&number);
+        }
+
+        // Try alternative formats that might appear in raw input
+        let alt_patterns = [
+            r"(?i)^DR\s*(\d{1,2})$",
+            r"(?i)^DR\s*=\s*(\d{1,2})$",
+            r"(?i)^Dynamic Range\s*[:=]\s*(\d{1,2})$",
+        ];
+
+        for pattern in &alt_patterns {
+            if let Ok(regex) = Regex::new(pattern)
+                && let Some(captures) = regex.captures(dr_value)
+                && let Ok(number) = captures[1].parse::<u32>()
+            {
+                return (1..=20).contains(&number);
+            }
         }
 
         false

@@ -132,7 +132,7 @@ impl DrParser {
 mod tests {
     use std::fs::write;
 
-    use {tempfile::TempDir, tokio::main};
+    use tempfile::TempDir;
 
     use crate::library::{
         database::LibraryDatabase,
@@ -182,7 +182,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[tokio::test]
     async fn test_dr_parser_with_files() {
         let temp_dir = TempDir::new().unwrap();
         let album_dir = temp_dir.path();
@@ -192,7 +192,8 @@ mod tests {
         write(&dr_file, "DR12").unwrap();
 
         // Test file finding
-        let files = DrParser::new(LibraryDatabase::new().await.unwrap().into())
+        let database = LibraryDatabase::new().await.unwrap();
+        let files = DrParser::new(database.into())
             .extractor
             .find_dr_files(album_dir)
             .unwrap();
