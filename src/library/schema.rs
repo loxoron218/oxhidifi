@@ -3,10 +3,9 @@
 //! This module defines the SQLite database schema and provides schema
 //! versioning capabilities for future migrations.
 
-use std::{fs::create_dir_all, path::PathBuf};
+use std::{env::var, fs::create_dir_all, path::PathBuf};
 
 use {
-    dirs::config_dir,
     sqlx::{
         SqlitePool, query, query_scalar,
         sqlite::{SqliteConnectOptions, SqliteJournalMode::Wal, SqliteSynchronous::Normal},
@@ -215,7 +214,7 @@ impl SchemaManager {
 ///
 /// The database connection string.
 pub fn get_database_url() -> String {
-    let mut config_dir = config_dir().unwrap_or_else(|| PathBuf::from("."));
+    let mut config_dir = get_xdg_config_home();
     config_dir.push("oxhidifi");
     config_dir.push("library.db");
 
@@ -225,6 +224,26 @@ pub fn get_database_url() -> String {
     }
 
     format!("sqlite://{}", config_dir.to_string_lossy())
+}
+
+/// Gets the XDG config home directory following XDG Base Directory specification.
+///
+/// Uses XDG_CONFIG_HOME environment variable if set, otherwise defaults to $HOME/.config
+fn get_xdg_config_home() -> PathBuf {
+    if let Ok(config_home) = var("XDG_CONFIG_HOME")
+        && !config_home.is_empty()
+    {
+        return PathBuf::from(config_home);
+    }
+
+    if let Ok(home) = var("HOME") {
+        let mut path = PathBuf::from(home);
+        path.push(".config");
+        return path;
+    }
+
+    // Fallback to current directory if HOME is not set (shouldn't happen on Unix)
+    PathBuf::from(".")
 }
 
 /// Creates a database connection pool.

@@ -4,7 +4,6 @@
 //! including Album, Artist, and Track models with proper serde serialization.
 
 use {
-    chrono::NaiveDateTime,
     serde::{Deserialize, Serialize},
     sqlx::FromRow,
 };
@@ -18,10 +17,10 @@ pub struct Artist {
     pub name: String,
     /// Timestamp when the artist was first added to the library.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub created_at: Option<NaiveDateTime>,
+    pub created_at: Option<String>,
     /// Timestamp when the artist was last updated.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub updated_at: Option<NaiveDateTime>,
+    pub updated_at: Option<String>,
 }
 
 /// Represents a musical album in the library.
@@ -48,10 +47,10 @@ pub struct Album {
     pub dr_value: Option<String>,
     /// Timestamp when the album was first added to the library.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub created_at: Option<NaiveDateTime>,
+    pub created_at: Option<String>,
     /// Timestamp when the album was last updated.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub updated_at: Option<NaiveDateTime>,
+    pub updated_at: Option<String>,
 }
 
 /// Represents a track in the library.
@@ -84,10 +83,10 @@ pub struct Track {
     pub channels: i64,
     /// Timestamp when the track was first added to the library.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub created_at: Option<NaiveDateTime>,
+    pub created_at: Option<String>,
     /// Timestamp when the track was last updated.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub updated_at: Option<NaiveDateTime>,
+    pub updated_at: Option<String>,
 }
 
 /// Search results containing albums and artists that match a query.
@@ -122,10 +121,7 @@ impl Default for Track {
 
 #[cfg(test)]
 mod tests {
-    use {
-        chrono::NaiveDateTime,
-        serde_json::{from_str, to_string},
-    };
+    use serde_json::{from_str, to_string};
 
     use crate::library::models::{Album, Artist, Track};
 
@@ -134,8 +130,8 @@ mod tests {
         let artist = Artist {
             id: 1,
             name: "Test Artist".to_string(),
-            created_at: Some(NaiveDateTime::from_timestamp_opt(1672531200, 0).unwrap()),
-            updated_at: Some(NaiveDateTime::from_timestamp_opt(1672617600, 0).unwrap()),
+            created_at: Some("2023-01-01 00:00:00".to_string()),
+            updated_at: Some("2023-01-02 00:00:00".to_string()),
         };
 
         let serialized = to_string(&artist).unwrap();
@@ -154,8 +150,8 @@ mod tests {
             compilation: false,
             path: "/path/to/album".to_string(),
             dr_value: Some("DR12".to_string()),
-            created_at: Some(NaiveDateTime::from_timestamp_opt(1672531200, 0).unwrap()),
-            updated_at: Some(NaiveDateTime::from_timestamp_opt(1672617600, 0).unwrap()),
+            created_at: Some("2023-01-01 00:00:00".to_string()),
+            updated_at: Some("2023-01-02 00:00:00".to_string()),
         };
 
         let serialized = to_string(&album).unwrap();
@@ -178,8 +174,8 @@ mod tests {
             sample_rate: 96000,
             bits_per_sample: 24,
             channels: 2,
-            created_at: Some(NaiveDateTime::from_timestamp_opt(1672531200, 0).unwrap()),
-            updated_at: Some(NaiveDateTime::from_timestamp_opt(1672617600, 0).unwrap()),
+            created_at: Some("2023-01-01 00:00:00".to_string()),
+            updated_at: Some("2023-01-02 00:00:00".to_string()),
         };
 
         let serialized = to_string(&track).unwrap();

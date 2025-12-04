@@ -4,13 +4,13 @@
 //! usage for config and cache files.
 
 use std::{
+    env::var,
     fs::{create_dir_all, read_to_string, write},
     io::Error as StdError,
     path::PathBuf,
 };
 
 use {
-    dirs::{cache_dir, config_dir},
     serde::{Deserialize, Serialize},
     serde_json::{Error as SerdeJsonError, from_str, to_string_pretty},
     thiserror::Error,
@@ -152,7 +152,7 @@ impl SettingsManager {
 ///
 /// The path to the configuration file.
 pub fn get_config_path() -> PathBuf {
-    let mut config_dir = config_dir().unwrap_or_else(|| PathBuf::from("."));
+    let mut config_dir = get_xdg_config_home();
     config_dir.push("oxhidifi");
     config_dir.push("settings.json");
     config_dir
@@ -164,9 +164,49 @@ pub fn get_config_path() -> PathBuf {
 ///
 /// The path to the cache directory.
 pub fn get_cache_dir() -> PathBuf {
-    let mut cache_dir = cache_dir().unwrap_or_else(|| PathBuf::from("."));
+    let mut cache_dir = get_xdg_cache_home();
     cache_dir.push("oxhidifi");
     cache_dir
+}
+
+/// Gets the XDG config home directory following XDG Base Directory specification.
+///
+/// Uses XDG_CONFIG_HOME environment variable if set, otherwise defaults to $HOME/.config
+fn get_xdg_config_home() -> PathBuf {
+    if let Ok(config_home) = var("XDG_CONFIG_HOME")
+        && !config_home.is_empty()
+    {
+        return PathBuf::from(config_home);
+    }
+
+    if let Ok(home) = var("HOME") {
+        let mut path = PathBuf::from(home);
+        path.push(".config");
+        return path;
+    }
+
+    // Fallback to current directory if HOME is not set (shouldn't happen on Unix)
+    PathBuf::from(".")
+}
+
+/// Gets the XDG cache home directory following XDG Base Directory specification.
+///
+/// Uses XDG_CACHE_HOME environment variable if set, otherwise defaults to $HOME/.cache
+fn get_xdg_cache_home() -> PathBuf {
+    if let Ok(cache_home) = var("XDG_CACHE_HOME")
+        && !cache_home.is_empty()
+    {
+        return PathBuf::from(cache_home);
+    }
+
+    if let Ok(home) = var("HOME") {
+        let mut path = PathBuf::from(home);
+        path.push(".cache");
+        return path;
+    }
+
+    // Fallback to current directory if HOME is not set (shouldn't happen on Unix)
+    PathBuf::from(".")
 }
 
 #[cfg(test)]
