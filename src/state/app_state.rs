@@ -8,6 +8,7 @@ use std::sync::{Arc, Weak};
 
 use {
     async_trait::async_trait,
+    libadwaita::glib::MainContext,
     parking_lot::RwLock,
     tokio::sync::broadcast::{Receiver, Sender, channel},
 };
@@ -56,6 +57,18 @@ pub struct LibraryState {
     pub search_filter: Option<String>,
     /// Current view mode (grid/list).
     pub view_mode: ViewMode,
+    /// Currently selected tab (albums or artists).
+    pub current_tab: LibraryTab,
+}
+
+/// Library tab selection.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum LibraryTab {
+    /// Albums tab is selected (default).
+    #[default]
+    Albums,
+    /// Artists tab is selected.
+    Artists,
 }
 
 /// View mode for library display.
@@ -207,17 +220,18 @@ pub trait StateObserver {
     ///
     /// * `app_state` - The application state to observe.
     async fn start_observing(&mut self, app_state: Arc<AppState>) {
-        let _receiver = app_state.subscribe();
+        let mut receiver = app_state.subscribe();
 
-        // Can't move self into async block due to lifetime issues
-        // This pattern needs to be handled differently in actual implementation
-        // For now, we'll comment out the problematic code to allow compilation
-        // In a real implementation, this would use Weak references or channels
-        // tokio::spawn(async move {
-        //     while let Ok(event) = receiver.recv().await {
-        //         self.handle_state_change(event).await;
-        //     }
-        // });
+        // Use glib::MainContext for GTK thread safety
+        MainContext::default().spawn_local(async move {
+            while let Ok(_event) = receiver.recv().await {
+                // Note: We can't call self.handle_state_change directly here
+                // because of ownership issues. Instead, UI components should
+                // subscribe to state changes directly and handle them appropriately.
+                // This is a limitation of the current architecture that would be
+                // addressed in a more sophisticated implementation.
+            }
+        });
     }
 }
 
@@ -228,7 +242,8 @@ mod tests {
     use crate::{
         audio::engine::{AudioEngine, PlaybackState::Stopped},
         state::{
-            AppState, LibraryState,
+            AppState,
+            LibraryState::{Albums, Artists},
             ViewMode::{Grid, List},
         },
     };
@@ -254,11 +269,18 @@ mod tests {
         assert!(library_state.current_tracks.is_empty());
         assert!(library_state.search_filter.is_none());
         assert_eq!(library_state.view_mode, Grid);
+        assert_eq!(library_state.current_tab, Albums);
     }
 
     #[test]
     fn test_view_mode_display() {
         assert_eq!(format!("{:?}", Grid), "Grid");
         assert_eq!(format!("{:?}", List), "List");
+    }
+
+    #[test]
+    fn test_library_tab_display() {
+        assert_eq!(format!("{:?}", Albums), "Albums");
+        assert_eq!(format!("{:?}", Artists), "Artists");
     }
 }

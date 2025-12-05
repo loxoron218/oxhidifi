@@ -6,9 +6,9 @@
 use std::sync::Arc;
 
 use libadwaita::{
-    HeaderBar as LibadwaitaHeaderBar, TabView,
-    gtk::{Button, Entry, Label, SearchBar, ToggleButton, Widget},
-    prelude::{Cast, EditableExt, ObjectExt, ToggleButtonExt},
+    HeaderBar as LibadwaitaHeaderBar,
+    gtk::{Button, Entry, Label, SearchBar, ToggleButton},
+    prelude::{EditableExt, ObjectExt, ToggleButtonExt},
 };
 
 use crate::state::{
@@ -140,33 +140,12 @@ impl HeaderBar {
             .build();
         widget.pack_end(&settings_button);
 
-        // Tab navigation with proper TabView
-        let tab_view = TabView::builder().build();
-
-        let albums_page = Label::new(Some("Albums"));
-        tab_view.append(&albums_page.upcast::<Widget>());
-
-        let artists_page = Label::new(Some("Artists"));
-        tab_view.append(&artists_page.upcast::<Widget>());
-
-        // Set tab titles properly
-        tab_view.nth_page(0).set_title("Albums");
-        tab_view.nth_page(1).set_title("Artists");
-        widget.set_title_widget(Some(&tab_view));
-
-        // Connect tab view to app state for navigation
-        if let Some(ref state) = app_state {
-            let _state_clone = state.clone();
-            tab_view.connect_selected_page_notify(move |tab_view| {
-                if let Some(selected_page) = tab_view.selected_page() {
-                    let page_index = tab_view.page_position(&selected_page);
-
-                    // This would trigger view-specific updates in a real implementation
-                    // For now, we just log the selection
-                    println!("Selected tab: {}", page_index);
-                }
-            });
-        }
+        // Simple title label - tab navigation is handled in main content area
+        let title_label = Label::builder()
+            .label("Oxhidifi")
+            .css_classes(["title"])
+            .build();
+        widget.set_title_widget(Some(&title_label));
 
         Self {
             widget,

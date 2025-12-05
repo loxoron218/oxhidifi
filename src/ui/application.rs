@@ -6,8 +6,7 @@
 use std::{error::Error, sync::Arc};
 
 use libadwaita::{
-    Application, ApplicationWindow, HeaderBar, NavigationPage, NavigationView, TabView,
-    glib::MainContext,
+    Application, ApplicationWindow, NavigationPage, NavigationView, TabView,
     gtk::{
         Align::Start,
         Box as GtkBox, Button, Label,
@@ -26,12 +25,15 @@ use crate::{
     library::LibraryDatabase,
     state::{
         AppState,
-        AppStateEvent::{LibraryStateChanged, SearchFilterChanged},
-        ViewMode::{Grid, List},
+        ViewMode::List,
+        app_state::LibraryTab::{Albums as LibraryAlbums, Artists as LibraryArtists},
     },
-    ui::views::{
-        AlbumGridView, ArtistGridView, ListView,
-        list_view::ListViewType::{Albums, Artists},
+    ui::{
+        header_bar::HeaderBar,
+        views::{
+            AlbumGridView, ArtistGridView, ListView,
+            list_view::ListViewType::{Albums, Artists},
+        },
     },
 };
 
@@ -151,8 +153,8 @@ fn build_ui(
     // Store navigation view reference for detail view navigation
     // In a real implementation, this would be stored in AppState or a navigation manager
 
-    // Create header bar
-    let header_bar = create_header_bar(settings);
+    // Create header bar with proper state integration
+    let header_bar = HeaderBar::default_with_state(app_state.clone());
 
     // Create player bar
     let player_bar = create_player_bar();
@@ -160,7 +162,7 @@ fn build_ui(
     // Assemble the main layout
     let main_box = GtkBox::builder().orientation(Vertical).build();
 
-    main_box.append(&header_bar);
+    main_box.append(&header_bar.widget);
     main_box.append(&navigation_view.upcast::<Widget>());
     main_box.append(&player_bar);
 
@@ -176,65 +178,6 @@ fn create_main_content(
     _library_db: &Arc<LibraryDatabase>,
     _audio_engine: &Arc<AudioEngine>,
 ) -> Widget {
-    // Load initial library data
-    let albums = Vec::new();
-    let artists = Vec::new();
-
-    // This would be done asynchronously in a real implementation
-    // For now, we'll create empty views that will be populated via state updates
-    let show_dr_badges = settings.show_dr_values;
-    let default_view_mode = if settings.default_view_mode == "list" {
-        List
-    } else {
-        Grid
-    };
-
-    // Create album view based on settings
-    let album_view: Widget = if default_view_mode == List {
-        let list_view = ListView::builder()
-            .app_state(app_state.clone())
-            .view_type(Albums)
-            .compact(false)
-            .build();
-        list_view.widget
-    } else {
-        let grid_view = AlbumGridView::builder()
-            .app_state(app_state.clone())
-            .albums(albums.clone())
-            .show_dr_badges(show_dr_badges)
-            .compact(false)
-            .build();
-        grid_view.widget
-    };
-
-    // Create artist view based on settings
-    let artist_view: Widget = if default_view_mode == List {
-        let list_view = ListView::builder()
-            .app_state(app_state.clone())
-            .view_type(Artists)
-            .compact(false)
-            .build();
-        list_view.widget
-    } else {
-        let grid_view = ArtistGridView::builder()
-            .app_state(app_state.clone())
-            .artists(artists.clone())
-            .compact(false)
-            .build();
-        grid_view.widget
-    };
-
-    // Create tab view for Albums/Artists navigation
-    let tab_view = TabView::builder().build();
-    tab_view.append(&album_view);
-    tab_view.append(&artist_view);
-
-    // Set tab titles
-    let page = tab_view.nth_page(0);
-    page.set_title("Albums");
-    let page = tab_view.nth_page(1);
-    page.set_title("Artists");
-
     // Create main container
     let main_container = GtkBox::builder()
         .orientation(Vertical)
@@ -245,68 +188,81 @@ fn create_main_content(
         .margin_end(12)
         .build();
 
-    main_container.append(&tab_view.upcast::<Widget>());
+    // Create all possible views upfront
+    let show_dr_badges = settings.show_dr_values;
 
-    // Connect to AppState for reactive updates
-    let app_state_clone = app_state.clone();
-    MainContext::default().spawn_local(async move {
-        let mut receiver = app_state_clone.subscribe();
-        while let Ok(event) = receiver.recv().await {
-            // Handle state changes (this would trigger UI updates in real implementation)
-            match event {
-                LibraryStateChanged(_) => {
-                    // Library state changed - views will update automatically via StateObserver
-                }
-                SearchFilterChanged(_) => {
-                    // Search filter changed - views will update automatically
-                }
-                _ => {}
-            }
+    // Album views
+    let album_grid_view = AlbumGridView::builder()
+        .app_state(app_state.clone())
+        .albums(Vec::new())
+        .show_dr_badges(show_dr_badges)
+        .compact(false)
+        .build();
+
+    let album_list_view = ListView::builder()
+        .app_state(app_state.clone())
+        .view_type(Albums)
+        .compact(false)
+        .build();
+
+    // Artist views
+    let artist_grid_view = ArtistGridView::builder()
+        .app_state(app_state.clone())
+        .artists(Vec::new())
+        .compact(false)
+        .build();
+
+    let artist_list_view = ListView::builder()
+        .app_state(app_state.clone())
+        .view_type(Artists)
+        .compact(false)
+        .build();
+
+    // Create tab view for Albums/Artists navigation
+    let tab_view = TabView::builder().build();
+
+    // Initialize with current view mode from app state
+    let current_view_mode = app_state.get_library_state().view_mode;
+
+    let (album_view, artist_view) = if current_view_mode == List {
+        (album_list_view.widget, artist_list_view.widget)
+    } else {
+        (album_grid_view.widget, artist_grid_view.widget)
+    };
+
+    tab_view.append(&album_view);
+    tab_view.append(&artist_view);
+
+    // Set tab titles
+    tab_view.nth_page(0).set_title("Albums");
+    tab_view.nth_page(1).set_title("Artists");
+
+    // Connect tab view selection to app state
+    let app_state_clone_tab = app_state.clone();
+    tab_view.connect_selected_page_notify(move |tab_view| {
+        if let Some(selected_page) = tab_view.selected_page() {
+            let page_index = tab_view.page_position(&selected_page);
+            let new_tab = if page_index == 0 {
+                LibraryAlbums
+            } else {
+                LibraryArtists
+            };
+
+            // Update app state with new tab selection
+            let mut library_state = app_state_clone_tab.get_library_state();
+            library_state.current_tab = new_tab;
+            app_state_clone_tab.update_library_state(library_state);
         }
     });
 
+    main_container.append(&tab_view.upcast::<Widget>());
+
+    // Connect to AppState for reactive view mode updates
+    // Note: Full view recreation on mode change is complex and may cause issues
+    // For now, we rely on the initial view mode setting
+    // A more sophisticated implementation would recreate the tab view when needed
+
     main_container.upcast::<Widget>()
-}
-
-/// Creates the application header bar.
-fn create_header_bar(settings: &UserSettings) -> HeaderBar {
-    let header_bar = HeaderBar::builder().build();
-
-    // Search button
-    let search_button = ToggleButton::builder()
-        .icon_name("system-search-symbolic")
-        .tooltip_text("Search")
-        .build();
-    header_bar.pack_start(&search_button);
-
-    // View toggle button
-    let view_toggle_icon = if settings.default_view_mode == "list" {
-        "view-list-symbolic"
-    } else {
-        "view-grid-symbolic"
-    };
-    let view_toggle = ToggleButton::builder()
-        .icon_name(view_toggle_icon)
-        .tooltip_text("Toggle View")
-        .build();
-    header_bar.pack_start(&view_toggle);
-
-    // Settings button
-    let settings_button = Button::builder()
-        .icon_name("preferences-system-symbolic")
-        .tooltip_text("Settings")
-        .build();
-    header_bar.pack_end(&settings_button);
-
-    // Tab navigation is now handled in main content
-    // Keep title as simple label for now
-    let title_label = Label::builder()
-        .label("Oxhidifi")
-        .css_classes(["title"])
-        .build();
-    header_bar.set_title_widget(Some(&title_label));
-
-    header_bar
 }
 
 /// Creates the persistent player control bar.
