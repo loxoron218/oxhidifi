@@ -6,7 +6,7 @@
 use std::{error::Error, sync::Arc};
 
 use libadwaita::{
-    Application, ApplicationWindow, HeaderBar, TabView,
+    Application, ApplicationWindow, HeaderBar, NavigationView, TabView,
     gtk::{
         Align::{Center, Start},
         Box as GtkBox, Button, Label,
@@ -15,9 +15,11 @@ use libadwaita::{
     },
     prelude::{
         AdwApplicationWindowExt, ApplicationExt, ApplicationExtManual, BoxExt, Cast, GtkWindowExt,
-        RangeExt,
+        RangeExt, NavigationViewExt,
     },
 };
+
+use crate::ui::views::{AlbumGridView, ArtistGridView, ListView, ListViewType};
 
 use crate::{
     audio::engine::AudioEngine,
@@ -113,8 +115,8 @@ impl OxhidifiApplication {
 /// Builds the main user interface.
 fn build_ui(
     app: &Application,
-    _audio_engine: &Arc<AudioEngine>,
-    _library_db: &Arc<LibraryDatabase>,
+    audio_engine: &Arc<AudioEngine>,
+    library_db: &Arc<LibraryDatabase>,
     app_state: &Arc<AppState>,
     settings: &UserSettings,
 ) {
@@ -126,11 +128,106 @@ fn build_ui(
         .default_height(800)
         .build();
 
-    // Create header bar
-    let header_bar = create_header_bar(settings);
+    // Create navigation view for handling view transitions
+    let navigation_view = NavigationView::builder().build();
 
-    // Create main content area
-    let main_content = GtkBox::builder()
+    // Create main content area with responsive layout
+    let main_content = create_main_content(app_state, settings, library_db, audio_engine);
+    
+    // Add main content as root page
+    navigation_view.add(&main_content);
+
+    // Store navigation view reference for detail view navigation
+    // In a real implementation, this would be stored in AppState or a navigation manager
+
+    // Create header bar
+    let header_bar = create_header_bar(settings, app_state);
+
+    // Create player bar
+    let player_bar = create_player_bar(app_state, audio_engine);
+
+    // Assemble the main layout
+    let main_box = GtkBox::builder().orientation(Vertical).build();
+
+    main_box.append(&header_bar);
+    main_box.append(&navigation_view.upcast::<Widget>());
+    main_box.append(&player_bar);
+
+    // Set the window content
+    window.set_content(Some(&main_box));
+    window.present();
+}
+
+/// Creates the main content area with responsive layout.
+fn create_main_content(
+    app_state: &Arc<AppState>,
+    settings: &UserSettings,
+    library_db: &Arc<LibraryDatabase>,
+    audio_engine: &Arc<AudioEngine>,
+) -> Widget {
+    // Load initial library data
+    let mut albums = Vec::new();
+    let mut artists = Vec::new();
+    
+    // This would be done asynchronously in a real implementation
+    // For now, we'll create empty views that will be populated via state updates
+    let show_dr_badges = settings.show_dr_values;
+    let default_view_mode = if settings.default_view_mode == "list" {
+        crate::state::ViewMode::List
+    } else {
+        crate::state::ViewMode::Grid
+    };
+
+    // Create album view based on settings
+    let album_view: Widget = if default_view_mode == crate::state::ViewMode::List {
+        let list_view = ListView::builder()
+            .app_state(app_state.clone())
+            .view_type(ListViewType::Albums)
+            .compact(false)
+            .build();
+        list_view.widget
+    } else {
+        let grid_view = AlbumGridView::builder()
+            .app_state(app_state.clone())
+            .albums(albums.clone())
+            .show_dr_badges(show_dr_badges)
+            .compact(false)
+            .build();
+        grid_view.widget
+    };
+
+    // Create artist view based on settings
+    let artist_view: Widget = if default_view_mode == crate::state::ViewMode::List {
+        let list_view = ListView::builder()
+            .app_state(app_state.clone())
+            .view_type(ListViewType::Artists)
+            .compact(false)
+            .build();
+        list_view.widget
+    } else {
+        let grid_view = ArtistGridView::builder()
+            .app_state(app_state.clone())
+            .artists(artists.clone())
+            .compact(false)
+            .build();
+        grid_view.widget
+    };
+
+    // Create tab view for Albums/Artists navigation
+    let tab_view = TabView::builder().build();
+    tab_view.append(&album_view);
+    tab_view.append(&artist_view);
+
+    // Set tab titles
+    if let Some(page) = tab_view.nth_page(0) {
+        page.set_title(Some("Albums"));
+    }
+    if let Some(page) = tab_view.nth_page(1) {
+        page.set_title(Some("Artists"));
+    }
+
+    // Create main container
+    let main_container = GtkBox::builder()
         .orientation(Vertical)
         .spacing(12)
         .margin_top(12)
@@ -139,42 +236,41 @@ fn build_ui(
         .margin_end(12)
         .build();
 
-    // Add placeholder content
-    let placeholder_label = Label::builder()
-        .label("Welcome to Oxhidifi - High-Fidelity Music Player")
-        .halign(Center)
-        .valign(Center)
-        .build();
+    main_container.append(&tab_view.upcast::<Widget>());
 
-    main_content.append(&placeholder_label);
+    // Connect to AppState for reactive updates
+    let app_state_clone = app_state.clone();
+    glib::MainContext::default().spawn(async move {
+        let mut receiver = app_state_clone.subscribe();
+        while let Ok(event) = receiver.recv().await {
+            // Handle state changes (this would trigger UI updates in real implementation)
+            match event {
+                crate::state::AppStateEvent::LibraryStateChanged(_) => {
+                    // Library state changed - views will update automatically via StateObserver
+                }
+                crate::state::AppStateEvent::SearchFilterChanged(_) => {
+                    // Search filter changed - views will update automatically
+                }
+                _ => {}
+            }
+        }
+    });
 
-    // Create player bar
-    let player_bar = create_player_bar(app_state);
-
-    // Assemble the main layout
-    let main_box = GtkBox::builder().orientation(Vertical).build();
-
-    main_box.append(&header_bar);
-    main_box.append(&main_content);
-    main_box.append(&player_bar);
-
-    // Set the window content
-    window.set_content(Some(&main_box));
-    window.present();
+    main_container.upcast::<Widget>()
 }
 
 /// Creates the application header bar.
 fn create_header_bar(settings: &UserSettings) -> HeaderBar {
     let header_bar = HeaderBar::builder().build();
 
-    // Search button (placeholder)
+    // Search button
     let search_button = ToggleButton::builder()
         .icon_name("system-search-symbolic")
         .tooltip_text("Search")
         .build();
     header_bar.pack_start(&search_button);
 
-    // View toggle button (placeholder)
+    // View toggle button
     let view_toggle_icon = if settings.default_view_mode == "list" {
         "view-list-symbolic"
     } else {
@@ -186,24 +282,20 @@ fn create_header_bar(settings: &UserSettings) -> HeaderBar {
         .build();
     header_bar.pack_start(&view_toggle);
 
-    // Settings button (placeholder)
+    // Settings button
     let settings_button = Button::builder()
         .icon_name("preferences-system-symbolic")
         .tooltip_text("Settings")
         .build();
     header_bar.pack_end(&settings_button);
 
-    // Tab navigation (placeholder)
-    let tab_view = TabView::builder().build();
-
-    // TabPage doesn't have a new() constructor, create pages differently
-    let albums_page = Label::new(Some("Albums"));
-    tab_view.append(&albums_page.upcast::<Widget>());
-
-    let artists_page = Label::new(Some("Artists"));
-    tab_view.append(&artists_page.upcast::<Widget>());
-
-    header_bar.set_title_widget(Some(&tab_view));
+    // Tab navigation is now handled in main content
+    // Keep title as simple label for now
+    let title_label = Label::builder()
+        .label("Oxhidifi")
+        .css_classes(vec!["title".to_string()])
+        .build();
+    header_bar.set_title_widget(Some(&title_label));
 
     header_bar
 }
