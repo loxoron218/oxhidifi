@@ -3,7 +3,11 @@
 //! This module coordinates file system monitoring, metadata extraction,
 //! and database updates to maintain a real-time synchronized music library.
 
-use std::{path::Path, sync::Arc};
+use std::{
+    fs::read_dir,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use {
     async_channel::{Receiver, bounded},
@@ -31,6 +35,7 @@ pub use config::ScannerConfig;
 ///
 /// The `LibraryScanner` orchestrates file system monitoring, metadata extraction,
 /// and database updates to maintain a real-time synchronized music library.
+#[derive(Debug)]
 pub struct LibraryScanner {
     /// File system watcher.
     file_watcher: FileWatcher,
@@ -188,6 +193,83 @@ impl LibraryScanner {
     /// A reference to the current `ScannerConfig`.
     pub fn config(&self) -> &ScannerConfig {
         &self.config
+    }
+
+    /// Performs an initial scan of all configured library directories.
+    ///
+    /// This method walks through all library directories and processes existing
+    /// audio files to populate the database with initial content.
+    ///
+    /// # Arguments
+    ///
+    /// * `database` - Database interface for storing metadata.
+    /// * `settings` - User settings containing library directories.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` indicating success or failure.
+    ///
+    /// # Errors
+    ///
+    /// Returns `LibraryError` if scanning fails.
+    pub async fn scan_initial_directories(
+        &self,
+        database: &Arc<LibraryDatabase>,
+        settings: &Arc<RwLock<UserSettings>>,
+    ) -> Result<(), LibraryError> {
+        let library_dirs = settings.read().library_directories.clone();
+        let mut all_audio_files = Vec::new();
+
+        // Walk through all library directories and collect audio files
+        for dir in library_dirs {
+            let dir_path = Path::new(&dir);
+            let audio_files = self.collect_audio_files_from_directory(dir_path)?;
+            all_audio_files.extend(audio_files);
+        }
+
+        // Process all collected audio files
+        if !all_audio_files.is_empty() {
+            handle_files_changed(all_audio_files, database, settings).await?;
+        }
+
+        Ok(())
+    }
+
+    /// Recursively collects audio files from a directory and its subdirectories.
+    ///
+    /// # Arguments
+    ///
+    /// * `dir_path` - Path to the directory to scan.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing a vector of audio file paths or a `LibraryError`.
+    fn collect_audio_files_from_directory(
+        &self,
+        dir_path: &Path,
+    ) -> Result<Vec<PathBuf>, LibraryError> {
+        let mut audio_files = Vec::new();
+
+        if let Ok(entries) = read_dir(dir_path) {
+            for entry in entries {
+                if let Ok(entry) = entry {
+                    let path = entry.path();
+
+                    if path.is_file() {
+                        // Check if it's a supported audio file
+                        if FileWatcher::is_supported_audio_file(&path) {
+                            audio_files.push(path);
+                        }
+                    } else if path.is_dir() {
+                        // Recursively process subdirectories
+                        let sub_audio_files = self.collect_audio_files_from_directory(&path)?;
+                        audio_files.extend(sub_audio_files);
+                    }
+                }
+            }
+        }
+
+        Ok(audio_files)
     }
 }
 

@@ -196,6 +196,7 @@ impl AlbumGridView {
                 EmptyStateConfig {
                     is_album_view: true,
                 },
+                None, // Will be set later when we have access to window
             )
         });
 

@@ -44,6 +44,7 @@ const SUPPORTED_AUDIO_EXTENSIONS: &[&str] = &[
 /// The `FileWatcher` uses the `notify` crate to monitor file system changes
 /// in specified music library directories. It filters events to only process
 /// supported audio formats and applies debouncing to handle rapid changes.
+#[derive(Debug)]
 pub struct FileWatcher {
     /// Internal notify watcher.
     _watcher: RecommendedWatcher,
@@ -161,7 +162,7 @@ impl FileWatcher {
     /// # Returns
     ///
     /// `true` if the path is a supported audio file, `false` otherwise.
-    fn is_supported_audio_file(path: &Path) -> bool {
+    pub fn is_supported_audio_file(path: &Path) -> bool {
         if let Some(extension) = path.extension() {
             if let Some(ext_str) = extension.to_str() {
                 SUPPORTED_AUDIO_EXTENSIONS

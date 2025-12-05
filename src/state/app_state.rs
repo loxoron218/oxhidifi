@@ -19,7 +19,7 @@ use crate::{
         PlaybackState::{self, Stopped},
         TrackInfo,
     },
-    library::{Album, Artist, Track},
+    library::{Album, Artist, Track, scanner::LibraryScanner},
 };
 
 /// Central state container with thread-safe access.
@@ -36,6 +36,8 @@ pub struct AppState {
     pub library: Arc<RwLock<LibraryState>>,
     /// Audio engine reference.
     pub audio_engine: Weak<AudioEngine>,
+    /// Library scanner reference (optional).
+    pub library_scanner: Option<Arc<RwLock<LibraryScanner>>>,
     /// Broadcast channel for state change notifications.
     state_tx: Sender<AppStateEvent>,
 }
@@ -100,11 +102,15 @@ impl AppState {
     /// # Arguments
     ///
     /// * `audio_engine` - Reference to the audio engine.
+    /// * `library_scanner` - Optional library scanner reference.
     ///
     /// # Returns
     ///
     /// A new `AppState` instance.
-    pub fn new(audio_engine: Weak<AudioEngine>) -> Self {
+    pub fn new(
+        audio_engine: Weak<AudioEngine>,
+        library_scanner: Option<Arc<RwLock<LibraryScanner>>>,
+    ) -> Self {
         let (state_tx, _) = channel(16);
 
         Self {
@@ -112,6 +118,7 @@ impl AppState {
             current_track: Arc::new(RwLock::new(None)),
             library: Arc::new(RwLock::new(LibraryState::default())),
             audio_engine,
+            library_scanner,
             state_tx,
         }
     }

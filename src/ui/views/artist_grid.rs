@@ -165,6 +165,7 @@ impl ArtistGridView {
                 EmptyStateConfig {
                     is_album_view: false,
                 },
+                None, // Will be set later when we have access to window
             )
         });
 

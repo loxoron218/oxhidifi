@@ -9,7 +9,7 @@ use {
     libadwaita::{
         Application, ApplicationWindow, NavigationPage, NavigationView,
         glib::MainContext,
-        gtk::{Box as GtkBox, Orientation::Vertical, Widget},
+        gtk::{Box as GtkBox, Orientation::Vertical, ScrolledWindow, Widget},
         prelude::{
             AdwApplicationWindowExt, ApplicationExt, ApplicationExtManual, BoxExt, Cast,
             GtkWindowExt, ListModelExt, WidgetExt,
@@ -86,19 +86,56 @@ impl OxhidifiApplication {
             .map_err(|e| format!("Failed to initialize library database: {}", e))?;
         let library_db = Arc::new(library_db_raw);
 
-        // Create application state
-        let app_state = AppState::new(Arc::downgrade(&Arc::new(audio_engine.clone())));
-
         // Initialize library scanner if there are library directories
         let library_scanner = if !settings.get_settings().library_directories.is_empty() {
             let settings_arc = Arc::new(RwLock::new(settings.get_settings().clone()));
-            let scanner = LibraryScanner::new(library_db.clone(), settings_arc, None)
+            let scanner = LibraryScanner::new(library_db.clone(), settings_arc.clone(), None)
                 .await
                 .map_err(|e| format!("Failed to initialize library scanner: {}", e))?;
+
+            // Perform initial scan of existing directories
+            if let Err(e) = scanner
+                .scan_initial_directories(&library_db, &settings_arc)
+                .await
+            {
+                eprintln!("Failed to perform initial library scan: {}", e);
+            }
+
             Some(Arc::new(RwLock::new(scanner)))
         } else {
             None
         };
+
+        // Create application state
+        let app_state = AppState::new(
+            Arc::downgrade(&Arc::new(audio_engine.clone())),
+            library_scanner.clone(),
+        );
+
+        // Fetch initial library data and populate AppState
+        if library_scanner.is_some() {
+            let albums = match library_db.get_albums(None).await {
+                Ok(albums) => albums,
+                Err(e) => {
+                    eprintln!("Failed to get albums from database: {}", e);
+                    Vec::new()
+                }
+            };
+
+            let artists = match library_db.get_artists(None).await {
+                Ok(artists) => artists,
+                Err(e) => {
+                    eprintln!("Failed to get artists from database: {}", e);
+                    Vec::new()
+                }
+            };
+
+            // Update AppState with library data
+            let mut library_state = app_state.get_library_state();
+            library_state.albums = albums;
+            library_state.artists = artists;
+            app_state.update_library_state(library_state);
+        }
 
         let app = Application::builder()
             .application_id("com.example.oxhidifi")
@@ -160,7 +197,13 @@ fn build_ui(
     let navigation_view = NavigationView::builder().build();
 
     // Create main content area with responsive layout
-    let main_content = create_main_content(app_state, settings_manager, library_db, audio_engine);
+    let main_content = create_main_content(
+        app_state,
+        settings_manager,
+        library_db,
+        audio_engine,
+        &window,
+    );
 
     // Add main content as root page
     let main_page = NavigationPage::builder()
@@ -216,54 +259,72 @@ fn create_main_content(
     settings_manager: &Arc<SettingsManager>,
     _library_db: &Arc<LibraryDatabase>,
     _audio_engine: &Arc<AudioEngine>,
+    window: &ApplicationWindow,
 ) -> Widget {
     // Create main container with stack for view switching
-    let main_container = GtkBox::builder()
-        .orientation(Vertical)
-        .spacing(12)
+    let main_container = GtkBox::builder().orientation(Vertical).spacing(12).build();
+
+    // Wrap the main container in a scrolled window to provide vertical scrolling
+    let scrolled_window = ScrolledWindow::builder()
+        .vexpand(true)
+        .hexpand(true)
         .margin_top(12)
         .margin_bottom(12)
         .margin_start(12)
         .margin_end(12)
+        .child(&main_container)
         .build();
 
     let show_dr_badges = settings_manager.get_settings().show_dr_values;
 
+    // Get current library state for view initialization
+    let library_state = app_state.get_library_state();
+
     // Create all possible views upfront
     let mut album_grid_view = AlbumGridView::builder()
         .app_state(app_state.clone())
-        .albums(Vec::new())
+        .albums(library_state.albums.clone())
         .show_dr_badges(show_dr_badges)
         .compact(false)
         .build();
 
-    // Inject settings manager into empty state
+    // Inject settings manager and window reference into empty state
     if let Some(empty_state) = &mut album_grid_view.empty_state {
         empty_state.settings_manager = Some((**settings_manager).clone());
+        empty_state.window = Some(window.clone());
+        empty_state.connect_button_handlers();
     }
 
-    let album_list_view = ListView::builder()
+    let mut album_list_view = ListView::builder()
         .app_state(app_state.clone())
         .view_type(Albums)
         .compact(false)
         .build();
 
+    // Populate list view with initial data
+    album_list_view.set_albums(library_state.albums.clone());
+
     let mut artist_grid_view = ArtistGridView::builder()
         .app_state(app_state.clone())
-        .artists(Vec::new())
+        .artists(library_state.artists.clone())
         .compact(false)
         .build();
 
-    // Inject settings manager into empty state
+    // Inject settings manager and window reference into empty state
     if let Some(empty_state) = &mut artist_grid_view.empty_state {
         empty_state.settings_manager = Some((**settings_manager).clone());
+        empty_state.window = Some(window.clone());
+        empty_state.connect_button_handlers();
     }
 
-    let artist_list_view = ListView::builder()
+    let mut artist_list_view = ListView::builder()
         .app_state(app_state.clone())
         .view_type(Artists)
         .compact(false)
         .build();
+
+    // Populate list view with initial data
+    artist_list_view.set_artists(library_state.artists.clone());
 
     // Store view references in app state for dynamic access
     // This is a workaround since we can't easily pass mutable references
@@ -329,7 +390,7 @@ fn create_main_content(
         }
     });
 
-    main_container.upcast::<Widget>()
+    scrolled_window.upcast::<Widget>()
 }
 
 /// Creates the persistent player control bar.
