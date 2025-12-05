@@ -6,7 +6,8 @@
 use std::{error::Error, sync::Arc};
 
 use libadwaita::{
-    Application, ApplicationWindow, NavigationPage, NavigationView, TabView,
+    Application, ApplicationWindow, NavigationPage, NavigationView,
+    glib::MainContext,
     gtk::{
         Align::Start,
         Box as GtkBox, Button, Label,
@@ -15,7 +16,7 @@ use libadwaita::{
     },
     prelude::{
         AdwApplicationWindowExt, ApplicationExt, ApplicationExtManual, BoxExt, Cast, GtkWindowExt,
-        RangeExt,
+        ListModelExt, RangeExt, WidgetExt,
     },
 };
 
@@ -25,7 +26,8 @@ use crate::{
     library::LibraryDatabase,
     state::{
         AppState,
-        ViewMode::List,
+        AppStateEvent::{LibraryStateChanged, SearchFilterChanged},
+        ViewMode::{Grid, List},
         app_state::LibraryTab::{Albums as LibraryAlbums, Artists as LibraryArtists},
     },
     ui::{
@@ -178,7 +180,7 @@ fn create_main_content(
     _library_db: &Arc<LibraryDatabase>,
     _audio_engine: &Arc<AudioEngine>,
 ) -> Widget {
-    // Create main container
+    // Create main container with stack for view switching
     let main_container = GtkBox::builder()
         .orientation(Vertical)
         .spacing(12)
@@ -188,10 +190,9 @@ fn create_main_content(
         .margin_end(12)
         .build();
 
-    // Create all possible views upfront
     let show_dr_badges = settings.show_dr_values;
 
-    // Album views
+    // Create all possible views upfront
     let album_grid_view = AlbumGridView::builder()
         .app_state(app_state.clone())
         .albums(Vec::new())
@@ -205,7 +206,6 @@ fn create_main_content(
         .compact(false)
         .build();
 
-    // Artist views
     let artist_grid_view = ArtistGridView::builder()
         .app_state(app_state.clone())
         .artists(Vec::new())
@@ -218,49 +218,69 @@ fn create_main_content(
         .compact(false)
         .build();
 
-    // Create tab view for Albums/Artists navigation
-    let tab_view = TabView::builder().build();
+    // Store view references in app state for dynamic access
+    // This is a workaround since we can't easily pass mutable references
+    // In a real implementation, we'd use a proper view manager
 
-    // Initialize with current view mode from app state
-    let current_view_mode = app_state.get_library_state().view_mode;
+    // Get current state
+    let library_state = app_state.get_library_state();
+    let current_tab = library_state.current_tab;
+    let current_view_mode = library_state.view_mode;
 
-    let (album_view, artist_view) = if current_view_mode == List {
-        (album_list_view.widget, artist_list_view.widget)
-    } else {
-        (album_grid_view.widget, artist_grid_view.widget)
+    // Select initial view
+    let initial_view = match (current_tab, current_view_mode) {
+        (LibraryAlbums, Grid) => album_grid_view.widget.clone(),
+        (LibraryAlbums, List) => album_list_view.widget.clone(),
+        (LibraryArtists, Grid) => artist_grid_view.widget.clone(),
+        (LibraryArtists, List) => artist_list_view.widget.clone(),
     };
 
-    tab_view.append(&album_view);
-    tab_view.append(&artist_view);
+    main_container.append(&initial_view.upcast::<Widget>());
 
-    // Set tab titles
-    tab_view.nth_page(0).set_title("Albums");
-    tab_view.nth_page(1).set_title("Artists");
+    // Store the main container and views for later updates
+    // We'll use a simple approach: replace the child when state changes
+    let app_state_clone = app_state.clone();
+    let main_container_clone = main_container.clone();
+    let album_grid_widget = album_grid_view.widget.clone();
+    let album_list_widget = album_list_view.widget.clone();
+    let artist_grid_widget = artist_grid_view.widget.clone();
+    let artist_list_widget = artist_list_view.widget.clone();
 
-    // Connect tab view selection to app state
-    let app_state_clone_tab = app_state.clone();
-    tab_view.connect_selected_page_notify(move |tab_view| {
-        if let Some(selected_page) = tab_view.selected_page() {
-            let page_index = tab_view.page_position(&selected_page);
-            let new_tab = if page_index == 0 {
-                LibraryAlbums
-            } else {
-                LibraryArtists
-            };
+    // Subscribe to state changes for view updates
+    MainContext::default().spawn_local(async move {
+        let mut receiver = app_state_clone.subscribe();
+        while let Ok(event) = receiver.recv().await {
+            match event {
+                LibraryStateChanged(new_state) => {
+                    // Clear all children and add the new view
+                    let children = main_container_clone.observe_children();
+                    let n_items = children.n_items();
+                    for i in 0..n_items {
+                        if let Some(child) = children.item(i)
+                            && let Some(widget) = child.downcast_ref::<Widget>()
+                        {
+                            main_container_clone.remove(widget);
+                        }
+                    }
 
-            // Update app state with new tab selection
-            let mut library_state = app_state_clone_tab.get_library_state();
-            library_state.current_tab = new_tab;
-            app_state_clone_tab.update_library_state(library_state);
+                    // Determine new view based on state
+                    let new_view = match (new_state.current_tab, new_state.view_mode) {
+                        (LibraryAlbums, Grid) => album_grid_widget.clone().upcast::<Widget>(),
+                        (LibraryAlbums, List) => album_list_widget.clone().upcast::<Widget>(),
+                        (LibraryArtists, Grid) => artist_grid_widget.clone().upcast::<Widget>(),
+                        (LibraryArtists, List) => artist_list_widget.clone().upcast::<Widget>(),
+                    };
+
+                    main_container_clone.append(&new_view);
+                }
+                SearchFilterChanged(_) => {
+                    // Search filter changed - views should handle this internally
+                    // through their own state observers
+                }
+                _ => {}
+            }
         }
     });
-
-    main_container.append(&tab_view.upcast::<Widget>());
-
-    // Connect to AppState for reactive view mode updates
-    // Note: Full view recreation on mode change is complex and may cause issues
-    // For now, we rely on the initial view mode setting
-    // A more sophisticated implementation would recreate the tab view when needed
 
     main_container.upcast::<Widget>()
 }

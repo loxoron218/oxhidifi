@@ -7,19 +7,22 @@ use std::sync::Arc;
 
 use libadwaita::{
     HeaderBar as LibadwaitaHeaderBar,
-    gtk::{Button, Entry, Label, SearchBar, ToggleButton},
-    prelude::{EditableExt, ObjectExt, ToggleButtonExt},
+    glib::MainContext,
+    gtk::{Box as GtkBox, Button, Entry, Orientation::Horizontal, SearchBar, ToggleButton},
+    prelude::{BoxExt, EditableExt, ObjectExt, ToggleButtonExt},
 };
 
 use crate::state::{
     AppState,
+    AppStateEvent::{self, LibraryStateChanged},
     ViewMode::{self, Grid, List},
+    app_state::LibraryTab::{Albums, Artists},
 };
 
-/// Basic header bar with essential controls.
+/// Adaptive header bar with search, navigation, and action controls.
 ///
 /// The `HeaderBar` provides a consistent interface for application
-/// navigation, search functionality, and settings access.
+/// navigation, search functionality, settings access, and album/artist tab navigation.
 pub struct HeaderBar {
     /// The underlying Libadwaita header bar widget.
     pub widget: LibadwaitaHeaderBar,
@@ -33,6 +36,12 @@ pub struct HeaderBar {
     pub search_entry: Entry,
     /// Search bar container.
     pub search_bar: SearchBar,
+    /// Album tab button.
+    pub album_tab: ToggleButton,
+    /// Artist tab button.
+    pub artist_tab: ToggleButton,
+    /// Tab container box.
+    pub tab_box: GtkBox,
     /// Application state reference.
     pub app_state: Option<Arc<AppState>>,
     /// Current view mode.
@@ -129,6 +138,29 @@ impl HeaderBar {
                 library_state.view_mode = new_mode;
                 state_clone.update_library_state(library_state);
             });
+
+            // Subscribe to state changes to update view toggle
+            let view_toggle_update = view_toggle.clone();
+            let state_clone_update = state.clone();
+
+            MainContext::default().spawn_local(async move {
+                let mut receiver = state_clone_update.subscribe();
+                while let Ok(event) = receiver.recv().await {
+                    if let LibraryStateChanged(new_state) = event {
+                        // Update view toggle state based on current view mode
+                        let is_list = new_state.view_mode == List;
+                        view_toggle_update.set_active(is_list);
+
+                        // Update icon
+                        let icon_name = if is_list {
+                            "view-list-symbolic"
+                        } else {
+                            "view-grid-symbolic"
+                        };
+                        view_toggle_update.set_property("icon-name", icon_name);
+                    }
+                }
+            });
         }
 
         widget.pack_start(&view_toggle);
@@ -140,12 +172,88 @@ impl HeaderBar {
             .build();
         widget.pack_end(&settings_button);
 
-        // Simple title label - tab navigation is handled in main content area
-        let title_label = Label::builder()
-            .label("Oxhidifi")
-            .css_classes(["title"])
+        // Create tab navigation buttons for Albums/Artists
+        let current_tab = app_state
+            .as_ref()
+            .map(|s| s.get_library_state().current_tab)
+            .unwrap_or(Albums);
+
+        let album_tab = ToggleButton::builder()
+            .label("Albums")
+            .tooltip_text("Browse albums")
+            .active(current_tab == Albums)
             .build();
-        widget.set_title_widget(Some(&title_label));
+
+        let artist_tab = ToggleButton::builder()
+            .label("Artists")
+            .tooltip_text("Browse artists")
+            .active(current_tab == Artists)
+            .build();
+
+        // Set up mutual exclusivity for tab buttons
+        artist_tab.set_group(Some(&album_tab));
+
+        // Connect tab buttons to app state
+        if let Some(ref state) = app_state {
+            let state_clone_album = state.clone();
+            let state_clone_artist = state.clone();
+            let artist_tab_clone = artist_tab.clone();
+            let album_tab_clone = album_tab.clone();
+
+            album_tab.connect_toggled(move |button: &ToggleButton| {
+                // Only process if this button is being activated (not deactivated)
+                if button.is_active() {
+                    // Update app state
+                    let mut library_state = state_clone_album.get_library_state();
+                    library_state.current_tab = Albums;
+                    state_clone_album.update_library_state(library_state);
+
+                    // Ensure artist tab is not active
+                    artist_tab_clone.set_active(false);
+                }
+            });
+
+            artist_tab.connect_toggled(move |button: &ToggleButton| {
+                // Only process if this button is being activated (not deactivated)
+                if button.is_active() {
+                    // Update app state
+                    let mut library_state = state_clone_artist.get_library_state();
+                    library_state.current_tab = Artists;
+                    state_clone_artist.update_library_state(library_state);
+
+                    // Ensure album tab is not active
+                    album_tab_clone.set_active(false);
+                }
+            });
+
+            // Subscribe to state changes to update tab buttons
+            let album_tab_update = album_tab.clone();
+            let artist_tab_update = artist_tab.clone();
+            let state_clone_update = state.clone();
+
+            MainContext::default().spawn_local(async move {
+                let mut receiver = state_clone_update.subscribe();
+                while let Ok(event) = receiver.recv().await {
+                    if let AppStateEvent::LibraryStateChanged(new_state) = event {
+                        // Update tab button states based on current tab
+                        album_tab_update.set_active(new_state.current_tab == Albums);
+                        artist_tab_update.set_active(new_state.current_tab == Artists);
+                    }
+                }
+            });
+        }
+
+        // Create tab container box
+        let tab_box = GtkBox::builder()
+            .orientation(Horizontal)
+            .spacing(6)
+            .css_classes(["linked"])
+            .build();
+
+        tab_box.append(&album_tab);
+        tab_box.append(&artist_tab);
+
+        widget.set_title_widget(Some(&tab_box));
 
         Self {
             widget,
@@ -154,6 +262,9 @@ impl HeaderBar {
             settings_button,
             search_entry,
             search_bar,
+            album_tab,
+            artist_tab,
+            tab_box,
             app_state,
             current_view_mode,
         }
