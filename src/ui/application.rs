@@ -8,30 +8,29 @@ use std::{error::Error, sync::Arc};
 use libadwaita::{
     Application, ApplicationWindow, NavigationPage, NavigationView,
     glib::MainContext,
-    gtk::{
-        Align::Start,
-        Box as GtkBox, Button, Label,
-        Orientation::{Horizontal, Vertical},
-        Picture, Scale, ToggleButton, Widget,
-    },
+    gtk::{Box as GtkBox, Orientation::Vertical, Widget},
     prelude::{
         AdwApplicationWindowExt, ApplicationExt, ApplicationExtManual, BoxExt, Cast, GtkWindowExt,
-        ListModelExt, RangeExt, WidgetExt,
+        ListModelExt, WidgetExt,
     },
 };
 
 use crate::{
-    audio::engine::AudioEngine,
+    audio::engine::{
+        AudioEngine,
+        PlaybackState::{Buffering, Paused, Playing, Ready, Stopped},
+    },
     config::{SettingsManager, UserSettings},
     library::LibraryDatabase,
     state::{
         AppState,
-        AppStateEvent::{LibraryStateChanged, SearchFilterChanged},
+        AppStateEvent::{LibraryStateChanged, PlaybackStateChanged, SearchFilterChanged},
         ViewMode::{Grid, List},
         app_state::LibraryTab::{Albums as LibraryAlbums, Artists as LibraryArtists},
     },
     ui::{
         header_bar::HeaderBar,
+        player_bar::PlayerBar,
         views::{
             AlbumGridView, ArtistGridView, ListView,
             list_view::ListViewType::{Albums, Artists},
@@ -159,14 +158,34 @@ fn build_ui(
     let header_bar = HeaderBar::default_with_state(app_state.clone());
 
     // Create player bar
-    let player_bar = create_player_bar();
+    let (player_bar_widget, _player_bar) = create_player_bar(app_state, audio_engine);
+
+    // Subscribe to playback state changes to show/hide player bar
+    let player_bar_widget_clone = player_bar_widget.clone();
+    let app_state_for_subscription = app_state.clone();
+    MainContext::default().spawn_local(async move {
+        let mut receiver = app_state_for_subscription.subscribe();
+        while let Ok(event) = receiver.recv().await {
+            if let PlaybackStateChanged(state) = event {
+                // Show player bar when playing or paused, hide when stopped
+                match state {
+                    Playing | Paused | Buffering => {
+                        player_bar_widget_clone.set_visible(true);
+                    }
+                    Stopped | Ready => {
+                        player_bar_widget_clone.set_visible(false);
+                    }
+                }
+            }
+        }
+    });
 
     // Assemble the main layout
     let main_box = GtkBox::builder().orientation(Vertical).build();
 
     main_box.append(&header_bar.widget);
     main_box.append(&navigation_view.upcast::<Widget>());
-    main_box.append(&player_bar);
+    main_box.append(&player_bar_widget);
 
     // Set the window content
     window.set_content(Some(&main_box));
@@ -286,79 +305,15 @@ fn create_main_content(
 }
 
 /// Creates the persistent player control bar.
-fn create_player_bar() -> GtkBox {
-    let player_bar = GtkBox::builder()
-        .orientation(Horizontal)
-        .spacing(12)
-        .margin_top(6)
-        .margin_bottom(6)
-        .margin_start(12)
-        .margin_end(12)
-        .css_classes(["player-bar"])
-        .build();
+fn create_player_bar(
+    app_state: &Arc<AppState>,
+    audio_engine: &Arc<AudioEngine>,
+) -> (GtkBox, PlayerBar) {
+    let player_bar = PlayerBar::new(app_state.clone(), audio_engine.clone());
+    let widget = player_bar.widget.clone();
 
-    // Album artwork placeholder
-    let artwork = Picture::builder()
-        .width_request(48)
-        .height_request(48)
-        .build();
-    player_bar.append(&artwork);
+    // Initially hide the player bar
+    widget.set_visible(false);
 
-    // Track info placeholder
-    let track_info = GtkBox::builder()
-        .orientation(Vertical)
-        .hexpand(true)
-        .build();
-
-    let title_label = Label::builder()
-        .label("Track Title")
-        .halign(Start)
-        .xalign(0.0)
-        .build();
-    track_info.append(&title_label);
-
-    let artist_label = Label::builder()
-        .label("Artist Name")
-        .halign(Start)
-        .xalign(0.0)
-        .css_classes(["dim-label"])
-        .build();
-    track_info.append(&artist_label);
-
-    player_bar.append(&track_info);
-
-    // Player controls
-    let controls = GtkBox::builder().orientation(Horizontal).spacing(6).build();
-
-    let prev_button = Button::builder()
-        .icon_name("media-skip-backward-symbolic")
-        .tooltip_text("Previous")
-        .build();
-    controls.append(&prev_button);
-
-    let play_button = ToggleButton::builder()
-        .icon_name("media-playback-start-symbolic")
-        .tooltip_text("Play")
-        .build();
-    controls.append(&play_button);
-
-    let next_button = Button::builder()
-        .icon_name("media-skip-forward-symbolic")
-        .tooltip_text("Next")
-        .build();
-    controls.append(&next_button);
-
-    player_bar.append(&controls);
-
-    // Volume control
-    let volume_scale = Scale::builder()
-        .orientation(Horizontal)
-        .width_request(100)
-        // Remove value() from builder, set it after creation
-        .draw_value(false)
-        .build();
-    volume_scale.set_value(100.0);
-    player_bar.append(&volume_scale);
-
-    player_bar
+    (widget.upcast::<GtkBox>(), player_bar)
 }
