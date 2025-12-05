@@ -6,26 +6,33 @@
 use std::{error::Error, sync::Arc};
 
 use libadwaita::{
-    Application, ApplicationWindow, HeaderBar, NavigationView, TabView,
+    Application, ApplicationWindow, HeaderBar, NavigationPage, NavigationView, TabView,
+    glib::MainContext,
     gtk::{
-        Align::{Center, Start},
+        Align::Start,
         Box as GtkBox, Button, Label,
         Orientation::{Horizontal, Vertical},
         Picture, Scale, ToggleButton, Widget,
     },
     prelude::{
         AdwApplicationWindowExt, ApplicationExt, ApplicationExtManual, BoxExt, Cast, GtkWindowExt,
-        RangeExt, NavigationViewExt,
+        RangeExt,
     },
 };
-
-use crate::ui::views::{AlbumGridView, ArtistGridView, ListView, ListViewType};
 
 use crate::{
     audio::engine::AudioEngine,
     config::{SettingsManager, UserSettings},
     library::LibraryDatabase,
-    state::AppState,
+    state::{
+        AppState,
+        AppStateEvent::{LibraryStateChanged, SearchFilterChanged},
+        ViewMode::{Grid, List},
+    },
+    ui::views::{
+        AlbumGridView, ArtistGridView, ListView,
+        list_view::ListViewType::{Albums, Artists},
+    },
 };
 
 /// Main application class with window management.
@@ -133,18 +140,22 @@ fn build_ui(
 
     // Create main content area with responsive layout
     let main_content = create_main_content(app_state, settings, library_db, audio_engine);
-    
+
     // Add main content as root page
-    navigation_view.add(&main_content);
+    let main_page = NavigationPage::builder()
+        .child(&main_content)
+        .title("Main")
+        .build();
+    navigation_view.add(&main_page);
 
     // Store navigation view reference for detail view navigation
     // In a real implementation, this would be stored in AppState or a navigation manager
 
     // Create header bar
-    let header_bar = create_header_bar(settings, app_state);
+    let header_bar = create_header_bar(settings);
 
     // Create player bar
-    let player_bar = create_player_bar(app_state, audio_engine);
+    let player_bar = create_player_bar();
 
     // Assemble the main layout
     let main_box = GtkBox::builder().orientation(Vertical).build();
@@ -162,27 +173,27 @@ fn build_ui(
 fn create_main_content(
     app_state: &Arc<AppState>,
     settings: &UserSettings,
-    library_db: &Arc<LibraryDatabase>,
-    audio_engine: &Arc<AudioEngine>,
+    _library_db: &Arc<LibraryDatabase>,
+    _audio_engine: &Arc<AudioEngine>,
 ) -> Widget {
     // Load initial library data
-    let mut albums = Vec::new();
-    let mut artists = Vec::new();
-    
+    let albums = Vec::new();
+    let artists = Vec::new();
+
     // This would be done asynchronously in a real implementation
     // For now, we'll create empty views that will be populated via state updates
     let show_dr_badges = settings.show_dr_values;
     let default_view_mode = if settings.default_view_mode == "list" {
-        crate::state::ViewMode::List
+        List
     } else {
-        crate::state::ViewMode::Grid
+        Grid
     };
 
     // Create album view based on settings
-    let album_view: Widget = if default_view_mode == crate::state::ViewMode::List {
+    let album_view: Widget = if default_view_mode == List {
         let list_view = ListView::builder()
             .app_state(app_state.clone())
-            .view_type(ListViewType::Albums)
+            .view_type(Albums)
             .compact(false)
             .build();
         list_view.widget
@@ -197,10 +208,10 @@ fn create_main_content(
     };
 
     // Create artist view based on settings
-    let artist_view: Widget = if default_view_mode == crate::state::ViewMode::List {
+    let artist_view: Widget = if default_view_mode == List {
         let list_view = ListView::builder()
             .app_state(app_state.clone())
-            .view_type(ListViewType::Artists)
+            .view_type(Artists)
             .compact(false)
             .build();
         list_view.widget
@@ -219,12 +230,10 @@ fn create_main_content(
     tab_view.append(&artist_view);
 
     // Set tab titles
-    if let Some(page) = tab_view.nth_page(0) {
-        page.set_title(Some("Albums"));
-    }
-    if let Some(page) = tab_view.nth_page(1) {
-        page.set_title(Some("Artists"));
-    }
+    let page = tab_view.nth_page(0);
+    page.set_title("Albums");
+    let page = tab_view.nth_page(1);
+    page.set_title("Artists");
 
     // Create main container
     let main_container = GtkBox::builder()
@@ -240,15 +249,15 @@ fn create_main_content(
 
     // Connect to AppState for reactive updates
     let app_state_clone = app_state.clone();
-    glib::MainContext::default().spawn(async move {
+    MainContext::default().spawn_local(async move {
         let mut receiver = app_state_clone.subscribe();
         while let Ok(event) = receiver.recv().await {
             // Handle state changes (this would trigger UI updates in real implementation)
             match event {
-                crate::state::AppStateEvent::LibraryStateChanged(_) => {
+                LibraryStateChanged(_) => {
                     // Library state changed - views will update automatically via StateObserver
                 }
-                crate::state::AppStateEvent::SearchFilterChanged(_) => {
+                SearchFilterChanged(_) => {
                     // Search filter changed - views will update automatically
                 }
                 _ => {}
@@ -293,7 +302,7 @@ fn create_header_bar(settings: &UserSettings) -> HeaderBar {
     // Keep title as simple label for now
     let title_label = Label::builder()
         .label("Oxhidifi")
-        .css_classes(vec!["title".to_string()])
+        .css_classes(["title"])
         .build();
     header_bar.set_title_widget(Some(&title_label));
 
@@ -301,7 +310,7 @@ fn create_header_bar(settings: &UserSettings) -> HeaderBar {
 }
 
 /// Creates the persistent player control bar.
-fn create_player_bar(_app_state: &Arc<AppState>) -> GtkBox {
+fn create_player_bar() -> GtkBox {
     let player_bar = GtkBox::builder()
         .orientation(Horizontal)
         .spacing(12)
@@ -309,7 +318,7 @@ fn create_player_bar(_app_state: &Arc<AppState>) -> GtkBox {
         .margin_bottom(6)
         .margin_start(12)
         .margin_end(12)
-        .css_classes(vec!["player-bar".to_string()])
+        .css_classes(["player-bar"])
         .build();
 
     // Album artwork placeholder
@@ -336,7 +345,7 @@ fn create_player_bar(_app_state: &Arc<AppState>) -> GtkBox {
         .label("Artist Name")
         .halign(Start)
         .xalign(0.0)
-        .css_classes(vec!["dim-label".to_string()])
+        .css_classes(["dim-label"])
         .build();
     track_info.append(&artist_label);
 

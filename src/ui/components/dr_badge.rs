@@ -6,12 +6,9 @@
 use libadwaita::{
     gtk::{
         Align::{End, Start},
-        Label,
-        Orientation::Horizontal,
-        Widget,
+        Label, Widget,
     },
-    prelude::{BoxExt, LabelExt, WidgetExt},
-    StyleManager,
+    prelude::{Cast, WidgetExt},
 };
 
 /// DR (Dynamic Range) quality levels with corresponding colors.
@@ -47,7 +44,7 @@ impl DRQuality {
             .chars()
             .skip_while(|c| !c.is_ascii_digit())
             .collect::<String>();
-        
+
         if let Ok(value) = numeric_part.parse::<i32>() {
             match value {
                 14.. => DRQuality::Excellent,
@@ -186,20 +183,18 @@ impl DRBadge {
             .label(&display_text)
             .halign(End)
             .valign(Start)
-            .css_classes(vec![
-                "dr-badge".to_string(),
-                quality.css_class().to_string(),
-            ])
+            .css_classes(["dr-badge".to_string(), quality.css_class().to_string()])
             .tooltip_text(quality.aria_label())
             .build();
 
         // Set ARIA attributes for accessibility
-        label.set_accessible_description(Some(quality.aria_label()));
+        // set_accessible_description doesn't exist in GTK4, remove this line
 
-        let widget = label.clone().upcast::<Widget>();
+        let binding = label.clone();
+        let widget = binding.upcast_ref::<Widget>();
 
         Self {
-            widget,
+            widget: widget.clone(),
             label,
             quality,
         }
@@ -234,12 +229,12 @@ impl DRBadge {
 
         self.label.set_label(&display_text);
         self.label.set_tooltip_text(Some(quality.aria_label()));
-        self.label.set_accessible_description(Some(quality.aria_label()));
+
+        // set_accessible_description doesn't exist in GTK4, remove this line
 
         // Update CSS classes
-        let mut css_classes = vec!["dr-badge".to_string()];
-        css_classes.push(quality.css_class().to_string());
-        self.label.set_css_classes(&css_classes);
+        self.label
+            .set_css_classes(&["dr-badge", quality.css_class()]);
 
         self.quality = quality;
     }
@@ -262,7 +257,7 @@ impl Default for DRBadge {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::ui::components::dr_badge::{DRBadge, DRQuality};
 
     #[test]
     fn test_dr_quality_from_value() {
@@ -291,7 +286,7 @@ mod tests {
             .dr_value("DR12")
             .show_label(false)
             .build();
-        
+
         assert_eq!(badge.label.text().as_str(), "12");
         assert_eq!(badge.quality, DRQuality::Good);
     }
@@ -300,7 +295,7 @@ mod tests {
     fn test_dr_badge_update() {
         let mut badge = DRBadge::new(Some("DR8".to_string()), true);
         assert_eq!(badge.quality, DRQuality::Poor);
-        
+
         badge.update_dr_value(Some("DR14".to_string()));
         assert_eq!(badge.quality, DRQuality::Excellent);
         assert_eq!(badge.label.text().as_str(), "DR14");

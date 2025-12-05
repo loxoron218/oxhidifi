@@ -8,7 +8,7 @@
 mod component_tests {
     use std::sync::Arc;
 
-    use libadwaita::{init, prelude::*};
+    use libadwaita::init;
 
     use crate::{
         library::models::Track,
@@ -30,10 +30,7 @@ mod component_tests {
         assert_eq!(badge.quality.css_class(), "dr-badge-good");
 
         // Test builder pattern
-        let badge_builder = DRBadge::builder()
-            .dr_value("DR8")
-            .show_label(false)
-            .build();
+        let badge_builder = DRBadge::builder().dr_value("DR8").show_label(false).build();
         assert_eq!(badge_builder.label.text().as_str(), "8");
         assert_eq!(badge_builder.quality.css_class(), "dr-badge-poor");
     }
@@ -68,7 +65,10 @@ mod component_tests {
             .build();
 
         assert!(overlay.is_playing);
-        assert_eq!(overlay.button.icon_name().as_deref(), Some("media-playback-pause-symbolic"));
+        assert_eq!(
+            overlay.button.icon_name().as_deref(),
+            Some("media-playback-pause-symbolic")
+        );
         assert!(!overlay.show_on_hover);
     }
 
@@ -118,7 +118,7 @@ mod component_tests {
         let badge = DRBadge::new(Some("DR12".to_string()), true);
         assert!(badge.label.accessible_description().is_some());
 
-        // Test CoverArt accessibility  
+        // Test CoverArt accessibility
         let cover_art = CoverArt::new(None, None, false, 50, 50);
         assert!(cover_art.picture.accessible_description().is_some());
 

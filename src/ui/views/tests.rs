@@ -14,7 +14,10 @@ mod view_integration_tests {
         library::models::{Album, Artist},
         state::AppState,
         ui::views::{
-            AlbumGridView, ArtistGridView, DetailView, DetailType, ListView, ListViewType,
+            AccessibleRole::{Grid, List},
+            AlbumGridView, ArtistGridView, DetailType, DetailView, ListView,
+            ListViewType::{Albums, Artists},
+            album_grid::AlbumSortCriteria::{Title, Year},
         },
     };
 
@@ -48,7 +51,7 @@ mod view_integration_tests {
         // Test list view creation for albums
         let album_list = ListView::builder()
             .app_state(app_state.clone())
-            .view_type(ListViewType::Albums)
+            .view_type(Albums)
             .compact(false)
             .build();
         assert!(album_list.widget.is_visible() || true);
@@ -56,7 +59,7 @@ mod view_integration_tests {
         // Test list view creation for artists
         let artist_list = ListView::builder()
             .app_state(app_state.clone())
-            .view_type(ListViewType::Artists)
+            .view_type(Artists)
             .compact(false)
             .build();
         assert!(artist_list.widget.is_visible() || true);
@@ -116,15 +119,16 @@ mod view_integration_tests {
 
         // Test filtering
         album_grid.filter_albums("A");
+
         // In real implementation, this would verify the filtered results
         assert!(true);
 
         // Test sorting by title
-        album_grid.sort_albums(crate::ui::views::album_grid::AlbumSortCriteria::Title);
+        album_grid.sort_albums(Title);
         assert!(true);
 
         // Test sorting by year
-        album_grid.sort_albums(crate::ui::views::album_grid::AlbumSortCriteria::Year);
+        album_grid.sort_albums(Year);
         assert!(true);
     }
 
@@ -145,7 +149,7 @@ mod view_integration_tests {
         let artist_grid = ArtistGridView::new(app_state.clone(), Vec::new(), false);
         assert!(artist_grid.flow_box.get_focusable() || true);
 
-        let album_list = ListView::new(app_state.clone(), ListViewType::Albums, false);
+        let album_list = ListView::new(app_state.clone(), Albums, false);
         assert!(album_list.list_box.get_focusable() || true);
     }
 
@@ -161,21 +165,12 @@ mod view_integration_tests {
 
         // Test accessibility attributes
         let album_grid = AlbumGridView::new(app_state.clone(), Vec::new(), true, false);
-        assert_eq!(
-            album_grid.flow_box.accessible_role(),
-            libadwaita::gtk::AccessibleRole::Grid
-        );
+        assert_eq!(album_grid.flow_box.accessible_role(), Grid);
 
         let artist_grid = ArtistGridView::new(app_state.clone(), Vec::new(), false);
-        assert_eq!(
-            artist_grid.flow_box.accessible_role(),
-            libadwaita::gtk::AccessibleRole::Grid
-        );
+        assert_eq!(artist_grid.flow_box.accessible_role(), Grid);
 
-        let album_list = ListView::new(app_state.clone(), ListViewType::Albums, false);
-        assert_eq!(
-            album_list.list_box.accessible_role(),
-            libadwaita::gtk::AccessibleRole::List
-        );
+        let album_list = ListView::new(app_state.clone(), Albums, false);
+        assert_eq!(album_list.list_box.accessible_role(), List);
     }
 }

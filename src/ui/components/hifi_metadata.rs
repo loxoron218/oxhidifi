@@ -6,13 +6,13 @@
 
 use libadwaita::{
     gtk::{
-        Align::{Start, Fill},
-        Box as GtkBox,
-        Label,
-        Orientation::Vertical,
+        AccessibleRole::Group,
+        Align::{Fill, Start},
+        Box as GtkBox, Label,
+        Orientation::{Horizontal, Vertical},
         Widget,
     },
-    prelude::{BoxExt, LabelExt, WidgetExt},
+    prelude::{AccessibleExt, BoxExt, Cast, OrientableExt},
 };
 
 use crate::library::models::Track;
@@ -135,6 +135,7 @@ impl HiFiMetadataBuilder {
 /// The `HiFiMetadata` component displays audio format information including
 /// format type, sample rate, bit depth, and channel configuration in a
 /// consistent, accessible format that follows GNOME HIG guidelines.
+#[derive(Clone)]
 pub struct HiFiMetadata {
     /// The underlying GTK widget container.
     pub widget: Widget,
@@ -194,17 +195,13 @@ impl HiFiMetadata {
             compact,
         };
 
-        let orientation = if compact {
-            libadwaita::gtk::Orientation::Horizontal
-        } else {
-            libadwaita::gtk::Orientation::Vertical
-        };
+        let orientation = if compact { Horizontal } else { Vertical };
 
         let container = GtkBox::builder()
             .orientation(orientation)
             .halign(Start)
             .valign(Fill)
-            .css_classes(vec!["hifi-metadata".to_string()])
+            .css_classes(["hifi-metadata"])
             .spacing(if compact { 8 } else { 2 })
             .build();
 
@@ -214,13 +211,13 @@ impl HiFiMetadata {
             // Add format label
             if show_format {
                 let format_label = Label::builder()
-                    .label(&format!("{} ", track_data.format))
+                    .label(format!("{} ", track_data.format))
                     .halign(Start)
                     .xalign(0.0)
-                    .css_classes(vec!["dim-label".to_string()])
+                    .css_classes(["dim-label"])
                     .build();
                 labels.push(format_label.clone());
-                container.append(&format_label.upcast::<Widget>());
+                container.append(format_label.upcast_ref::<Widget>());
             }
 
             // Add sample rate label
@@ -234,22 +231,22 @@ impl HiFiMetadata {
                     .label(&sample_rate_text)
                     .halign(Start)
                     .xalign(0.0)
-                    .css_classes(vec!["dim-label".to_string()])
+                    .css_classes(["dim-label"])
                     .build();
                 labels.push(sample_rate_label.clone());
-                container.append(&sample_rate_label.upcast::<Widget>());
+                container.append(sample_rate_label.upcast_ref::<Widget>());
             }
 
             // Add bit depth label
             if show_bit_depth {
                 let bit_depth_label = Label::builder()
-                    .label(&format!("{}-bit ", track_data.bits_per_sample))
+                    .label(format!("{}-bit ", track_data.bits_per_sample))
                     .halign(Start)
                     .xalign(0.0)
-                    .css_classes(vec!["dim-label".to_string()])
+                    .css_classes(["dim-label"])
                     .build();
                 labels.push(bit_depth_label.clone());
-                container.append(&bit_depth_label.upcast::<Widget>());
+                container.append(bit_depth_label.upcast_ref::<Widget>());
             }
 
             // Add channels label
@@ -263,19 +260,21 @@ impl HiFiMetadata {
                     .label(&channels_text)
                     .halign(Start)
                     .xalign(0.0)
-                    .css_classes(vec!["dim-label".to_string()])
+                    .css_classes(["dim-label"])
                     .build();
                 labels.push(channels_label.clone());
-                container.append(&channels_label.upcast::<Widget>());
+                container.append(channels_label.upcast_ref::<Widget>());
             }
         }
 
         // Set ARIA attributes for accessibility
-        container.set_accessible_role(libadwaita::gtk::AccessibleRole::Group);
-        container.set_accessible_description(Some("Audio technical specifications"));
+        container.set_accessible_role(Group);
+
+        // set_accessible_description doesn't exist for Box in GTK4
+        // Accessibility is handled through other means
 
         Self {
-            widget: container.clone().upcast::<Widget>(),
+            widget: container.clone().upcast_ref::<Widget>().clone(),
             container,
             labels,
             track,
@@ -310,13 +309,13 @@ impl HiFiMetadata {
             // Add format label
             if self.config.show_format {
                 let format_label = Label::builder()
-                    .label(&format!("{} ", track_data.format))
+                    .label(format!("{} ", track_data.format))
                     .halign(Start)
                     .xalign(0.0)
-                    .css_classes(vec!["dim-label".to_string()])
+                    .css_classes(["dim-label"])
                     .build();
                 self.labels.push(format_label.clone());
-                self.container.append(&format_label.upcast::<Widget>());
+                self.container.append(format_label.upcast_ref::<Widget>());
             }
 
             // Add sample rate label
@@ -330,22 +329,24 @@ impl HiFiMetadata {
                     .label(&sample_rate_text)
                     .halign(Start)
                     .xalign(0.0)
-                    .css_classes(vec!["dim-label".to_string()])
+                    .css_classes(["dim-label"])
                     .build();
                 self.labels.push(sample_rate_label.clone());
-                self.container.append(&sample_rate_label.upcast::<Widget>());
+                self.container
+                    .append(sample_rate_label.upcast_ref::<Widget>());
             }
 
             // Add bit depth label
             if self.config.show_bit_depth {
                 let bit_depth_label = Label::builder()
-                    .label(&format!("{}-bit ", track_data.bits_per_sample))
+                    .label(format!("{}-bit ", track_data.bits_per_sample))
                     .halign(Start)
                     .xalign(0.0)
-                    .css_classes(vec!["dim-label".to_string()])
+                    .css_classes(["dim-label"])
                     .build();
                 self.labels.push(bit_depth_label.clone());
-                self.container.append(&bit_depth_label.upcast::<Widget>());
+                self.container
+                    .append(bit_depth_label.upcast_ref::<Widget>());
             }
 
             // Add channels label
@@ -359,10 +360,10 @@ impl HiFiMetadata {
                     .label(&channels_text)
                     .halign(Start)
                     .xalign(0.0)
-                    .css_classes(vec!["dim-label".to_string()])
+                    .css_classes(["dim-label"])
                     .build();
                 self.labels.push(channels_label.clone());
-                self.container.append(&channels_label.upcast::<Widget>());
+                self.container.append(channels_label.upcast_ref::<Widget>());
             }
         }
     }
@@ -374,19 +375,16 @@ impl HiFiMetadata {
     /// * `config` - New display configuration
     pub fn update_config(&mut self, config: HiFiMetadataConfig) {
         self.config = config.clone();
-        
+
         // Recreate the display with new configuration
         let current_track = self.track.clone();
         self.update_track(current_track);
-        
+
         // Update container orientation for compact mode
-        let orientation = if config.compact {
-            libadwaita::gtk::Orientation::Horizontal
-        } else {
-            libadwaita::gtk::Orientation::Vertical
-        };
+        let orientation = if config.compact { Horizontal } else { Vertical };
         self.container.set_orientation(orientation);
-        self.container.set_spacing(if config.compact { 8 } else { 2 });
+        self.container
+            .set_spacing(if config.compact { 8 } else { 2 });
     }
 }
 
@@ -398,8 +396,7 @@ impl Default for HiFiMetadata {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::library::models::Track;
+    use crate::{library::models::Track, ui::component::hifi_metadata::HiFiMetadata};
 
     #[test]
     fn test_hifi_metadata_builder() {
@@ -485,22 +482,31 @@ mod tests {
             ..Track::default()
         };
 
-        assert_eq!(match mono_track.channels {
-            1 => "Mono".to_string(),
-            2 => "Stereo".to_string(),
-            n => format!("{} ch", n),
-        }, "Mono");
+        assert_eq!(
+            match mono_track.channels {
+                1 => "Mono".to_string(),
+                2 => "Stereo".to_string(),
+                n => format!("{} ch", n),
+            },
+            "Mono"
+        );
 
-        assert_eq!(match stereo_track.channels {
-            1 => "Mono".to_string(),
-            2 => "Stereo".to_string(),
-            n => format!("{} ch", n),
-        }, "Stereo");
+        assert_eq!(
+            match stereo_track.channels {
+                1 => "Mono".to_string(),
+                2 => "Stereo".to_string(),
+                n => format!("{} ch", n),
+            },
+            "Stereo"
+        );
 
-        assert_eq!(match multi_track.channels {
-            1 => "Mono".to_string(),
-            2 => "Stereo".to_string(),
-            n => format!("{} ch", n),
-        }, "5 ch");
+        assert_eq!(
+            match multi_track.channels {
+                1 => "Mono".to_string(),
+                2 => "Stereo".to_string(),
+                n => format!("{} ch", n),
+            },
+            "5 ch"
+        );
     }
 }

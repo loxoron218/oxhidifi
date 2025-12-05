@@ -13,7 +13,11 @@ use {
 };
 
 use crate::{
-    audio::engine::{AudioEngine, PlaybackState, TrackInfo},
+    audio::engine::{
+        AudioEngine,
+        PlaybackState::{self, Stopped},
+        TrackInfo,
+    },
     library::{Album, Artist, Track},
 };
 
@@ -91,7 +95,7 @@ impl AppState {
         let (state_tx, _) = channel(16);
 
         Self {
-            playback: Arc::new(RwLock::new(PlaybackState::Stopped)),
+            playback: Arc::new(RwLock::new(Stopped)),
             current_track: Arc::new(RwLock::new(None)),
             library: Arc::new(RwLock::new(LibraryState::default())),
             audio_engine,
@@ -188,7 +192,7 @@ impl AppState {
 ///
 /// This trait allows UI components to react to application state changes
 /// without tight coupling to the state management system.
-#[async_trait]
+#[async_trait(?Send)]
 pub trait StateObserver {
     /// Handles a state change event.
     ///
@@ -222,8 +226,11 @@ mod tests {
     use std::sync::Arc;
 
     use crate::{
-        audio::engine::{AudioEngine, PlaybackState},
-        state::{AppState, LibraryState, ViewMode},
+        audio::engine::{AudioEngine, PlaybackState::Stopped},
+        state::{
+            AppState, LibraryState,
+            ViewMode::{Grid, List},
+        },
     };
 
     #[test]
@@ -232,9 +239,9 @@ mod tests {
         let engine_weak = Arc::downgrade(&Arc::new(engine));
         let app_state = AppState::new(engine_weak);
 
-        assert_eq!(app_state.get_playback_state(), PlaybackState::Stopped);
+        assert_eq!(app_state.get_playback_state(), Stopped);
         assert!(app_state.get_current_track().is_none());
-        assert_eq!(app_state.get_library_state().view_mode, ViewMode::Grid);
+        assert_eq!(app_state.get_library_state().view_mode, Grid);
     }
 
     #[test]
@@ -246,12 +253,12 @@ mod tests {
         assert!(library_state.selected_artist.is_none());
         assert!(library_state.current_tracks.is_empty());
         assert!(library_state.search_filter.is_none());
-        assert_eq!(library_state.view_mode, ViewMode::Grid);
+        assert_eq!(library_state.view_mode, Grid);
     }
 
     #[test]
     fn test_view_mode_display() {
-        assert_eq!(format!("{:?}", ViewMode::Grid), "Grid");
-        assert_eq!(format!("{:?}", ViewMode::List), "List");
+        assert_eq!(format!("{:?}", Grid), "Grid");
+        assert_eq!(format!("{:?}", List), "List");
     }
 }

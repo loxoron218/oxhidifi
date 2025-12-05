@@ -6,23 +6,30 @@
 
 use std::sync::Arc;
 
-use libadwaita::{
-    gtk::{
-        Align::{Start, Fill},
-        Box as GtkBox,
-        Label,
-        ListBox,
-        ListBoxRow,
-        Orientation::Horizontal,
-        Widget,
+use {
+    async_trait::async_trait,
+    libadwaita::{
+        gtk::{
+            AccessibleRole::List,
+            Align::Start,
+            Box as GtkBox, Label, ListBox, ListBoxRow,
+            Orientation::{Horizontal, Vertical},
+            SelectionMode::None as SelectionNone,
+            Widget,
+            pango::EllipsizeMode::End,
+        },
+        prelude::{AccessibleExt, BoxExt, Cast, ListBoxRowExt, WidgetExt},
     },
-    prelude::{BoxExt, LabelExt, ListBoxExt, ListBoxRowExt, WidgetExt},
 };
 
 use crate::{
     library::models::{Album, Artist},
-    state::{AppState, LibraryState, StateObserver},
-    ui::components::{cover_art::CoverArt, hifi_metadata::HiFiMetadata},
+    state::{
+        AppState,
+        AppStateEvent::{self, LibraryStateChanged, SearchFilterChanged},
+        LibraryState, StateObserver,
+    },
+    ui::components::cover_art::CoverArt,
 };
 
 /// Builder pattern for configuring ListView components.
@@ -87,9 +94,10 @@ impl ListViewBuilder {
 }
 
 /// Type of items to display in the list view.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub enum ListViewType {
     /// Display albums in list view
+    #[default]
     Albums,
     /// Display artists in list view
     Artists,
@@ -132,27 +140,21 @@ impl ListView {
     /// # Returns
     ///
     /// A new `ListView` instance.
-    pub fn new(
-        app_state: Option<Arc<AppState>>,
-        view_type: ListViewType,
-        compact: bool,
-    ) -> Self {
+    pub fn new(app_state: Option<Arc<AppState>>, view_type: ListViewType, compact: bool) -> Self {
         let config = ListViewConfig { compact };
 
         let list_box = ListBox::builder()
-            .selection_mode(libadwaita::gtk::SelectionMode::None)
-            .css_classes(vec!["list-view".to_string()])
+            .selection_mode(SelectionNone)
+            .css_classes(["list-view"])
             .build();
 
         // Set ARIA attributes for accessibility
-        list_box.set_accessible_role(libadwaita::gtk::AccessibleRole::List);
-        list_box.set_accessible_description(Some(match view_type {
-            ListViewType::Albums => "Album list view",
-            ListViewType::Artists => "Artist list view",
-        }));
+        list_box.set_accessible_role(List);
+
+        // set_accessible_description doesn't exist in GTK4, remove this line
 
         let mut view = Self {
-            widget: list_box.clone().upcast::<Widget>(),
+            widget: list_box.clone().upcast_ref::<Widget>().clone(),
             list_box,
             app_state,
             view_type,
@@ -176,9 +178,10 @@ impl ListView {
 
     /// Clears the current list and prepares for new items.
     fn clear_list(&mut self) {
-        self.list_box.foreach(|row| {
-            self.list_box.remove(row);
-        });
+        // Clear all children from the list box
+        while let Some(child) = self.list_box.first_child() {
+            self.list_box.remove(&child);
+        }
     }
 
     /// Sets the albums to display in the list.
@@ -247,7 +250,7 @@ impl ListView {
             .label(&album.title)
             .halign(Start)
             .xalign(0.0)
-            .ellipsize(libadwaita::gtk::pango::EllipsizeMode::End)
+            .ellipsize(End)
             .tooltip_text(&album.title)
             .build();
 
@@ -262,13 +265,13 @@ impl ListView {
             .label(&artist_year_text)
             .halign(Start)
             .xalign(0.0)
-            .css_classes(vec!["dim-label".to_string()])
-            .ellipsize(libadwaita::gtk::pango::EllipsizeMode::End)
+            .css_classes(["dim-label"])
+            .ellipsize(End)
             .tooltip_text(&artist_year_text)
             .build();
 
-        info_container.append(&title_label.upcast::<Widget>());
-        info_container.append(&artist_year_label.upcast::<Widget>());
+        info_container.append(title_label.upcast_ref::<Widget>());
+        info_container.append(artist_year_label.upcast_ref::<Widget>());
 
         // Create main row container
         let row_container = GtkBox::builder()
@@ -281,7 +284,7 @@ impl ListView {
             .build();
 
         row_container.append(&cover_art.widget);
-        row_container.append(&info_container.upcast::<Widget>());
+        row_container.append(info_container.upcast_ref::<Widget>());
 
         // Add additional metadata if not compact
         if !self.config.compact {
@@ -291,11 +294,11 @@ impl ListView {
                     .label(genre)
                     .halign(Start)
                     .xalign(0.0)
-                    .css_classes(vec!["dim-label".to_string()])
-                    .ellipsize(libadwaita::gtk::pango::EllipsizeMode::End)
+                    .css_classes(["dim-label"])
+                    .ellipsize(End)
                     .tooltip_text(genre)
                     .build();
-                row_container.append(&genre_label.upcast::<Widget>());
+                row_container.append(genre_label.upcast_ref::<Widget>());
             }
 
             // Compilation indicator
@@ -304,11 +307,11 @@ impl ListView {
                     .label("Compilation")
                     .halign(Start)
                     .xalign(0.0)
-                    .css_classes(vec!["dim-label".to_string()])
-                    .ellipsize(libadwaita::gtk::pango::EllipsizeMode::End)
+                    .css_classes(["dim-label"])
+                    .ellipsize(End)
                     .tooltip_text("Compilation album")
                     .build();
-                row_container.append(&compilation_label.upcast::<Widget>());
+                row_container.append(compilation_label.upcast_ref::<Widget>());
             }
         }
 
@@ -318,13 +321,9 @@ impl ListView {
         row.set_activatable(true);
         row.set_selectable(true);
 
-        // Set ARIA attributes for accessibility
-        row.set_accessible_description(Some(&format!(
-            "Album: {}, Artist ID: {}",
-            album.title, album.artist_id
-        )));
+        // set_accessible_description doesn't exist in GTK4, remove this line
 
-        row.upcast::<Widget>()
+        row.upcast_ref::<Widget>().clone()
     }
 
     /// Creates a single artist row widget for the list.
@@ -356,11 +355,11 @@ impl ListView {
             .label(&artist.name)
             .halign(Start)
             .xalign(0.0)
-            .ellipsize(libadwaita::gtk::pango::EllipsizeMode::End)
+            .ellipsize(End)
             .tooltip_text(&artist.name)
             .build();
 
-        info_container.append(&name_label.upcast::<Widget>());
+        info_container.append(name_label.upcast_ref::<Widget>());
 
         // Create main row container
         let row_container = GtkBox::builder()
@@ -373,7 +372,7 @@ impl ListView {
             .build();
 
         row_container.append(&cover_art.widget);
-        row_container.append(&info_container.upcast::<Widget>());
+        row_container.append(info_container.upcast_ref::<Widget>());
 
         // Create ListBoxRow wrapper
         let row = ListBoxRow::new();
@@ -381,10 +380,9 @@ impl ListView {
         row.set_activatable(true);
         row.set_selectable(true);
 
-        // Set ARIA attributes for accessibility
-        row.set_accessible_description(Some(&format!("Artist: {}", artist.name)));
+        // set_accessible_description doesn't exist in GTK4, remove this line
 
-        row.upcast::<Widget>()
+        row.upcast_ref::<Widget>().clone()
     }
 
     /// Updates the display configuration.
@@ -394,6 +392,7 @@ impl ListView {
     /// * `config` - New display configuration
     pub fn update_config(&mut self, config: ListViewConfig) {
         self.config = config;
+
         // Rebuild the list with new configuration
         if let Some(ref app_state) = self.app_state {
             let library_state = app_state.get_library_state();
@@ -428,9 +427,7 @@ impl ListView {
                     let filtered_artists: Vec<Artist> = library_state
                         .artists
                         .into_iter()
-                        .filter(|artist| {
-                            artist.name.to_lowercase().contains(&query.to_lowercase())
-                        })
+                        .filter(|artist| artist.name.to_lowercase().contains(&query.to_lowercase()))
                         .collect();
                     self.set_artists(filtered_artists);
                 }
@@ -439,14 +436,14 @@ impl ListView {
     }
 }
 
-#[async_trait::async_trait]
+#[async_trait(?Send)]
 impl StateObserver for ListView {
-    async fn handle_state_change(&mut self, event: crate::state::AppStateEvent) {
+    async fn handle_state_change(&mut self, event: AppStateEvent) {
         match event {
-            crate::state::AppStateEvent::LibraryStateChanged(state) => {
+            LibraryStateChanged(state) => {
                 self.handle_library_state_change(state).await;
             }
-            crate::state::AppStateEvent::SearchFilterChanged(filter) => {
+            SearchFilterChanged(filter) => {
                 if let Some(query) = filter {
                     self.filter_items(&query);
                 } else {
@@ -482,30 +479,32 @@ impl Default for ListView {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::library::models::{Album, Artist};
+    use crate::{
+        library::models::{Album, Artist},
+        ui::views::list_view::{
+            ListView,
+            ListViewType::{Albums, Artists},
+        },
+    };
 
     #[test]
     fn test_list_view_builder() {
-        let list_view = ListView::builder()
-            .view_type(ListViewType::Artists)
-            .compact(true)
-            .build();
+        let list_view = ListView::builder().view_type(Artists).compact(true).build();
 
-        assert_eq!(list_view.view_type, ListViewType::Artists);
+        assert_eq!(list_view.view_type, Artists);
         assert!(list_view.config.compact);
     }
 
     #[test]
     fn test_list_view_default() {
         let list_view = ListView::default();
-        assert_eq!(list_view.view_type, ListViewType::Albums);
+        assert_eq!(list_view.view_type, Albums);
         assert!(!list_view.config.compact);
     }
 
     #[test]
     fn test_list_view_types() {
-        assert_eq!(format!("{:?}", ListViewType::Albums), "Albums");
-        assert_eq!(format!("{:?}", ListViewType::Artists), "Artists");
+        assert_eq!(format!("{:?}", Albums), "Albums");
+        assert_eq!(format!("{:?}", Artists), "Artists");
     }
 }

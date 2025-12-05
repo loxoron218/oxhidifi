@@ -6,13 +6,16 @@
 use std::path::Path;
 
 use libadwaita::{
+    gio::File,
     gtk::{
+        AccessibleRole::Img,
         Align::{Center, End},
         Box as GtkBox,
+        ContentFit::Cover,
         Orientation::Vertical,
         Picture, Widget,
     },
-    prelude::{BoxExt, PictureExt, WidgetExt},
+    prelude::{AccessibleExt, BoxExt, Cast, WidgetExt},
 };
 
 use crate::ui::components::dr_badge::{DRBadge, DRBadgeBuilder};
@@ -144,22 +147,24 @@ impl CoverArt {
             .valign(Center)
             .width_request(width)
             .height_request(height)
-            .content_fit(libadwaita::gtk::ContentFit::Cover);
+            .content_fit(Cover);
 
-        if let Some(path) = &artwork_path {
-            if Path::new(path).exists() {
-                picture_builder = picture_builder.filename(path);
-            }
+        if let Some(path) = &artwork_path
+            && Path::new(path).exists()
+        {
+            let file = File::for_path(path);
+            picture_builder = picture_builder.file(&file);
         }
 
         let picture = picture_builder.build();
 
         // Set ARIA attributes for accessibility
-        picture.set_accessible_role(libadwaita::gtk::AccessibleRole::Image);
+        picture.set_accessible_role(Img);
         if let Some(path) = &artwork_path {
-            picture.set_accessible_description(Some(&format!("Album artwork for {}", path)));
+            // set_accessible_description doesn't exist in GTK4, use alternative accessibility methods
+            picture.set_tooltip_text(Some(&format!("Album artwork for {}", path)));
         } else {
-            picture.set_accessible_description(Some("Default album artwork"));
+            picture.set_tooltip_text(Some("Default album artwork"));
         }
 
         let mut dr_badge = None;
@@ -193,14 +198,14 @@ impl CoverArt {
             .valign(Center)
             .build();
 
-        main_container.append(&picture.upcast::<Widget>());
+        main_container.append(picture.upcast_ref::<Widget>());
 
         if let Some(ref container) = badge_container {
             main_container.append(container);
         }
 
         Self {
-            widget: main_container.upcast::<Widget>(),
+            widget: main_container.upcast_ref::<Widget>().clone(),
             picture,
             dr_badge,
             badge_container,
@@ -224,20 +229,18 @@ impl CoverArt {
     pub fn update_artwork(&mut self, artwork_path: Option<String>) {
         if let Some(path) = artwork_path {
             if Path::new(&path).exists() {
-                self.picture.set_filename(Some(&path));
+                self.picture.set_file(Some(&File::for_path(&path)));
                 self.picture
-                    .set_accessible_description(Some(&format!("Album artwork for {}", path)));
+                    .set_tooltip_text(Some(&format!("Album artwork for {}", path)));
             } else {
                 // Clear the image if path doesn't exist
-                self.picture.set_filename(None);
-                self.picture
-                    .set_accessible_description(Some("Default album artwork"));
+                self.picture.set_file(None::<&File>);
+                self.picture.set_tooltip_text(Some("Default album artwork"));
             }
         } else {
             // Clear the image
-            self.picture.set_filename(None);
-            self.picture
-                .set_accessible_description(Some("Default album artwork"));
+            self.picture.set_file(None::<&File>);
+            self.picture.set_tooltip_text(Some("Default album artwork"));
         }
     }
 
@@ -271,10 +274,10 @@ impl CoverArt {
             }
         } else if !show && self.dr_badge.is_some() {
             // Remove badge from container
-            if let Some(ref container) = self.badge_container {
-                if let Some(ref badge) = self.dr_badge {
-                    container.remove(&badge.widget);
-                }
+            if let Some(ref container) = self.badge_container
+                && let Some(ref badge) = self.dr_badge
+            {
+                container.remove(&badge.widget);
             }
             self.dr_badge = None;
         }
@@ -289,7 +292,7 @@ impl Default for CoverArt {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::ui::components::cover_art::CoverArt;
 
     #[test]
     fn test_cover_art_builder() {
@@ -316,13 +319,15 @@ mod tests {
     #[test]
     fn test_cover_art_update_artwork() {
         let mut cover_art = CoverArt::new(None, None, false, 100, 100);
-        
+
         // Test with non-existent path
         cover_art.update_artwork(Some("/non/existent/path.jpg".to_string()));
+
         // Should not panic and should clear the image
-        
+
         // Test with None
         cover_art.update_artwork(None);
+
         // Should not panic and should clear the image
     }
 }

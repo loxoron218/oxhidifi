@@ -5,16 +5,19 @@
 
 #[cfg(test)]
 mod ui_compliance_tests {
-    use std::sync::Arc;
+    use std::{sync::Arc, time::Instant};
 
-    use libadwaita::{init, prelude::*};
+    use libadwaita::init;
 
     use crate::{
         audio::engine::AudioEngine,
+        library::models::Album,
         state::AppState,
         ui::{
-            application::OxhidifiApplication, components::*, header_bar::HeaderBar,
-            player_bar::PlayerBar, views::*,
+            application::OxhidifiApplication,
+            header_bar::HeaderBar,
+            player_bar::PlayerBar,
+            views::{ListView, ListViewType::Albums},
         },
     };
 
@@ -26,10 +29,12 @@ mod ui_compliance_tests {
 
         // Test spacing guidelines (6px, 12px, 18px, 24px increments)
         let album_grid = AlbumGridView::default();
+
         // The margin values should follow GNOME spacing guidelines
         // This is verified by visual inspection in real implementation
-        
+
         let detail_view = DetailView::default();
+
         // Spacing in detail view should follow guidelines
         assert!(true);
     }
@@ -60,7 +65,7 @@ mod ui_compliance_tests {
         let artist_grid = ArtistGridView::new(app_state.clone(), Vec::new(), false);
         assert!(artist_grid.flow_box.accessible_description().is_some());
 
-        let album_list = ListView::new(app_state.clone(), ListViewType::Albums, false);
+        let album_list = ListView::new(app_state.clone(), Albums, false);
         assert!(album_list.list_box.accessible_description().is_some());
     }
 
@@ -85,7 +90,7 @@ mod ui_compliance_tests {
 
         let detail_view = DetailView::new(
             app_state.clone(),
-            DetailType::Album(crate::library::models::Album::default()),
+            DetailType::Album(Album::default()),
             false,
         );
         assert!(detail_view.main_container.get_focusable());
@@ -103,15 +108,15 @@ mod ui_compliance_tests {
 
         // Test that views can handle large datasets efficiently
         let large_albums = (0..1000)
-            .map(|i| crate::library::models::Album {
+            .map(|i| Album {
                 id: i,
                 artist_id: i % 100,
                 title: format!("Album {}", i),
-                ..crate::library::models::Album::default()
+                ..Album::default()
             })
             .collect::<Vec<_>>();
 
-        let start_time = std::time::Instant::now();
+        let start_time = Instant::now();
         let _album_grid = AlbumGridView::new(app_state.clone(), large_albums, true, false);
         let duration = start_time.elapsed();
 
@@ -133,14 +138,14 @@ mod ui_compliance_tests {
         // Test that components properly clean up resources
         // This is a basic test - real memory leak detection would require more sophisticated tools
         let initial_ref_count = Arc::strong_count(&app_state);
-        
+
         {
             let _header_bar = HeaderBar::default_with_state(app_state.clone());
             let _player_bar = PlayerBar::new(app_state.clone(), Arc::new(engine));
             let _album_grid = AlbumGridView::new(app_state.clone(), Vec::new(), true, false);
             let _detail_view = DetailView::new(
                 app_state.clone(),
-                DetailType::Album(crate::library::models::Album::default()),
+                DetailType::Album(Album::default()),
                 false,
             );
         }
@@ -163,7 +168,7 @@ mod ui_compliance_tests {
         // Test that views adapt to different screen sizes
         let small_album_grid = AlbumGridView::new(app_state.clone(), Vec::new(), true, true);
         let large_album_grid = AlbumGridView::new(app_state.clone(), Vec::new(), true, false);
-        
+
         // Compact mode should have different layout characteristics
         assert!(true);
     }

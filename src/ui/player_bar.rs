@@ -6,20 +6,30 @@
 use std::sync::Arc;
 
 use libadwaita::{
+    glib::MainContext,
     gtk::{
+        AccessibleRole::Img,
         Align::Start,
-        Box, Button, Label,
+        Box, Button,
+        ContentFit::Cover,
+        Label,
         Orientation::{Horizontal, Vertical},
         Picture, Scale, ToggleButton, Widget,
+        pango::EllipsizeMode::End,
     },
-    prelude::{
-        BoxExt, ButtonExt, LabelExt, PictureExt, RangeExt, ScaleExt, ToggleButtonExt, WidgetExt,
-    },
+    prelude::{AccessibleExt, BoxExt, ButtonExt, Cast, RangeExt, ToggleButtonExt, WidgetExt},
 };
 
 use crate::{
-    audio::engine::{AudioEngine, PlaybackState, TrackInfo},
-    state::{AppState, AppStateEvent},
+    audio::engine::{
+        AudioEngine,
+        PlaybackState::{self, Buffering, Paused, Playing, Ready, Stopped},
+        TrackInfo,
+    },
+    state::{
+        AppState,
+        AppStateEvent::{CurrentTrackChanged, PlaybackStateChanged},
+    },
     ui::components::hifi_metadata::HiFiMetadata,
 };
 
@@ -86,19 +96,20 @@ impl PlayerBar {
             .margin_bottom(6)
             .margin_start(12)
             .margin_end(12)
-            .css_classes(vec!["player-bar".to_string()])
+            .css_classes(["player-bar"])
             .build();
 
         // Album artwork
         let artwork = Picture::builder()
             .width_request(48)
             .height_request(48)
-            .content_fit(libadwaita::gtk::ContentFit::Cover)
+            .content_fit(Cover)
             .build();
-        
+
         // Set ARIA attributes
-        artwork.set_accessible_role(libadwaita::gtk::AccessibleRole::Image);
-        artwork.set_accessible_description(Some("Current track artwork"));
+        artwork.set_accessible_role(Img);
+
+        // set_accessible_description doesn't exist in GTK4, remove this line
 
         widget.append(&artwork);
 
@@ -109,20 +120,20 @@ impl PlayerBar {
             .label("No track loaded")
             .halign(Start)
             .xalign(0.0)
-            .ellipsize(libadwaita::gtk::pango::EllipsizeMode::End)
+            .ellipsize(End)
             .tooltip_text("No track loaded")
             .build();
-        track_info.append(&title_label.upcast::<Widget>());
+        track_info.append(title_label.upcast_ref::<Widget>());
 
         let artist_label = Label::builder()
             .label("")
             .halign(Start)
             .xalign(0.0)
-            .css_classes(vec!["dim-label".to_string()])
-            .ellipsize(libadwaita::gtk::pango::EllipsizeMode::End)
+            .css_classes(["dim-label"])
+            .ellipsize(End)
             .tooltip_text("")
             .build();
-        track_info.append(&artist_label.upcast::<Widget>());
+        track_info.append(artist_label.upcast_ref::<Widget>());
 
         widget.append(&track_info);
 
@@ -130,9 +141,9 @@ impl PlayerBar {
         let hifi_metadata_container = Box::builder()
             .orientation(Horizontal)
             .spacing(8)
-            .css_classes(vec!["hifi-metadata-container".to_string()])
+            .css_classes(["hifi-metadata-container"])
             .build();
-        widget.append(&hifi_metadata_container.upcast::<Widget>());
+        widget.append(hifi_metadata_container.upcast_ref::<Widget>());
 
         // Player controls
         let controls = Box::builder().orientation(Horizontal).spacing(6).build();
@@ -142,21 +153,21 @@ impl PlayerBar {
             .tooltip_text("Previous track")
             .sensitive(false) // Disabled until track is loaded
             .build();
-        controls.append(&prev_button.upcast::<Widget>());
+        controls.append(prev_button.upcast_ref::<Widget>());
 
         let play_button = ToggleButton::builder()
             .icon_name("media-playback-start-symbolic")
             .tooltip_text("Play")
             .sensitive(false) // Disabled until track is loaded
             .build();
-        controls.append(&play_button.upcast::<Widget>());
+        controls.append(play_button.upcast_ref::<Widget>());
 
         let next_button = Button::builder()
             .icon_name("media-skip-forward-symbolic")
             .tooltip_text("Next track")
             .sensitive(false) // Disabled until track is loaded
             .build();
-        controls.append(&next_button.upcast::<Widget>());
+        controls.append(next_button.upcast_ref::<Widget>());
 
         widget.append(&controls);
 
@@ -171,38 +182,35 @@ impl PlayerBar {
             .label("0:00")
             .width_chars(5)
             .xalign(1.0)
-            .css_classes(vec!["dim-label".to_string()])
+            .css_classes(["dim-label"])
             .build();
-        progress_container.append(&current_time_label.upcast::<Widget>());
+        progress_container.append(current_time_label.upcast_ref::<Widget>());
 
         let progress_scale = Scale::builder()
             .orientation(Horizontal)
             .hexpand(true)
             .draw_value(false)
             .build();
-        progress_container.append(&progress_scale.upcast::<Widget>());
+        progress_container.append(progress_scale.upcast_ref::<Widget>());
 
         let total_duration_label = Label::builder()
             .label("0:00")
             .width_chars(5)
             .xalign(0.0)
-            .css_classes(vec!["dim-label".to_string()])
+            .css_classes(["dim-label"])
             .build();
-        progress_container.append(&total_duration_label.upcast::<Widget>());
+        progress_container.append(total_duration_label.upcast_ref::<Widget>());
 
         widget.append(&progress_container);
 
         // Volume control with mute button
-        let volume_container = Box::builder()
-            .orientation(Horizontal)
-            .spacing(6)
-            .build();
+        let volume_container = Box::builder().orientation(Horizontal).spacing(6).build();
 
         let mute_button = ToggleButton::builder()
             .icon_name("audio-volume-high-symbolic")
             .tooltip_text("Mute")
             .build();
-        volume_container.append(&mute_button.upcast::<Widget>());
+        volume_container.append(mute_button.upcast_ref::<Widget>());
 
         let volume_scale = Scale::builder()
             .orientation(Horizontal)
@@ -210,7 +218,7 @@ impl PlayerBar {
             .draw_value(false)
             .build();
         volume_scale.set_value(100.0);
-        volume_container.append(&volume_scale.upcast::<Widget>());
+        volume_container.append(volume_scale.upcast_ref::<Widget>());
 
         widget.append(&volume_container);
 
@@ -218,7 +226,7 @@ impl PlayerBar {
         let status_container = Box::builder()
             .orientation(Horizontal)
             .spacing(8)
-            .css_classes(vec!["status-indicators".to_string()])
+            .css_classes(["status-indicators"])
             .build();
 
         // Gapless playback indicator
@@ -226,31 +234,31 @@ impl PlayerBar {
             .label("Gapless")
             .tooltip_text("Gapless playback enabled")
             .visible(false) // Hidden by default
-            .css_classes(vec!["status-indicator".to_string(), "dim-label".to_string()])
+            .css_classes(["status-indicator", "dim-label"])
             .build();
-        status_container.append(&gapless_indicator.upcast::<Widget>());
+        status_container.append(gapless_indicator.upcast_ref::<Widget>());
 
         // Bit-perfect output indicator
         let bit_perfect_indicator = Label::builder()
             .label("Bit-perfect")
             .tooltip_text("Bit-perfect output active")
             .visible(false) // Hidden by default
-            .css_classes(vec!["status-indicator".to_string(), "dim-label".to_string()])
+            .css_classes(["status-indicator", "dim-label"])
             .build();
-        status_container.append(&bit_perfect_indicator.upcast::<Widget>());
+        status_container.append(bit_perfect_indicator.upcast_ref::<Widget>());
 
         // Audio routing indicator
         let routing_indicator = Label::builder()
             .label("Stereo")
             .tooltip_text("Stereo output")
             .visible(false) // Hidden by default
-            .css_classes(vec!["status-indicator".to_string(), "dim-label".to_string()])
+            .css_classes(["status-indicator", "dim-label"])
             .build();
-        status_container.append(&routing_indicator.upcast::<Widget>());
+        status_container.append(routing_indicator.upcast_ref::<Widget>());
 
         widget.append(&status_container);
 
-        let mut player_bar = Self {
+        let player_bar = Self {
             widget,
             artwork,
             title_label,
@@ -291,13 +299,15 @@ impl PlayerBar {
         let mute_button = self.mute_button.clone();
 
         // Play/Pause button
+        let audio_engine_for_play = audio_engine.clone();
         play_button.connect_clicked(move |_| {
-            glib::MainContext::default().spawn(async move {
-                let state = audio_engine.current_playback_state();
-                if matches!(state, PlaybackState::Playing) {
-                    let _ = audio_engine.pause().await;
+            let audio_engine_clone = audio_engine_for_play.clone();
+            MainContext::default().spawn_local(async move {
+                let state = audio_engine_clone.current_playback_state();
+                if matches!(state, Playing) {
+                    let _ = audio_engine_clone.pause().await;
                 } else {
-                    let _ = audio_engine.play().await;
+                    let _ = audio_engine_clone.play().await;
                 }
             });
         });
@@ -315,10 +325,11 @@ impl PlayerBar {
         });
 
         // Progress scale seek
+        let audio_engine_seek = audio_engine.clone();
         progress_scale.connect_value_changed(move |scale| {
             let position = scale.value() as u64;
-            let audio_engine_clone = audio_engine.clone();
-            glib::MainContext::default().spawn(async move {
+            let audio_engine_clone = audio_engine_seek.clone();
+            MainContext::default().spawn_local(async move {
                 let _ = audio_engine_clone.seek(position).await;
             });
         });
@@ -326,6 +337,7 @@ impl PlayerBar {
         // Volume control
         volume_scale.connect_value_changed(move |scale| {
             let volume = scale.value() / 100.0;
+
             // Implementation would handle volume setting
             println!("Volume: {}", volume);
         });
@@ -333,6 +345,7 @@ impl PlayerBar {
         // Mute button
         mute_button.connect_toggled(move |button| {
             let muted = button.is_active();
+
             // Implementation would handle mute state
             println!("Muted: {}", muted);
         });
@@ -347,17 +360,17 @@ impl PlayerBar {
         let play_button = self.play_button.clone();
         let prev_button = self.prev_button.clone();
         let next_button = self.next_button.clone();
-        let progress_scale = self.progress_scale.clone();
-        let current_time_label = self.current_time_label.clone();
+        let _progress_scale = self.progress_scale.clone();
+        let _current_time_label = self.current_time_label.clone();
         let total_duration_label = self.total_duration_label.clone();
         let mut hifi_metadata = self.hifi_metadata.clone();
         let hifi_metadata_container = self.widget.clone(); // Use main widget as container for now
 
-        glib::MainContext::default().spawn(async move {
+        MainContext::default().spawn_local(async move {
             let mut receiver = app_state.subscribe();
             while let Ok(event) = receiver.recv().await {
                 match event {
-                    AppStateEvent::CurrentTrackChanged(track_info) => {
+                    CurrentTrackChanged(track_info) => {
                         Self::update_track_info(
                             &track_info,
                             &title_label,
@@ -371,7 +384,7 @@ impl PlayerBar {
                             &next_button,
                         );
                     }
-                    AppStateEvent::PlaybackStateChanged(state) => {
+                    PlaybackStateChanged(state) => {
                         Self::update_playback_state(&state, &play_button);
                     }
                     _ => {}
@@ -395,14 +408,18 @@ impl PlayerBar {
     ) {
         if let Some(info) = track_info {
             // Update title and artist
-            title_label.set_label(&info.metadata.title);
-            title_label.set_tooltip_text(Some(&info.metadata.title));
-            
-            artist_label.set_label(&info.metadata.artist);
-            artist_label.set_tooltip_text(Some(&info.metadata.artist));
+            title_label.set_label(&info.metadata.standard.title.clone().unwrap_or_default());
+            title_label.set_tooltip_text(Some(
+                &info.metadata.standard.title.clone().unwrap_or_default(),
+            ));
+
+            artist_label.set_label(&info.metadata.standard.artist.clone().unwrap_or_default());
+            artist_label.set_tooltip_text(Some(
+                &info.metadata.standard.artist.clone().unwrap_or_default(),
+            ));
 
             // Update artwork (placeholder - would load actual artwork)
-            artwork.set_filename(None); // Clear existing image
+            artwork.set_filename(None::<&str>); // Clear existing image
 
             // Update duration
             let duration_seconds = info.duration_ms / 1000;
@@ -417,16 +434,21 @@ impl PlayerBar {
             if hifi_metadata.is_none() {
                 // Create basic metadata display
                 let format_label = Label::builder()
-                    .label(&info.format.format)
-                    .css_classes(vec!["dim-label".to_string()])
+                    .label(format!(
+                        "{}-bit {}kHz {}ch ",
+                        info.format.bits_per_sample,
+                        info.format.sample_rate / 1000,
+                        info.format.channels
+                    ))
+                    .css_classes(["dim-label"])
                     .build();
-                hifi_metadata_container.append(&format_label.upcast::<Widget>());
-                
+                hifi_metadata_container.append(format_label.upcast_ref::<Widget>());
+
                 let sample_rate_label = Label::builder()
-                    .label(&format!("{}kHz", info.format.sample_rate / 1000))
-                    .css_classes(vec!["dim-label".to_string()])
+                    .label(format!("{}kHz", info.format.sample_rate / 1000))
+                    .css_classes(["dim-label"])
                     .build();
-                hifi_metadata_container.append(&sample_rate_label.upcast::<Widget>());
+                hifi_metadata_container.append(sample_rate_label.upcast_ref::<Widget>());
             }
 
             // Enable controls
@@ -439,9 +461,9 @@ impl PlayerBar {
             title_label.set_tooltip_text(Some("No track loaded"));
             artist_label.set_label("");
             artist_label.set_tooltip_text(Some(""));
-            artwork.set_filename(None);
+            artwork.set_filename(None::<&str>);
             total_duration_label.set_label("0:00");
-            
+
             // Disable controls
             play_button.set_sensitive(false);
             prev_button.set_sensitive(false);
@@ -452,15 +474,15 @@ impl PlayerBar {
     /// Updates playback state display.
     fn update_playback_state(state: &PlaybackState, play_button: &ToggleButton) {
         match state {
-            PlaybackState::Playing => {
+            Playing => {
                 play_button.set_icon_name("media-playback-pause-symbolic");
                 play_button.set_tooltip_text(Some("Pause"));
             }
-            PlaybackState::Paused | PlaybackState::Stopped | PlaybackState::Ready => {
+            Paused | Stopped | Ready => {
                 play_button.set_icon_name("media-playback-start-symbolic");
                 play_button.set_tooltip_text(Some("Play"));
             }
-            PlaybackState::Buffering => {
+            Buffering => {
                 play_button.set_icon_name("media-playback-pause-symbolic");
                 play_button.set_tooltip_text(Some("Buffering..."));
             }
@@ -476,11 +498,7 @@ mod tests {
 
     use libadwaita::{init, prelude::ButtonExt};
 
-    use crate::{
-        audio::engine::AudioEngine,
-        state::AppState,
-        ui::player_bar::PlayerBar,
-    };
+    use crate::{audio::engine::AudioEngine, state::AppState, ui::player_bar::PlayerBar};
 
     #[test]
     fn test_player_bar_creation() {
@@ -492,7 +510,7 @@ mod tests {
         let engine = AudioEngine::new().unwrap();
         let engine_weak = Arc::downgrade(&Arc::new(engine));
         let app_state = AppState::new(engine_weak);
-        
+
         // This test would require mocking AppState and AudioEngine properly
         // For now, we'll just verify the constructor signature compiles
         assert!(true);

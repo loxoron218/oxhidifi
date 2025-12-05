@@ -6,23 +6,30 @@
 
 use std::sync::Arc;
 
-use libadwaita::{
-    gtk::{
-        Align::{Center, Start},
-        Box as GtkBox,
-        FlowBox,
-        FlowBoxChild,
-        Label,
-        Orientation::Vertical,
-        Widget,
+use {
+    async_trait::async_trait,
+    libadwaita::{
+        gtk::{
+            AccessibleRole::{Grid, Group},
+            Align::{Center, Start},
+            Box as GtkBox, FlowBox, FlowBoxChild, Label,
+            Orientation::Vertical,
+            SelectionMode::None as SelectionNone,
+            Widget,
+            pango::EllipsizeMode::End,
+        },
+        prelude::{AccessibleExt, BoxExt, Cast, FlowBoxChildExt, ListModelExt, WidgetExt},
     },
-    prelude::{BoxExt, FlowBoxExt, LabelExt, WidgetExt},
 };
 
 use crate::{
     library::models::Album,
-    state::{AppState, LibraryState, StateObserver},
-    ui::components::{cover_art::CoverArt, hifi_metadata::HiFiMetadata},
+    state::{
+        AppState,
+        AppStateEvent::{self, LibraryStateChanged, SearchFilterChanged},
+        LibraryState, StateObserver,
+    },
+    ui::components::cover_art::CoverArt,
 };
 
 /// Builder pattern for configuring AlbumGridView components.
@@ -162,16 +169,17 @@ impl AlbumGridView {
             .valign(Start)
             .homogeneous(true)
             .max_children_per_line(100) // Will be adjusted based on available width
-            .selection_mode(libadwaita::gtk::SelectionMode::None)
-            .css_classes(vec!["album-grid".to_string()])
+            .selection_mode(SelectionNone)
+            .css_classes(["album-grid"])
             .build();
 
         // Set ARIA attributes for accessibility
-        flow_box.set_accessible_role(libadwaita::gtk::AccessibleRole::Grid);
-        flow_box.set_accessible_description(Some("Album grid view"));
+        flow_box.set_accessible_role(Grid);
+
+        // set_accessible_description doesn't exist in GTK4, remove this line
 
         let mut view = Self {
-            widget: flow_box.clone().upcast::<Widget>(),
+            widget: flow_box.clone().upcast_ref::<Widget>().clone(),
             flow_box,
             app_state,
             albums: Vec::new(),
@@ -200,9 +208,15 @@ impl AlbumGridView {
     /// * `albums` - New vector of albums to display
     pub fn set_albums(&mut self, albums: Vec<Album>) {
         // Clear existing children
-        self.flow_box.foreach(|child| {
-            self.flow_box.remove(child);
-        });
+        let children = self.flow_box.observe_children();
+        let n_items = children.n_items();
+        for i in 0..n_items {
+            if let Some(child) = children.item(i)
+                && let Ok(widget) = child.downcast::<Widget>()
+            {
+                self.flow_box.remove(&widget);
+            }
+        }
 
         self.albums = albums;
 
@@ -236,7 +250,7 @@ impl AlbumGridView {
             .label(&album.title)
             .halign(Center)
             .xalign(0.5)
-            .ellipsize(libadwaita::gtk::pango::EllipsizeMode::End)
+            .ellipsize(End)
             .lines(2)
             .tooltip_text(&album.title)
             .build();
@@ -252,8 +266,8 @@ impl AlbumGridView {
             .label(&artist_year_text)
             .halign(Center)
             .xalign(0.5)
-            .css_classes(vec!["dim-label".to_string()])
-            .ellipsize(libadwaita::gtk::pango::EllipsizeMode::End)
+            .css_classes(["dim-label"])
+            .ellipsize(End)
             .lines(1)
             .tooltip_text(&artist_year_text)
             .build();
@@ -268,26 +282,22 @@ impl AlbumGridView {
             .margin_bottom(8)
             .margin_start(8)
             .margin_end(8)
-            .css_classes(vec!["album-item".to_string()])
+            .css_classes(["album-item"])
             .build();
 
         container.append(&cover_art.widget);
-        container.append(&title_label.upcast::<Widget>());
-        container.append(&artist_year_label.upcast::<Widget>());
+        container.append(title_label.upcast_ref::<Widget>());
+        container.append(artist_year_label.upcast_ref::<Widget>());
 
         // Set ARIA attributes for accessibility
-        container.set_accessible_role(libadwaita::gtk::AccessibleRole::Group);
-        container.set_accessible_description(Some(&format!(
-            "Album: {}, Artist ID: {}",
-            album.title, album.artist_id
-        )));
+        container.set_accessible_role(Group);
 
         // Create FlowBoxChild wrapper
         let child = FlowBoxChild::new();
         child.set_child(Some(&container));
         child.set_focusable(true);
 
-        child.upcast::<Widget>()
+        child.upcast_ref::<Widget>().clone()
     }
 
     /// Updates the display configuration.
@@ -297,6 +307,7 @@ impl AlbumGridView {
     /// * `config` - New display configuration
     pub fn update_config(&mut self, config: AlbumGridViewConfig) {
         self.config = config;
+
         // Rebuild all album items with new configuration
         self.set_albums(self.albums.clone());
     }
@@ -327,7 +338,7 @@ impl AlbumGridView {
     /// * `sort_by` - Sorting criteria
     pub fn sort_albums(&mut self, sort_by: AlbumSortCriteria) {
         let mut sorted_albums = self.albums.clone();
-        
+
         match sort_by {
             AlbumSortCriteria::Title => {
                 sorted_albums.sort_by(|a, b| a.title.cmp(&b.title));
@@ -336,14 +347,13 @@ impl AlbumGridView {
                 sorted_albums.sort_by(|a, b| a.artist_id.cmp(&b.artist_id));
             }
             AlbumSortCriteria::Year => {
-                sorted_albums.sort_by(|a, b| {
-                    a.year.unwrap_or(0).cmp(&b.year.unwrap_or(0))
-                });
+                sorted_albums.sort_by(|a, b| a.year.unwrap_or(0).cmp(&b.year.unwrap_or(0)));
             }
             AlbumSortCriteria::DRValue => {
                 sorted_albums.sort_by(|a, b| {
                     let a_dr = a.dr_value.as_deref().unwrap_or("DR0");
                     let b_dr = b.dr_value.as_deref().unwrap_or("DR0");
+
                     // Extract numeric part for comparison
                     let a_num = a_dr
                         .chars()
@@ -379,14 +389,14 @@ pub enum AlbumSortCriteria {
     DRValue,
 }
 
-#[async_trait::async_trait]
+#[async_trait(?Send)]
 impl StateObserver for AlbumGridView {
-    async fn handle_state_change(&mut self, event: crate::state::AppStateEvent) {
+    async fn handle_state_change(&mut self, event: AppStateEvent) {
         match event {
-            crate::state::AppStateEvent::LibraryStateChanged(state) => {
+            LibraryStateChanged(state) => {
                 self.handle_library_state_change(state).await;
             }
-            crate::state::AppStateEvent::SearchFilterChanged(filter) => {
+            SearchFilterChanged(filter) => {
                 if let Some(query) = filter {
                     self.filter_albums(&query);
                 } else {
@@ -416,8 +426,7 @@ impl Default for AlbumGridView {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::library::models::Album;
+    use {crate::library::models::Album, ui::views::album_grid::AlbumGridView};
 
     #[test]
     fn test_album_grid_view_builder() {

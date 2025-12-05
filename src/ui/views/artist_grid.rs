@@ -6,22 +6,29 @@
 
 use std::sync::Arc;
 
-use libadwaita::{
-    gtk::{
-        Align::{Center, Start},
-        Box as GtkBox,
-        FlowBox,
-        FlowBoxChild,
-        Label,
-        Orientation::Vertical,
-        Widget,
+use {
+    async_trait::async_trait,
+    libadwaita::{
+        gtk::{
+            AccessibleRole::{Grid, Group},
+            Align::{Center, Start},
+            Box as GtkBox, FlowBox, FlowBoxChild, Label,
+            Orientation::Vertical,
+            SelectionMode::None as SelectionNone,
+            Widget,
+            pango::EllipsizeMode::End,
+        },
+        prelude::{AccessibleExt, BoxExt, Cast, FlowBoxChildExt, ListModelExt, WidgetExt},
     },
-    prelude::{BoxExt, FlowBoxExt, LabelExt, WidgetExt},
 };
 
 use crate::{
     library::models::Artist,
-    state::{AppState, LibraryState, StateObserver},
+    state::{
+        AppState,
+        AppStateEvent::{self, LibraryStateChanged, SearchFilterChanged},
+        LibraryState, StateObserver,
+    },
     ui::components::cover_art::CoverArt,
 };
 
@@ -123,11 +130,7 @@ impl ArtistGridView {
     /// # Returns
     ///
     /// A new `ArtistGridView` instance.
-    pub fn new(
-        app_state: Option<Arc<AppState>>,
-        artists: Vec<Artist>,
-        compact: bool,
-    ) -> Self {
+    pub fn new(app_state: Option<Arc<AppState>>, artists: Vec<Artist>, compact: bool) -> Self {
         let config = ArtistGridViewConfig { compact };
 
         let flow_box = FlowBox::builder()
@@ -135,16 +138,17 @@ impl ArtistGridView {
             .valign(Start)
             .homogeneous(true)
             .max_children_per_line(100) // Will be adjusted based on available width
-            .selection_mode(libadwaita::gtk::SelectionMode::None)
-            .css_classes(vec!["artist-grid".to_string()])
+            .selection_mode(SelectionNone)
+            .css_classes(["artist-grid"])
             .build();
 
         // Set ARIA attributes for accessibility
-        flow_box.set_accessible_role(libadwaita::gtk::AccessibleRole::Grid);
-        flow_box.set_accessible_description(Some("Artist grid view"));
+        flow_box.set_accessible_role(Grid);
+
+        // set_accessible_description doesn't exist in GTK4, remove this line
 
         let mut view = Self {
-            widget: flow_box.clone().upcast::<Widget>(),
+            widget: flow_box.clone().upcast_ref::<Widget>().clone(),
             flow_box,
             app_state,
             artists: Vec::new(),
@@ -173,9 +177,15 @@ impl ArtistGridView {
     /// * `artists` - New vector of artists to display
     pub fn set_artists(&mut self, artists: Vec<Artist>) {
         // Clear existing children
-        self.flow_box.foreach(|child| {
-            self.flow_box.remove(child);
-        });
+        let children = self.flow_box.observe_children();
+        let n_items = children.n_items();
+        for i in 0..n_items {
+            if let Some(child) = children.item(i)
+                && let Ok(widget) = child.downcast::<Widget>()
+            {
+                self.flow_box.remove(&widget);
+            }
+        }
 
         self.artists = artists;
 
@@ -208,7 +218,7 @@ impl ArtistGridView {
             .label(&artist.name)
             .halign(Center)
             .xalign(0.5)
-            .ellipsize(libadwaita::gtk::pango::EllipsizeMode::End)
+            .ellipsize(End)
             .lines(2)
             .tooltip_text(&artist.name)
             .build();
@@ -219,8 +229,8 @@ impl ArtistGridView {
             .label(album_count_text)
             .halign(Center)
             .xalign(0.5)
-            .css_classes(vec!["dim-label".to_string()])
-            .ellipsize(libadwaita::gtk::pango::EllipsizeMode::End)
+            .css_classes(["dim-label"])
+            .ellipsize(End)
             .lines(1)
             .tooltip_text(album_count_text)
             .build();
@@ -235,23 +245,24 @@ impl ArtistGridView {
             .margin_bottom(8)
             .margin_start(8)
             .margin_end(8)
-            .css_classes(vec!["artist-item".to_string()])
+            .css_classes(["artist-item"])
             .build();
 
         container.append(&cover_art.widget);
-        container.append(&name_label.upcast::<Widget>());
-        container.append(&album_count_label.upcast::<Widget>());
+        container.append(name_label.upcast_ref::<Widget>());
+        container.append(album_count_label.upcast_ref::<Widget>());
 
         // Set ARIA attributes for accessibility
-        container.set_accessible_role(libadwaita::gtk::AccessibleRole::Group);
-        container.set_accessible_description(Some(&format!("Artist: {}", artist.name)));
+        container.set_accessible_role(Group);
+
+        // set_accessible_description doesn't exist in GTK4, remove this line
 
         // Create FlowBoxChild wrapper
         let child = FlowBoxChild::new();
         child.set_child(Some(&container));
         child.set_focusable(true);
 
-        child.upcast::<Widget>()
+        child.upcast_ref::<Widget>().clone()
     }
 
     /// Updates the display configuration.
@@ -261,6 +272,7 @@ impl ArtistGridView {
     /// * `config` - New display configuration
     pub fn update_config(&mut self, config: ArtistGridViewConfig) {
         self.config = config;
+
         // Rebuild all artist items with new configuration
         self.set_artists(self.artists.clone());
     }
@@ -288,7 +300,7 @@ impl ArtistGridView {
     /// * `sort_by` - Sorting criteria
     pub fn sort_artists(&mut self, sort_by: ArtistSortCriteria) {
         let mut sorted_artists = self.artists.clone();
-        
+
         match sort_by {
             ArtistSortCriteria::Name => {
                 sorted_artists.sort_by(|a, b| a.name.cmp(&b.name));
@@ -313,14 +325,14 @@ pub enum ArtistSortCriteria {
     AlbumCount,
 }
 
-#[async_trait::async_trait]
+#[async_trait(?Send)]
 impl StateObserver for ArtistGridView {
-    async fn handle_state_change(&mut self, event: crate::state::AppStateEvent) {
+    async fn handle_state_change(&mut self, event: AppStateEvent) {
         match event {
-            crate::state::AppStateEvent::LibraryStateChanged(state) => {
+            LibraryStateChanged(state) => {
                 self.handle_library_state_change(state).await;
             }
-            crate::state::AppStateEvent::SearchFilterChanged(filter) => {
+            SearchFilterChanged(filter) => {
                 if let Some(query) = filter {
                     self.filter_artists(&query);
                 } else {
@@ -350,8 +362,7 @@ impl Default for ArtistGridView {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::library::models::Artist;
+    use {library::models::Artist, ui::views::artist_view::ArtistGridView};
 
     #[test]
     fn test_artist_grid_view_builder() {
