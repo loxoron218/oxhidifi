@@ -29,7 +29,10 @@ use crate::{
         AppStateEvent::{self, LibraryStateChanged, SearchFilterChanged},
         LibraryState, StateObserver,
     },
-    ui::components::cover_art::CoverArt,
+    ui::components::{
+        cover_art::CoverArt,
+        empty_state::{EmptyState, EmptyStateConfig},
+    },
 };
 
 /// Builder pattern for configuring AlbumGridView components.
@@ -129,6 +132,8 @@ pub struct AlbumGridView {
     pub albums: Vec<Album>,
     /// Configuration flags.
     pub config: AlbumGridViewConfig,
+    /// Empty state component for when no albums are available.
+    pub empty_state: Option<EmptyState>,
 }
 
 /// Configuration for AlbumGridView display options.
@@ -173,17 +178,39 @@ impl AlbumGridView {
             .css_classes(["album-grid"])
             .build();
 
+        // Create main container that can hold both flow box and empty state
+        let main_container = GtkBox::builder().orientation(Vertical).build();
+
+        main_container.append(&flow_box.clone().upcast::<Widget>());
+
         // Set ARIA attributes for accessibility
         flow_box.set_accessible_role(Grid);
 
         // set_accessible_description doesn't exist in GTK4, remove this line
 
+        // Create empty state component
+        let empty_state = app_state.as_ref().map(|state| {
+            EmptyState::new(
+                Some(state.clone()),
+                None, // Will be set later when we have access to settings
+                EmptyStateConfig {
+                    is_album_view: true,
+                },
+            )
+        });
+
+        // Add empty state to main container if it exists
+        if let Some(ref empty_state) = empty_state {
+            main_container.append(&empty_state.widget);
+        }
+
         let mut view = Self {
-            widget: flow_box.clone().upcast_ref::<Widget>().clone(),
+            widget: main_container.upcast_ref::<Widget>().clone(),
             flow_box,
             app_state,
             albums: Vec::new(),
             config,
+            empty_state,
         };
 
         // Populate with initial albums
@@ -219,6 +246,23 @@ impl AlbumGridView {
         }
 
         self.albums = albums;
+
+        // Update empty state visibility
+        if let Some(_empty_state) = &self.empty_state {
+            // Get current library state from app state if available
+            let library_state = if let Some(app_state) = &self.app_state {
+                app_state.get_library_state()
+            } else {
+                LibraryState {
+                    albums: self.albums.clone(),
+                    ..Default::default()
+                }
+            };
+            self.empty_state
+                .as_ref()
+                .unwrap()
+                .update_from_library_state(&library_state);
+        }
 
         // Add new album items
         for album in &self.albums {

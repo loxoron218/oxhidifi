@@ -67,6 +67,7 @@ impl Default for UserSettings {
 }
 
 /// Handles loading, saving, and validation of user preferences.
+#[derive(Clone)]
 pub struct SettingsManager {
     settings: UserSettings,
     config_path: PathBuf,

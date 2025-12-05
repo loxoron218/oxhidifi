@@ -5,14 +5,17 @@
 
 use std::{error::Error, sync::Arc};
 
-use libadwaita::{
-    Application, ApplicationWindow, NavigationPage, NavigationView,
-    glib::MainContext,
-    gtk::{Box as GtkBox, Orientation::Vertical, Widget},
-    prelude::{
-        AdwApplicationWindowExt, ApplicationExt, ApplicationExtManual, BoxExt, Cast, GtkWindowExt,
-        ListModelExt, WidgetExt,
+use {
+    libadwaita::{
+        Application, ApplicationWindow, NavigationPage, NavigationView,
+        glib::MainContext,
+        gtk::{Box as GtkBox, Orientation::Vertical, Widget},
+        prelude::{
+            AdwApplicationWindowExt, ApplicationExt, ApplicationExtManual, BoxExt, Cast,
+            GtkWindowExt, ListModelExt, WidgetExt,
+        },
     },
+    parking_lot::RwLock,
 };
 
 use crate::{
@@ -20,8 +23,8 @@ use crate::{
         AudioEngine,
         PlaybackState::{Buffering, Paused, Playing, Ready, Stopped},
     },
-    config::{SettingsManager, UserSettings},
-    library::LibraryDatabase,
+    config::SettingsManager,
+    library::{LibraryDatabase, scanner::LibraryScanner},
     state::{
         AppState,
         AppStateEvent::{LibraryStateChanged, PlaybackStateChanged, SearchFilterChanged},
@@ -50,10 +53,12 @@ pub struct OxhidifiApplication {
     pub audio_engine: Arc<AudioEngine>,
     /// Library database for music library operations.
     pub library_db: Arc<LibraryDatabase>,
+    /// Library scanner for real-time monitoring.
+    pub library_scanner: Option<Arc<RwLock<LibraryScanner>>>,
     /// Application state manager.
     pub app_state: Arc<AppState>,
     /// User settings manager.
-    pub settings: SettingsManager,
+    pub settings: Arc<SettingsManager>,
 }
 
 impl OxhidifiApplication {
@@ -76,12 +81,24 @@ impl OxhidifiApplication {
             AudioEngine::new().map_err(|e| format!("Failed to initialize audio engine: {}", e))?;
 
         // Initialize library database
-        let library_db = LibraryDatabase::new()
+        let library_db_raw = LibraryDatabase::new()
             .await
             .map_err(|e| format!("Failed to initialize library database: {}", e))?;
+        let library_db = Arc::new(library_db_raw);
 
         // Create application state
         let app_state = AppState::new(Arc::downgrade(&Arc::new(audio_engine.clone())));
+
+        // Initialize library scanner if there are library directories
+        let library_scanner = if !settings.get_settings().library_directories.is_empty() {
+            let settings_arc = Arc::new(RwLock::new(settings.get_settings().clone()));
+            let scanner = LibraryScanner::new(library_db.clone(), settings_arc, None)
+                .await
+                .map_err(|e| format!("Failed to initialize library scanner: {}", e))?;
+            Some(Arc::new(RwLock::new(scanner)))
+        } else {
+            None
+        };
 
         let app = Application::builder()
             .application_id("com.example.oxhidifi")
@@ -90,9 +107,10 @@ impl OxhidifiApplication {
         Ok(OxhidifiApplication {
             app,
             audio_engine: Arc::new(audio_engine),
-            library_db: Arc::new(library_db),
+            library_db,
+            library_scanner,
             app_state: Arc::new(app_state),
-            settings,
+            settings: Arc::new(settings),
         })
     }
 
@@ -105,7 +123,7 @@ impl OxhidifiApplication {
             let audio_engine_clone = self.audio_engine.clone();
             let library_db_clone = self.library_db.clone();
             let app_state_clone = self.app_state.clone();
-            let settings_clone = self.settings.get_settings().clone();
+            let settings_manager_clone = self.settings.clone();
 
             move |_| {
                 build_ui(
@@ -113,7 +131,7 @@ impl OxhidifiApplication {
                     &audio_engine_clone,
                     &library_db_clone,
                     &app_state_clone,
-                    &settings_clone,
+                    &settings_manager_clone,
                 );
             }
         });
@@ -128,7 +146,7 @@ fn build_ui(
     audio_engine: &Arc<AudioEngine>,
     library_db: &Arc<LibraryDatabase>,
     app_state: &Arc<AppState>,
-    settings: &UserSettings,
+    settings_manager: &Arc<SettingsManager>,
 ) {
     // Create the main window
     let window = ApplicationWindow::builder()
@@ -142,7 +160,7 @@ fn build_ui(
     let navigation_view = NavigationView::builder().build();
 
     // Create main content area with responsive layout
-    let main_content = create_main_content(app_state, settings, library_db, audio_engine);
+    let main_content = create_main_content(app_state, settings_manager, library_db, audio_engine);
 
     // Add main content as root page
     let main_page = NavigationPage::builder()
@@ -195,7 +213,7 @@ fn build_ui(
 /// Creates the main content area with responsive layout.
 fn create_main_content(
     app_state: &Arc<AppState>,
-    settings: &UserSettings,
+    settings_manager: &Arc<SettingsManager>,
     _library_db: &Arc<LibraryDatabase>,
     _audio_engine: &Arc<AudioEngine>,
 ) -> Widget {
@@ -209,15 +227,20 @@ fn create_main_content(
         .margin_end(12)
         .build();
 
-    let show_dr_badges = settings.show_dr_values;
+    let show_dr_badges = settings_manager.get_settings().show_dr_values;
 
     // Create all possible views upfront
-    let album_grid_view = AlbumGridView::builder()
+    let mut album_grid_view = AlbumGridView::builder()
         .app_state(app_state.clone())
         .albums(Vec::new())
         .show_dr_badges(show_dr_badges)
         .compact(false)
         .build();
+
+    // Inject settings manager into empty state
+    if let Some(empty_state) = &mut album_grid_view.empty_state {
+        empty_state.settings_manager = Some((**settings_manager).clone());
+    }
 
     let album_list_view = ListView::builder()
         .app_state(app_state.clone())
@@ -225,11 +248,16 @@ fn create_main_content(
         .compact(false)
         .build();
 
-    let artist_grid_view = ArtistGridView::builder()
+    let mut artist_grid_view = ArtistGridView::builder()
         .app_state(app_state.clone())
         .artists(Vec::new())
         .compact(false)
         .build();
+
+    // Inject settings manager into empty state
+    if let Some(empty_state) = &mut artist_grid_view.empty_state {
+        empty_state.settings_manager = Some((**settings_manager).clone());
+    }
 
     let artist_list_view = ListView::builder()
         .app_state(app_state.clone())
