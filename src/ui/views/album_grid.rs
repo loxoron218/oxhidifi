@@ -284,7 +284,7 @@ impl AlbumGridView {
     fn create_album_item(&self, album: &Album) -> Widget {
         // Create cover art
         let cover_art = CoverArt::builder()
-            .artwork_path(&album.path)
+            .artwork_path(album.artwork_path.as_deref().unwrap_or(&album.path))
             .dr_value(album.dr_value.clone().unwrap_or_else(|| "N/A".to_string()))
             .show_dr_badge(self.config.show_dr_badges)
             .dimensions(180, 180)

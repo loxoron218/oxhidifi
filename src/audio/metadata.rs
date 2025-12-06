@@ -11,6 +11,7 @@ use {
     lofty::{
         error::{ErrorKind::Io, LoftyError},
         file::FileType::{Aac, Aiff, Flac, Mpc, Mpeg, Opus, Vorbis, Wav},
+        picture::PictureType::{CoverBack, CoverFront, Leaflet},
         prelude::{AudioFile, ItemKey::AlbumArtist, TaggedFileExt},
         probe::Probe,
         tag::Accessor,
@@ -84,6 +85,8 @@ pub struct TrackMetadata {
     pub standard: StandardMetadata,
     /// Technical audio properties.
     pub technical: TechnicalMetadata,
+    /// Embedded artwork data (if available).
+    pub artwork: Option<Vec<u8>>,
 }
 
 /// Extracts metadata from an audio file.
@@ -183,9 +186,23 @@ impl TagReader {
             file_size,
         };
 
+        // Extract embedded artwork (prefer front cover)
+        let artwork = primary_tag.and_then(|tag| {
+            // Try to get front cover first
+            tag.get_picture_type(CoverFront)
+                .or_else(|| {
+                    // Fall back to any cover if front cover not available
+                    tag.pictures()
+                        .iter()
+                        .find(|pic| matches!(pic.pic_type(), CoverFront | CoverBack | Leaflet))
+                })
+                .map(|pic| pic.data().to_vec())
+        });
+
         Ok(TrackMetadata {
             standard,
             technical,
+            artwork,
         })
     }
 }
@@ -244,6 +261,38 @@ mod tests {
 
         let serialized = to_string(&metadata).unwrap();
         let deserialized: TechnicalMetadata = from_str(&serialized).unwrap();
+        assert_eq!(metadata, deserialized);
+    }
+
+    #[test]
+    fn test_track_metadata_serialization() {
+        let metadata = TrackMetadata {
+            standard: StandardMetadata {
+                title: Some("Test Title".to_string()),
+                artist: Some("Test Artist".to_string()),
+                album: Some("Test Album".to_string()),
+                album_artist: None,
+                track_number: Some(1),
+                total_tracks: Some(10),
+                disc_number: Some(1),
+                total_discs: Some(1),
+                year: Some(2023),
+                genre: Some("Classical".to_string()),
+                comment: Some("Test comment".to_string()),
+            },
+            technical: TechnicalMetadata {
+                format: "FLAC".to_string(),
+                sample_rate: 96000,
+                bits_per_sample: 24,
+                channels: 2,
+                duration_ms: 300000,
+                file_size: 1024,
+            },
+            artwork: None,
+        };
+
+        let serialized = to_string(&metadata).unwrap();
+        let deserialized: TrackMetadata = from_str(&serialized).unwrap();
         assert_eq!(metadata, deserialized);
     }
 }

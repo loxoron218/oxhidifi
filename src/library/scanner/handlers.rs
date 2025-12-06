@@ -12,7 +12,13 @@ use {
 };
 
 use crate::{
-    audio::metadata::{TagReader, TrackMetadata},
+    audio::{
+        artwork::{
+            ArtworkSource::{Embedded, External},
+            extract_artwork, find_external_artwork, save_embedded_artwork,
+        },
+        metadata::{TagReader, TrackMetadata},
+    },
     config::settings::UserSettings,
     error::domain::LibraryError,
     library::database::LibraryDatabase,
@@ -273,6 +279,15 @@ async fn update_album_in_database(
 ) -> Result<(), LibraryError> {
     let pool = database.pool();
 
+    // Extract audio file paths from tracks_metadata
+    let audio_files: Vec<PathBuf> = tracks_metadata
+        .iter()
+        .map(|(path, _)| path.clone())
+        .collect();
+
+    // Extract artwork path
+    let artwork_path = extract_album_artwork_path(album_dir, &audio_files).await;
+
     // Begin transaction
     let mut tx = pool.begin().await?;
 
@@ -287,6 +302,7 @@ async fn update_album_in_database(
         tracks_metadata,
         album_dir,
         is_compilation,
+        artwork_path.as_deref(),
     )
     .await?;
 
@@ -349,6 +365,7 @@ async fn get_or_create_artist(
 /// * `tracks_metadata` - Track metadata.
 /// * `album_dir` - Album directory path.
 /// * `is_compilation` - Whether it's a compilation.
+/// * `artwork_path` - Optional path to album artwork file.
 ///
 /// # Returns
 ///
@@ -364,6 +381,7 @@ async fn get_or_create_album(
     tracks_metadata: &[(PathBuf, TrackMetadata)],
     album_dir: &Path,
     is_compilation: bool,
+    artwork_path: Option<&str>,
 ) -> Result<i64, LibraryError> {
     let album_title = album_info.as_deref().unwrap_or("Unknown Album");
     let year = tracks_metadata
@@ -387,10 +405,11 @@ async fn get_or_create_album(
         Some(id) => {
             // Update existing album
             query(
-                "UPDATE albums SET path = ?, compilation = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+                "UPDATE albums SET path = ?, compilation = ?, artwork_path = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
             )
             .bind(album_dir.to_string_lossy().to_string())
             .bind(is_compilation)
+            .bind(artwork_path)
             .bind(id)
             .execute(&mut **tx)
             .await?;
@@ -399,7 +418,7 @@ async fn get_or_create_album(
         None => {
             // Create new album
             let id: i64 = query_scalar(
-                "INSERT INTO albums (artist_id, title, year, genre, compilation, path) VALUES (?, ?, ?, ?, ?, ?) RETURNING id"
+                "INSERT INTO albums (artist_id, title, year, genre, compilation, path, artwork_path) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id"
             )
             .bind(artist_id)
             .bind(album_title)
@@ -407,6 +426,7 @@ async fn get_or_create_album(
             .bind(genre)
             .bind(is_compilation)
             .bind(album_dir.to_string_lossy().to_string())
+            .bind(artwork_path)
             .fetch_one(&mut **tx)
             .await?;
             Ok(id)
@@ -495,4 +515,45 @@ async fn update_track_in_transaction(
     }
 
     Ok(())
+}
+
+/// Extracts artwork path for an album directory.
+///
+/// Attempts to find artwork by checking the first audio file in the album
+/// for embedded artwork, then falls back to external artwork files.
+///
+/// # Arguments
+///
+/// * `album_dir` - Path to the album directory.
+/// * `audio_files` - List of audio files in the album.
+///
+/// # Returns
+///
+/// An `Option<String>` containing the artwork file path if found.
+async fn extract_album_artwork_path(album_dir: &Path, audio_files: &[PathBuf]) -> Option<String> {
+    // Try to extract artwork from the first audio file
+    if let Some(first_file) = audio_files.first() {
+        match extract_artwork(first_file) {
+            Ok(Embedded(data, _mime_type)) => {
+                // Save embedded artwork to a file in the album directory
+                let artwork_path = album_dir.join("folder.jpg");
+                if save_embedded_artwork(&data, &artwork_path).is_ok() {
+                    return Some(artwork_path.to_string_lossy().to_string());
+                }
+            }
+            Ok(External(path)) => {
+                return Some(path.to_string_lossy().to_string());
+            }
+            Err(_) => {
+                // Continue to external file search
+            }
+        }
+    }
+
+    // Look for external artwork files directly
+    if let Ok(Some(external_path)) = find_external_artwork(album_dir) {
+        return Some(external_path.to_string_lossy().to_string());
+    }
+
+    None
 }

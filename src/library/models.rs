@@ -45,6 +45,9 @@ pub struct Album {
     /// DR (Dynamic Range) value (if available).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dr_value: Option<String>,
+    /// Path to album artwork file (if available).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub artwork_path: Option<String>,
     /// Timestamp when the album was first added to the library.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_at: Option<String>,
@@ -150,6 +153,7 @@ mod tests {
             compilation: false,
             path: "/path/to/album".to_string(),
             dr_value: Some("DR12".to_string()),
+            artwork_path: Some("/path/to/album/folder.jpg".to_string()),
             created_at: Some("2023-01-01 00:00:00".to_string()),
             updated_at: Some("2023-01-02 00:00:00".to_string()),
         };

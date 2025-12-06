@@ -7,7 +7,7 @@ use std::{env::var, fs::create_dir_all, path::PathBuf};
 
 use {
     sqlx::{
-        SqlitePool, query, query_scalar,
+        Error as SqlxError, SqlitePool, query, query_scalar,
         sqlite::{SqliteConnectOptions, SqliteJournalMode::Wal, SqliteSynchronous::Normal},
     },
     thiserror::Error,
@@ -18,14 +18,14 @@ use {
 pub enum SchemaError {
     /// Database connection error.
     #[error("Database connection error: {0}")]
-    ConnectionError(#[from] sqlx::Error),
+    ConnectionError(#[from] SqlxError),
     /// Schema migration error.
     #[error("Schema migration error: {reason}")]
     MigrationError { reason: String },
 }
 
 /// Current schema version.
-pub const CURRENT_SCHEMA_VERSION: i32 = 1;
+pub const CURRENT_SCHEMA_VERSION: i32 = 2;
 
 /// Database schema definition.
 pub struct SchemaManager {
@@ -89,10 +89,8 @@ impl SchemaManager {
                 // Schema is up to date
             }
             Some(version) => {
-                // Migration needed (not implemented in Phase 1)
-                return Err(SchemaError::MigrationError {
-                    reason: format!("Schema migration from version {} not implemented", version),
-                });
+                // Handle migrations
+                self.migrate_schema(version).await?;
             }
         }
 
@@ -135,6 +133,7 @@ impl SchemaManager {
                 compilation BOOLEAN DEFAULT FALSE,
                 path TEXT NOT NULL UNIQUE,
                 dr_value TEXT,
+                artwork_path TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (artist_id) REFERENCES artists (id) ON DELETE CASCADE,
@@ -190,6 +189,39 @@ impl SchemaManager {
         query("CREATE INDEX idx_tracks_path ON tracks (path)")
             .execute(&self.pool)
             .await?;
+
+        Ok(())
+    }
+
+    /// Migrates the database schema from an older version.
+    ///
+    /// # Arguments
+    ///
+    /// * `from_version` - The current schema version.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` indicating success or failure.
+    async fn migrate_schema(&self, from_version: i32) -> Result<(), SchemaError> {
+        if from_version == 1 && CURRENT_SCHEMA_VERSION >= 2 {
+            // Migration from v1 to v2: Add artwork_path column to albums table
+            query("ALTER TABLE albums ADD COLUMN artwork_path TEXT")
+                .execute(&self.pool)
+                .await?;
+
+            // Update schema version
+            query("UPDATE schema_version SET version = ?")
+                .bind(CURRENT_SCHEMA_VERSION)
+                .execute(&self.pool)
+                .await?;
+        } else {
+            return Err(SchemaError::MigrationError {
+                reason: format!(
+                    "Schema migration from version {} to {} not implemented",
+                    from_version, CURRENT_SCHEMA_VERSION
+                ),
+            });
+        }
 
         Ok(())
     }
@@ -274,7 +306,7 @@ mod tests {
 
     #[test]
     fn test_schema_version_constant() {
-        assert_eq!(CURRENT_SCHEMA_VERSION, 1);
+        assert_eq!(CURRENT_SCHEMA_VERSION, 2);
     }
 
     #[test]

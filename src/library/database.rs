@@ -82,7 +82,7 @@ impl LibraryDatabase {
                 query_as::<_, Album>(
                     r#"
                     SELECT id, artist_id, title, year, genre, compilation, path, dr_value,
-                           created_at, updated_at
+                           artwork_path, created_at, updated_at
                     FROM albums
                     WHERE title LIKE ?
                     ORDER BY title, year
@@ -96,7 +96,7 @@ impl LibraryDatabase {
                 query_as::<_, Album>(
                     r#"
                     SELECT id, artist_id, title, year, genre, compilation, path, dr_value,
-                           created_at, updated_at
+                           artwork_path, created_at, updated_at
                     FROM albums
                     ORDER BY title, year
                     "#,
@@ -260,7 +260,7 @@ impl LibraryDatabase {
         let albums = query_as::<_, Album>(
             r#"
             SELECT id, artist_id, title, year, genre, compilation, path, dr_value,
-                   created_at, updated_at
+                   artwork_path, created_at, updated_at
             FROM albums
             WHERE title LIKE ?
             ORDER BY title, year
@@ -438,19 +438,20 @@ impl LibraryDatabase {
             if let Some(album_id) = existing_album {
                 // Update existing album
                 query(
-                    "UPDATE albums SET genre = ?, compilation = ?, path = ?, dr_value = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+                    "UPDATE albums SET genre = ?, compilation = ?, path = ?, dr_value = ?, artwork_path = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
                 )
                 .bind(album.genre)
                 .bind(album.compilation)
                 .bind(album.path)
                 .bind(album.dr_value)
+                .bind(album.artwork_path)
                 .bind(album_id)
                 .execute(&mut *tx)
                 .await?;
             } else {
                 // Insert new album
                 query(
-                    "INSERT INTO albums (artist_id, title, year, genre, compilation, path, dr_value) VALUES (?, ?, ?, ?, ?, ?, ?)"
+                    "INSERT INTO albums (artist_id, title, year, genre, compilation, path, dr_value, artwork_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
                 )
                 .bind(album.artist_id)
                 .bind(album.title)
@@ -459,6 +460,7 @@ impl LibraryDatabase {
                 .bind(album.compilation)
                 .bind(album.path)
                 .bind(album.dr_value)
+                .bind(album.artwork_path)
                 .execute(&mut *tx)
                 .await?;
             }
