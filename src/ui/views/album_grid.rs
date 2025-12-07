@@ -471,7 +471,7 @@ impl Default for AlbumGridView {
 
 #[cfg(test)]
 mod tests {
-    use {crate::library::models::Album, ui::views::album_grid::AlbumGridView};
+    use crate::{library::models::Album, ui::views::album_grid::AlbumGridView};
 
     #[test]
     fn test_album_grid_view_builder() {
@@ -485,6 +485,7 @@ mod tests {
                 compilation: false,
                 path: "/path/to/album1".to_string(),
                 dr_value: Some("DR12".to_string()),
+                artwork_path: None,
                 created_at: None,
                 updated_at: None,
             },
@@ -497,6 +498,7 @@ mod tests {
                 compilation: true,
                 path: "/path/to/album2".to_string(),
                 dr_value: Some("DR8".to_string()),
+                artwork_path: None,
                 created_at: None,
                 updated_at: None,
             },
@@ -529,6 +531,7 @@ mod tests {
                 artist_id: 1,
                 title: "B Album".to_string(),
                 year: Some(2023),
+                artwork_path: None,
                 ..Album::default()
             },
             Album {
@@ -536,6 +539,7 @@ mod tests {
                 artist_id: 2,
                 title: "A Album".to_string(),
                 year: Some(2022),
+                artwork_path: None,
                 ..Album::default()
             },
         ];

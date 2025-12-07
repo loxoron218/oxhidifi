@@ -7,17 +7,20 @@
 mod view_integration_tests {
     use std::sync::Arc;
 
-    use libadwaita::{init, prelude::*};
+    use libadwaita::{
+        gtk::AccessibleRole::{Grid, List},
+        init,
+    };
 
     use crate::{
         audio::engine::AudioEngine,
         library::models::{Album, Artist},
         state::AppState,
         ui::views::{
-            AccessibleRole::{Grid, List},
-            AlbumGridView, ArtistGridView, DetailType, DetailView, ListView,
-            ListViewType::{Albums, Artists},
+            AlbumGridView, ArtistGridView, DetailView, ListView,
             album_grid::AlbumSortCriteria::{Title, Year},
+            detail_view::DetailType,
+            list_view::ListViewType::{Albums, Artists},
         },
     };
 
@@ -29,11 +32,11 @@ mod view_integration_tests {
 
         let engine = AudioEngine::new().unwrap();
         let engine_weak = Arc::downgrade(&Arc::new(engine));
-        let app_state = AppState::new(engine_weak);
+        let app_state = AppState::new(engine_weak, None);
 
         // Test album grid view creation
         let album_grid = AlbumGridView::builder()
-            .app_state(app_state.clone())
+            .app_state(Arc::new(app_state.clone()))
             .albums(Vec::new())
             .show_dr_badges(true)
             .compact(false)
@@ -42,7 +45,7 @@ mod view_integration_tests {
 
         // Test artist grid view creation
         let artist_grid = ArtistGridView::builder()
-            .app_state(app_state.clone())
+            .app_state(Arc::new(app_state.clone()))
             .artists(Vec::new())
             .compact(false)
             .build();
@@ -50,7 +53,7 @@ mod view_integration_tests {
 
         // Test list view creation for albums
         let album_list = ListView::builder()
-            .app_state(app_state.clone())
+            .app_state(Arc::new(app_state.clone()))
             .view_type(Albums)
             .compact(false)
             .build();
@@ -58,7 +61,7 @@ mod view_integration_tests {
 
         // Test list view creation for artists
         let artist_list = ListView::builder()
-            .app_state(app_state.clone())
+            .app_state(Arc::new(app_state.clone()))
             .view_type(Artists)
             .compact(false)
             .build();
@@ -67,7 +70,7 @@ mod view_integration_tests {
         // Test detail view creation for album
         let album = Album::default();
         let album_detail = DetailView::builder()
-            .app_state(app_state.clone())
+            .app_state(Arc::new(app_state.clone()))
             .detail_type(DetailType::Album(album))
             .compact(false)
             .build();
@@ -76,7 +79,7 @@ mod view_integration_tests {
         // Test detail view creation for artist
         let artist = Artist::default();
         let artist_detail = DetailView::builder()
-            .app_state(app_state.clone())
+            .app_state(Arc::new(app_state.clone()))
             .detail_type(DetailType::Artist(artist))
             .compact(false)
             .build();
@@ -91,7 +94,7 @@ mod view_integration_tests {
 
         let engine = AudioEngine::new().unwrap();
         let engine_weak = Arc::downgrade(&Arc::new(engine));
-        let app_state = AppState::new(engine_weak);
+        let app_state = AppState::new(engine_weak, None);
 
         let albums = vec![
             Album {
@@ -111,7 +114,7 @@ mod view_integration_tests {
         ];
 
         let mut album_grid = AlbumGridView::builder()
-            .app_state(app_state.clone())
+            .app_state(Arc::new(app_state.clone()))
             .albums(albums.clone())
             .show_dr_badges(true)
             .compact(false)
@@ -140,17 +143,18 @@ mod view_integration_tests {
 
         let engine = AudioEngine::new().unwrap();
         let engine_weak = Arc::downgrade(&Arc::new(engine));
-        let app_state = AppState::new(engine_weak);
+        let app_state = AppState::new(engine_weak, None);
 
         // Test that views support keyboard navigation
-        let album_grid = AlbumGridView::new(app_state.clone(), Vec::new(), true, false);
-        assert!(album_grid.flow_box.get_focusable() || true);
+        let album_grid =
+            AlbumGridView::new(Some(app_state.clone().into()), Vec::new(), true, false);
+        assert!(album_grid.flow_box.is_focusable() || true);
 
-        let artist_grid = ArtistGridView::new(app_state.clone(), Vec::new(), false);
-        assert!(artist_grid.flow_box.get_focusable() || true);
+        let artist_grid = ArtistGridView::new(Some(app_state.clone().into()), Vec::new(), false);
+        assert!(artist_grid.flow_box.is_focusable() || true);
 
-        let album_list = ListView::new(app_state.clone(), Albums, false);
-        assert!(album_list.list_box.get_focusable() || true);
+        let album_list = ListView::new(Some(app_state.clone().into()), Albums, false);
+        assert!(album_list.list_box.is_focusable() || true);
     }
 
     #[test]
@@ -161,16 +165,17 @@ mod view_integration_tests {
 
         let engine = AudioEngine::new().unwrap();
         let engine_weak = Arc::downgrade(&Arc::new(engine));
-        let app_state = AppState::new(engine_weak);
+        let app_state = AppState::new(engine_weak, None);
 
         // Test accessibility attributes
-        let album_grid = AlbumGridView::new(app_state.clone(), Vec::new(), true, false);
+        let album_grid =
+            AlbumGridView::new(Some(app_state.clone().into()), Vec::new(), true, false);
         assert_eq!(album_grid.flow_box.accessible_role(), Grid);
 
-        let artist_grid = ArtistGridView::new(app_state.clone(), Vec::new(), false);
+        let artist_grid = ArtistGridView::new(Some(app_state.clone().into()), Vec::new(), false);
         assert_eq!(artist_grid.flow_box.accessible_role(), Grid);
 
-        let album_list = ListView::new(app_state.clone(), Albums, false);
+        let album_list = ListView::new(Some(app_state.clone().into()), Albums, false);
         assert_eq!(album_list.list_box.accessible_role(), List);
     }
 }

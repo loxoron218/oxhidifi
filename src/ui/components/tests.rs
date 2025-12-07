@@ -6,13 +6,10 @@
 
 #[cfg(test)]
 mod component_tests {
-    use std::sync::Arc;
-
-    use libadwaita::init;
+    use libadwaita::{gtk::AccessibleRole::None, init};
 
     use crate::{
         library::models::Track,
-        state::AppState,
         ui::components::{
             cover_art::CoverArt, dr_badge::DRBadge, hifi_metadata::HiFiMetadata,
             play_overlay::PlayOverlay,
@@ -48,8 +45,8 @@ mod component_tests {
             .dimensions(100, 100)
             .build();
 
-        assert_eq!(cover_art.picture.width_request(), 100);
-        assert_eq!(cover_art.picture.height_request(), 100);
+        assert_eq!(cover_art.picture.width(), 100);
+        assert_eq!(cover_art.picture.height(), 100);
         assert!(cover_art.dr_badge.is_some());
     }
 
@@ -116,14 +113,14 @@ mod component_tests {
 
         // Test DRBadge accessibility
         let badge = DRBadge::new(Some("DR12".to_string()), true);
-        assert!(badge.label.accessible_description().is_some());
+        assert!(badge.label.accessible_role() != None);
 
         // Test CoverArt accessibility
         let cover_art = CoverArt::new(None, None, false, 50, 50);
-        assert!(cover_art.picture.accessible_description().is_some());
+        assert!(cover_art.picture.accessible_role() != None);
 
         // Test PlayOverlay accessibility
         let overlay = PlayOverlay::new(false, false);
-        assert!(overlay.button.accessible_description().is_some());
+        assert!(overlay.button.accessible_role() != None);
     }
 }

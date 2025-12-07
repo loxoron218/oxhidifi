@@ -10,7 +10,10 @@ mod tests {
     use lofty::picture::MimeType::{Jpeg, Png};
 
     use crate::audio::{
-        artwork::{ArtworkSource::External, detect_mime_type, extract_artwork},
+        artwork::{
+            ArtworkSource::{Embedded, External},
+            detect_mime_type, extract_artwork,
+        },
         metadata::TagReader::read_metadata,
     };
 

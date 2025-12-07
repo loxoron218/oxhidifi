@@ -407,7 +407,7 @@ impl Default for ArtistGridView {
 
 #[cfg(test)]
 mod tests {
-    use {library::models::Artist, ui::views::artist_view::ArtistGridView};
+    use crate::{library::models::Artist, ui::views::artist_grid::ArtistGridView};
 
     #[test]
     fn test_artist_grid_view_builder() {

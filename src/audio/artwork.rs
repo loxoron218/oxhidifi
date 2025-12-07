@@ -151,7 +151,7 @@ pub fn find_external_artwork(dir: &Path) -> Result<Option<PathBuf>, ArtworkError
 /// # Returns
 ///
 /// An `Option<MimeType>` representing the detected MIME type.
-fn detect_mime_type(data: &[u8]) -> Option<MimeType> {
+pub fn detect_mime_type(data: &[u8]) -> Option<MimeType> {
     if data.len() < 4 {
         return None;
     }

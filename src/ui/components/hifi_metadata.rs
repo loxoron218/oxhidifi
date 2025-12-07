@@ -396,7 +396,7 @@ impl Default for HiFiMetadata {
 
 #[cfg(test)]
 mod tests {
-    use crate::{library::models::Track, ui::component::hifi_metadata::HiFiMetadata};
+    use crate::{library::models::Track, ui::components::hifi_metadata::HiFiMetadata};
 
     #[test]
     fn test_hifi_metadata_builder() {

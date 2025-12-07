@@ -496,9 +496,9 @@ impl PlayerBar {
 mod tests {
     use std::sync::Arc;
 
-    use libadwaita::{init, prelude::ButtonExt};
+    use libadwaita::init;
 
-    use crate::{audio::engine::AudioEngine, state::AppState, ui::player_bar::PlayerBar};
+    use crate::{audio::engine::AudioEngine, state::AppState};
 
     #[test]
     fn test_player_bar_creation() {
@@ -509,7 +509,7 @@ mod tests {
 
         let engine = AudioEngine::new().unwrap();
         let engine_weak = Arc::downgrade(&Arc::new(engine));
-        let app_state = AppState::new(engine_weak);
+        let app_state = AppState::new(engine_weak, None);
 
         // This test would require mocking AppState and AudioEngine properly
         // For now, we'll just verify the constructor signature compiles

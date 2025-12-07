@@ -292,6 +292,8 @@ impl Default for CoverArt {
 
 #[cfg(test)]
 mod tests {
+    use libadwaita::prelude::WidgetExt;
+
     use crate::ui::components::cover_art::CoverArt;
 
     #[test]

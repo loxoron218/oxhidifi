@@ -250,7 +250,7 @@ mod tests {
         audio::engine::{AudioEngine, PlaybackState::Stopped},
         state::{
             AppState,
-            LibraryState::{Albums, Artists},
+            LibraryTab::{Albums, Artists},
             ViewMode::{Grid, List},
         },
     };
@@ -259,7 +259,7 @@ mod tests {
     fn test_app_state_creation() {
         let engine = AudioEngine::new().unwrap();
         let engine_weak = Arc::downgrade(&Arc::new(engine));
-        let app_state = AppState::new(engine_weak);
+        let app_state = AppState::new(engine_weak, None);
 
         assert_eq!(app_state.get_playback_state(), Stopped);
         assert!(app_state.get_current_track().is_none());

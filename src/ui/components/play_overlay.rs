@@ -197,7 +197,9 @@ impl Default for PlayOverlay {
 
 #[cfg(test)]
 mod tests {
-    use ui::components::play_overlay::PlayOverlay;
+    use libadwaita::prelude::ButtonExt;
+
+    use crate::ui::components::play_overlay::PlayOverlay;
 
     #[test]
     fn test_play_overlay_builder() {

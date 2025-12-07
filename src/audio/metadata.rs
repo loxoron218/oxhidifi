@@ -211,7 +211,9 @@ impl TagReader {
 mod tests {
     use serde_json::{from_str, to_string};
 
-    use crate::audio::metadata::{MetadataError, StandardMetadata, TechnicalMetadata};
+    use crate::audio::metadata::{
+        MetadataError, StandardMetadata, TechnicalMetadata, TrackMetadata,
+    };
 
     #[test]
     fn test_metadata_error_display() {
