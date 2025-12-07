@@ -30,5 +30,5 @@ tracing = "0.1.43"
 tracing-subscriber = "0.3.22"
 
 [dev-dependencies]
-criterion = "0.8.0"
+criterion = "0.8.1"
 tempfile = "3.23.0"
