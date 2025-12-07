@@ -479,15 +479,13 @@ impl Default for ListView {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        library::models::{Album, Artist},
-        ui::views::list_view::{
-            ListView,
-            ListViewType::{Albums, Artists},
-        },
+    use crate::ui::views::list_view::{
+        ListView,
+        ListViewType::{Albums, Artists},
     };
 
     #[test]
+    #[ignore = "Requires GTK display for UI testing"]
     fn test_list_view_builder() {
         let list_view = ListView::builder().view_type(Artists).compact(true).build();
 
@@ -496,6 +494,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "Requires GTK display for UI testing"]
     fn test_list_view_default() {
         let list_view = ListView::default();
         assert_eq!(list_view.view_type, Albums);
@@ -504,6 +503,7 @@ mod tests {
 
     #[test]
     fn test_list_view_types() {
+        // This test doesn't require GTK, so no skip needed
         assert_eq!(format!("{:?}", Albums), "Albums");
         assert_eq!(format!("{:?}", Artists), "Artists");
     }

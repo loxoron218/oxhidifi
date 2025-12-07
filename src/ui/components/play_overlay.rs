@@ -202,6 +202,7 @@ mod tests {
     use crate::ui::components::play_overlay::PlayOverlay;
 
     #[test]
+    #[ignore = "Requires GTK display for UI testing"]
     fn test_play_overlay_builder() {
         let overlay = PlayOverlay::builder()
             .is_playing(true)
@@ -217,6 +218,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "Requires GTK display for UI testing"]
     fn test_play_overlay_default() {
         let overlay = PlayOverlay::default();
         assert!(!overlay.is_playing);
@@ -228,6 +230,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "Requires GTK display for UI testing"]
     fn test_play_overlay_set_playing() {
         let mut overlay = PlayOverlay::new(false, false);
         assert!(!overlay.is_playing);

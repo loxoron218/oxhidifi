@@ -496,20 +496,14 @@ impl PlayerBar {
 mod tests {
     use std::sync::Arc;
 
-    use libadwaita::init;
-
     use crate::{audio::engine::AudioEngine, state::AppState};
 
     #[test]
+    #[ignore = "Requires GTK display for UI testing"]
     fn test_player_bar_creation() {
-        // Skip this test if we can't initialize GTK (e.g., in CI environments)
-        if init().is_err() {
-            return;
-        }
-
         let engine = AudioEngine::new().unwrap();
         let engine_weak = Arc::downgrade(&Arc::new(engine));
-        let app_state = AppState::new(engine_weak, None);
+        let _app_state = AppState::new(engine_weak, None);
 
         // This test would require mocking AppState and AudioEngine properly
         // For now, we'll just verify the constructor signature compiles

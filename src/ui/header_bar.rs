@@ -282,17 +282,13 @@ impl HeaderBar {
 
 #[cfg(test)]
 mod tests {
-    use libadwaita::{init, prelude::ButtonExt};
+    use libadwaita::prelude::ButtonExt;
 
     use crate::ui::header_bar::HeaderBar;
 
     #[test]
+    #[ignore = "Requires GTK display for UI testing"]
     fn test_header_bar_creation() {
-        // Skip this test if we can't initialize GTK (e.g., in CI environments)
-        if init().is_err() {
-            return;
-        }
-
         let header_bar = HeaderBar::new(None);
 
         // Check icon names without requiring widget realization

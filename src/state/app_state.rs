@@ -249,7 +249,7 @@ mod tests {
     use crate::{
         audio::engine::{AudioEngine, PlaybackState::Stopped},
         state::{
-            AppState,
+            AppState, LibraryState,
             LibraryTab::{Albums, Artists},
             ViewMode::{Grid, List},
         },

@@ -410,6 +410,7 @@ mod tests {
     use crate::{library::models::Artist, ui::views::artist_grid::ArtistGridView};
 
     #[test]
+    #[ignore = "Requires GTK display for UI testing"]
     fn test_artist_grid_view_builder() {
         let artists = vec![
             Artist {
@@ -436,6 +437,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "Requires GTK display for UI testing"]
     fn test_artist_grid_view_default() {
         let grid_view = ArtistGridView::default();
         assert_eq!(grid_view.artists.len(), 0);
@@ -444,6 +446,7 @@ mod tests {
 
     #[test]
     fn test_artist_sort_criteria() {
+        // This test doesn't require GTK, so no skip needed
         let mut artists = vec![
             Artist {
                 id: 1,

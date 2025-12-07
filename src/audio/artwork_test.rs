@@ -14,7 +14,7 @@ mod tests {
             ArtworkSource::{Embedded, External},
             detect_mime_type, extract_artwork,
         },
-        metadata::TagReader::read_metadata,
+        metadata::TagReader,
     };
 
     /// Test embedded artwork extraction from FLAC files.
@@ -113,7 +113,7 @@ mod tests {
     fn test_metadata_extraction_with_artwork() {
         let test_file = Path::new("testdata/flac_with_artwork.flac");
         if test_file.exists() {
-            let result = read_metadata(test_file);
+            let result = TagReader::read_metadata(test_file);
             assert!(result.is_ok());
             let metadata = result.unwrap();
             assert!(metadata.artwork.is_some());

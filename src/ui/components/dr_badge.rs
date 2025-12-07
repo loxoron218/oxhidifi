@@ -281,6 +281,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "Requires GTK display for UI testing"]
     fn test_dr_badge_builder() {
         let badge = DRBadge::builder()
             .dr_value("DR12")
@@ -292,6 +293,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "Requires GTK display for UI testing"]
     fn test_dr_badge_update() {
         let mut badge = DRBadge::new(Some("DR8".to_string()), true);
         assert_eq!(badge.quality, DRQuality::Poor);

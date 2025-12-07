@@ -9,13 +9,12 @@ mod view_integration_tests {
 
     use libadwaita::{
         gtk::AccessibleRole::{Grid, List},
-        init,
+        prelude::{AccessibleExt, WidgetExt},
     };
 
     use crate::{
-        audio::engine::AudioEngine,
+        AppState, AudioEngine,
         library::models::{Album, Artist},
-        state::AppState,
         ui::views::{
             AlbumGridView, ArtistGridView, DetailView, ListView,
             album_grid::AlbumSortCriteria::{Title, Year},
@@ -25,11 +24,8 @@ mod view_integration_tests {
     };
 
     #[test]
+    #[ignore = "Requires GTK display for UI testing"]
     fn test_view_transitions_and_navigation() {
-        if init().is_err() {
-            return;
-        }
-
         let engine = AudioEngine::new().unwrap();
         let engine_weak = Arc::downgrade(&Arc::new(engine));
         let app_state = AppState::new(engine_weak, None);
@@ -87,11 +83,8 @@ mod view_integration_tests {
     }
 
     #[test]
+    #[ignore = "Requires GTK display for UI testing"]
     fn test_real_time_filtering_and_sorting() {
-        if init().is_err() {
-            return;
-        }
-
         let engine = AudioEngine::new().unwrap();
         let engine_weak = Arc::downgrade(&Arc::new(engine));
         let app_state = AppState::new(engine_weak, None);
@@ -136,11 +129,8 @@ mod view_integration_tests {
     }
 
     #[test]
+    #[ignore = "Requires GTK display for UI testing"]
     fn test_keyboard_navigation_support() {
-        if init().is_err() {
-            return;
-        }
-
         let engine = AudioEngine::new().unwrap();
         let engine_weak = Arc::downgrade(&Arc::new(engine));
         let app_state = AppState::new(engine_weak, None);
@@ -158,11 +148,8 @@ mod view_integration_tests {
     }
 
     #[test]
+    #[ignore = "Requires GTK display for UI testing"]
     fn test_screen_reader_compatibility() {
-        if init().is_err() {
-            return;
-        }
-
         let engine = AudioEngine::new().unwrap();
         let engine_weak = Arc::downgrade(&Arc::new(engine));
         let app_state = AppState::new(engine_weak, None);

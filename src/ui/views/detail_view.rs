@@ -644,6 +644,7 @@ mod tests {
     };
 
     #[test]
+    #[ignore = "Requires GTK display for UI testing"]
     fn test_detail_view_builder() {
         let artist = Artist {
             id: 1,
@@ -664,6 +665,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "Requires GTK display for UI testing"]
     fn test_detail_view_default() {
         let detail_view = DetailView::default();
         match &detail_view.detail_type {
@@ -675,12 +677,13 @@ mod tests {
 
     #[test]
     fn test_detail_types() {
+        // This test doesn't require GTK, so no skip needed
         let album = Album::default();
         let artist = Artist::default();
 
         assert_eq!(
             format!("{:?}", DetailType::Album(album)),
-            "Album(Album { id: 0, artist_id: 0, title: \"\", year: None, genre: None, compilation: false, path: \"\", dr_value: None, created_at: None, updated_at: None })"
+            "Album(Album { id: 0, artist_id: 0, title: \"\", year: None, genre: None, compilation: false, path: \"\", dr_value: None, artwork_path: None, created_at: None, updated_at: None })"
         );
         assert_eq!(
             format!("{:?}", DetailType::Artist(artist)),

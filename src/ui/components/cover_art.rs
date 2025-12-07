@@ -297,6 +297,7 @@ mod tests {
     use crate::ui::components::cover_art::CoverArt;
 
     #[test]
+    #[ignore = "Requires GTK display for UI testing"]
     fn test_cover_art_builder() {
         let cover_art = CoverArt::builder()
             .artwork_path("/path/to/artwork.jpg")
@@ -311,6 +312,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "Requires GTK display for UI testing"]
     fn test_cover_art_default() {
         let cover_art = CoverArt::default();
         assert!(cover_art.dr_badge.is_none());
@@ -319,6 +321,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "Requires GTK display for UI testing"]
     fn test_cover_art_update_artwork() {
         let mut cover_art = CoverArt::new(None, None, false, 100, 100);
 

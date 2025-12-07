@@ -399,6 +399,7 @@ mod tests {
     use crate::{library::models::Track, ui::components::hifi_metadata::HiFiMetadata};
 
     #[test]
+    #[ignore = "Requires GTK display for UI testing"]
     fn test_hifi_metadata_builder() {
         let track = Track {
             id: 1,
@@ -432,6 +433,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "Requires GTK display for UI testing"]
     fn test_hifi_metadata_default() {
         let metadata = HiFiMetadata::default();
         assert!(metadata.track.is_none());
@@ -440,6 +442,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "Requires GTK display for UI testing"]
     fn test_hifi_metadata_update_track() {
         let mut metadata = HiFiMetadata::new(None, true, true, true, true, false);
         assert!(metadata.track.is_none());
