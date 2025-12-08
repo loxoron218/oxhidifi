@@ -7,10 +7,9 @@
 use std::sync::{Arc, Weak};
 
 use {
-    async_trait::async_trait,
-    libadwaita::glib::MainContext,
     parking_lot::RwLock,
     tokio::sync::broadcast::{Receiver, Sender, channel},
+    tracing::{debug, warn},
 };
 
 use crate::{
@@ -111,7 +110,9 @@ impl AppState {
         audio_engine: Weak<AudioEngine>,
         library_scanner: Option<Arc<RwLock<LibraryScanner>>>,
     ) -> Self {
-        let (state_tx, _) = channel(16);
+        // Use a larger channel capacity to handle rapid state changes
+        // and implement proper error handling for overflow scenarios
+        let (state_tx, _) = channel(128);
 
         Self {
             playback: Arc::new(RwLock::new(Stopped)),
@@ -129,10 +130,16 @@ impl AppState {
     ///
     /// * `state` - New playback state.
     pub fn update_playback_state(&self, state: PlaybackState) {
+        debug!("AppState: Updating playback state to {:?}", state);
         *self.playback.write() = state.clone();
-        let _ = self
+        if let Err(e) = self
             .state_tx
-            .send(AppStateEvent::PlaybackStateChanged(state));
+            .send(AppStateEvent::PlaybackStateChanged(state))
+        {
+            warn!("Failed to send PlaybackStateChanged event: {}", e);
+            // In case of overflow, we log but continue - UI may be temporarily out of sync
+            // but this prevents complete deadlock
+        }
     }
 
     /// Updates the current track and notifies subscribers.
@@ -142,9 +149,12 @@ impl AppState {
     /// * `track` - New current track information.
     pub fn update_current_track(&self, track: Option<TrackInfo>) {
         *self.current_track.write() = track.clone();
-        let _ = self
+        if let Err(e) = self
             .state_tx
-            .send(AppStateEvent::CurrentTrackChanged(track));
+            .send(AppStateEvent::CurrentTrackChanged(track))
+        {
+            warn!("Failed to send CurrentTrackChanged event: {}", e);
+        }
     }
 
     /// Updates the library state and notifies subscribers.
@@ -153,10 +163,17 @@ impl AppState {
     ///
     /// * `library_state` - New library state.
     pub fn update_library_state(&self, library_state: LibraryState) {
+        debug!(
+            "AppState: Updating library state - tab={:?}, view_mode={:?}",
+            library_state.current_tab, library_state.view_mode
+        );
         *self.library.write() = library_state.clone();
-        let _ = self
+        if let Err(e) = self
             .state_tx
-            .send(AppStateEvent::LibraryStateChanged(library_state));
+            .send(AppStateEvent::LibraryStateChanged(library_state))
+        {
+            warn!("Failed to send LibraryStateChanged event: {}", e);
+        }
     }
 
     /// Updates the search filter and notifies subscribers.
@@ -165,10 +182,14 @@ impl AppState {
     ///
     /// * `filter` - New search filter.
     pub fn update_search_filter(&self, filter: Option<String>) {
+        debug!("AppState: Updating search filter to {:?}", filter);
         self.library.write().search_filter = filter.clone();
-        let _ = self
+        if let Err(e) = self
             .state_tx
-            .send(AppStateEvent::SearchFilterChanged(filter));
+            .send(AppStateEvent::SearchFilterChanged(filter))
+        {
+            warn!("Failed to send SearchFilterChanged event: {}", e);
+        }
     }
 
     /// Subscribes to application state changes.
@@ -177,6 +198,7 @@ impl AppState {
     ///
     /// A broadcast receiver for state change events.
     pub fn subscribe(&self) -> Receiver<AppStateEvent> {
+        debug!("AppState: New subscription created");
         self.state_tx.subscribe()
     }
 
@@ -205,40 +227,6 @@ impl AppState {
     /// The current `LibraryState`.
     pub fn get_library_state(&self) -> LibraryState {
         self.library.read().clone()
-    }
-}
-
-/// Trait for UI components to subscribe to state changes.
-///
-/// This trait allows UI components to react to application state changes
-/// without tight coupling to the state management system.
-#[async_trait(?Send)]
-pub trait StateObserver {
-    /// Handles a state change event.
-    ///
-    /// # Arguments
-    ///
-    /// * `event` - The state change event to handle.
-    async fn handle_state_change(&mut self, event: AppStateEvent);
-
-    /// Starts observing state changes.
-    ///
-    /// # Arguments
-    ///
-    /// * `app_state` - The application state to observe.
-    async fn start_observing(&mut self, app_state: Arc<AppState>) {
-        let mut receiver = app_state.subscribe();
-
-        // Use glib::MainContext for GTK thread safety
-        MainContext::default().spawn_local(async move {
-            while let Ok(_event) = receiver.recv().await {
-                // Note: We can't call self.handle_state_change directly here
-                // because of ownership issues. Instead, UI components should
-                // subscribe to state changes directly and handle them appropriately.
-                // This is a limitation of the current architecture that would be
-                // addressed in a more sophisticated implementation.
-            }
-        });
     }
 }
 

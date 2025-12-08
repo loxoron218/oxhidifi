@@ -18,6 +18,6 @@ pub use {
     config::{SettingsManager, UserSettings},
     error::{AudioError as Error, LibraryError, UiError},
     library::{Album, Artist, LibraryDatabase, SearchResults, Track},
-    state::{AppState, AppStateEvent, LibraryState, StateObserver, ViewMode},
+    state::{AppState, AppStateEvent, LibraryState, ViewMode},
     ui::OxhidifiApplication,
 };

@@ -5,16 +5,18 @@
 
 use std::sync::Arc;
 
-use libadwaita::{
-    HeaderBar as LibadwaitaHeaderBar,
-    glib::MainContext,
-    gtk::{Box as GtkBox, Button, Entry, Orientation::Horizontal, SearchBar, ToggleButton},
-    prelude::{BoxExt, EditableExt, ObjectExt, ToggleButtonExt},
+use {
+    libadwaita::{
+        HeaderBar as LibadwaitaHeaderBar,
+        glib::JoinHandle,
+        gtk::{Box as GtkBox, Button, Entry, Orientation::Horizontal, SearchBar, ToggleButton},
+        prelude::{BoxExt, EditableExt, ObjectExt, ToggleButtonExt},
+    },
+    tracing::{debug, info},
 };
 
 use crate::state::{
     AppState,
-    AppStateEvent::{self, LibraryStateChanged},
     ViewMode::{self, Grid, List},
     app_state::LibraryTab::{Albums, Artists},
 };
@@ -46,6 +48,8 @@ pub struct HeaderBar {
     pub app_state: Option<Arc<AppState>>,
     /// Current view mode.
     pub current_view_mode: ViewMode,
+    /// Subscription handle for state changes (to ensure proper cleanup)
+    _subscription_handle: Option<JoinHandle<()>>,
 }
 
 impl HeaderBar {
@@ -122,8 +126,18 @@ impl HeaderBar {
         if let Some(ref state) = app_state {
             let state_clone = state.clone();
             let view_toggle_clone = view_toggle.clone();
-            view_toggle.connect_toggled(move |button: &ToggleButton| {
+
+            let callback = move |button: &ToggleButton| {
                 let new_mode = if button.is_active() { List } else { Grid };
+
+                // Check if state actually changed
+                let current_state = state_clone.get_library_state();
+                if current_state.view_mode == new_mode {
+                    debug!("View mode unchanged, skipping update");
+                    return;
+                }
+
+                info!("View mode changed to: {:?}", new_mode);
 
                 // Update icon
                 let icon_name = if button.is_active() {
@@ -134,33 +148,12 @@ impl HeaderBar {
                 view_toggle_clone.set_property("icon-name", icon_name);
 
                 // Update app state
-                let mut library_state = state_clone.get_library_state();
+                let mut library_state = current_state;
                 library_state.view_mode = new_mode;
                 state_clone.update_library_state(library_state);
-            });
+            };
 
-            // Subscribe to state changes to update view toggle
-            let view_toggle_update = view_toggle.clone();
-            let state_clone_update = state.clone();
-
-            MainContext::default().spawn_local(async move {
-                let mut receiver = state_clone_update.subscribe();
-                while let Ok(event) = receiver.recv().await {
-                    if let LibraryStateChanged(new_state) = event {
-                        // Update view toggle state based on current view mode
-                        let is_list = new_state.view_mode == List;
-                        view_toggle_update.set_active(is_list);
-
-                        // Update icon
-                        let icon_name = if is_list {
-                            "view-list-symbolic"
-                        } else {
-                            "view-grid-symbolic"
-                        };
-                        view_toggle_update.set_property("icon-name", icon_name);
-                    }
-                }
-            });
+            view_toggle.connect_toggled(callback);
         }
 
         widget.pack_start(&view_toggle);
@@ -203,8 +196,17 @@ impl HeaderBar {
             album_tab.connect_toggled(move |button: &ToggleButton| {
                 // Only process if this button is being activated (not deactivated)
                 if button.is_active() {
+                    // Check if state actually changed
+                    let current_state = state_clone_album.get_library_state();
+                    if current_state.current_tab == Albums {
+                        debug!("Album tab already active, skipping update");
+                        return;
+                    }
+
+                    info!("Switching to Albums tab");
+
                     // Update app state
-                    let mut library_state = state_clone_album.get_library_state();
+                    let mut library_state = current_state;
                     library_state.current_tab = Albums;
                     state_clone_album.update_library_state(library_state);
 
@@ -216,8 +218,17 @@ impl HeaderBar {
             artist_tab.connect_toggled(move |button: &ToggleButton| {
                 // Only process if this button is being activated (not deactivated)
                 if button.is_active() {
+                    // Check if state actually changed
+                    let current_state = state_clone_artist.get_library_state();
+                    if current_state.current_tab == Artists {
+                        debug!("Artist tab already active, skipping update");
+                        return;
+                    }
+
+                    info!("Switching to Artists tab");
+
                     // Update app state
-                    let mut library_state = state_clone_artist.get_library_state();
+                    let mut library_state = current_state;
                     library_state.current_tab = Artists;
                     state_clone_artist.update_library_state(library_state);
 
@@ -225,23 +236,10 @@ impl HeaderBar {
                     album_tab_clone.set_active(false);
                 }
             });
-
-            // Subscribe to state changes to update tab buttons
-            let album_tab_update = album_tab.clone();
-            let artist_tab_update = artist_tab.clone();
-            let state_clone_update = state.clone();
-
-            MainContext::default().spawn_local(async move {
-                let mut receiver = state_clone_update.subscribe();
-                while let Ok(event) = receiver.recv().await {
-                    if let AppStateEvent::LibraryStateChanged(new_state) = event {
-                        // Update tab button states based on current tab
-                        album_tab_update.set_active(new_state.current_tab == Albums);
-                        artist_tab_update.set_active(new_state.current_tab == Artists);
-                    }
-                }
-            });
         }
+
+        // No subscription needed - button states are managed directly by handlers
+        let _subscription_handle = None;
 
         // Create tab container box
         let tab_box = GtkBox::builder()
@@ -267,6 +265,7 @@ impl HeaderBar {
             tab_box,
             app_state,
             current_view_mode,
+            _subscription_handle,
         }
     }
 }

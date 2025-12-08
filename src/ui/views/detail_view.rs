@@ -6,30 +6,23 @@
 
 use std::sync::Arc;
 
-use {
-    async_trait::async_trait,
-    libadwaita::{
-        gtk::{
-            AccessibleRole::Article,
-            Align::{Fill, Start},
-            Box as GtkBox, Button, Label, ListBox, ListBoxRow,
-            Orientation::{Horizontal, Vertical},
-            ScrolledWindow,
-            SelectionMode::None as SelectionNone,
-            Widget,
-            pango::EllipsizeMode::End as EllipsizeEnd,
-        },
-        prelude::{AccessibleExt, BoxExt, Cast, ListBoxRowExt, ListModelExt, WidgetExt},
+use libadwaita::{
+    gtk::{
+        AccessibleRole::Article,
+        Align::{Fill, Start},
+        Box as GtkBox, Button, Label, ListBox, ListBoxRow,
+        Orientation::{Horizontal, Vertical},
+        ScrolledWindow,
+        SelectionMode::None as SelectionNone,
+        Widget,
+        pango::EllipsizeMode::End as EllipsizeEnd,
     },
+    prelude::{AccessibleExt, BoxExt, Cast, ListBoxRowExt, ListModelExt, WidgetExt},
 };
 
 use crate::{
     library::models::{Album, Artist, Track},
-    state::{
-        AppState,
-        AppStateEvent::{self, LibraryStateChanged},
-        LibraryState, StateObserver,
-    },
+    state::AppState,
     ui::components::{cover_art::CoverArt, hifi_metadata::HiFiMetadata, play_overlay::PlayOverlay},
 };
 
@@ -595,37 +588,6 @@ impl DetailView {
         // Rebuild the detail view with new configuration
         if let Some(detail_type) = self.detail_type.clone() {
             self.set_detail(detail_type);
-        }
-    }
-}
-
-#[async_trait(?Send)]
-impl StateObserver for DetailView {
-    async fn handle_state_change(&mut self, event: AppStateEvent) {
-        if let LibraryStateChanged(state) = event {
-            self.handle_library_state_change(state).await;
-        }
-    }
-}
-
-impl DetailView {
-    async fn handle_library_state_change(&mut self, state: LibraryState) {
-        // Update track listings if we're showing an album detail
-        if let Some(DetailType::Album(ref album)) = self.detail_type {
-            let tracks: Vec<Track> = state
-                .current_tracks
-                .into_iter()
-                .filter(|track| track.album_id == album.id)
-                .collect();
-
-            // Find the track list section and update it
-            // This is a simplified approach - in practice, we'd need to track the track list widget
-            if !tracks.is_empty() {
-                // For now, just rebuild the entire view
-                if let Some(detail_type) = self.detail_type.clone() {
-                    self.set_detail(detail_type);
-                }
-            }
         }
     }
 }

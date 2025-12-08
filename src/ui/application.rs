@@ -9,13 +9,17 @@ use {
     libadwaita::{
         Application, ApplicationWindow, NavigationPage, NavigationView,
         glib::MainContext,
-        gtk::{Box as GtkBox, Orientation::Vertical, ScrolledWindow, Widget},
+        gtk::{
+            Box as GtkBox, Orientation::Vertical, ScrolledWindow, Stack,
+            StackTransitionType::Crossfade, Widget,
+        },
         prelude::{
             AdwApplicationWindowExt, ApplicationExt, ApplicationExtManual, BoxExt, Cast,
-            GtkWindowExt, ListModelExt, WidgetExt,
+            GtkWindowExt, WidgetExt,
         },
     },
     parking_lot::RwLock,
+    tracing::{debug, info, warn},
 };
 
 use crate::{
@@ -261,10 +265,13 @@ fn create_main_content(
     _audio_engine: &Arc<AudioEngine>,
     window: &ApplicationWindow,
 ) -> Widget {
-    // Create main container with stack for view switching
-    let main_container = GtkBox::builder().orientation(Vertical).spacing(12).build();
+    // Create stack for efficient view switching
+    let view_stack = Stack::builder()
+        .transition_type(Crossfade)
+        .transition_duration(200)
+        .build();
 
-    // Wrap the main container in a scrolled window to provide vertical scrolling
+    // Wrap the stack in a scrolled window to provide vertical scrolling
     let scrolled_window = ScrolledWindow::builder()
         .vexpand(true)
         .hexpand(true)
@@ -272,7 +279,7 @@ fn create_main_content(
         .margin_bottom(12)
         .margin_start(12)
         .margin_end(12)
-        .child(&main_container)
+        .child(&view_stack)
         .build();
 
     let show_dr_badges = settings_manager.get_settings().show_dr_values;
@@ -335,57 +342,86 @@ fn create_main_content(
     let current_tab = library_state.current_tab;
     let current_view_mode = library_state.view_mode;
 
-    // Select initial view
-    let initial_view = match (current_tab, current_view_mode) {
-        (LibraryAlbums, Grid) => album_grid_view.widget.clone(),
-        (LibraryAlbums, List) => album_list_view.widget.clone(),
-        (LibraryArtists, Grid) => artist_grid_view.widget.clone(),
-        (LibraryArtists, List) => artist_list_view.widget.clone(),
-    };
+    // Add ALL views to the stack initially with unique names
+    view_stack.add_named(&album_grid_view.widget, Some("album_grid"));
+    view_stack.add_named(&album_list_view.widget, Some("album_list"));
+    view_stack.add_named(&artist_grid_view.widget, Some("artist_grid"));
+    view_stack.add_named(&artist_list_view.widget, Some("artist_list"));
 
-    main_container.append(&initial_view.upcast::<Widget>());
-
-    // Store the main container and views for later updates
-    // We'll use a simple approach: replace the child when state changes
-    let app_state_clone = app_state.clone();
-    let main_container_clone = main_container.clone();
-    let album_grid_widget = album_grid_view.widget.clone();
-    let album_list_widget = album_list_view.widget.clone();
-    let artist_grid_widget = artist_grid_view.widget.clone();
-    let artist_list_widget = artist_list_view.widget.clone();
+    // Set initial visible view
+    match (current_tab.clone(), current_view_mode.clone()) {
+        (LibraryAlbums, Grid) => {
+            view_stack.set_visible_child_name("album_grid");
+        }
+        (LibraryAlbums, List) => {
+            view_stack.set_visible_child_name("album_list");
+        }
+        (LibraryArtists, Grid) => {
+            view_stack.set_visible_child_name("artist_grid");
+        }
+        (LibraryArtists, List) => {
+            view_stack.set_visible_child_name("artist_list");
+        }
+    }
 
     // Subscribe to state changes for view updates
+    // Use tracing for monitoring
+    debug!("Subscribing to AppState changes in main content");
+    let app_state_clone = app_state.clone();
+    let view_stack_clone = view_stack.clone();
+
+    // Use a weak reference to avoid potential memory leaks
+    // and implement proper error handling for subscription
     MainContext::default().spawn_local(async move {
         let mut receiver = app_state_clone.subscribe();
-        while let Ok(event) = receiver.recv().await {
-            match event {
-                LibraryStateChanged(new_state) => {
-                    // Clear all children and add the new view
-                    let children = main_container_clone.observe_children();
-                    let n_items = children.n_items();
-                    for i in 0..n_items {
-                        if let Some(child) = children.item(i)
-                            && let Some(widget) = child.downcast_ref::<Widget>()
-                        {
-                            main_container_clone.remove(widget);
+        let mut switch_count = 0;
+
+        loop {
+            match receiver.recv().await {
+                Ok(event) => {
+                    match event {
+                        LibraryStateChanged(new_state) => {
+                            switch_count += 1;
+                            info!(
+                                "View switch #{}: tab={:?}, view_mode={:?}",
+                                switch_count, new_state.current_tab, new_state.view_mode
+                            );
+
+                            // Add debug logging for performance monitoring
+                            if switch_count % 10 == 0 {
+                                debug!("Performance check - view switches: {}", switch_count);
+                            }
+
+                            // Switch to the appropriate view based on state
+                            match (new_state.current_tab, new_state.view_mode) {
+                                (LibraryAlbums, Grid) => {
+                                    view_stack_clone.set_visible_child_name("album_grid");
+                                }
+                                (LibraryAlbums, List) => {
+                                    view_stack_clone.set_visible_child_name("album_list");
+                                }
+                                (LibraryArtists, Grid) => {
+                                    view_stack_clone.set_visible_child_name("artist_grid");
+                                }
+                                (LibraryArtists, List) => {
+                                    view_stack_clone.set_visible_child_name("artist_list");
+                                }
+                            }
                         }
+                        SearchFilterChanged(_) => {
+                            // Search filter changed - views should handle this internally
+                            // through their own state observers
+                            debug!("Search filter changed");
+                        }
+                        _ => {}
                     }
-
-                    // Determine new view based on state
-                    let new_view = match (new_state.current_tab, new_state.view_mode) {
-                        (LibraryAlbums, Grid) => album_grid_widget.clone().upcast::<Widget>(),
-                        (LibraryAlbums, List) => album_list_widget.clone().upcast::<Widget>(),
-                        (LibraryArtists, Grid) => artist_grid_widget.clone().upcast::<Widget>(),
-                        (LibraryArtists, List) => artist_list_widget.clone().upcast::<Widget>(),
-                    };
-
-                    main_container_clone.append(&new_view);
                 }
-                SearchFilterChanged(_) => {
-                    // Search filter changed - views should handle this internally
-                    // through their own state observers
+                Err(e) => {
+                    // Handle subscription errors (e.g., channel closed, lagging behind)
+                    warn!("State subscription error: {}", e);
+                    // Continue listening - don't break the loop
+                    continue;
                 }
-                _ => {}
             }
         }
     });

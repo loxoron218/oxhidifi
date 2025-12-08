@@ -5,7 +5,12 @@
 
 use std::error::Error;
 
-use {libadwaita::init, tokio::main};
+use {
+    libadwaita::init,
+    tokio::main,
+    tracing::info,
+    tracing_subscriber::{EnvFilter, fmt::Subscriber},
+};
 
 use oxhidifi::ui::OxhidifiApplication;
 
@@ -15,6 +20,13 @@ use oxhidifi::ui::OxhidifiApplication;
 /// creates the main application instance, and starts the event loop.
 #[main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    // Initialize tracing for observability
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+
+    Subscriber::builder().with_env_filter(filter).init();
+
+    info!("Starting Oxhidifi application");
+
     // Initialize GTK and Libadwaita
     init()?;
 
@@ -22,5 +34,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let app = OxhidifiApplication::new().await?;
     app.run();
 
+    info!("Application terminated");
     Ok(())
 }

@@ -6,29 +6,22 @@
 
 use std::sync::Arc;
 
-use {
-    async_trait::async_trait,
-    libadwaita::{
-        gtk::{
-            AccessibleRole::List,
-            Align::Start,
-            Box as GtkBox, Label, ListBox, ListBoxRow,
-            Orientation::{Horizontal, Vertical},
-            SelectionMode::None as SelectionNone,
-            Widget,
-            pango::EllipsizeMode::End,
-        },
-        prelude::{AccessibleExt, BoxExt, Cast, ListBoxRowExt, WidgetExt},
+use libadwaita::{
+    gtk::{
+        AccessibleRole::List,
+        Align::Start,
+        Box as GtkBox, Label, ListBox, ListBoxRow,
+        Orientation::{Horizontal, Vertical},
+        SelectionMode::None as SelectionNone,
+        Widget,
+        pango::EllipsizeMode::End,
     },
+    prelude::{AccessibleExt, BoxExt, Cast, ListBoxRowExt, WidgetExt},
 };
 
 use crate::{
     library::models::{Album, Artist},
-    state::{
-        AppState,
-        AppStateEvent::{self, LibraryStateChanged, SearchFilterChanged},
-        LibraryState, StateObserver,
-    },
+    state::AppState,
     ui::components::cover_art::CoverArt,
 };
 
@@ -432,41 +425,6 @@ impl ListView {
                     self.set_artists(filtered_artists);
                 }
             }
-        }
-    }
-}
-
-#[async_trait(?Send)]
-impl StateObserver for ListView {
-    async fn handle_state_change(&mut self, event: AppStateEvent) {
-        match event {
-            LibraryStateChanged(state) => {
-                self.handle_library_state_change(state).await;
-            }
-            SearchFilterChanged(filter) => {
-                if let Some(query) = filter {
-                    self.filter_items(&query);
-                } else {
-                    // Reset to all items
-                    if let Some(ref app_state) = self.app_state {
-                        let library_state = app_state.get_library_state();
-                        match self.view_type {
-                            ListViewType::Albums => self.set_albums(library_state.albums),
-                            ListViewType::Artists => self.set_artists(library_state.artists),
-                        }
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-}
-
-impl ListView {
-    async fn handle_library_state_change(&mut self, state: LibraryState) {
-        match self.view_type {
-            ListViewType::Albums => self.set_albums(state.albums),
-            ListViewType::Artists => self.set_artists(state.artists),
         }
     }
 }

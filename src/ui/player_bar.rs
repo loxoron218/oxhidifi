@@ -5,19 +5,22 @@
 
 use std::sync::Arc;
 
-use libadwaita::{
-    glib::MainContext,
-    gtk::{
-        AccessibleRole::Img,
-        Align::Start,
-        Box, Button,
-        ContentFit::Cover,
-        Label,
-        Orientation::{Horizontal, Vertical},
-        Picture, Scale, ToggleButton, Widget,
-        pango::EllipsizeMode::End,
+use {
+    libadwaita::{
+        glib::MainContext,
+        gtk::{
+            AccessibleRole::Img,
+            Align::Start,
+            Box, Button,
+            ContentFit::Cover,
+            Label,
+            Orientation::{Horizontal, Vertical},
+            Picture, Scale, ToggleButton, Widget,
+            pango::EllipsizeMode::End,
+        },
+        prelude::{AccessibleExt, BoxExt, ButtonExt, Cast, RangeExt, ToggleButtonExt, WidgetExt},
     },
-    prelude::{AccessibleExt, BoxExt, ButtonExt, Cast, RangeExt, ToggleButtonExt, WidgetExt},
+    tracing::debug,
 };
 
 use crate::{
@@ -366,11 +369,14 @@ impl PlayerBar {
         let mut hifi_metadata = self.hifi_metadata.clone();
         let hifi_metadata_container = self.widget.clone(); // Use main widget as container for now
 
+        // Subscribe to AppState changes with tracing
+        debug!("PlayerBar: Subscribing to AppState changes");
         MainContext::default().spawn_local(async move {
             let mut receiver = app_state.subscribe();
             while let Ok(event) = receiver.recv().await {
                 match event {
                     CurrentTrackChanged(track_info) => {
+                        debug!("PlayerBar: Current track changed");
                         Self::update_track_info(
                             &track_info,
                             &title_label,
@@ -385,6 +391,7 @@ impl PlayerBar {
                         );
                     }
                     PlaybackStateChanged(state) => {
+                        debug!("PlayerBar: Playback state changed to {:?}", state);
                         Self::update_playback_state(&state, &play_button);
                     }
                     _ => {}

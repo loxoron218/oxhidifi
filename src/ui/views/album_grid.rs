@@ -6,29 +6,22 @@
 
 use std::sync::Arc;
 
-use {
-    async_trait::async_trait,
-    libadwaita::{
-        gtk::{
-            AccessibleRole::{Grid, Group},
-            Align::{Center, Start},
-            Box as GtkBox, FlowBox, FlowBoxChild, Label,
-            Orientation::Vertical,
-            SelectionMode::None as SelectionNone,
-            Widget,
-            pango::EllipsizeMode::End,
-        },
-        prelude::{AccessibleExt, BoxExt, Cast, FlowBoxChildExt, ListModelExt, WidgetExt},
+use libadwaita::{
+    gtk::{
+        AccessibleRole::{Grid, Group},
+        Align::{Center, Start},
+        Box as GtkBox, FlowBox, FlowBoxChild, Label,
+        Orientation::Vertical,
+        SelectionMode::None as SelectionNone,
+        Widget,
+        pango::EllipsizeMode::End,
     },
+    prelude::{AccessibleExt, BoxExt, Cast, FlowBoxChildExt, ListModelExt, WidgetExt},
 };
 
 use crate::{
     library::models::Album,
-    state::{
-        AppState,
-        AppStateEvent::{self, LibraryStateChanged, SearchFilterChanged},
-        LibraryState, StateObserver,
-    },
+    state::{AppState, LibraryState},
     ui::components::{
         cover_art::CoverArt,
         empty_state::{EmptyState, EmptyStateConfig},
@@ -432,35 +425,6 @@ pub enum AlbumSortCriteria {
     Year,
     /// Sort by DR value (highest first)
     DRValue,
-}
-
-#[async_trait(?Send)]
-impl StateObserver for AlbumGridView {
-    async fn handle_state_change(&mut self, event: AppStateEvent) {
-        match event {
-            LibraryStateChanged(state) => {
-                self.handle_library_state_change(state).await;
-            }
-            SearchFilterChanged(filter) => {
-                if let Some(query) = filter {
-                    self.filter_albums(&query);
-                } else {
-                    // Reset to all albums
-                    if let Some(ref app_state) = self.app_state {
-                        let library_state = app_state.get_library_state();
-                        self.set_albums(library_state.albums);
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-}
-
-impl AlbumGridView {
-    async fn handle_library_state_change(&mut self, state: LibraryState) {
-        self.set_albums(state.albums);
-    }
 }
 
 impl Default for AlbumGridView {

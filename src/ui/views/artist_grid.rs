@@ -6,29 +6,22 @@
 
 use std::sync::Arc;
 
-use {
-    async_trait::async_trait,
-    libadwaita::{
-        gtk::{
-            AccessibleRole::{Grid, Group},
-            Align::{Center, Start},
-            Box as GtkBox, FlowBox, FlowBoxChild, Label,
-            Orientation::Vertical,
-            SelectionMode::None as SelectionNone,
-            Widget,
-            pango::EllipsizeMode::End,
-        },
-        prelude::{AccessibleExt, BoxExt, Cast, FlowBoxChildExt, ListModelExt, WidgetExt},
+use libadwaita::{
+    gtk::{
+        AccessibleRole::{Grid, Group},
+        Align::{Center, Start},
+        Box as GtkBox, FlowBox, FlowBoxChild, Label,
+        Orientation::Vertical,
+        SelectionMode::None as SelectionNone,
+        Widget,
+        pango::EllipsizeMode::End,
     },
+    prelude::{AccessibleExt, BoxExt, Cast, FlowBoxChildExt, ListModelExt, WidgetExt},
 };
 
 use crate::{
     library::models::Artist,
-    state::{
-        AppState,
-        AppStateEvent::{self, LibraryStateChanged, SearchFilterChanged},
-        LibraryState, StateObserver,
-    },
+    state::{AppState, LibraryState},
     ui::components::{
         cover_art::CoverArt,
         empty_state::{EmptyState, EmptyStateConfig},
@@ -368,35 +361,6 @@ pub enum ArtistSortCriteria {
     Name,
     /// Sort by album count (requires additional data)
     AlbumCount,
-}
-
-#[async_trait(?Send)]
-impl StateObserver for ArtistGridView {
-    async fn handle_state_change(&mut self, event: AppStateEvent) {
-        match event {
-            LibraryStateChanged(state) => {
-                self.handle_library_state_change(state).await;
-            }
-            SearchFilterChanged(filter) => {
-                if let Some(query) = filter {
-                    self.filter_artists(&query);
-                } else {
-                    // Reset to all artists
-                    if let Some(ref app_state) = self.app_state {
-                        let library_state = app_state.get_library_state();
-                        self.set_artists(library_state.artists);
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-}
-
-impl ArtistGridView {
-    async fn handle_library_state_change(&mut self, state: LibraryState) {
-        self.set_artists(state.artists);
-    }
 }
 
 impl Default for ArtistGridView {
