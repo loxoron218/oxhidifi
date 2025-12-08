@@ -20,6 +20,7 @@ use {
         },
         prelude::{AccessibleExt, BoxExt, ButtonExt, Cast, RangeExt, ToggleButtonExt, WidgetExt},
     },
+    tokio::sync::broadcast::error::RecvError::{Closed, Lagged},
     tracing::debug,
 };
 
@@ -386,28 +387,43 @@ impl PlayerBar {
         debug!("PlayerBar: Subscribing to AppState changes");
         MainContext::default().spawn_local(async move {
             let mut receiver = app_state.subscribe();
-            while let Ok(event) = receiver.recv().await {
-                match event {
-                    CurrentTrackChanged(track_info) => {
-                        debug!("PlayerBar: Current track changed");
-                        let update_context = TrackInfoUpdateContext {
-                            title_label: &title_label,
-                            artist_label: &artist_label,
-                            artwork: &artwork,
-                            hifi_metadata: &mut hifi_metadata,
-                            hifi_metadata_container: &hifi_metadata_container,
-                            total_duration_label: &total_duration_label,
-                            play_button: &play_button,
-                            prev_button: &prev_button,
-                            next_button: &next_button,
-                        };
-                        Self::update_track_info(&track_info, update_context);
+            loop {
+                match receiver.recv().await {
+                    Ok(event) => match event {
+                        CurrentTrackChanged(track_info) => {
+                            debug!("PlayerBar: Current track changed");
+                            let update_context = TrackInfoUpdateContext {
+                                title_label: &title_label,
+                                artist_label: &artist_label,
+                                artwork: &artwork,
+                                hifi_metadata: &mut hifi_metadata,
+                                hifi_metadata_container: &hifi_metadata_container,
+                                total_duration_label: &total_duration_label,
+                                play_button: &play_button,
+                                prev_button: &prev_button,
+                                next_button: &next_button,
+                            };
+                            Self::update_track_info(&track_info, update_context);
+                        }
+                        PlaybackStateChanged(state) => {
+                            debug!("PlayerBar: Playback state changed to {:?}", state);
+                            Self::update_playback_state(&state, &play_button);
+                        }
+                        _ => {}
+                    },
+                    Err(Closed) => {
+                        // Channel was closed - resubscribe
+                        debug!("PlayerBar state subscription channel closed, resubscribing");
+                        receiver = app_state.subscribe();
+                        continue;
                     }
-                    PlaybackStateChanged(state) => {
-                        debug!("PlayerBar: Playback state changed to {:?}", state);
-                        Self::update_playback_state(&state, &play_button);
+                    Err(Lagged(skipped)) => {
+                        debug!(
+                            "PlayerBar state subscription lagged, skipped {} messages",
+                            skipped
+                        );
+                        continue;
                     }
-                    _ => {}
                 }
             }
         });

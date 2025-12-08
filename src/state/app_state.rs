@@ -9,7 +9,7 @@ use std::sync::{Arc, Weak};
 use {
     parking_lot::RwLock,
     tokio::sync::broadcast::{Receiver, Sender, channel},
-    tracing::{debug, warn},
+    tracing::debug,
 };
 
 use crate::{
@@ -132,15 +132,9 @@ impl AppState {
     pub fn update_playback_state(&self, state: PlaybackState) {
         debug!("AppState: Updating playback state to {:?}", state);
         *self.playback.write() = state.clone();
-        if let Err(e) = self
+        let _ = self
             .state_tx
-            .send(AppStateEvent::PlaybackStateChanged(state))
-        {
-            warn!("Failed to send PlaybackStateChanged event: {}", e);
-
-            // In case of overflow, we log but continue - UI may be temporarily out of sync
-            // but this prevents complete deadlock
-        }
+            .send(AppStateEvent::PlaybackStateChanged(state));
     }
 
     /// Updates the current track and notifies subscribers.
@@ -150,12 +144,9 @@ impl AppState {
     /// * `track` - New current track information.
     pub fn update_current_track(&self, track: Option<TrackInfo>) {
         *self.current_track.write() = track.clone();
-        if let Err(e) = self
+        let _ = self
             .state_tx
-            .send(AppStateEvent::CurrentTrackChanged(track))
-        {
-            warn!("Failed to send CurrentTrackChanged event: {}", e);
-        }
+            .send(AppStateEvent::CurrentTrackChanged(track));
     }
 
     /// Updates the library state and notifies subscribers.
@@ -169,12 +160,9 @@ impl AppState {
             library_state.current_tab, library_state.view_mode
         );
         *self.library.write() = library_state.clone();
-        if let Err(e) = self
+        let _ = self
             .state_tx
-            .send(AppStateEvent::LibraryStateChanged(library_state))
-        {
-            warn!("Failed to send LibraryStateChanged event: {}", e);
-        }
+            .send(AppStateEvent::LibraryStateChanged(library_state));
     }
 
     /// Updates the search filter and notifies subscribers.
@@ -185,12 +173,9 @@ impl AppState {
     pub fn update_search_filter(&self, filter: Option<String>) {
         debug!("AppState: Updating search filter to {:?}", filter);
         self.library.write().search_filter = filter.clone();
-        if let Err(e) = self
+        let _ = self
             .state_tx
-            .send(AppStateEvent::SearchFilterChanged(filter))
-        {
-            warn!("Failed to send SearchFilterChanged event: {}", e);
-        }
+            .send(AppStateEvent::SearchFilterChanged(filter));
     }
 
     /// Subscribes to application state changes.

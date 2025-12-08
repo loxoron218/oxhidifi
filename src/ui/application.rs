@@ -19,7 +19,8 @@ use {
         },
     },
     parking_lot::RwLock,
-    tracing::{debug, info, warn},
+    tokio::sync::broadcast::error::RecvError::{Closed, Lagged},
+    tracing::{debug, info},
 };
 
 use crate::{
@@ -230,16 +231,33 @@ fn build_ui(
     let app_state_for_subscription = app_state.clone();
     MainContext::default().spawn_local(async move {
         let mut receiver = app_state_for_subscription.subscribe();
-        while let Ok(event) = receiver.recv().await {
-            if let PlaybackStateChanged(state) = event {
-                // Show player bar when playing or paused, hide when stopped
-                match state {
-                    Playing | Paused | Buffering => {
-                        player_bar_widget_clone.set_visible(true);
+        loop {
+            match receiver.recv().await {
+                Ok(event) => {
+                    if let PlaybackStateChanged(state) = event {
+                        // Show player bar when playing or paused, hide when stopped
+                        match state {
+                            Playing | Paused | Buffering => {
+                                player_bar_widget_clone.set_visible(true);
+                            }
+                            Stopped | Ready => {
+                                player_bar_widget_clone.set_visible(false);
+                            }
+                        }
                     }
-                    Stopped | Ready => {
-                        player_bar_widget_clone.set_visible(false);
-                    }
+                }
+                Err(Closed) => {
+                    // Channel was closed - resubscribe
+                    debug!("Playback state subscription channel closed, resubscribing");
+                    receiver = app_state_for_subscription.subscribe();
+                    continue;
+                }
+                Err(Lagged(skipped)) => {
+                    debug!(
+                        "Playback state subscription lagged, skipped {} messages",
+                        skipped
+                    );
+                    continue;
                 }
             }
         }
@@ -416,11 +434,20 @@ fn create_main_content(
                         _ => {}
                     }
                 }
-                Err(e) => {
-                    // Handle subscription errors (e.g., channel closed, lagging behind)
-                    warn!("State subscription error: {}", e);
-
-                    // Continue listening - don't break the loop
+                Err(Closed) => {
+                    // Channel was closed - this can happen when all receivers are dropped
+                    // and the AppState recreates the channel. We should resubscribe.
+                    debug!("State subscription channel closed, attempting to resubscribe");
+                    receiver = app_state_clone.subscribe();
+                    continue;
+                }
+                Err(Lagged(skipped)) => {
+                    // Receiver lagged behind, but this is not critical
+                    // The receiver will get the next event
+                    debug!(
+                        "State subscription lagged behind, skipped {} messages",
+                        skipped
+                    );
                     continue;
                 }
             }
