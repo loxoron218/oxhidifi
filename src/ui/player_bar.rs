@@ -497,8 +497,6 @@ impl PlayerBar {
     }
 }
 
-// Remove Default impl since it requires AppState and AudioEngine
-
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;

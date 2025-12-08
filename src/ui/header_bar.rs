@@ -277,8 +277,6 @@ impl HeaderBar {
     }
 }
 
-// Remove the Default impl since it requires AppState
-
 #[cfg(test)]
 mod tests {
     use libadwaita::prelude::ButtonExt;
