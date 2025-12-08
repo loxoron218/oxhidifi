@@ -22,7 +22,10 @@ use {
 
 use crate::{
     config::SettingsManager,
-    library::{database::LibraryDatabase, scanner::LibraryScanner},
+    library::{
+        database::LibraryDatabase,
+        scanner::{LibraryScanner, handlers::handle_files_changed},
+    },
     state::{AppState, LibraryState},
 };
 
@@ -263,20 +266,45 @@ impl EmptyState {
 
                     // Check if we have an existing scanner
                     if let Some(scanner_arc) = &app_state.library_scanner {
-                        // Use existing scanner
-                        let mut scanner_write = scanner_arc.write();
+                        // Use existing scanner - add directory first (synchronous operation)
+                        {
+                            let mut scanner_write = scanner_arc.write();
 
-                        // Add the new directory to the scanner
-                        if let Err(e) = scanner_write.add_library_directory(new_directory) {
-                            eprintln!("Failed to add directory to scanner: {}", e);
+                            // Add the new directory to the scanner
+                            if let Err(e) = scanner_write.add_library_directory(new_directory) {
+                                eprintln!("Failed to add directory to scanner: {}", e);
+                            }
+
+                            // scanner_write is dropped here, releasing the lock
                         }
 
-                        // Perform initial scan
-                        if let Err(e) = scanner_write
-                            .scan_initial_directories(&library_db_arc, &settings_arc)
+                        // Perform initial scan - collect audio files synchronously, then process asynchronously
+                        let all_audio_files = {
+                            let scanner_read = scanner_arc.read();
+                            let library_dirs = settings_arc.read().library_directories.clone();
+                            let mut all_files = Vec::new();
+
+                            for dir in library_dirs {
+                                let dir_path = std::path::Path::new(&dir);
+                                if let Ok(audio_files) =
+                                    scanner_read.collect_audio_files_from_directory(dir_path)
+                                {
+                                    all_files.extend(audio_files);
+                                }
+                            }
+                            all_files
+                        };
+
+                        // Process files asynchronously without holding scanner lock
+                        if !all_audio_files.is_empty()
+                            && let Err(e) = handle_files_changed(
+                                all_audio_files,
+                                &library_db_arc,
+                                &settings_arc,
+                            )
                             .await
                         {
-                            eprintln!("Failed to perform initial scan: {}", e);
+                            eprintln!("Failed to process files: {}", e);
                         }
                     } else {
                         // Create new scanner
@@ -290,13 +318,34 @@ impl EmptyState {
                             Ok(scanner) => {
                                 let scanner_arc = Arc::new(RwLock::new(scanner));
 
-                                // Perform initial scan with new scanner
-                                let scanner_read = scanner_arc.read();
-                                if let Err(e) = scanner_read
-                                    .scan_initial_directories(&library_db_arc, &settings_arc)
+                                // Perform initial scan with new scanner - collect audio files synchronously, then process asynchronously
+                                let all_audio_files = {
+                                    let scanner_read = scanner_arc.read();
+                                    let library_dirs =
+                                        settings_arc.read().library_directories.clone();
+                                    let mut all_files = Vec::new();
+
+                                    for dir in library_dirs {
+                                        let dir_path = std::path::Path::new(&dir);
+                                        if let Ok(audio_files) = scanner_read
+                                            .collect_audio_files_from_directory(dir_path)
+                                        {
+                                            all_files.extend(audio_files);
+                                        }
+                                    }
+                                    all_files
+                                };
+
+                                // Process files asynchronously without holding scanner lock
+                                if !all_audio_files.is_empty()
+                                    && let Err(e) = handle_files_changed(
+                                        all_audio_files,
+                                        &library_db_arc,
+                                        &settings_arc,
+                                    )
                                     .await
                                 {
-                                    eprintln!("Failed to perform initial scan: {}", e);
+                                    eprintln!("Failed to process files: {}", e);
                                 }
                             }
                             Err(e) => {

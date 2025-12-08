@@ -36,6 +36,19 @@ use crate::{
     ui::components::hifi_metadata::HiFiMetadata,
 };
 
+/// Context struct for track information updates.
+struct TrackInfoUpdateContext<'a> {
+    title_label: &'a Label,
+    artist_label: &'a Label,
+    artwork: &'a Picture,
+    hifi_metadata: &'a mut Option<HiFiMetadata>,
+    hifi_metadata_container: &'a Box,
+    total_duration_label: &'a Label,
+    play_button: &'a ToggleButton,
+    prev_button: &'a Button,
+    next_button: &'a Button,
+}
+
 /// Comprehensive Hi-Fi player control center with metadata display.
 ///
 /// The `PlayerBar` provides advanced playback controls, comprehensive
@@ -377,18 +390,18 @@ impl PlayerBar {
                 match event {
                     CurrentTrackChanged(track_info) => {
                         debug!("PlayerBar: Current track changed");
-                        Self::update_track_info(
-                            &track_info,
-                            &title_label,
-                            &artist_label,
-                            &artwork,
-                            &mut hifi_metadata,
-                            &hifi_metadata_container,
-                            &total_duration_label,
-                            &play_button,
-                            &prev_button,
-                            &next_button,
-                        );
+                        let update_context = TrackInfoUpdateContext {
+                            title_label: &title_label,
+                            artist_label: &artist_label,
+                            artwork: &artwork,
+                            hifi_metadata: &mut hifi_metadata,
+                            hifi_metadata_container: &hifi_metadata_container,
+                            total_duration_label: &total_duration_label,
+                            play_button: &play_button,
+                            prev_button: &prev_button,
+                            next_button: &next_button,
+                        };
+                        Self::update_track_info(&track_info, update_context);
                     }
                     PlaybackStateChanged(state) => {
                         debug!("PlayerBar: Playback state changed to {:?}", state);
@@ -401,44 +414,35 @@ impl PlayerBar {
     }
 
     /// Updates track information display.
-    fn update_track_info(
-        track_info: &Option<TrackInfo>,
-        title_label: &Label,
-        artist_label: &Label,
-        artwork: &Picture,
-        hifi_metadata: &mut Option<HiFiMetadata>,
-        hifi_metadata_container: &Box,
-        total_duration_label: &Label,
-        play_button: &ToggleButton,
-        prev_button: &Button,
-        next_button: &Button,
-    ) {
+    fn update_track_info(track_info: &Option<TrackInfo>, ctx: TrackInfoUpdateContext) {
         if let Some(info) = track_info {
             // Update title and artist
-            title_label.set_label(&info.metadata.standard.title.clone().unwrap_or_default());
-            title_label.set_tooltip_text(Some(
+            ctx.title_label
+                .set_label(&info.metadata.standard.title.clone().unwrap_or_default());
+            ctx.title_label.set_tooltip_text(Some(
                 &info.metadata.standard.title.clone().unwrap_or_default(),
             ));
 
-            artist_label.set_label(&info.metadata.standard.artist.clone().unwrap_or_default());
-            artist_label.set_tooltip_text(Some(
+            ctx.artist_label
+                .set_label(&info.metadata.standard.artist.clone().unwrap_or_default());
+            ctx.artist_label.set_tooltip_text(Some(
                 &info.metadata.standard.artist.clone().unwrap_or_default(),
             ));
 
             // Update artwork (placeholder - would load actual artwork)
-            artwork.set_filename(None::<&str>); // Clear existing image
+            ctx.artwork.set_filename(None::<&str>); // Clear existing image
 
             // Update duration
             let duration_seconds = info.duration_ms / 1000;
             let duration_minutes = duration_seconds / 60;
             let duration_remaining = duration_seconds % 60;
             let duration_text = format!("{:02}:{:02}", duration_minutes, duration_remaining);
-            total_duration_label.set_label(&duration_text);
+            ctx.total_duration_label.set_label(&duration_text);
 
             // Create or update Hi-Fi metadata
             // Note: This would require creating a Track from TrackInfo in real implementation
             // For now, we'll just show basic format info
-            if hifi_metadata.is_none() {
+            if ctx.hifi_metadata.is_none() {
                 // Create basic metadata display
                 let format_label = Label::builder()
                     .label(format!(
@@ -449,32 +453,34 @@ impl PlayerBar {
                     ))
                     .css_classes(["dim-label"])
                     .build();
-                hifi_metadata_container.append(format_label.upcast_ref::<Widget>());
+                ctx.hifi_metadata_container
+                    .append(format_label.upcast_ref::<Widget>());
 
                 let sample_rate_label = Label::builder()
                     .label(format!("{}kHz", info.format.sample_rate / 1000))
                     .css_classes(["dim-label"])
                     .build();
-                hifi_metadata_container.append(sample_rate_label.upcast_ref::<Widget>());
+                ctx.hifi_metadata_container
+                    .append(sample_rate_label.upcast_ref::<Widget>());
             }
 
             // Enable controls
-            play_button.set_sensitive(true);
-            prev_button.set_sensitive(true);
-            next_button.set_sensitive(true);
+            ctx.play_button.set_sensitive(true);
+            ctx.prev_button.set_sensitive(true);
+            ctx.next_button.set_sensitive(true);
         } else {
             // Clear all track info
-            title_label.set_label("No track loaded");
-            title_label.set_tooltip_text(Some("No track loaded"));
-            artist_label.set_label("");
-            artist_label.set_tooltip_text(Some(""));
-            artwork.set_filename(None::<&str>);
-            total_duration_label.set_label("0:00");
+            ctx.title_label.set_label("No track loaded");
+            ctx.title_label.set_tooltip_text(Some("No track loaded"));
+            ctx.artist_label.set_label("");
+            ctx.artist_label.set_tooltip_text(Some(""));
+            ctx.artwork.set_filename(None::<&str>);
+            ctx.total_duration_label.set_label("0:00");
 
             // Disable controls
-            play_button.set_sensitive(false);
-            prev_button.set_sensitive(false);
-            next_button.set_sensitive(false);
+            ctx.play_button.set_sensitive(false);
+            ctx.prev_button.set_sensitive(false);
+            ctx.next_button.set_sensitive(false);
         }
     }
 

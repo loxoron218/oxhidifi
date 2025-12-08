@@ -419,6 +419,7 @@ fn create_main_content(
                 Err(e) => {
                     // Handle subscription errors (e.g., channel closed, lagging behind)
                     warn!("State subscription error: {}", e);
+
                     // Continue listening - don't break the loop
                     continue;
                 }

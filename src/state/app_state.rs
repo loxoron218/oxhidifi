@@ -137,6 +137,7 @@ impl AppState {
             .send(AppStateEvent::PlaybackStateChanged(state))
         {
             warn!("Failed to send PlaybackStateChanged event: {}", e);
+
             // In case of overflow, we log but continue - UI may be temporarily out of sync
             // but this prevents complete deadlock
         }

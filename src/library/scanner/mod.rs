@@ -27,7 +27,7 @@ use crate::{
 };
 
 mod config;
-mod handlers;
+pub mod handlers;
 
 pub use config::ScannerConfig;
 
@@ -244,27 +244,25 @@ impl LibraryScanner {
     /// # Returns
     ///
     /// A `Result` containing a vector of audio file paths or a `LibraryError`.
-    fn collect_audio_files_from_directory(
+    pub fn collect_audio_files_from_directory(
         &self,
         dir_path: &Path,
     ) -> Result<Vec<PathBuf>, LibraryError> {
         let mut audio_files = Vec::new();
 
         if let Ok(entries) = read_dir(dir_path) {
-            for entry in entries {
-                if let Ok(entry) = entry {
-                    let path = entry.path();
+            for entry in entries.flatten() {
+                let path = entry.path();
 
-                    if path.is_file() {
-                        // Check if it's a supported audio file
-                        if FileWatcher::is_supported_audio_file(&path) {
-                            audio_files.push(path);
-                        }
-                    } else if path.is_dir() {
-                        // Recursively process subdirectories
-                        let sub_audio_files = self.collect_audio_files_from_directory(&path)?;
-                        audio_files.extend(sub_audio_files);
+                if path.is_file() {
+                    // Check if it's a supported audio file
+                    if FileWatcher::is_supported_audio_file(&path) {
+                        audio_files.push(path);
                     }
+                } else if path.is_dir() {
+                    // Recursively process subdirectories
+                    let sub_audio_files = self.collect_audio_files_from_directory(&path)?;
+                    audio_files.extend(sub_audio_files);
                 }
             }
         }
