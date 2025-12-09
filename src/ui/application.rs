@@ -8,10 +8,12 @@ use std::{error::Error, sync::Arc};
 use {
     libadwaita::{
         Application, ApplicationWindow, NavigationPage, NavigationView,
+        gdk::Display,
         glib::MainContext,
         gtk::{
-            Box as GtkBox, Orientation::Vertical, ScrolledWindow, Stack,
-            StackTransitionType::Crossfade, Widget,
+            Box as GtkBox, CssProvider, Orientation::Vertical, STYLE_PROVIDER_PRIORITY_APPLICATION,
+            ScrolledWindow, Stack, StackTransitionType::Crossfade, Widget,
+            style_context_add_provider_for_display,
         },
         prelude::{
             AdwApplicationWindowExt, ApplicationExt, ApplicationExtManual, BoxExt, Cast,
@@ -270,6 +272,9 @@ fn build_ui(
     main_box.append(&navigation_view.upcast::<Widget>());
     main_box.append(&player_bar_widget);
 
+    // Load custom CSS for consistent styling
+    load_custom_css();
+
     // Set the window content
     window.set_content(Some(&main_box));
     window.present();
@@ -469,4 +474,129 @@ fn create_player_bar(
     widget.set_visible(false);
 
     (widget.upcast::<GtkBox>(), player_bar)
+}
+
+/// Loads custom CSS for consistent component styling.
+fn load_custom_css() {
+    // Define CSS for DR badges and cover art components
+    let css = r#"
+        /* Cover art container styling */
+        .cover-art-container {
+            background-color: @theme_bg_color;
+            border-radius: 6px;
+        }
+        
+        /* Cover art picture styling */
+        .cover-art-picture {
+            border-radius: 6px;
+            background-color: @theme_unfocused_bg_color;
+        }
+        
+        /* DR badge styling - consistent 28x28px with proper positioning */
+        .dr-badge-label {
+            font-family: monospace;
+            font-weight: bold;
+            font-size: 12px;
+            min-width: 28px;
+            min-height: 28px;
+            border-radius: 4px;
+            padding: 0;
+            margin: 4px; /* Small margin to prevent touching edges */
+            color: white;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        
+        /* DR badge quality colors */
+        .dr-badge-label.dr-14,
+        .dr-badge-label.dr-15 { background-color: #4CAF50; }    /* Green - Excellent */
+        .dr-badge-label.dr-12,
+        .dr-badge-label.dr-13 { background-color: #8BC34A; }    /* Light Green - Good */
+        .dr-badge-label.dr-10,
+        .dr-badge-label.dr-11 { background-color: #FFC107; }    /* Amber - Fair */
+        .dr-badge-label.dr-08,
+        .dr-badge-label.dr-09 { background-color: #FF9800; }    /* Orange - Poor */
+        .dr-badge-label.dr-00,
+        .dr-badge-label.dr-01,
+        .dr-badge-label.dr-02,
+        .dr-badge-label.dr-03,
+        .dr-badge-label.dr-04,
+        .dr-badge-label.dr-05,
+        .dr-badge-label.dr-06,
+        .dr-badge-label.dr-07 { background-color: #F44336; }    /* Red - Very Poor */
+        .dr-badge-label.dr-na { background-color: #9E9E9E; }    /* Gray - Unknown */
+        
+        /* Individual DR value classes for precise styling */
+        .dr-badge-label.dr-00 { background-color: #F44336; }
+        .dr-badge-label.dr-01 { background-color: #F44336; }
+        .dr-badge-label.dr-02 { background-color: #F44336; }
+        .dr-badge-label.dr-03 { background-color: #F44336; }
+        .dr-badge-label.dr-04 { background-color: #F44336; }
+        .dr-badge-label.dr-05 { background-color: #F44336; }
+        .dr-badge-label.dr-06 { background-color: #F44336; }
+        .dr-badge-label.dr-07 { background-color: #F44336; }
+        .dr-badge-label.dr-08 { background-color: #FF9800; }
+        .dr-badge-label.dr-09 { background-color: #FF9800; }
+        .dr-badge-label.dr-10 { background-color: #FFC107; }
+        .dr-badge-label.dr-11 { background-color: #FFC107; }
+        .dr-badge-label.dr-12 { background-color: #8BC34A; }
+        .dr-badge-label.dr-13 { background-color: #8BC34A; }
+        .dr-badge-label.dr-14 { background-color: #4CAF50; }
+        .dr-badge-label.dr-15 { background-color: #4CAF50; }
+        
+        /* Album card base styling */
+        .album-tile {
+            background-color: transparent;
+            border-radius: 12px; /* 12px border-radius as specified */
+            min-width: 64px; /* Minimum width for smallest zoom level */
+        }
+                
+        /* Album title label styling */
+        .album-title-label {
+            font-weight: 700; /* Bold 1.1em font-weight: 700 */
+            font-size: 1.1em;
+        }
+        
+        /* Album artist label styling */
+        .album-artist-label {
+            color: #AAA; /* Light gray (#AAA) */
+            font-weight: 400;
+            font-size: 0.95em;
+        }
+        
+        /* Album format/genre label styling */
+        .album-format-label {
+            color: #666; /* Darker gray (#666) */
+            font-style: italic;
+            font-size: 0.9em;
+            margin-top: 2px;
+        }
+        
+        /* Play overlay styling */
+        .play-overlay {
+            background-color: rgba(0, 0, 0, 0.6);
+            border-radius: 50%;
+            min-width: 40px;
+            min-height: 40px;
+            opacity: 0;
+            transition: opacity 0.2s ease-in-out;
+        }
+        
+        .play-overlay:hover {
+            background-color: rgba(0, 0, 0, 0.9);
+        }
+        
+        /* Album grid styling */
+        .album-grid {
+            /* FlowBox will handle the responsive grid layout */
+            min-width: 360px; /* Minimum width for mobile-like displays */
+        }
+    "#;
+
+    let provider = CssProvider::new();
+    provider.load_from_string(css);
+    style_context_add_provider_for_display(
+        &Display::default().expect("Could not connect to a display."),
+        &provider,
+        STYLE_PROVIDER_PRIORITY_APPLICATION,
+    );
 }

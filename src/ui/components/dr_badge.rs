@@ -4,10 +4,7 @@
 //! values with color coding based on quality levels, following GNOME HIG guidelines.
 
 use libadwaita::{
-    gtk::{
-        Align::{End, Start},
-        Label, Widget,
-    },
+    gtk::{Align::End, Label, Widget},
     prelude::{Cast, WidgetExt},
 };
 
@@ -66,12 +63,12 @@ impl DRQuality {
     /// The CSS class name as a string slice.
     pub fn css_class(&self) -> &'static str {
         match self {
-            DRQuality::Excellent => "dr-badge-excellent",
-            DRQuality::Good => "dr-badge-good",
-            DRQuality::Fair => "dr-badge-fair",
-            DRQuality::Poor => "dr-badge-poor",
-            DRQuality::VeryPoor => "dr-badge-very-poor",
-            DRQuality::Unknown => "dr-badge-unknown",
+            DRQuality::Excellent => "dr-14", // Using highest DR value as representative
+            DRQuality::Good => "dr-12",
+            DRQuality::Fair => "dr-10",
+            DRQuality::Poor => "dr-08",
+            DRQuality::VeryPoor => "dr-00",
+            DRQuality::Unknown => "dr-na",
         }
     }
 
@@ -168,24 +165,50 @@ impl DRBadge {
             .map(DRQuality::from_dr_value)
             .unwrap_or(DRQuality::Unknown);
 
-        let display_text = if let Some(value) = dr_value {
-            if show_label {
-                value
+        // Extract numeric part for CSS class and display
+        let (display_text, css_class) = if let Some(value) = dr_value {
+            if let Ok(numeric_part) = value
+                .chars()
+                .skip_while(|c| !c.is_ascii_digit())
+                .collect::<String>()
+                .parse::<u8>()
+            {
+                let formatted_display = if show_label {
+                    format!("DR{:02}", numeric_part)
+                } else {
+                    format!("{:02}", numeric_part)
+                };
+                let css_class = format!("dr-{:02}", numeric_part);
+                (formatted_display, css_class)
             } else {
-                // Remove "DR" prefix if present
-                value.trim_start_matches("DR").to_string()
+                // Invalid DR value format
+                let display_text = if show_label {
+                    "DR N/A".to_string()
+                } else {
+                    "N/A".to_string()
+                };
+                (display_text, "dr-na".to_string())
             }
         } else {
-            "N/A".to_string()
+            // No DR value provided
+            let display_text = if show_label {
+                "DR N/A".to_string()
+            } else {
+                "N/A".to_string()
+            };
+            (display_text, "dr-na".to_string())
         };
 
-        let label = Label::builder()
+        let label_builder = Label::builder()
             .label(&display_text)
             .halign(End)
-            .valign(Start)
-            .css_classes(["dr-badge".to_string(), quality.css_class().to_string()])
-            .tooltip_text(quality.aria_label())
-            .build();
+            .valign(End)
+            .width_request(28)
+            .height_request(28)
+            .css_classes(&["dr-badge-label", "dr-badge-label-grid"] as &[&str])
+            .tooltip_text(quality.aria_label());
+        let label = label_builder.build();
+        label.add_css_class(&css_class);
 
         // Set ARIA attributes for accessibility
         // set_accessible_description doesn't exist in GTK4, remove this line
@@ -220,21 +243,33 @@ impl DRBadge {
             .map(DRQuality::from_dr_value)
             .unwrap_or(DRQuality::Unknown);
 
-        let display_text = if let Some(value) = dr_value {
-            // Keep the original format including "DR" prefix
-            value
+        // Extract numeric part for CSS class and display
+        let (display_text, css_class) = if let Some(value) = dr_value {
+            if let Ok(numeric_part) = value
+                .chars()
+                .skip_while(|c| !c.is_ascii_digit())
+                .collect::<String>()
+                .parse::<u8>()
+            {
+                let formatted_display = format!("DR{:02}", numeric_part);
+                let css_class = format!("dr-{:02}", numeric_part);
+                (formatted_display, css_class)
+            } else {
+                // Invalid DR value format
+                ("DR N/A".to_string(), "dr-na".to_string())
+            }
         } else {
-            "N/A".to_string()
+            // No DR value provided
+            ("DR N/A".to_string(), "dr-na".to_string())
         };
 
         self.label.set_label(&display_text);
         self.label.set_tooltip_text(Some(quality.aria_label()));
 
-        // set_accessible_description doesn't exist in GTK4, remove this line
-
-        // Update CSS classes
+        // Update CSS classes - first set base classes, then add dynamic class
         self.label
-            .set_css_classes(&["dr-badge", quality.css_class()]);
+            .set_css_classes(&["dr-badge-label", "dr-badge-label-grid"]);
+        self.label.add_css_class(&css_class);
 
         self.quality = quality;
     }
@@ -272,12 +307,12 @@ mod tests {
 
     #[test]
     fn test_dr_quality_css_classes() {
-        assert_eq!(DRQuality::Excellent.css_class(), "dr-badge-excellent");
-        assert_eq!(DRQuality::Good.css_class(), "dr-badge-good");
-        assert_eq!(DRQuality::Fair.css_class(), "dr-badge-fair");
-        assert_eq!(DRQuality::Poor.css_class(), "dr-badge-poor");
-        assert_eq!(DRQuality::VeryPoor.css_class(), "dr-badge-very-poor");
-        assert_eq!(DRQuality::Unknown.css_class(), "dr-badge-unknown");
+        assert_eq!(DRQuality::Excellent.css_class(), "dr-14");
+        assert_eq!(DRQuality::Good.css_class(), "dr-12");
+        assert_eq!(DRQuality::Fair.css_class(), "dr-10");
+        assert_eq!(DRQuality::Poor.css_class(), "dr-08");
+        assert_eq!(DRQuality::VeryPoor.css_class(), "dr-00");
+        assert_eq!(DRQuality::Unknown.css_class(), "dr-na");
     }
 
     #[test]

@@ -8,22 +8,21 @@ use std::sync::Arc;
 
 use libadwaita::{
     gtk::{
-        AccessibleRole::{Grid, Group},
-        Align::{Center, Start},
-        Box as GtkBox, FlowBox, FlowBoxChild, Label,
+        AccessibleRole::Grid,
+        Align::{Fill, Start},
+        Box as GtkBox, FlowBox,
         Orientation::Vertical,
         SelectionMode::None as SelectionNone,
         Widget,
-        pango::EllipsizeMode::End,
     },
-    prelude::{AccessibleExt, BoxExt, Cast, FlowBoxChildExt, ListModelExt, WidgetExt},
+    prelude::{AccessibleExt, BoxExt, Cast, ListModelExt, WidgetExt},
 };
 
 use crate::{
     library::models::Album,
     state::{AppState, LibraryState},
     ui::components::{
-        cover_art::CoverArt,
+        album_card::AlbumCard,
         empty_state::{EmptyState, EmptyStateConfig},
     },
 };
@@ -163,11 +162,19 @@ impl AlbumGridView {
         };
 
         let flow_box = FlowBox::builder()
-            .halign(Center)
+            .halign(Fill) // Fill available horizontal space instead of centering
             .valign(Start)
             .homogeneous(true)
             .max_children_per_line(100) // Will be adjusted based on available width
             .selection_mode(SelectionNone)
+            .row_spacing(8) // 8px row spacing as specified
+            .column_spacing(8) // 8px column spacing as specified
+            .margin_top(24) // 24px margins as specified
+            .margin_bottom(24)
+            .margin_start(24)
+            .margin_end(24)
+            .hexpand(true) // Expand horizontally to fill available space
+            .vexpand(false)
             .css_classes(["album-grid"])
             .build();
 
@@ -178,8 +185,6 @@ impl AlbumGridView {
 
         // Set ARIA attributes for accessibility
         flow_box.set_accessible_role(Grid);
-
-        // set_accessible_description doesn't exist in GTK4, remove this line
 
         // Create empty state component
         let empty_state = app_state.as_ref().map(|state| {
@@ -258,14 +263,14 @@ impl AlbumGridView {
                 .update_from_library_state(&library_state);
         }
 
-        // Add new album items
+        // Add new album items using the new AlbumCard component
         for album in &self.albums {
             let album_item = self.create_album_item(album);
             self.flow_box.insert(&album_item, -1);
         }
     }
 
-    /// Creates a single album item widget for the grid.
+    /// Creates a single album item widget for the grid using the new AlbumCard.
     ///
     /// # Arguments
     ///
@@ -275,67 +280,60 @@ impl AlbumGridView {
     ///
     /// A new `Widget` representing the album item.
     fn create_album_item(&self, album: &Album) -> Widget {
-        // Create cover art
-        let cover_art = CoverArt::builder()
-            .artwork_path(album.artwork_path.as_deref().unwrap_or(&album.path))
-            .dr_value(album.dr_value.clone().unwrap_or_else(|| "N/A".to_string()))
-            .show_dr_badge(self.config.show_dr_badges)
-            .dimensions(180, 180)
-            .build();
-
-        // Create title label
-        let title_label = Label::builder()
-            .label(&album.title)
-            .halign(Center)
-            .xalign(0.5)
-            .ellipsize(End)
-            .lines(2)
-            .tooltip_text(&album.title)
-            .build();
-
-        // Create artist/year info
-        let artist_year_text = if let Some(year) = album.year {
-            format!("{} ({})", album.artist_id, year)
+        // Create album card with proper callbacks
+        // Note: In a real implementation, format would be obtained from tracks
+        // For now, we use a reasonable default based on common high-res formats
+        let format = if album.path.to_lowercase().ends_with(".flac") {
+            "FLAC".to_string()
+        } else if album.path.to_lowercase().ends_with(".wav") {
+            "WAV".to_string()
+        } else if album.path.to_lowercase().ends_with(".dsf")
+            || album.path.to_lowercase().ends_with(".dff")
+        {
+            "DSD".to_string()
+        } else if album.path.to_lowercase().ends_with(".mqa") {
+            "MQA".to_string()
         } else {
-            album.artist_id.to_string()
+            "Hi-Res".to_string()
         };
 
-        let artist_year_label = Label::builder()
-            .label(&artist_year_text)
-            .halign(Center)
-            .xalign(0.5)
-            .css_classes(["dim-label"])
-            .ellipsize(End)
-            .lines(1)
-            .tooltip_text(&artist_year_text)
+        let album_card = AlbumCard::builder()
+            .album(album.clone())
+            .format(format)
+            .show_dr_badge(self.config.show_dr_badges)
+            .compact(self.config.compact)
+            .on_play_clicked({
+                let app_state = self.app_state.clone();
+                let album_clone = album.clone();
+                move || {
+                    // Handle play button click - queue album for playback
+                    if let Some(_state) = &app_state {
+                        // In a real implementation, this would:
+                        // 1. Fetch tracks for the album
+                        // 2. Queue them for playback
+                        // 3. Update player bar immediately
+                        // 4. Show player bar
+                        println!("Play clicked for album: {}", album_clone.title);
+                    }
+                }
+            })
+            .on_card_clicked({
+                let app_state = self.app_state.clone();
+                let album_clone = album.clone();
+                move || {
+                    // Handle card click - navigate to detail view
+                    if let Some(_state) = &app_state {
+                        // In a real implementation, this would:
+                        // 1. Navigate to album detail page
+                        // 2. Load detailed album information
+                        // 3. Update navigation history
+                        println!("Card clicked for album: {}", album_clone.title);
+                    }
+                }
+            })
             .build();
 
-        // Create main container
-        let container = GtkBox::builder()
-            .orientation(Vertical)
-            .halign(Center)
-            .valign(Start)
-            .spacing(4)
-            .margin_top(8)
-            .margin_bottom(8)
-            .margin_start(8)
-            .margin_end(8)
-            .css_classes(["album-item"])
-            .build();
-
-        container.append(&cover_art.widget);
-        container.append(title_label.upcast_ref::<Widget>());
-        container.append(artist_year_label.upcast_ref::<Widget>());
-
-        // Set ARIA attributes for accessibility
-        container.set_accessible_role(Group);
-
-        // Create FlowBoxChild wrapper
-        let child = FlowBoxChild::new();
-        child.set_child(Some(&container));
-        child.set_focusable(true);
-
-        child.upcast_ref::<Widget>().clone()
+        album_card.widget
     }
 
     /// Updates the display configuration.

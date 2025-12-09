@@ -273,16 +273,20 @@ impl ArtistGridView {
             .tooltip_text(album_count_text)
             .build();
 
-        // Create main container
+        // Create main container with fixed dimensions to ensure consistent sizing
         let container = GtkBox::builder()
             .orientation(Vertical)
             .halign(Center)
             .valign(Start)
+            .hexpand(false)
+            .vexpand(false)
             .spacing(4)
             .margin_top(8)
             .margin_bottom(8)
             .margin_start(8)
             .margin_end(8)
+            .width_request(196) // 180 (cover) + 8*2 (margins) = 196
+            .height_request(250) // Approximate height for cover + labels
             .css_classes(["artist-item"])
             .build();
 

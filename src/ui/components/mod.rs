@@ -6,6 +6,7 @@
 #[cfg(test)]
 mod tests;
 
+pub mod album_card;
 pub mod cover_art;
 pub mod dr_badge;
 pub mod empty_state;
@@ -13,6 +14,6 @@ pub mod hifi_metadata;
 pub mod play_overlay;
 
 pub use {
-    cover_art::CoverArt, dr_badge::DRBadge, empty_state::EmptyState, hifi_metadata::HiFiMetadata,
-    play_overlay::PlayOverlay,
+    album_card::AlbumCard, cover_art::CoverArt, dr_badge::DRBadge, empty_state::EmptyState,
+    hifi_metadata::HiFiMetadata, play_overlay::PlayOverlay,
 };
