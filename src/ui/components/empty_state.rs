@@ -265,7 +265,14 @@ impl EmptyState {
                         Arc::new(RwLock::new(settings_manager.get_settings().clone()));
 
                     // Check if we have an existing scanner
-                    if let Some(scanner_arc) = &app_state.library_scanner {
+                    let has_existing_scanner = app_state.library_scanner.read().is_some();
+                    if has_existing_scanner {
+                        // Get the scanner reference while holding the read lock briefly
+                        let scanner_arc = {
+                            let scanner_guard = app_state.library_scanner.read();
+                            scanner_guard.as_ref().unwrap().clone()
+                        };
+
                         // Use existing scanner - add directory first (synchronous operation)
                         {
                             let mut scanner_write = scanner_arc.write();
@@ -317,6 +324,9 @@ impl EmptyState {
                         {
                             Ok(scanner) => {
                                 let scanner_arc = Arc::new(RwLock::new(scanner));
+
+                                // IMPORTANT: Store the scanner in AppState to prevent it from being dropped
+                                *app_state.library_scanner.write() = Some(scanner_arc.clone());
 
                                 // Perform initial scan with new scanner - collect audio files synchronously, then process asynchronously
                                 let all_audio_files = {

@@ -36,7 +36,7 @@ pub struct AppState {
     /// Audio engine reference.
     pub audio_engine: Weak<AudioEngine>,
     /// Library scanner reference (optional).
-    pub library_scanner: Option<Arc<RwLock<LibraryScanner>>>,
+    pub library_scanner: Arc<RwLock<Option<Arc<RwLock<LibraryScanner>>>>>,
     /// Broadcast channel for state change notifications.
     state_tx: Sender<AppStateEvent>,
 }
@@ -119,7 +119,7 @@ impl AppState {
             current_track: Arc::new(RwLock::new(None)),
             library: Arc::new(RwLock::new(LibraryState::default())),
             audio_engine,
-            library_scanner,
+            library_scanner: Arc::new(RwLock::new(library_scanner)),
             state_tx,
         }
     }
