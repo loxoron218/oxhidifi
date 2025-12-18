@@ -31,7 +31,10 @@ use crate::{
         PlaybackState::{Buffering, Paused, Playing, Ready, Stopped},
     },
     config::SettingsManager,
-    library::{LibraryDatabase, scanner::LibraryScanner},
+    library::{
+        LibraryDatabase,
+        scanner::{LibraryScanner, ScannerEvent::LibraryChanged},
+    },
     state::{
         AppState,
         AppStateEvent::{LibraryStateChanged, PlaybackStateChanged, SearchFilterChanged},
@@ -177,6 +180,58 @@ impl OxhidifiApplication {
                     &app_state_clone,
                     &settings_manager_clone,
                 );
+
+                // Subscribe to library scanner events if active
+                if let Some(scanner_lock) = &app_state_clone.library_scanner.read().clone() {
+                    let scanner = scanner_lock.read();
+                    let mut rx = scanner.subscribe();
+                    let app_state_refresh = app_state_clone.clone();
+                    let db_refresh = library_db_clone.clone();
+
+                    MainContext::default().spawn_local(async move {
+                        loop {
+                            match rx.recv().await {
+                                Ok(LibraryChanged) => {
+                                    debug!("LibraryChanged event received, refreshing app state");
+
+                                    // Refresh albums
+                                    let albums = match db_refresh.get_albums(None).await {
+                                        Ok(albums) => albums,
+                                        Err(e) => {
+                                            eprintln!("Failed to refresh albums: {}", e);
+                                            Vec::new()
+                                        }
+                                    };
+
+                                    // Refresh artists
+                                    let artists = match db_refresh.get_artists(None).await {
+                                        Ok(artists) => artists,
+                                        Err(e) => {
+                                            eprintln!("Failed to refresh artists: {}", e);
+                                            Vec::new()
+                                        }
+                                    };
+
+                                    // Update state
+                                    let mut current_state = app_state_refresh.get_library_state();
+                                    current_state.albums = albums;
+                                    current_state.artists = artists;
+                                    app_state_refresh.update_library_state(current_state);
+                                }
+                                Err(Closed) => {
+                                    debug!("Scanner event channel closed");
+                                    break;
+                                }
+                                Err(Lagged(skipped)) => {
+                                    debug!(
+                                        "Scanner event channel lagged, skipped {} events",
+                                        skipped
+                                    );
+                                }
+                            }
+                        }
+                    });
+                }
             }
         });
 

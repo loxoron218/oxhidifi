@@ -12,7 +12,11 @@ use std::{
 use {
     async_channel::{Receiver, bounded},
     parking_lot::RwLock,
-    tokio::{spawn, task::JoinHandle},
+    tokio::{
+        spawn,
+        sync::broadcast::{Receiver as TokioReceiver, Sender, channel},
+        task::JoinHandle,
+    },
     tracing::{debug, error, warn},
 };
 
@@ -31,6 +35,13 @@ pub mod handlers;
 
 pub use config::ScannerConfig;
 
+/// Events emitted by the library scanner.
+#[derive(Debug, Clone)]
+pub enum ScannerEvent {
+    /// The library has been modified (add/remove/update).
+    LibraryChanged,
+}
+
 /// Main library scanner coordinator.
 ///
 /// The `LibraryScanner` orchestrates file system monitoring, metadata extraction,
@@ -43,6 +54,8 @@ pub struct LibraryScanner {
     config: ScannerConfig,
     /// Task handles for background operations.
     _tasks: Vec<JoinHandle<()>>,
+    /// Event sender for scanner notifications.
+    event_sender: Sender<ScannerEvent>,
 }
 
 impl LibraryScanner {
@@ -71,6 +84,9 @@ impl LibraryScanner {
         // Create channels for event processing
         let (raw_event_sender, raw_event_receiver) = bounded(100);
         let (debounced_event_sender, debounced_event_receiver) = bounded(50);
+
+        // Create broadcast channel for scanner events
+        let (event_sender, _) = channel(16);
 
         // Clone config for file watcher to avoid move/borrow issues
         let file_watcher_config = config.file_watcher_config.clone();
@@ -104,18 +120,29 @@ impl LibraryScanner {
         // Spawn debounced event handler task
         let database_clone = database.clone();
         let settings_clone = settings.clone();
+        let event_sender_clone = event_sender.clone();
         tasks.push(spawn(async move {
-            Self::handle_debounced_events(debounced_event_receiver, database_clone, settings_clone)
-                .await;
+            Self::handle_debounced_events(
+                debounced_event_receiver,
+                database_clone,
+                settings_clone,
+                event_sender_clone,
+            )
+            .await;
         }));
 
         Ok(LibraryScanner {
             file_watcher,
             config,
             _tasks: tasks,
+            event_sender,
         })
     }
 
+    /// Handles debounced file system events.
+    ///
+    /// This method processes debounced events and coordinates metadata extraction
+    /// and database updates.
     /// Handles debounced file system events.
     ///
     /// This method processes debounced events and coordinates metadata extraction
@@ -124,29 +151,47 @@ impl LibraryScanner {
         receiver: Receiver<DebouncedEvent>,
         database: Arc<LibraryDatabase>,
         settings: Arc<RwLock<UserSettings>>,
+        event_sender: Sender<ScannerEvent>,
     ) {
         while let Ok(event) = receiver.recv().await {
+            let mut changes_processed = false;
             match event {
                 DebouncedEvent::FilesChanged { paths } => {
                     debug!("Processing {} changed files", paths.len());
                     if let Err(e) = handle_files_changed(paths, &database, &settings).await {
                         error!("Error handling changed files: {}", e);
+                    } else {
+                        changes_processed = true;
                     }
                 }
                 DebouncedEvent::FilesRemoved { paths } => {
                     debug!("Processing {} removed files", paths.len());
                     if let Err(e) = handle_files_removed(paths, &database).await {
                         error!("Error handling removed files: {}", e);
+                    } else {
+                        changes_processed = true;
                     }
                 }
                 DebouncedEvent::FilesRenamed { paths } => {
                     debug!("Processing {} renamed files", paths.len());
                     if let Err(e) = handle_files_renamed(paths, &database, &settings).await {
                         error!("Error handling renamed files: {}", e);
+                    } else {
+                        changes_processed = true;
                     }
                 }
             }
+
+            if changes_processed {
+                debug!("Library changes processed, emitting LibraryChanged event");
+                let _ = event_sender.send(ScannerEvent::LibraryChanged);
+            }
         }
+    }
+
+    /// Subscribe to scanner events.
+    pub fn subscribe(&self) -> TokioReceiver<ScannerEvent> {
+        self.event_sender.subscribe()
     }
 
     /// Adds a library directory to be monitored.

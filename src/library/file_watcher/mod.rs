@@ -16,7 +16,11 @@ use {
         Config, Error, Event, RecommendedWatcher,
         RecursiveMode::Recursive,
         Watcher,
-        event::{EventKind, ModifyKind},
+        event::{
+            EventKind::{Create, Modify, Other, Remove},
+            ModifyKind::{Data, Name},
+            RenameMode::{Both, From, To},
+        },
     },
     parking_lot::RwLock,
     tracing::{debug, error},
@@ -31,7 +35,10 @@ mod events;
 pub use {
     config::FileWatcherConfig,
     debouncer::DebouncedEventProcessor,
-    events::{DebouncedEvent, ProcessedEvent},
+    events::{
+        DebouncedEvent,
+        ProcessedEvent::{self, FileChanged, FileRemoved},
+    },
 };
 
 /// Supported audio file extensions for library monitoring.
@@ -118,32 +125,110 @@ impl FileWatcher {
 
                 // Process each path in the event
                 for path in &event.paths {
-                    if Self::is_supported_audio_file(path) {
-                        // Handle different event kinds
-                        match event.kind {
-                            EventKind::Create(_) | EventKind::Modify(ModifyKind::Data(_)) => {
-                                let _ = sender.try_send(ProcessedEvent::FileChanged {
+                    // Check logic depending on event kind
+                    match event.kind {
+                        // For Create/Modify, we MUST check extensions to avoid processing non-audio files
+                        Create(_) | Modify(Data(_)) => {
+                            if Self::is_supported_audio_file(path) {
+                                let _ = sender.try_send(FileChanged {
                                     path: path.clone(),
-                                    is_new: matches!(event.kind, EventKind::Create(_)),
+                                    is_new: matches!(event.kind, Create(_)),
                                 });
-                            }
-                            EventKind::Remove(_) => {
-                                let _ = sender
-                                    .try_send(ProcessedEvent::FileRemoved { path: path.clone() });
-                            }
-                            EventKind::Other => {
-                                // Handle potential rename/move events
-                                // Note: notify doesn't always provide both old and new paths
-                                // We'll handle this in the incremental updater with heuristics
-                                debug!("Other event kind for path: {:?}", path);
-                            }
-                            _ => {
-                                // Ignore other event kinds (access, metadata changes, etc.)
-                                debug!("Ignoring event kind {:?} for path: {:?}", event.kind, path);
+                            } else {
+                                debug!("Ignoring non-audio file change: {:?}", path);
                             }
                         }
-                    } else {
-                        debug!("Ignoring non-audio file: {:?}", path);
+
+                        // Handle Rename/Move events (covers Move to Trash)
+                        Modify(Name(mode)) => {
+                            debug!(
+                                "FileWatcher: Processing rename event {:?} for path: {:?}",
+                                mode, path
+                            );
+                            match mode {
+                                // From: File was moved FROM this path (deletion/move source)
+                                From => {
+                                    debug!(
+                                        "FileWatcher: Propagating rename-from (remove) event for path: {:?}",
+                                        path
+                                    );
+                                    let _ = sender.try_send(FileRemoved { path: path.clone() });
+                                }
+
+                                // To: File was moved TO this path (creation/move dest)
+                                To => {
+                                    if Self::is_supported_audio_file(path) {
+                                        debug!(
+                                            "FileWatcher: Propagating rename-to (add) event for path: {:?}",
+                                            path
+                                        );
+                                        let _ = sender.try_send(FileChanged {
+                                            path: path.clone(),
+                                            is_new: true,
+                                        });
+                                    }
+                                }
+
+                                // Both: Atomic rename (path contains both descriptors? Notify usually sends separate events or one event with two paths)
+                                // In Notify, Both usually usually comes with 2 paths in the event paths vector.
+                                Both => {
+                                    // If we have 2 paths, 0 is From, 1 is To.
+                                    if event.paths.len() == 2 {
+                                        let from_path = &event.paths[0];
+                                        let to_path = &event.paths[1];
+
+                                        debug!(
+                                            "FileWatcher: Propagating rename-both: {:?} -> {:?}",
+                                            from_path, to_path
+                                        );
+
+                                        // Handle From
+                                        let _ = sender.try_send(FileRemoved {
+                                            path: from_path.clone(),
+                                        });
+
+                                        // Handle To
+                                        if Self::is_supported_audio_file(to_path) {
+                                            let _ = sender.try_send(FileChanged {
+                                                path: to_path.clone(),
+                                                is_new: true,
+                                            });
+                                        }
+                                    } else {
+                                        // Fallback if structure is unexpected, treat match path as potentially both?
+                                        // Safer to treat as generic change or log warning.
+                                        debug!(
+                                            "FileWatcher: Received RenameMode::Both but path count is {}",
+                                            event.paths.len()
+                                        );
+                                    }
+                                }
+                                _ => {
+                                    debug!(
+                                        "FileWatcher: Ignored unknown RenameMode for path: {:?}",
+                                        path
+                                    );
+                                }
+                            }
+                        }
+
+                        // For Remove, we must allow it to pass even if it's a directory
+                        // or a file without extension, as we can't check the file type of a deleted path
+                        // easily, and we need to catch directory deletions.
+                        Remove(_) => {
+                            debug!("FileWatcher: Propagating remove event for path: {:?}", path);
+                            let _ = sender.try_send(FileRemoved { path: path.clone() });
+                        }
+                        Other => {
+                            // Handle potential rename/move events
+                            if Self::is_supported_audio_file(path) {
+                                debug!("Other event kind for path: {:?}", path);
+                            }
+                        }
+                        _ => {
+                            // Ignore other event kinds (access, metadata changes, etc.)
+                            debug!("Ignoring event kind {:?} for path: {:?}", event.kind, path);
+                        }
                     }
                 }
             }

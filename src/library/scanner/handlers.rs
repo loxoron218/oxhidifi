@@ -124,18 +124,44 @@ pub async fn handle_files_removed(
     let mut tx = pool.begin().await?;
 
     for path in paths {
-        // Remove track from database
-        query("DELETE FROM tracks WHERE path = ?")
-            .bind(path.to_string_lossy().to_string())
+        let path_str = path.to_string_lossy().to_string();
+        let path_pattern = format!("{}/%", path_str);
+
+        debug!(
+            "Attempting to delete tracks for path: {} (pattern: {})",
+            path_str, path_pattern
+        );
+
+        // Remove track from database (handle directories too)
+        let result = query("DELETE FROM tracks WHERE path = ? OR path LIKE ?")
+            .bind(&path_str)
+            .bind(&path_pattern)
             .execute(&mut *tx)
             .await?;
+
+        debug!(
+            "Deleted {} tracks for path {}",
+            result.rows_affected(),
+            path_str
+        );
     }
+
+    // Clean up empty albums
+    let album_result =
+        query("DELETE FROM albums WHERE id NOT IN (SELECT DISTINCT album_id FROM tracks)")
+            .execute(&mut *tx)
+            .await?;
+    debug!("Deleted {} empty albums", album_result.rows_affected());
+
+    // Clean up empty artists
+    let artist_result =
+        query("DELETE FROM artists WHERE id NOT IN (SELECT DISTINCT artist_id FROM albums)")
+            .execute(&mut *tx)
+            .await?;
+    debug!("Deleted {} empty artists", artist_result.rows_affected());
 
     // Commit transaction
     tx.commit().await?;
-
-    // TODO: Clean up empty albums and artists
-    // This should be handled by the incremental updater
 
     Ok(())
 }

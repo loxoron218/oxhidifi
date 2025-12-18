@@ -9,7 +9,7 @@ use std::{
 use {
     parking_lot::RwLock,
     sqlx::{Sqlite, Transaction, query, query_scalar},
-    tracing::warn,
+    tracing::{debug, warn},
 };
 
 use crate::{
@@ -190,21 +190,41 @@ pub async fn handle_files_removed_incremental(
 
     // Remove tracks
     for path in paths {
-        query("DELETE FROM tracks WHERE path = ?")
-            .bind(path.to_string_lossy().to_string())
+        let path_str = path.to_string_lossy().to_string();
+        let path_pattern = format!("{}/%", path_str);
+
+        debug!(
+            "Attempting to delete tracks for path: {} (pattern: {})",
+            path_str, path_pattern
+        );
+
+        // Delete track directly or tracks in subdirectory
+        let result = query("DELETE FROM tracks WHERE path = ? OR path LIKE ?")
+            .bind(&path_str)
+            .bind(&path_pattern)
             .execute(&mut *tx)
             .await?;
+
+        debug!(
+            "Deleted {} tracks for path {}",
+            result.rows_affected(),
+            path_str
+        );
     }
 
     // Clean up empty albums
-    query("DELETE FROM albums WHERE id NOT IN (SELECT DISTINCT album_id FROM tracks)")
-        .execute(&mut *tx)
-        .await?;
+    let album_result =
+        query("DELETE FROM albums WHERE id NOT IN (SELECT DISTINCT album_id FROM tracks)")
+            .execute(&mut *tx)
+            .await?;
+    debug!("Deleted {} empty albums", album_result.rows_affected());
 
     // Clean up empty artists
-    query("DELETE FROM artists WHERE id NOT IN (SELECT DISTINCT artist_id FROM albums)")
-        .execute(&mut *tx)
-        .await?;
+    let artist_result =
+        query("DELETE FROM artists WHERE id NOT IN (SELECT DISTINCT artist_id FROM albums)")
+            .execute(&mut *tx)
+            .await?;
+    debug!("Deleted {} empty artists", artist_result.rows_affected());
 
     tx.commit().await?;
     Ok(())
