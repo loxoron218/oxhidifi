@@ -15,7 +15,7 @@ use libadwaita::{
         SelectionMode::None as SelectionNone,
         Widget,
     },
-    prelude::{AccessibleExt, BoxExt, Cast, ListModelExt, WidgetExt},
+    prelude::{AccessibleExt, BoxExt, Cast, WidgetExt},
 };
 
 use crate::{
@@ -126,6 +126,8 @@ pub struct AlbumGridView {
     pub config: AlbumGridViewConfig,
     /// Empty state component for when no albums are available.
     pub empty_state: Option<EmptyState>,
+    /// Current sort criteria.
+    pub current_sort: AlbumSortCriteria,
 }
 
 /// Configuration for AlbumGridView display options.
@@ -210,6 +212,7 @@ impl AlbumGridView {
             albums: Vec::new(),
             config,
             empty_state,
+            current_sort: AlbumSortCriteria::Title, // Default sort by Title
         };
 
         // Populate with initial albums
@@ -234,17 +237,14 @@ impl AlbumGridView {
     /// * `albums` - New vector of albums to display
     pub fn set_albums(&mut self, albums: Vec<Album>) {
         // Clear existing children
-        let children = self.flow_box.observe_children();
-        let n_items = children.n_items();
-        for i in 0..n_items {
-            if let Some(child) = children.item(i)
-                && let Ok(widget) = child.downcast::<Widget>()
-            {
-                self.flow_box.remove(&widget);
-            }
+        while let Some(child) = self.flow_box.first_child() {
+            self.flow_box.remove(&child);
         }
 
         self.albums = albums;
+
+        // Apply current sort
+        self.apply_sort();
 
         // Update empty state visibility
         if let Some(_empty_state) = &self.empty_state {
@@ -373,20 +373,31 @@ impl AlbumGridView {
     ///
     /// * `sort_by` - Sorting criteria
     pub fn sort_albums(&mut self, sort_by: AlbumSortCriteria) {
-        let mut sorted_albums = self.albums.clone();
+        self.current_sort = sort_by;
 
-        match sort_by {
+        // Apply sort to current albums and refresh display
+        self.apply_sort();
+
+        // Re-display sorted albums - this creates unnecessary object churn but preserves the pattern
+        // In a real implementation we would just re-order children or use a SortListModel
+        self.set_albums(self.albums.clone());
+    }
+
+    /// Applies the current sort criteria to the albums vector.
+    fn apply_sort(&mut self) {
+        match self.current_sort {
             AlbumSortCriteria::Title => {
-                sorted_albums.sort_by(|a, b| a.title.cmp(&b.title));
+                self.albums.sort_by(|a, b| a.title.cmp(&b.title));
             }
             AlbumSortCriteria::Artist => {
-                sorted_albums.sort_by(|a, b| a.artist_id.cmp(&b.artist_id));
+                self.albums.sort_by(|a, b| a.artist_id.cmp(&b.artist_id));
             }
             AlbumSortCriteria::Year => {
-                sorted_albums.sort_by(|a, b| a.year.unwrap_or(0).cmp(&b.year.unwrap_or(0)));
+                self.albums
+                    .sort_by(|a, b| a.year.unwrap_or(0).cmp(&b.year.unwrap_or(0)));
             }
             AlbumSortCriteria::DRValue => {
-                sorted_albums.sort_by(|a, b| {
+                self.albums.sort_by(|a, b| {
                     let a_dr = a.dr_value.as_deref().unwrap_or("DR0");
                     let b_dr = b.dr_value.as_deref().unwrap_or("DR0");
 
@@ -407,8 +418,6 @@ impl AlbumGridView {
                 });
             }
         }
-
-        self.set_albums(sorted_albums);
     }
 }
 

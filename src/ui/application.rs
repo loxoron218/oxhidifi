@@ -37,7 +37,9 @@ use crate::{
     },
     state::{
         AppState,
-        AppStateEvent::{LibraryStateChanged, PlaybackStateChanged, SearchFilterChanged},
+        AppStateEvent::{
+            LibraryDataChanged, NavigationChanged, PlaybackStateChanged, SearchFilterChanged,
+        },
         ViewMode::{Grid, List},
         app_state::LibraryTab::{Albums as LibraryAlbums, Artists as LibraryArtists},
     },
@@ -141,10 +143,7 @@ impl OxhidifiApplication {
             };
 
             // Update AppState with library data
-            let mut library_state = app_state.get_library_state();
-            library_state.albums = albums;
-            library_state.artists = artists;
-            app_state.update_library_state(library_state);
+            app_state.update_library_data(albums, artists);
         }
 
         let app = Application::builder()
@@ -213,10 +212,7 @@ impl OxhidifiApplication {
                                     };
 
                                     // Update state
-                                    let mut current_state = app_state_refresh.get_library_state();
-                                    current_state.albums = albums;
-                                    current_state.artists = artists;
-                                    app_state_refresh.update_library_state(current_state);
+                                    app_state_refresh.update_library_data(albums, artists);
                                 }
                                 Err(Closed) => {
                                     debug!("Scanner event channel closed");
@@ -454,24 +450,37 @@ fn create_main_content(
         let mut receiver = app_state_clone.subscribe();
         let mut switch_count = 0;
 
+        // Move view controllers into this closure to keep them alive and update them
+        let mut album_grid_view = album_grid_view;
+        let mut artist_grid_view = artist_grid_view;
+        let mut album_list_view = album_list_view;
+        let mut artist_list_view = artist_list_view;
+
         loop {
             match receiver.recv().await {
                 Ok(event) => {
                     match event {
-                        LibraryStateChanged(new_state) => {
+                        LibraryDataChanged { albums, artists } => {
+                            debug!("Handling LibraryDataChanged event");
+
+                            // Update data in all views
+                            album_grid_view.set_albums(albums.clone());
+                            artist_grid_view.set_artists(artists.clone());
+                            album_list_view.set_albums(albums.clone());
+                            artist_list_view.set_artists(artists.clone());
+                        }
+                        NavigationChanged {
+                            current_tab,
+                            view_mode,
+                        } => {
                             switch_count += 1;
                             info!(
                                 "View switch #{}: tab={:?}, view_mode={:?}",
-                                switch_count, new_state.current_tab, new_state.view_mode
+                                switch_count, current_tab, view_mode
                             );
 
-                            // Add debug logging for performance monitoring
-                            if switch_count % 10 == 0 {
-                                debug!("Performance check - view switches: {}", switch_count);
-                            }
-
                             // Switch to the appropriate view based on state
-                            match (new_state.current_tab, new_state.view_mode) {
+                            match (current_tab, view_mode) {
                                 (LibraryAlbums, Grid) => {
                                     view_stack_clone.set_visible_child_name("album_grid");
                                 }
@@ -486,10 +495,17 @@ fn create_main_content(
                                 }
                             }
                         }
-                        SearchFilterChanged(_) => {
-                            // Search filter changed - views should handle this internally
-                            // through their own state observers
-                            debug!("Search filter changed");
+                        SearchFilterChanged(filter) => {
+                            // Search filter changed - update all views
+                            // Note: Each view handles filtering internally, we just need to pass the query
+                            let query = filter.as_deref().unwrap_or("");
+
+                            debug!("Updating search filter for all views: '{}'", query);
+
+                            album_grid_view.filter_albums(query);
+                            artist_grid_view.filter_artists(query);
+                            album_list_view.filter_items(query);
+                            artist_list_view.filter_items(query);
                         }
                         _ => {}
                     }

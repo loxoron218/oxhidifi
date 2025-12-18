@@ -147,10 +147,8 @@ impl HeaderBar {
                 };
                 view_toggle_clone.set_property("icon-name", icon_name);
 
-                // Update app state
-                let mut library_state = current_state;
-                library_state.view_mode = new_mode;
-                state_clone.update_library_state(library_state);
+                // Update app state using lightweight navigation update
+                state_clone.update_navigation_state(current_state.current_tab, new_mode);
             };
 
             view_toggle.connect_toggled(callback);
@@ -205,10 +203,8 @@ impl HeaderBar {
 
                     info!("Switching to Albums tab");
 
-                    // Update app state
-                    let mut library_state = current_state;
-                    library_state.current_tab = Albums;
-                    state_clone_album.update_library_state(library_state);
+                    // Update app state using lightweight navigation update
+                    state_clone_album.update_navigation_state(Albums, current_state.view_mode);
 
                     // Ensure artist tab is not active
                     artist_tab_clone.set_active(false);
@@ -227,10 +223,8 @@ impl HeaderBar {
 
                     info!("Switching to Artists tab");
 
-                    // Update app state
-                    let mut library_state = current_state;
-                    library_state.current_tab = Artists;
-                    state_clone_artist.update_library_state(library_state);
+                    // Update app state using lightweight navigation update
+                    state_clone_artist.update_navigation_state(Artists, current_state.view_mode);
 
                     // Ensure album tab is not active
                     album_tab_clone.set_active(false);

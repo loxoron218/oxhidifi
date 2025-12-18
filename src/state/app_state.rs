@@ -88,9 +88,17 @@ pub enum AppStateEvent {
     /// Playback state changed.
     PlaybackStateChanged(PlaybackState),
     /// Current track changed.
-    CurrentTrackChanged(Option<TrackInfo>),
-    /// Library state changed.
-    LibraryStateChanged(LibraryState),
+    CurrentTrackChanged(Box<Option<TrackInfo>>),
+    /// Library data (content) changed.
+    LibraryDataChanged {
+        albums: Vec<Album>,
+        artists: Vec<Artist>,
+    },
+    /// Navigation state changed.
+    NavigationChanged {
+        current_tab: LibraryTab,
+        view_mode: ViewMode,
+    },
     /// Search filter changed.
     SearchFilterChanged(Option<String>),
 }
@@ -146,23 +154,55 @@ impl AppState {
         *self.current_track.write() = track.clone();
         let _ = self
             .state_tx
-            .send(AppStateEvent::CurrentTrackChanged(track));
+            .send(AppStateEvent::CurrentTrackChanged(Box::new(track)));
     }
 
-    /// Updates the library state and notifies subscribers.
+    /// Updates only the library data (albums/artists) without changing navigation.
     ///
     /// # Arguments
     ///
-    /// * `library_state` - New library state.
-    pub fn update_library_state(&self, library_state: LibraryState) {
+    /// * `albums` - New albums list
+    /// * `artists` - New artists list
+    pub fn update_library_data(&self, albums: Vec<Album>, artists: Vec<Artist>) {
         debug!(
-            "AppState: Updating library state - tab={:?}, view_mode={:?}",
-            library_state.current_tab, library_state.view_mode
+            "AppState: Updating library data - {} albums, {} artists",
+            albums.len(),
+            artists.len()
         );
-        *self.library.write() = library_state.clone();
+
+        {
+            let mut library = self.library.write();
+            library.albums = albums.clone();
+            library.artists = artists.clone();
+        }
+
         let _ = self
             .state_tx
-            .send(AppStateEvent::LibraryStateChanged(library_state));
+            .send(AppStateEvent::LibraryDataChanged { albums, artists });
+    }
+
+    /// Updates only the navigation state (tab/view mode).
+    ///
+    /// # Arguments
+    ///
+    /// * `current_tab` - New tab
+    /// * `view_mode` - New view mode
+    pub fn update_navigation_state(&self, current_tab: LibraryTab, view_mode: ViewMode) {
+        debug!(
+            "AppState: Updating navigation - tab={:?}, view_mode={:?}",
+            current_tab, view_mode
+        );
+
+        {
+            let mut library = self.library.write();
+            library.current_tab = current_tab.clone();
+            library.view_mode = view_mode.clone();
+        }
+
+        let _ = self.state_tx.send(AppStateEvent::NavigationChanged {
+            current_tab,
+            view_mode,
+        });
     }
 
     /// Updates the search filter and notifies subscribers.

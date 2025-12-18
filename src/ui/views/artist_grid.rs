@@ -16,7 +16,7 @@ use libadwaita::{
         Widget,
         pango::EllipsizeMode::End,
     },
-    prelude::{AccessibleExt, BoxExt, Cast, FlowBoxChildExt, ListModelExt, WidgetExt},
+    prelude::{AccessibleExt, BoxExt, Cast, FlowBoxChildExt, WidgetExt},
 };
 
 use crate::{
@@ -107,6 +107,8 @@ pub struct ArtistGridView {
     pub config: ArtistGridViewConfig,
     /// Empty state component for when no artists are available.
     pub empty_state: Option<EmptyState>,
+    /// Current sort criteria.
+    pub current_sort: ArtistSortCriteria,
 }
 
 /// Configuration for ArtistGridView display options.
@@ -174,6 +176,7 @@ impl ArtistGridView {
             artists: Vec::new(),
             config,
             empty_state,
+            current_sort: ArtistSortCriteria::Name, // Default sort by Name
         };
 
         // Populate with initial artists
@@ -198,17 +201,14 @@ impl ArtistGridView {
     /// * `artists` - New vector of artists to display
     pub fn set_artists(&mut self, artists: Vec<Artist>) {
         // Clear existing children
-        let children = self.flow_box.observe_children();
-        let n_items = children.n_items();
-        for i in 0..n_items {
-            if let Some(child) = children.item(i)
-                && let Ok(widget) = child.downcast::<Widget>()
-            {
-                self.flow_box.remove(&widget);
-            }
+        while let Some(child) = self.flow_box.first_child() {
+            self.flow_box.remove(&child);
         }
 
         self.artists = artists;
+
+        // Apply current sort
+        self.apply_sort();
 
         // Update empty state visibility
         if let Some(_empty_state) = &self.empty_state {
@@ -341,20 +341,27 @@ impl ArtistGridView {
     ///
     /// * `sort_by` - Sorting criteria
     pub fn sort_artists(&mut self, sort_by: ArtistSortCriteria) {
-        let mut sorted_artists = self.artists.clone();
+        self.current_sort = sort_by;
 
-        match sort_by {
+        // Apply sort to current artists and refresh display
+        self.apply_sort();
+
+        // Re-display sorted artists
+        self.set_artists(self.artists.clone());
+    }
+
+    /// Applies the current sort criteria to the artists vector.
+    fn apply_sort(&mut self) {
+        match self.current_sort {
             ArtistSortCriteria::Name => {
-                sorted_artists.sort_by(|a, b| a.name.cmp(&b.name));
+                self.artists.sort_by(|a, b| a.name.cmp(&b.name));
             }
             ArtistSortCriteria::AlbumCount => {
                 // For now, we can't sort by album count without additional data
                 // This would require querying the database or having album counts in state
-                sorted_artists.sort_by(|a, b| a.name.cmp(&b.name));
+                self.artists.sort_by(|a, b| a.name.cmp(&b.name));
             }
         }
-
-        self.set_artists(sorted_artists);
     }
 }
 

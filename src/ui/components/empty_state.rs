@@ -369,10 +369,7 @@ impl EmptyState {
                     match library_db_arc.get_albums(None).await {
                         Ok(albums) => match library_db_arc.get_artists(None).await {
                             Ok(artists) => {
-                                let mut library_state = app_state.get_library_state();
-                                library_state.albums = albums;
-                                library_state.artists = artists;
-                                app_state.update_library_state(library_state);
+                                app_state.update_library_data(albums, artists);
                             }
                             Err(e) => {
                                 eprintln!("Failed to get artists from database: {}", e);
