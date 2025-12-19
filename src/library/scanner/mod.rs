@@ -82,7 +82,8 @@ impl LibraryScanner {
         let config = config.unwrap_or_default();
 
         // Create channels for event processing
-        let (raw_event_sender, raw_event_receiver) = bounded(100);
+        // Increased capacity to handle recursive directory scans
+        let (raw_event_sender, raw_event_receiver) = bounded(1000);
         let (debounced_event_sender, debounced_event_receiver) = bounded(50);
 
         // Create broadcast channel for scanner events

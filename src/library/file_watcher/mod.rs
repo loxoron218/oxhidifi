@@ -6,6 +6,7 @@
 
 use std::{
     collections::HashSet,
+    fs::read_dir,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -129,7 +130,17 @@ impl FileWatcher {
                     match event.kind {
                         // For Create/Modify, we MUST check extensions to avoid processing non-audio files
                         Create(_) | Modify(Data(_)) => {
-                            if Self::is_supported_audio_file(path) {
+                            // Check if it's a directory creation
+                            if path.is_dir() && matches!(event.kind, Create(_)) {
+                                debug!("FileWatcher: Detected new directory, scanning: {:?}", path);
+                                let files = Self::collect_audio_files_recursively(path);
+                                for file_path in files {
+                                    let _ = sender.try_send(FileChanged {
+                                        path: file_path,
+                                        is_new: true,
+                                    });
+                                }
+                            } else if Self::is_supported_audio_file(path) {
                                 let _ = sender.try_send(FileChanged {
                                     path: path.clone(),
                                     is_new: matches!(event.kind, Create(_)),
@@ -157,7 +168,19 @@ impl FileWatcher {
 
                                 // To: File was moved TO this path (creation/move dest)
                                 To => {
-                                    if Self::is_supported_audio_file(path) {
+                                    if path.is_dir() {
+                                        debug!(
+                                            "FileWatcher: Detected moved directory, scanning: {:?}",
+                                            path
+                                        );
+                                        let files = Self::collect_audio_files_recursively(path);
+                                        for file_path in files {
+                                            let _ = sender.try_send(FileChanged {
+                                                path: file_path,
+                                                is_new: true,
+                                            });
+                                        }
+                                    } else if Self::is_supported_audio_file(path) {
                                         debug!(
                                             "FileWatcher: Propagating rename-to (add) event for path: {:?}",
                                             path
@@ -188,7 +211,20 @@ impl FileWatcher {
                                         });
 
                                         // Handle To
-                                        if Self::is_supported_audio_file(to_path) {
+                                        if to_path.is_dir() {
+                                            debug!(
+                                                "FileWatcher: Detected moved directory (both), scanning: {:?}",
+                                                to_path
+                                            );
+                                            let files =
+                                                Self::collect_audio_files_recursively(to_path);
+                                            for file_path in files {
+                                                let _ = sender.try_send(FileChanged {
+                                                    path: file_path,
+                                                    is_new: true,
+                                                });
+                                            }
+                                        } else if Self::is_supported_audio_file(to_path) {
                                             let _ = sender.try_send(FileChanged {
                                                 path: to_path.clone(),
                                                 is_new: true,
@@ -236,6 +272,28 @@ impl FileWatcher {
                 error!("File system watcher error: {}", e);
             }
         }
+    }
+
+    /// Recursively collects audio files from a directory.
+    fn collect_audio_files_recursively(dir_path: &Path) -> Vec<PathBuf> {
+        let mut audio_files = Vec::new();
+
+        if let Ok(entries) = read_dir(dir_path) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+
+                if path.is_file() {
+                    if Self::is_supported_audio_file(&path) {
+                        audio_files.push(path);
+                    }
+                } else if path.is_dir() {
+                    let sub_files = Self::collect_audio_files_recursively(&path);
+                    audio_files.extend(sub_files);
+                }
+            }
+        }
+
+        audio_files
     }
 
     /// Checks if a path corresponds to a supported audio file.
