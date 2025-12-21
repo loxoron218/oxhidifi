@@ -16,8 +16,8 @@ use {
             style_context_add_provider_for_display,
         },
         prelude::{
-            AdwApplicationWindowExt, ApplicationExt, ApplicationExtManual, BoxExt, Cast,
-            GtkWindowExt, WidgetExt,
+            AdjustmentExt, AdwApplicationWindowExt, ApplicationExt, ApplicationExtManual, BoxExt,
+            Cast, GtkWindowExt, WidgetExt,
         },
     },
     parking_lot::RwLock,
@@ -345,23 +345,12 @@ fn create_main_content(
         .transition_duration(200)
         .build();
 
-    // Wrap the stack in a scrolled window to provide vertical scrolling
-    let scrolled_window = ScrolledWindow::builder()
-        .vexpand(true)
-        .hexpand(true)
-        .margin_top(12)
-        .margin_bottom(12)
-        .margin_start(12)
-        .margin_end(12)
-        .child(&view_stack)
-        .build();
-
     let show_dr_badges = settings_manager.get_settings().show_dr_values;
 
     // Get current library state for view initialization
     let library_state = app_state.get_library_state();
 
-    // Create all possible views upfront
+    // Create all possible views upfront with individual scrolled windows
     let mut album_grid_view = AlbumGridView::builder()
         .app_state(app_state.clone())
         .albums(library_state.albums.clone())
@@ -376,6 +365,17 @@ fn create_main_content(
         empty_state.connect_button_handlers();
     }
 
+    // Wrap album grid view in its own scrolled window
+    let album_grid_scrolled = ScrolledWindow::builder()
+        .vexpand(true)
+        .hexpand(true)
+        .margin_top(12)
+        .margin_bottom(12)
+        .margin_start(12)
+        .margin_end(12)
+        .child(&album_grid_view.widget)
+        .build();
+
     let mut album_list_view = ListView::builder()
         .app_state(app_state.clone())
         .view_type(Albums)
@@ -384,6 +384,17 @@ fn create_main_content(
 
     // Populate list view with initial data
     album_list_view.set_albums(library_state.albums.clone());
+
+    // Wrap album list view in its own scrolled window
+    let album_list_scrolled = ScrolledWindow::builder()
+        .vexpand(true)
+        .hexpand(true)
+        .margin_top(12)
+        .margin_bottom(12)
+        .margin_start(12)
+        .margin_end(12)
+        .child(&album_list_view.widget)
+        .build();
 
     let mut artist_grid_view = ArtistGridView::builder()
         .app_state(app_state.clone())
@@ -398,6 +409,17 @@ fn create_main_content(
         empty_state.connect_button_handlers();
     }
 
+    // Wrap artist grid view in its own scrolled window
+    let artist_grid_scrolled = ScrolledWindow::builder()
+        .vexpand(true)
+        .hexpand(true)
+        .margin_top(12)
+        .margin_bottom(12)
+        .margin_start(12)
+        .margin_end(12)
+        .child(&artist_grid_view.widget)
+        .build();
+
     let mut artist_list_view = ListView::builder()
         .app_state(app_state.clone())
         .view_type(Artists)
@@ -406,6 +428,17 @@ fn create_main_content(
 
     // Populate list view with initial data
     artist_list_view.set_artists(library_state.artists.clone());
+
+    // Wrap artist list view in its own scrolled window
+    let artist_list_scrolled = ScrolledWindow::builder()
+        .vexpand(true)
+        .hexpand(true)
+        .margin_top(12)
+        .margin_bottom(12)
+        .margin_start(12)
+        .margin_end(12)
+        .child(&artist_list_view.widget)
+        .build();
 
     // Store view references in app state for dynamic access
     // This is a workaround since we can't easily pass mutable references
@@ -416,11 +449,11 @@ fn create_main_content(
     let current_tab = library_state.current_tab;
     let current_view_mode = library_state.view_mode;
 
-    // Add ALL views to the stack initially with unique names
-    view_stack.add_named(&album_grid_view.widget, Some("album_grid"));
-    view_stack.add_named(&album_list_view.widget, Some("album_list"));
-    view_stack.add_named(&artist_grid_view.widget, Some("artist_grid"));
-    view_stack.add_named(&artist_list_view.widget, Some("artist_list"));
+    // Add ALL scrolled views to the stack initially with unique names
+    view_stack.add_named(&album_grid_scrolled, Some("album_grid"));
+    view_stack.add_named(&album_list_scrolled, Some("album_list"));
+    view_stack.add_named(&artist_grid_scrolled, Some("artist_grid"));
+    view_stack.add_named(&artist_list_scrolled, Some("artist_list"));
 
     // Set initial visible view
     match (current_tab.clone(), current_view_mode.clone()) {
@@ -482,15 +515,51 @@ fn create_main_content(
                             // Switch to the appropriate view based on state
                             match (current_tab, view_mode) {
                                 (LibraryAlbums, Grid) => {
+                                    // Reset scroll position before switching
+                                    if let Some(child) =
+                                        view_stack_clone.child_by_name("album_grid")
+                                        && let Some(scrolled) =
+                                            child.downcast_ref::<ScrolledWindow>()
+                                    {
+                                        scrolled.vadjustment().set_value(0.0);
+                                        scrolled.hadjustment().set_value(0.0);
+                                    }
                                     view_stack_clone.set_visible_child_name("album_grid");
                                 }
                                 (LibraryAlbums, List) => {
+                                    // Reset scroll position before switching
+                                    if let Some(child) =
+                                        view_stack_clone.child_by_name("album_list")
+                                        && let Some(scrolled) =
+                                            child.downcast_ref::<ScrolledWindow>()
+                                    {
+                                        scrolled.vadjustment().set_value(0.0);
+                                        scrolled.hadjustment().set_value(0.0);
+                                    }
                                     view_stack_clone.set_visible_child_name("album_list");
                                 }
                                 (LibraryArtists, Grid) => {
+                                    // Reset scroll position before switching
+                                    if let Some(child) =
+                                        view_stack_clone.child_by_name("artist_grid")
+                                        && let Some(scrolled) =
+                                            child.downcast_ref::<ScrolledWindow>()
+                                    {
+                                        scrolled.vadjustment().set_value(0.0);
+                                        scrolled.hadjustment().set_value(0.0);
+                                    }
                                     view_stack_clone.set_visible_child_name("artist_grid");
                                 }
                                 (LibraryArtists, List) => {
+                                    // Reset scroll position before switching
+                                    if let Some(child) =
+                                        view_stack_clone.child_by_name("artist_list")
+                                        && let Some(scrolled) =
+                                            child.downcast_ref::<ScrolledWindow>()
+                                    {
+                                        scrolled.vadjustment().set_value(0.0);
+                                        scrolled.hadjustment().set_value(0.0);
+                                    }
                                     view_stack_clone.set_visible_child_name("artist_list");
                                 }
                             }
@@ -530,7 +599,7 @@ fn create_main_content(
         }
     });
 
-    scrolled_window.upcast::<Widget>()
+    view_stack.upcast::<Widget>()
 }
 
 /// Creates the persistent player control bar.
