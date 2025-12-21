@@ -10,7 +10,7 @@ use {
         BufferSize::Default as CpalDefault,
         BuildStreamError, ChannelCount, Device, Host, OutputCallbackInfo, PlayStreamError,
         SampleFormat::{self, F32, I16, U16},
-        SampleRate, Stream, StreamConfig, default_host,
+        Stream, StreamConfig, default_host,
         traits::{DeviceTrait, HostTrait, StreamTrait},
     },
     rtrb::{Consumer, PopError::Empty},
@@ -47,7 +47,7 @@ pub enum OutputError {
 #[derive(Debug, Clone)]
 pub struct OutputConfig {
     /// Target sample rate for output (may differ from source).
-    pub sample_rate: SampleRate,
+    pub sample_rate: u32,
     /// Number of output channels.
     pub channels: ChannelCount,
     /// Buffer duration in milliseconds.
@@ -59,7 +59,7 @@ pub struct OutputConfig {
 impl Default for OutputConfig {
     fn default() -> Self {
         Self {
-            sample_rate: SampleRate(44100),
+            sample_rate: 44100,
             channels: 2,
             buffer_duration_ms: 50,
             exclusive_mode: true,
@@ -142,7 +142,7 @@ impl AudioOutput {
         let source_channels = source_format.channels;
 
         for config in supported_configs {
-            let sample_rate = config.max_sample_rate().0;
+            let sample_rate = config.max_sample_rate();
             let channels = config.channels();
 
             // Prefer exact match
@@ -156,7 +156,7 @@ impl AudioOutput {
             // Fallback to compatible configurations
             if <u32 as From<u16>>::from(channels) >= source_channels
                 && (best_config.is_none()
-                    || (config.max_sample_rate().0 > best_config.as_ref().unwrap().sample_rate().0))
+                    || (config.max_sample_rate() > best_config.as_ref().unwrap().sample_rate()))
             {
                 best_config = Some(config.with_max_sample_rate());
             }
@@ -164,7 +164,7 @@ impl AudioOutput {
 
         let config = best_config.ok_or(OutputError::NoDeviceFound)?;
 
-        let is_resampling = config.sample_rate().0 != source_sample_rate
+        let is_resampling = config.sample_rate() != source_sample_rate
             || <u32 as From<u16>>::from(config.channels()) != source_channels;
 
         Ok((
@@ -332,7 +332,9 @@ impl AudioOutput {
     /// A vector of device names.
     pub fn get_available_devices(&self) -> Vec<String> {
         match self.host.output_devices() {
-            Ok(devices) => devices.filter_map(|device| device.name().ok()).collect(),
+            Ok(devices) => devices
+                .filter_map(|device| device.description().ok().map(|desc| desc.to_string()))
+                .collect(),
             Err(_) => Vec::new(),
         }
     }
@@ -343,7 +345,10 @@ impl AudioOutput {
     ///
     /// The name of the current output device, or "Unknown" if unavailable.
     pub fn get_current_device_name(&self) -> String {
-        self.device.name().unwrap_or_else(|_| "Unknown".to_string())
+        self.device
+            .description()
+            .map(|desc| desc.to_string())
+            .unwrap_or_else(|_| "Unknown".to_string())
     }
 }
 
@@ -404,7 +409,7 @@ mod tests {
     #[test]
     fn test_output_config_default() {
         let config = OutputConfig::default();
-        assert_eq!(config.sample_rate.0, 44100);
+        assert_eq!(config.sample_rate.0(), 44100);
         assert_eq!(config.channels, 2);
         assert_eq!(config.buffer_duration_ms, 50);
         assert_eq!(config.exclusive_mode, true);
