@@ -8,7 +8,7 @@ use libadwaita::{
     gtk::{
         AccessibleRole::Group,
         Align::{Fill, Start},
-        Box as GtkBox, Label,
+        Box, Label,
         Orientation::{Horizontal, Vertical},
         Widget,
     },
@@ -140,7 +140,7 @@ pub struct HiFiMetadata {
     /// The underlying GTK widget container.
     pub widget: Widget,
     /// The main container box.
-    pub container: GtkBox,
+    pub container: Box,
     /// Individual label widgets for each metadata field.
     pub labels: Vec<Label>,
     /// Current track metadata being displayed.
@@ -197,7 +197,7 @@ impl HiFiMetadata {
 
         let orientation = if compact { Horizontal } else { Vertical };
 
-        let container = GtkBox::builder()
+        let container = Box::builder()
             .orientation(orientation)
             .halign(Start)
             .valign(Fill)

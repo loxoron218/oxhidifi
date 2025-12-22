@@ -10,7 +10,7 @@ use libadwaita::{
     gtk::{
         AccessibleRole::List,
         Align::Start,
-        Box as GtkBox, Label, ListBox, ListBoxRow,
+        Box, Label, ListBox, ListBoxRow,
         Orientation::{Horizontal, Vertical},
         SelectionMode::None as SelectionNone,
         Widget,
@@ -232,7 +232,7 @@ impl ListView {
             .build();
 
         // Create main info container
-        let info_container = GtkBox::builder()
+        let info_container = Box::builder()
             .orientation(Vertical)
             .hexpand(true)
             .spacing(2)
@@ -267,7 +267,7 @@ impl ListView {
         info_container.append(artist_year_label.upcast_ref::<Widget>());
 
         // Create main row container
-        let row_container = GtkBox::builder()
+        let row_container = Box::builder()
             .orientation(Horizontal)
             .spacing(12)
             .margin_top(8)
@@ -337,7 +337,7 @@ impl ListView {
             .build();
 
         // Create main info container
-        let info_container = GtkBox::builder()
+        let info_container = Box::builder()
             .orientation(Vertical)
             .hexpand(true)
             .spacing(2)
@@ -355,7 +355,7 @@ impl ListView {
         info_container.append(name_label.upcast_ref::<Widget>());
 
         // Create main row container
-        let row_container = GtkBox::builder()
+        let row_container = Box::builder()
             .orientation(Horizontal)
             .spacing(12)
             .margin_top(8)

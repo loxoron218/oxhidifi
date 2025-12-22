@@ -11,7 +11,7 @@ use {
         glib::MainContext,
         gtk::{
             Align::{Center, Fill},
-            Box as GtkBox, Button, FileDialog, Label,
+            Box, Button, FileDialog, Label,
             Orientation::Vertical,
             Widget,
         },
@@ -46,7 +46,7 @@ pub struct EmptyState {
     /// The underlying GTK widget container.
     pub widget: Widget,
     /// Main container box.
-    pub container: GtkBox,
+    pub container: Box,
     /// Message label.
     pub message_label: Label,
     /// Add directory button.
@@ -113,7 +113,7 @@ impl EmptyState {
             .build();
 
         // Create main container
-        let container = GtkBox::builder()
+        let container = Box::builder()
             .orientation(Vertical)
             .halign(Center)
             .valign(Center)
@@ -129,7 +129,7 @@ impl EmptyState {
         container.append(&add_button);
 
         // Create outer widget container
-        let widget = GtkBox::builder()
+        let widget = Box::builder()
             .orientation(Vertical)
             .halign(Fill)
             .valign(Fill)

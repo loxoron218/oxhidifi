@@ -10,7 +10,7 @@ use libadwaita::{
     gtk::{
         AccessibleRole::Grid,
         Align::{Fill, Start},
-        Box as GtkBox, FlowBox,
+        Box, FlowBox,
         Orientation::Vertical,
         SelectionMode::None as SelectionNone,
         Widget,
@@ -181,7 +181,7 @@ impl AlbumGridView {
             .build();
 
         // Create main container that can hold both flow box and empty state
-        let main_container = GtkBox::builder().orientation(Vertical).build();
+        let main_container = Box::builder().orientation(Vertical).build();
 
         main_container.append(&flow_box.clone().upcast::<Widget>());
 

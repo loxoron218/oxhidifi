@@ -9,7 +9,7 @@ use {
     libadwaita::{
         HeaderBar as LibadwaitaHeaderBar,
         glib::JoinHandle,
-        gtk::{Box as GtkBox, Button, Entry, Orientation::Horizontal, SearchBar, ToggleButton},
+        gtk::{Box, Button, Entry, Orientation::Horizontal, SearchBar, ToggleButton},
         prelude::{BoxExt, EditableExt, ObjectExt, ToggleButtonExt},
     },
     tracing::{debug, info},
@@ -43,7 +43,7 @@ pub struct HeaderBar {
     /// Artist tab button.
     pub artist_tab: ToggleButton,
     /// Tab container box.
-    pub tab_box: GtkBox,
+    pub tab_box: Box,
     /// Application state reference.
     pub app_state: Option<Arc<AppState>>,
     /// Current view mode.
@@ -236,7 +236,7 @@ impl HeaderBar {
         let _subscription_handle = None;
 
         // Create tab container box
-        let tab_box = GtkBox::builder()
+        let tab_box = Box::builder()
             .orientation(Horizontal)
             .spacing(6)
             .css_classes(["linked"])

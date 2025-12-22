@@ -10,7 +10,7 @@ use libadwaita::{
     gtk::{
         AccessibleRole::{Grid, Group},
         Align::{Center, Start},
-        Box as GtkBox, FlowBox, FlowBoxChild, Label,
+        Box, FlowBox, FlowBoxChild, Label,
         Orientation::Vertical,
         SelectionMode::None as SelectionNone,
         Widget,
@@ -143,7 +143,7 @@ impl ArtistGridView {
             .build();
 
         // Create main container that can hold both flow box and empty state
-        let main_container = GtkBox::builder().orientation(Vertical).build();
+        let main_container = Box::builder().orientation(Vertical).build();
 
         main_container.append(&flow_box.clone().upcast::<Widget>());
 
@@ -274,7 +274,7 @@ impl ArtistGridView {
             .build();
 
         // Create main container with fixed dimensions to ensure consistent sizing
-        let container = GtkBox::builder()
+        let container = Box::builder()
             .orientation(Vertical)
             .halign(Center)
             .valign(Start)

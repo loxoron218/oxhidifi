@@ -10,12 +10,12 @@ use libadwaita::{
     gtk::{
         AccessibleRole::Article,
         Align::{Fill, Start},
-        Box as GtkBox, Button, Label, ListBox, ListBoxRow,
+        Box, Button, Label, ListBox, ListBoxRow,
         Orientation::{Horizontal, Vertical},
         ScrolledWindow,
         SelectionMode::None as SelectionNone,
         Widget,
-        pango::EllipsizeMode::End as EllipsizeEnd,
+        pango::EllipsizeMode::End,
     },
     prelude::{AccessibleExt, BoxExt, Cast, ListBoxRowExt, ListModelExt, WidgetExt},
 };
@@ -113,7 +113,7 @@ pub struct DetailView {
     /// The underlying GTK widget (main container).
     pub widget: Widget,
     /// Main container box.
-    pub main_container: GtkBox,
+    pub main_container: Box,
     /// Current application state reference.
     pub app_state: Option<Arc<AppState>>,
     /// Current detail type being displayed.
@@ -144,7 +144,7 @@ impl DetailView {
     pub fn new(app_state: Option<Arc<AppState>>, detail_type: DetailType, compact: bool) -> Self {
         let config = DetailViewConfig { compact };
 
-        let main_container = GtkBox::builder()
+        let main_container = Box::builder()
             .orientation(Vertical)
             .halign(Fill)
             .valign(Fill)
@@ -245,7 +245,7 @@ impl DetailView {
     ///
     /// A new `Widget` representing the album header.
     fn create_album_header(&self, album: &Album) -> Widget {
-        let header_container = GtkBox::builder()
+        let header_container = Box::builder()
             .orientation(Horizontal)
             .spacing(24)
             .build();
@@ -263,7 +263,7 @@ impl DetailView {
             .show_on_hover(true)
             .build();
 
-        let cover_container = GtkBox::builder()
+        let cover_container = Box::builder()
             .orientation(Vertical)
             .halign(Start)
             .valign(Start)
@@ -273,7 +273,7 @@ impl DetailView {
         cover_container.append(&play_overlay.widget);
 
         // Metadata container
-        let metadata_container = GtkBox::builder()
+        let metadata_container = Box::builder()
             .orientation(Vertical)
             .hexpand(true)
             .spacing(8)
@@ -285,7 +285,7 @@ impl DetailView {
             .halign(Start)
             .xalign(0.0)
             .css_classes(["title-1"])
-            .ellipsize(EllipsizeEnd)
+            .ellipsize(End)
             .tooltip_text(&album.title)
             .build();
         metadata_container.append(title_label.upcast_ref::<Widget>());
@@ -296,7 +296,7 @@ impl DetailView {
             .halign(Start)
             .xalign(0.0)
             .css_classes(["title-2"])
-            .ellipsize(EllipsizeEnd)
+            .ellipsize(End)
             .tooltip_text(format!("Artist ID: {}", album.artist_id))
             .build();
         metadata_container.append(artist_label.upcast_ref::<Widget>());
@@ -318,7 +318,7 @@ impl DetailView {
                 .halign(Start)
                 .xalign(0.0)
                 .css_classes(["dim-label"])
-                .ellipsize(EllipsizeEnd)
+                .ellipsize(End)
                 .tooltip_text(genre)
                 .build();
             metadata_container.append(genre_label.upcast_ref::<Widget>());
@@ -355,7 +355,7 @@ impl DetailView {
     ///
     /// A new `Widget` representing the track list.
     fn create_track_list(&self, tracks: Vec<Track>) -> Widget {
-        let list_container = GtkBox::builder().orientation(Vertical).spacing(8).build();
+        let list_container = Box::builder().orientation(Vertical).spacing(8).build();
 
         let title_label = Label::builder()
             .label("Tracks")
@@ -397,7 +397,7 @@ impl DetailView {
     ///
     /// A new `Widget` representing the track row.
     fn create_track_row(&self, track: &Track, track_number: usize) -> Widget {
-        let row_container = GtkBox::builder()
+        let row_container = Box::builder()
             .orientation(Horizontal)
             .spacing(12)
             .margin_top(4)
@@ -421,7 +421,7 @@ impl DetailView {
             .halign(Start)
             .xalign(0.0)
             .hexpand(true)
-            .ellipsize(EllipsizeEnd)
+            .ellipsize(End)
             .tooltip_text(&track.title)
             .build();
         row_container.append(title_label.upcast_ref::<Widget>());
@@ -488,7 +488,7 @@ impl DetailView {
     ///
     /// A new `Widget` representing the artist header.
     fn create_artist_header(&self, artist: &Artist) -> Widget {
-        let header_container = GtkBox::builder()
+        let header_container = Box::builder()
             .orientation(Horizontal)
             .spacing(24)
             .build();
@@ -500,7 +500,7 @@ impl DetailView {
             .dimensions(300, 300)
             .build();
 
-        let cover_container = GtkBox::builder()
+        let cover_container = Box::builder()
             .orientation(Vertical)
             .halign(Start)
             .valign(Start)
@@ -509,7 +509,7 @@ impl DetailView {
         cover_container.append(&cover_art.widget);
 
         // Metadata container
-        let metadata_container = GtkBox::builder()
+        let metadata_container = Box::builder()
             .orientation(Vertical)
             .hexpand(true)
             .spacing(8)
@@ -521,7 +521,7 @@ impl DetailView {
             .halign(Start)
             .xalign(0.0)
             .css_classes(["title-1"])
-            .ellipsize(EllipsizeEnd)
+            .ellipsize(End)
             .tooltip_text(&artist.name)
             .build();
         metadata_container.append(name_label.upcast_ref::<Widget>());
@@ -556,7 +556,7 @@ impl DetailView {
     ///
     /// A new `Widget` representing the album list placeholder.
     fn create_album_list_placeholder(&self) -> Widget {
-        let list_container = GtkBox::builder().orientation(Vertical).spacing(8).build();
+        let list_container = Box::builder().orientation(Vertical).spacing(8).build();
 
         let title_label = Label::builder()
             .label("Albums")
