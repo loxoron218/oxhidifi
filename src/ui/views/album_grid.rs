@@ -280,6 +280,19 @@ impl AlbumGridView {
     ///
     /// A new `Widget` representing the album item.
     fn create_album_item(&self, album: &Album) -> Widget {
+        // Look up artist name from app state
+        let artist_name = if let Some(app_state) = &self.app_state {
+            let library_state = app_state.get_library_state();
+            library_state
+                .artists
+                .iter()
+                .find(|artist| artist.id == album.artist_id)
+                .map(|artist| artist.name.clone())
+                .unwrap_or_else(|| "Unknown Artist".to_string())
+        } else {
+            "Unknown Artist".to_string()
+        };
+
         // Create album card with proper callbacks
         // Note: In a real implementation, format would be obtained from tracks
         // For now, we use a reasonable default based on common high-res formats
@@ -299,6 +312,7 @@ impl AlbumGridView {
 
         let album_card = AlbumCard::builder()
             .album(album.clone())
+            .artist_name(artist_name)
             .format(format)
             .show_dr_badge(self.config.show_dr_badges)
             .compact(self.config.compact)

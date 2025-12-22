@@ -27,6 +27,7 @@ use crate::{
 #[derive(Default)]
 pub struct AlbumCardBuilder {
     album: Option<Album>,
+    artist_name: Option<String>,
     format: Option<String>,
     show_dr_badge: bool,
     compact: bool,
@@ -46,6 +47,20 @@ impl AlbumCardBuilder {
     /// The builder instance for method chaining.
     pub fn album(mut self, album: Album) -> Self {
         self.album = Some(album);
+        self
+    }
+
+    /// Sets the artist name for the card.
+    ///
+    /// # Arguments
+    ///
+    /// * `artist_name` - The artist name to display
+    ///
+    /// # Returns
+    ///
+    /// The builder instance for method chaining.
+    pub fn artist_name(mut self, artist_name: String) -> Self {
+        self.artist_name = Some(artist_name);
         self
     }
 
@@ -133,6 +148,8 @@ impl AlbumCardBuilder {
     pub fn build(self) -> AlbumCard {
         AlbumCard::new(
             self.album.expect("Album must be set"),
+            self.artist_name
+                .unwrap_or_else(|| "Unknown Artist".to_string()),
             self.format,
             self.show_dr_badge,
             self.compact,
@@ -165,6 +182,8 @@ pub struct AlbumCard {
     pub format_label: Label,
     /// Year info label.
     pub year_label: Label,
+    /// Current artist name.
+    pub artist_name: String,
 }
 
 impl AlbumCard {
@@ -173,6 +192,7 @@ impl AlbumCard {
     /// # Arguments
     ///
     /// * `album` - The album data to display
+    /// * `artist_name` - The artist name to display
     /// * `format` - Optional audio format information
     /// * `show_dr_badge` - Whether to show the DR badge overlay
     /// * `compact` - Whether to use compact layout
@@ -185,6 +205,7 @@ impl AlbumCard {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         album: Album,
+        artist_name: String,
         format: Option<String>,
         show_dr_badge: bool,
         compact: bool,
@@ -242,13 +263,13 @@ impl AlbumCard {
 
         // Create artist label
         let artist_label = Label::builder()
-            .label(album.artist_id.to_string())
+            .label(&artist_name)
             .halign(Start)
             .xalign(0.0)
             .ellipsize(End)
             .lines(1)
             .max_width_chars(((cover_width - 16) / 10).max(8)) // Dynamic calculation as per spec
-            .tooltip_text(album.artist_id.to_string())
+            .tooltip_text(&artist_name)
             .css_classes(["album-artist-label"])
             .build();
 
@@ -313,7 +334,7 @@ impl AlbumCard {
         album_tile.set_tooltip_text(Some(&format!(
             "{} by {} ({})",
             album.title,
-            album.artist_id,
+            artist_name,
             album.year.unwrap_or(0)
         )));
 
@@ -354,6 +375,7 @@ impl AlbumCard {
             artist_label,
             format_label,
             year_label,
+            artist_name,
         }
     }
 
@@ -371,8 +393,9 @@ impl AlbumCard {
     /// # Arguments
     ///
     /// * `album` - New album data to display
+    /// * `artist_name` - New artist name to display
     /// * `format` - Optional new format information
-    pub fn update_album(&mut self, album: Album, format: Option<String>) {
+    pub fn update_album(&mut self, album: Album, artist_name: String, format: Option<String>) {
         // Update cover art
         self.cover_art.update_artwork(Some(
             album
@@ -389,9 +412,8 @@ impl AlbumCard {
         self.title_label.set_label(&album.title);
         self.title_label.set_tooltip_text(Some(&album.title));
 
-        self.artist_label.set_label(&album.artist_id.to_string());
-        self.artist_label
-            .set_tooltip_text(Some(&album.artist_id.to_string()));
+        self.artist_label.set_label(&artist_name);
+        self.artist_label.set_tooltip_text(Some(&artist_name));
 
         let format_info = format.unwrap_or_else(|| "Hi-Res".to_string());
         self.format_label.set_label(&format_info);
@@ -405,9 +427,12 @@ impl AlbumCard {
         self.album_tile.set_tooltip_text(Some(&format!(
             "{} by {} ({})",
             album.title,
-            album.artist_id,
+            artist_name,
             album.year.unwrap_or(0)
         )));
+
+        // Update stored artist name
+        self.artist_name = artist_name;
     }
 }
 
@@ -427,7 +452,15 @@ impl Default for AlbumCard {
             updated_at: None,
         };
 
-        Self::new(dummy_album, None, true, false, None, None)
+        Self::new(
+            dummy_album,
+            "Default Artist".to_string(),
+            None,
+            true,
+            false,
+            None,
+            None,
+        )
     }
 }
 

@@ -247,11 +247,24 @@ impl ListView {
             .tooltip_text(&album.title)
             .build();
 
+        // Look up artist name from app state
+        let artist_name = if let Some(app_state) = &self.app_state {
+            let library_state = app_state.get_library_state();
+            library_state
+                .artists
+                .iter()
+                .find(|artist| artist.id == album.artist_id)
+                .map(|artist| artist.name.clone())
+                .unwrap_or_else(|| "Unknown Artist".to_string())
+        } else {
+            "Unknown Artist".to_string()
+        };
+
         // Artist/year info
         let artist_year_text = if let Some(year) = album.year {
-            format!("{} ({})", album.artist_id, year)
+            format!("{} ({})", artist_name, year)
         } else {
-            album.artist_id.to_string()
+            artist_name
         };
 
         let artist_year_label = Label::builder()

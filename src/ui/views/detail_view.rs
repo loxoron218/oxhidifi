@@ -245,10 +245,7 @@ impl DetailView {
     ///
     /// A new `Widget` representing the album header.
     fn create_album_header(&self, album: &Album) -> Widget {
-        let header_container = Box::builder()
-            .orientation(Horizontal)
-            .spacing(24)
-            .build();
+        let header_container = Box::builder().orientation(Horizontal).spacing(24).build();
 
         // Large cover art with play overlay
         let cover_art = CoverArt::builder()
@@ -488,10 +485,7 @@ impl DetailView {
     ///
     /// A new `Widget` representing the artist header.
     fn create_artist_header(&self, artist: &Artist) -> Widget {
-        let header_container = Box::builder()
-            .orientation(Horizontal)
-            .spacing(24)
-            .build();
+        let header_container = Box::builder().orientation(Horizontal).spacing(24).build();
 
         // Artist image (default avatar)
         let cover_art = CoverArt::builder()
