@@ -202,7 +202,6 @@ impl AlbumCard {
     /// # Returns
     ///
     /// A new `AlbumCard` instance.
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         album: Album,
         artist_name: String,
