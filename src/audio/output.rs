@@ -409,7 +409,7 @@ mod tests {
     #[test]
     fn test_output_config_default() {
         let config = OutputConfig::default();
-        assert_eq!(config.sample_rate.0(), 44100);
+        assert_eq!(config.sample_rate, 44100);
         assert_eq!(config.channels, 2);
         assert_eq!(config.buffer_duration_ms, 50);
         assert_eq!(config.exclusive_mode, true);
