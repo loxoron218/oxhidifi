@@ -8,16 +8,19 @@ use std::{error::Error, sync::Arc};
 use {
     libadwaita::{
         Application, ApplicationWindow, NavigationPage, NavigationView,
-        gdk::Display,
-        glib::MainContext,
+        gdk::{Display, Key},
+        glib::{
+            MainContext,
+            Propagation::{Proceed, Stop},
+        },
         gtk::{
-            Box as GtkBox, CssProvider, Orientation::Vertical, STYLE_PROVIDER_PRIORITY_APPLICATION,
-            ScrolledWindow, Stack, StackTransitionType::Crossfade, Widget,
-            style_context_add_provider_for_display,
+            Box as GtkBox, CssProvider, EventControllerKey, Orientation::Vertical,
+            STYLE_PROVIDER_PRIORITY_APPLICATION, ScrolledWindow, Stack,
+            StackTransitionType::Crossfade, Widget, style_context_add_provider_for_display,
         },
         prelude::{
             AdjustmentExt, AdwApplicationWindowExt, ApplicationExt, ApplicationExtManual, BoxExt,
-            Cast, GtkWindowExt, WidgetExt,
+            Cast, GtkWindowExt, NavigationPageExt, WidgetExt,
         },
     },
     parking_lot::RwLock,
@@ -39,7 +42,9 @@ use crate::{
         AppState,
         AppStateEvent::{
             LibraryDataChanged, NavigationChanged, PlaybackStateChanged, SearchFilterChanged,
+            ViewOptionsChanged,
         },
+        NavigationState::{AlbumDetail, ArtistDetail, Library},
         ViewMode::{Grid, List},
         app_state::LibraryTab::{Albums as LibraryAlbums, Artists as LibraryArtists},
     },
@@ -47,7 +52,8 @@ use crate::{
         header_bar::HeaderBar,
         player_bar::PlayerBar,
         views::{
-            AlbumGridView, ArtistGridView, ListView,
+            AlbumGridView, ArtistGridView, DetailView, ListView,
+            detail_view::DetailType::{Album as AlbumDetailType, Artist as ArtistDetailType},
             list_view::ListViewType::{Albums, Artists},
         },
     },
@@ -254,6 +260,9 @@ fn build_ui(
     // Create navigation view for handling view transitions
     let navigation_view = NavigationView::builder().build();
 
+    // Create header bar with proper state integration
+    let header_bar = HeaderBar::default_with_state(app_state.clone());
+
     // Create main content area with responsive layout
     let main_content = create_main_content(
         app_state,
@@ -270,11 +279,101 @@ fn build_ui(
         .build();
     navigation_view.add(&main_page);
 
-    // Store navigation view reference for detail view navigation
-    // In a real implementation, this would be stored in AppState or a navigation manager
+    // Handle navigation events and update HeaderBar state centrally
+    let navigation_view_clone = navigation_view.clone();
+    let app_state_nav = app_state.clone();
+    let hb_widget = header_bar.widget.clone();
+    let hb_back = header_bar.back_button.clone();
+    let hb_search = header_bar.search_button.clone();
+    let hb_view = header_bar.view_toggle.clone();
+    let hb_tabs = header_bar.tab_box.clone();
 
-    // Create header bar with proper state integration
-    let header_bar = HeaderBar::default_with_state(app_state.clone());
+    MainContext::default().spawn_local(async move {
+        let mut receiver = app_state_nav.subscribe();
+        loop {
+            match receiver.recv().await {
+                Ok(event) => {
+                    if let NavigationChanged(nav_state) = event {
+                        match nav_state {
+                            Library => {
+                                let is_at_root =
+                                    navigation_view_clone.visible_page().and_then(|p| p.tag())
+                                        == Some("root".into());
+
+                                if !is_at_root {
+                                    navigation_view_clone.pop_to_tag("root");
+                                }
+
+                                hb_back.set_visible(false);
+                                hb_search.set_visible(true);
+                                hb_view.set_visible(true);
+                                hb_widget.set_title_widget(Some(&hb_tabs));
+                                hb_widget.set_show_start_title_buttons(true);
+                                hb_widget.set_show_end_title_buttons(true);
+                            }
+                            AlbumDetail(album) => {
+                                let detail_view = DetailView::builder()
+                                    .app_state(app_state_nav.clone())
+                                    .detail_type(AlbumDetailType(album.clone()))
+                                    .compact(false)
+                                    .build();
+
+                                let page = NavigationPage::builder()
+                                    .child(&detail_view.widget)
+                                    .title(&album.title)
+                                    .build();
+
+                                navigation_view_clone.push(&page);
+                                hb_back.set_visible(true);
+                                hb_search.set_visible(false);
+                                hb_view.set_visible(false);
+                                hb_widget.set_title_widget(Option::<&Widget>::None);
+                            }
+                            ArtistDetail(artist) => {
+                                let detail_view = DetailView::builder()
+                                    .app_state(app_state_nav.clone())
+                                    .detail_type(ArtistDetailType(artist.clone()))
+                                    .compact(false)
+                                    .build();
+
+                                let page = NavigationPage::builder()
+                                    .child(&detail_view.widget)
+                                    .title(&artist.name)
+                                    .build();
+
+                                navigation_view_clone.push(&page);
+                                hb_back.set_visible(true);
+                                hb_search.set_visible(false);
+                                hb_view.set_visible(false);
+                                hb_widget.set_title_widget(Option::<&Widget>::None);
+                            }
+                        }
+                    }
+                }
+                Err(Closed) => break,
+                Err(Lagged(_)) => continue,
+            }
+        }
+    });
+
+    // Tag the root page so we can pop back to it
+    main_page.set_tag(Some("root"));
+
+    // Sync AppState when NavigationView pops (e.g. via ESC or swipe)
+    // We use a weak reference to AppState to avoid circular Arc leaks
+    let app_state_weak = Arc::downgrade(app_state);
+    navigation_view.connect_visible_page_notify(move |nv| {
+        if let Some(page) = nv.visible_page()
+            && page.tag().as_deref() == Some("root")
+            && let Some(app_state) = app_state_weak.upgrade()
+        {
+            let current_nav = app_state.get_navigation_state();
+            if current_nav != Library {
+                debug!("NavigationView synced to root, updating AppState");
+                app_state.update_navigation(Library);
+            }
+        }
+    });
 
     // Create player bar
     let (player_bar_widget, _player_bar) = create_player_bar(app_state, audio_engine);
@@ -325,6 +424,22 @@ fn build_ui(
 
     // Load custom CSS for consistent styling
     load_custom_css();
+
+    // Set up ESC key shortcut for back navigation
+    let app_state_esc = app_state.clone();
+    let esc_controller = EventControllerKey::new();
+    esc_controller.connect_key_pressed(move |_, key, _, _| {
+        if key == Key::Escape {
+            let current_nav = app_state_esc.get_navigation_state();
+            if current_nav != Library {
+                debug!("ESC pressed in detail view, navigating back to library");
+                app_state_esc.update_navigation(Library);
+                return Stop;
+            }
+        }
+        Proceed
+    });
+    window.add_controller(esc_controller);
 
     // Set the window content
     window.set_content(Some(&main_box));
@@ -502,7 +617,7 @@ fn create_main_content(
                             album_list_view.set_albums(albums.clone());
                             artist_list_view.set_artists(artists.clone());
                         }
-                        NavigationChanged {
+                        ViewOptionsChanged {
                             current_tab,
                             view_mode,
                         } => {

@@ -9,7 +9,7 @@ use {
 };
 
 /// Represents a musical artist in the library.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, FromRow, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, FromRow, Default)]
 pub struct Artist {
     /// Unique database ID.
     pub id: i64,
@@ -24,7 +24,7 @@ pub struct Artist {
 }
 
 /// Represents a musical album in the library.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, FromRow, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, FromRow, Default)]
 pub struct Album {
     /// Unique database ID.
     pub id: i64,

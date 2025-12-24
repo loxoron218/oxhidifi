@@ -10,7 +10,7 @@ use libadwaita::{
     gtk::{
         AccessibleRole::Group,
         Align::{Fill, Start},
-        Box, FlowBoxChild, Label,
+        Box, FlowBoxChild, GestureClick, Label,
         Orientation::{Horizontal, Vertical},
         Widget,
         pango::EllipsizeMode::End,
@@ -342,25 +342,37 @@ impl AlbumCard {
         child.set_child(Some(&album_tile));
         child.set_focusable(true);
 
-        // Handle click events with coordinate-based detection
-        if let Some(play_callback) = on_play_clicked {
-            let play_button_clone = play_overlay.button.clone();
+        // Handle click events
+        // Note: FlowBoxChild handles selection/activation, but we want custom behavior
+        // We use a GestureClick controller on the child widget to capture clicks
+        let click_controller = GestureClick::new();
 
-            // Connect to play button click
-            play_button_clone.connect_clicked(move |_| {
-                play_callback();
+        // Clone for closures
+        let play_callback = on_play_clicked;
+        let card_callback = on_card_clicked;
+
+        let card_callback_clone = card_callback.clone();
+        click_controller.connect_released(move |_gesture, _n_press, _x, _y| {
+            // If we have a card callback, trigger it
+            if let Some(ref callback) = card_callback_clone {
+                callback();
+            }
+        });
+
+        // Add controller to the main tile widget
+        album_tile.add_controller(click_controller);
+
+        // Support keyboard activation (Enter/Space)
+        if let Some(card_callback) = card_callback {
+            child.connect_activate(move |_| {
+                card_callback();
             });
         }
 
-        if let Some(card_callback) = on_card_clicked {
-            let child_clone = child.clone();
-
-            // Connect to card click with coordinate detection
-            child_clone.connect_activate(move |_| {
-                // In a real implementation, we would check coordinates to distinguish
-                // between play button clicks and card navigation clicks
-                // For now, we assume card clicks are for navigation
-                card_callback();
+        // Also connect the play button specifically if we have a callback
+        if let Some(play_callback) = play_callback {
+            play_overlay.button.connect_clicked(move |_| {
+                play_callback();
             });
         }
 

@@ -20,7 +20,7 @@ use libadwaita::{
 
 use crate::{
     library::models::Album,
-    state::{AppState, LibraryState},
+    state::{AppState, LibraryState, NavigationState::AlbumDetail},
     ui::components::{
         album_card::AlbumCard,
         empty_state::{EmptyState, EmptyStateConfig},
@@ -336,12 +336,8 @@ impl AlbumGridView {
                 let album_clone = album.clone();
                 move || {
                     // Handle card click - navigate to detail view
-                    if let Some(_state) = &app_state {
-                        // In a real implementation, this would:
-                        // 1. Navigate to album detail page
-                        // 2. Load detailed album information
-                        // 3. Update navigation history
-                        println!("Card clicked for album: {}", album_clone.title);
+                    if let Some(state) = &app_state {
+                        state.update_navigation(AlbumDetail(album_clone.clone()));
                     }
                 }
             })

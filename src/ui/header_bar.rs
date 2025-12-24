@@ -10,13 +10,14 @@ use {
         HeaderBar as LibadwaitaHeaderBar,
         glib::JoinHandle,
         gtk::{Box, Button, Entry, Orientation::Horizontal, SearchBar, ToggleButton},
-        prelude::{BoxExt, EditableExt, ObjectExt, ToggleButtonExt},
+        prelude::{BoxExt, ButtonExt, EditableExt, ObjectExt, ToggleButtonExt},
     },
     tracing::{debug, info},
 };
 
 use crate::state::{
     AppState,
+    NavigationState::Library,
     ViewMode::{self, Grid, List},
     app_state::LibraryTab::{Albums, Artists},
 };
@@ -48,6 +49,8 @@ pub struct HeaderBar {
     pub app_state: Option<Arc<AppState>>,
     /// Current view mode.
     pub current_view_mode: ViewMode,
+    /// Back button for detail views.
+    pub back_button: Button,
     /// Subscription handle for state changes (to ensure proper cleanup)
     _subscription_handle: Option<JoinHandle<()>>,
 }
@@ -60,6 +63,24 @@ impl HeaderBar {
     /// A new `HeaderBar` instance.
     pub fn new(app_state: Option<Arc<AppState>>) -> Self {
         let widget = LibadwaitaHeaderBar::builder().build();
+
+        // Create back button
+        let back_button = Button::builder()
+            .icon_name("go-previous-symbolic")
+            .tooltip_text("Back")
+            .visible(false) // Hidden by default
+            .build();
+
+        // Connect back button to app state
+        if let Some(ref state) = app_state {
+            let state_clone = state.clone();
+            back_button.connect_clicked(move |_| {
+                // Navigate back to library root
+                state_clone.update_navigation(Library);
+            });
+        }
+
+        widget.pack_start(&back_button);
 
         // Create search entry
         let search_entry = Entry::builder()
@@ -148,7 +169,7 @@ impl HeaderBar {
                 view_toggle_clone.set_property("icon-name", icon_name);
 
                 // Update app state using lightweight navigation update
-                state_clone.update_navigation_state(current_state.current_tab, new_mode);
+                state_clone.update_view_options(current_state.current_tab, new_mode);
             };
 
             view_toggle.connect_toggled(callback);
@@ -204,7 +225,7 @@ impl HeaderBar {
                     info!("Switching to Albums tab");
 
                     // Update app state using lightweight navigation update
-                    state_clone_album.update_navigation_state(Albums, current_state.view_mode);
+                    state_clone_album.update_view_options(Albums, current_state.view_mode);
 
                     // Ensure artist tab is not active
                     artist_tab_clone.set_active(false);
@@ -224,16 +245,13 @@ impl HeaderBar {
                     info!("Switching to Artists tab");
 
                     // Update app state using lightweight navigation update
-                    state_clone_artist.update_navigation_state(Artists, current_state.view_mode);
+                    state_clone_artist.update_view_options(Artists, current_state.view_mode);
 
                     // Ensure album tab is not active
                     album_tab_clone.set_active(false);
                 }
             });
         }
-
-        // No subscription needed - button states are managed directly by handlers
-        let _subscription_handle = None;
 
         // Create tab container box
         let tab_box = Box::builder()
@@ -257,9 +275,10 @@ impl HeaderBar {
             album_tab,
             artist_tab,
             tab_box,
+            back_button,
             app_state,
             current_view_mode,
-            _subscription_handle,
+            _subscription_handle: None,
         }
     }
 }

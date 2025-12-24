@@ -21,7 +21,10 @@ use libadwaita::{
 
 use crate::{
     library::models::{Album, Artist},
-    state::AppState,
+    state::{
+        AppState,
+        NavigationState::{AlbumDetail, ArtistDetail},
+    },
     ui::components::cover_art::CoverArt,
 };
 
@@ -327,7 +330,14 @@ impl ListView {
         row.set_activatable(true);
         row.set_selectable(true);
 
-        // set_accessible_description doesn't exist in GTK4, remove this line
+        // Handle row activation for navigation
+        let album_clone = album.clone();
+        let app_state = self.app_state.clone();
+        row.connect_activate(move |_| {
+            if let Some(ref state) = app_state {
+                state.update_navigation(AlbumDetail(album_clone.clone()));
+            }
+        });
 
         row.upcast_ref::<Widget>().clone()
     }
@@ -386,7 +396,14 @@ impl ListView {
         row.set_activatable(true);
         row.set_selectable(true);
 
-        // set_accessible_description doesn't exist in GTK4, remove this line
+        // Handle row activation for navigation
+        let artist_clone = artist.clone();
+        let app_state = self.app_state.clone();
+        row.connect_activate(move |_| {
+            if let Some(ref state) = app_state {
+                state.update_navigation(ArtistDetail(artist_clone.clone()));
+            }
+        });
 
         row.upcast_ref::<Widget>().clone()
     }

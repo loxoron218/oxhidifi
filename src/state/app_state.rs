@@ -33,6 +33,8 @@ pub struct AppState {
     pub current_track: Arc<RwLock<Option<TrackInfo>>>,
     /// Current library view state.
     pub library: Arc<RwLock<LibraryState>>,
+    /// Current navigation state.
+    pub navigation: Arc<RwLock<NavigationState>>,
     /// Audio engine reference.
     pub audio_engine: Weak<AudioEngine>,
     /// Library scanner reference (optional).
@@ -60,6 +62,18 @@ pub struct LibraryState {
     pub view_mode: ViewMode,
     /// Currently selected tab (albums or artists).
     pub current_tab: LibraryTab,
+}
+
+/// Navigation state tracking.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum NavigationState {
+    /// Main library view (root).
+    #[default]
+    Library,
+    /// Album detail view.
+    AlbumDetail(Album),
+    /// Artist detail view.
+    ArtistDetail(Artist),
 }
 
 /// Library tab selection.
@@ -95,7 +109,9 @@ pub enum AppStateEvent {
         artists: Vec<Artist>,
     },
     /// Navigation state changed.
-    NavigationChanged {
+    NavigationChanged(NavigationState),
+    /// View options changed (tab/mode).
+    ViewOptionsChanged {
         current_tab: LibraryTab,
         view_mode: ViewMode,
     },
@@ -126,6 +142,7 @@ impl AppState {
             playback: Arc::new(RwLock::new(Stopped)),
             current_track: Arc::new(RwLock::new(None)),
             library: Arc::new(RwLock::new(LibraryState::default())),
+            navigation: Arc::new(RwLock::new(NavigationState::default())),
             audio_engine,
             library_scanner: Arc::new(RwLock::new(library_scanner)),
             state_tx,
@@ -181,28 +198,56 @@ impl AppState {
             .send(AppStateEvent::LibraryDataChanged { albums, artists });
     }
 
-    /// Updates only the navigation state (tab/view mode).
+    /// Updates the navigation stack state.
+    ///
+    /// # Arguments
+    ///
+    /// * `state` - New navigation state
+    pub fn update_navigation(&self, state: NavigationState) {
+        let changed = {
+            let mut nav = self.navigation.write();
+            if *nav != state {
+                debug!("AppState: Updating navigation to {:?}", state);
+                *nav = state.clone();
+                true
+            } else {
+                false
+            }
+        };
+
+        if changed {
+            let _ = self.state_tx.send(AppStateEvent::NavigationChanged(state));
+        }
+    }
+
+    /// Updates only the view options (tab/view mode) without changing main navigation.
     ///
     /// # Arguments
     ///
     /// * `current_tab` - New tab
     /// * `view_mode` - New view mode
-    pub fn update_navigation_state(&self, current_tab: LibraryTab, view_mode: ViewMode) {
-        debug!(
-            "AppState: Updating navigation - tab={:?}, view_mode={:?}",
-            current_tab, view_mode
-        );
-
-        {
+    pub fn update_view_options(&self, current_tab: LibraryTab, view_mode: ViewMode) {
+        let changed = {
             let mut library = self.library.write();
-            library.current_tab = current_tab.clone();
-            library.view_mode = view_mode.clone();
-        }
+            if library.current_tab != current_tab || library.view_mode != view_mode {
+                debug!(
+                    "AppState: Updating view options - tab={:?}, view_mode={:?}",
+                    current_tab, view_mode
+                );
+                library.current_tab = current_tab.clone();
+                library.view_mode = view_mode.clone();
+                true
+            } else {
+                false
+            }
+        };
 
-        let _ = self.state_tx.send(AppStateEvent::NavigationChanged {
-            current_tab,
-            view_mode,
-        });
+        if changed {
+            let _ = self.state_tx.send(AppStateEvent::ViewOptionsChanged {
+                current_tab,
+                view_mode,
+            });
+        }
     }
 
     /// Updates the search filter and notifies subscribers.
@@ -253,6 +298,15 @@ impl AppState {
     /// The current `LibraryState`.
     pub fn get_library_state(&self) -> LibraryState {
         self.library.read().clone()
+    }
+
+    /// Gets the current navigation state.
+    ///
+    /// # Returns
+    ///
+    /// The current `NavigationState`.
+    pub fn get_navigation_state(&self) -> NavigationState {
+        self.navigation.read().clone()
     }
 }
 

@@ -10,7 +10,7 @@ use libadwaita::{
     gtk::{
         AccessibleRole::{Grid, Group},
         Align::{Center, Start},
-        Box, FlowBox, FlowBoxChild, Label,
+        Box, FlowBox, FlowBoxChild, GestureClick, Label,
         Orientation::Vertical,
         SelectionMode::None as SelectionNone,
         Widget,
@@ -21,7 +21,7 @@ use libadwaita::{
 
 use crate::{
     library::models::Artist,
-    state::{AppState, LibraryState},
+    state::{AppState, LibraryState, NavigationState::ArtistDetail},
     ui::components::{
         cover_art::CoverArt,
         empty_state::{EmptyState, EmptyStateConfig},
@@ -303,6 +303,30 @@ impl ArtistGridView {
         let child = FlowBoxChild::new();
         child.set_child(Some(&container));
         child.set_focusable(true);
+
+        // Add click controller for navigation
+        let click_controller = GestureClick::new();
+
+        let artist_clone = artist.clone();
+        let app_state = self.app_state.clone();
+
+        click_controller.connect_released(move |_, _, _, _| {
+            // Navigate to artist detail view
+            if let Some(ref state) = app_state {
+                state.update_navigation(ArtistDetail(artist_clone.clone()));
+            }
+        });
+
+        child.add_controller(click_controller);
+
+        // Support keyboard activation (Enter/Space)
+        let artist_clone = artist.clone();
+        let app_state = self.app_state.clone();
+        child.connect_activate(move |_| {
+            if let Some(ref state) = app_state {
+                state.update_navigation(ArtistDetail(artist_clone.clone()));
+            }
+        });
 
         child.upcast_ref::<Widget>().clone()
     }
