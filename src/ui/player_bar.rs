@@ -20,7 +20,6 @@ use {
         },
         prelude::{AccessibleExt, BoxExt, ButtonExt, Cast, RangeExt, ToggleButtonExt, WidgetExt},
     },
-    tokio::sync::broadcast::error::RecvError::{Closed, Lagged},
     tracing::debug,
 };
 
@@ -386,7 +385,7 @@ impl PlayerBar {
         // Subscribe to AppState changes with tracing
         debug!("PlayerBar: Subscribing to AppState changes");
         MainContext::default().spawn_local(async move {
-            let mut receiver = app_state.subscribe();
+            let receiver = app_state.subscribe();
             loop {
                 match receiver.recv().await {
                     Ok(event) => match event {
@@ -411,18 +410,10 @@ impl PlayerBar {
                         }
                         _ => {}
                     },
-                    Err(Closed) => {
-                        // Channel was closed - resubscribe
-                        debug!("PlayerBar state subscription channel closed, resubscribing");
-                        receiver = app_state.subscribe();
-                        continue;
-                    }
-                    Err(Lagged(skipped)) => {
-                        debug!(
-                            "PlayerBar state subscription lagged, skipped {} messages",
-                            skipped
-                        );
-                        continue;
+                    Err(_) => {
+                        // Channel was closed - this means AppState is gone.
+                        debug!("PlayerBar state subscription channel closed");
+                        break;
                     }
                 }
             }

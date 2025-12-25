@@ -7,8 +7,8 @@
 use std::sync::{Arc, Weak};
 
 use {
+    async_channel::{Receiver, Sender, unbounded},
     parking_lot::RwLock,
-    tokio::sync::broadcast::{Receiver, Sender, channel},
     tracing::debug,
 };
 
@@ -39,8 +39,9 @@ pub struct AppState {
     pub audio_engine: Weak<AudioEngine>,
     /// Library scanner reference (optional).
     pub library_scanner: Arc<RwLock<Option<Arc<RwLock<LibraryScanner>>>>>,
-    /// Broadcast channel for state change notifications.
-    state_tx: Sender<AppStateEvent>,
+    /// List of active subscribers for manual broadcast fan-out.
+    /// We use async_channel to avoid Tokio runtime dependencies in the waker logic.
+    subscribers: Arc<RwLock<Vec<Sender<AppStateEvent>>>>,
 }
 
 /// Current library view state.
@@ -134,10 +135,6 @@ impl AppState {
         audio_engine: Weak<AudioEngine>,
         library_scanner: Option<Arc<RwLock<LibraryScanner>>>,
     ) -> Self {
-        // Use a larger channel capacity to handle rapid state changes
-        // and implement proper error handling for overflow scenarios
-        let (state_tx, _) = channel(128);
-
         Self {
             playback: Arc::new(RwLock::new(Stopped)),
             current_track: Arc::new(RwLock::new(None)),
@@ -145,8 +142,30 @@ impl AppState {
             navigation: Arc::new(RwLock::new(NavigationState::default())),
             audio_engine,
             library_scanner: Arc::new(RwLock::new(library_scanner)),
-            state_tx,
+            subscribers: Arc::new(RwLock::new(Vec::new())),
         }
+    }
+
+    /// Helper to broadcast an event to all subscribers.
+    /// Cleans up closed channels.
+    fn broadcast_event(&self, event: AppStateEvent) -> usize {
+        let mut subscribers = self.subscribers.write();
+        let mut active = Vec::with_capacity(subscribers.len());
+        let mut count = 0;
+
+        for tx in subscribers.iter() {
+            // We use try_send to avoid blocking. Since these are unbounded channels,
+            // try_send should only fail if the channel is closed.
+            // If it were bounded and full, this would return an error, effectively dropping the event.
+            // But for UI events, unbounded is preferable to ensure delivery.
+            if let Ok(()) = tx.try_send(event.clone()) {
+                active.push(tx.clone());
+                count += 1;
+            }
+        }
+
+        *subscribers = active;
+        count
     }
 
     /// Updates the playback state and notifies subscribers.
@@ -157,9 +176,7 @@ impl AppState {
     pub fn update_playback_state(&self, state: PlaybackState) {
         debug!("AppState: Updating playback state to {:?}", state);
         *self.playback.write() = state.clone();
-        let _ = self
-            .state_tx
-            .send(AppStateEvent::PlaybackStateChanged(state));
+        self.broadcast_event(AppStateEvent::PlaybackStateChanged(state));
     }
 
     /// Updates the current track and notifies subscribers.
@@ -169,9 +186,7 @@ impl AppState {
     /// * `track` - New current track information.
     pub fn update_current_track(&self, track: Option<TrackInfo>) {
         *self.current_track.write() = track.clone();
-        let _ = self
-            .state_tx
-            .send(AppStateEvent::CurrentTrackChanged(Box::new(track)));
+        self.broadcast_event(AppStateEvent::CurrentTrackChanged(Box::new(track)));
     }
 
     /// Updates only the library data (albums/artists) without changing navigation.
@@ -193,9 +208,7 @@ impl AppState {
             library.artists = artists.clone();
         }
 
-        let _ = self
-            .state_tx
-            .send(AppStateEvent::LibraryDataChanged { albums, artists });
+        self.broadcast_event(AppStateEvent::LibraryDataChanged { albums, artists });
     }
 
     /// Updates the navigation stack state.
@@ -216,7 +229,7 @@ impl AppState {
         };
 
         if changed {
-            let _ = self.state_tx.send(AppStateEvent::NavigationChanged(state));
+            self.broadcast_event(AppStateEvent::NavigationChanged(state));
         }
     }
 
@@ -243,7 +256,7 @@ impl AppState {
         };
 
         if changed {
-            let _ = self.state_tx.send(AppStateEvent::ViewOptionsChanged {
+            self.broadcast_event(AppStateEvent::ViewOptionsChanged {
                 current_tab,
                 view_mode,
             });
@@ -258,19 +271,23 @@ impl AppState {
     pub fn update_search_filter(&self, filter: Option<String>) {
         debug!("AppState: Updating search filter to {:?}", filter);
         self.library.write().search_filter = filter.clone();
-        let _ = self
-            .state_tx
-            .send(AppStateEvent::SearchFilterChanged(filter));
+        self.broadcast_event(AppStateEvent::SearchFilterChanged(filter));
     }
 
     /// Subscribes to application state changes.
     ///
     /// # Returns
     ///
-    /// A broadcast receiver for state change events.
+    /// A receiver for state change events.
     pub fn subscribe(&self) -> Receiver<AppStateEvent> {
         debug!("AppState: New subscription created");
-        self.state_tx.subscribe()
+        // Create a new unbounded channel for this subscriber
+        let (tx, rx) = unbounded();
+
+        // Add sender to the list
+        self.subscribers.write().push(tx);
+
+        rx
     }
 
     /// Gets the current playback state.

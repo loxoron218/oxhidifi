@@ -289,69 +289,62 @@ fn build_ui(
     let hb_tabs = header_bar.tab_box.clone();
 
     MainContext::default().spawn_local(async move {
-        let mut receiver = app_state_nav.subscribe();
-        loop {
-            match receiver.recv().await {
-                Ok(event) => {
-                    if let NavigationChanged(nav_state) = event {
-                        match nav_state {
-                            Library => {
-                                let is_at_root =
-                                    navigation_view_clone.visible_page().and_then(|p| p.tag())
-                                        == Some("root".into());
+        let receiver = app_state_nav.subscribe();
+        while let Ok(event) = receiver.recv().await {
+            if let NavigationChanged(nav_state) = event {
+                match nav_state {
+                    Library => {
+                        let is_at_root = navigation_view_clone.visible_page().and_then(|p| p.tag())
+                            == Some("root".into());
 
-                                if !is_at_root {
-                                    navigation_view_clone.pop_to_tag("root");
-                                }
-
-                                hb_back.set_visible(false);
-                                hb_search.set_visible(true);
-                                hb_view.set_visible(true);
-                                hb_widget.set_title_widget(Some(&hb_tabs));
-                                hb_widget.set_show_start_title_buttons(true);
-                                hb_widget.set_show_end_title_buttons(true);
-                            }
-                            AlbumDetail(album) => {
-                                let detail_view = DetailView::builder()
-                                    .app_state(app_state_nav.clone())
-                                    .detail_type(AlbumDetailType(album.clone()))
-                                    .compact(false)
-                                    .build();
-
-                                let page = NavigationPage::builder()
-                                    .child(&detail_view.widget)
-                                    .title(&album.title)
-                                    .build();
-
-                                navigation_view_clone.push(&page);
-                                hb_back.set_visible(true);
-                                hb_search.set_visible(false);
-                                hb_view.set_visible(false);
-                                hb_widget.set_title_widget(Option::<&Widget>::None);
-                            }
-                            ArtistDetail(artist) => {
-                                let detail_view = DetailView::builder()
-                                    .app_state(app_state_nav.clone())
-                                    .detail_type(ArtistDetailType(artist.clone()))
-                                    .compact(false)
-                                    .build();
-
-                                let page = NavigationPage::builder()
-                                    .child(&detail_view.widget)
-                                    .title(&artist.name)
-                                    .build();
-
-                                navigation_view_clone.push(&page);
-                                hb_back.set_visible(true);
-                                hb_search.set_visible(false);
-                                hb_view.set_visible(false);
-                                hb_widget.set_title_widget(Option::<&Widget>::None);
-                            }
+                        if !is_at_root {
+                            navigation_view_clone.pop_to_tag("root");
                         }
+
+                        hb_back.set_visible(false);
+                        hb_search.set_visible(true);
+                        hb_view.set_visible(true);
+                        hb_widget.set_title_widget(Some(&hb_tabs));
+                        hb_widget.set_show_start_title_buttons(true);
+                        hb_widget.set_show_end_title_buttons(true);
+                    }
+                    AlbumDetail(album) => {
+                        let detail_view = DetailView::builder()
+                            .app_state(app_state_nav.clone())
+                            .detail_type(AlbumDetailType(album.clone()))
+                            .compact(false)
+                            .build();
+
+                        let page = NavigationPage::builder()
+                            .child(&detail_view.widget)
+                            .title(&album.title)
+                            .build();
+
+                        navigation_view_clone.push(&page);
+                        hb_back.set_visible(true);
+                        hb_search.set_visible(false);
+                        hb_view.set_visible(false);
+                        hb_widget.set_title_widget(Option::<&Widget>::None);
+                    }
+                    ArtistDetail(artist) => {
+                        let detail_view = DetailView::builder()
+                            .app_state(app_state_nav.clone())
+                            .detail_type(ArtistDetailType(artist.clone()))
+                            .compact(false)
+                            .build();
+
+                        let page = NavigationPage::builder()
+                            .child(&detail_view.widget)
+                            .title(&artist.name)
+                            .build();
+
+                        navigation_view_clone.push(&page);
+                        hb_back.set_visible(true);
+                        hb_search.set_visible(false);
+                        hb_view.set_visible(false);
+                        hb_widget.set_title_widget(Option::<&Widget>::None);
                     }
                 }
-                Err(Closed) => break,
-                Err(Lagged(_)) => continue,
             }
         }
     });
@@ -382,7 +375,7 @@ fn build_ui(
     let player_bar_widget_clone = player_bar_widget.clone();
     let app_state_for_subscription = app_state.clone();
     MainContext::default().spawn_local(async move {
-        let mut receiver = app_state_for_subscription.subscribe();
+        let receiver = app_state_for_subscription.subscribe();
         loop {
             match receiver.recv().await {
                 Ok(event) => {
@@ -398,18 +391,12 @@ fn build_ui(
                         }
                     }
                 }
-                Err(Closed) => {
-                    // Channel was closed - resubscribe
-                    debug!("Playback state subscription channel closed, resubscribing");
-                    receiver = app_state_for_subscription.subscribe();
-                    continue;
-                }
-                Err(Lagged(skipped)) => {
-                    debug!(
-                        "Playback state subscription lagged, skipped {} messages",
-                        skipped
-                    );
-                    continue;
+                Err(_) => {
+                    // Channel was closed - resubscribe? Or just exit?
+                    // For async-channel manual fan-out, close usually means the sender is gone (AppState dropped).
+                    // So we should break.
+                    debug!("Playback state subscription channel closed");
+                    break;
                 }
             }
         }
@@ -595,7 +582,7 @@ fn create_main_content(
     // Use a weak reference to avoid potential memory leaks
     // and implement proper error handling for subscription
     MainContext::default().spawn_local(async move {
-        let mut receiver = app_state_clone.subscribe();
+        let receiver = app_state_clone.subscribe();
         let mut switch_count = 0;
 
         // Move view controllers into this closure to keep them alive and update them
@@ -694,21 +681,9 @@ fn create_main_content(
                         _ => {}
                     }
                 }
-                Err(Closed) => {
-                    // Channel was closed - this can happen when all receivers are dropped
-                    // and the AppState recreates the channel. We should resubscribe.
-                    debug!("State subscription channel closed, attempting to resubscribe");
-                    receiver = app_state_clone.subscribe();
-                    continue;
-                }
-                Err(Lagged(skipped)) => {
-                    // Receiver lagged behind, but this is not critical
-                    // The receiver will get the next event
-                    debug!(
-                        "State subscription lagged behind, skipped {} messages",
-                        skipped
-                    );
-                    continue;
+                Err(_) => {
+                    debug!("Main view subscription channel closed");
+                    break;
                 }
             }
         }
