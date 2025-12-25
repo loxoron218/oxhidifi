@@ -614,57 +614,22 @@ fn create_main_content(
                                 switch_count, current_tab, view_mode
                             );
 
-                            // Switch to the appropriate view based on state
-                            match (current_tab, view_mode) {
-                                (LibraryAlbums, Grid) => {
-                                    // Reset scroll position before switching
-                                    if let Some(child) =
-                                        view_stack_clone.child_by_name("album_grid")
-                                        && let Some(scrolled) =
-                                            child.downcast_ref::<ScrolledWindow>()
-                                    {
-                                        scrolled.vadjustment().set_value(0.0);
-                                        scrolled.hadjustment().set_value(0.0);
-                                    }
-                                    view_stack_clone.set_visible_child_name("album_grid");
-                                }
-                                (LibraryAlbums, List) => {
-                                    // Reset scroll position before switching
-                                    if let Some(child) =
-                                        view_stack_clone.child_by_name("album_list")
-                                        && let Some(scrolled) =
-                                            child.downcast_ref::<ScrolledWindow>()
-                                    {
-                                        scrolled.vadjustment().set_value(0.0);
-                                        scrolled.hadjustment().set_value(0.0);
-                                    }
-                                    view_stack_clone.set_visible_child_name("album_list");
-                                }
-                                (LibraryArtists, Grid) => {
-                                    // Reset scroll position before switching
-                                    if let Some(child) =
-                                        view_stack_clone.child_by_name("artist_grid")
-                                        && let Some(scrolled) =
-                                            child.downcast_ref::<ScrolledWindow>()
-                                    {
-                                        scrolled.vadjustment().set_value(0.0);
-                                        scrolled.hadjustment().set_value(0.0);
-                                    }
-                                    view_stack_clone.set_visible_child_name("artist_grid");
-                                }
-                                (LibraryArtists, List) => {
-                                    // Reset scroll position before switching
-                                    if let Some(child) =
-                                        view_stack_clone.child_by_name("artist_list")
-                                        && let Some(scrolled) =
-                                            child.downcast_ref::<ScrolledWindow>()
-                                    {
-                                        scrolled.vadjustment().set_value(0.0);
-                                        scrolled.hadjustment().set_value(0.0);
-                                    }
-                                    view_stack_clone.set_visible_child_name("artist_list");
-                                }
+                            let child_name = match (&current_tab, &view_mode) {
+                                (LibraryAlbums, Grid) => "album_grid",
+                                (LibraryAlbums, List) => "album_list",
+                                (LibraryArtists, Grid) => "artist_grid",
+                                (LibraryArtists, List) => "artist_list",
+                            };
+
+                            // Reset scroll position before switching
+                            if let Some(child) = view_stack_clone.child_by_name(child_name)
+                                && let Some(scrolled) = child.downcast_ref::<ScrolledWindow>()
+                            {
+                                scrolled.vadjustment().set_value(0.0);
+                                scrolled.hadjustment().set_value(0.0);
                             }
+
+                            view_stack_clone.set_visible_child_name(child_name);
                         }
                         SearchFilterChanged(filter) => {
                             // Search filter changed - update all views
