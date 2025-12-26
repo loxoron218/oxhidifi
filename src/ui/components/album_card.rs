@@ -9,18 +9,21 @@ use std::rc::Rc;
 use libadwaita::{
     gtk::{
         AccessibleRole::Group,
-        Align::{Fill, Start},
+        Align::{End, Fill, Start},
         Box, FlowBoxChild, GestureClick, Label,
         Orientation::{Horizontal, Vertical},
         Widget,
-        pango::EllipsizeMode::End,
+        pango::EllipsizeMode::End as EllipsizeEnd,
     },
     prelude::{AccessibleExt, BoxExt, ButtonExt, Cast, FlowBoxChildExt, WidgetExt},
 };
 
 use crate::{
     library::models::Album,
-    ui::components::{cover_art::CoverArt, dr_badge::DRBadge, play_overlay::PlayOverlay},
+    ui::{
+        components::{cover_art::CoverArt, dr_badge::DRBadge, play_overlay::PlayOverlay},
+        utils::create_format_display,
+    },
 };
 
 /// Builder pattern for configuring AlbumCard components.
@@ -242,7 +245,7 @@ impl AlbumCard {
             .label(&album.title)
             .halign(Start)
             .xalign(0.0)
-            .ellipsize(End)
+            .ellipsize(EllipsizeEnd)
             .lines(2)
             .max_width_chars(((cover_width - 16) / 10).max(8)) // Dynamic calculation as per spec
             .tooltip_text(&album.title)
@@ -265,42 +268,49 @@ impl AlbumCard {
             .label(&artist_name)
             .halign(Start)
             .xalign(0.0)
-            .ellipsize(End)
+            .ellipsize(EllipsizeEnd)
             .lines(1)
-            .max_width_chars(((cover_width - 16) / 10).max(8)) // Dynamic calculation as per spec
+            .max_width_chars(((cover_width - 16) / 10).max(8)) // Dynamic calculation
             .tooltip_text(&artist_name)
             .css_classes(["album-artist-label"])
             .build();
 
         // Create format and year labels
-        let format_info = format.unwrap_or_else(|| "Hi-Res".to_string());
-        let format_label = Label::builder()
+        let format_info = format.unwrap_or_else(|| {
+            // If no explicit format provided, try to create one from album metadata
+            create_format_display(&album).unwrap_or_default()
+        });
+        let mut format_label_builder = Label::builder()
             .label(&format_info)
             .halign(Start)
             .xalign(0.0)
-            .ellipsize(End)
             .lines(1)
-            .max_width_chars((((cover_width - 16) / 2) / 10).max(8)) // Dynamic calculation as per spec
-            .tooltip_text(&format_info)
-            .css_classes(["album-format-label"])
-            .build();
+            .max_width_chars((((cover_width - 16) / 2) / 10).max(8)) // Dynamic calculation
+            .css_classes(["album-format-label"]);
+
+        if !format_info.is_empty() {
+            format_label_builder = format_label_builder.tooltip_text(&format_info);
+        }
+
+        let format_label = format_label_builder.build();
 
         let year_info = album.year.map(|y| y.to_string()).unwrap_or_default();
         let year_label = Label::builder()
             .label(&year_info)
-            .halign(Start)
+            .halign(End)
             .xalign(0.0)
-            .ellipsize(End)
             .lines(1)
-            .max_width_chars(8) // Fixed 8 chars as per spec for year field
+            .max_width_chars(4) // Fixed 4 chars for a regular year number
             .tooltip_text(&year_info)
             .css_classes(["album-format-label"])
+            .hexpand(true)
             .build();
 
         // Create horizontal metadata container
         let metadata_hbox = Box::builder()
             .orientation(Horizontal)
             .halign(Start)
+            .width_request(cover_width) // Force full width to align year to right margin
             .spacing(8)
             .build();
 
@@ -426,9 +436,16 @@ impl AlbumCard {
         self.artist_label.set_label(&artist_name);
         self.artist_label.set_tooltip_text(Some(&artist_name));
 
-        let format_info = format.unwrap_or_else(|| "Hi-Res".to_string());
+        let format_info = format.unwrap_or_else(|| {
+            // If no explicit format provided, try to create one from album metadata
+            create_format_display(&album).unwrap_or_default()
+        });
         self.format_label.set_label(&format_info);
-        self.format_label.set_tooltip_text(Some(&format_info));
+        if format_info.is_empty() {
+            self.format_label.set_tooltip_text(None);
+        } else {
+            self.format_label.set_tooltip_text(Some(&format_info));
+        }
 
         let year_info = album.year.map(|y| y.to_string()).unwrap_or_default();
         self.year_label.set_label(&year_info);
@@ -455,6 +472,9 @@ impl Default for AlbumCard {
             title: "Default Album".to_string(),
             year: Some(2023),
             genre: None,
+            format: Some("FLAC".to_string()),
+            bits_per_sample: Some(24),
+            sample_rate: Some(96000),
             compilation: false,
             path: "/default/path".to_string(),
             dr_value: Some("DR12".to_string()),
@@ -488,6 +508,9 @@ mod tests {
             title: "Test Album".to_string(),
             year: Some(2023),
             genre: Some("Classical".to_string()),
+            format: Some("FLAC".to_string()),
+            bits_per_sample: Some(24),
+            sample_rate: Some(96000),
             compilation: false,
             path: "/path/to/album".to_string(),
             dr_value: Some("DR12".to_string()),
@@ -510,5 +533,88 @@ mod tests {
     fn test_album_card_default() {
         let card = AlbumCard::default();
         assert!(card.dr_badge.is_some());
+    }
+
+    #[test]
+    #[ignore = "Requires GTK display for UI testing"]
+    fn test_album_card_sample_rate_decimal_formatting() {
+        // Test 44.1 kHz sample rate in album card
+        let album_441 = Album {
+            id: 1,
+            artist_id: 1,
+            title: "Test Album 44.1".to_string(),
+            year: Some(2023),
+            genre: Some("Classical".to_string()),
+            format: Some("FLAC".to_string()),
+            bits_per_sample: Some(24),
+            sample_rate: Some(44100),
+            compilation: false,
+            path: "/path/to/album_441".to_string(),
+            dr_value: Some("DR12".to_string()),
+            artwork_path: None,
+            created_at: None,
+            updated_at: None,
+        };
+
+        let card_441 = AlbumCard::builder()
+            .album(album_441)
+            .artist_name("Test Artist".to_string())
+            .show_dr_badge(true)
+            .compact(false)
+            .build();
+
+        // The format label should contain "FLAC 24/44.1"
+        let format_text = card_441.format_label.text().to_string();
+        assert_eq!(
+            format_text, "FLAC 24/44.1",
+            "Expected 'FLAC 24/44.1' but got '{}'",
+            format_text
+        );
+
+        // Test 88.2 kHz sample rate
+        let album_882 = Album {
+            sample_rate: Some(88200),
+            ..Album::default()
+        };
+
+        let card_882 = AlbumCard::new(
+            album_882,
+            "Test Artist".to_string(),
+            None,
+            true,
+            false,
+            None,
+            None,
+        );
+
+        let format_text_882 = card_882.format_label.text().to_string();
+        assert_eq!(
+            format_text_882, "FLAC 24/88.2",
+            "Expected 'FLAC 24/88.2' but got '{}'",
+            format_text_882
+        );
+
+        // Test 96 kHz (whole number) sample rate
+        let album_96 = Album {
+            sample_rate: Some(96000),
+            ..Album::default()
+        };
+
+        let card_96 = AlbumCard::new(
+            album_96,
+            "Test Artist".to_string(),
+            None,
+            true,
+            false,
+            None,
+            None,
+        );
+
+        let format_text_96 = card_96.format_label.text().to_string();
+        assert_eq!(
+            format_text_96, "FLAC 24/96",
+            "Expected 'FLAC 24/96' but got '{}'",
+            format_text_96
+        );
     }
 }

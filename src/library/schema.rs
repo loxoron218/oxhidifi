@@ -25,7 +25,7 @@ pub enum SchemaError {
 }
 
 /// Current schema version.
-pub const CURRENT_SCHEMA_VERSION: i32 = 2;
+pub const CURRENT_SCHEMA_VERSION: i32 = 4;
 
 /// Database schema definition.
 pub struct SchemaManager {
@@ -134,6 +134,9 @@ impl SchemaManager {
                 path TEXT NOT NULL UNIQUE,
                 dr_value TEXT,
                 artwork_path TEXT,
+                format TEXT,
+                bits_per_sample INTEGER,
+                sample_rate INTEGER,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (artist_id) REFERENCES artists (id) ON DELETE CASCADE,
@@ -157,9 +160,12 @@ impl SchemaManager {
                 path TEXT NOT NULL UNIQUE,
                 file_size INTEGER NOT NULL,
                 format TEXT NOT NULL,
+                codec TEXT NOT NULL DEFAULT '',
                 sample_rate INTEGER NOT NULL,
                 bits_per_sample INTEGER NOT NULL,
                 channels INTEGER NOT NULL,
+                is_lossless BOOLEAN NOT NULL DEFAULT FALSE,
+                is_high_resolution BOOLEAN NOT NULL DEFAULT FALSE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (album_id) REFERENCES albums (id) ON DELETE CASCADE
@@ -206,6 +212,73 @@ impl SchemaManager {
         if from_version == 1 && CURRENT_SCHEMA_VERSION >= 2 {
             // Migration from v1 to v2: Add artwork_path column to albums table
             query("ALTER TABLE albums ADD COLUMN artwork_path TEXT")
+                .execute(&self.pool)
+                .await?;
+
+            // Update schema version to 2
+            query("UPDATE schema_version SET version = 2")
+                .execute(&self.pool)
+                .await?;
+
+            // Now migrate from v2 to v3 if needed
+            if CURRENT_SCHEMA_VERSION >= 3 {
+                // Migration from v2 to v3: Add codec, is_lossless, and is_high_resolution columns to tracks table
+                // and format column to albums table
+                query("ALTER TABLE tracks ADD COLUMN codec TEXT NOT NULL DEFAULT ''")
+                    .execute(&self.pool)
+                    .await?;
+
+                query("ALTER TABLE tracks ADD COLUMN is_lossless BOOLEAN NOT NULL DEFAULT FALSE")
+                    .execute(&self.pool)
+                    .await?;
+
+                query("ALTER TABLE tracks ADD COLUMN is_high_resolution BOOLEAN NOT NULL DEFAULT FALSE")
+                    .execute(&self.pool)
+                    .await?;
+
+                query("ALTER TABLE albums ADD COLUMN format TEXT")
+                    .execute(&self.pool)
+                    .await?;
+
+                // Update schema version to 3
+                query("UPDATE schema_version SET version = ?")
+                    .bind(CURRENT_SCHEMA_VERSION)
+                    .execute(&self.pool)
+                    .await?;
+            }
+        } else if from_version == 2 && CURRENT_SCHEMA_VERSION >= 3 {
+            // Migration from v2 to v3: Add codec, is_lossless, and is_high_resolution columns to tracks table
+            // and format column to albums table
+            query("ALTER TABLE tracks ADD COLUMN codec TEXT NOT NULL DEFAULT ''")
+                .execute(&self.pool)
+                .await?;
+
+            query("ALTER TABLE tracks ADD COLUMN is_lossless BOOLEAN NOT NULL DEFAULT FALSE")
+                .execute(&self.pool)
+                .await?;
+
+            query(
+                "ALTER TABLE tracks ADD COLUMN is_high_resolution BOOLEAN NOT NULL DEFAULT FALSE",
+            )
+            .execute(&self.pool)
+            .await?;
+
+            query("ALTER TABLE albums ADD COLUMN format TEXT")
+                .execute(&self.pool)
+                .await?;
+
+            // Update schema version
+            query("UPDATE schema_version SET version = ?")
+                .bind(CURRENT_SCHEMA_VERSION)
+                .execute(&self.pool)
+                .await?;
+        } else if from_version == 3 && CURRENT_SCHEMA_VERSION >= 4 {
+            // Migration from v3 to v4: Add bits_per_sample and sample_rate columns to albums table
+            query("ALTER TABLE albums ADD COLUMN bits_per_sample INTEGER")
+                .execute(&self.pool)
+                .await?;
+
+            query("ALTER TABLE albums ADD COLUMN sample_rate INTEGER")
                 .execute(&self.pool)
                 .await?;
 
@@ -306,7 +379,7 @@ mod tests {
 
     #[test]
     fn test_schema_version_constant() {
-        assert_eq!(CURRENT_SCHEMA_VERSION, 2);
+        assert_eq!(CURRENT_SCHEMA_VERSION, 4);
     }
 
     #[test]

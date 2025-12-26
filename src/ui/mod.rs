@@ -10,6 +10,7 @@ pub mod application;
 pub mod components;
 pub mod header_bar;
 pub mod player_bar;
+pub mod utils;
 pub mod views;
 
 pub use {

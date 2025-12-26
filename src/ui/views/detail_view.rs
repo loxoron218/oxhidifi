@@ -639,7 +639,7 @@ mod tests {
 
         assert_eq!(
             format!("{:?}", DetailType::Album(album)),
-            "Album(Album { id: 0, artist_id: 0, title: \"\", year: None, genre: None, compilation: false, path: \"\", dr_value: None, artwork_path: None, created_at: None, updated_at: None })"
+            "Album(Album { id: 0, artist_id: 0, title: \"\", year: None, genre: None, format: None, bits_per_sample: None, sample_rate: None, compilation: false, path: \"\", dr_value: None, artwork_path: None, created_at: None, updated_at: None })"
         );
         assert_eq!(
             format!("{:?}", DetailType::Artist(artist)),

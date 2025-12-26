@@ -21,9 +21,12 @@ use libadwaita::{
 use crate::{
     library::models::Album,
     state::{AppState, LibraryState, NavigationState::AlbumDetail},
-    ui::components::{
-        album_card::AlbumCard,
-        empty_state::{EmptyState, EmptyStateConfig},
+    ui::{
+        components::{
+            album_card::AlbumCard,
+            empty_state::{EmptyState, EmptyStateConfig},
+        },
+        utils::create_format_display,
     },
 };
 
@@ -294,21 +297,8 @@ impl AlbumGridView {
         };
 
         // Create album card with proper callbacks
-        // Note: In a real implementation, format would be obtained from tracks
-        // For now, we use a reasonable default based on common high-res formats
-        let format = if album.path.to_lowercase().ends_with(".flac") {
-            "FLAC".to_string()
-        } else if album.path.to_lowercase().ends_with(".wav") {
-            "WAV".to_string()
-        } else if album.path.to_lowercase().ends_with(".dsf")
-            || album.path.to_lowercase().ends_with(".dff")
-        {
-            "DSD".to_string()
-        } else if album.path.to_lowercase().ends_with(".mqa") {
-            "MQA".to_string()
-        } else {
-            "Hi-Res".to_string()
-        };
+        // Use the actual format from the album metadata, including bit depth and sample rate
+        let format = create_format_display(album).unwrap_or_default();
 
         let album_card = AlbumCard::builder()
             .album(album.clone())
@@ -464,6 +454,9 @@ mod tests {
                 title: "Test Album 1".to_string(),
                 year: Some(2023),
                 genre: Some("Classical".to_string()),
+                format: Some("FLAC".to_string()),
+                bits_per_sample: Some(24),
+                sample_rate: Some(96000),
                 compilation: false,
                 path: "/path/to/album1".to_string(),
                 dr_value: Some("DR12".to_string()),
@@ -477,6 +470,9 @@ mod tests {
                 title: "Test Album 2".to_string(),
                 year: Some(2022),
                 genre: Some("Jazz".to_string()),
+                format: Some("WAV".to_string()),
+                bits_per_sample: Some(16),
+                sample_rate: Some(44100),
                 compilation: true,
                 path: "/path/to/album2".to_string(),
                 dr_value: Some("DR8".to_string()),

@@ -10,7 +10,6 @@ use {
     anyhow::Context,
     lofty::{
         error::{ErrorKind::Io, LoftyError},
-        file::FileType::{Aac, Aiff, Flac, Mpc, Mpeg, Opus, Vorbis, Wav},
         picture::PictureType::{CoverBack, CoverFront, Leaflet},
         prelude::{AudioFile, ItemKey::AlbumArtist, TaggedFileExt},
         probe::Probe,
@@ -19,6 +18,8 @@ use {
     serde::{Deserialize, Serialize},
     thiserror::Error,
 };
+
+use crate::audio::format_detector::detect_audio_format;
 
 /// Error type for metadata extraction operations.
 #[derive(Error, Debug)]
@@ -66,6 +67,8 @@ pub struct StandardMetadata {
 pub struct TechnicalMetadata {
     /// Audio format (e.g., "FLAC", "MP3", "WAV").
     pub format: String,
+    /// Audio codec (e.g., "FLAC", "MP3", "PCM S24").
+    pub codec: String,
     /// Sample rate in Hz.
     pub sample_rate: u32,
     /// Bits per sample.
@@ -76,6 +79,10 @@ pub struct TechnicalMetadata {
     pub duration_ms: u64,
     /// File size in bytes.
     pub file_size: u64,
+    /// Whether the format is lossless.
+    pub is_lossless: bool,
+    /// Whether the format is high-resolution.
+    pub is_high_resolution: bool,
 }
 
 /// Combined metadata containing both standard and technical information.
@@ -164,26 +171,27 @@ impl TagReader {
             comment: primary_tag.and_then(|tag| tag.comment().map(|s| s.to_string())),
         };
 
-        // Extract technical metadata
-        let format_name = match tagged_file.file_type() {
-            Flac => "FLAC",
-            Mpeg => "MP3",
-            Aac => "AAC",
-            Opus => "Opus",
-            Vorbis => "Ogg Vorbis",
-            Wav => "WAV",
-            Aiff => "AIFF",
-            Mpc => "MPC",
-            _ => return Err(MetadataError::UnsupportedFormat),
-        };
+        // Extract technical metadata using symphonia's full capabilities
+        let format_info = detect_audio_format(path).map_err(|e| {
+            MetadataError::ReadError(LoftyError::new(Io(StdError::other(e.to_string()))))
+        })?;
 
         let technical = TechnicalMetadata {
-            format: format_name.to_string(),
-            sample_rate: properties.sample_rate().unwrap_or(44100),
-            bits_per_sample: properties.bit_depth().unwrap_or(16) as u32,
-            channels: properties.channels().unwrap_or(2) as u32,
+            format: format_info.format,
+            codec: format_info.codec,
+            sample_rate: properties.sample_rate().unwrap_or(format_info.sample_rate),
+            bits_per_sample: properties
+                .bit_depth()
+                .map(|b| b as u32)
+                .unwrap_or(format_info.bits_per_sample),
+            channels: properties
+                .channels()
+                .map(|c| c as u32)
+                .unwrap_or(format_info.channels),
             duration_ms: properties.duration().as_millis() as u64,
             file_size,
+            is_lossless: format_info.is_lossless,
+            is_high_resolution: format_info.is_high_resolution,
         };
 
         // Extract embedded artwork (prefer front cover)
@@ -254,11 +262,14 @@ mod tests {
     fn test_technical_metadata_serialization() {
         let metadata = TechnicalMetadata {
             format: "FLAC".to_string(),
+            codec: "FLAC".to_string(),
             sample_rate: 96000,
             bits_per_sample: 24,
             channels: 2,
             duration_ms: 300000,
             file_size: 1024,
+            is_lossless: true,
+            is_high_resolution: true,
         };
 
         let serialized = to_string(&metadata).unwrap();
@@ -284,11 +295,14 @@ mod tests {
             },
             technical: TechnicalMetadata {
                 format: "FLAC".to_string(),
+                codec: "FLAC".to_string(),
                 sample_rate: 96000,
                 bits_per_sample: 24,
                 channels: 2,
                 duration_ms: 300000,
                 file_size: 1024,
+                is_lossless: true,
+                is_high_resolution: true,
             },
             artwork: None,
         };

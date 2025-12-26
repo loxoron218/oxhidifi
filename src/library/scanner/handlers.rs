@@ -418,6 +418,22 @@ async fn get_or_create_album(
         .iter()
         .find_map(|(_, metadata)| metadata.standard.genre.clone());
 
+    // Determine primary format, bits_per_sample, and sample_rate from tracks
+    let (primary_format, primary_bits_per_sample, primary_sample_rate) = tracks_metadata
+        .iter()
+        .find_map(|(_, metadata)| {
+            if !metadata.technical.format.is_empty() {
+                Some((
+                    metadata.technical.format.clone(),
+                    metadata.technical.bits_per_sample as i64,
+                    metadata.technical.sample_rate as i64,
+                ))
+            } else {
+                None
+            }
+        })
+        .unwrap_or_else(|| ("Unknown".to_string(), 16, 44100));
+
     // Check if album exists
     let existing_album: Option<i64> =
         query_scalar("SELECT id FROM albums WHERE artist_id = ? AND title = ? AND year IS ?")
@@ -431,11 +447,14 @@ async fn get_or_create_album(
         Some(id) => {
             // Update existing album
             query(
-                "UPDATE albums SET path = ?, compilation = ?, artwork_path = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+                "UPDATE albums SET path = ?, compilation = ?, artwork_path = ?, format = ?, bits_per_sample = ?, sample_rate = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
             )
             .bind(album_dir.to_string_lossy().to_string())
             .bind(is_compilation)
             .bind(artwork_path)
+            .bind(&primary_format)
+            .bind(Some(primary_bits_per_sample))
+            .bind(Some(primary_sample_rate))
             .bind(id)
             .execute(&mut **tx)
             .await?;
@@ -444,7 +463,7 @@ async fn get_or_create_album(
         None => {
             // Create new album
             let id: i64 = query_scalar(
-                "INSERT INTO albums (artist_id, title, year, genre, compilation, path, artwork_path) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id"
+                "INSERT INTO albums (artist_id, title, year, genre, compilation, path, artwork_path, format, bits_per_sample, sample_rate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id"
             )
             .bind(artist_id)
             .bind(album_title)
@@ -453,6 +472,9 @@ async fn get_or_create_album(
             .bind(is_compilation)
             .bind(album_dir.to_string_lossy().to_string())
             .bind(artwork_path)
+            .bind(&primary_format)
+            .bind(Some(primary_bits_per_sample))
+            .bind(Some(primary_sample_rate))
             .fetch_one(&mut **tx)
             .await?;
             Ok(id)
@@ -492,9 +514,12 @@ async fn update_track_in_transaction(
     let duration_ms = metadata.technical.duration_ms as i64;
     let file_size = metadata.technical.file_size as i64;
     let format = &metadata.technical.format;
+    let codec = &metadata.technical.codec;
     let sample_rate = metadata.technical.sample_rate as i64;
     let bits_per_sample = metadata.technical.bits_per_sample as i64;
     let channels = metadata.technical.channels as i64;
+    let is_lossless = metadata.technical.is_lossless;
+    let is_high_resolution = metadata.technical.is_high_resolution;
 
     // Check if track exists
     let existing_track: Option<i64> = query_scalar("SELECT id FROM tracks WHERE path = ?")
@@ -505,7 +530,7 @@ async fn update_track_in_transaction(
     if let Some(track_id) = existing_track {
         // Update existing track
         query(
-            "UPDATE tracks SET album_id = ?, title = ?, track_number = ?, disc_number = ?, duration_ms = ?, file_size = ?, format = ?, sample_rate = ?, bits_per_sample = ?, channels = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+            "UPDATE tracks SET album_id = ?, title = ?, track_number = ?, disc_number = ?, duration_ms = ?, file_size = ?, format = ?, codec = ?, sample_rate = ?, bits_per_sample = ?, channels = ?, is_lossless = ?, is_high_resolution = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
         )
         .bind(album_id)
         .bind(track_title)
@@ -514,16 +539,19 @@ async fn update_track_in_transaction(
         .bind(duration_ms)
         .bind(file_size)
         .bind(format)
+        .bind(codec)
         .bind(sample_rate)
         .bind(bits_per_sample)
         .bind(channels)
+        .bind(is_lossless)
+        .bind(is_high_resolution)
         .bind(track_id)
         .execute(&mut **tx)
         .await?;
     } else {
         // Create new track
         query(
-            "INSERT INTO tracks (album_id, title, track_number, disc_number, duration_ms, path, file_size, format, sample_rate, bits_per_sample, channels) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            "INSERT INTO tracks (album_id, title, track_number, disc_number, duration_ms, path, file_size, format, codec, sample_rate, bits_per_sample, channels, is_lossless, is_high_resolution) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
         .bind(album_id)
         .bind(track_title)
@@ -533,9 +561,12 @@ async fn update_track_in_transaction(
         .bind(track_path.to_string_lossy().to_string())
         .bind(file_size)
         .bind(format)
+        .bind(codec)
         .bind(sample_rate)
         .bind(bits_per_sample)
         .bind(channels)
+        .bind(is_lossless)
+        .bind(is_high_resolution)
         .execute(&mut **tx)
         .await?;
     }

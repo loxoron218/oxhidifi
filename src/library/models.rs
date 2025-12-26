@@ -38,6 +38,15 @@ pub struct Album {
     /// Genre (if available).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub genre: Option<String>,
+    /// Audio format (e.g., "FLAC", "MP3").
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub format: Option<String>,
+    /// Bits per sample for the album's audio files.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bits_per_sample: Option<i64>,
+    /// Sample rate in Hz for the album's audio files.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sample_rate: Option<i64>,
     /// Whether this is a compilation album.
     pub compilation: bool,
     /// File system path to the album directory.
@@ -78,12 +87,18 @@ pub struct Track {
     pub file_size: i64,
     /// Audio format (e.g., "FLAC", "MP3").
     pub format: String,
+    /// Audio codec (e.g., "FLAC", "MP3", "PCM S24").
+    pub codec: String,
     /// Sample rate in Hz.
     pub sample_rate: i64,
     /// Bits per sample.
     pub bits_per_sample: i64,
     /// Number of audio channels.
     pub channels: i64,
+    /// Whether the format is lossless.
+    pub is_lossless: bool,
+    /// Whether the format is high-resolution.
+    pub is_high_resolution: bool,
     /// Timestamp when the track was first added to the library.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_at: Option<String>,
@@ -113,9 +128,12 @@ impl Default for Track {
             path: String::new(),
             file_size: 0,
             format: String::new(),
+            codec: String::new(),
             sample_rate: 44100,
             bits_per_sample: 16,
             channels: 2,
+            is_lossless: false,
+            is_high_resolution: false,
             created_at: None,
             updated_at: None,
         }
@@ -150,6 +168,9 @@ mod tests {
             title: "Test Album".to_string(),
             year: Some(2023),
             genre: Some("Classical".to_string()),
+            format: Some("FLAC".to_string()),
+            bits_per_sample: Some(24),
+            sample_rate: Some(96000),
             compilation: false,
             path: "/path/to/album".to_string(),
             dr_value: Some("DR12".to_string()),
@@ -175,9 +196,12 @@ mod tests {
             path: "/path/to/track.flac".to_string(),
             file_size: 1024,
             format: "FLAC".to_string(),
+            codec: "FLAC".to_string(),
             sample_rate: 96000,
             bits_per_sample: 24,
             channels: 2,
+            is_lossless: true,
+            is_high_resolution: true,
             created_at: Some("2023-01-01 00:00:00".to_string()),
             updated_at: Some("2023-01-02 00:00:00".to_string()),
         };

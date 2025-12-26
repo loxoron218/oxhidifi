@@ -110,7 +110,7 @@ pub enum AppStateEvent {
         artists: Vec<Artist>,
     },
     /// Navigation state changed.
-    NavigationChanged(NavigationState),
+    NavigationChanged(Box<NavigationState>),
     /// View options changed (tab/mode).
     ViewOptionsChanged {
         current_tab: LibraryTab,
@@ -229,7 +229,7 @@ impl AppState {
         };
 
         if changed {
-            self.broadcast_event(AppStateEvent::NavigationChanged(state));
+            self.broadcast_event(AppStateEvent::NavigationChanged(Box::new(state)));
         }
     }
 
@@ -281,6 +281,7 @@ impl AppState {
     /// A receiver for state change events.
     pub fn subscribe(&self) -> Receiver<AppStateEvent> {
         debug!("AppState: New subscription created");
+
         // Create a new unbounded channel for this subscriber
         let (tx, rx) = unbounded();
 

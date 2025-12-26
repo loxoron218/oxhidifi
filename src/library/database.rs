@@ -82,7 +82,7 @@ impl LibraryDatabase {
                 query_as::<_, Album>(
                     r#"
                     SELECT id, artist_id, title, year, genre, compilation, path, dr_value,
-                           artwork_path, created_at, updated_at
+                           artwork_path, format, bits_per_sample, sample_rate, created_at, updated_at
                     FROM albums
                     WHERE title LIKE ?
                     ORDER BY title, year
@@ -96,7 +96,7 @@ impl LibraryDatabase {
                 query_as::<_, Album>(
                     r#"
                     SELECT id, artist_id, title, year, genre, compilation, path, dr_value,
-                           artwork_path, created_at, updated_at
+                           artwork_path, format, bits_per_sample, sample_rate, created_at, updated_at
                     FROM albums
                     ORDER BY title, year
                     "#,
@@ -184,7 +184,7 @@ impl LibraryDatabase {
         let tracks = query_as::<_, Track>(
             r#"
             SELECT id, album_id, title, track_number, disc_number, duration_ms, path,
-                   file_size, format, sample_rate, bits_per_sample, channels, created_at, updated_at
+                   file_size, format, codec, sample_rate, bits_per_sample, channels, is_lossless, is_high_resolution, created_at, updated_at
             FROM tracks
             WHERE album_id = ?
             ORDER BY disc_number, track_number, title
@@ -227,7 +227,7 @@ impl LibraryDatabase {
         let tracks = query_as::<_, Track>(
             r#"
             SELECT t.id, t.album_id, t.title, t.track_number, t.disc_number, t.duration_ms, t.path,
-                   t.file_size, t.format, t.sample_rate, t.bits_per_sample, t.channels, t.created_at, t.updated_at
+                   t.file_size, t.format, t.codec, t.sample_rate, t.bits_per_sample, t.channels, t.is_lossless, t.is_high_resolution, t.created_at, t.updated_at
             FROM tracks t
             JOIN albums a ON t.album_id = a.id
             WHERE a.artist_id = ?
@@ -260,7 +260,7 @@ impl LibraryDatabase {
         let albums = query_as::<_, Album>(
             r#"
             SELECT id, artist_id, title, year, genre, compilation, path, dr_value,
-                   artwork_path, created_at, updated_at
+                   artwork_path, format, bits_per_sample, sample_rate, created_at, updated_at
             FROM albums
             WHERE title LIKE ?
             ORDER BY title, year
@@ -368,7 +368,7 @@ impl LibraryDatabase {
             if let Some(track_id) = existing_track {
                 // Update existing track
                 query(
-                    "UPDATE tracks SET album_id = ?, title = ?, track_number = ?, disc_number = ?, duration_ms = ?, file_size = ?, format = ?, sample_rate = ?, bits_per_sample = ?, channels = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+                    "UPDATE tracks SET album_id = ?, title = ?, track_number = ?, disc_number = ?, duration_ms = ?, file_size = ?, format = ?, codec = ?, sample_rate = ?, bits_per_sample = ?, channels = ?, is_lossless = ?, is_high_resolution = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
                 )
                 .bind(track.album_id)
                 .bind(track.title)
@@ -377,16 +377,19 @@ impl LibraryDatabase {
                 .bind(track.duration_ms)
                 .bind(track.file_size)
                 .bind(track.format)
+                .bind(track.codec)
                 .bind(track.sample_rate)
                 .bind(track.bits_per_sample)
                 .bind(track.channels)
+                .bind(track.is_lossless)
+                .bind(track.is_high_resolution)
                 .bind(track_id)
                 .execute(&mut *tx)
                 .await?;
             } else {
                 // Insert new track
                 query(
-                    "INSERT INTO tracks (album_id, title, track_number, disc_number, duration_ms, path, file_size, format, sample_rate, bits_per_sample, channels) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                    "INSERT INTO tracks (album_id, title, track_number, disc_number, duration_ms, path, file_size, format, codec, sample_rate, bits_per_sample, channels, is_lossless, is_high_resolution) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
                 )
                 .bind(track.album_id)
                 .bind(track.title)
@@ -396,9 +399,12 @@ impl LibraryDatabase {
                 .bind(track.path)
                 .bind(track.file_size)
                 .bind(track.format)
+                .bind(track.codec)
                 .bind(track.sample_rate)
                 .bind(track.bits_per_sample)
                 .bind(track.channels)
+                .bind(track.is_lossless)
+                .bind(track.is_high_resolution)
                 .execute(&mut *tx)
                 .await?;
             }
@@ -438,20 +444,23 @@ impl LibraryDatabase {
             if let Some(album_id) = existing_album {
                 // Update existing album
                 query(
-                    "UPDATE albums SET genre = ?, compilation = ?, path = ?, dr_value = ?, artwork_path = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+                    "UPDATE albums SET genre = ?, compilation = ?, path = ?, dr_value = ?, artwork_path = ?, format = ?, bits_per_sample = ?, sample_rate = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
                 )
                 .bind(album.genre)
                 .bind(album.compilation)
                 .bind(album.path)
                 .bind(album.dr_value)
                 .bind(album.artwork_path)
+                .bind(album.format)
+                .bind(album.bits_per_sample)
+                .bind(album.sample_rate)
                 .bind(album_id)
                 .execute(&mut *tx)
                 .await?;
             } else {
                 // Insert new album
                 query(
-                    "INSERT INTO albums (artist_id, title, year, genre, compilation, path, dr_value, artwork_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+                    "INSERT INTO albums (artist_id, title, year, genre, compilation, path, dr_value, artwork_path, format, bits_per_sample, sample_rate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
                 )
                 .bind(album.artist_id)
                 .bind(album.title)
@@ -461,6 +470,9 @@ impl LibraryDatabase {
                 .bind(album.path)
                 .bind(album.dr_value)
                 .bind(album.artwork_path)
+                .bind(album.format)
+                .bind(album.bits_per_sample)
+                .bind(album.sample_rate)
                 .execute(&mut *tx)
                 .await?;
             }

@@ -292,7 +292,7 @@ fn build_ui(
         let receiver = app_state_nav.subscribe();
         while let Ok(event) = receiver.recv().await {
             if let NavigationChanged(nav_state) = event {
-                match nav_state {
+                match *nav_state {
                     Library => {
                         let is_at_root = navigation_view_clone.visible_page().and_then(|p| p.tag())
                             == Some("root".into());

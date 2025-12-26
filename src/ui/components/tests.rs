@@ -76,9 +76,12 @@ mod component_tests {
             path: "/path/to/track.flac".to_string(),
             file_size: 1024,
             format: "FLAC".to_string(),
+            codec: "FLAC".to_string(),
             sample_rate: 96000,
             bits_per_sample: 24,
             channels: 2,
+            is_lossless: true,
+            is_high_resolution: true,
             created_at: None,
             updated_at: None,
         };
@@ -94,6 +97,83 @@ mod component_tests {
 
         assert_eq!(metadata.labels.len(), 4);
         assert!(metadata.config.compact);
+    }
+
+    #[test]
+    #[ignore = "Requires GTK display for UI testing"]
+    fn test_hifi_metadata_sample_rate_decimal_formatting() {
+        // Test 44.1 kHz sample rate
+        let track_441 = Track {
+            id: 1,
+            album_id: 1,
+            title: "Test Track 44.1".to_string(),
+            track_number: Some(1),
+            disc_number: 1,
+            duration_ms: 300000,
+            path: "/path/to/track_441.flac".to_string(),
+            file_size: 1024,
+            format: "FLAC".to_string(),
+            codec: "FLAC".to_string(),
+            sample_rate: 44100,
+            bits_per_sample: 24,
+            channels: 2,
+            is_lossless: true,
+            is_high_resolution: true,
+            created_at: None,
+            updated_at: None,
+        };
+
+        let metadata_441 = HiFiMetadata::builder()
+            .track(track_441)
+            .show_sample_rate(true)
+            .compact(true)
+            .build();
+
+        // The label should contain "44.1 kHz"
+        assert_eq!(metadata_441.labels.len(), 1);
+        let label_text = metadata_441.labels[0].text().to_string();
+        assert!(
+            label_text.contains("44.1 kHz"),
+            "Expected '44.1 kHz' but got '{}'",
+            label_text
+        );
+
+        // Test 88.2 kHz sample rate
+        let track_882 = Track {
+            sample_rate: 88200,
+            ..Track::default()
+        };
+
+        let metadata_882 = HiFiMetadata::new(
+            Some(track_882),
+            false, // show_format
+            true,  // show_sample_rate
+            false, // show_bit_depth
+            false, // show_channels
+            true,  // compact
+        );
+
+        let label_text_882 = metadata_882.labels[0].text().to_string();
+        assert!(
+            label_text_882.contains("88.2 kHz"),
+            "Expected '88.2 kHz' but got '{}'",
+            label_text_882
+        );
+
+        // Test 96 kHz (whole number) sample rate
+        let track_96 = Track {
+            sample_rate: 96000,
+            ..Track::default()
+        };
+
+        let metadata_96 = HiFiMetadata::new(Some(track_96), false, true, false, false, true);
+
+        let label_text_96 = metadata_96.labels[0].text().to_string();
+        assert!(
+            label_text_96.contains("96 kHz"),
+            "Expected '96 kHz' but got '{}'",
+            label_text_96
+        );
     }
 
     #[test]

@@ -15,7 +15,7 @@ use libadwaita::{
     prelude::{AccessibleExt, BoxExt, Cast, OrientableExt},
 };
 
-use crate::library::models::Track;
+use crate::{library::models::Track, ui::utils::format_sample_rate};
 
 /// Builder pattern for configuring HiFiMetadata components.
 #[derive(Debug, Default)]
@@ -223,7 +223,7 @@ impl HiFiMetadata {
             // Add sample rate label
             if show_sample_rate {
                 let sample_rate_text = if track_data.sample_rate >= 1000 {
-                    format!("{} kHz", track_data.sample_rate / 1000)
+                    format!("{} kHz", format_sample_rate(track_data.sample_rate))
                 } else {
                     format!("{} Hz", track_data.sample_rate)
                 };
@@ -321,7 +321,7 @@ impl HiFiMetadata {
             // Add sample rate label
             if self.config.show_sample_rate {
                 let sample_rate_text = if track_data.sample_rate >= 1000 {
-                    format!("{} kHz", track_data.sample_rate / 1000)
+                    format!("{} kHz", format_sample_rate(track_data.sample_rate))
                 } else {
                     format!("{} Hz", track_data.sample_rate)
                 };
@@ -411,9 +411,12 @@ mod tests {
             path: "/path/to/track.flac".to_string(),
             file_size: 1024,
             format: "FLAC".to_string(),
+            codec: "FLAC".to_string(),
             sample_rate: 96000,
             bits_per_sample: 24,
             channels: 2,
+            is_lossless: true,
+            is_high_resolution: true,
             created_at: None,
             updated_at: None,
         };
@@ -458,9 +461,12 @@ mod tests {
             path: "/path/to/track.flac".to_string(),
             file_size: 1024,
             format: "FLAC".to_string(),
+            codec: "FLAC".to_string(),
             sample_rate: 96000,
             bits_per_sample: 24,
             channels: 2,
+            is_lossless: true,
+            is_high_resolution: true,
             created_at: None,
             updated_at: None,
         };
