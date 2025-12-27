@@ -9,7 +9,7 @@ use {
     libadwaita::{
         HeaderBar as LibadwaitaHeaderBar,
         glib::JoinHandle,
-        gtk::{Box, Button, Entry, Orientation::Horizontal, SearchBar, ToggleButton},
+        gtk::{Box, Button, Entry, Image, Label, Orientation::Horizontal, SearchBar, ToggleButton},
         prelude::{BoxExt, ButtonExt, EditableExt, ObjectExt, ToggleButtonExt},
     },
     tracing::{debug, info},
@@ -190,16 +190,34 @@ impl HeaderBar {
             .map(|s| s.get_library_state().current_tab)
             .unwrap_or(Albums);
 
+        // Create Albums tab with both icon and text
+        let album_icon = Image::builder().icon_name("folder-music-symbolic").build();
+        let album_label = Label::builder().label("Albums").build();
+        let album_box = Box::builder().orientation(Horizontal).spacing(6).build();
+        album_box.append(&album_icon);
+        album_box.append(&album_label);
+
         let album_tab = ToggleButton::builder()
-            .label("Albums")
+            .child(&album_box)
             .tooltip_text("Browse albums")
             .active(current_tab == Albums)
+            .has_frame(false)
             .build();
 
+        // Create Artists tab with both icon and text
+        let artist_icon = Image::builder()
+            .icon_name("avatar-default-symbolic")
+            .build();
+        let artist_label = Label::builder().label("Artists").build();
+        let artist_box = Box::builder().orientation(Horizontal).spacing(6).build();
+        artist_box.append(&artist_icon);
+        artist_box.append(&artist_label);
+
         let artist_tab = ToggleButton::builder()
-            .label("Artists")
+            .child(&artist_box)
             .tooltip_text("Browse artists")
             .active(current_tab == Artists)
+            .has_frame(false)
             .build();
 
         // Set up mutual exclusivity for tab buttons
@@ -254,11 +272,7 @@ impl HeaderBar {
         }
 
         // Create tab container box
-        let tab_box = Box::builder()
-            .orientation(Horizontal)
-            .spacing(6)
-            .css_classes(["linked"])
-            .build();
+        let tab_box = Box::builder().orientation(Horizontal).spacing(6).build();
 
         tab_box.append(&album_tab);
         tab_box.append(&artist_tab);
