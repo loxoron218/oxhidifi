@@ -144,10 +144,6 @@ impl LibraryScanner {
     ///
     /// This method processes debounced events and coordinates metadata extraction
     /// and database updates.
-    /// Handles debounced file system events.
-    ///
-    /// This method processes debounced events and coordinates metadata extraction
-    /// and database updates.
     async fn handle_debounced_events(
         receiver: Receiver<DebouncedEvent>,
         database: Arc<LibraryDatabase>,
