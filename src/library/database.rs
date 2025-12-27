@@ -9,6 +9,7 @@ use std::path::Path;
 use {
     sqlx::{SqlitePool, query, query_as, query_scalar},
     thiserror::Error,
+    tracing::debug,
 };
 
 use crate::library::{
@@ -37,6 +38,7 @@ pub enum LibraryError {
 ///
 /// The `LibraryDatabase` provides async methods for all library operations,
 /// including album/artist/track queries, searching, and DR value management.
+#[derive(Debug, Clone)]
 pub struct LibraryDatabase {
     pool: SqlitePool,
 }
@@ -520,6 +522,183 @@ impl LibraryDatabase {
         Ok(())
     }
 
+    /// Removes all tracks within a directory and its subdirectories.
+    ///
+    /// # Arguments
+    ///
+    /// * `directory_path` - Path to the directory to remove tracks from.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` indicating success or failure.
+    ///
+    /// # Errors
+    ///
+    /// Returns `LibraryError` if the operation fails.
+    pub async fn remove_tracks_in_directory<P: AsRef<Path>>(
+        &self,
+        directory_path: P,
+    ) -> Result<(), LibraryError> {
+        let directory_path_str = directory_path.as_ref().to_string_lossy().to_string();
+        let path_pattern = format!("{}/%", directory_path_str);
+
+        let mut tx = self.pool.begin().await?;
+
+        // Remove tracks in the directory
+        let result = query("DELETE FROM tracks WHERE path LIKE ?")
+            .bind(&path_pattern)
+            .execute(&mut *tx)
+            .await?;
+
+        debug!(
+            "Deleted {} tracks from directory {}",
+            result.rows_affected(),
+            directory_path_str
+        );
+
+        // Clean up empty albums
+        let _album_result =
+            query("DELETE FROM albums WHERE id NOT IN (SELECT DISTINCT album_id FROM tracks)")
+                .execute(&mut *tx)
+                .await?;
+
+        // Clean up empty artists
+        let _artist_result =
+            query("DELETE FROM artists WHERE id NOT IN (SELECT DISTINCT artist_id FROM albums)")
+                .execute(&mut *tx)
+                .await?;
+
+        // Clear DR values for the deleted directory (in case album wasn't fully deleted)
+        query("UPDATE albums SET dr_value = NULL WHERE path = ?")
+            .bind(&directory_path_str)
+            .execute(&mut *tx)
+            .await?;
+
+        tx.commit().await?;
+
+        Ok(())
+    }
+
+    /// Validates and cleans up orphaned records that reference non-existent files/directories.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` indicating success or failure.
+    ///
+    /// # Errors
+    ///
+    /// Returns `LibraryError` if the cleanup fails.
+    pub async fn cleanup_orphaned_records(&self) -> Result<(), LibraryError> {
+        debug!("Performing validation to clean up orphaned records");
+
+        let mut tx = self.pool.begin().await?;
+
+        // Find albums with non-existent directories
+        let orphaned_albums: Vec<String> = query_scalar::<_, String>("SELECT path FROM albums")
+            .fetch_all(&mut *tx)
+            .await?;
+
+        let mut albums_to_delete = Vec::new();
+
+        for album_path in orphaned_albums {
+            if !Path::new(&album_path).exists() {
+                albums_to_delete.push(album_path);
+            }
+        }
+
+        if !albums_to_delete.is_empty() {
+            debug!("Found {} orphaned albums to delete", albums_to_delete.len());
+
+            // Delete orphaned albums (this will cascade to tracks)
+            for album_path in &albums_to_delete {
+                // Clear DR value first (though deletion will remove it anyway)
+                query("UPDATE albums SET dr_value = NULL WHERE path = ?")
+                    .bind(album_path)
+                    .execute(&mut *tx)
+                    .await?;
+
+                let result = query("DELETE FROM albums WHERE path = ?")
+                    .bind(album_path)
+                    .execute(&mut *tx)
+                    .await?;
+
+                debug!(
+                    "Deleted orphaned album: {} ({} rows)",
+                    album_path,
+                    result.rows_affected()
+                );
+            }
+
+            // Clean up empty artists
+            let artist_result = query(
+                "DELETE FROM artists WHERE id NOT IN (SELECT DISTINCT artist_id FROM albums)",
+            )
+            .execute(&mut *tx)
+            .await?;
+
+            debug!(
+                "Deleted {} empty artists during cleanup",
+                artist_result.rows_affected()
+            );
+        }
+
+        // Also check for tracks with non-existent files
+        let orphaned_tracks: Vec<String> = query_scalar::<_, String>("SELECT path FROM tracks")
+            .fetch_all(&mut *tx)
+            .await?;
+
+        let mut tracks_to_delete = Vec::new();
+
+        for track_path in orphaned_tracks {
+            if !Path::new(&track_path).exists() {
+                tracks_to_delete.push(track_path);
+            }
+        }
+
+        if !tracks_to_delete.is_empty() {
+            debug!("Found {} orphaned tracks to delete", tracks_to_delete.len());
+
+            for track_path in &tracks_to_delete {
+                let result = query("DELETE FROM tracks WHERE path = ?")
+                    .bind(track_path)
+                    .execute(&mut *tx)
+                    .await?;
+
+                debug!(
+                    "Deleted orphaned track: {} ({} rows)",
+                    track_path,
+                    result.rows_affected()
+                );
+            }
+
+            // Clean up empty albums and artists again
+            let album_result =
+                query("DELETE FROM albums WHERE id NOT IN (SELECT DISTINCT album_id FROM tracks)")
+                    .execute(&mut *tx)
+                    .await?;
+
+            debug!(
+                "Deleted {} empty albums during track cleanup",
+                album_result.rows_affected()
+            );
+
+            let artist_result = query(
+                "DELETE FROM artists WHERE id NOT IN (SELECT DISTINCT artist_id FROM albums)",
+            )
+            .execute(&mut *tx)
+            .await?;
+
+            debug!(
+                "Deleted {} empty artists during track cleanup",
+                artist_result.rows_affected()
+            );
+        }
+
+        tx.commit().await?;
+        debug!("Validation cleanup completed successfully");
+        Ok(())
+    }
+
     /// Gets the database connection pool for advanced operations.
     ///
     /// # Returns
@@ -532,11 +711,11 @@ impl LibraryDatabase {
 
 #[cfg(test)]
 mod tests {
-    use crate::library::database::LibraryError;
+    use crate::library::database::LibraryError::{InvalidData, NotFound};
 
     #[test]
     fn test_library_error_display() {
-        let not_found_error = LibraryError::NotFound {
+        let not_found_error = NotFound {
             entity: "album".to_string(),
             id: 123,
         };
@@ -545,7 +724,7 @@ mod tests {
             "Record not found: album with id 123"
         );
 
-        let invalid_data_error = LibraryError::InvalidData {
+        let invalid_data_error = InvalidData {
             reason: "test reason".to_string(),
         };
         assert_eq!(invalid_data_error.to_string(), "Invalid data: test reason");

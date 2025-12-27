@@ -9,7 +9,7 @@ use std::{
 use {
     parking_lot::RwLock,
     sqlx::{Sqlite, Transaction, query, query_scalar},
-    tracing::{debug, warn},
+    tracing::warn,
 };
 
 use crate::{
@@ -23,7 +23,7 @@ use crate::{
     config::settings::UserSettings,
     error::domain::LibraryError,
     library::{
-        database::LibraryDatabase, dr_parser::DrParser,
+        database::LibraryDatabase, dr_parser::DrParser, file_watcher::FileWatcher,
         incremental_updater::config::IncrementalUpdaterConfig,
     },
 };
@@ -185,48 +185,64 @@ pub async fn handle_files_removed_incremental(
     paths: Vec<PathBuf>,
     database: &LibraryDatabase,
 ) -> Result<(), LibraryError> {
-    let pool = database.pool();
-    let mut tx = pool.begin().await?;
+    let mut individual_files = Vec::new();
+    let mut directories = Vec::new();
 
-    // Remove tracks
+    // Process all removal paths (including directories and unsupported files)
+    // since directory deletions may affect the library
     for path in paths {
         let path_str = path.to_string_lossy().to_string();
-        let path_pattern = format!("{}/%", path_str);
 
-        debug!(
-            "Attempting to delete tracks for path: {} (pattern: {})",
-            path_str, path_pattern
-        );
+        // Determine if this path represents a directory or file
+        let is_directory = {
+            let pool = database.pool();
 
-        // Delete track directly or tracks in subdirectory
-        let result = query("DELETE FROM tracks WHERE path = ? OR path LIKE ?")
-            .bind(&path_str)
-            .bind(&path_pattern)
-            .execute(&mut *tx)
-            .await?;
+            // First, check if this exact path exists as a track (file)
+            let is_file = query_scalar::<_, Option<i64>>("SELECT 1 FROM tracks WHERE path = ?")
+                .bind(&path_str)
+                .fetch_optional(pool)
+                .await
+                .unwrap_or(None)
+                .is_some();
 
-        debug!(
-            "Deleted {} tracks for path {}",
-            result.rows_affected(),
-            path_str
-        );
+            if is_file {
+                false // It's definitely a file
+            } else {
+                // Check if there are any tracks under this path (directory)
+                let pattern = format!("{}/%", path_str);
+
+                query_scalar::<_, i64>("SELECT COUNT(*) FROM tracks WHERE path LIKE ?")
+                    .bind(&pattern)
+                    .fetch_one(pool)
+                    .await
+                    .unwrap_or(0)
+                    > 0 // If tracks exist under this path, it's a directory
+            }
+        };
+
+        if is_directory {
+            directories.push(path);
+        } else {
+            // Only add to individual files if it's an audio file
+            if FileWatcher::is_supported_audio_file(&path) {
+                individual_files.push(path_str);
+            }
+
+            // Note: Non-audio files are ignored for individual file processing
+            // but directories containing them will still be handled above
+        }
     }
 
-    // Clean up empty albums
-    let album_result =
-        query("DELETE FROM albums WHERE id NOT IN (SELECT DISTINCT album_id FROM tracks)")
-            .execute(&mut *tx)
-            .await?;
-    debug!("Deleted {} empty albums", album_result.rows_affected());
+    // Handle directory deletions
+    for dir_path in directories {
+        database.remove_tracks_in_directory(&dir_path).await?;
+    }
 
-    // Clean up empty artists
-    let artist_result =
-        query("DELETE FROM artists WHERE id NOT IN (SELECT DISTINCT artist_id FROM albums)")
-            .execute(&mut *tx)
-            .await?;
-    debug!("Deleted {} empty artists", artist_result.rows_affected());
+    // Handle individual file deletions
+    if !individual_files.is_empty() {
+        database.batch_remove_tracks(individual_files).await?;
+    }
 
-    tx.commit().await?;
     Ok(())
 }
 

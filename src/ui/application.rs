@@ -24,7 +24,6 @@ use {
         },
     },
     parking_lot::RwLock,
-    tokio::sync::broadcast::error::RecvError::{Closed, Lagged},
     tracing::{debug, info},
 };
 
@@ -130,8 +129,12 @@ impl OxhidifiApplication {
             library_scanner.clone(),
         );
 
-        // Fetch initial library data and populate AppState
+        // Perform startup validation to clean up orphaned records
         if library_scanner.is_some() {
+            if let Err(e) = library_db.cleanup_orphaned_records().await {
+                eprintln!("Failed to cleanup orphaned records: {}", e);
+            }
+
             let albums = match library_db.get_albums(None).await {
                 Ok(albums) => albums,
                 Err(e) => {
@@ -189,7 +192,7 @@ impl OxhidifiApplication {
                 // Subscribe to library scanner events if active
                 if let Some(scanner_lock) = &app_state_clone.library_scanner.read().clone() {
                     let scanner = scanner_lock.read();
-                    let mut rx = scanner.subscribe();
+                    let rx = scanner.subscribe();
                     let app_state_refresh = app_state_clone.clone();
                     let db_refresh = library_db_clone.clone();
 
@@ -220,15 +223,9 @@ impl OxhidifiApplication {
                                     // Update state
                                     app_state_refresh.update_library_data(albums, artists);
                                 }
-                                Err(Closed) => {
+                                Err(_) => {
                                     debug!("Scanner event channel closed");
                                     break;
-                                }
-                                Err(Lagged(skipped)) => {
-                                    debug!(
-                                        "Scanner event channel lagged, skipped {} events",
-                                        skipped
-                                    );
                                 }
                             }
                         }
@@ -697,7 +694,7 @@ fn load_custom_css() {
             border-radius: 4px;
             padding: 0;
             margin: 4px; /* Small margin to prevent touching edges */
-            color: white;
+            color: black;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
         }
         

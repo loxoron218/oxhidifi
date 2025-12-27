@@ -12,13 +12,14 @@ use crate::error::dr_error::DrError;
 /// DR value validation regex pattern.
 const DR_VALUE_PATTERN: &str = r"^DR(\d{1,2})$";
 
-/// Supported DR file patterns.
-const DR_FILE_PATTERNS: &[&str] = &["dr*.txt", "*dr*.txt", "dr*", "*dr*"];
+/// Supported text file extensions for DR value scanning.
+const TEXT_FILE_EXTENSIONS: &[&str] = &["txt", "log", "md", "csv"];
 
 /// Extracts and validates DR values from album directories.
 ///
 /// The `DrExtractor` parses various DR meter log formats and extracts
 /// valid DR values according to official specifications.
+#[derive(Debug, Clone)]
 pub struct DrExtractor {
     /// Regex patterns for different DR log formats.
     dr_patterns: Vec<Regex>,
@@ -39,16 +40,15 @@ impl DrExtractor {
     ///
     /// A new `DrExtractor` instance.
     pub fn new() -> Self {
-        // Add patterns for common DR log formats
+        // Add patterns for Official DR value formats only
         // All patterns should capture only the numeric part (group 1)
+        // Per the specification, we only extract Official DR Values, not per-track DR values
         let dr_patterns = vec![
-            Regex::new(r"(?i)^\s*DR\s*(\d{1,2})\s*$").unwrap(),
-            Regex::new(r"(?i)DR\s*=\s*(\d{1,2})").unwrap(),
-            Regex::new(r"(?i)Dynamic Range\s*[:=]\s*(\d{1,2})").unwrap(),
-            // Pattern for canonical DR format - capture the number after DR
-            Regex::new(r"(?i)^\s*DR(\d{1,2})\s*$").unwrap(),
-            // Pattern to match DR values embedded in text (like "Track 1: DR12")
-            Regex::new(r"(?i)\bDR(\d{1,2})\b").unwrap(),
+            // Official DR value patterns from spec (docs/0. dr-extraction.txt)
+            Regex::new(r"(?i)Official\s+DR\s+value[:\s]*DR(\d{1,2})").unwrap(),
+            Regex::new(r"(?i)Official\s+EP/Album\s+DR[:\s]*(\d{1,2})").unwrap(),
+            Regex::new(r"(?i)Official\s+DR\s+Value[:\s]*DR(\d{1,2})").unwrap(),
+            Regex::new(r"(?i)Реальные\s+значения\s+DR[:\s]*DR(\d{1,2})").unwrap(),
         ];
 
         let dr_validator = Regex::new(DR_VALUE_PATTERN).unwrap();
@@ -119,7 +119,8 @@ impl DrExtractor {
     ///
     /// `true` if the DR value is valid, `false` otherwise.
     pub fn validate_dr_value(&self, dr_value: &str) -> bool {
-        // First try the canonical format (DR12)
+        // Only validate the canonical format (DR12)
+        // Per specification, we only accept Official DR Values in canonical format
         if self.dr_validator.is_match(dr_value)
             && let Some(captures) = self.dr_validator.captures(dr_value)
             && let Ok(number) = captures[1].parse::<u32>()
@@ -127,26 +128,13 @@ impl DrExtractor {
             return (1..=20).contains(&number);
         }
 
-        // Try alternative formats that might appear in raw input
-        let alt_patterns = [
-            r"(?i)^DR\s*(\d{1,2})$",
-            r"(?i)^DR\s*=\s*(\d{1,2})$",
-            r"(?i)^Dynamic Range\s*[:=]\s*(\d{1,2})$",
-        ];
-
-        for pattern in &alt_patterns {
-            if let Ok(regex) = Regex::new(pattern)
-                && let Some(captures) = regex.captures(dr_value)
-                && let Ok(number) = captures[1].parse::<u32>()
-            {
-                return (1..=20).contains(&number);
-            }
-        }
-
         false
     }
 
     /// Finds potential DR files in an album directory.
+    ///
+    /// Scans all text files in the directory for potential DR values,
+    /// since DR log files can have irregular names (e.g., "2012–2017_log.txt").
     ///
     /// # Arguments
     ///
@@ -154,7 +142,7 @@ impl DrExtractor {
     ///
     /// # Returns
     ///
-    /// A `Result` containing a vector of potential DR file paths or a `DrError`.
+    /// A `Result` containing a vector of potential text file paths or a `DrError`.
     ///
     /// # Errors
     ///
@@ -166,50 +154,25 @@ impl DrExtractor {
             return Ok(Vec::new());
         }
 
-        let mut dr_files = Vec::new();
+        let mut text_files = Vec::new();
 
         for entry in read_dir(album_path)? {
             let entry = entry?;
             let path = entry.path();
 
             if path.is_file()
-                && let Some(filename) = path.file_name().and_then(|n| n.to_str())
+                && let Some(extension) = path.extension().and_then(|ext| ext.to_str())
             {
-                // Check against supported DR file patterns
-                for pattern in DR_FILE_PATTERNS {
-                    if self.matches_dr_pattern(filename, pattern) {
-                        dr_files.push(path.clone());
-                        break;
-                    }
+                // Check against supported text file extensions
+                if TEXT_FILE_EXTENSIONS
+                    .iter()
+                    .any(|&ext| ext.eq_ignore_ascii_case(extension))
+                {
+                    text_files.push(path.clone());
                 }
             }
         }
 
-        Ok(dr_files)
-    }
-
-    /// Checks if a filename matches a DR file pattern.
-    ///
-    /// # Arguments
-    ///
-    /// * `filename` - Filename to check.
-    /// * `pattern` - Pattern to match against.
-    ///
-    /// # Returns
-    ///
-    /// `true` if the filename matches the pattern, `false` otherwise.
-    fn matches_dr_pattern(&self, filename: &str, pattern: &str) -> bool {
-        // Simple glob-like pattern matching
-        if pattern == "dr*.txt" {
-            return filename.to_lowercase().starts_with("dr") && filename.ends_with(".txt");
-        } else if pattern == "*dr*.txt" {
-            return filename.contains("dr") && filename.ends_with(".txt");
-        } else if pattern == "dr*" {
-            return filename.to_lowercase().starts_with("dr");
-        } else if pattern == "*dr*" {
-            return filename.contains("dr");
-        }
-
-        false
+        Ok(text_files)
     }
 }

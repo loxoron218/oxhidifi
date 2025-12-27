@@ -12,7 +12,7 @@ use parking_lot::RwLock;
 ///
 /// The `AlbumDrCache` provides thread-safe access to cached DR values
 /// to avoid repeated file system operations.
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct AlbumDrCache {
     /// Internal cache storage.
     cache: Arc<RwLock<HashMap<PathBuf, String>>>,

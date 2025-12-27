@@ -27,7 +27,7 @@ use {
     tracing::{debug, error},
 };
 
-use crate::error::domain::LibraryError;
+use crate::{audio::format_detector::supported_audio_extensions, error::domain::LibraryError};
 
 mod config;
 mod debouncer;
@@ -42,10 +42,8 @@ pub use {
     },
 };
 
-/// Supported audio file extensions for library monitoring.
-const SUPPORTED_AUDIO_EXTENSIONS: &[&str] = &[
-    "flac", "mp3", "aac", "opus", "ogg", "wav", "aiff", "aif", "mpc",
-];
+/// Supported text file extensions for DR value monitoring.
+const SUPPORTED_TEXT_EXTENSIONS: &[&str] = &["txt", "log", "md", "csv"];
 
 /// File system watcher for music library directories.
 ///
@@ -140,13 +138,17 @@ impl FileWatcher {
                                         is_new: true,
                                     });
                                 }
-                            } else if Self::is_supported_audio_file(path) {
+                            } else if Self::is_supported_audio_file(path)
+                                || Self::is_supported_text_file(path)
+                            {
+                                // Text files might contain DR values, so treat them as file changes
+                                // This will trigger DR parsing for the parent album directory
                                 let _ = sender.try_send(FileChanged {
                                     path: path.clone(),
                                     is_new: matches!(event.kind, Create(_)),
                                 });
                             } else {
-                                debug!("Ignoring non-audio file change: {:?}", path);
+                                debug!("Ignoring unsupported file change: {:?}", path);
                             }
                         }
 
@@ -180,7 +182,9 @@ impl FileWatcher {
                                                 is_new: true,
                                             });
                                         }
-                                    } else if Self::is_supported_audio_file(path) {
+                                    } else if Self::is_supported_audio_file(path)
+                                        || Self::is_supported_text_file(path)
+                                    {
                                         debug!(
                                             "FileWatcher: Propagating rename-to (add) event for path: {:?}",
                                             path
@@ -224,7 +228,9 @@ impl FileWatcher {
                                                     is_new: true,
                                                 });
                                             }
-                                        } else if Self::is_supported_audio_file(to_path) {
+                                        } else if Self::is_supported_audio_file(to_path)
+                                            || Self::is_supported_text_file(to_path)
+                                        {
                                             let _ = sender.try_send(FileChanged {
                                                 path: to_path.clone(),
                                                 is_new: true,
@@ -257,7 +263,9 @@ impl FileWatcher {
                         }
                         Other => {
                             // Handle potential rename/move events
-                            if Self::is_supported_audio_file(path) {
+                            if Self::is_supported_audio_file(path)
+                                || Self::is_supported_text_file(path)
+                            {
                                 debug!("Other event kind for path: {:?}", path);
                             }
                         }
@@ -308,7 +316,30 @@ impl FileWatcher {
     pub fn is_supported_audio_file(path: &Path) -> bool {
         if let Some(extension) = path.extension() {
             if let Some(ext_str) = extension.to_str() {
-                SUPPORTED_AUDIO_EXTENSIONS
+                supported_audio_extensions()
+                    .iter()
+                    .any(|&ext| ext.eq_ignore_ascii_case(ext_str))
+            } else {
+                false
+            }
+        } else {
+            false
+        }
+    }
+
+    /// Checks if a path corresponds to a supported text file for DR value monitoring.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - Path to check.
+    ///
+    /// # Returns
+    ///
+    /// `true` if the path is a supported text file, `false` otherwise.
+    pub fn is_supported_text_file(path: &Path) -> bool {
+        if let Some(extension) = path.extension() {
+            if let Some(ext_str) = extension.to_str() {
+                SUPPORTED_TEXT_EXTENSIONS
                     .iter()
                     .any(|&ext| ext.eq_ignore_ascii_case(ext_str))
             } else {
@@ -407,18 +438,54 @@ mod tests {
     #[test]
     fn test_supported_audio_extensions() {
         let test_cases = vec![
+            // Supported extensions (should return true)
             ("test.flac", true),
             ("test.mp3", true),
+            ("test.m4a", true),
+            ("test.aac", true),
+            ("test.opus", true),
+            ("test.ogg", true),
             ("test.wav", true),
+            ("test.aiff", true),
+            ("test.aif", true),
+            ("test.dsf", true),
+            ("test.dff", true),
+            // Unsupported extensions (should return false)
             ("test.txt", false),
+            ("test.mpc", false), // Musepack is not supported by format detector
             ("test", false),
             ("TEST.FLAC", true), // Case insensitive
+            ("TEST.M4A", true),  // Case insensitive
         ];
 
         for (filename, expected) in test_cases {
             let path = PathBuf::from(filename);
             assert_eq!(
                 FileWatcher::is_supported_audio_file(&path),
+                expected,
+                "Failed for filename: {}",
+                filename
+            );
+        }
+    }
+
+    #[test]
+    fn test_supported_text_extensions() {
+        let test_cases = vec![
+            ("test.txt", true),
+            ("test.log", true),
+            ("test.md", true),
+            ("test.csv", true),
+            ("test.flac", false),
+            ("test", false),
+            ("TEST.TXT", true),          // Case insensitive
+            ("2012–2017_log.txt", true), // Irregular filename from requirements
+        ];
+
+        for (filename, expected) in test_cases {
+            let path = PathBuf::from(filename);
+            assert_eq!(
+                FileWatcher::is_supported_text_file(&path),
                 expected,
                 "Failed for filename: {}",
                 filename

@@ -10,7 +10,7 @@ use {anyhow::Error, sqlx::Error as SqlxError, thiserror::Error};
 use crate::{
     audio::{decoder::DecoderError, metadata::MetadataError, output::OutputError},
     error::dr_error::DrError,
-    library::schema::SchemaError,
+    library::{database::LibraryError as DatabaseError, schema::SchemaError},
 };
 
 /// Audio-related errors.
@@ -51,6 +51,9 @@ pub enum LibraryError {
     /// DR parsing error.
     #[error("DR parsing error: {0}")]
     DrError(#[from] DrError),
+    /// Database library error.
+    #[error("Database library error: {0}")]
+    DatabaseLibraryError(#[from] DatabaseError),
 }
 
 /// UI-related errors.

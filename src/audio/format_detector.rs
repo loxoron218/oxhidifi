@@ -231,6 +231,42 @@ fn is_lossless_format(codec_name: &str) -> bool {
     )
 }
 
+/// Returns the list of supported audio file extensions.
+///
+/// This function provides the canonical list of audio file extensions
+/// that are supported by the audio format detection system. It should
+/// be used by all components that need to filter or identify audio files
+/// to ensure consistency across the application.
+///
+/// # Returns
+///
+/// A slice of supported audio file extensions (without leading dots).
+///
+/// # Examples
+///
+/// ```rust
+/// use oxhidifi::audio::format_detector::supported_audio_extensions;
+///
+/// let extensions = supported_audio_extensions();
+/// assert!(extensions.contains(&"flac"));
+/// assert!(extensions.contains(&"mp3"));
+/// ```
+pub fn supported_audio_extensions() -> &'static [&'static str] {
+    &[
+        "flac", // FLAC Lossless
+        "mp3",  // MP3
+        "m4a",  // AAC/ALAC in MP4 container
+        "aac",  // Raw AAC
+        "opus", // Opus in Ogg container
+        "ogg",  // Vorbis in Ogg container
+        "wav",  // WAV PCM
+        "aiff", // AIFF PCM
+        "aif",  // AIFF (short extension)
+        "dsf",  // DSD Stream File
+        "dff",  // DSD Interchange File Format
+    ]
+}
+
 /// Creates a user-friendly format display string.
 ///
 /// This function creates a display string that combines format and codec

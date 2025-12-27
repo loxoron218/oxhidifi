@@ -10,13 +10,9 @@ use std::{
 };
 
 use {
-    async_channel::{Receiver, bounded},
+    async_channel::{Receiver, Sender, bounded, unbounded},
     parking_lot::RwLock,
-    tokio::{
-        spawn,
-        sync::broadcast::{Receiver as TokioReceiver, Sender, channel},
-        task::JoinHandle,
-    },
+    tokio::{spawn, task::JoinHandle},
     tracing::{debug, error, warn},
 };
 
@@ -25,7 +21,11 @@ use crate::{
     error::domain::LibraryError,
     library::{
         database::LibraryDatabase,
-        file_watcher::{DebouncedEvent, DebouncedEventProcessor, FileWatcher},
+        dr_parser::DrParser,
+        file_watcher::{
+            DebouncedEvent::{self, FilesChanged, FilesRemoved, FilesRenamed},
+            DebouncedEventProcessor, FileWatcher,
+        },
         scanner::handlers::{handle_files_changed, handle_files_removed, handle_files_renamed},
     },
 };
@@ -54,8 +54,10 @@ pub struct LibraryScanner {
     config: ScannerConfig,
     /// Task handles for background operations.
     _tasks: Vec<JoinHandle<()>>,
-    /// Event sender for scanner notifications.
-    event_sender: Sender<ScannerEvent>,
+    /// List of active subscribers for manual broadcast fan-out.
+    subscribers: Arc<RwLock<Vec<Sender<ScannerEvent>>>>,
+    /// DR parser for extracting DR values from album directories.
+    dr_parser: Option<Arc<DrParser>>,
 }
 
 impl LibraryScanner {
@@ -86,8 +88,8 @@ impl LibraryScanner {
         let (raw_event_sender, raw_event_receiver) = bounded(1000);
         let (debounced_event_sender, debounced_event_receiver) = bounded(50);
 
-        // Create broadcast channel for scanner events
-        let (event_sender, _) = channel(16);
+        // Initialize empty subscribers list
+        let subscribers = Arc::new(RwLock::new(Vec::new()));
 
         // Clone config for file watcher to avoid move/borrow issues
         let file_watcher_config = config.file_watcher_config.clone();
@@ -110,6 +112,14 @@ impl LibraryScanner {
             config.file_watcher_config.clone(),
         );
 
+        // Initialize DR parser if enabled in settings
+        let dr_parser = if settings.read().show_dr_values {
+            let parser = DrParser::new(database.clone());
+            Some(Arc::new(parser))
+        } else {
+            None
+        };
+
         // Spawn background tasks
         let mut tasks = Vec::new();
 
@@ -121,13 +131,15 @@ impl LibraryScanner {
         // Spawn debounced event handler task
         let database_clone = database.clone();
         let settings_clone = settings.clone();
-        let event_sender_clone = event_sender.clone();
+        let subscribers_clone = subscribers.clone();
+        let dr_parser_clone = dr_parser.clone();
         tasks.push(spawn(async move {
             Self::handle_debounced_events(
                 debounced_event_receiver,
                 database_clone,
                 settings_clone,
-                event_sender_clone,
+                dr_parser_clone,
+                subscribers_clone,
             )
             .await;
         }));
@@ -136,8 +148,29 @@ impl LibraryScanner {
             file_watcher,
             config,
             _tasks: tasks,
-            event_sender,
+            subscribers,
+            dr_parser,
         })
+    }
+
+    /// Helper to broadcast an event to all subscribers.
+    /// Cleans up closed channels.
+    fn broadcast_event(subscribers: &Arc<RwLock<Vec<Sender<ScannerEvent>>>>, event: ScannerEvent) {
+        let mut subscribers_lock = subscribers.write();
+        let mut active = Vec::with_capacity(subscribers_lock.len());
+        let mut count = 0;
+
+        for tx in subscribers_lock.iter() {
+            // We use try_send to avoid blocking. Since these are unbounded channels (created in subscribe),
+            // try_send should only fail if the channel is closed.
+            if let Ok(()) = tx.try_send(event.clone()) {
+                active.push(tx.clone());
+                count += 1;
+            }
+        }
+
+        *subscribers_lock = active;
+        debug!("Broadcasted event to {} subscribers", count);
     }
 
     /// Handles debounced file system events.
@@ -148,30 +181,35 @@ impl LibraryScanner {
         receiver: Receiver<DebouncedEvent>,
         database: Arc<LibraryDatabase>,
         settings: Arc<RwLock<UserSettings>>,
-        event_sender: Sender<ScannerEvent>,
+        dr_parser: Option<Arc<DrParser>>,
+        subscribers: Arc<RwLock<Vec<Sender<ScannerEvent>>>>,
     ) {
         while let Ok(event) = receiver.recv().await {
             let mut changes_processed = false;
             match event {
-                DebouncedEvent::FilesChanged { paths } => {
+                FilesChanged { paths } => {
                     debug!("Processing {} changed files", paths.len());
-                    if let Err(e) = handle_files_changed(paths, &database, &settings).await {
+                    if let Err(e) =
+                        handle_files_changed(paths, &database, &settings, &dr_parser).await
+                    {
                         error!("Error handling changed files: {}", e);
                     } else {
                         changes_processed = true;
                     }
                 }
-                DebouncedEvent::FilesRemoved { paths } => {
+                FilesRemoved { paths } => {
                     debug!("Processing {} removed files", paths.len());
-                    if let Err(e) = handle_files_removed(paths, &database).await {
+                    if let Err(e) = handle_files_removed(paths, &database, &dr_parser).await {
                         error!("Error handling removed files: {}", e);
                     } else {
                         changes_processed = true;
                     }
                 }
-                DebouncedEvent::FilesRenamed { paths } => {
+                FilesRenamed { paths } => {
                     debug!("Processing {} renamed files", paths.len());
-                    if let Err(e) = handle_files_renamed(paths, &database, &settings).await {
+                    if let Err(e) =
+                        handle_files_renamed(paths, &database, &settings, &dr_parser).await
+                    {
                         error!("Error handling renamed files: {}", e);
                     } else {
                         changes_processed = true;
@@ -181,14 +219,20 @@ impl LibraryScanner {
 
             if changes_processed {
                 debug!("Library changes processed, emitting LibraryChanged event");
-                let _ = event_sender.send(ScannerEvent::LibraryChanged);
+                Self::broadcast_event(&subscribers, ScannerEvent::LibraryChanged);
             }
         }
     }
 
     /// Subscribe to scanner events.
-    pub fn subscribe(&self) -> TokioReceiver<ScannerEvent> {
-        self.event_sender.subscribe()
+    pub fn subscribe(&self) -> Receiver<ScannerEvent> {
+        // Create a new unbounded channel for this subscriber
+        let (tx, rx) = unbounded();
+
+        // Add sender to the list
+        self.subscribers.write().push(tx);
+
+        rx
     }
 
     /// Adds a library directory to be monitored.
@@ -271,7 +315,7 @@ impl LibraryScanner {
 
         // Process all collected audio files
         if !all_audio_files.is_empty() {
-            handle_files_changed(all_audio_files, database, settings).await?;
+            handle_files_changed(all_audio_files, database, settings, &self.dr_parser).await?;
         }
 
         Ok(())

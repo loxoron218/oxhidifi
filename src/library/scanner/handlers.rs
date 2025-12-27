@@ -3,6 +3,7 @@
 use std::{
     collections::{HashMap, HashSet},
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use {
@@ -21,7 +22,7 @@ use crate::{
     },
     config::settings::UserSettings,
     error::domain::LibraryError,
-    library::database::LibraryDatabase,
+    library::{database::LibraryDatabase, dr_parser::DrParser, file_watcher::FileWatcher},
 };
 
 /// Handles files that have been created or modified.
@@ -31,6 +32,7 @@ use crate::{
 /// * `paths` - Paths of changed files.
 /// * `database` - Database interface.
 /// * `settings` - User settings.
+/// * `dr_parser` - Optional DR parser for extracting DR values.
 ///
 /// # Returns
 ///
@@ -43,57 +45,115 @@ pub async fn handle_files_changed(
     paths: Vec<PathBuf>,
     database: &LibraryDatabase,
     _settings: &RwLock<UserSettings>,
+    dr_parser: &Option<Arc<DrParser>>,
 ) -> Result<(), LibraryError> {
-    // Group files by album directory
-    let mut files_by_album: HashMap<PathBuf, Vec<PathBuf>> = HashMap::new();
+    // Separate audio files from text files
+    let mut audio_files = Vec::new();
+    let mut text_files = Vec::new();
+
     for path in paths {
-        if let Some(parent) = path.parent() {
-            files_by_album
-                .entry(parent.to_path_buf())
-                .or_default()
-                .push(path);
+        if FileWatcher::is_supported_audio_file(&path) {
+            audio_files.push(path);
+        } else if FileWatcher::is_supported_text_file(&path) {
+            text_files.push(path);
         }
+
+        // Ignore unsupported files
     }
 
-    // Process each album directory
-    for (album_dir, album_files) in files_by_album {
-        debug!("Processing album directory: {:?}", album_dir);
-
-        // Extract metadata for all files in the album
-        let mut tracks_metadata = Vec::new();
-        for file_path in &album_files {
-            match TagReader::read_metadata(file_path) {
-                Ok(metadata) => {
-                    tracks_metadata.push((file_path.clone(), metadata));
-                }
-                Err(e) => {
-                    warn!("Failed to read metadata for {:?}: {}", file_path, e);
-
-                    // Continue processing other files
-                }
+    // Process audio files for metadata and database updates
+    if !audio_files.is_empty() {
+        // Group audio files by album directory
+        let mut files_by_album: HashMap<PathBuf, Vec<PathBuf>> = HashMap::new();
+        for path in audio_files {
+            if let Some(parent) = path.parent() {
+                files_by_album
+                    .entry(parent.to_path_buf())
+                    .or_default()
+                    .push(path);
             }
         }
 
-        if tracks_metadata.is_empty() {
-            continue;
+        // Process each album directory with audio files
+        for (album_dir, album_files) in files_by_album {
+            debug!("Processing album directory: {:?}", album_dir);
+
+            // Extract metadata for all audio files in the album
+            let mut tracks_metadata = Vec::new();
+            for file_path in &album_files {
+                match TagReader::read_metadata(file_path) {
+                    Ok(metadata) => {
+                        tracks_metadata.push((file_path.clone(), metadata));
+                    }
+                    Err(e) => {
+                        warn!("Failed to read metadata for {:?}: {}", file_path, e);
+
+                        // Continue processing other files
+                    }
+                }
+            }
+
+            if tracks_metadata.is_empty() {
+                continue;
+            }
+
+            // Determine if this is a compilation album
+            let is_compilation = is_compilation_album(&tracks_metadata);
+
+            // Extract album and artist information
+            let (album_info, artist_info) =
+                extract_album_artist_info(&tracks_metadata, is_compilation);
+
+            // Update database with new/modified tracks
+            update_album_in_database(
+                &album_dir,
+                &album_info,
+                &artist_info,
+                &tracks_metadata,
+                database,
+                is_compilation,
+            )
+            .await?;
+
+            // Parse and update DR value if enabled
+            if let Some(parser) = dr_parser
+                && let Ok(Some(dr_value)) = parser.parse_dr_for_album(&album_dir).await
+            {
+                database
+                    .update_dr_value(&album_dir, Some(&dr_value))
+                    .await?;
+            }
+        }
+    }
+
+    // Process text files for DR value updates only
+    if !text_files.is_empty() && dr_parser.is_some() {
+        let parser = dr_parser.as_ref().unwrap();
+
+        // Get unique album directories from text files
+        let mut album_dirs: HashSet<PathBuf> = HashSet::new();
+        for path in text_files {
+            if let Some(parent) = path.parent() {
+                album_dirs.insert(parent.to_path_buf());
+            }
         }
 
-        // Determine if this is a compilation album
-        let is_compilation = is_compilation_album(&tracks_metadata);
+        // Parse DR values for each affected album directory
+        for album_dir in album_dirs {
+            match parser.parse_dr_for_album(&album_dir).await {
+                Ok(dr_value) => {
+                    database
+                        .update_dr_value(&album_dir, dr_value.as_deref())
+                        .await?;
+                }
+                Err(e) => {
+                    warn!("Failed to parse DR value for {:?}: {}", album_dir, e);
 
-        // Extract album and artist information
-        let (album_info, artist_info) = extract_album_artist_info(&tracks_metadata, is_compilation);
-
-        // Update database with new/modified tracks
-        update_album_in_database(
-            &album_dir,
-            &album_info,
-            &artist_info,
-            &tracks_metadata,
-            database,
-            is_compilation,
-        )
-        .await?;
+                    // Update with None to clear any existing DR value
+                    database.update_dr_value(&album_dir, None).await?;
+                }
+            }
+        }
     }
 
     Ok(())
@@ -105,6 +165,7 @@ pub async fn handle_files_changed(
 ///
 /// * `paths` - Paths of removed files.
 /// * `database` - Database interface.
+/// * `dr_parser` - Optional DR parser for re-parsing DR values after removal.
 ///
 /// # Returns
 ///
@@ -116,52 +177,101 @@ pub async fn handle_files_changed(
 pub async fn handle_files_removed(
     paths: Vec<PathBuf>,
     database: &LibraryDatabase,
+    dr_parser: &Option<Arc<DrParser>>,
 ) -> Result<(), LibraryError> {
-    // Remove tracks from database
-    let pool = database.pool();
-
-    // Begin transaction
-    let mut tx = pool.begin().await?;
+    // Process all removal paths (including directories and unsupported files)
+    // since directory deletions and non-audio file deletions may affect the library
+    let mut individual_files = Vec::new();
+    let mut directories = Vec::new();
+    let mut text_files = Vec::new();
 
     for path in paths {
+        // Check if it's a text file for DR value handling
+        if FileWatcher::is_supported_text_file(&path) {
+            text_files.push(path.clone());
+        }
+
         let path_str = path.to_string_lossy().to_string();
-        let path_pattern = format!("{}/%", path_str);
 
-        debug!(
-            "Attempting to delete tracks for path: {} (pattern: {})",
-            path_str, path_pattern
-        );
+        // Determine if this path represents a directory or file
+        let is_directory = {
+            let pool = database.pool();
 
-        // Remove track from database (handle directories too)
-        let result = query("DELETE FROM tracks WHERE path = ? OR path LIKE ?")
-            .bind(&path_str)
-            .bind(&path_pattern)
-            .execute(&mut *tx)
-            .await?;
+            // First, check if this exact path exists as a track (file)
+            let is_file = query_scalar::<_, Option<i64>>("SELECT 1 FROM tracks WHERE path = ?")
+                .bind(&path_str)
+                .fetch_optional(pool)
+                .await
+                .unwrap_or(None)
+                .is_some();
 
-        debug!(
-            "Deleted {} tracks for path {}",
-            result.rows_affected(),
-            path_str
-        );
+            if is_file {
+                false // It's definitely a file
+            } else {
+                // Check if there are any tracks under this path (directory)
+                let pattern = format!("{}/%", path_str);
+
+                query_scalar::<_, i64>("SELECT COUNT(*) FROM tracks WHERE path LIKE ?")
+                    .bind(&pattern)
+                    .fetch_one(pool)
+                    .await
+                    .unwrap_or(0)
+                    > 0 // If tracks exist under this path, it's a directory
+            }
+        };
+
+        if is_directory {
+            directories.push(path);
+        } else {
+            // Only add to individual files if it's an audio file
+            if FileWatcher::is_supported_audio_file(&path) {
+                individual_files.push(path_str);
+            }
+
+            // Note: Non-audio, non-text files are ignored for individual file processing
+            // but directories containing them will still be handled above
+        }
     }
 
-    // Clean up empty albums
-    let album_result =
-        query("DELETE FROM albums WHERE id NOT IN (SELECT DISTINCT album_id FROM tracks)")
-            .execute(&mut *tx)
-            .await?;
-    debug!("Deleted {} empty albums", album_result.rows_affected());
+    // Handle directory deletions
+    for dir_path in directories {
+        database.remove_tracks_in_directory(&dir_path).await?;
+    }
 
-    // Clean up empty artists
-    let artist_result =
-        query("DELETE FROM artists WHERE id NOT IN (SELECT DISTINCT artist_id FROM albums)")
-            .execute(&mut *tx)
-            .await?;
-    debug!("Deleted {} empty artists", artist_result.rows_affected());
+    // Handle individual audio file deletions
+    if !individual_files.is_empty() {
+        database.batch_remove_tracks(individual_files).await?;
+    }
 
-    // Commit transaction
-    tx.commit().await?;
+    // Handle text file removals for DR value updates
+    if !text_files.is_empty() && dr_parser.is_some() {
+        let parser = dr_parser.as_ref().unwrap();
+
+        // Get unique album directories from text files
+        let mut text_album_dirs: HashSet<PathBuf> = HashSet::new();
+        for path in &text_files {
+            if let Some(parent) = path.parent() {
+                text_album_dirs.insert(parent.to_path_buf());
+            }
+        }
+
+        // Parse DR values for each affected album directory
+        for album_dir in text_album_dirs {
+            match parser.parse_dr_for_album(&album_dir).await {
+                Ok(dr_value) => {
+                    database
+                        .update_dr_value(&album_dir, dr_value.as_deref())
+                        .await?;
+                }
+                Err(e) => {
+                    warn!("Failed to parse DR value for {:?}: {}", album_dir, e);
+
+                    // Update with None to clear any existing DR value
+                    database.update_dr_value(&album_dir, None).await?;
+                }
+            }
+        }
+    }
 
     Ok(())
 }
@@ -173,6 +283,7 @@ pub async fn handle_files_removed(
 /// * `paths` - Original and new paths of renamed files.
 /// * `database` - Database interface.
 /// * `settings` - User settings.
+/// * `dr_parser` - Optional DR parser for extracting DR values.
 ///
 /// # Returns
 ///
@@ -185,13 +296,14 @@ pub async fn handle_files_renamed(
     paths: Vec<(PathBuf, PathBuf)>,
     database: &LibraryDatabase,
     settings: &RwLock<UserSettings>,
+    dr_parser: &Option<Arc<DrParser>>,
 ) -> Result<(), LibraryError> {
     // Handle renames as remove + add
     let removed_paths: Vec<PathBuf> = paths.iter().map(|(from, _)| from.clone()).collect();
     let added_paths: Vec<PathBuf> = paths.iter().map(|(_, to)| to.clone()).collect();
 
-    handle_files_removed(removed_paths, database).await?;
-    handle_files_changed(added_paths, database, settings).await?;
+    handle_files_removed(removed_paths, database, dr_parser).await?;
+    handle_files_changed(added_paths, database, settings, dr_parser).await?;
 
     Ok(())
 }
