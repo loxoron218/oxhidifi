@@ -175,14 +175,17 @@ impl HeaderBar {
             view_toggle.connect_toggled(callback);
         }
 
-        widget.pack_start(&view_toggle);
-
         // Settings button
         let settings_button = Button::builder()
-            .icon_name("preferences-system-symbolic")
+            .icon_name("open-menu-symbolic")
             .tooltip_text("Settings")
             .build();
+
+        // Pack settings button first (will appear on far right)
         widget.pack_end(&settings_button);
+
+        // Then pack view toggle (will appear immediately to left of settings)
+        widget.pack_end(&view_toggle);
 
         // Create tab navigation buttons for Albums/Artists
         let current_tab = app_state
@@ -326,7 +329,7 @@ mod tests {
         );
         assert_eq!(
             header_bar.settings_button.icon_name().as_deref(),
-            Some("preferences-system-symbolic")
+            Some("open-menu-symbolic")
         );
     }
 }
