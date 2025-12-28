@@ -7,16 +7,18 @@ use std::sync::Arc;
 
 use {
     libadwaita::{
-        HeaderBar as LibadwaitaHeaderBar,
-        glib::JoinHandle,
+        HeaderBar as LibadwaitaHeaderBar, SplitButton,
+        gio::{Icon, Menu, MenuItem, SimpleAction, SimpleActionGroup},
+        glib::{JoinHandle, MainContext, Variant, VariantTy},
         gtk::{Box, Button, Entry, Image, Label, Orientation::Horizontal, SearchBar, ToggleButton},
-        prelude::{BoxExt, ButtonExt, EditableExt, ObjectExt, ToggleButtonExt},
+        prelude::{ActionMapExt, BoxExt, ButtonExt, EditableExt, ToggleButtonExt, WidgetExt},
     },
     tracing::{debug, info},
 };
 
 use crate::state::{
     AppState,
+    AppStateEvent::ViewOptionsChanged,
     NavigationState::Library,
     ViewMode::{self, Grid, List},
     app_state::LibraryTab::{Albums, Artists},
@@ -31,8 +33,8 @@ pub struct HeaderBar {
     pub widget: LibadwaitaHeaderBar,
     /// Search toggle button.
     pub search_button: ToggleButton,
-    /// View toggle button.
-    pub view_toggle: ToggleButton,
+    /// View split button.
+    pub view_split_button: SplitButton,
     /// Settings button.
     pub settings_button: Button,
     /// Search entry for expandable search.
@@ -126,53 +128,118 @@ impl HeaderBar {
 
         widget.pack_start(&search_button);
 
-        // View toggle button
+        // View split button
         let current_view_mode = app_state
             .as_ref()
             .map(|s| s.get_library_state().view_mode)
             .unwrap_or(Grid);
 
-        let view_toggle_icon = match current_view_mode {
+        let view_button_icon = match current_view_mode {
             List => "view-list-symbolic",
             Grid => "view-grid-symbolic",
         };
 
-        let view_toggle = ToggleButton::builder()
-            .icon_name(view_toggle_icon)
+        // Create menu for dropdown
+        let menu = Menu::new();
+
+        // Add Grid view option
+        let grid_item = MenuItem::new(Some("Grid View"), Some("view.set-mode"));
+        grid_item.set_attribute_value("target", Some(&Variant::from(Grid as i32)));
+        if let Ok(icon) = Icon::for_string("view-grid-symbolic") {
+            grid_item.set_icon(&icon);
+        }
+        menu.append_item(&grid_item);
+
+        // Add List view option
+        let list_item = MenuItem::new(Some("List View"), Some("view.set-mode"));
+        list_item.set_attribute_value("target", Some(&Variant::from(List as i32)));
+        if let Ok(icon) = Icon::for_string("view-list-symbolic") {
+            list_item.set_icon(&icon);
+        }
+        menu.append_item(&list_item);
+
+        let view_split_button = SplitButton::builder()
+            .icon_name(view_button_icon)
             .tooltip_text("Toggle View")
-            .active(current_view_mode == List)
+            .menu_model(&menu)
             .build();
 
-        // Connect view toggle to app state
+        // Connect main button click to toggle view mode
         if let Some(ref state) = app_state {
-            let state_clone = state.clone();
-            let view_toggle_clone = view_toggle.clone();
+            let state_clone_main = state.clone();
+            let view_split_button_clone_main = view_split_button.clone();
 
-            let callback = move |button: &ToggleButton| {
-                let new_mode = if button.is_active() { List } else { Grid };
+            // Main button click handler - toggles between current mode and the other mode
+            view_split_button.connect_clicked(move |_| {
+                let current_state = state_clone_main.get_library_state();
+                let new_mode = if current_state.view_mode == Grid {
+                    List
+                } else {
+                    Grid
+                };
 
                 // Check if state actually changed
-                let current_state = state_clone.get_library_state();
                 if current_state.view_mode == new_mode {
                     debug!("View mode unchanged, skipping update");
                     return;
                 }
 
-                info!("View mode changed to: {:?}", new_mode);
+                info!("View mode toggled to: {:?}", new_mode);
 
                 // Update icon
-                let icon_name = if button.is_active() {
-                    "view-list-symbolic"
-                } else {
-                    "view-grid-symbolic"
+                let icon_name = match new_mode {
+                    List => "view-list-symbolic",
+                    Grid => "view-grid-symbolic",
                 };
-                view_toggle_clone.set_property("icon-name", icon_name);
+                view_split_button_clone_main.set_icon_name(icon_name);
 
-                // Update app state using lightweight navigation update
-                state_clone.update_view_options(current_state.current_tab, new_mode);
-            };
+                // Update app state
+                state_clone_main.update_view_options(current_state.current_tab, new_mode);
+            });
 
-            view_toggle.connect_toggled(callback);
+            // Connect menu actions to app state
+            let state_clone_menu = state.clone();
+            let view_split_button_clone_menu = view_split_button.clone();
+
+            // Handle set-mode action (menu item clicks)
+            let set_mode_action = SimpleAction::new("view.set-mode", Some(VariantTy::INT32));
+            let state_clone_set = state_clone_menu.clone();
+            let view_split_button_clone_set = view_split_button_clone_menu.clone();
+
+            set_mode_action.connect_activate(move |_action, parameter: Option<&Variant>| {
+                if let Some(param) = parameter {
+                    let mode_value = param.get::<i32>().unwrap();
+                    let new_mode = match mode_value {
+                        0 => Grid, // Grid = 0
+                        1 => List, // List = 1
+                        _ => return,
+                    };
+
+                    // Check if state actually changed
+                    let current_state = state_clone_set.get_library_state();
+                    if current_state.view_mode == new_mode {
+                        debug!("View mode unchanged, skipping update");
+                        return;
+                    }
+
+                    info!("View mode changed to: {:?}", new_mode);
+
+                    // Update icon
+                    let icon_name = match new_mode {
+                        List => "view-list-symbolic",
+                        Grid => "view-grid-symbolic",
+                    };
+                    view_split_button_clone_set.set_icon_name(icon_name);
+
+                    // Update app state
+                    state_clone_set.update_view_options(current_state.current_tab, new_mode);
+                }
+            });
+
+            // Add action to the widget itself since we can't easily access parent action groups
+            let action_group = SimpleActionGroup::new();
+            action_group.add_action(&set_mode_action);
+            view_split_button.insert_action_group("win", Some(&action_group));
         }
 
         // Settings button
@@ -184,8 +251,8 @@ impl HeaderBar {
         // Pack settings button first (will appear on far right)
         widget.pack_end(&settings_button);
 
-        // Then pack view toggle (will appear immediately to left of settings)
-        widget.pack_end(&view_toggle);
+        // Then pack view split button (will appear immediately to left of settings)
+        widget.pack_end(&view_split_button);
 
         // Create tab navigation buttons for Albums/Artists
         let current_tab = app_state
@@ -285,7 +352,7 @@ impl HeaderBar {
         Self {
             widget,
             search_button,
-            view_toggle,
+            view_split_button: view_split_button.clone(),
             settings_button,
             search_entry,
             search_bar,
@@ -293,9 +360,29 @@ impl HeaderBar {
             artist_tab,
             tab_box,
             back_button,
-            app_state,
-            current_view_mode,
-            _subscription_handle: None,
+            app_state: app_state.clone(),
+            current_view_mode: current_view_mode.clone(),
+            _subscription_handle: if let Some(ref state) = app_state {
+                // Create subscription handle for state changes
+                let state_clone_sub = state.clone();
+                let view_split_button_clone_sub = view_split_button.clone();
+                let handle = MainContext::default().spawn_local(async move {
+                    let rx = state_clone_sub.subscribe();
+                    while let Ok(event) = rx.recv().await {
+                        if let ViewOptionsChanged { view_mode, .. } = event {
+                            // Update icon based on new view mode
+                            let icon_name = match view_mode {
+                                List => "view-list-symbolic",
+                                Grid => "view-grid-symbolic",
+                            };
+                            view_split_button_clone_sub.set_icon_name(icon_name);
+                        }
+                    }
+                });
+                Some(handle)
+            } else {
+                None
+            },
         }
     }
 }
@@ -324,7 +411,7 @@ mod tests {
             Some("system-search-symbolic")
         );
         assert_eq!(
-            header_bar.view_toggle.icon_name().as_deref(),
+            header_bar.view_split_button.icon_name().as_deref(),
             Some("view-grid-symbolic")
         );
         assert_eq!(

@@ -282,7 +282,7 @@ fn build_ui(
     let hb_widget = header_bar.widget.clone();
     let hb_back = header_bar.back_button.clone();
     let hb_search = header_bar.search_button.clone();
-    let hb_view = header_bar.view_toggle.clone();
+    let hb_view = header_bar.view_split_button.clone();
     let hb_tabs = header_bar.tab_box.clone();
 
     MainContext::default().spawn_local(async move {

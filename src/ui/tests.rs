@@ -80,7 +80,7 @@ mod ui_compliance_tests {
         // Test that all interactive elements support keyboard navigation
         let header_bar = HeaderBar::default_with_state(Arc::new(app_state.clone()));
         assert!(header_bar.search_button.can_focus());
-        assert!(header_bar.view_toggle.can_focus());
+        assert!(header_bar.view_split_button.can_focus());
         assert!(header_bar.settings_button.can_focus());
 
         let album_grid =
