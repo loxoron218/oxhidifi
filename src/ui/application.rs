@@ -90,8 +90,13 @@ impl OxhidifiApplication {
     /// Returns an error if audio engine, library database, or settings initialization fails.
     pub async fn new() -> Result<Self, Box<dyn Error>> {
         // Initialize settings
-        let settings =
+        let settings_manager =
             SettingsManager::new().map_err(|e| format!("Failed to initialize settings: {}", e))?;
+        let settings_manager_shared = Arc::new(RwLock::new(settings_manager));
+
+        // Extract UserSettings for components that need direct access
+        let user_settings = settings_manager_shared.read().get_settings().clone();
+        let user_settings_shared = Arc::new(RwLock::new(user_settings));
 
         // Initialize audio engine
         let audio_engine =
@@ -104,15 +109,15 @@ impl OxhidifiApplication {
         let library_db = Arc::new(library_db_raw);
 
         // Initialize library scanner if there are library directories
-        let library_scanner = if !settings.get_settings().library_directories.is_empty() {
-            let settings_arc = Arc::new(RwLock::new(settings.get_settings().clone()));
-            let scanner = LibraryScanner::new(library_db.clone(), settings_arc.clone(), None)
-                .await
-                .map_err(|e| format!("Failed to initialize library scanner: {}", e))?;
+        let library_scanner = if !user_settings_shared.read().library_directories.is_empty() {
+            let scanner =
+                LibraryScanner::new(library_db.clone(), user_settings_shared.clone(), None)
+                    .await
+                    .map_err(|e| format!("Failed to initialize library scanner: {}", e))?;
 
             // Perform initial scan of existing directories
             if let Err(e) = scanner
-                .scan_initial_directories(&library_db, &settings_arc)
+                .scan_initial_directories(&library_db, &user_settings_shared)
                 .await
             {
                 eprintln!("Failed to perform initial library scan: {}", e);
@@ -127,6 +132,7 @@ impl OxhidifiApplication {
         let app_state = AppState::new(
             Arc::downgrade(&Arc::new(audio_engine.clone())),
             library_scanner.clone(),
+            settings_manager_shared.clone(),
         );
 
         // Perform startup validation to clean up orphaned records
@@ -165,7 +171,7 @@ impl OxhidifiApplication {
             library_db,
             library_scanner,
             app_state: Arc::new(app_state),
-            settings: Arc::new(settings),
+            settings: Arc::new(settings_manager_shared.read().clone()),
         })
     }
 

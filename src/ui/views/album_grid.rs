@@ -7,6 +7,7 @@
 use std::sync::Arc;
 
 use libadwaita::{
+    glib::{JoinHandle, MainContext},
     gtk::{
         AccessibleRole::Grid,
         Align::{Fill, Start},
@@ -20,7 +21,7 @@ use libadwaita::{
 
 use crate::{
     library::models::Album,
-    state::{AppState, LibraryState, NavigationState::AlbumDetail},
+    state::{AppState, LibraryState, NavigationState::AlbumDetail, ZoomEvent::GridZoomChanged},
     ui::{
         components::{
             album_card::AlbumCard,
@@ -131,6 +132,8 @@ pub struct AlbumGridView {
     pub empty_state: Option<EmptyState>,
     /// Current sort criteria.
     pub current_sort: AlbumSortCriteria,
+    /// Zoom subscription handle for cleanup.
+    _zoom_subscription_handle: Option<JoinHandle<()>>,
 }
 
 /// Configuration for AlbumGridView display options.
@@ -210,12 +213,86 @@ impl AlbumGridView {
 
         let mut view = Self {
             widget: main_container.upcast_ref::<Widget>().clone(),
-            flow_box,
-            app_state,
+            flow_box: flow_box.clone(),
+            app_state: app_state.clone(),
             albums: Vec::new(),
-            config,
+            config: config.clone(),
             empty_state,
             current_sort: AlbumSortCriteria::Title, // Default sort by Title
+            _zoom_subscription_handle: if let Some(ref state) = app_state {
+                // Subscribe to zoom changes
+                let state_clone = state.clone();
+                let flow_box_clone = flow_box.clone();
+                let config_clone = config.clone();
+                let handle = MainContext::default().spawn_local(async move {
+                    let rx = state_clone.zoom_manager.subscribe();
+                    while let Ok(event) = rx.recv().await {
+                        if let GridZoomChanged(_) = event {
+                            // Rebuild all album items with new zoom level
+                            // Get current library state
+                            let library_state = state_clone.get_library_state();
+
+                            // Clear existing children
+                            while let Some(child) = flow_box_clone.first_child() {
+                                flow_box_clone.remove(&child);
+                            }
+
+                            // Add new album items with updated dimensions
+                            for album in &library_state.albums {
+                                // Look up artist name from app state
+                                let artist_name = {
+                                    library_state
+                                        .artists
+                                        .iter()
+                                        .find(|artist| artist.id == album.artist_id)
+                                        .map(|artist| artist.name.clone())
+                                        .unwrap_or_else(|| "Unknown Artist".to_string())
+                                };
+
+                                // Create album card with proper callbacks
+                                let format = create_format_display(album).unwrap_or_default();
+
+                                // Get cover size from zoom manager
+                                let cover_size =
+                                    state_clone.zoom_manager.get_grid_cover_dimensions().0;
+
+                                let album_card = AlbumCard::builder()
+                                    .album(album.clone())
+                                    .artist_name(artist_name)
+                                    .format(format)
+                                    .show_dr_badge(config_clone.show_dr_badges)
+                                    .compact(config_clone.compact)
+                                    .cover_size(cover_size as u32)
+                                    .on_play_clicked({
+                                        let _app_state_inner = state_clone.clone();
+                                        let album_clone = album.clone();
+                                        move || {
+                                            println!(
+                                                "Play clicked for album: {}",
+                                                album_clone.title
+                                            );
+                                        }
+                                    })
+                                    .on_card_clicked({
+                                        let app_state_inner = state_clone.clone();
+                                        let album_clone = album.clone();
+                                        move || {
+                                            app_state_inner.update_navigation(AlbumDetail(
+                                                album_clone.clone(),
+                                            ));
+                                        }
+                                    })
+                                    .build();
+
+                                flow_box_clone.insert(&album_card.widget, -1);
+                            }
+                        }
+                    }
+                });
+                Some(handle)
+            } else {
+                None
+            },
         };
 
         // Populate with initial albums
@@ -300,12 +377,21 @@ impl AlbumGridView {
         // Use the actual format from the album metadata, including bit depth and sample rate
         let format = create_format_display(album).unwrap_or_default();
 
+        // Get cover size from zoom manager if available
+        let cover_size = if let Some(app_state) = &self.app_state {
+            app_state.zoom_manager.get_grid_cover_dimensions().0
+        } else {
+            // Default cover size based on compact mode
+            if self.config.compact { 120 } else { 180 }
+        };
+
         let album_card = AlbumCard::builder()
             .album(album.clone())
             .artist_name(artist_name)
             .format(format)
             .show_dr_badge(self.config.show_dr_badges)
             .compact(self.config.compact)
+            .cover_size(cover_size as u32)
             .on_play_clicked({
                 let app_state = self.app_state.clone();
                 let album_clone = album.clone();

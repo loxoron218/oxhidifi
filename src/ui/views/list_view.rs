@@ -7,6 +7,7 @@
 use std::sync::Arc;
 
 use libadwaita::{
+    glib::{JoinHandle, MainContext},
     gtk::{
         AccessibleRole::List,
         Align::Start,
@@ -24,6 +25,7 @@ use crate::{
     state::{
         AppState,
         NavigationState::{AlbumDetail, ArtistDetail},
+        ZoomEvent::ListZoomChanged,
     },
     ui::components::cover_art::CoverArt,
 };
@@ -115,6 +117,8 @@ pub struct ListView {
     pub view_type: ListViewType,
     /// Configuration flags.
     pub config: ListViewConfig,
+    /// Zoom subscription handle for cleanup.
+    _zoom_subscription_handle: Option<JoinHandle<()>>,
 }
 
 /// Configuration for ListView display options.
@@ -151,10 +155,63 @@ impl ListView {
 
         let mut view = Self {
             widget: list_box.clone().upcast_ref::<Widget>().clone(),
-            list_box,
-            app_state,
-            view_type,
-            config,
+            list_box: list_box.clone(),
+            app_state: app_state.clone(),
+            view_type: view_type.clone(),
+            config: config.clone(),
+            _zoom_subscription_handle: if let Some(ref state) = app_state {
+                // Subscribe to zoom changes
+                let state_clone = state.clone();
+                let list_box_clone = list_box.clone();
+                let view_type_clone = view_type.clone();
+                let config_clone = config.clone();
+                let handle = MainContext::default().spawn_local(async move {
+                    let rx = state_clone.zoom_manager.subscribe();
+                    while let Ok(event) = rx.recv().await {
+                        if let ListZoomChanged(_) = event {
+                            // Rebuild all list items with new zoom level
+                            // Get current library state
+                            let library_state = state_clone.get_library_state();
+
+                            // Clear existing children
+                            while let Some(child) = list_box_clone.first_child() {
+                                list_box_clone.remove(&child);
+                            }
+
+                            // Rebuild list with updated dimensions
+                            match view_type_clone {
+                                ListViewType::Albums => {
+                                    for album in &library_state.albums {
+                                        let row = create_album_row_with_zoom(
+                                            album,
+                                            Some(&state_clone),
+                                            &config_clone,
+                                            &(state_clone.zoom_manager.get_list_cover_dimensions().0
+                                                as u32),
+                                        );
+                                        list_box_clone.append(&row);
+                                    }
+                                }
+                                ListViewType::Artists => {
+                                    for artist in &library_state.artists {
+                                        let row = create_artist_row_with_zoom(
+                                            artist,
+                                            Some(&state_clone),
+                                            &config_clone,
+                                            &(state_clone.zoom_manager.get_list_cover_dimensions().0
+                                                as u32),
+                                        );
+                                        list_box_clone.append(&row);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+                Some(handle)
+            } else {
+                None
+            },
         };
 
         // Initialize empty list
@@ -226,120 +283,19 @@ impl ListView {
     ///
     /// A new `Widget` representing the album row.
     fn create_album_row(&self, album: &Album) -> Widget {
-        // Create cover art
-        let cover_art = CoverArt::builder()
-            .artwork_path(album.artwork_path.as_deref().unwrap_or(&album.path))
-            .dr_value(album.dr_value.clone().unwrap_or_else(|| "N/A".to_string()))
-            .show_dr_badge(true)
-            .dimensions(48, 48)
-            .build();
-
-        // Create main info container
-        let info_container = Box::builder()
-            .orientation(Vertical)
-            .hexpand(true)
-            .spacing(2)
-            .build();
-
-        // Title label
-        let title_label = Label::builder()
-            .label(&album.title)
-            .halign(Start)
-            .xalign(0.0)
-            .ellipsize(End)
-            .tooltip_text(&album.title)
-            .build();
-
-        // Look up artist name from app state
-        let artist_name = if let Some(app_state) = &self.app_state {
-            let library_state = app_state.get_library_state();
-            library_state
-                .artists
-                .iter()
-                .find(|artist| artist.id == album.artist_id)
-                .map(|artist| artist.name.clone())
-                .unwrap_or_else(|| "Unknown Artist".to_string())
+        // Get cover size from zoom manager if available
+        let cover_size = if let Some(app_state) = &self.app_state {
+            app_state.zoom_manager.get_list_cover_dimensions().0
         } else {
-            "Unknown Artist".to_string()
+            48 // Default cover size
         };
 
-        // Artist/year info
-        let artist_year_text = if let Some(year) = album.year {
-            format!("{} ({})", artist_name, year)
-        } else {
-            artist_name
-        };
-
-        let artist_year_label = Label::builder()
-            .label(&artist_year_text)
-            .halign(Start)
-            .xalign(0.0)
-            .css_classes(["dim-label"])
-            .ellipsize(End)
-            .tooltip_text(&artist_year_text)
-            .build();
-
-        info_container.append(title_label.upcast_ref::<Widget>());
-        info_container.append(artist_year_label.upcast_ref::<Widget>());
-
-        // Create main row container
-        let row_container = Box::builder()
-            .orientation(Horizontal)
-            .spacing(12)
-            .margin_top(8)
-            .margin_bottom(8)
-            .margin_start(8)
-            .margin_end(8)
-            .build();
-
-        row_container.append(&cover_art.widget);
-        row_container.append(info_container.upcast_ref::<Widget>());
-
-        // Add additional metadata if not compact
-        if !self.config.compact {
-            // Genre info
-            if let Some(ref genre) = album.genre {
-                let genre_label = Label::builder()
-                    .label(genre)
-                    .halign(Start)
-                    .xalign(0.0)
-                    .css_classes(["dim-label"])
-                    .ellipsize(End)
-                    .tooltip_text(genre)
-                    .build();
-                row_container.append(genre_label.upcast_ref::<Widget>());
-            }
-
-            // Compilation indicator
-            if album.compilation {
-                let compilation_label = Label::builder()
-                    .label("Compilation")
-                    .halign(Start)
-                    .xalign(0.0)
-                    .css_classes(["dim-label"])
-                    .ellipsize(End)
-                    .tooltip_text("Compilation album")
-                    .build();
-                row_container.append(compilation_label.upcast_ref::<Widget>());
-            }
-        }
-
-        // Create ListBoxRow wrapper
-        let row = ListBoxRow::new();
-        row.set_child(Some(&row_container));
-        row.set_activatable(true);
-        row.set_selectable(true);
-
-        // Handle row activation for navigation
-        let album_clone = album.clone();
-        let app_state = self.app_state.clone();
-        row.connect_activate(move |_| {
-            if let Some(ref state) = app_state {
-                state.update_navigation(AlbumDetail(album_clone.clone()));
-            }
-        });
-
-        row.upcast_ref::<Widget>().clone()
+        create_album_row_with_zoom(
+            album,
+            self.app_state.as_ref(),
+            &self.config,
+            &(cover_size as u32),
+        )
     }
 
     /// Creates a single artist row widget for the list.
@@ -352,60 +308,19 @@ impl ListView {
     ///
     /// A new `Widget` representing the artist row.
     fn create_artist_row(&self, artist: &Artist) -> Widget {
-        // Create cover art (default image)
-        let cover_art = CoverArt::builder()
-            .artwork_path("")
-            .show_dr_badge(false)
-            .dimensions(48, 48)
-            .build();
+        // Get cover size from zoom manager if available
+        let cover_size = if let Some(app_state) = &self.app_state {
+            app_state.zoom_manager.get_list_cover_dimensions().0
+        } else {
+            48 // Default cover size
+        };
 
-        // Create main info container
-        let info_container = Box::builder()
-            .orientation(Vertical)
-            .hexpand(true)
-            .spacing(2)
-            .build();
-
-        // Name label
-        let name_label = Label::builder()
-            .label(&artist.name)
-            .halign(Start)
-            .xalign(0.0)
-            .ellipsize(End)
-            .tooltip_text(&artist.name)
-            .build();
-
-        info_container.append(name_label.upcast_ref::<Widget>());
-
-        // Create main row container
-        let row_container = Box::builder()
-            .orientation(Horizontal)
-            .spacing(12)
-            .margin_top(8)
-            .margin_bottom(8)
-            .margin_start(8)
-            .margin_end(8)
-            .build();
-
-        row_container.append(&cover_art.widget);
-        row_container.append(info_container.upcast_ref::<Widget>());
-
-        // Create ListBoxRow wrapper
-        let row = ListBoxRow::new();
-        row.set_child(Some(&row_container));
-        row.set_activatable(true);
-        row.set_selectable(true);
-
-        // Handle row activation for navigation
-        let artist_clone = artist.clone();
-        let app_state = self.app_state.clone();
-        row.connect_activate(move |_| {
-            if let Some(ref state) = app_state {
-                state.update_navigation(ArtistDetail(artist_clone.clone()));
-            }
-        });
-
-        row.upcast_ref::<Widget>().clone()
+        create_artist_row_with_zoom(
+            artist,
+            self.app_state.as_ref(),
+            &self.config,
+            &(cover_size as u32),
+        )
     }
 
     /// Updates the display configuration.
@@ -457,6 +372,192 @@ impl ListView {
             }
         }
     }
+}
+
+/// Helper function to create an album row with specific cover size.
+fn create_album_row_with_zoom(
+    album: &Album,
+    app_state: Option<&Arc<AppState>>,
+    config: &ListViewConfig,
+    cover_size: &u32,
+) -> Widget {
+    // Create cover art
+    let cover_art = CoverArt::builder()
+        .artwork_path(album.artwork_path.as_deref().unwrap_or(&album.path))
+        .dr_value(album.dr_value.clone().unwrap_or_else(|| "N/A".to_string()))
+        .show_dr_badge(true)
+        .dimensions(*cover_size as i32, *cover_size as i32)
+        .build();
+
+    // Create main info container
+    let info_container = Box::builder()
+        .orientation(Vertical)
+        .hexpand(true)
+        .spacing(2)
+        .build();
+
+    // Title label
+    let title_label = Label::builder()
+        .label(&album.title)
+        .halign(Start)
+        .xalign(0.0)
+        .ellipsize(End)
+        .tooltip_text(&album.title)
+        .build();
+
+    // Look up artist name from app state
+    let artist_name = if let Some(app_state_ref) = app_state {
+        let library_state = app_state_ref.get_library_state();
+        library_state
+            .artists
+            .iter()
+            .find(|artist| artist.id == album.artist_id)
+            .map(|artist| artist.name.clone())
+            .unwrap_or_else(|| "Unknown Artist".to_string())
+    } else {
+        "Unknown Artist".to_string()
+    };
+
+    // Artist/year info
+    let artist_year_text = if let Some(year) = album.year {
+        format!("{} ({})", artist_name, year)
+    } else {
+        artist_name
+    };
+
+    let artist_year_label = Label::builder()
+        .label(&artist_year_text)
+        .halign(Start)
+        .xalign(0.0)
+        .css_classes(["dim-label"])
+        .ellipsize(End)
+        .tooltip_text(&artist_year_text)
+        .build();
+
+    info_container.append(title_label.upcast_ref::<Widget>());
+    info_container.append(artist_year_label.upcast_ref::<Widget>());
+
+    // Create main row container
+    let row_container = Box::builder()
+        .orientation(Horizontal)
+        .spacing(12)
+        .margin_top(8)
+        .margin_bottom(8)
+        .margin_start(8)
+        .margin_end(8)
+        .build();
+
+    row_container.append(&cover_art.widget);
+    row_container.append(info_container.upcast_ref::<Widget>());
+
+    // Add additional metadata if not compact
+    if !config.compact {
+        // Genre info
+        if let Some(ref genre) = album.genre {
+            let genre_label = Label::builder()
+                .label(genre)
+                .halign(Start)
+                .xalign(0.0)
+                .css_classes(["dim-label"])
+                .ellipsize(End)
+                .tooltip_text(genre)
+                .build();
+            row_container.append(genre_label.upcast_ref::<Widget>());
+        }
+
+        // Compilation indicator
+        if album.compilation {
+            let compilation_label = Label::builder()
+                .label("Compilation")
+                .halign(Start)
+                .xalign(0.0)
+                .css_classes(["dim-label"])
+                .ellipsize(End)
+                .tooltip_text("Compilation album")
+                .build();
+            row_container.append(compilation_label.upcast_ref::<Widget>());
+        }
+    }
+
+    // Create ListBoxRow wrapper
+    let row = ListBoxRow::new();
+    row.set_child(Some(&row_container));
+    row.set_activatable(true);
+    row.set_selectable(true);
+
+    // Handle row activation for navigation
+    let album_clone = album.clone();
+    let app_state_clone = app_state.cloned();
+    row.connect_activate(move |_| {
+        if let Some(ref state) = app_state_clone {
+            state.update_navigation(AlbumDetail(album_clone.clone()));
+        }
+    });
+
+    row.upcast_ref::<Widget>().clone()
+}
+
+/// Helper function to create an artist row with specific cover size.
+fn create_artist_row_with_zoom(
+    artist: &Artist,
+    app_state: Option<&Arc<AppState>>,
+    _config: &ListViewConfig,
+    cover_size: &u32,
+) -> Widget {
+    // Create cover art (default image)
+    let cover_art = CoverArt::builder()
+        .artwork_path("")
+        .show_dr_badge(false)
+        .dimensions(*cover_size as i32, *cover_size as i32)
+        .build();
+
+    // Create main info container
+    let info_container = Box::builder()
+        .orientation(Vertical)
+        .hexpand(true)
+        .spacing(2)
+        .build();
+
+    // Name label
+    let name_label = Label::builder()
+        .label(&artist.name)
+        .halign(Start)
+        .xalign(0.0)
+        .ellipsize(End)
+        .tooltip_text(&artist.name)
+        .build();
+
+    info_container.append(name_label.upcast_ref::<Widget>());
+
+    // Create main row container
+    let row_container = Box::builder()
+        .orientation(Horizontal)
+        .spacing(12)
+        .margin_top(8)
+        .margin_bottom(8)
+        .margin_start(8)
+        .margin_end(8)
+        .build();
+
+    row_container.append(&cover_art.widget);
+    row_container.append(info_container.upcast_ref::<Widget>());
+
+    // Create ListBoxRow wrapper
+    let row = ListBoxRow::new();
+    row.set_child(Some(&row_container));
+    row.set_activatable(true);
+    row.set_selectable(true);
+
+    // Handle row activation for navigation
+    let artist_clone = artist.clone();
+    let app_state_clone = app_state.cloned();
+    row.connect_activate(move |_| {
+        if let Some(ref state) = app_state_clone {
+            state.update_navigation(ArtistDetail(artist_clone.clone()));
+        }
+    });
+
+    row.upcast_ref::<Widget>().clone()
 }
 
 impl Default for ListView {

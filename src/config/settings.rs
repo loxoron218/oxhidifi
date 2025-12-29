@@ -14,6 +14,7 @@ use {
     serde::{Deserialize, Serialize},
     serde_json::{Error as SerdeJsonError, from_str, to_string_pretty},
     thiserror::Error,
+    tracing::debug,
 };
 
 /// Error type for settings operations.
@@ -47,6 +48,10 @@ pub struct UserSettings {
     pub show_dr_values: bool,
     /// Default view mode (grid or list).
     pub default_view_mode: String,
+    /// Current zoom level for grid view (0-4, where 0 is smallest).
+    pub grid_zoom_level: u8,
+    /// Current zoom level for list view (0-2, where 0 is smallest).
+    pub list_zoom_level: u8,
     /// Theme preference (system/light/dark).
     pub theme_preference: String,
 }
@@ -61,20 +66,22 @@ impl Default for UserSettings {
             library_directories: vec![],
             show_dr_values: true,
             default_view_mode: "grid".to_string(),
+            grid_zoom_level: 2, // Default medium zoom level (0-4)
+            list_zoom_level: 1, // Default medium zoom level (0-2)
             theme_preference: "system".to_string(),
         }
     }
 }
 
 /// Handles loading, saving, and validation of user preferences.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct SettingsManager {
     settings: UserSettings,
     config_path: PathBuf,
 }
 
 impl SettingsManager {
-    /// Creates a new settings manager.
+    /// Creates a new settings manager with default config path.
     ///
     /// # Returns
     ///
@@ -84,17 +91,34 @@ impl SettingsManager {
     ///
     /// Returns `SettingsError` if settings cannot be loaded from disk.
     pub fn new() -> Result<Self, SettingsError> {
-        let config_path = get_config_path();
+        Self::with_config_path(get_config_path())
+    }
 
+    /// Creates a new settings manager with a custom config path (for testing).
+    ///
+    /// # Arguments
+    ///
+    /// * `config_path` - Custom path for the settings file
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing the `SettingsManager` or a `SettingsError`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `SettingsError` if settings cannot be loaded from disk.
+    pub fn with_config_path(config_path: PathBuf) -> Result<Self, SettingsError> {
         // Ensure config directory exists
         if let Some(parent) = config_path.parent() {
             create_dir_all(parent)?;
         }
 
         let settings = if config_path.exists() {
+            debug!("Loading settings from existing file: {:?}", config_path);
             let contents = read_to_string(&config_path)?;
             from_str(&contents)?
         } else {
+            debug!("Creating new default settings file: {:?}", config_path);
             UserSettings::default()
         };
 
@@ -111,6 +135,15 @@ impl SettingsManager {
     /// A reference to the current `UserSettings`.
     pub fn get_settings(&self) -> &UserSettings {
         &self.settings
+    }
+
+    /// Gets the configuration file path.
+    ///
+    /// # Returns
+    ///
+    /// A reference to the configuration file path.
+    pub fn get_config_path(&self) -> &PathBuf {
+        &self.config_path
     }
 
     /// Updates the settings and saves them to disk.
@@ -141,6 +174,7 @@ impl SettingsManager {
     ///
     /// Returns `SettingsError` if settings cannot be saved to disk.
     fn save_settings(&self) -> Result<(), SettingsError> {
+        debug!("Saving settings to file: {:?}", self.config_path);
         let contents = to_string_pretty(&self.settings)?;
         write(&self.config_path, contents)?;
         Ok(())
@@ -239,6 +273,8 @@ mod tests {
             library_directories: vec!["/music".to_string()],
             show_dr_values: false,
             default_view_mode: "list".to_string(),
+            grid_zoom_level: 2,
+            list_zoom_level: 1,
             theme_preference: "dark".to_string(),
         };
 

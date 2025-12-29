@@ -7,23 +7,24 @@
 mod ui_compliance_tests {
     use std::{sync::Arc, time::Instant};
 
-    use libadwaita::{
-        gtk::AccessibleRole::None as AccessibleNone,
-        prelude::{AccessibleExt, WidgetExt},
-    };
-
     use {
-        crate::{
-            audio::engine::AudioEngine,
-            library::{models::Album, scanner::LibraryScanner},
-            state::AppState,
-            ui::{
-                AlbumGridView, ArtistGridView, CoverArt, DRBadge, DetailView, HeaderBar, ListView,
-                PlayOverlay, PlayerBar,
-                views::{detail_view::DetailType, list_view::ListViewType::Albums},
-            },
+        libadwaita::{
+            gtk::AccessibleRole::None as AccessibleNone,
+            prelude::{AccessibleExt, WidgetExt},
         },
         parking_lot::RwLock,
+    };
+
+    use crate::{
+        audio::engine::AudioEngine,
+        config::SettingsManager,
+        library::{models::Album, scanner::LibraryScanner},
+        state::AppState,
+        ui::{
+            AlbumGridView, ArtistGridView, CoverArt, DRBadge, DetailView, HeaderBar, ListView,
+            PlayOverlay, PlayerBar,
+            views::{detail_view::DetailType, list_view::ListViewType::Albums},
+        },
     };
 
     #[test]
@@ -46,7 +47,12 @@ mod ui_compliance_tests {
     fn test_accessibility_compliance() {
         let engine = AudioEngine::new().unwrap();
         let engine_weak = Arc::downgrade(&Arc::new(engine));
-        let app_state = AppState::new(engine_weak, None::<Arc<RwLock<LibraryScanner>>>);
+        let settings_manager = SettingsManager::new().unwrap();
+        let app_state = AppState::new(
+            engine_weak,
+            None::<Arc<RwLock<LibraryScanner>>>,
+            Arc::new(RwLock::new(settings_manager)),
+        );
 
         // Test that all major components have proper ARIA attributes
         // accessible_description doesn't exist in GTK4, so we'll test other accessibility features
@@ -75,7 +81,12 @@ mod ui_compliance_tests {
     fn test_keyboard_navigation_compliance() {
         let engine = AudioEngine::new().unwrap();
         let engine_weak = Arc::downgrade(&Arc::new(engine));
-        let app_state = AppState::new(engine_weak, None::<Arc<RwLock<LibraryScanner>>>);
+        let settings_manager = SettingsManager::new().unwrap();
+        let app_state = AppState::new(
+            engine_weak,
+            None::<Arc<RwLock<LibraryScanner>>>,
+            Arc::new(RwLock::new(settings_manager)),
+        );
 
         // Test that all interactive elements support keyboard navigation
         let header_bar = HeaderBar::default_with_state(Arc::new(app_state.clone()));
@@ -100,7 +111,12 @@ mod ui_compliance_tests {
     fn test_performance_validation() {
         let engine = AudioEngine::new().unwrap();
         let engine_weak = Arc::downgrade(&Arc::new(engine));
-        let app_state = AppState::new(engine_weak, None::<Arc<RwLock<LibraryScanner>>>);
+        let settings_manager = SettingsManager::new().unwrap();
+        let app_state = AppState::new(
+            engine_weak,
+            None::<Arc<RwLock<LibraryScanner>>>,
+            Arc::new(RwLock::new(settings_manager)),
+        );
 
         // Test that views can handle large datasets efficiently
         let large_albums = (0..1000)
@@ -127,7 +143,12 @@ mod ui_compliance_tests {
     fn test_memory_leak_detection() {
         let engine = AudioEngine::new().unwrap();
         let engine_weak = Arc::downgrade(&Arc::new(engine.clone()));
-        let app_state = AppState::new(engine_weak, None::<Arc<RwLock<LibraryScanner>>>);
+        let settings_manager = SettingsManager::new().unwrap();
+        let app_state = AppState::new(
+            engine_weak,
+            None::<Arc<RwLock<LibraryScanner>>>,
+            Arc::new(RwLock::new(settings_manager)),
+        );
 
         // Test that components properly clean up resources
         // This is a basic test - real memory leak detection would require more sophisticated tools
@@ -156,7 +177,12 @@ mod ui_compliance_tests {
     fn test_responsive_layout_adaptation() {
         let engine = AudioEngine::new().unwrap();
         let engine_weak = Arc::downgrade(&Arc::new(engine));
-        let app_state = AppState::new(engine_weak, None::<Arc<RwLock<LibraryScanner>>>);
+        let settings_manager = SettingsManager::new().unwrap();
+        let app_state = AppState::new(
+            engine_weak,
+            None::<Arc<RwLock<LibraryScanner>>>,
+            Arc::new(RwLock::new(settings_manager)),
+        );
 
         // Test that views adapt to different screen sizes
         let _small_album_grid =

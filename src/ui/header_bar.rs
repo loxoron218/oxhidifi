@@ -10,7 +10,11 @@ use {
         HeaderBar as LibadwaitaHeaderBar, SplitButton,
         gio::{Icon, Menu, MenuItem, SimpleAction, SimpleActionGroup},
         glib::{JoinHandle, MainContext, Variant, VariantTy},
-        gtk::{Box, Button, Entry, Image, Label, Orientation::Horizontal, SearchBar, ToggleButton},
+        gtk::{
+            Box, Button, Entry, Image, Label,
+            Orientation::{Horizontal, Vertical},
+            Popover, SearchBar, Separator, ToggleButton,
+        },
         prelude::{ActionMapExt, BoxExt, ButtonExt, EditableExt, ToggleButtonExt, WidgetExt},
     },
     tracing::{debug, info},
@@ -53,6 +57,12 @@ pub struct HeaderBar {
     pub current_view_mode: ViewMode,
     /// Back button for detail views.
     pub back_button: Button,
+    /// Zoom out button for popover.
+    pub zoom_out_button: Button,
+    /// Zoom in button for popover.
+    pub zoom_in_button: Button,
+    /// Zoom popover container.
+    pub zoom_popover: Popover,
     /// Subscription handle for state changes (to ensure proper cleanup)
     _subscription_handle: Option<JoinHandle<()>>,
 }
@@ -164,6 +174,62 @@ impl HeaderBar {
             .menu_model(&menu)
             .build();
 
+        // Create zoom popover content
+        let zoom_box = Box::builder()
+            .orientation(Vertical) // Changed to Vertical as per requirements
+            .spacing(6)
+            .build();
+
+        // Create main horizontal container for label and zoom buttons
+        let zoom_controls_box = Box::builder()
+            .orientation(Horizontal)
+            .spacing(6)
+            .margin_start(6)
+            .margin_end(6)
+            .margin_top(6)
+            .margin_bottom(6)
+            .build();
+
+        // Add "Icon Size" label
+        let icon_size_label = Label::builder().label("Icon Size").build();
+        zoom_controls_box.append(&icon_size_label);
+
+        // Create zoom buttons container (horizontal pill)
+        let zoom_buttons_box = Box::builder()
+            .orientation(Horizontal)
+            .spacing(0)
+            .css_classes(["linked", "flat"])
+            .build();
+
+        // Create zoom buttons
+        let zoom_out_button = Button::builder()
+            .icon_name("zoom-out-symbolic")
+            .tooltip_text("Zoom Out")
+            .css_classes(["flat"])
+            .build();
+
+        let zoom_in_button = Button::builder()
+            .icon_name("zoom-in-symbolic")
+            .tooltip_text("Zoom In")
+            .css_classes(["flat"])
+            .build();
+
+        zoom_buttons_box.append(&zoom_out_button);
+        zoom_buttons_box.append(&zoom_in_button);
+
+        zoom_controls_box.append(&zoom_buttons_box);
+        zoom_box.append(&zoom_controls_box);
+
+        // Add separator after zoom controls
+        let separator = Separator::new(Horizontal);
+        zoom_box.append(&separator);
+
+        // Create popover
+        let zoom_popover = Popover::builder().child(&zoom_box).has_arrow(true).build();
+
+        // Set popover on the split button's arrow
+        view_split_button.set_popover(Some(&zoom_popover));
+
         // Connect main button click to toggle view mode
         if let Some(ref state) = app_state {
             let state_clone_main = state.clone();
@@ -240,6 +306,38 @@ impl HeaderBar {
             let action_group = SimpleActionGroup::new();
             action_group.add_action(&set_mode_action);
             view_split_button.insert_action_group("win", Some(&action_group));
+        }
+
+        // Connect zoom buttons to app state if available
+        if let Some(ref state) = app_state {
+            let state_clone_zoom_out = state.clone();
+            let state_clone_zoom_in = state.clone();
+
+            // Zoom out handler
+            zoom_out_button.connect_clicked(move |_| {
+                let current_view_mode = state_clone_zoom_out.get_library_state().view_mode;
+                match current_view_mode {
+                    Grid => {
+                        state_clone_zoom_out.decrease_grid_zoom_level();
+                    }
+                    List => {
+                        state_clone_zoom_out.decrease_list_zoom_level();
+                    }
+                }
+            });
+
+            // Zoom in handler
+            zoom_in_button.connect_clicked(move |_| {
+                let current_view_mode = state_clone_zoom_in.get_library_state().view_mode;
+                match current_view_mode {
+                    Grid => {
+                        state_clone_zoom_in.increase_grid_zoom_level();
+                    }
+                    List => {
+                        state_clone_zoom_in.increase_list_zoom_level();
+                    }
+                }
+            });
         }
 
         // Settings button
@@ -360,6 +458,9 @@ impl HeaderBar {
             artist_tab,
             tab_box,
             back_button,
+            zoom_out_button,
+            zoom_in_button,
+            zoom_popover,
             app_state: app_state.clone(),
             current_view_mode: current_view_mode.clone(),
             _subscription_handle: if let Some(ref state) = app_state {

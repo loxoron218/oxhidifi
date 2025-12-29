@@ -18,7 +18,9 @@ use crate::{
         PlaybackState::{self, Stopped},
         TrackInfo,
     },
+    config::SettingsManager,
     library::{Album, Artist, Track, scanner::LibraryScanner},
+    state::zoom_manager::ZoomManager,
 };
 
 /// Central state container with thread-safe access.
@@ -42,6 +44,10 @@ pub struct AppState {
     /// List of active subscribers for manual broadcast fan-out.
     /// We use async_channel to avoid Tokio runtime dependencies in the waker logic.
     subscribers: Arc<RwLock<Vec<Sender<AppStateEvent>>>>,
+    /// Zoom manager for handling view zoom levels.
+    pub zoom_manager: Arc<ZoomManager>,
+    /// Settings manager reference for persistence (wrapped in RwLock for mutability).
+    pub settings_manager: Arc<RwLock<SettingsManager>>,
 }
 
 /// Current library view state.
@@ -127,6 +133,7 @@ impl AppState {
     ///
     /// * `audio_engine` - Reference to the audio engine.
     /// * `library_scanner` - Optional library scanner reference.
+    /// * `settings_manager` - Settings manager reference for zoom persistence.
     ///
     /// # Returns
     ///
@@ -134,7 +141,10 @@ impl AppState {
     pub fn new(
         audio_engine: Weak<AudioEngine>,
         library_scanner: Option<Arc<RwLock<LibraryScanner>>>,
+        settings_manager: Arc<RwLock<SettingsManager>>,
     ) -> Self {
+        let zoom_manager = Arc::new(ZoomManager::new(settings_manager.clone()));
+
         Self {
             playback: Arc::new(RwLock::new(Stopped)),
             current_track: Arc::new(RwLock::new(None)),
@@ -143,6 +153,8 @@ impl AppState {
             audio_engine,
             library_scanner: Arc::new(RwLock::new(library_scanner)),
             subscribers: Arc::new(RwLock::new(Vec::new())),
+            zoom_manager,
+            settings_manager,
         }
     }
 
@@ -326,14 +338,53 @@ impl AppState {
     pub fn get_navigation_state(&self) -> NavigationState {
         self.navigation.read().clone()
     }
+
+    /// Increases the grid view zoom level and persists to settings.
+    pub fn increase_grid_zoom_level(&self) {
+        let current_level = self.zoom_manager.get_grid_zoom_level();
+        if current_level < 4 {
+            // Update zoom manager (which handles persistence)
+            self.zoom_manager.set_grid_zoom_level(current_level + 1);
+        }
+    }
+
+    /// Decreases the grid view zoom level and persists to settings.
+    pub fn decrease_grid_zoom_level(&self) {
+        let current_level = self.zoom_manager.get_grid_zoom_level();
+        if current_level > 0 {
+            // Update zoom manager (which handles persistence)
+            self.zoom_manager.set_grid_zoom_level(current_level - 1);
+        }
+    }
+
+    /// Increases the list view zoom level and persists to settings.
+    pub fn increase_list_zoom_level(&self) {
+        let current_level = self.zoom_manager.get_list_zoom_level();
+        if current_level < 2 {
+            // Update zoom manager (which handles persistence)
+            self.zoom_manager.set_list_zoom_level(current_level + 1);
+        }
+    }
+
+    /// Decreases the list view zoom level and persists to settings.
+    pub fn decrease_list_zoom_level(&self) {
+        let current_level = self.zoom_manager.get_list_zoom_level();
+        if current_level > 0 {
+            // Update zoom manager (which handles persistence)
+            self.zoom_manager.set_list_zoom_level(current_level - 1);
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
 
+    use parking_lot::RwLock;
+
     use crate::{
         audio::engine::{AudioEngine, PlaybackState::Stopped},
+        config::SettingsManager,
         state::{
             AppState, LibraryState,
             LibraryTab::{Albums, Artists},
@@ -345,7 +396,8 @@ mod tests {
     fn test_app_state_creation() {
         let engine = AudioEngine::new().unwrap();
         let engine_weak = Arc::downgrade(&Arc::new(engine));
-        let app_state = AppState::new(engine_weak, None);
+        let settings_manager = SettingsManager::new().unwrap();
+        let app_state = AppState::new(engine_weak, None, Arc::new(RwLock::new(settings_manager)));
 
         assert_eq!(app_state.get_playback_state(), Stopped);
         assert!(app_state.get_current_track().is_none());

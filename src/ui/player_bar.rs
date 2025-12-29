@@ -514,14 +514,17 @@ impl PlayerBar {
 mod tests {
     use std::sync::Arc;
 
-    use crate::{audio::engine::AudioEngine, state::AppState};
+    use parking_lot::RwLock;
+
+    use crate::{audio::engine::AudioEngine, config::SettingsManager, state::AppState};
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
     fn test_player_bar_creation() {
         let engine = AudioEngine::new().unwrap();
         let engine_weak = Arc::downgrade(&Arc::new(engine));
-        let _app_state = AppState::new(engine_weak, None);
+        let settings_manager = SettingsManager::new().unwrap();
+        let _app_state = AppState::new(engine_weak, None, Arc::new(RwLock::new(settings_manager)));
 
         // This test would require mocking AppState and AudioEngine properly
         // For now, we'll just verify the constructor signature compiles

@@ -7,13 +7,17 @@
 mod view_integration_tests {
     use std::sync::Arc;
 
-    use libadwaita::{
-        gtk::AccessibleRole::{Grid, List},
-        prelude::{AccessibleExt, WidgetExt},
+    use {
+        libadwaita::{
+            gtk::AccessibleRole::{Grid, List},
+            prelude::{AccessibleExt, WidgetExt},
+        },
+        parking_lot::RwLock,
     };
 
     use crate::{
         AppState, AudioEngine,
+        config::SettingsManager,
         library::models::{Album, Artist},
         ui::views::{
             AlbumGridView, ArtistGridView, DetailView, ListView,
@@ -28,7 +32,8 @@ mod view_integration_tests {
     fn test_view_transitions_and_navigation() {
         let engine = AudioEngine::new().unwrap();
         let engine_weak = Arc::downgrade(&Arc::new(engine));
-        let app_state = AppState::new(engine_weak, None);
+        let settings_manager = SettingsManager::new().unwrap();
+        let app_state = AppState::new(engine_weak, None, Arc::new(RwLock::new(settings_manager)));
 
         // Test album grid view creation
         let album_grid = AlbumGridView::builder()
@@ -87,7 +92,8 @@ mod view_integration_tests {
     fn test_real_time_filtering_and_sorting() {
         let engine = AudioEngine::new().unwrap();
         let engine_weak = Arc::downgrade(&Arc::new(engine));
-        let app_state = AppState::new(engine_weak, None);
+        let settings_manager = SettingsManager::new().unwrap();
+        let app_state = AppState::new(engine_weak, None, Arc::new(RwLock::new(settings_manager)));
 
         let albums = vec![
             Album {
@@ -133,7 +139,8 @@ mod view_integration_tests {
     fn test_keyboard_navigation_support() {
         let engine = AudioEngine::new().unwrap();
         let engine_weak = Arc::downgrade(&Arc::new(engine));
-        let app_state = AppState::new(engine_weak, None);
+        let settings_manager = SettingsManager::new().unwrap();
+        let app_state = AppState::new(engine_weak, None, Arc::new(RwLock::new(settings_manager)));
 
         // Test that views support keyboard navigation
         let album_grid =
@@ -152,7 +159,8 @@ mod view_integration_tests {
     fn test_screen_reader_compatibility() {
         let engine = AudioEngine::new().unwrap();
         let engine_weak = Arc::downgrade(&Arc::new(engine));
-        let app_state = AppState::new(engine_weak, None);
+        let settings_manager = SettingsManager::new().unwrap();
+        let app_state = AppState::new(engine_weak, None, Arc::new(RwLock::new(settings_manager)));
 
         // Test accessibility attributes
         let album_grid =

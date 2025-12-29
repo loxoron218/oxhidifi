@@ -4,5 +4,9 @@
 //! with thread-safe access and reactive update mechanisms.
 
 pub mod app_state;
+pub mod zoom_manager;
 
-pub use app_state::{AppState, AppStateEvent, LibraryState, LibraryTab, NavigationState, ViewMode};
+pub use {
+    app_state::{AppState, AppStateEvent, LibraryState, LibraryTab, NavigationState, ViewMode},
+    zoom_manager::{ZoomEvent, ZoomManager},
+};

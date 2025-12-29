@@ -34,6 +34,7 @@ pub struct AlbumCardBuilder {
     format: Option<String>,
     show_dr_badge: bool,
     compact: bool,
+    cover_size: Option<u32>,
     on_play_clicked: Option<Rc<dyn Fn()>>,
     on_card_clicked: Option<Rc<dyn Fn()>>,
 }
@@ -109,6 +110,20 @@ impl AlbumCardBuilder {
         self
     }
 
+    /// Sets the cover size for the album card.
+    ///
+    /// # Arguments
+    ///
+    /// * `cover_size` - The size of the cover art in pixels (width and height)
+    ///
+    /// # Returns
+    ///
+    /// The builder instance for method chaining.
+    pub fn cover_size(mut self, cover_size: u32) -> Self {
+        self.cover_size = Some(cover_size);
+        self
+    }
+
     /// Sets the callback for when the play button is clicked.
     ///
     /// # Arguments
@@ -149,17 +164,39 @@ impl AlbumCardBuilder {
     ///
     /// A new `AlbumCard` instance.
     pub fn build(self) -> AlbumCard {
-        AlbumCard::new(
-            self.album.expect("Album must be set"),
-            self.artist_name
+        AlbumCard::new(AlbumCardConfig {
+            album: self.album.expect("Album must be set"),
+            artist_name: self
+                .artist_name
                 .unwrap_or_else(|| "Unknown Artist".to_string()),
-            self.format,
-            self.show_dr_badge,
-            self.compact,
-            self.on_play_clicked,
-            self.on_card_clicked,
-        )
+            format: self.format,
+            show_dr_badge: self.show_dr_badge,
+            compact: self.compact,
+            cover_size: self.cover_size,
+            on_play_clicked: self.on_play_clicked,
+            on_card_clicked: self.on_card_clicked,
+        })
     }
+}
+
+/// Configuration for AlbumCard creation.
+pub struct AlbumCardConfig {
+    /// The album data to display
+    pub album: Album,
+    /// The artist name to display
+    pub artist_name: String,
+    /// Optional audio format information
+    pub format: Option<String>,
+    /// Whether to show the DR badge overlay
+    pub show_dr_badge: bool,
+    /// Whether to use compact layout
+    pub compact: bool,
+    /// Optional cover size override (if None, uses compact-based default)
+    pub cover_size: Option<u32>,
+    /// Optional callback for play button clicks
+    pub on_play_clicked: Option<Rc<dyn Fn()>>,
+    /// Optional callback for card clicks (outside play button)
+    pub on_card_clicked: Option<Rc<dyn Fn()>>,
 }
 
 /// Album card component with proper widget hierarchy and styling.
@@ -194,29 +231,26 @@ impl AlbumCard {
     ///
     /// # Arguments
     ///
-    /// * `album` - The album data to display
-    /// * `artist_name` - The artist name to display
-    /// * `format` - Optional audio format information
-    /// * `show_dr_badge` - Whether to show the DR badge overlay
-    /// * `compact` - Whether to use compact layout
-    /// * `on_play_clicked` - Optional callback for play button clicks
-    /// * `on_card_clicked` - Optional callback for card clicks (outside play button)
+    /// * `config` - Configuration for the album card
     ///
     /// # Returns
     ///
     /// A new `AlbumCard` instance.
-    pub fn new(
-        album: Album,
-        artist_name: String,
-        format: Option<String>,
-        show_dr_badge: bool,
-        compact: bool,
-        on_play_clicked: Option<Rc<dyn Fn()>>,
-        on_card_clicked: Option<Rc<dyn Fn()>>,
-    ) -> Self {
-        // Determine base cover dimensions based on compact mode
+    pub fn new(config: AlbumCardConfig) -> Self {
+        let AlbumCardConfig {
+            album,
+            artist_name,
+            format,
+            show_dr_badge,
+            compact,
+            cover_size,
+            on_play_clicked,
+            on_card_clicked,
+        } = config;
+
+        // Determine base cover dimensions based on cover_size parameter or compact mode
         // These are starting points that will be adjusted by the parent container
-        let base_cover_size = if compact { 120 } else { 180 };
+        let base_cover_size = cover_size.unwrap_or(if compact { 120 } else { 180 });
         let (cover_width, cover_height) = (base_cover_size, base_cover_size);
 
         // Create cover art with DR badge if enabled
@@ -224,7 +258,7 @@ impl AlbumCard {
             .artwork_path(album.artwork_path.as_deref().unwrap_or(&album.path))
             .dr_value(album.dr_value.clone().unwrap_or_else(|| "N/A".to_string()))
             .show_dr_badge(show_dr_badge)
-            .dimensions(cover_width, cover_height)
+            .dimensions(cover_width as i32, cover_height as i32)
             .build();
 
         // Create play overlay
@@ -247,7 +281,7 @@ impl AlbumCard {
             .xalign(0.0)
             .ellipsize(EllipsizeEnd)
             .lines(2)
-            .max_width_chars(((cover_width - 16) / 10).max(8)) // Dynamic calculation as per spec
+            .max_width_chars((((cover_width - 16) / 10).max(8)) as i32) // Dynamic calculation as per spec
             .tooltip_text(&album.title)
             .css_classes(["album-title-label"])
             .build();
@@ -270,7 +304,7 @@ impl AlbumCard {
             .xalign(0.0)
             .ellipsize(EllipsizeEnd)
             .lines(1)
-            .max_width_chars(((cover_width - 16) / 10).max(8)) // Dynamic calculation
+            .max_width_chars((((cover_width - 16) / 10).max(8)) as i32) // Dynamic calculation
             .tooltip_text(&artist_name)
             .css_classes(["album-artist-label"])
             .build();
@@ -285,7 +319,7 @@ impl AlbumCard {
             .halign(Start)
             .xalign(0.0)
             .lines(1)
-            .max_width_chars((((cover_width - 16) / 2) / 10).max(8)) // Dynamic calculation
+            .max_width_chars(((((cover_width - 16) / 2) / 10).max(8)) as i32) // Dynamic calculation
             .css_classes(["album-format-label"]);
 
         if !format_info.is_empty() {
@@ -310,7 +344,7 @@ impl AlbumCard {
         let metadata_hbox = Box::builder()
             .orientation(Horizontal)
             .halign(Start)
-            .width_request(cover_width) // Force full width to align year to right margin
+            .width_request(cover_width as i32) // Force full width to align year to right margin
             .spacing(8)
             .build();
 
@@ -483,21 +517,25 @@ impl Default for AlbumCard {
             updated_at: None,
         };
 
-        Self::new(
-            dummy_album,
-            "Default Artist".to_string(),
-            None,
-            true,
-            false,
-            None,
-            None,
-        )
+        Self::new(AlbumCardConfig {
+            album: dummy_album,
+            artist_name: "Default Artist".to_string(),
+            format: None,
+            show_dr_badge: true,
+            compact: false,
+            cover_size: None,
+            on_play_clicked: None,
+            on_card_clicked: None,
+        })
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{library::models::Album, ui::components::album_card::AlbumCard};
+    use crate::{
+        library::models::Album,
+        ui::components::album_card::{AlbumCard, AlbumCardConfig},
+    };
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
@@ -577,15 +615,16 @@ mod tests {
             ..Album::default()
         };
 
-        let card_882 = AlbumCard::new(
-            album_882,
-            "Test Artist".to_string(),
-            None,
-            true,
-            false,
-            None,
-            None,
-        );
+        let card_882 = AlbumCard::new(AlbumCardConfig {
+            album: album_882,
+            artist_name: "Test Artist".to_string(),
+            format: None,
+            show_dr_badge: true,
+            compact: false,
+            cover_size: None,
+            on_play_clicked: None,
+            on_card_clicked: None,
+        });
 
         let format_text_882 = card_882.format_label.text().to_string();
         assert_eq!(
@@ -600,15 +639,16 @@ mod tests {
             ..Album::default()
         };
 
-        let card_96 = AlbumCard::new(
-            album_96,
-            "Test Artist".to_string(),
-            None,
-            true,
-            false,
-            None,
-            None,
-        );
+        let card_96 = AlbumCard::new(AlbumCardConfig {
+            album: album_96,
+            artist_name: "Test Artist".to_string(),
+            format: None,
+            show_dr_badge: true,
+            compact: false,
+            cover_size: None,
+            on_play_clicked: None,
+            on_card_clicked: None,
+        });
 
         let format_text_96 = card_96.format_label.text().to_string();
         assert_eq!(
