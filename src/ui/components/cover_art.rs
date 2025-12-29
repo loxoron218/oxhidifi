@@ -105,6 +105,7 @@ impl CoverArtBuilder {
 ///
 /// The `CoverArt` component displays artwork images with proper aspect ratio
 /// handling and optional DR quality badge overlay in the bottom-right corner.
+#[derive(Clone)]
 pub struct CoverArt {
     /// The underlying GTK widget container.
     pub widget: Widget,
@@ -112,6 +113,8 @@ pub struct CoverArt {
     pub picture: Picture,
     /// The DR badge overlay (if enabled).
     pub dr_badge: Option<DRBadge>,
+    /// The current DR value for this cover art.
+    pub dr_value: String,
 }
 
 impl CoverArt {
@@ -163,7 +166,7 @@ impl CoverArt {
         if show_dr_badge {
             // Create DR badge
             let badge = DRBadgeBuilder::default()
-                .dr_value(dr_value.unwrap_or_else(|| "N/A".to_string()))
+                .dr_value(dr_value.clone().unwrap_or_else(|| "N/A".to_string()))
                 .show_label(false) // Don't show "DR" prefix in grid view
                 .build();
             dr_badge = Some(badge);
@@ -203,10 +206,13 @@ impl CoverArt {
             overlay.add_overlay(&badge.widget);
         }
 
+        let stored_dr_value = dr_value.unwrap_or_else(|| "N/A".to_string());
+
         Self {
             widget: overlay.upcast_ref::<Widget>().clone(),
             picture,
             dr_badge,
+            dr_value: stored_dr_value,
         }
     }
 
@@ -248,6 +254,9 @@ impl CoverArt {
     ///
     /// * `dr_value` - New DR value string (e.g., "DR12")
     pub fn update_dr_value(&mut self, dr_value: Option<String>) {
+        let new_dr_value = dr_value.clone().unwrap_or_else(|| "N/A".to_string());
+        self.dr_value = new_dr_value;
+
         if let Some(ref mut badge) = self.dr_badge {
             badge.update_dr_value(dr_value);
         }
@@ -258,10 +267,32 @@ impl CoverArt {
     /// # Arguments
     ///
     /// * `show` - Whether to show the DR badge
-    pub fn set_show_dr_badge(&mut self, _show: bool) {
-        // Note: Dynamic showing/hiding of overlays is complex in GTK4
-        // For now, we'll assume the badge visibility is set at creation time
-        // In a real implementation, we'd need to recreate the overlay or use a different approach
+    pub fn set_show_dr_badge(&mut self, show: bool) {
+        let overlay = self
+            .widget
+            .downcast_ref::<Overlay>()
+            .expect("CoverArt widget should be an Overlay");
+
+        if show {
+            if self.dr_badge.is_none() {
+                // Create and add DR badge if it doesn't exist
+                let badge = DRBadgeBuilder::default()
+                    .dr_value(self.dr_value.clone())
+                    .show_label(false) // Don't show "DR" prefix in grid view
+                    .build();
+                overlay.add_overlay(&badge.widget);
+                self.dr_badge = Some(badge);
+            } else {
+                // Ensure existing badge is visible
+                if let Some(ref badge) = self.dr_badge {
+                    badge.widget.set_visible(true);
+                }
+            }
+        } else if let Some(ref badge) = self.dr_badge {
+            // Remove badge from overlay and clear reference
+            overlay.remove_overlay(&badge.widget);
+            self.dr_badge = None;
+        }
     }
 }
 

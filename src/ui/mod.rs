@@ -10,6 +10,7 @@ pub mod application;
 pub mod components;
 pub mod header_bar;
 pub mod player_bar;
+pub mod preferences;
 pub mod utils;
 pub mod views;
 
@@ -18,5 +19,8 @@ pub use {
     components::{CoverArt, DRBadge, HiFiMetadata, PlayOverlay},
     header_bar::HeaderBar,
     player_bar::PlayerBar,
+    preferences::{
+        AudioPreferencesPage, GeneralPreferencesPage, LibraryPreferencesPage, PreferencesDialog,
+    },
     views::{AlbumGridView, ArtistGridView, DetailView, ListView},
 };

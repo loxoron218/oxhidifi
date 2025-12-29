@@ -139,6 +139,7 @@ impl DRBadgeBuilder {
 ///
 /// The `DRBadge` component displays Dynamic Range values with color coding
 /// based on quality levels, providing visual feedback about audio quality.
+#[derive(Clone)]
 pub struct DRBadge {
     /// The underlying GTK widget.
     pub widget: Widget,

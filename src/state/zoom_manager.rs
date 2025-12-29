@@ -117,7 +117,7 @@ impl ZoomManager {
             *self.grid_zoom_level.write() = clamped_level;
 
             // Persist to settings
-            let mut settings_manager_write = self.settings_manager.write();
+            let settings_manager_write = self.settings_manager.write();
             let mut current_settings = settings_manager_write.get_settings().clone();
             current_settings.grid_zoom_level = clamped_level;
             let config_path = settings_manager_write.get_config_path();
@@ -146,7 +146,7 @@ impl ZoomManager {
             *self.list_zoom_level.write() = clamped_level;
 
             // Persist to settings
-            let mut settings_manager_write = self.settings_manager.write();
+            let settings_manager_write = self.settings_manager.write();
             let mut current_settings = settings_manager_write.get_settings().clone();
             current_settings.list_zoom_level = clamped_level;
             let config_path = settings_manager_write.get_config_path();
@@ -332,8 +332,7 @@ mod tests {
         let initial_grid_level = 3;
         let initial_list_level = 0;
 
-        let mut settings_manager =
-            SettingsManager::with_config_path(settings_path.clone()).unwrap();
+        let settings_manager = SettingsManager::with_config_path(settings_path.clone()).unwrap();
         let mut current_settings = settings_manager.get_settings().clone();
         current_settings.grid_zoom_level = initial_grid_level;
         current_settings.list_zoom_level = initial_list_level;

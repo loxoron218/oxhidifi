@@ -4,7 +4,7 @@
 //! in a responsive grid layout with cover art, DR badges, and metadata,
 //! supporting virtual scrolling for large datasets and real-time filtering.
 
-use std::sync::Arc;
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use libadwaita::{
     glib::{JoinHandle, MainContext},
@@ -21,7 +21,10 @@ use libadwaita::{
 
 use crate::{
     library::models::Album,
-    state::{AppState, LibraryState, NavigationState::AlbumDetail, ZoomEvent::GridZoomChanged},
+    state::{
+        AppState, LibraryState, NavigationState::AlbumDetail, ZoomEvent::GridZoomChanged,
+        app_state::AppStateEvent::SettingsChanged,
+    },
     ui::{
         components::{
             album_card::AlbumCard,
@@ -132,8 +135,12 @@ pub struct AlbumGridView {
     pub empty_state: Option<EmptyState>,
     /// Current sort criteria.
     pub current_sort: AlbumSortCriteria,
+    /// References to album card instances for dynamic updates.
+    pub album_cards: Rc<RefCell<Vec<AlbumCard>>>,
     /// Zoom subscription handle for cleanup.
     _zoom_subscription_handle: Option<JoinHandle<()>>,
+    /// Settings subscription handle for cleanup.
+    _settings_subscription_handle: Option<JoinHandle<()>>,
 }
 
 /// Configuration for AlbumGridView display options.
@@ -211,6 +218,8 @@ impl AlbumGridView {
             main_container.append(&empty_state.widget);
         }
 
+        let album_cards = Rc::new(RefCell::new(Vec::new()));
+
         let mut view = Self {
             widget: main_container.upcast_ref::<Widget>().clone(),
             flow_box: flow_box.clone(),
@@ -219,11 +228,13 @@ impl AlbumGridView {
             config: config.clone(),
             empty_state,
             current_sort: AlbumSortCriteria::Title, // Default sort by Title
+            album_cards: album_cards.clone(),
             _zoom_subscription_handle: if let Some(ref state) = app_state {
                 // Subscribe to zoom changes
                 let state_clone = state.clone();
                 let flow_box_clone = flow_box.clone();
                 let config_clone = config.clone();
+                let album_cards_clone = album_cards.clone();
                 let handle = MainContext::default().spawn_local(async move {
                     let rx = state_clone.zoom_manager.subscribe();
                     while let Ok(event) = rx.recv().await {
@@ -236,6 +247,7 @@ impl AlbumGridView {
                             while let Some(child) = flow_box_clone.first_child() {
                                 flow_box_clone.remove(&child);
                             }
+                            album_cards_clone.borrow_mut().clear();
 
                             // Add new album items with updated dimensions
                             for album in &library_state.albums {
@@ -260,7 +272,13 @@ impl AlbumGridView {
                                     .album(album.clone())
                                     .artist_name(artist_name)
                                     .format(format)
-                                    .show_dr_badge(config_clone.show_dr_badges)
+                                    .show_dr_badge(
+                                        state_clone
+                                            .get_settings_manager()
+                                            .read()
+                                            .get_settings()
+                                            .show_dr_values,
+                                    )
                                     .compact(config_clone.compact)
                                     .cover_size(cover_size as u32)
                                     .on_play_clicked({
@@ -284,7 +302,28 @@ impl AlbumGridView {
                                     })
                                     .build();
 
+                                album_cards_clone.borrow_mut().push(album_card.clone());
                                 flow_box_clone.insert(&album_card.widget, -1);
+                            }
+                        }
+                    }
+                });
+                Some(handle)
+            } else {
+                None
+            },
+            _settings_subscription_handle: if let Some(ref state) = app_state {
+                // Subscribe to settings changes
+                let state_clone = state.clone();
+                let album_cards_clone = album_cards.clone();
+                let handle = MainContext::default().spawn_local(async move {
+                    let rx = state_clone.subscribe();
+                    while let Ok(event) = rx.recv().await {
+                        if let SettingsChanged { show_dr_values } = event {
+                            // Update all album cards with new DR badge visibility
+                            let mut cards = album_cards_clone.borrow_mut();
+                            for card in cards.iter_mut() {
+                                card.update_dr_badge_visibility(show_dr_values);
                             }
                         }
                     }
@@ -322,6 +361,7 @@ impl AlbumGridView {
         }
 
         self.albums = albums;
+        self.album_cards.borrow_mut().clear();
 
         // Apply current sort
         self.apply_sort();
@@ -345,21 +385,22 @@ impl AlbumGridView {
 
         // Add new album items using the new AlbumCard component
         for album in &self.albums {
-            let album_item = self.create_album_item(album);
-            self.flow_box.insert(&album_item, -1);
+            let album_card = self.create_album_card(album);
+            self.flow_box.insert(&album_card.widget, -1);
+            self.album_cards.borrow_mut().push(album_card);
         }
     }
 
-    /// Creates a single album item widget for the grid using the new AlbumCard.
+    /// Creates a single album card for the grid.
     ///
     /// # Arguments
     ///
-    /// * `album` - The album to create an item for
+    /// * `album` - The album to create a card for
     ///
     /// # Returns
     ///
-    /// A new `Widget` representing the album item.
-    fn create_album_item(&self, album: &Album) -> Widget {
+    /// A new `AlbumCard` instance.
+    fn create_album_card(&self, album: &Album) -> AlbumCard {
         // Look up artist name from app state
         let artist_name = if let Some(app_state) = &self.app_state {
             let library_state = app_state.get_library_state();
@@ -385,11 +426,19 @@ impl AlbumGridView {
             if self.config.compact { 120 } else { 180 }
         };
 
-        let album_card = AlbumCard::builder()
+        AlbumCard::builder()
             .album(album.clone())
             .artist_name(artist_name)
             .format(format)
-            .show_dr_badge(self.config.show_dr_badges)
+            .show_dr_badge(if let Some(app_state) = &self.app_state {
+                app_state
+                    .get_settings_manager()
+                    .read()
+                    .get_settings()
+                    .show_dr_values
+            } else {
+                self.config.show_dr_badges
+            })
             .compact(self.config.compact)
             .cover_size(cover_size as u32)
             .on_play_clicked({
@@ -417,9 +466,7 @@ impl AlbumGridView {
                     }
                 }
             })
-            .build();
-
-        album_card.widget
+            .build()
     }
 
     /// Updates the display configuration.
@@ -432,6 +479,20 @@ impl AlbumGridView {
 
         // Rebuild all album items with new configuration
         self.set_albums(self.albums.clone());
+    }
+
+    /// Updates the DR badge visibility setting for this view.
+    ///
+    /// # Arguments
+    ///
+    /// * `show_dr_badges` - Whether to show DR badges
+    pub fn set_show_dr_badges(&mut self, show_dr_badges: bool) {
+        self.config.show_dr_badges = show_dr_badges;
+
+        // Update all existing album cards directly
+        for album_card in self.album_cards.borrow_mut().iter_mut() {
+            album_card.update_dr_badge_visibility(show_dr_badges);
+        }
     }
 
     /// Filters albums based on a search query.

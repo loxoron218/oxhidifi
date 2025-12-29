@@ -11,6 +11,7 @@ use std::{
 };
 
 use {
+    parking_lot::{RwLock, RwLockReadGuard},
     serde::{Deserialize, Serialize},
     serde_json::{Error as SerdeJsonError, from_str, to_string_pretty},
     thiserror::Error,
@@ -46,8 +47,6 @@ pub struct UserSettings {
     pub library_directories: Vec<String>,
     /// Whether to show DR values on album covers.
     pub show_dr_values: bool,
-    /// Default view mode (grid or list).
-    pub default_view_mode: String,
     /// Current zoom level for grid view (0-4, where 0 is smallest).
     pub grid_zoom_level: u8,
     /// Current zoom level for list view (0-2, where 0 is smallest).
@@ -65,7 +64,6 @@ impl Default for UserSettings {
             buffer_duration_ms: 50,
             library_directories: vec![],
             show_dr_values: true,
-            default_view_mode: "grid".to_string(),
             grid_zoom_level: 2, // Default medium zoom level (0-4)
             list_zoom_level: 1, // Default medium zoom level (0-2)
             theme_preference: "system".to_string(),
@@ -74,10 +72,19 @@ impl Default for UserSettings {
 }
 
 /// Handles loading, saving, and validation of user preferences.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct SettingsManager {
-    settings: UserSettings,
+    settings: RwLock<UserSettings>,
     config_path: PathBuf,
+}
+
+impl Clone for SettingsManager {
+    fn clone(&self) -> Self {
+        Self {
+            settings: RwLock::new(self.settings.read().clone()),
+            config_path: self.config_path.clone(),
+        }
+    }
 }
 
 impl SettingsManager {
@@ -123,7 +130,7 @@ impl SettingsManager {
         };
 
         Ok(SettingsManager {
-            settings,
+            settings: RwLock::new(settings),
             config_path,
         })
     }
@@ -133,8 +140,8 @@ impl SettingsManager {
     /// # Returns
     ///
     /// A reference to the current `UserSettings`.
-    pub fn get_settings(&self) -> &UserSettings {
-        &self.settings
+    pub fn get_settings(&self) -> RwLockReadGuard<'_, UserSettings> {
+        self.settings.read()
     }
 
     /// Gets the configuration file path.
@@ -159,8 +166,10 @@ impl SettingsManager {
     /// # Errors
     ///
     /// Returns `SettingsError` if settings cannot be saved to disk.
-    pub fn update_settings(&mut self, new_settings: UserSettings) -> Result<(), SettingsError> {
-        self.settings = new_settings;
+    pub fn update_settings(&self, new_settings: UserSettings) -> Result<(), SettingsError> {
+        let mut settings_write = self.settings.write();
+        *settings_write = new_settings;
+        drop(settings_write);
         self.save_settings()
     }
 
@@ -175,7 +184,7 @@ impl SettingsManager {
     /// Returns `SettingsError` if settings cannot be saved to disk.
     fn save_settings(&self) -> Result<(), SettingsError> {
         debug!("Saving settings to file: {:?}", self.config_path);
-        let contents = to_string_pretty(&self.settings)?;
+        let contents = to_string_pretty(&*self.settings.read())?;
         write(&self.config_path, contents)?;
         Ok(())
     }
@@ -259,7 +268,6 @@ mod tests {
         assert_eq!(settings.exclusive_mode, true);
         assert_eq!(settings.buffer_duration_ms, 50);
         assert_eq!(settings.show_dr_values, true);
-        assert_eq!(settings.default_view_mode, "grid");
         assert_eq!(settings.theme_preference, "system");
     }
 
@@ -272,7 +280,6 @@ mod tests {
             buffer_duration_ms: 100,
             library_directories: vec!["/music".to_string()],
             show_dr_values: false,
-            default_view_mode: "list".to_string(),
             grid_zoom_level: 2,
             list_zoom_level: 1,
             theme_preference: "dark".to_string(),

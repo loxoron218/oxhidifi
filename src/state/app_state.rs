@@ -124,6 +124,8 @@ pub enum AppStateEvent {
     },
     /// Search filter changed.
     SearchFilterChanged(Option<String>),
+    /// User settings changed that affect UI display.
+    SettingsChanged { show_dr_values: bool },
 }
 
 impl AppState {
@@ -373,6 +375,41 @@ impl AppState {
             // Update zoom manager (which handles persistence)
             self.zoom_manager.set_list_zoom_level(current_level - 1);
         }
+    }
+
+    /// Updates the show_dr_values setting and notifies subscribers.
+    ///
+    /// # Arguments
+    ///
+    /// * `show_dr_values` - New value for the show_dr_values setting
+    pub fn update_show_dr_values_setting(&self, show_dr_values: bool) {
+        debug!(
+            "AppState: Updating show_dr_values setting to {}",
+            show_dr_values
+        );
+
+        // Update settings in settings manager
+        let settings_write = self.settings_manager.write();
+        let mut current_settings = settings_write.get_settings().clone();
+        current_settings.show_dr_values = show_dr_values;
+
+        if let Err(e) = settings_write.update_settings(current_settings) {
+            debug!("Failed to update show_dr_values setting: {}", e);
+            return;
+        }
+        drop(settings_write);
+
+        // Broadcast settings change event
+        self.broadcast_event(AppStateEvent::SettingsChanged { show_dr_values });
+    }
+
+    /// Gets the settings manager reference.
+    ///
+    /// # Returns
+    ///
+    /// A reference to the settings manager.
+    pub fn get_settings_manager(&self) -> Arc<RwLock<SettingsManager>> {
+        self.settings_manager.clone()
     }
 }
 

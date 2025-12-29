@@ -9,6 +9,7 @@ mod ui_compliance_tests {
 
     use {
         libadwaita::{
+            Application,
             gtk::AccessibleRole::None as AccessibleNone,
             prelude::{AccessibleExt, WidgetExt},
         },
@@ -89,7 +90,15 @@ mod ui_compliance_tests {
         );
 
         // Test that all interactive elements support keyboard navigation
-        let header_bar = HeaderBar::default_with_state(Arc::new(app_state.clone()));
+        let application = Application::builder()
+            .application_id("com.example.oxhidifi")
+            .build();
+        let settings_manager = SettingsManager::new().unwrap();
+        let header_bar = HeaderBar::default_with_state(
+            Arc::new(app_state.clone()),
+            application,
+            Arc::new(settings_manager),
+        );
         assert!(header_bar.search_button.can_focus());
         assert!(header_bar.view_split_button.can_focus());
         assert!(header_bar.settings_button.can_focus());
@@ -156,7 +165,15 @@ mod ui_compliance_tests {
 
         {
             let app_state_arc = Arc::new(app_state.clone());
-            let _header_bar = HeaderBar::default_with_state(app_state_arc.clone());
+            let application = Application::builder()
+                .application_id("com.example.oxhidifi")
+                .build();
+            let settings_manager = SettingsManager::new().unwrap();
+            let _header_bar = HeaderBar::default_with_state(
+                app_state_arc.clone(),
+                application,
+                Arc::new(settings_manager),
+            );
             let _player_bar = PlayerBar::new(app_state_arc, Arc::new(engine));
             let _album_grid =
                 AlbumGridView::new(Some(app_state.clone().into()), Vec::new(), true, false);

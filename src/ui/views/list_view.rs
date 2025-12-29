@@ -4,7 +4,7 @@
 //! in a column/list layout with detailed metadata, supporting virtual scrolling
 //! for large datasets and real-time filtering/sorting.
 
-use std::sync::Arc;
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use libadwaita::{
     glib::{JoinHandle, MainContext},
@@ -26,6 +26,7 @@ use crate::{
         AppState,
         NavigationState::{AlbumDetail, ArtistDetail},
         ZoomEvent::ListZoomChanged,
+        app_state::AppStateEvent::SettingsChanged,
     },
     ui::components::cover_art::CoverArt,
 };
@@ -119,6 +120,10 @@ pub struct ListView {
     pub config: ListViewConfig,
     /// Zoom subscription handle for cleanup.
     _zoom_subscription_handle: Option<JoinHandle<()>>,
+    /// Settings subscription handle for cleanup.
+    _settings_subscription_handle: Option<JoinHandle<()>>,
+    /// References to cover art components for dynamic updates.
+    cover_arts: Rc<RefCell<Vec<CoverArt>>>,
 }
 
 /// Configuration for ListView display options.
@@ -153,6 +158,8 @@ impl ListView {
 
         // set_accessible_description doesn't exist in GTK4, remove this line
 
+        let cover_arts = Rc::new(RefCell::new(Vec::new()));
+
         let mut view = Self {
             widget: list_box.clone().upcast_ref::<Widget>().clone(),
             list_box: list_box.clone(),
@@ -165,6 +172,7 @@ impl ListView {
                 let list_box_clone = list_box.clone();
                 let view_type_clone = view_type.clone();
                 let config_clone = config.clone();
+                let cover_arts_clone = cover_arts.clone();
                 let handle = MainContext::default().spawn_local(async move {
                     let rx = state_clone.zoom_manager.subscribe();
                     while let Ok(event) = rx.recv().await {
@@ -177,6 +185,7 @@ impl ListView {
                             while let Some(child) = list_box_clone.first_child() {
                                 list_box_clone.remove(&child);
                             }
+                            cover_arts_clone.borrow_mut().clear();
 
                             // Rebuild list with updated dimensions
                             match view_type_clone {
@@ -188,6 +197,7 @@ impl ListView {
                                             &config_clone,
                                             &(state_clone.zoom_manager.get_list_cover_dimensions().0
                                                 as u32),
+                                            &cover_arts_clone,
                                         );
                                         list_box_clone.append(&row);
                                     }
@@ -212,6 +222,31 @@ impl ListView {
             } else {
                 None
             },
+            _settings_subscription_handle: if let Some(ref state) = app_state {
+                // Subscribe to settings changes
+                let state_clone = state.clone();
+                let cover_arts_clone = cover_arts.clone();
+                let view_type_clone = view_type.clone();
+                let handle = MainContext::default().spawn_local(async move {
+                    let rx = state_clone.subscribe();
+                    while let Ok(event) = rx.recv().await {
+                        if let SettingsChanged { show_dr_values } = event {
+                            // Only update albums, not artists
+                            if view_type_clone == ListViewType::Albums {
+                                // Update all cover art components with new DR badge visibility
+                                let mut cover_arts = cover_arts_clone.borrow_mut();
+                                for cover_art in cover_arts.iter_mut() {
+                                    cover_art.set_show_dr_badge(show_dr_values);
+                                }
+                            }
+                        }
+                    }
+                });
+                Some(handle)
+            } else {
+                None
+            },
+            cover_arts,
         };
 
         // Initialize empty list
@@ -248,6 +283,7 @@ impl ListView {
         }
 
         self.clear_list();
+        self.cover_arts.borrow_mut().clear();
 
         for album in albums {
             let row = self.create_album_row(&album);
@@ -295,6 +331,7 @@ impl ListView {
             self.app_state.as_ref(),
             &self.config,
             &(cover_size as u32),
+            &self.cover_arts,
         )
     }
 
@@ -380,14 +417,28 @@ fn create_album_row_with_zoom(
     app_state: Option<&Arc<AppState>>,
     config: &ListViewConfig,
     cover_size: &u32,
+    cover_arts: &Rc<RefCell<Vec<CoverArt>>>,
 ) -> Widget {
     // Create cover art
+    let show_dr_badge = if let Some(app_state_ref) = app_state {
+        app_state_ref
+            .get_settings_manager()
+            .read()
+            .get_settings()
+            .show_dr_values
+    } else {
+        true // Default to showing DR badges
+    };
+
     let cover_art = CoverArt::builder()
         .artwork_path(album.artwork_path.as_deref().unwrap_or(&album.path))
         .dr_value(album.dr_value.clone().unwrap_or_else(|| "N/A".to_string()))
-        .show_dr_badge(true)
+        .show_dr_badge(show_dr_badge)
         .dimensions(*cover_size as i32, *cover_size as i32)
         .build();
+
+    // Store cover art for dynamic updates
+    cover_arts.borrow_mut().push(cover_art.clone());
 
     // Create main info container
     let info_container = Box::builder()

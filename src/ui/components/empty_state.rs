@@ -189,7 +189,7 @@ impl EmptyState {
                                     let path_str: &str = path_str;
 
                                     // Clone the settings manager to get mutable access
-                                    let mut settings_manager_clone = settings_manager.clone();
+                                    let settings_manager_clone = settings_manager.clone();
 
                                     // Update settings with new library directory
                                     let mut current_settings =

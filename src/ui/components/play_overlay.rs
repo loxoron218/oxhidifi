@@ -63,6 +63,7 @@ impl PlayOverlayBuilder {
 /// The `PlayOverlay` component displays a play or pause button that can be
 /// overlaid on media elements like cover art, with proper hover effects,
 /// keyboard navigation, and screen reader support.
+#[derive(Clone)]
 pub struct PlayOverlay {
     /// The underlying GTK widget (button).
     pub widget: Widget,

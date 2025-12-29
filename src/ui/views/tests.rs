@@ -19,11 +19,14 @@ mod view_integration_tests {
         AppState, AudioEngine,
         config::SettingsManager,
         library::models::{Album, Artist},
-        ui::views::{
-            AlbumGridView, ArtistGridView, DetailView, ListView,
-            album_grid::AlbumSortCriteria::{Title, Year},
-            detail_view::DetailType,
-            list_view::ListViewType::{Albums, Artists},
+        ui::{
+            components::cover_art::CoverArt,
+            views::{
+                AlbumGridView, ArtistGridView, DetailView, ListView,
+                album_grid::AlbumSortCriteria::{Title, Year},
+                detail_view::DetailType,
+                list_view::ListViewType::{Albums, Artists},
+            },
         },
     };
 
@@ -172,5 +175,37 @@ mod view_integration_tests {
 
         let album_list = ListView::new(Some(app_state.clone().into()), Albums, false);
         assert_eq!(album_list.list_box.accessible_role(), List);
+    }
+
+    #[test]
+    #[ignore = "Requires GTK display for UI testing"]
+    fn test_cover_art_dr_badge_methods() {
+        // Create a CoverArt instance
+        let mut cover_art = CoverArt::new(
+            Some("/path/to/artwork.jpg".to_string()),
+            Some("DR12".to_string()),
+            true, // Initially show DR badge
+            200,
+            200,
+        );
+
+        // Test that the method can be called without panic
+        cover_art.set_show_dr_badge(false);
+        cover_art.set_show_dr_badge(true);
+    }
+
+    #[test]
+    #[ignore = "Requires GTK display for UI testing"]
+    fn test_cover_art_edge_cases() {
+        // Test with no DR value
+        let mut cover_art = CoverArt::new(None, None, false, 100, 100);
+
+        // Should not panic when updating DR value
+        cover_art.update_dr_value(Some("DR8".to_string()));
+        cover_art.update_dr_value(None);
+
+        // Should not panic when toggling visibility
+        cover_art.set_show_dr_badge(true);
+        cover_art.set_show_dr_badge(false);
     }
 }

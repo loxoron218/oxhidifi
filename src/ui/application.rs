@@ -41,7 +41,7 @@ use crate::{
         AppState,
         AppStateEvent::{
             LibraryDataChanged, NavigationChanged, PlaybackStateChanged, SearchFilterChanged,
-            ViewOptionsChanged,
+            SettingsChanged, ViewOptionsChanged,
         },
         NavigationState::{AlbumDetail, ArtistDetail, Library},
         ViewMode::{Grid, List},
@@ -92,10 +92,10 @@ impl OxhidifiApplication {
         // Initialize settings
         let settings_manager =
             SettingsManager::new().map_err(|e| format!("Failed to initialize settings: {}", e))?;
-        let settings_manager_shared = Arc::new(RwLock::new(settings_manager));
+        let settings_manager_shared = Arc::new(settings_manager);
 
         // Extract UserSettings for components that need direct access
-        let user_settings = settings_manager_shared.read().get_settings().clone();
+        let user_settings = settings_manager_shared.get_settings().clone();
         let user_settings_shared = Arc::new(RwLock::new(user_settings));
 
         // Initialize audio engine
@@ -132,34 +132,33 @@ impl OxhidifiApplication {
         let app_state = AppState::new(
             Arc::downgrade(&Arc::new(audio_engine.clone())),
             library_scanner.clone(),
-            settings_manager_shared.clone(),
+            Arc::new(RwLock::new((*settings_manager_shared).clone())),
         );
 
-        // Perform startup validation to clean up orphaned records
-        if library_scanner.is_some() {
-            if let Err(e) = library_db.cleanup_orphaned_records().await {
-                eprintln!("Failed to cleanup orphaned records: {}", e);
-            }
-
-            let albums = match library_db.get_albums(None).await {
-                Ok(albums) => albums,
-                Err(e) => {
-                    eprintln!("Failed to get albums from database: {}", e);
-                    Vec::new()
-                }
-            };
-
-            let artists = match library_db.get_artists(None).await {
-                Ok(artists) => artists,
-                Err(e) => {
-                    eprintln!("Failed to get artists from database: {}", e);
-                    Vec::new()
-                }
-            };
-
-            // Update AppState with library data
-            app_state.update_library_data(albums, artists);
+        // Always load existing library data from database on startup
+        // This ensures library is displayed even if no directories are currently configured
+        if let Err(e) = library_db.cleanup_orphaned_records().await {
+            eprintln!("Failed to cleanup orphaned records: {}", e);
         }
+
+        let albums = match library_db.get_albums(None).await {
+            Ok(albums) => albums,
+            Err(e) => {
+                eprintln!("Failed to get albums from database: {}", e);
+                Vec::new()
+            }
+        };
+
+        let artists = match library_db.get_artists(None).await {
+            Ok(artists) => artists,
+            Err(e) => {
+                eprintln!("Failed to get artists from database: {}", e);
+                Vec::new()
+            }
+        };
+
+        // Update AppState with library data
+        app_state.update_library_data(albums, artists);
 
         let app = Application::builder()
             .application_id("com.example.oxhidifi")
@@ -171,7 +170,7 @@ impl OxhidifiApplication {
             library_db,
             library_scanner,
             app_state: Arc::new(app_state),
-            settings: Arc::new(settings_manager_shared.read().clone()),
+            settings: settings_manager_shared.clone(),
         })
     }
 
@@ -264,7 +263,8 @@ fn build_ui(
     let navigation_view = NavigationView::builder().build();
 
     // Create header bar with proper state integration
-    let header_bar = HeaderBar::default_with_state(app_state.clone());
+    let header_bar =
+        HeaderBar::default_with_state(app_state.clone(), app.clone(), settings_manager.clone());
 
     // Create main content area with responsive layout
     let main_content = create_main_content(
@@ -645,6 +645,19 @@ fn create_main_content(
                             artist_grid_view.filter_artists(query);
                             album_list_view.filter_items(query);
                             artist_list_view.filter_items(query);
+                        }
+                        SettingsChanged { show_dr_values } => {
+                            // Update DR badge visibility in all views
+                            debug!(
+                                "Handling SettingsChanged event: show_dr_values={}",
+                                show_dr_values
+                            );
+
+                            // Update data in all views with new DR setting
+                            album_grid_view.set_show_dr_badges(show_dr_values);
+
+                            // Note: ListView doesn't currently have a set_show_dr_badges method,
+                            // but it should respect the setting when creating new album rows
                         }
                         _ => {}
                     }

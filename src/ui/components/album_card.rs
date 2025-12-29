@@ -203,6 +203,7 @@ pub struct AlbumCardConfig {
 ///
 /// The `AlbumCard` component implements the exact widget structure specified
 /// in docs/4.\ album-cards.md with proper spacing, CSS classes, and interaction patterns.
+#[derive(Clone)]
 pub struct AlbumCard {
     /// The underlying FlowBoxChild widget.
     pub widget: Widget,
@@ -495,6 +496,15 @@ impl AlbumCard {
 
         // Update stored artist name
         self.artist_name = artist_name;
+    }
+
+    /// Updates the DR badge visibility for this album card.
+    ///
+    /// # Arguments
+    ///
+    /// * `show_dr_badge` - Whether to show the DR badge
+    pub fn update_dr_badge_visibility(&mut self, show_dr_badge: bool) {
+        self.cover_art.set_show_dr_badge(show_dr_badge);
     }
 }
 
