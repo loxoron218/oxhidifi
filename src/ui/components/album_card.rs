@@ -225,6 +225,10 @@ pub struct AlbumCard {
     pub year_label: Label,
     /// Current artist name.
     pub artist_name: String,
+    /// Title area container (contains title label).
+    pub title_area: Box,
+    /// Metadata container (contains format and year labels).
+    pub metadata_container: Box,
 }
 
 impl AlbumCard {
@@ -369,9 +373,9 @@ impl AlbumCard {
             .build();
 
         album_tile.append(&cover_container);
-        album_tile.append(&title_area.upcast::<Widget>());
+        album_tile.append(&title_area);
         album_tile.append(artist_label.upcast_ref::<Widget>());
-        album_tile.append(metadata_container.upcast_ref::<Widget>());
+        album_tile.append(&metadata_container);
 
         // Set ARIA attributes for accessibility
         album_tile.set_accessible_role(Group);
@@ -432,6 +436,8 @@ impl AlbumCard {
             format_label,
             year_label,
             artist_name,
+            title_area,
+            metadata_container,
         }
     }
 
@@ -505,6 +511,23 @@ impl AlbumCard {
     /// * `show_dr_badge` - Whether to show the DR badge
     pub fn update_dr_badge_visibility(&mut self, show_dr_badge: bool) {
         self.cover_art.set_show_dr_badge(show_dr_badge);
+    }
+
+    /// Updates the metadata overlay visibility for this album card.
+    ///
+    /// # Arguments
+    ///
+    /// * `show_overlays` - Whether to show metadata overlays (title, artist, format, year)
+    pub fn update_metadata_overlay_visibility(&mut self, show_overlays: bool) {
+        // Show or hide the title, artist, format, and year labels
+        self.title_label.set_visible(show_overlays);
+        self.artist_label.set_visible(show_overlays);
+        self.format_label.set_visible(show_overlays);
+        self.year_label.set_visible(show_overlays);
+
+        // Also hide the containers to make the card shrink vertically
+        self.title_area.set_visible(show_overlays);
+        self.metadata_container.set_visible(show_overlays);
     }
 }
 

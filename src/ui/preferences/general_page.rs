@@ -52,6 +52,8 @@ impl GeneralPreferencesPage {
 
         page.setup_theme_preference();
         page.setup_dr_values_preference();
+        page.setup_metadata_overlays_preference();
+        page.setup_year_display_preference();
 
         debug!("GeneralPreferencesPage: Created");
 
@@ -150,6 +152,104 @@ impl GeneralPreferencesPage {
         });
 
         group.add(&switch_row);
+        self.widget.add(&group);
+    }
+
+    /// Sets up the metadata overlays visibility switch row.
+    fn setup_metadata_overlays_preference(&mut self) {
+        let group = PreferencesGroup::builder()
+            .title("Metadata Display")
+            .description("Configure how metadata is displayed on album cards")
+            .build();
+
+        let current_show_overlays = self.settings_manager.get_settings().show_metadata_overlays;
+
+        let switch_row = SwitchRow::builder()
+            .title("Show Metadata Overlays")
+            .subtitle("Display title, artist, format, and year information on album artwork")
+            .active(current_show_overlays)
+            .build();
+
+        // Connect change handler
+        let settings_manager_clone = self.settings_manager.clone();
+        let app_state_clone = self.app_state.clone();
+        switch_row.connect_active_notify(move |row| {
+            let new_value = row.is_active();
+
+            // Update settings
+            let mut current_settings = settings_manager_clone.get_settings().clone();
+            current_settings.show_metadata_overlays = new_value;
+
+            if let Err(e) = settings_manager_clone.update_settings(current_settings) {
+                debug!("Failed to update metadata overlays preference: {}", e);
+                return;
+            }
+
+            // Notify app state of the change using the proper settings update method
+            app_state_clone.update_show_metadata_overlays_setting(new_value);
+        });
+
+        group.add(&switch_row);
+        self.widget.add(&group);
+    }
+
+    /// Sets up the year display mode combo row.
+    fn setup_year_display_preference(&mut self) {
+        let group = PreferencesGroup::builder()
+            .title("Year Display")
+            .description("Choose which year to display for albums")
+            .build();
+
+        // Create year mode options
+        let year_modes = vec!["Release Year", "Original Year"];
+        let current_mode = self
+            .settings_manager
+            .get_settings()
+            .year_display_mode
+            .clone();
+
+        let combo_row = ComboRow::builder()
+            .title("Year Display Mode")
+            .subtitle("Select whether to show release or original album year")
+            .build();
+
+        // Create string list for combo row
+        let string_list = StringList::new(&year_modes);
+        combo_row.set_model(Some(&string_list));
+
+        // Set current selection
+        let current_index = match current_mode.as_str() {
+            "release" => 0,
+            "original" => 1,
+            _ => 0, // Default to release year
+        };
+        combo_row.set_selected(current_index as u32);
+
+        // Connect change handler
+        let settings_manager_clone = self.settings_manager.clone();
+        let app_state_clone = self.app_state.clone();
+        combo_row.connect_selected_notify(move |row| {
+            let selected_index = row.selected() as usize;
+            let new_mode = match selected_index {
+                0 => "release".to_string(),
+                1 => "original".to_string(),
+                _ => "release".to_string(),
+            };
+
+            // Update settings
+            let mut current_settings = settings_manager_clone.get_settings().clone();
+            current_settings.year_display_mode = new_mode.clone();
+
+            if let Err(e) = settings_manager_clone.update_settings(current_settings) {
+                debug!("Failed to update year display mode preference: {}", e);
+                return;
+            }
+
+            // Notify app state of the change using the proper settings update method
+            app_state_clone.update_year_display_mode_setting(new_mode);
+        });
+
+        group.add(&combo_row);
         self.widget.add(&group);
     }
 }

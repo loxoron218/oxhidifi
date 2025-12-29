@@ -6,24 +6,31 @@
 
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
-use libadwaita::{
-    glib::{JoinHandle, MainContext},
-    gtk::{
-        AccessibleRole::Grid,
-        Align::{Fill, Start},
-        Box, FlowBox,
-        Orientation::Vertical,
-        SelectionMode::None as SelectionNone,
-        Widget,
+use {
+    libadwaita::{
+        glib::{JoinHandle, MainContext},
+        gtk::{
+            AccessibleRole::Grid,
+            Align::{Fill, Start},
+            Box, FlowBox,
+            Orientation::Vertical,
+            SelectionMode::None as SelectionNone,
+            Widget,
+        },
+        prelude::{AccessibleExt, BoxExt, Cast, WidgetExt},
     },
-    prelude::{AccessibleExt, BoxExt, Cast, WidgetExt},
+    tracing::debug,
 };
 
 use crate::{
     library::models::Album,
     state::{
-        AppState, LibraryState, NavigationState::AlbumDetail, ZoomEvent::GridZoomChanged,
-        app_state::AppStateEvent::SettingsChanged,
+        AppState, LibraryState,
+        NavigationState::AlbumDetail,
+        ZoomEvent::GridZoomChanged,
+        app_state::AppStateEvent::{
+            MetadataOverlaysChanged, SettingsChanged, YearDisplayModeChanged,
+        },
     },
     ui::{
         components::{
@@ -319,12 +326,32 @@ impl AlbumGridView {
                 let handle = MainContext::default().spawn_local(async move {
                     let rx = state_clone.subscribe();
                     while let Ok(event) = rx.recv().await {
-                        if let SettingsChanged { show_dr_values } = event {
-                            // Update all album cards with new DR badge visibility
-                            let mut cards = album_cards_clone.borrow_mut();
-                            for card in cards.iter_mut() {
-                                card.update_dr_badge_visibility(show_dr_values);
+                        match event {
+                            SettingsChanged { show_dr_values } => {
+                                // Update all album cards with new DR badge visibility
+                                let mut cards = album_cards_clone.borrow_mut();
+                                for card in cards.iter_mut() {
+                                    card.update_dr_badge_visibility(show_dr_values);
+                                }
                             }
+                            MetadataOverlaysChanged { show_overlays } => {
+                                // Update all album cards with new metadata overlay visibility
+                                let mut cards = album_cards_clone.borrow_mut();
+                                for card in cards.iter_mut() {
+                                    card.update_metadata_overlay_visibility(show_overlays);
+                                }
+                            }
+                            YearDisplayModeChanged { mode } => {
+                                // Update all album cards with new year display mode
+                                // For now, this doesn't change anything since we only have release year
+                                // In the future, when original_year is implemented, this will update
+                                // the year labels to show either release or original year
+                                debug!("Year display mode changed to: {}", mode);
+
+                                // Note: This is a placeholder for future implementation
+                                // when original_year field is added to the Album model
+                            }
+                            _ => {}
                         }
                     }
                 });
@@ -426,19 +453,23 @@ impl AlbumGridView {
             if self.config.compact { 120 } else { 180 }
         };
 
-        AlbumCard::builder()
+        // Get settings for DR badge and metadata overlays visibility
+        let (show_dr_badge, show_metadata_overlays) = if let Some(app_state) = &self.app_state {
+            let settings = app_state
+                .get_settings_manager()
+                .read()
+                .get_settings()
+                .clone();
+            (settings.show_dr_values, settings.show_metadata_overlays)
+        } else {
+            (self.config.show_dr_badges, true) // Default to showing overlays
+        };
+
+        let mut album_card = AlbumCard::builder()
             .album(album.clone())
             .artist_name(artist_name)
             .format(format)
-            .show_dr_badge(if let Some(app_state) = &self.app_state {
-                app_state
-                    .get_settings_manager()
-                    .read()
-                    .get_settings()
-                    .show_dr_values
-            } else {
-                self.config.show_dr_badges
-            })
+            .show_dr_badge(show_dr_badge)
             .compact(self.config.compact)
             .cover_size(cover_size as u32)
             .on_play_clicked({
@@ -466,7 +497,12 @@ impl AlbumGridView {
                     }
                 }
             })
-            .build()
+            .build();
+
+        // Apply metadata overlay visibility setting
+        album_card.update_metadata_overlay_visibility(show_metadata_overlays);
+
+        album_card
     }
 
     /// Updates the display configuration.

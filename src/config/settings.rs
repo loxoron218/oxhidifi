@@ -53,6 +53,10 @@ pub struct UserSettings {
     pub list_zoom_level: u8,
     /// Theme preference (system/light/dark).
     pub theme_preference: String,
+    /// Year display mode for albums ("release" or "original").
+    pub year_display_mode: String,
+    /// Whether to show metadata overlays (title, artist, format, year) on album cards.
+    pub show_metadata_overlays: bool,
 }
 
 impl Default for UserSettings {
@@ -67,6 +71,8 @@ impl Default for UserSettings {
             grid_zoom_level: 2, // Default medium zoom level (0-4)
             list_zoom_level: 1, // Default medium zoom level (0-2)
             theme_preference: "system".to_string(),
+            year_display_mode: "release".to_string(), // Default to release year
+            show_metadata_overlays: true,             // Default to showing metadata overlays
         }
     }
 }
@@ -283,6 +289,8 @@ mod tests {
             grid_zoom_level: 2,
             list_zoom_level: 1,
             theme_preference: "dark".to_string(),
+            year_display_mode: "original".to_string(),
+            show_metadata_overlays: false,
         };
 
         let serialized = to_string(&settings).unwrap();

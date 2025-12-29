@@ -126,6 +126,10 @@ pub enum AppStateEvent {
     SearchFilterChanged(Option<String>),
     /// User settings changed that affect UI display.
     SettingsChanged { show_dr_values: bool },
+    /// Metadata overlays visibility setting changed.
+    MetadataOverlaysChanged { show_overlays: bool },
+    /// Year display mode setting changed.
+    YearDisplayModeChanged { mode: String },
 }
 
 impl AppState {
@@ -410,6 +414,55 @@ impl AppState {
     /// A reference to the settings manager.
     pub fn get_settings_manager(&self) -> Arc<RwLock<SettingsManager>> {
         self.settings_manager.clone()
+    }
+
+    /// Updates the show_metadata_overlays setting and notifies subscribers.
+    ///
+    /// # Arguments
+    ///
+    /// * `show_overlays` - New value for the show_metadata_overlays setting
+    pub fn update_show_metadata_overlays_setting(&self, show_overlays: bool) {
+        debug!(
+            "AppState: Updating show_metadata_overlays setting to {}",
+            show_overlays
+        );
+
+        // Update settings in settings manager
+        let settings_write = self.settings_manager.write();
+        let mut current_settings = settings_write.get_settings().clone();
+        current_settings.show_metadata_overlays = show_overlays;
+
+        if let Err(e) = settings_write.update_settings(current_settings) {
+            debug!("Failed to update show_metadata_overlays setting: {}", e);
+            return;
+        }
+        drop(settings_write);
+
+        // Broadcast settings change event
+        self.broadcast_event(AppStateEvent::MetadataOverlaysChanged { show_overlays });
+    }
+
+    /// Updates the year_display_mode setting and notifies subscribers.
+    ///
+    /// # Arguments
+    ///
+    /// * `mode` - New value for the year_display_mode setting ("release" or "original")
+    pub fn update_year_display_mode_setting(&self, mode: String) {
+        debug!("AppState: Updating year_display_mode setting to {}", mode);
+
+        // Update settings in settings manager
+        let settings_write = self.settings_manager.write();
+        let mut current_settings = settings_write.get_settings().clone();
+        current_settings.year_display_mode = mode.clone();
+
+        if let Err(e) = settings_write.update_settings(current_settings) {
+            debug!("Failed to update year_display_mode setting: {}", e);
+            return;
+        }
+        drop(settings_write);
+
+        // Broadcast settings change event
+        self.broadcast_event(AppStateEvent::YearDisplayModeChanged { mode });
     }
 }
 
