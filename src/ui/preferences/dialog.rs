@@ -45,6 +45,10 @@ impl PreferencesDialog {
     pub fn new(app_state: Arc<AppState>, settings_manager: Arc<SettingsManager>) -> Self {
         let widget = LibadwaitaPreferencesDialog::builder().build();
 
+        // Set fixed dialog dimensions for consistent layout across all form factors
+        widget.set_content_width(900);
+        widget.set_content_height(700);
+
         // Create and add General preferences page
         let general_page = GeneralPreferencesPage::new(app_state.clone(), settings_manager.clone());
         widget.add(&general_page.widget);
