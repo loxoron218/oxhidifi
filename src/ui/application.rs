@@ -791,7 +791,17 @@ fn load_custom_css() {
             opacity: 0;
             transition: opacity 0.2s ease-in-out;
         }
-        
+
+        .cover-play-button {
+            opacity: 0;
+            transition: opacity 0.2s ease-in-out;
+        }
+
+        /* Show play button when hovering over cover art container */
+        .cover-art-container:hover .cover-play-button {
+            opacity: 1;
+        }
+
         .play-overlay:hover {
             background-color: rgba(0, 0, 0, 0.9);
         }

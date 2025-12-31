@@ -12,7 +12,7 @@ use libadwaita::{
         Align::{End, Fill, Start},
         Box, FlowBoxChild, GestureClick, Label,
         Orientation::{Horizontal, Vertical},
-        Widget,
+        Overlay, Widget,
         pango::EllipsizeMode::End as EllipsizeEnd,
     },
     prelude::{AccessibleExt, BoxExt, ButtonExt, Cast, FlowBoxChildExt, WidgetExt},
@@ -266,14 +266,27 @@ impl AlbumCard {
             .dimensions(cover_width as i32, cover_height as i32)
             .build();
 
-        // Create play overlay
+        // Create play overlay with CSS-based hover handling
         let play_overlay = PlayOverlay::builder()
             .is_playing(false)
-            .show_on_hover(true)
+            .show_on_hover(false)
             .build();
+
+        // Add CSS class for CSS-based hover effect
+        play_overlay.widget.add_css_class("cover-play-button");
+
+        // Set explicit size for the play button
+        play_overlay.widget.set_size_request(48, 48);
 
         // DR badge is now handled by CoverArt component, so we don't need separate dr_badge field
         let dr_badge = None;
+
+        // Add play overlay to the cover art overlay
+        let cover_art_overlay = cover_art
+            .widget
+            .downcast_ref::<Overlay>()
+            .expect("CoverArt widget should be an Overlay");
+        cover_art_overlay.add_overlay(&play_overlay.widget);
 
         // The cover_art widget already includes proper overlay handling and sizing
         // Just use it directly as the cover container
