@@ -23,7 +23,12 @@ use {
 };
 
 use crate::{
-    library::models::Album,
+    audio::{
+        decoder::AudioFormat,
+        engine::{AudioEngine, PlaybackState::Playing, TrackInfo},
+        metadata::TagReader,
+    },
+    library::{LibraryDatabase, models::Album},
     state::{
         AppState, LibraryState,
         NavigationState::AlbumDetail,
@@ -42,9 +47,11 @@ use crate::{
 };
 
 /// Builder pattern for configuring AlbumGridView components.
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct AlbumGridViewBuilder {
     app_state: Option<Arc<AppState>>,
+    library_db: Option<Arc<LibraryDatabase>>,
+    audio_engine: Option<Arc<AudioEngine>>,
     albums: Vec<Album>,
     show_dr_badges: bool,
     compact: bool,
@@ -62,6 +69,34 @@ impl AlbumGridViewBuilder {
     /// The builder instance for method chaining.
     pub fn app_state(mut self, app_state: Arc<AppState>) -> Self {
         self.app_state = Some(app_state);
+        self
+    }
+
+    /// Sets the library database for fetching tracks.
+    ///
+    /// # Arguments
+    ///
+    /// * `library_db` - Library database reference
+    ///
+    /// # Returns
+    ///
+    /// The builder instance for method chaining.
+    pub fn library_db(mut self, library_db: Arc<LibraryDatabase>) -> Self {
+        self.library_db = Some(library_db);
+        self
+    }
+
+    /// Sets the audio engine for playback.
+    ///
+    /// # Arguments
+    ///
+    /// * `audio_engine` - Audio engine reference
+    ///
+    /// # Returns
+    ///
+    /// The builder instance for method chaining.
+    pub fn audio_engine(mut self, audio_engine: Arc<AudioEngine>) -> Self {
+        self.audio_engine = Some(audio_engine);
         self
     }
 
@@ -115,6 +150,8 @@ impl AlbumGridViewBuilder {
     pub fn build(self) -> AlbumGridView {
         AlbumGridView::new(
             self.app_state,
+            self.library_db,
+            self.audio_engine,
             self.albums,
             self.show_dr_badges,
             self.compact,
@@ -134,6 +171,10 @@ pub struct AlbumGridView {
     pub flow_box: FlowBox,
     /// Current application state reference.
     pub app_state: Option<Arc<AppState>>,
+    /// Library database reference for fetching tracks.
+    pub library_db: Option<Arc<LibraryDatabase>>,
+    /// Audio engine reference for playback.
+    pub audio_engine: Option<Arc<AudioEngine>>,
     /// Current albums being displayed.
     pub albums: Vec<Album>,
     /// Configuration flags.
@@ -165,6 +206,8 @@ impl AlbumGridView {
     /// # Arguments
     ///
     /// * `app_state` - Optional application state reference for reactive updates
+    /// * `library_db` - Optional library database reference for fetching tracks
+    /// * `audio_engine` - Optional audio engine reference for playback
     /// * `albums` - Initial albums to display
     /// * `show_dr_badges` - Whether to show DR badges on album covers
     /// * `compact` - Whether to use compact layout
@@ -174,6 +217,8 @@ impl AlbumGridView {
     /// A new `AlbumGridView` instance.
     pub fn new(
         app_state: Option<Arc<AppState>>,
+        library_db: Option<Arc<LibraryDatabase>>,
+        audio_engine: Option<Arc<AudioEngine>>,
         albums: Vec<Album>,
         show_dr_badges: bool,
         compact: bool,
@@ -231,6 +276,8 @@ impl AlbumGridView {
             widget: main_container.upcast_ref::<Widget>().clone(),
             flow_box: flow_box.clone(),
             app_state: app_state.clone(),
+            library_db: library_db.clone(),
+            audio_engine: audio_engine.clone(),
             albums: Vec::new(),
             config: config.clone(),
             empty_state,
@@ -275,29 +322,19 @@ impl AlbumGridView {
                                 let cover_size =
                                     state_clone.zoom_manager.get_grid_cover_dimensions().0;
 
+                                let show_dr_badge = state_clone
+                                    .get_settings_manager()
+                                    .read()
+                                    .get_settings()
+                                    .show_dr_values;
+
                                 let album_card = AlbumCard::builder()
                                     .album(album.clone())
                                     .artist_name(artist_name)
                                     .format(format)
-                                    .show_dr_badge(
-                                        state_clone
-                                            .get_settings_manager()
-                                            .read()
-                                            .get_settings()
-                                            .show_dr_values,
-                                    )
+                                    .show_dr_badge(show_dr_badge)
                                     .compact(config_clone.compact)
                                     .cover_size(cover_size as u32)
-                                    .on_play_clicked({
-                                        let _app_state_inner = state_clone.clone();
-                                        let album_clone = album.clone();
-                                        move || {
-                                            println!(
-                                                "Play clicked for album: {}",
-                                                album_clone.title
-                                            );
-                                        }
-                                    })
                                     .on_card_clicked({
                                         let app_state_inner = state_clone.clone();
                                         let album_clone = album.clone();
@@ -474,16 +511,50 @@ impl AlbumGridView {
             .cover_size(cover_size as u32)
             .on_play_clicked({
                 let app_state = self.app_state.clone();
+                let library_db = self.library_db.clone();
+                let audio_engine = self.audio_engine.clone();
                 let album_clone = album.clone();
                 move || {
                     // Handle play button click - queue album for playback
-                    if let Some(_state) = &app_state {
-                        // In a real implementation, this would:
-                        // 1. Fetch tracks for the album
-                        // 2. Queue them for playback
-                        // 3. Update player bar immediately
-                        // 4. Show player bar
-                        println!("Play clicked for album: {}", album_clone.title);
+                    if let (Some(app_state), Some(library_db), Some(audio_engine)) = (
+                        app_state.as_ref(),
+                        library_db.as_ref(),
+                        audio_engine.as_ref(),
+                    ) {
+                        let album_id = album_clone.id;
+                        let app_state_clone = app_state.clone();
+                        let library_db_clone = library_db.clone();
+                        let audio_engine_clone = audio_engine.clone();
+
+                        MainContext::default().spawn_local(async move {
+                            if let Ok(tracks) = library_db_clone.get_tracks_by_album(album_id).await
+                                && !tracks.is_empty()
+                            {
+                                let first_track = &tracks[0];
+                                let track_path = &first_track.path;
+
+                                if let Ok(_) = audio_engine_clone.load_track(track_path).await
+                                    && let Ok(_) = audio_engine_clone.play().await
+                                {
+                                    app_state_clone.update_playback_state(Playing);
+
+                                    if let Ok(metadata) = TagReader::read_metadata(track_path) {
+                                        let track_info = TrackInfo {
+                                            path: track_path.clone(),
+                                            metadata,
+                                            format: AudioFormat {
+                                                sample_rate: first_track.sample_rate as u32,
+                                                channels: first_track.channels as u32,
+                                                bits_per_sample: first_track.bits_per_sample as u32,
+                                                channel_mask: 0,
+                                            },
+                                            duration_ms: first_track.duration_ms as u64,
+                                        };
+                                        app_state_clone.update_current_track(Some(track_info));
+                                    }
+                                }
+                            }
+                        });
                     }
                 }
             })
@@ -619,7 +690,7 @@ pub enum AlbumSortCriteria {
 
 impl Default for AlbumGridView {
     fn default() -> Self {
-        Self::new(None, Vec::new(), true, false)
+        Self::new(None, None, None, Vec::new(), true, false)
     }
 }
 

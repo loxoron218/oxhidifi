@@ -440,8 +440,8 @@ fn build_ui(
 fn create_main_content(
     app_state: &Arc<AppState>,
     settings_manager: &Arc<SettingsManager>,
-    _library_db: &Arc<LibraryDatabase>,
-    _audio_engine: &Arc<AudioEngine>,
+    library_db: &Arc<LibraryDatabase>,
+    audio_engine: &Arc<AudioEngine>,
     window: &ApplicationWindow,
 ) -> Widget {
     // Create stack for efficient view switching
@@ -458,6 +458,8 @@ fn create_main_content(
     // Create all possible views upfront with individual scrolled windows
     let mut album_grid_view = AlbumGridView::builder()
         .app_state(app_state.clone())
+        .library_db(library_db.clone())
+        .audio_engine(audio_engine.clone())
         .albums(library_state.albums.clone())
         .show_dr_badges(show_dr_badges)
         .compact(false)
