@@ -8,7 +8,6 @@ use std::error::Error;
 use {
     libadwaita::init,
     tokio::main,
-    tracing::info,
     tracing_subscriber::{EnvFilter, fmt::Subscriber},
 };
 
@@ -25,8 +24,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     Subscriber::builder().with_env_filter(filter).init();
 
-    info!("Starting Oxhidifi application");
-
     // Initialize GTK and Libadwaita
     init()?;
 
@@ -34,6 +31,5 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let app = OxhidifiApplication::new().await?;
     app.run();
 
-    info!("Application terminated");
     Ok(())
 }
