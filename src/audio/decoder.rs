@@ -17,7 +17,7 @@ use {
     symphonia::{
         core::{
             audio::{
-                AudioBufferRef::{self, F32, U16, U24, U32},
+                AudioBufferRef::{self, F32, F64, S8, S16, S24, S32, U8, U16, U24, U32},
                 Signal,
             },
             codecs::{CODEC_TYPE_NULL, Decoder, DecoderOptions},
@@ -305,40 +305,87 @@ impl AudioProducer {
     /// Returns `DecoderError` if decoding fails.
     pub fn run(mut self) -> Result<(), DecoderError> {
         while let Some(buffer) = self.decoder.decode_next_packet()? {
+            let spec = buffer.spec();
+            let channels = spec.channels.count();
+
             // Convert audio buffer to f32 samples
             let samples = match buffer {
-                F32(buf) => buf.chan(0).to_vec(),
-                U16(buf) => buf
-                    .chan(0)
-                    .iter()
-                    .map(|&sample| sample as f32 / 65535.0)
-                    .collect(),
-                U24(buf) => {
-                    // Handle u24 properly by converting to f32
-                    // u24 samples are stored as 32-bit integers with the upper 8 bits unused
-                    buf.chan(0)
-                        .iter()
-                        .map(|&sample| {
-                            // Extract the lower 24 bits and normalize to [-1.0, 1.0]
-                            let sample_u32 = sample.0;
-                            let sample_24 = sample_u32 & 0x00FFFFFF;
-                            if sample_24 & 0x00800000 != 0 {
-                                // Negative number (sign bit set)
-                                let signed_sample = sample_24 as i32 - 0x01000000;
-                                signed_sample as f32 / 8388608.0
-                            } else {
-                                // Positive number
-                                sample_24 as f32 / 8388607.0
-                            }
-                        })
-                        .collect()
+                F32(buf) => {
+                    let mut samples = Vec::new();
+                    for ch in 0..channels {
+                        samples.extend(buf.chan(ch).iter().copied());
+                    }
+                    samples
                 }
-                U32(buf) => buf
-                    .chan(0)
-                    .iter()
-                    .map(|&sample| sample as f32 / 4294967295.0)
-                    .collect(),
-                _ => return Err(DecoderError::UnsupportedFormat),
+                F64(buf) => {
+                    let mut samples = Vec::new();
+                    for ch in 0..channels {
+                        samples.extend(buf.chan(ch).iter().map(|&s| s as f32));
+                    }
+                    samples
+                }
+                U8(buf) => {
+                    let mut samples = Vec::new();
+                    for ch in 0..channels {
+                        samples.extend(buf.chan(ch).iter().map(|&s| s as f32 / 255.0));
+                    }
+                    samples
+                }
+                S8(buf) => {
+                    let mut samples = Vec::new();
+                    for ch in 0..channels {
+                        samples.extend(buf.chan(ch).iter().map(|&s| s as f32 / 127.0));
+                    }
+                    samples
+                }
+                U16(buf) => {
+                    let mut samples = Vec::new();
+                    for ch in 0..channels {
+                        samples.extend(buf.chan(ch).iter().map(|&s| s as f32 / 65535.0));
+                    }
+                    samples
+                }
+                S16(buf) => {
+                    let mut samples = Vec::new();
+                    for ch in 0..channels {
+                        samples.extend(buf.chan(ch).iter().map(|&s| s as f32 / 32767.0));
+                    }
+                    samples
+                }
+                U24(buf) => {
+                    let mut samples = Vec::new();
+                    for ch in 0..channels {
+                        samples.extend(buf.chan(ch).iter().map(|&sample| {
+                            let sample_u32 = sample.0 & 0x00FFFFFF;
+                            sample_u32 as f32 / 16777215.0
+                        }));
+                    }
+                    samples
+                }
+                S24(buf) => {
+                    let mut samples = Vec::new();
+                    for ch in 0..channels {
+                        samples.extend(buf.chan(ch).iter().map(|&sample| {
+                            let sample_i32 = sample.0 << 8 >> 8;
+                            sample_i32 as f32 / 8388607.0
+                        }));
+                    }
+                    samples
+                }
+                U32(buf) => {
+                    let mut samples = Vec::new();
+                    for ch in 0..channels {
+                        samples.extend(buf.chan(ch).iter().map(|&s| s as f32 / 4294967295.0));
+                    }
+                    samples
+                }
+                S32(buf) => {
+                    let mut samples = Vec::new();
+                    for ch in 0..channels {
+                        samples.extend(buf.chan(ch).iter().map(|&s| s as f32 / 2147483647.0));
+                    }
+                    samples
+                }
             };
 
             // Write samples to ring buffer
