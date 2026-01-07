@@ -15,6 +15,7 @@ use {
     },
     rtrb::{Consumer, PopError::Empty},
     rubato::FftFixedIn,
+    symphonia::core::audio::SignalSpec,
     thiserror::Error,
 };
 
@@ -118,6 +119,7 @@ impl AudioOutput {
     /// # Arguments
     ///
     /// * `source_format` - The audio format of the source material.
+    /// * `_source_spec` - The signal specification from symphonia with channel layout.
     ///
     /// # Returns
     ///
@@ -130,6 +132,7 @@ impl AudioOutput {
     pub fn get_optimal_config(
         &self,
         source_format: &AudioFormat,
+        _source_spec: &SignalSpec,
     ) -> Result<(StreamConfig, bool), OutputError> {
         let supported_configs = self
             .device
@@ -145,7 +148,7 @@ impl AudioOutput {
             let sample_rate = config.max_sample_rate();
             let channels = config.channels();
 
-            // Prefer exact match
+            // Prefer exact match for bit-perfect playback
             if sample_rate == source_sample_rate
                 && <u32 as From<u16>>::from(channels) == source_channels
             {
@@ -369,13 +372,15 @@ impl AudioConsumer {
     /// * `output` - The audio output to use.
     /// * `consumer` - The ring buffer consumer to read samples from.
     /// * `source_format` - The source audio format.
+    /// * `source_spec` - The signal specification from symphonia.
     pub fn new(
         output: AudioOutput,
         consumer: Consumer<f32>,
         source_format: &AudioFormat,
+        source_spec: &SignalSpec,
     ) -> Result<Self, OutputError> {
         // Determine if resampling is needed by checking optimal config
-        let (_, is_resampling) = output.get_optimal_config(source_format)?;
+        let (_, is_resampling) = output.get_optimal_config(source_format, source_spec)?;
         let mut output = output;
         output.is_resampling = is_resampling;
 
@@ -394,8 +399,12 @@ impl AudioConsumer {
     /// # Errors
     ///
     /// Returns `OutputError` if stream creation or startup fails.
-    pub fn run(self, source_format: &AudioFormat) -> Result<Stream, OutputError> {
-        let (stream_config, _) = self.output.get_optimal_config(source_format)?;
+    pub fn run(
+        self,
+        source_format: &AudioFormat,
+        source_spec: &SignalSpec,
+    ) -> Result<Stream, OutputError> {
+        let (stream_config, _) = self.output.get_optimal_config(source_format, source_spec)?;
         let stream = self.output.create_stream(stream_config, self.consumer)?;
         stream.play()?;
         Ok(stream)

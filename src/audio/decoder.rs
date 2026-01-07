@@ -18,7 +18,7 @@ use {
         core::{
             audio::{
                 AudioBufferRef::{self, F32, F64, S8, S16, S24, S32, U8, U16, U24, U32},
-                Signal,
+                Signal, SignalSpec,
             },
             codecs::{CODEC_TYPE_NULL, Decoder, DecoderOptions},
             errors::Error as SymphoniaError,
@@ -83,6 +83,8 @@ pub struct AudioDecoder {
     pub format: AudioFormat,
     /// Technical metadata from the file.
     pub technical_metadata: TechnicalMetadata,
+    /// Signal specification from symphonia (sample rate + channel layout).
+    pub signal_spec: SignalSpec,
 }
 
 impl AudioDecoder {
@@ -152,9 +154,14 @@ impl AudioDecoder {
         let track = &format_reader.tracks()[track_index];
         let codec_params = &track.codec_params;
 
+        let signal_spec = SignalSpec::new(
+            codec_params.sample_rate.unwrap_or(44100),
+            codec_params.channels.ok_or(DecoderError::NoAudioTrack)?,
+        );
+
         let format = AudioFormat {
-            sample_rate: codec_params.sample_rate.unwrap_or(44100),
-            channels: codec_params.channels.map(|ch| ch.count()).unwrap_or(2) as u32,
+            sample_rate: signal_spec.rate,
+            channels: signal_spec.channels.count() as u32,
             bits_per_sample: codec_params.bits_per_coded_sample.unwrap_or(16),
             channel_mask: 0,
         };
@@ -170,6 +177,7 @@ impl AudioDecoder {
             track_index,
             format,
             technical_metadata,
+            signal_spec,
         })
     }
 

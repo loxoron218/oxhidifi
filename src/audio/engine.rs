@@ -401,18 +401,21 @@ impl AudioEngine {
         // Create audio output
         let output = AudioOutput::new(Some(self.output_config.clone()))?;
 
+        // Create decoder to get signal spec
+        let decoder = AudioDecoder::new(&track_info.path)?;
+        let signal_spec = decoder.signal_spec;
+
         // Create audio consumer
-        let consumer = AudioConsumer::new(output, consumer, &track_info.format)?;
+        let consumer = AudioConsumer::new(output, consumer, &track_info.format, &signal_spec)?;
 
         // Create audio producer
-        let decoder = AudioDecoder::new(&track_info.path)?;
         let producer = AudioProducer::new(decoder, producer);
 
         // Start decoder thread
         let decoder_handle = spawn(move || producer.run());
 
         // Start audio stream
-        let stream = consumer.run(&track_info.format)?;
+        let stream = consumer.run(&track_info.format, &signal_spec)?;
 
         // Store stream handle
         *self
@@ -468,17 +471,19 @@ impl AudioEngine {
             let mut decoder = AudioDecoder::new(&track_info.path)?;
             decoder.seek(position_ms)?;
 
+            let signal_spec = decoder.signal_spec;
+
             // Recreate the playback stream
             let buffer_size = 4096;
             let (producer, consumer) = RingBuffer::<f32>::new(buffer_size);
 
             let output = AudioOutput::new(Some(self.output_config.clone()))?;
-            let consumer = AudioConsumer::new(output, consumer, &track_info.format)?;
+            let consumer = AudioConsumer::new(output, consumer, &track_info.format, &signal_spec)?;
             let producer = AudioProducer::new(decoder, producer);
 
             let decoder_handle = spawn(move || producer.run());
 
-            let stream = consumer.run(&track_info.format)?;
+            let stream = consumer.run(&track_info.format, &signal_spec)?;
 
             *self
                 .stream_handle
