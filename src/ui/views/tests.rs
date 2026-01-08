@@ -146,8 +146,14 @@ mod view_integration_tests {
         let app_state = AppState::new(engine_weak, None, Arc::new(RwLock::new(settings_manager)));
 
         // Test that views support keyboard navigation
-        let album_grid =
-            AlbumGridView::new(Some(app_state.clone().into()), Vec::new(), true, false);
+        let album_grid = AlbumGridView::new(
+            Some(app_state.clone().into()),
+            None,
+            None,
+            Vec::new(),
+            true,
+            false,
+        );
         assert!(album_grid.flow_box.is_focusable() || true);
 
         let artist_grid = ArtistGridView::new(Some(app_state.clone().into()), Vec::new(), false);
@@ -166,8 +172,14 @@ mod view_integration_tests {
         let app_state = AppState::new(engine_weak, None, Arc::new(RwLock::new(settings_manager)));
 
         // Test accessibility attributes
-        let album_grid =
-            AlbumGridView::new(Some(app_state.clone().into()), Vec::new(), true, false);
+        let album_grid = AlbumGridView::new(
+            Some(app_state.clone().into()),
+            None,
+            None,
+            Vec::new(),
+            true,
+            false,
+        );
         assert_eq!(album_grid.flow_box.accessible_role(), Grid);
 
         let artist_grid = ArtistGridView::new(Some(app_state.clone().into()), Vec::new(), false);
