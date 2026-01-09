@@ -38,14 +38,23 @@ use crate::{
 
 /// Context struct for track information updates.
 struct TrackInfoUpdateContext<'a> {
+    /// Label widget displaying the track title.
     title_label: &'a Label,
+    /// Label widget displaying the artist name.
     artist_label: &'a Label,
+    /// Picture widget displaying the album artwork.
     artwork: &'a Picture,
+    /// Optional Hi-Fi metadata display component.
     hifi_metadata: &'a mut Option<HiFiMetadata>,
+    /// Container widget for Hi-Fi metadata.
     hifi_metadata_container: &'a Box,
+    /// Label widget displaying the total track duration.
     total_duration_label: &'a Label,
+    /// Toggle button for play/pause control.
     play_button: &'a ToggleButton,
+    /// Button for skipping to previous track.
     prev_button: &'a Button,
+    /// Button for skipping to next track.
     next_button: &'a Button,
 }
 

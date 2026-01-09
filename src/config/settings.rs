@@ -80,7 +80,9 @@ impl Default for UserSettings {
 /// Handles loading, saving, and validation of user preferences.
 #[derive(Debug)]
 pub struct SettingsManager {
+    /// Thread-safe user settings storage.
     settings: RwLock<UserSettings>,
+    /// Path to the configuration file on disk.
     config_path: PathBuf,
 }
 

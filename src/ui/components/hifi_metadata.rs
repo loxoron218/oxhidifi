@@ -20,11 +20,17 @@ use crate::{library::models::Track, ui::utils::format_sample_rate};
 /// Builder pattern for configuring HiFiMetadata components.
 #[derive(Debug, Default)]
 pub struct HiFiMetadataBuilder {
+    /// Track containing the metadata to display.
     track: Option<Track>,
+    /// Whether to show the audio format (e.g., "FLAC", "MP3").
     show_format: bool,
+    /// Whether to show the sample rate (e.g., "96 kHz").
     show_sample_rate: bool,
+    /// Whether to show the bit depth (e.g., "24-bit").
     show_bit_depth: bool,
+    /// Whether to show the channel count (e.g., "Stereo").
     show_channels: bool,
+    /// Whether to use compact layout (single line vs multiple lines).
     compact: bool,
 }
 

@@ -31,8 +31,11 @@ use crate::{
 /// Builder pattern for configuring ArtistGridView components.
 #[derive(Debug, Default)]
 pub struct ArtistGridViewBuilder {
+    /// Optional application state reference for reactive updates.
     app_state: Option<Arc<AppState>>,
+    /// Vector of artists to display in the grid.
     artists: Vec<Artist>,
+    /// Whether to use compact layout with smaller cover sizes.
     compact: bool,
 }
 

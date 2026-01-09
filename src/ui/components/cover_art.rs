@@ -19,10 +19,15 @@ use crate::ui::components::dr_badge::{DRBadge, DRBadgeBuilder};
 /// Builder pattern for configuring CoverArt components.
 #[derive(Debug, Default)]
 pub struct CoverArtBuilder {
+    /// Path to the artwork image file.
     artwork_path: Option<String>,
+    /// DR value string to display in the badge overlay (e.g., "DR12").
     dr_value: Option<String>,
+    /// Whether to show the DR badge overlay on the cover.
     show_dr_badge: bool,
+    /// Width of the cover art display in pixels.
     width: i32,
+    /// Height of the cover art display in pixels.
     height: i32,
 }
 

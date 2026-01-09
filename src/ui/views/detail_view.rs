@@ -29,8 +29,11 @@ use crate::{
 /// Builder pattern for configuring DetailView components.
 #[derive(Debug, Default)]
 pub struct DetailViewBuilder {
+    /// Optional application state reference for reactive updates.
     app_state: Option<Arc<AppState>>,
+    /// The type of detail to display (album or artist).
     detail_type: DetailType,
+    /// Whether to use compact layout.
     compact: bool,
 }
 

@@ -34,8 +34,11 @@ use crate::{
 /// Builder pattern for configuring ListView components.
 #[derive(Debug, Default)]
 pub struct ListViewBuilder {
+    /// Optional application state reference for reactive updates.
     app_state: Option<Arc<AppState>>,
+    /// The type of items to display (albums or artists).
     view_type: ListViewType,
+    /// Whether to use compact layout.
     compact: bool,
 }
 

@@ -15,7 +15,9 @@ use libadwaita::{
 /// Builder pattern for configuring PlayOverlay components.
 #[derive(Debug, Default)]
 pub struct PlayOverlayBuilder {
+    /// Whether the overlay should show pause icon initially.
     is_playing: bool,
+    /// Whether to show overlay only on hover.
     show_on_hover: bool,
 }
 

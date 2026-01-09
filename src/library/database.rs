@@ -40,6 +40,7 @@ pub enum LibraryError {
 /// including album/artist/track queries, searching, and DR value management.
 #[derive(Debug, Clone)]
 pub struct LibraryDatabase {
+    /// SQLite connection pool for database operations.
     pool: SqlitePool,
 }
 

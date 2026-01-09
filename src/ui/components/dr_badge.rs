@@ -92,7 +92,9 @@ impl DRQuality {
 /// Builder pattern for configuring DRBadge components.
 #[derive(Debug, Default)]
 pub struct DRBadgeBuilder {
+    /// DR value string to display (e.g., "DR12").
     dr_value: Option<String>,
+    /// Whether to show the "DR" prefix label on the badge.
     show_label: bool,
 }
 

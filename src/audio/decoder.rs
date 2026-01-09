@@ -284,7 +284,9 @@ impl AudioDecoder {
 /// This struct wraps an `AudioDecoder` and continuously decodes audio,
 /// writing the samples to the provided ring buffer producer.
 pub struct AudioProducer {
+    /// The audio decoder that provides raw audio samples.
     decoder: AudioDecoder,
+    /// Ring buffer producer for writing decoded samples.
     producer: Producer<f32>,
 }
 

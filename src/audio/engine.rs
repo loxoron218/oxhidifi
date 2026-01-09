@@ -114,9 +114,13 @@ impl Clone for AudioEngine {
 /// Internal control messages for the audio engine.
 #[derive(Debug)]
 enum ControlMessage {
+    /// Start playback.
     Play,
+    /// Pause playback.
     Pause,
+    /// Stop playback.
     Stop,
+    /// Seek to specified position in milliseconds.
     Seek(u64),
 }
 

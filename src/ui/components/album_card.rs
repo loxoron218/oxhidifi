@@ -29,13 +29,21 @@ use crate::{
 /// Builder pattern for configuring AlbumCard components.
 #[derive(Default)]
 pub struct AlbumCardBuilder {
+    /// The album data to display on the card.
     album: Option<Album>,
+    /// The artist name to display on the card.
     artist_name: Option<String>,
+    /// The audio format to display (e.g., "FLAC", "MP3").
     format: Option<String>,
+    /// Whether to show the DR badge overlay on the cover.
     show_dr_badge: bool,
+    /// Whether to use compact layout with smaller cover size.
     compact: bool,
+    /// Optional cover size override in pixels (width and height).
     cover_size: Option<u32>,
+    /// Optional callback invoked when the play button is clicked.
     on_play_clicked: Option<Rc<dyn Fn()>>,
+    /// Optional callback invoked when the card (outside play button) is clicked.
     on_card_clicked: Option<Rc<dyn Fn()>>,
 }
 

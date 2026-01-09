@@ -49,11 +49,17 @@ use crate::{
 /// Builder pattern for configuring AlbumGridView components.
 #[derive(Default)]
 pub struct AlbumGridViewBuilder {
+    /// Optional application state reference for reactive updates.
     app_state: Option<Arc<AppState>>,
+    /// Optional library database reference for fetching tracks.
     library_db: Option<Arc<LibraryDatabase>>,
+    /// Optional audio engine reference for playback.
     audio_engine: Option<Arc<AudioEngine>>,
+    /// Vector of albums to display in the grid.
     albums: Vec<Album>,
+    /// Whether to show DR badges on album covers.
     show_dr_badges: bool,
+    /// Whether to use compact layout with smaller cover sizes.
     compact: bool,
 }
 

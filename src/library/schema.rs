@@ -29,6 +29,7 @@ pub const CURRENT_SCHEMA_VERSION: i32 = 4;
 
 /// Database schema definition.
 pub struct SchemaManager {
+    /// SQLite connection pool for schema operations.
     pool: SqlitePool,
 }
 

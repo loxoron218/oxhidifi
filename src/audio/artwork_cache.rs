@@ -16,6 +16,7 @@ use parking_lot::RwLock;
 /// Maps album directory paths to their corresponding artwork file paths.
 #[derive(Debug, Default)]
 pub struct ArtworkCache {
+    /// Thread-safe cache mapping album directory paths to artwork file paths.
     cache: Arc<RwLock<HashMap<PathBuf, Option<String>>>>,
 }
 
