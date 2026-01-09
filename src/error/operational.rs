@@ -16,11 +16,27 @@ use {
 /// making debugging and user feedback more informative.
 pub trait ResultExt<T, E> {
     /// Adds context to an error with a static string.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` with additional context.
+    ///
+    /// # Errors
+    ///
+    /// Returns the original error wrapped with additional context.
     fn add_context(self, context: &'static str) -> AnyhowResult<T>
     where
         E: StdError + Send + Sync + 'static;
 
     /// Adds context to an error with a formatted string.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` with additional context.
+    ///
+    /// # Errors
+    ///
+    /// Returns the original error wrapped with additional context.
     fn add_contextf(self, format: impl Display) -> AnyhowResult<T>
     where
         E: StdError + Send + Sync + 'static;

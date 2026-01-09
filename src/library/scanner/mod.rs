@@ -330,6 +330,10 @@ impl LibraryScanner {
     /// # Returns
     ///
     /// A `Result` containing a vector of audio file paths or a `LibraryError`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `LibraryError` if the directory cannot be read.
     pub fn collect_audio_files_from_directory(
         &self,
         dir_path: &Path,

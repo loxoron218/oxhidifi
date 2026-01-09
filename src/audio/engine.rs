@@ -287,6 +287,10 @@ impl AudioEngine {
     /// # Returns
     ///
     /// A `Result` indicating success or failure.
+    ///
+    /// # Errors
+    ///
+    /// Returns `AudioError::InvalidOperation` if the stop command cannot be sent.
     pub async fn stop(&self) -> Result<(), AudioError> {
         self.control_tx
             .send(ControlMessage::Stop)

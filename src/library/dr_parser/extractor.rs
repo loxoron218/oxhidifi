@@ -39,6 +39,10 @@ impl DrExtractor {
     /// # Returns
     ///
     /// A new `DrExtractor` instance.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the regex patterns cannot be compiled (should never happen with valid patterns).
     pub fn new() -> Self {
         // Add patterns for Official DR value formats only
         // All patterns should capture only the numeric part (group 1)

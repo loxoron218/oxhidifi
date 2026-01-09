@@ -204,6 +204,10 @@ impl AudioOutput {
     /// # Errors
     ///
     /// Returns `OutputError` if device capabilities cannot be queried.
+    ///
+    /// # Panics
+    ///
+    /// Panics if no compatible configuration is found (should not happen with valid audio devices).
     pub fn get_target_config(
         &self,
         source_format: &AudioFormat,
@@ -487,6 +491,10 @@ impl AudioConsumer {
     /// * `consumer` - The ring buffer consumer to read samples from.
     /// * `source_format` - The source audio format.
     /// * `source_spec` - The signal specification from symphonia.
+    ///
+    /// # Errors
+    ///
+    /// Returns `OutputError` if the output configuration cannot be determined.
     pub fn new(
         output: AudioOutput,
         consumer: Consumer<f32>,

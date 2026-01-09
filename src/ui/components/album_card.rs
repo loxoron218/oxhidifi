@@ -171,6 +171,10 @@ impl AlbumCardBuilder {
     /// # Returns
     ///
     /// A new `AlbumCard` instance.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the album has not been set before building.
     pub fn build(self) -> AlbumCard {
         AlbumCard::new(AlbumCardConfig {
             album: self.album.expect("Album must be set"),
@@ -249,6 +253,10 @@ impl AlbumCard {
     /// # Returns
     ///
     /// A new `AlbumCard` instance.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the CoverArt widget is not an Overlay (should never happen with proper widget construction).
     pub fn new(config: AlbumCardConfig) -> Self {
         let AlbumCardConfig {
             album,

@@ -272,6 +272,10 @@ impl CoverArt {
     /// # Arguments
     ///
     /// * `show` - Whether to show the DR badge
+    ///
+    /// # Panics
+    ///
+    /// Panics if the CoverArt widget is not an Overlay (should never happen with proper widget construction).
     pub fn set_show_dr_badge(&mut self, show: bool) {
         let overlay = self
             .widget

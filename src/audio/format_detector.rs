@@ -90,6 +90,11 @@ pub struct AudioFormatInfo {
 ///     Ok(())
 /// }
 /// ```
+///
+/// # Errors
+///
+/// Returns `FormatDetectionError` if the file cannot be opened, the format
+/// cannot be detected, or the format is not supported.
 pub fn detect_audio_format<P: AsRef<Path>>(
     path: P,
 ) -> Result<AudioFormatInfo, FormatDetectionError> {

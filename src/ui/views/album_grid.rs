@@ -424,6 +424,10 @@ impl AlbumGridView {
     /// # Arguments
     ///
     /// * `albums` - New vector of albums to display
+    ///
+    /// # Panics
+    ///
+    /// Panics if empty state exists but is None (should never happen with proper initialization).
     pub fn set_albums(&mut self, albums: Vec<Album>) {
         // Clear existing children
         while let Some(child) = self.flow_box.first_child() {

@@ -52,6 +52,12 @@ pub enum ArtworkSource {
 /// # Returns
 ///
 /// A `Result` containing the `ArtworkSource` or an `ArtworkError`.
+///
+/// # Errors
+///
+/// Returns `ArtworkError::ExtractionError` if metadata extraction fails.
+/// Returns `ArtworkError::ReadError` if the directory cannot be read.
+/// Returns `ArtworkError::NotFound` if no artwork is found.
 pub fn extract_artwork<P: AsRef<Path>>(audio_path: P) -> Result<ArtworkSource, ArtworkError> {
     let audio_path = audio_path.as_ref();
     let parent_dir = audio_path.parent().ok_or(ArtworkError::NotFound)?;
@@ -85,6 +91,10 @@ pub fn extract_artwork<P: AsRef<Path>>(audio_path: P) -> Result<ArtworkSource, A
 ///
 /// A `Result` containing an `Option<PathBuf>` with the path to the artwork file,
 /// or an `ArtworkError` if the directory cannot be read.
+///
+/// # Errors
+///
+/// Returns `ArtworkError::ReadError` if the directory cannot be read.
 pub fn find_external_artwork(dir: &Path) -> Result<Option<PathBuf>, ArtworkError> {
     let entries = read_dir(dir).map_err(ArtworkError::ReadError)?;
 
@@ -189,6 +199,10 @@ pub fn detect_mime_type(data: &[u8]) -> Option<MimeType> {
 /// # Returns
 ///
 /// A `Result` indicating success or failure.
+///
+/// # Errors
+///
+/// Returns `ArtworkError::ReadError` if the file cannot be written.
 pub fn save_embedded_artwork<P: AsRef<Path>>(
     artwork_data: &[u8],
     target_path: P,

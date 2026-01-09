@@ -418,6 +418,10 @@ fn resampling_loop(
 /// # Returns
 ///
 /// A `Result` containing the CPAL stream or an error.
+///
+/// # Errors
+///
+/// Returns `OutputError` if the device configuration cannot be queried or the stream cannot be created.
 pub fn create_resampling_stream(
     output: &AudioOutput,
     mut resampled_consumer: Consumer<f32>,

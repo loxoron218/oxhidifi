@@ -41,6 +41,10 @@ use crate::{
 /// # Errors
 ///
 /// Returns `LibraryError` if processing fails.
+///
+/// # Panics
+///
+/// Panics if DR parser is provided as `Some` but contains `None` (should never happen with valid initialization).
 pub async fn handle_files_changed(
     paths: Vec<PathBuf>,
     database: &LibraryDatabase,
@@ -174,6 +178,10 @@ pub async fn handle_files_changed(
 /// # Errors
 ///
 /// Returns `LibraryError` if processing fails.
+///
+/// # Panics
+///
+/// Panics if DR parser is provided as `Some` but contains `None` (should never happen with valid initialization).
 pub async fn handle_files_removed(
     paths: Vec<PathBuf>,
     database: &LibraryDatabase,

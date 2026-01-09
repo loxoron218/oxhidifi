@@ -305,6 +305,10 @@ impl SchemaManager {
     /// # Returns
     ///
     /// The current schema version, or 0 if not initialized.
+    ///
+    /// # Errors
+    ///
+    /// Returns `SchemaError` if the database query fails.
     pub async fn get_current_version(&self) -> Result<i32, SchemaError> {
         let version: Option<i32> = query_scalar("SELECT version FROM schema_version LIMIT 1")
             .fetch_optional(&self.pool)

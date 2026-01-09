@@ -84,6 +84,10 @@ impl HeaderBar {
     /// # Returns
     ///
     /// A new `HeaderBar` instance.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the action parameter is not an integer variant (should never happen with proper menu setup).
     pub fn new(
         app_state: Arc<AppState>,
         application: Option<Application>,

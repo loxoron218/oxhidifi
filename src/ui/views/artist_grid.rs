@@ -202,6 +202,10 @@ impl ArtistGridView {
     /// # Arguments
     ///
     /// * `artists` - New vector of artists to display
+    ///
+    /// # Panics
+    ///
+    /// Panics if empty state exists but is None (should never happen with proper initialization).
     pub fn set_artists(&mut self, artists: Vec<Artist>) {
         // Clear existing children
         while let Some(child) = self.flow_box.first_child() {
