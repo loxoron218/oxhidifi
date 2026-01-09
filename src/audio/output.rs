@@ -3,23 +3,28 @@
 //! This module handles audio device enumeration, stream creation, and
 //! bit-perfect playback configuration for high-fidelity audio output.
 
-use std::time::Duration;
+use std::{mem::forget, time::Duration};
 
 use {
     cpal::{
         BufferSize::Default as CpalDefault,
         BuildStreamError, ChannelCount, Device, Host, OutputCallbackInfo, PlayStreamError,
         SampleFormat::{self, F32, I16, U16},
-        Stream, StreamConfig, default_host,
+        Stream, StreamConfig,
+        platform::{
+            HostId::{self, Alsa, Jack},
+            available_hosts, host_from_id,
+        },
         traits::{DeviceTrait, HostTrait, StreamTrait},
     },
-    rtrb::{Consumer, PopError::Empty},
+    rtrb::{Consumer, PopError::Empty, RingBuffer},
     rubato::FftFixedIn,
     symphonia::core::audio::SignalSpec,
     thiserror::Error,
+    tracing::{debug, error, info, warn},
 };
 
-use crate::audio::decoder::AudioFormat;
+use crate::audio::{decoder::AudioFormat, resampler::ResamplingAudioConsumer};
 
 /// Error type for audio output operations.
 #[derive(Error, Debug)]
@@ -33,6 +38,9 @@ pub enum OutputError {
     /// No suitable audio device found.
     #[error("No suitable audio device found")]
     NoDeviceFound,
+    /// Failed to initialize a specific audio host.
+    #[error("Failed to initialize audio host: {host:?}")]
+    HostInitFailed { host: HostId },
     /// Unsupported sample format.
     #[error("Unsupported sample format: {format:?}")]
     UnsupportedSampleFormat { format: SampleFormat },
@@ -101,20 +109,87 @@ impl AudioOutput {
     /// - No suitable audio device is found
     /// - Device enumeration fails
     pub fn new(config: Option<OutputConfig>) -> Result<Self, OutputError> {
-        let host = default_host();
-        let device = host
-            .default_output_device()
-            .ok_or(OutputError::NoDeviceFound)?;
+        let all_hosts = available_hosts();
 
-        Ok(AudioOutput {
-            host,
-            device,
-            config: config.unwrap_or_default(),
-            is_resampling: false,
-        })
+        // Try multiple hosts in order of preference
+        // For PipeWire systems, try Jack first (PipeWire has Jack compatibility)
+        // Then fall back to Alsa
+        let hosts_to_try = vec![Jack, Alsa];
+
+        for host_id in hosts_to_try {
+            if !all_hosts.contains(&host_id) {
+                debug!("Host {:?} not available, skipping", host_id);
+                continue;
+            }
+
+            match Self::try_host(host_id) {
+                Ok((host, device)) => {
+                    let device_name = device
+                        .description()
+                        .map(|d| d.to_string())
+                        .unwrap_or_else(|_| "Unknown".to_string());
+                    info!(
+                        "Successfully initialized host {:?} with device: {}",
+                        host_id, device_name
+                    );
+
+                    return Ok(AudioOutput {
+                        host,
+                        device,
+                        config: config.unwrap_or_default(),
+                        is_resampling: false,
+                    });
+                }
+                Err(e) => {
+                    warn!(host = ?host_id, error = %e, "Failed to initialize host");
+                    continue;
+                }
+            }
+        }
+
+        error!("Failed to initialize any audio host");
+        Err(OutputError::NoDeviceFound)
     }
 
-    /// Gets the optimal stream configuration for bit-perfect playback.
+    /// Tries to initialize audio output with a specific host.
+    ///
+    /// # Arguments
+    ///
+    /// * `host_id` - The host ID to try
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing a tuple of the host and device, or an `OutputError`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `OutputError` if the host cannot be initialized or no device found.
+    fn try_host(host_id: HostId) -> Result<(Host, Device), OutputError> {
+        debug!("Instantiating host: {:?}", host_id);
+
+        let host = host_from_id(host_id).map_err(|e| {
+            error!(host = ?host_id, error = ?e, "Failed to instantiate host");
+            OutputError::HostInitFailed { host: host_id }
+        })?;
+
+        debug!("Getting default output device for host: {:?}", host_id);
+
+        let device = host.default_output_device().ok_or_else(|| {
+            warn!("No default output device found for host: {:?}", host_id);
+            OutputError::NoDeviceFound
+        })?;
+
+        info!("Successfully got device for host: {:?}", host_id);
+
+        Ok((host, device))
+    }
+
+    /// Gets the target stream configuration based on system capabilities.
+    ///
+    /// This method respects the actual audio backend constraints by examining
+    /// all supported configurations and selecting the most appropriate one.
+    /// It returns the actual sample rate that will be used for playback, which may
+    /// differ from what the source provides.
     ///
     /// # Arguments
     ///
@@ -123,61 +198,72 @@ impl AudioOutput {
     ///
     /// # Returns
     ///
-    /// A `Result` containing a tuple of the optimal `StreamConfig` and a boolean indicating
+    /// A `Result` containing a tuple of the target `StreamConfig` and a boolean indicating
     /// whether resampling is needed, or an `OutputError`.
     ///
     /// # Errors
     ///
     /// Returns `OutputError` if device capabilities cannot be queried.
-    pub fn get_optimal_config(
+    pub fn get_target_config(
         &self,
         source_format: &AudioFormat,
         _source_spec: &SignalSpec,
     ) -> Result<(StreamConfig, bool), OutputError> {
+        // Get all supported output configurations
         let supported_configs = self
             .device
             .supported_output_configs()
             .map_err(|_| OutputError::NoDeviceFound)?;
 
-        // Try to find a configuration that matches our source exactly
-        let mut best_config = None;
         let source_sample_rate = source_format.sample_rate;
         let source_channels = source_format.channels;
 
-        for config in supported_configs {
-            let sample_rate = config.max_sample_rate();
-            let channels = config.channels();
+        // Try to find the best matching configuration
+        let mut best_config = None;
+        let mut exact_match = false;
 
-            // Prefer exact match for bit-perfect playback
-            if sample_rate == source_sample_rate
-                && <u32 as From<u16>>::from(channels) == source_channels
+        for config in supported_configs {
+            let config_sample_rate = config.max_sample_rate();
+            let config_channels = config.channels();
+
+            // Check for exact match (bit-perfect)
+            if config_sample_rate == source_sample_rate
+                && <u32 as From<u16>>::from(config_channels) == source_channels
             {
                 best_config = Some(config.with_max_sample_rate());
+                exact_match = true;
                 break;
             }
 
-            // Fallback to compatible configurations
-            if <u32 as From<u16>>::from(channels) >= source_channels
+            // Otherwise, find the best compatible configuration
+            if <u32 as From<u16>>::from(config_channels) >= source_channels
                 && (best_config.is_none()
-                    || (config.max_sample_rate() > best_config.as_ref().unwrap().sample_rate()))
+                    || config_sample_rate > best_config.as_ref().unwrap().sample_rate())
             {
                 best_config = Some(config.with_max_sample_rate());
             }
         }
 
         let config = best_config.ok_or(OutputError::NoDeviceFound)?;
+        let target_sample_rate = config.sample_rate();
+        let target_channels = config.channels();
+        let target_sample_format = config.sample_format();
 
-        let is_resampling = config.sample_rate() != source_sample_rate
-            || <u32 as From<u16>>::from(config.channels()) != source_channels;
+        let needs_resampling = !exact_match;
 
-        Ok((
-            StreamConfig {
-                channels: config.channels(),
-                sample_rate: config.sample_rate(),
-                buffer_size: CpalDefault,
-            },
-            is_resampling,
-        ))
+        // Create stream config using the selected configuration
+        let stream_config = StreamConfig {
+            channels: target_channels,
+            sample_rate: target_sample_rate,
+            buffer_size: CpalDefault,
+        };
+
+        info!(
+            "Target config: {} Hz, {} channels, {:?} format, resampling needed: {}",
+            target_sample_rate, target_channels, target_sample_format, needs_resampling
+        );
+
+        Ok((stream_config, needs_resampling))
     }
 
     /// Creates an audio stream with the specified configuration.
@@ -355,13 +441,41 @@ impl AudioOutput {
     }
 }
 
+impl AudioOutput {
+    /// Gets a reference to the CPAL device.
+    ///
+    /// # Returns
+    /// A reference to the selected CPAL output device. The lifetime is tied to `self`.
+    pub fn device(&self) -> &Device {
+        &self.device
+    }
+
+    /// Gets a reference to the output configuration.
+    ///
+    /// # Returns
+    /// A reference to the current output configuration used to build streams.
+    pub fn config(&self) -> &OutputConfig {
+        &self.config
+    }
+}
+
 /// Audio consumer that reads samples from a ring buffer and feeds them to the output.
 ///
 /// This struct wraps an `AudioOutput` and continuously reads samples from the
-/// provided ring buffer consumer.
-pub struct AudioConsumer {
-    output: AudioOutput,
-    consumer: Consumer<f32>,
+/// provided ring buffer consumer. When resampling is needed, it uses a
+/// `ResamplingAudioConsumer` to handle sample rate conversion.
+pub enum AudioConsumer {
+    /// Direct consumer (no resampling needed).
+    Direct {
+        output: AudioOutput,
+        consumer: Consumer<f32>,
+    },
+    /// Resampling consumer (resampling needed).
+    Resampling {
+        output: AudioOutput,
+        resampling_consumer: ResamplingAudioConsumer,
+        resampled_consumer: Consumer<f32>,
+    },
 }
 
 impl AudioConsumer {
@@ -379,12 +493,36 @@ impl AudioConsumer {
         source_format: &AudioFormat,
         source_spec: &SignalSpec,
     ) -> Result<Self, OutputError> {
-        // Determine if resampling is needed by checking optimal config
-        let (_, is_resampling) = output.get_optimal_config(source_format, source_spec)?;
-        let mut output = output;
-        output.is_resampling = is_resampling;
+        let (target_config, needs_resampling) =
+            output.get_target_config(source_format, source_spec)?;
 
-        Ok(AudioConsumer { output, consumer })
+        let mut output = output;
+        output.is_resampling = needs_resampling;
+
+        if needs_resampling {
+            // Create ring buffers for resampling
+            let buffer_size = 8192; // Larger buffer for resampling
+            let (resampled_producer, resampled_consumer) = RingBuffer::<f32>::new(buffer_size);
+
+            // Create resampling consumer
+            let resampling_consumer = ResamplingAudioConsumer::new(
+                consumer,
+                resampled_producer,
+                source_format,
+                target_config,
+            )
+            .map_err(|e| OutputError::ResamplingError(e.to_string()))?;
+
+            info!("Created resampling audio consumer");
+            Ok(AudioConsumer::Resampling {
+                output,
+                resampling_consumer,
+                resampled_consumer,
+            })
+        } else {
+            info!("Created direct audio consumer (no resampling needed)");
+            Ok(AudioConsumer::Direct { output, consumer })
+        }
     }
 
     /// Runs the audio consumption loop.
@@ -401,19 +539,41 @@ impl AudioConsumer {
     /// Returns `OutputError` if stream creation or startup fails.
     pub fn run(
         self,
-        source_format: &AudioFormat,
-        source_spec: &SignalSpec,
+        _source_format: &AudioFormat,
+        _source_spec: &SignalSpec,
     ) -> Result<Stream, OutputError> {
-        let (stream_config, _) = self.output.get_optimal_config(source_format, source_spec)?;
-        let stream = self.output.create_stream(stream_config, self.consumer)?;
-        stream.play()?;
-        Ok(stream)
+        match self {
+            AudioConsumer::Direct { output, consumer } => {
+                let (stream_config, _) = output.get_target_config(_source_format, _source_spec)?;
+                let stream = output.create_stream(stream_config, consumer)?;
+                stream.play()?;
+                Ok(stream)
+            }
+            AudioConsumer::Resampling {
+                output,
+                resampling_consumer,
+                resampled_consumer,
+            } => {
+                let stream_config = resampling_consumer.target_config().clone();
+                let stream = crate::audio::resampler::create_resampling_stream(
+                    &output,
+                    resampled_consumer,
+                    stream_config,
+                )?;
+                stream.play()?;
+
+                // Keep the resampling thread alive for the lifetime of the stream.
+                // This intentionally leaks the consumer to avoid premature drop.
+                forget(resampling_consumer);
+                Ok(stream)
+            }
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::audio::output::{OutputConfig, OutputError};
+    use crate::audio::output::{OutputConfig, OutputError::NoDeviceFound};
 
     #[test]
     fn test_output_config_default() {
@@ -426,7 +586,7 @@ mod tests {
 
     #[test]
     fn test_output_error_display() {
-        let no_device_error = OutputError::NoDeviceFound;
+        let no_device_error = NoDeviceFound;
         assert_eq!(
             no_device_error.to_string(),
             "No suitable audio device found"

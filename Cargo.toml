@@ -7,7 +7,7 @@ version = "0.1.0"
 anyhow = "1.0.100"
 async-channel = "2.5.0"
 async-trait = "0.1.89"
-cpal = "0.17.0"
+cpal = { version = "0.17.0", features = ["jack"] }
 crossbeam-channel = "0.5.15"
 libadwaita = { version = "0.8.1", features = [
   "gio_v2_80",

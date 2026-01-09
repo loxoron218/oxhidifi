@@ -316,81 +316,120 @@ impl AudioProducer {
             let spec = buffer.spec();
             let channels = spec.channels.count();
 
-            // Convert audio buffer to f32 samples
+            // Convert audio buffer to f32 samples in INTERLEAVED format
             let samples = match buffer {
                 F32(buf) => {
-                    let mut samples = Vec::new();
-                    for ch in 0..channels {
-                        samples.extend(buf.chan(ch).iter().copied());
+                    let mut samples = Vec::with_capacity(buf.frames() * channels);
+                    for frame in 0..buf.frames() {
+                        for ch in 0..channels {
+                            samples.push(buf.chan(ch)[frame]);
+                        }
                     }
                     samples
                 }
                 F64(buf) => {
-                    let mut samples = Vec::new();
-                    for ch in 0..channels {
-                        samples.extend(buf.chan(ch).iter().map(|&s| s as f32));
+                    let mut samples = Vec::with_capacity(buf.frames() * channels);
+                    for frame in 0..buf.frames() {
+                        for ch in 0..channels {
+                            samples.push(buf.chan(ch)[frame] as f32);
+                        }
                     }
                     samples
                 }
                 U8(buf) => {
-                    let mut samples = Vec::new();
-                    for ch in 0..channels {
-                        samples.extend(buf.chan(ch).iter().map(|&s| s as f32 / 255.0));
+                    let mut samples = Vec::with_capacity(buf.frames() * channels);
+                    for frame in 0..buf.frames() {
+                        for ch in 0..channels {
+                            let s = buf.chan(ch)[frame];
+                            let v = (s as f32 - 128.0_f32) / 127.0_f32;
+                            samples.push(v);
+                        }
                     }
                     samples
                 }
                 S8(buf) => {
-                    let mut samples = Vec::new();
-                    for ch in 0..channels {
-                        samples.extend(buf.chan(ch).iter().map(|&s| s as f32 / 127.0));
+                    let mut samples = Vec::with_capacity(buf.frames() * channels);
+                    for frame in 0..buf.frames() {
+                        for ch in 0..channels {
+                            samples.push(buf.chan(ch)[frame] as f32 / 127.0);
+                        }
                     }
                     samples
                 }
                 U16(buf) => {
-                    let mut samples = Vec::new();
-                    for ch in 0..channels {
-                        samples.extend(buf.chan(ch).iter().map(|&s| s as f32 / 65535.0));
+                    let mut samples = Vec::with_capacity(buf.frames() * channels);
+                    for frame in 0..buf.frames() {
+                        for ch in 0..channels {
+                            let s = buf.chan(ch)[frame];
+                            let v = (s as f32 - 32768.0_f32) / 32767.0_f32;
+                            samples.push(v);
+                        }
                     }
                     samples
                 }
                 S16(buf) => {
-                    let mut samples = Vec::new();
-                    for ch in 0..channels {
-                        samples.extend(buf.chan(ch).iter().map(|&s| s as f32 / 32767.0));
+                    let mut samples = Vec::with_capacity(buf.frames() * channels);
+                    for frame in 0..buf.frames() {
+                        for ch in 0..channels {
+                            let s = buf.chan(ch)[frame];
+                            let v = if s == i16::MIN {
+                                -1.0
+                            } else {
+                                s as f32 / i16::MAX as f32
+                            };
+                            samples.push(v);
+                        }
                     }
                     samples
                 }
                 U24(buf) => {
-                    let mut samples = Vec::new();
-                    for ch in 0..channels {
-                        samples.extend(buf.chan(ch).iter().map(|&sample| {
-                            let sample_u32 = sample.0 & 0x00FFFFFF;
-                            sample_u32 as f32 / 16777215.0
-                        }));
+                    let mut samples = Vec::with_capacity(buf.frames() * channels);
+                    for frame in 0..buf.frames() {
+                        for ch in 0..channels {
+                            let sample_u32 = buf.chan(ch)[frame].0 & 0x00FFFFFF;
+                            samples.push(sample_u32 as f32 / 16777215.0);
+                        }
                     }
                     samples
                 }
                 S24(buf) => {
-                    let mut samples = Vec::new();
-                    for ch in 0..channels {
-                        samples.extend(buf.chan(ch).iter().map(|&sample| {
-                            let sample_i32 = sample.0 << 8 >> 8;
-                            sample_i32 as f32 / 8388607.0
-                        }));
+                    let mut samples = Vec::with_capacity(buf.frames() * channels);
+                    for frame in 0..buf.frames() {
+                        for ch in 0..channels {
+                            let s = buf.chan(ch)[frame].0 << 8 >> 8;
+                            let v = if s == -8_388_608 {
+                                -1.0
+                            } else {
+                                s as f32 / 8_388_607.0
+                            };
+                            samples.push(v);
+                        }
                     }
                     samples
                 }
                 U32(buf) => {
-                    let mut samples = Vec::new();
-                    for ch in 0..channels {
-                        samples.extend(buf.chan(ch).iter().map(|&s| s as f32 / 4294967295.0));
+                    let mut samples = Vec::with_capacity(buf.frames() * channels);
+                    for frame in 0..buf.frames() {
+                        for ch in 0..channels {
+                            let s = buf.chan(ch)[frame];
+                            let v = (s as f32 - 2_147_483_648.0_f32) / 2_147_483_647.0_f32;
+                            samples.push(v);
+                        }
                     }
                     samples
                 }
                 S32(buf) => {
-                    let mut samples = Vec::new();
-                    for ch in 0..channels {
-                        samples.extend(buf.chan(ch).iter().map(|&s| s as f32 / 2147483647.0));
+                    let mut samples = Vec::with_capacity(buf.frames() * channels);
+                    for frame in 0..buf.frames() {
+                        for ch in 0..channels {
+                            let s = buf.chan(ch)[frame];
+                            let v = if s == i32::MIN {
+                                -1.0
+                            } else {
+                                s as f32 / i32::MAX as f32
+                            };
+                            samples.push(v);
+                        }
                     }
                     samples
                 }

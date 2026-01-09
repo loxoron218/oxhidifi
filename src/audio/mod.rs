@@ -6,3 +6,4 @@ pub mod engine;
 pub mod format_detector;
 pub mod metadata;
 pub mod output;
+pub mod resampler;
