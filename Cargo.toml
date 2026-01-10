@@ -7,6 +7,7 @@ version = "0.1.0"
 anyhow = "1.0.100"
 async-channel = "2.5.0"
 async-trait = "0.1.89"
+audioadapter-buffers = "2.0"
 cpal = { version = "0.17.1", features = ["jack"] }
 crossbeam-channel = "0.5.15"
 libadwaita = { version = "0.8.1", features = [
@@ -19,7 +20,7 @@ notify = "8.2.0"
 parking_lot = "0.12.5"
 regex = "1.12.2"
 rtrb = "0.3.2"
-rubato = "0.16.2"
+rubato = "1.0.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 sqlx = { version = "0.8.6", features = ["runtime-tokio", "sqlite"] }

@@ -18,7 +18,7 @@ use {
         traits::{DeviceTrait, HostTrait, StreamTrait},
     },
     rtrb::{Consumer, PopError::Empty, RingBuffer},
-    rubato::FftFixedIn,
+    rubato::{Fft, FixedSync::Input, ResamplerConstructionError},
     symphonia::core::audio::SignalSpec,
     thiserror::Error,
     tracing::{debug, error, info, warn},
@@ -399,21 +399,22 @@ impl AudioOutput {
         source_rate: u32,
         target_rate: u32,
         channels: usize,
-    ) -> Result<FftFixedIn<f32>, OutputError> {
+    ) -> Result<Fft<f32>, OutputError> {
         if source_rate == target_rate {
             return Err(OutputError::ResamplingError(
                 "Source and target rates are identical".to_string(),
             ));
         }
 
-        let resampler = FftFixedIn::<f32>::new(
+        let resampler = Fft::<f32>::new(
             source_rate as usize,
             target_rate as usize,
             1024, // chunk_size_in - reasonable default
             1,    // sub_chunks
             channels,
+            Input,
         )
-        .map_err(|e| OutputError::ResamplingError(e.to_string()))?;
+        .map_err(|e: ResamplerConstructionError| OutputError::ResamplingError(e.to_string()))?;
 
         Ok(resampler)
     }

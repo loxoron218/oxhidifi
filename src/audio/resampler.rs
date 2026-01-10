@@ -15,9 +15,10 @@ use std::{
 };
 
 use {
+    audioadapter_buffers::direct::InterleavedSlice,
     cpal::{OutputCallbackInfo, SampleFormat, Stream, StreamConfig, traits::DeviceTrait},
     rtrb::{Consumer, PopError::Empty, Producer, PushError::Full},
-    rubato::{FftFixedIn, Resampler},
+    rubato::{Fft, FixedSync::Input, ResampleError, Resampler, ResamplerConstructionError},
     tracing::{debug, error, info},
 };
 
@@ -60,15 +61,13 @@ impl Error for ResamplingError {}
 /// in real-time, maintaining proper channel layout and timing.
 pub struct AudioResampler {
     /// Rubato resampler instance.
-    resampler: FftFixedIn<f32>,
+    resampler: Fft<f32>,
     /// Source sample rate in Hz.
     source_rate: u32,
     /// Target sample rate in Hz.
     target_rate: u32,
     /// Number of channels.
     channels: usize,
-    /// Fixed input chunk size per channel expected by rubato.
-    chunk_size: usize,
     /// Accumulated interleaved input buffer (may hold partial frames).
     input_buffer: Vec<f32>,
     /// Output buffer for resampled data.
@@ -112,14 +111,15 @@ impl AudioResampler {
         // Use a reasonable default that balances latency and efficiency
         let chunk_size = calculate_chunk_size(source_rate, target_rate);
 
-        let resampler = FftFixedIn::<f32>::new(
+        let resampler = Fft::<f32>::new(
             source_rate as usize,
             target_rate as usize,
             chunk_size,
             1, // sub_chunks
             channels,
+            Input,
         )
-        .map_err(|e| ResamplingError::RubatoError(e.to_string()))?;
+        .map_err(|e: ResamplerConstructionError| ResamplingError::RubatoError(e.to_string()))?;
 
         info!(
             "Created resampler: {} Hz -> {} Hz, {} channels, chunk size: {}",
@@ -131,7 +131,6 @@ impl AudioResampler {
             source_rate,
             target_rate,
             channels,
-            chunk_size,
             input_buffer: Vec::with_capacity(chunk_size * channels),
             output_buffer: Vec::new(),
         })
@@ -160,45 +159,22 @@ impl AudioResampler {
         self.output_buffer.clear();
 
         let ch = self.channels;
-        let needed_frames = self.chunk_size;
+        let needed_frames = self.resampler.input_frames_next();
         let mut available_frames = self.input_buffer.len() / ch;
 
         while available_frames >= needed_frames {
-            // Deinterleave exactly chunk_size frames per channel using iterators
-            let frame_samples = &self.input_buffer[..needed_frames * ch];
-            let mut planar_in: Vec<Vec<f32>> =
-                (0..ch).map(|_| Vec::with_capacity(needed_frames)).collect();
-            for frame in frame_samples.chunks_exact(ch) {
-                for (c, plane) in planar_in.iter_mut().enumerate() {
-                    plane.push(frame[c]);
-                }
-            }
+            // Extract exactly needed_frames frames per channel as interleaved slice
+            let samples_to_process = &self.input_buffer[..needed_frames * ch];
+            let input_adapter =
+                InterleavedSlice::new(samples_to_process, ch, needed_frames).unwrap();
 
-            let in_refs: Vec<&[f32]> = planar_in.iter().map(|v| v.as_slice()).collect();
-            let planar_out = self
+            let output_owned = self
                 .resampler
-                .process(&in_refs, None)
-                .map_err(|e| ResamplingError::RubatoError(e.to_string()))?;
+                .process(&input_adapter, 0, None)
+                .map_err(|e: ResampleError| ResamplingError::RubatoError(e.to_string()))?;
 
-            if !planar_out.is_empty() {
-                // Reinterleave output without index-based loops
-                let mut iters: Vec<_> = planar_out.iter().map(|v| v.iter()).collect();
-                loop {
-                    let mut frame_complete = true;
-                    for it in iters.iter_mut() {
-                        match it.next() {
-                            Some(&s) => self.output_buffer.push(s),
-                            None => {
-                                frame_complete = false;
-                                break;
-                            }
-                        }
-                    }
-                    if !frame_complete {
-                        break;
-                    }
-                }
-            }
+            self.output_buffer
+                .extend_from_slice(&output_owned.take_data());
 
             // Remove processed interleaved samples from the accumulator
             let remove_count = needed_frames * ch;
@@ -505,7 +481,9 @@ pub fn create_resampling_stream(
 
 #[cfg(test)]
 mod tests {
-    use crate::audio::resampler::{AudioResampler, ResamplingError::InvalidConfiguration};
+    use crate::audio::resampler::{
+        AudioResampler, ResamplingError::InvalidConfiguration, calculate_chunk_size, gcd,
+    };
 
     #[test]
     fn test_gcd_calculation() {
