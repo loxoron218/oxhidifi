@@ -11,6 +11,7 @@ use {
         BuildStreamError, ChannelCount, Device, Host, OutputCallbackInfo, PlayStreamError,
         SampleFormat::{self, F32, I16, U16},
         Stream, StreamConfig,
+        StreamError::{self, BackendSpecific},
         platform::{
             HostId::{self, Alsa, Jack},
             available_hosts, host_from_id,
@@ -295,8 +296,16 @@ impl AudioOutput {
             .map_err(|_| OutputError::NoDeviceFound)?
             .sample_format();
 
-        let err_fn = |err| {
-            eprintln!("Audio stream error: {}", err);
+        let err_fn = |err: StreamError| match err {
+            BackendSpecific { err } => {
+                let err_str = err.to_string();
+                if err_str.contains("buffer size changed") {
+                    info!("Audio buffer size changed: {}", err_str);
+                } else {
+                    error!("Audio backend error: {}", err_str);
+                }
+            }
+            _ => error!("Audio stream error: {}", err),
         };
 
         let timeout = Duration::from_millis(self.config.buffer_duration_ms as u64);

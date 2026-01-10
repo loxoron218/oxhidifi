@@ -16,7 +16,11 @@ use std::{
 
 use {
     audioadapter_buffers::direct::InterleavedSlice,
-    cpal::{OutputCallbackInfo, SampleFormat, Stream, StreamConfig, traits::DeviceTrait},
+    cpal::{
+        OutputCallbackInfo, SampleFormat, Stream, StreamConfig,
+        StreamError::{self, BackendSpecific},
+        traits::DeviceTrait,
+    },
     rtrb::{Consumer, PopError::Empty, Producer, PushError::Full},
     rubato::{Fft, FixedSync::Input, ResampleError, Resampler, ResamplerConstructionError},
     tracing::{debug, error, info},
@@ -409,8 +413,16 @@ pub fn create_resampling_stream(
         .map_err(|_| NoDeviceFound)?
         .sample_format();
 
-    let err_fn = |err| {
-        eprintln!("Audio stream error: {}", err);
+    let err_fn = |err: StreamError| match err {
+        BackendSpecific { err } => {
+            let err_str = err.to_string();
+            if err_str.contains("buffer size changed") {
+                info!("Audio buffer size changed: {}", err_str);
+            } else {
+                error!("Audio backend error: {}", err_str);
+            }
+        }
+        _ => error!("Audio stream error: {}", err),
     };
 
     let timeout = Duration::from_millis(output.config().buffer_duration_ms as u64);
