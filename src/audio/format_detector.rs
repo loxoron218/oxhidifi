@@ -135,7 +135,7 @@ pub fn detect_audio_format<P: AsRef<Path>>(
 
     let sample_rate = codec_params.sample_rate.unwrap_or(44100);
     let bits_per_sample = codec_params.bits_per_coded_sample.unwrap_or(16);
-    let channels = codec_params.channels.map(|ch| ch.count()).unwrap_or(2) as u32;
+    let channels = codec_params.channels.map_or(2, |ch| ch.count()) as u32;
 
     // Determine if format is lossless
     let is_lossless = is_lossless_format(&codec_name);
@@ -256,6 +256,7 @@ fn is_lossless_format(codec_name: &str) -> bool {
 /// assert!(extensions.contains(&"flac"));
 /// assert!(extensions.contains(&"mp3"));
 /// ```
+#[must_use]
 pub fn supported_audio_extensions() -> &'static [&'static str] {
     &[
         "flac", // FLAC Lossless
@@ -284,6 +285,7 @@ pub fn supported_audio_extensions() -> &'static [&'static str] {
 /// # Returns
 ///
 /// A formatted string suitable for display in the UI.
+#[must_use]
 pub fn format_display_string(format_info: &AudioFormatInfo) -> String {
     // For common formats, just show the codec name
     match format_info.codec.as_ref() {
@@ -291,7 +293,7 @@ pub fn format_display_string(format_info: &AudioFormatInfo) -> String {
         "DSD" => {
             // Show DSD with sample rate for DSD formats
             let dsd_rate = format_info.sample_rate / 44100;
-            format!("DSD{}", dsd_rate)
+            format!("DSD{dsd_rate}")
         }
         "PCM F32" | "PCM S16" | "PCM S24" | "PCM S32" | "PCM U8" => {
             if format_info.format == "WAV" {

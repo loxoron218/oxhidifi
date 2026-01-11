@@ -104,7 +104,7 @@ impl AudioPreferencesPage {
 
         // Create adjustment for sample rate (0 = auto, then common rates)
         let adjustment = Adjustment::new(
-            current_sample_rate as f64,
+            f64::from(current_sample_rate),
             0.0,      // minimum (0 = auto)
             768000.0, // maximum (768kHz)
             1.0,      // step
@@ -198,7 +198,7 @@ impl AudioPreferencesPage {
 
         // Create adjustment for buffer duration (10ms to 500ms)
         let adjustment = Adjustment::new(
-            current_buffer_duration as f64,
+            f64::from(current_buffer_duration),
             10.0,  // minimum
             500.0, // maximum
             1.0,   // step
@@ -225,7 +225,7 @@ impl AudioPreferencesPage {
                     new_value
                 );
                 let clamped_value = new_value.clamp(10, 500);
-                row.set_value(clamped_value as f64);
+                row.set_value(f64::from(clamped_value));
                 return;
             }
 

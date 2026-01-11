@@ -1,4 +1,4 @@
-//! Library database interface using sqlx with SQLite.
+//! Library database interface using sqlx with `SQLite`.
 //!
 //! This module provides the main `LibraryDatabase` struct that handles
 //! all database operations for the music library, including querying,
@@ -40,7 +40,7 @@ pub enum LibraryError {
 /// including album/artist/track queries, searching, and DR value management.
 #[derive(Debug, Clone)]
 pub struct LibraryDatabase {
-    /// SQLite connection pool for database operations.
+    /// `SQLite` connection pool for database operations.
     pool: SqlitePool,
 }
 
@@ -81,15 +81,15 @@ impl LibraryDatabase {
     pub async fn get_albums(&self, filter: Option<&str>) -> Result<Vec<Album>, LibraryError> {
         let albums = match filter {
             Some(filter_str) => {
-                let search_pattern = format!("%{}%", filter_str);
+                let search_pattern = format!("%{filter_str}%");
                 query_as::<_, Album>(
-                    r#"
+                    r"
                     SELECT id, artist_id, title, year, genre, compilation, path, dr_value,
                            artwork_path, format, bits_per_sample, sample_rate, created_at, updated_at
                     FROM albums
                     WHERE title LIKE ?
                     ORDER BY title, year
-                    "#,
+                    ",
                 )
                 .bind(search_pattern)
                 .fetch_all(&self.pool)
@@ -97,12 +97,12 @@ impl LibraryDatabase {
             }
             None => {
                 query_as::<_, Album>(
-                    r#"
+                    r"
                     SELECT id, artist_id, title, year, genre, compilation, path, dr_value,
                            artwork_path, format, bits_per_sample, sample_rate, created_at, updated_at
                     FROM albums
                     ORDER BY title, year
-                    "#,
+                    ",
                 )
                 .fetch_all(&self.pool)
                 .await?
@@ -128,14 +128,14 @@ impl LibraryDatabase {
     pub async fn get_artists(&self, filter: Option<&str>) -> Result<Vec<Artist>, LibraryError> {
         let artists = match filter {
             Some(filter_str) => {
-                let search_pattern = format!("%{}%", filter_str);
+                let search_pattern = format!("%{filter_str}%");
                 query_as::<_, Artist>(
-                    r#"
+                    r"
                     SELECT id, name, created_at, updated_at
                     FROM artists
                     WHERE name LIKE ?
                     ORDER BY name
-                    "#,
+                    ",
                 )
                 .bind(search_pattern)
                 .fetch_all(&self.pool)
@@ -143,11 +143,11 @@ impl LibraryDatabase {
             }
             None => {
                 query_as::<_, Artist>(
-                    r#"
+                    r"
                     SELECT id, name, created_at, updated_at
                     FROM artists
                     ORDER BY name
-                    "#,
+                    ",
                 )
                 .fetch_all(&self.pool)
                 .await?
@@ -185,13 +185,13 @@ impl LibraryDatabase {
         }
 
         let tracks = query_as::<_, Track>(
-            r#"
+            r"
             SELECT id, album_id, title, track_number, disc_number, duration_ms, path,
                    file_size, format, codec, sample_rate, bits_per_sample, channels, is_lossless, is_high_resolution, created_at, updated_at
             FROM tracks
             WHERE album_id = ?
             ORDER BY disc_number, track_number, title
-            "#,
+            ",
         )
         .bind(album_id)
         .fetch_all(&self.pool)
@@ -228,14 +228,14 @@ impl LibraryDatabase {
         }
 
         let tracks = query_as::<_, Track>(
-            r#"
+            r"
             SELECT t.id, t.album_id, t.title, t.track_number, t.disc_number, t.duration_ms, t.path,
                    t.file_size, t.format, t.codec, t.sample_rate, t.bits_per_sample, t.channels, t.is_lossless, t.is_high_resolution, t.created_at, t.updated_at
             FROM tracks t
             JOIN albums a ON t.album_id = a.id
             WHERE a.artist_id = ?
             ORDER BY a.title, t.disc_number, t.track_number, t.title
-            "#
+            "
         )
         .bind(artist_id)
         .fetch_all(&self.pool)
@@ -258,28 +258,28 @@ impl LibraryDatabase {
     ///
     /// Returns `LibraryError` if the queries fail.
     pub async fn search_library(&self, query: &str) -> Result<SearchResults, LibraryError> {
-        let search_pattern = format!("%{}%", query);
+        let search_pattern = format!("%{query}%");
 
         let albums = query_as::<_, Album>(
-            r#"
+            r"
             SELECT id, artist_id, title, year, genre, compilation, path, dr_value,
                    artwork_path, format, bits_per_sample, sample_rate, created_at, updated_at
             FROM albums
             WHERE title LIKE ?
             ORDER BY title, year
-            "#,
+            ",
         )
         .bind(&search_pattern)
         .fetch_all(&self.pool)
         .await?;
 
         let artists = query_as::<_, Artist>(
-            r#"
+            r"
             SELECT id, name, created_at, updated_at
             FROM artists
             WHERE name LIKE ?
             ORDER BY name
-            "#,
+            ",
         )
         .bind(&search_pattern)
         .fetch_all(&self.pool)
@@ -541,7 +541,7 @@ impl LibraryDatabase {
         directory_path: P,
     ) -> Result<(), LibraryError> {
         let directory_path_str = directory_path.as_ref().to_string_lossy().to_string();
-        let path_pattern = format!("{}/%", directory_path_str);
+        let path_pattern = format!("{directory_path_str}/%");
 
         let mut tx = self.pool.begin().await?;
 
@@ -705,6 +705,7 @@ impl LibraryDatabase {
     /// # Returns
     ///
     /// A reference to the internal `SqlitePool`.
+    #[must_use]
     pub fn pool(&self) -> &SqlitePool {
         &self.pool
     }

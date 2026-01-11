@@ -62,7 +62,7 @@ struct TrackInfoUpdateContext<'a> {
 ///
 /// The `PlayerBar` provides advanced playback controls, comprehensive
 /// Hi-Fi technical metadata, status indicators, and real-time updates
-/// integrated with the AudioEngine and AppState.
+/// integrated with the `AudioEngine` and `AppState`.
 pub struct PlayerBar {
     /// The underlying GTK box widget.
     pub widget: Box,
@@ -103,7 +103,7 @@ pub struct PlayerBar {
 }
 
 impl PlayerBar {
-    /// Creates a new player bar instance with AppState integration.
+    /// Creates a new player bar instance with `AppState` integration.
     ///
     /// # Arguments
     ///
@@ -113,6 +113,7 @@ impl PlayerBar {
     /// # Returns
     ///
     /// A new `PlayerBar` instance.
+    #[must_use]
     pub fn new(app_state: Arc<AppState>, audio_engine: Arc<AudioEngine>) -> Self {
         let widget = Box::builder()
             .orientation(Horizontal)
@@ -364,7 +365,7 @@ impl PlayerBar {
             let volume = scale.value() / 100.0;
 
             // Implementation would handle volume setting
-            println!("Volume: {}", volume);
+            println!("Volume: {volume}");
         });
 
         // Mute button
@@ -372,11 +373,11 @@ impl PlayerBar {
             let muted = button.is_active();
 
             // Implementation would handle mute state
-            println!("Muted: {}", muted);
+            println!("Muted: {muted}");
         });
     }
 
-    /// Subscribes to AppState changes for reactive updates.
+    /// Subscribes to `AppState` changes for reactive updates.
     fn subscribe_to_state_changes(&self) {
         let app_state = self.app_state.clone();
         let title_label = self.title_label.clone();
@@ -396,8 +397,8 @@ impl PlayerBar {
         MainContext::default().spawn_local(async move {
             let receiver = app_state.subscribe();
             loop {
-                match receiver.recv().await {
-                    Ok(event) => match event {
+                if let Ok(event) = receiver.recv().await {
+                    match event {
                         CurrentTrackChanged(track_info) => {
                             debug!("PlayerBar: Current track changed");
                             let update_context = TrackInfoUpdateContext {
@@ -418,12 +419,11 @@ impl PlayerBar {
                             Self::update_playback_state(&state, &play_button);
                         }
                         _ => {}
-                    },
-                    Err(_) => {
-                        // Channel was closed - this means AppState is gone.
-                        debug!("PlayerBar state subscription channel closed");
-                        break;
                     }
+                } else {
+                    // Channel was closed - this means AppState is gone.
+                    debug!("PlayerBar state subscription channel closed");
+                    break;
                 }
             }
         });
@@ -452,7 +452,7 @@ impl PlayerBar {
             let duration_seconds = info.duration_ms / 1000;
             let duration_minutes = duration_seconds / 60;
             let duration_remaining = duration_seconds % 60;
-            let duration_text = format!("{:02}:{:02}", duration_minutes, duration_remaining);
+            let duration_text = format!("{duration_minutes:02}:{duration_remaining:02}");
             ctx.total_duration_label.set_label(&duration_text);
 
             // Create or update Hi-Fi metadata

@@ -182,12 +182,10 @@ impl TagReader {
             sample_rate: properties.sample_rate().unwrap_or(format_info.sample_rate),
             bits_per_sample: properties
                 .bit_depth()
-                .map(|b| b as u32)
-                .unwrap_or(format_info.bits_per_sample),
+                .map_or(format_info.bits_per_sample, u32::from),
             channels: properties
                 .channels()
-                .map(|c| c as u32)
-                .unwrap_or(format_info.channels),
+                .map_or(format_info.channels, u32::from),
             duration_ms: properties.duration().as_millis() as u64,
             file_size,
             is_lossless: format_info.is_lossless,

@@ -12,7 +12,7 @@ use libadwaita::{
     prelude::{AccessibleExt, ButtonExt, Cast, WidgetExt},
 };
 
-/// Builder pattern for configuring PlayOverlay components.
+/// Builder pattern for configuring `PlayOverlay` components.
 #[derive(Debug, Default)]
 pub struct PlayOverlayBuilder {
     /// Whether the overlay should show pause icon initially.
@@ -31,6 +31,7 @@ impl PlayOverlayBuilder {
     /// # Returns
     ///
     /// The builder instance for method chaining.
+    #[must_use]
     pub fn is_playing(mut self, is_playing: bool) -> Self {
         self.is_playing = is_playing;
         self
@@ -45,16 +46,18 @@ impl PlayOverlayBuilder {
     /// # Returns
     ///
     /// The builder instance for method chaining.
+    #[must_use]
     pub fn show_on_hover(mut self, show_on_hover: bool) -> Self {
         self.show_on_hover = show_on_hover;
         self
     }
 
-    /// Builds the PlayOverlay component.
+    /// Builds the `PlayOverlay` component.
     ///
     /// # Returns
     ///
     /// A new `PlayOverlay` instance.
+    #[must_use]
     pub fn build(self) -> PlayOverlay {
         PlayOverlay::new(self.is_playing, self.show_on_hover)
     }
@@ -78,7 +81,7 @@ pub struct PlayOverlay {
 }
 
 impl PlayOverlay {
-    /// Creates a new PlayOverlay component.
+    /// Creates a new `PlayOverlay` component.
     ///
     /// # Arguments
     ///
@@ -88,6 +91,7 @@ impl PlayOverlay {
     /// # Returns
     ///
     /// A new `PlayOverlay` instance.
+    #[must_use]
     pub fn new(is_playing: bool, show_on_hover: bool) -> Self {
         let icon_name = if is_playing {
             "media-playback-pause-symbolic"
@@ -138,11 +142,12 @@ impl PlayOverlay {
         }
     }
 
-    /// Creates a PlayOverlay builder for configuration.
+    /// Creates a `PlayOverlay` builder for configuration.
     ///
     /// # Returns
     ///
     /// A new `PlayOverlayBuilder` instance.
+    #[must_use]
     pub fn builder() -> PlayOverlayBuilder {
         PlayOverlayBuilder::default()
     }
@@ -187,6 +192,7 @@ impl PlayOverlay {
     /// # Returns
     ///
     /// The current playing state.
+    #[must_use]
     pub fn is_playing(&self) -> bool {
         self.is_playing
     }

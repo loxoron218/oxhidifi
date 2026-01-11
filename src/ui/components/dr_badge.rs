@@ -35,6 +35,7 @@ impl DRQuality {
     /// # Returns
     ///
     /// The corresponding `DRQuality` enum variant.
+    #[must_use]
     pub fn from_dr_value(dr_value: &str) -> Self {
         // Extract numeric part from DR value (e.g., "DR12" -> 12)
         let numeric_part = dr_value
@@ -61,6 +62,7 @@ impl DRQuality {
     /// # Returns
     ///
     /// The CSS class name as a string slice.
+    #[must_use]
     pub fn css_class(&self) -> &'static str {
         match self {
             DRQuality::Excellent => "dr-14", // Using highest DR value as representative
@@ -77,6 +79,7 @@ impl DRQuality {
     /// # Returns
     ///
     /// The ARIA label as a string slice.
+    #[must_use]
     pub fn aria_label(&self) -> &'static str {
         match self {
             DRQuality::Excellent => "Excellent dynamic range quality",
@@ -89,7 +92,7 @@ impl DRQuality {
     }
 }
 
-/// Builder pattern for configuring DRBadge components.
+/// Builder pattern for configuring `DRBadge` components.
 #[derive(Debug, Default)]
 pub struct DRBadgeBuilder {
     /// DR value string to display (e.g., "DR12").
@@ -122,16 +125,18 @@ impl DRBadgeBuilder {
     /// # Returns
     ///
     /// The builder instance for method chaining.
+    #[must_use]
     pub fn show_label(mut self, show_label: bool) -> Self {
         self.show_label = show_label;
         self
     }
 
-    /// Builds the DRBadge component.
+    /// Builds the `DRBadge` component.
     ///
     /// # Returns
     ///
     /// A new `DRBadge` instance.
+    #[must_use]
     pub fn build(self) -> DRBadge {
         DRBadge::new(self.dr_value, self.show_label)
     }
@@ -152,7 +157,7 @@ pub struct DRBadge {
 }
 
 impl DRBadge {
-    /// Creates a new DRBadge with the specified DR value.
+    /// Creates a new `DRBadge` with the specified DR value.
     ///
     /// # Arguments
     ///
@@ -165,8 +170,7 @@ impl DRBadge {
     pub fn new(dr_value: Option<String>, show_label: bool) -> Self {
         let quality = dr_value
             .as_deref()
-            .map(DRQuality::from_dr_value)
-            .unwrap_or(DRQuality::Unknown);
+            .map_or(DRQuality::Unknown, DRQuality::from_dr_value);
 
         // Extract numeric part for CSS class and display
         let (display_text, css_class) = if let Some(value) = dr_value {
@@ -177,11 +181,11 @@ impl DRBadge {
                 .parse::<u8>()
             {
                 let formatted_display = if show_label {
-                    format!("DR{:02}", numeric_part)
+                    format!("DR{numeric_part:02}")
                 } else {
-                    format!("{:02}", numeric_part)
+                    format!("{numeric_part:02}")
                 };
-                let css_class = format!("dr-{:02}", numeric_part);
+                let css_class = format!("dr-{numeric_part:02}");
                 (formatted_display, css_class)
             } else {
                 // Invalid DR value format
@@ -226,11 +230,12 @@ impl DRBadge {
         }
     }
 
-    /// Creates a DRBadge builder for configuration.
+    /// Creates a `DRBadge` builder for configuration.
     ///
     /// # Returns
     ///
     /// A new `DRBadgeBuilder` instance.
+    #[must_use]
     pub fn builder() -> DRBadgeBuilder {
         DRBadgeBuilder::default()
     }
@@ -243,8 +248,7 @@ impl DRBadge {
     pub fn update_dr_value(&mut self, dr_value: Option<String>) {
         let quality = dr_value
             .as_deref()
-            .map(DRQuality::from_dr_value)
-            .unwrap_or(DRQuality::Unknown);
+            .map_or(DRQuality::Unknown, DRQuality::from_dr_value);
 
         // Extract numeric part for CSS class and display
         let (display_text, css_class) = if let Some(value) = dr_value {
@@ -254,8 +258,8 @@ impl DRBadge {
                 .collect::<String>()
                 .parse::<u8>()
             {
-                let formatted_display = format!("DR{:02}", numeric_part);
-                let css_class = format!("dr-{:02}", numeric_part);
+                let formatted_display = format!("DR{numeric_part:02}");
+                let css_class = format!("dr-{numeric_part:02}");
                 (formatted_display, css_class)
             } else {
                 // Invalid DR value format
@@ -282,6 +286,7 @@ impl DRBadge {
     /// # Returns
     ///
     /// The current `DRQuality`.
+    #[must_use]
     pub fn quality(&self) -> &DRQuality {
         &self.quality
     }

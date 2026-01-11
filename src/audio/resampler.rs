@@ -48,10 +48,10 @@ pub enum ResamplingError {
 impl Display for ResamplingError {
     fn fmt(&self, f: &mut Formatter<'_>) -> StdResult {
         match self {
-            ResamplingError::RubatoError(msg) => write!(f, "Rubato error: {}", msg),
-            ResamplingError::RingBufferError(msg) => write!(f, "Ring buffer error: {}", msg),
+            ResamplingError::RubatoError(msg) => write!(f, "Rubato error: {msg}"),
+            ResamplingError::RingBufferError(msg) => write!(f, "Ring buffer error: {msg}"),
             ResamplingError::InvalidConfiguration(msg) => {
-                write!(f, "Invalid configuration: {}", msg)
+                write!(f, "Invalid configuration: {msg}")
             }
         }
     }
@@ -198,9 +198,10 @@ impl AudioResampler {
     /// # Returns
     ///
     /// Expected number of output samples (per channel).
+    #[must_use]
     pub fn expected_output_size(&self, input_size: usize) -> usize {
-        let in_rate = self.source_rate as u64;
-        let out_rate = self.target_rate as u64;
+        let in_rate = u64::from(self.source_rate);
+        let out_rate = u64::from(self.target_rate);
         ((input_size as u64 * out_rate) / in_rate) as usize
     }
 }
@@ -209,11 +210,11 @@ impl AudioResampler {
 fn calculate_chunk_size(source_rate: u32, target_rate: u32) -> usize {
     // Find GCD to get a reasonable chunk size
     let gcd = gcd(source_rate, target_rate);
-    let lcm = (source_rate as u64 * target_rate as u64) / gcd as u64;
+    let lcm = (u64::from(source_rate) * u64::from(target_rate)) / u64::from(gcd);
 
     // Use a chunk size that's a multiple of both rates' relationship
     // but keep it reasonable for real-time processing
-    let base_chunk = (lcm / source_rate as u64).min(4096) as usize;
+    let base_chunk = (lcm / u64::from(source_rate)).min(4096) as usize;
 
     // Ensure it's at least 256 samples for efficiency
     base_chunk.clamp(256, 8192)
@@ -288,6 +289,7 @@ impl ResamplingAudioConsumer {
     }
 
     /// Gets the target stream configuration.
+    #[must_use]
     pub fn target_config(&self) -> &StreamConfig {
         &self.target_config
     }
@@ -413,19 +415,20 @@ pub fn create_resampling_stream(
         .map_err(|_| NoDeviceFound)?
         .sample_format();
 
-    let err_fn = |err: StreamError| match err {
-        BackendSpecific { err } => {
+    let err_fn = |err: StreamError| {
+        if let BackendSpecific { err } = err {
             let err_str = err.to_string();
             if err_str.contains("buffer size changed") {
                 info!("Audio buffer size changed: {}", err_str);
             } else {
                 error!("Audio backend error: {}", err_str);
             }
+        } else {
+            error!("Audio stream error: {}", err)
         }
-        _ => error!("Audio stream error: {}", err),
     };
 
-    let timeout = Duration::from_millis(output.config().buffer_duration_ms as u64);
+    let timeout = Duration::from_millis(u64::from(output.config().buffer_duration_ms));
 
     let stream = match sample_format {
         SampleFormat::F32 => output.device().build_output_stream(
@@ -452,7 +455,7 @@ pub fn create_resampling_stream(
                     match resampled_consumer.pop() {
                         Ok(value) => {
                             let clamped = value.clamp(-1.0, 1.0);
-                            *sample = (clamped * i16::MAX as f32) as i16;
+                            *sample = (clamped * f32::from(i16::MAX)) as i16;
                         }
                         Err(Empty) => {
                             *sample = 0;
@@ -470,7 +473,7 @@ pub fn create_resampling_stream(
                     match resampled_consumer.pop() {
                         Ok(value) => {
                             let clamped = value.clamp(-1.0, 1.0);
-                            *sample = ((clamped + 1.0) * (u16::MAX as f32) / 2.0) as u16;
+                            *sample = ((clamped + 1.0) * f32::from(u16::MAX) / 2.0) as u16;
                         }
                         Err(Empty) => {
                             *sample = 32768;

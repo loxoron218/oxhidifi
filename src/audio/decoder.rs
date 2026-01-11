@@ -207,11 +207,10 @@ impl AudioDecoder {
                             .map_err(DecoderError::SymphoniaError)?;
 
                         return Ok(Some(decoded));
-                    } else {
-                        return Err(DecoderError::SymphoniaError(SymphoniaError::Unsupported(
-                            "No decoder available",
-                        )));
                     }
+                    return Err(DecoderError::SymphoniaError(SymphoniaError::Unsupported(
+                        "No decoder available",
+                    )));
                 }
                 Err(SymphoniaError::IoError(e)) => {
                     return Err(DecoderError::IoError(e));
@@ -267,13 +266,14 @@ impl AudioDecoder {
     /// # Returns
     ///
     /// Duration in milliseconds, or `None` if unknown.
+    #[must_use]
     pub fn duration_ms(&self) -> Option<u64> {
         self.format_reader
             .tracks()
             .get(self.track_index)
             .and_then(|track| track.codec_params.n_frames)
             .map(|frames| {
-                let sample_rate = self.format.sample_rate as f64;
+                let sample_rate = f64::from(self.format.sample_rate);
                 (frames as f64 / sample_rate * 1000.0) as u64
             })
     }
@@ -343,7 +343,7 @@ impl AudioProducer {
                     for frame in 0..buf.frames() {
                         for ch in 0..channels {
                             let s = buf.chan(ch)[frame];
-                            let v = (s as f32 - 128.0_f32) / 127.0_f32;
+                            let v = (f32::from(s) - 128.0_f32) / 127.0_f32;
                             samples.push(v);
                         }
                     }
@@ -353,7 +353,7 @@ impl AudioProducer {
                     let mut samples = Vec::with_capacity(buf.frames() * channels);
                     for frame in 0..buf.frames() {
                         for ch in 0..channels {
-                            samples.push(buf.chan(ch)[frame] as f32 / 127.0);
+                            samples.push(f32::from(buf.chan(ch)[frame]) / 127.0);
                         }
                     }
                     samples
@@ -363,7 +363,7 @@ impl AudioProducer {
                     for frame in 0..buf.frames() {
                         for ch in 0..channels {
                             let s = buf.chan(ch)[frame];
-                            let v = (s as f32 - 32768.0_f32) / 32767.0_f32;
+                            let v = (f32::from(s) - 32768.0_f32) / 32767.0_f32;
                             samples.push(v);
                         }
                     }
@@ -377,7 +377,7 @@ impl AudioProducer {
                             let v = if s == i16::MIN {
                                 -1.0
                             } else {
-                                s as f32 / i16::MAX as f32
+                                f32::from(s) / f32::from(i16::MAX)
                             };
                             samples.push(v);
                         }

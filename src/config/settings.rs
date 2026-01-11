@@ -203,6 +203,7 @@ impl SettingsManager {
 /// # Returns
 ///
 /// The path to the configuration file.
+#[must_use]
 pub fn get_config_path() -> PathBuf {
     let mut config_dir = get_xdg_config_home();
     config_dir.push("oxhidifi");
@@ -215,6 +216,7 @@ pub fn get_config_path() -> PathBuf {
 /// # Returns
 ///
 /// The path to the cache directory.
+#[must_use]
 pub fn get_cache_dir() -> PathBuf {
     let mut cache_dir = get_xdg_cache_home();
     cache_dir.push("oxhidifi");
@@ -223,7 +225,7 @@ pub fn get_cache_dir() -> PathBuf {
 
 /// Gets the XDG config home directory following XDG Base Directory specification.
 ///
-/// Uses XDG_CONFIG_HOME environment variable if set, otherwise defaults to $HOME/.config
+/// Uses `XDG_CONFIG_HOME` environment variable if set, otherwise defaults to $HOME/.config
 fn get_xdg_config_home() -> PathBuf {
     if let Ok(config_home) = var("XDG_CONFIG_HOME")
         && !config_home.is_empty()
@@ -243,7 +245,7 @@ fn get_xdg_config_home() -> PathBuf {
 
 /// Gets the XDG cache home directory following XDG Base Directory specification.
 ///
-/// Uses XDG_CACHE_HOME environment variable if set, otherwise defaults to $HOME/.cache
+/// Uses `XDG_CACHE_HOME` environment variable if set, otherwise defaults to $HOME/.cache
 fn get_xdg_cache_home() -> PathBuf {
     if let Ok(cache_home) = var("XDG_CACHE_HOME")
         && !cache_home.is_empty()

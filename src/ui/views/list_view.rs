@@ -31,7 +31,7 @@ use crate::{
     ui::components::cover_art::CoverArt,
 };
 
-/// Builder pattern for configuring ListView components.
+/// Builder pattern for configuring `ListView` components.
 #[derive(Debug, Default)]
 pub struct ListViewBuilder {
     /// Optional application state reference for reactive updates.
@@ -52,6 +52,7 @@ impl ListViewBuilder {
     /// # Returns
     ///
     /// The builder instance for method chaining.
+    #[must_use]
     pub fn app_state(mut self, app_state: Arc<AppState>) -> Self {
         self.app_state = Some(app_state);
         self
@@ -66,6 +67,7 @@ impl ListViewBuilder {
     /// # Returns
     ///
     /// The builder instance for method chaining.
+    #[must_use]
     pub fn view_type(mut self, view_type: ListViewType) -> Self {
         self.view_type = view_type;
         self
@@ -80,16 +82,18 @@ impl ListViewBuilder {
     /// # Returns
     ///
     /// The builder instance for method chaining.
+    #[must_use]
     pub fn compact(mut self, compact: bool) -> Self {
         self.compact = compact;
         self
     }
 
-    /// Builds the ListView component.
+    /// Builds the `ListView` component.
     ///
     /// # Returns
     ///
     /// A new `ListView` instance.
+    #[must_use]
     pub fn build(self) -> ListView {
         ListView::new(self.app_state, self.view_type, self.compact)
     }
@@ -111,7 +115,7 @@ pub enum ListViewType {
 /// more detailed information than the grid view, with support for virtual
 /// scrolling, real-time filtering, and keyboard navigation.
 pub struct ListView {
-    /// The underlying GTK widget (ListBox).
+    /// The underlying GTK widget (`ListBox`).
     pub widget: Widget,
     /// The list box container.
     pub list_box: ListBox,
@@ -129,7 +133,7 @@ pub struct ListView {
     cover_arts: Rc<RefCell<Vec<CoverArt>>>,
 }
 
-/// Configuration for ListView display options.
+/// Configuration for `ListView` display options.
 #[derive(Debug, Clone)]
 pub struct ListViewConfig {
     /// Whether to use compact layout.
@@ -137,7 +141,7 @@ pub struct ListViewConfig {
 }
 
 impl ListView {
-    /// Creates a new ListView component.
+    /// Creates a new `ListView` component.
     ///
     /// # Arguments
     ///
@@ -148,6 +152,7 @@ impl ListView {
     /// # Returns
     ///
     /// A new `ListView` instance.
+    #[must_use]
     pub fn new(app_state: Option<Arc<AppState>>, view_type: ListViewType, compact: bool) -> Self {
         let config = ListViewConfig { compact };
 
@@ -258,11 +263,12 @@ impl ListView {
         view
     }
 
-    /// Creates a ListView builder for configuration.
+    /// Creates a `ListView` builder for configuration.
     ///
     /// # Returns
     ///
     /// A new `ListViewBuilder` instance.
+    #[must_use]
     pub fn builder() -> ListViewBuilder {
         ListViewBuilder::default()
     }
@@ -466,15 +472,17 @@ fn create_album_row_with_zoom(
             .artists
             .iter()
             .find(|artist| artist.id == album.artist_id)
-            .map(|artist| artist.name.clone())
-            .unwrap_or_else(|| "Unknown Artist".to_string())
+            .map_or_else(
+                || "Unknown Artist".to_string(),
+                |artist| artist.name.clone(),
+            )
     } else {
         "Unknown Artist".to_string()
     };
 
     // Artist/year info
     let artist_year_text = if let Some(year) = album.year {
-        format!("{} ({})", artist_name, year)
+        format!("{artist_name} ({year})")
     } else {
         artist_name
     };

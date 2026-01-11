@@ -42,11 +42,11 @@ pub struct AppState {
     /// Library scanner reference (optional).
     pub library_scanner: Arc<RwLock<Option<Arc<RwLock<LibraryScanner>>>>>,
     /// List of active subscribers for manual broadcast fan-out.
-    /// We use async_channel to avoid Tokio runtime dependencies in the waker logic.
+    /// We use `async_channel` to avoid Tokio runtime dependencies in the waker logic.
     subscribers: Arc<RwLock<Vec<Sender<AppStateEvent>>>>,
     /// Zoom manager for handling view zoom levels.
     pub zoom_manager: Arc<ZoomManager>,
-    /// Settings manager reference for persistence (wrapped in RwLock for mutability).
+    /// Settings manager reference for persistence (wrapped in `RwLock` for mutability).
     pub settings_manager: Arc<RwLock<SettingsManager>>,
 }
 
@@ -237,12 +237,12 @@ impl AppState {
     pub fn update_navigation(&self, state: NavigationState) {
         let changed = {
             let mut nav = self.navigation.write();
-            if *nav != state {
+            if *nav == state {
+                false
+            } else {
                 debug!("AppState: Updating navigation to {:?}", state);
                 *nav = state.clone();
                 true
-            } else {
-                false
             }
         };
 
@@ -314,6 +314,7 @@ impl AppState {
     /// # Returns
     ///
     /// The current `PlaybackState`.
+    #[must_use]
     pub fn get_playback_state(&self) -> PlaybackState {
         self.playback.read().clone()
     }
@@ -323,6 +324,7 @@ impl AppState {
     /// # Returns
     ///
     /// The current `Option<TrackInfo>`.
+    #[must_use]
     pub fn get_current_track(&self) -> Option<TrackInfo> {
         self.current_track.read().clone()
     }
@@ -332,6 +334,7 @@ impl AppState {
     /// # Returns
     ///
     /// The current `LibraryState`.
+    #[must_use]
     pub fn get_library_state(&self) -> LibraryState {
         self.library.read().clone()
     }
@@ -341,6 +344,7 @@ impl AppState {
     /// # Returns
     ///
     /// The current `NavigationState`.
+    #[must_use]
     pub fn get_navigation_state(&self) -> NavigationState {
         self.navigation.read().clone()
     }
@@ -381,11 +385,11 @@ impl AppState {
         }
     }
 
-    /// Updates the show_dr_values setting and notifies subscribers.
+    /// Updates the `show_dr_values` setting and notifies subscribers.
     ///
     /// # Arguments
     ///
-    /// * `show_dr_values` - New value for the show_dr_values setting
+    /// * `show_dr_values` - New value for the `show_dr_values` setting
     pub fn update_show_dr_values_setting(&self, show_dr_values: bool) {
         debug!(
             "AppState: Updating show_dr_values setting to {}",
@@ -412,15 +416,16 @@ impl AppState {
     /// # Returns
     ///
     /// A reference to the settings manager.
+    #[must_use]
     pub fn get_settings_manager(&self) -> Arc<RwLock<SettingsManager>> {
         self.settings_manager.clone()
     }
 
-    /// Updates the show_metadata_overlays setting and notifies subscribers.
+    /// Updates the `show_metadata_overlays` setting and notifies subscribers.
     ///
     /// # Arguments
     ///
-    /// * `show_overlays` - New value for the show_metadata_overlays setting
+    /// * `show_overlays` - New value for the `show_metadata_overlays` setting
     pub fn update_show_metadata_overlays_setting(&self, show_overlays: bool) {
         debug!(
             "AppState: Updating show_metadata_overlays setting to {}",
@@ -442,11 +447,11 @@ impl AppState {
         self.broadcast_event(AppStateEvent::MetadataOverlaysChanged { show_overlays });
     }
 
-    /// Updates the year_display_mode setting and notifies subscribers.
+    /// Updates the `year_display_mode` setting and notifies subscribers.
     ///
     /// # Arguments
     ///
-    /// * `mode` - New value for the year_display_mode setting ("release" or "original")
+    /// * `mode` - New value for the `year_display_mode` setting ("release" or "original")
     pub fn update_year_display_mode_setting(&self, mode: String) {
         debug!("AppState: Updating year_display_mode setting to {}", mode);
 

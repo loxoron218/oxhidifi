@@ -89,6 +89,7 @@ impl IncrementalUpdater {
     /// # Returns
     ///
     /// A task handle for the processing loop.
+    #[must_use]
     pub fn start_processing(&self, receiver: Receiver<DebouncedEvent>) -> JoinHandle<()> {
         let database = self.database.clone();
         let dr_parser = self.dr_parser.clone();
@@ -147,6 +148,7 @@ impl IncrementalUpdater {
     /// # Returns
     ///
     /// A reference to the current `IncrementalUpdaterConfig`.
+    #[must_use]
     pub fn config(&self) -> &IncrementalUpdaterConfig {
         &self.config
     }

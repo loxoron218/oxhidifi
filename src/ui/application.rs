@@ -91,7 +91,7 @@ impl OxhidifiApplication {
     pub async fn new() -> Result<Self, Box<dyn Error>> {
         // Initialize settings
         let settings_manager =
-            SettingsManager::new().map_err(|e| format!("Failed to initialize settings: {}", e))?;
+            SettingsManager::new().map_err(|e| format!("Failed to initialize settings: {e}"))?;
         let settings_manager_shared = Arc::new(settings_manager);
 
         // Extract UserSettings for components that need direct access
@@ -100,32 +100,32 @@ impl OxhidifiApplication {
 
         // Initialize audio engine
         let audio_engine =
-            AudioEngine::new().map_err(|e| format!("Failed to initialize audio engine: {}", e))?;
+            AudioEngine::new().map_err(|e| format!("Failed to initialize audio engine: {e}"))?;
 
         // Initialize library database
         let library_db_raw = LibraryDatabase::new()
             .await
-            .map_err(|e| format!("Failed to initialize library database: {}", e))?;
+            .map_err(|e| format!("Failed to initialize library database: {e}"))?;
         let library_db = Arc::new(library_db_raw);
 
         // Initialize library scanner if there are library directories
-        let library_scanner = if !user_settings_shared.read().library_directories.is_empty() {
+        let library_scanner = if user_settings_shared.read().library_directories.is_empty() {
+            None
+        } else {
             let scanner =
                 LibraryScanner::new(library_db.clone(), user_settings_shared.clone(), None)
                     .await
-                    .map_err(|e| format!("Failed to initialize library scanner: {}", e))?;
+                    .map_err(|e| format!("Failed to initialize library scanner: {e}"))?;
 
             // Perform initial scan of existing directories
             if let Err(e) = scanner
                 .scan_initial_directories(&library_db, &user_settings_shared)
                 .await
             {
-                eprintln!("Failed to perform initial library scan: {}", e);
+                eprintln!("Failed to perform initial library scan: {e}");
             }
 
             Some(Arc::new(RwLock::new(scanner)))
-        } else {
-            None
         };
 
         // Create application state
@@ -138,13 +138,13 @@ impl OxhidifiApplication {
         // Always load existing library data from database on startup
         // This ensures library is displayed even if no directories are currently configured
         if let Err(e) = library_db.cleanup_orphaned_records().await {
-            eprintln!("Failed to cleanup orphaned records: {}", e);
+            eprintln!("Failed to cleanup orphaned records: {e}");
         }
 
         let albums = match library_db.get_albums(None).await {
             Ok(albums) => albums,
             Err(e) => {
-                eprintln!("Failed to get albums from database: {}", e);
+                eprintln!("Failed to get albums from database: {e}");
                 Vec::new()
             }
         };
@@ -152,7 +152,7 @@ impl OxhidifiApplication {
         let artists = match library_db.get_artists(None).await {
             Ok(artists) => artists,
             Err(e) => {
-                eprintln!("Failed to get artists from database: {}", e);
+                eprintln!("Failed to get artists from database: {e}");
                 Vec::new()
             }
         };
@@ -211,7 +211,7 @@ impl OxhidifiApplication {
                                     let albums = match db_refresh.get_albums(None).await {
                                         Ok(albums) => albums,
                                         Err(e) => {
-                                            eprintln!("Failed to refresh albums: {}", e);
+                                            eprintln!("Failed to refresh albums: {e}");
                                             Vec::new()
                                         }
                                     };
@@ -220,7 +220,7 @@ impl OxhidifiApplication {
                                     let artists = match db_refresh.get_artists(None).await {
                                         Ok(artists) => artists,
                                         Err(e) => {
-                                            eprintln!("Failed to refresh artists: {}", e);
+                                            eprintln!("Failed to refresh artists: {e}");
                                             Vec::new()
                                         }
                                     };
@@ -380,27 +380,24 @@ fn build_ui(
     MainContext::default().spawn_local(async move {
         let receiver = app_state_for_subscription.subscribe();
         loop {
-            match receiver.recv().await {
-                Ok(event) => {
-                    if let PlaybackStateChanged(state) = event {
-                        // Show player bar when playing or paused, hide when stopped
-                        match state {
-                            Playing | Paused | Buffering => {
-                                player_bar_widget_clone.set_visible(true);
-                            }
-                            Stopped | Ready => {
-                                player_bar_widget_clone.set_visible(false);
-                            }
+            if let Ok(event) = receiver.recv().await {
+                if let PlaybackStateChanged(state) = event {
+                    // Show player bar when playing or paused, hide when stopped
+                    match state {
+                        Playing | Paused | Buffering => {
+                            player_bar_widget_clone.set_visible(true);
+                        }
+                        Stopped | Ready => {
+                            player_bar_widget_clone.set_visible(false);
                         }
                     }
                 }
-                Err(_) => {
-                    // Channel was closed - resubscribe? Or just exit?
-                    // For async-channel manual fan-out, close usually means the sender is gone (AppState dropped).
-                    // So we should break.
-                    debug!("Playback state subscription channel closed");
-                    break;
-                }
+            } else {
+                // Channel was closed - resubscribe? Or just exit?
+                // For async-channel manual fan-out, close usually means the sender is gone (AppState dropped).
+                // So we should break.
+                debug!("Playback state subscription channel closed");
+                break;
             }
         }
     });
@@ -597,77 +594,74 @@ fn create_main_content(
         let mut artist_list_view = artist_list_view;
 
         loop {
-            match receiver.recv().await {
-                Ok(event) => {
-                    match event {
-                        LibraryDataChanged { albums, artists } => {
-                            debug!("Handling LibraryDataChanged event");
+            if let Ok(event) = receiver.recv().await {
+                match event {
+                    LibraryDataChanged { albums, artists } => {
+                        debug!("Handling LibraryDataChanged event");
 
-                            // Update data in all views
-                            album_grid_view.set_albums(albums.clone());
-                            artist_grid_view.set_artists(artists.clone());
-                            album_list_view.set_albums(albums.clone());
-                            artist_list_view.set_artists(artists.clone());
-                        }
-                        ViewOptionsChanged {
-                            current_tab,
-                            view_mode,
-                        } => {
-                            switch_count += 1;
-                            info!(
-                                "View switch #{}: tab={:?}, view_mode={:?}",
-                                switch_count, current_tab, view_mode
-                            );
-
-                            let child_name = match (&current_tab, &view_mode) {
-                                (LibraryAlbums, Grid) => "album_grid",
-                                (LibraryAlbums, List) => "album_list",
-                                (LibraryArtists, Grid) => "artist_grid",
-                                (LibraryArtists, List) => "artist_list",
-                            };
-
-                            // Reset scroll position before switching
-                            if let Some(child) = view_stack_clone.child_by_name(child_name)
-                                && let Some(scrolled) = child.downcast_ref::<ScrolledWindow>()
-                            {
-                                scrolled.vadjustment().set_value(0.0);
-                                scrolled.hadjustment().set_value(0.0);
-                            }
-
-                            view_stack_clone.set_visible_child_name(child_name);
-                        }
-                        SearchFilterChanged(filter) => {
-                            // Search filter changed - update all views
-                            // Note: Each view handles filtering internally, we just need to pass the query
-                            let query = filter.as_deref().unwrap_or("");
-
-                            debug!("Updating search filter for all views: '{}'", query);
-
-                            album_grid_view.filter_albums(query);
-                            artist_grid_view.filter_artists(query);
-                            album_list_view.filter_items(query);
-                            artist_list_view.filter_items(query);
-                        }
-                        SettingsChanged { show_dr_values } => {
-                            // Update DR badge visibility in all views
-                            debug!(
-                                "Handling SettingsChanged event: show_dr_values={}",
-                                show_dr_values
-                            );
-
-                            // Update data in all views with new DR setting
-                            album_grid_view.set_show_dr_badges(show_dr_values);
-
-                            // Note: ListView doesn't currently have a set_show_dr_badges method,
-                            // but it should respect the setting when creating new album rows
-                        }
-                        _ => {}
+                        // Update data in all views
+                        album_grid_view.set_albums(albums.clone());
+                        artist_grid_view.set_artists(artists.clone());
+                        album_list_view.set_albums(albums.clone());
+                        artist_list_view.set_artists(artists.clone());
                     }
+                    ViewOptionsChanged {
+                        current_tab,
+                        view_mode,
+                    } => {
+                        switch_count += 1;
+                        info!(
+                            "View switch #{}: tab={:?}, view_mode={:?}",
+                            switch_count, current_tab, view_mode
+                        );
+
+                        let child_name = match (&current_tab, &view_mode) {
+                            (LibraryAlbums, Grid) => "album_grid",
+                            (LibraryAlbums, List) => "album_list",
+                            (LibraryArtists, Grid) => "artist_grid",
+                            (LibraryArtists, List) => "artist_list",
+                        };
+
+                        // Reset scroll position before switching
+                        if let Some(child) = view_stack_clone.child_by_name(child_name)
+                            && let Some(scrolled) = child.downcast_ref::<ScrolledWindow>()
+                        {
+                            scrolled.vadjustment().set_value(0.0);
+                            scrolled.hadjustment().set_value(0.0);
+                        }
+
+                        view_stack_clone.set_visible_child_name(child_name);
+                    }
+                    SearchFilterChanged(filter) => {
+                        // Search filter changed - update all views
+                        // Note: Each view handles filtering internally, we just need to pass the query
+                        let query = filter.as_deref().unwrap_or("");
+
+                        debug!("Updating search filter for all views: '{}'", query);
+
+                        album_grid_view.filter_albums(query);
+                        artist_grid_view.filter_artists(query);
+                        album_list_view.filter_items(query);
+                        artist_list_view.filter_items(query);
+                    }
+                    SettingsChanged { show_dr_values } => {
+                        // Update DR badge visibility in all views
+                        debug!(
+                            "Handling SettingsChanged event: show_dr_values={}",
+                            show_dr_values
+                        );
+
+                        // Update data in all views with new DR setting
+                        album_grid_view.set_show_dr_badges(show_dr_values);
+
+                        // Note: ListView doesn't currently have a set_show_dr_badges method,
+                        // but it should respect the setting when creating new album rows
+                    }
+                    _ => {}
                 }
-                Err(_) => {
-                    debug!("Main view subscription channel closed");
-                    break;
-                }
+            } else {
+                debug!("Main view subscription channel closed");
+                break;
             }
         }
     });
@@ -692,7 +686,7 @@ fn create_player_bar(
 /// Loads custom CSS for consistent component styling.
 fn load_custom_css() {
     // Define CSS for DR badges and cover art components
-    let css = r#"
+    let css = r"
         /* Cover art container styling */
         .cover-art-container {
             background-color: @theme_bg_color;
@@ -813,7 +807,7 @@ fn load_custom_css() {
             /* FlowBox will handle the responsive grid layout */
             min-width: 360px; /* Minimum width for mobile-like displays */
         }
-    "#;
+    ";
 
     let provider = CssProvider::new();
     provider.load_from_string(css);

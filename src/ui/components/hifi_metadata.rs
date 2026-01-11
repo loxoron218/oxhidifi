@@ -17,7 +17,7 @@ use libadwaita::{
 
 use crate::{library::models::Track, ui::utils::format_sample_rate};
 
-/// Builder pattern for configuring HiFiMetadata components.
+/// Builder pattern for configuring `HiFiMetadata` components.
 #[derive(Debug, Default)]
 pub struct HiFiMetadataBuilder {
     /// Track containing the metadata to display.
@@ -44,6 +44,7 @@ impl HiFiMetadataBuilder {
     /// # Returns
     ///
     /// The builder instance for method chaining.
+    #[must_use]
     pub fn track(mut self, track: Track) -> Self {
         self.track = Some(track);
         self
@@ -58,6 +59,7 @@ impl HiFiMetadataBuilder {
     /// # Returns
     ///
     /// The builder instance for method chaining.
+    #[must_use]
     pub fn show_format(mut self, show_format: bool) -> Self {
         self.show_format = show_format;
         self
@@ -72,6 +74,7 @@ impl HiFiMetadataBuilder {
     /// # Returns
     ///
     /// The builder instance for method chaining.
+    #[must_use]
     pub fn show_sample_rate(mut self, show_sample_rate: bool) -> Self {
         self.show_sample_rate = show_sample_rate;
         self
@@ -86,6 +89,7 @@ impl HiFiMetadataBuilder {
     /// # Returns
     ///
     /// The builder instance for method chaining.
+    #[must_use]
     pub fn show_bit_depth(mut self, show_bit_depth: bool) -> Self {
         self.show_bit_depth = show_bit_depth;
         self
@@ -100,6 +104,7 @@ impl HiFiMetadataBuilder {
     /// # Returns
     ///
     /// The builder instance for method chaining.
+    #[must_use]
     pub fn show_channels(mut self, show_channels: bool) -> Self {
         self.show_channels = show_channels;
         self
@@ -114,16 +119,18 @@ impl HiFiMetadataBuilder {
     /// # Returns
     ///
     /// The builder instance for method chaining.
+    #[must_use]
     pub fn compact(mut self, compact: bool) -> Self {
         self.compact = compact;
         self
     }
 
-    /// Builds the HiFiMetadata component.
+    /// Builds the `HiFiMetadata` component.
     ///
     /// # Returns
     ///
     /// A new `HiFiMetadata` instance.
+    #[must_use]
     pub fn build(self) -> HiFiMetadata {
         HiFiMetadata::new(
             self.track,
@@ -155,7 +162,7 @@ pub struct HiFiMetadata {
     pub config: HiFiMetadataConfig,
 }
 
-/// Configuration for HiFiMetadata display options.
+/// Configuration for `HiFiMetadata` display options.
 #[derive(Debug, Clone)]
 pub struct HiFiMetadataConfig {
     /// Whether to show the audio format.
@@ -171,7 +178,7 @@ pub struct HiFiMetadataConfig {
 }
 
 impl HiFiMetadata {
-    /// Creates a new HiFiMetadata component.
+    /// Creates a new `HiFiMetadata` component.
     ///
     /// # Arguments
     ///
@@ -185,6 +192,7 @@ impl HiFiMetadata {
     /// # Returns
     ///
     /// A new `HiFiMetadata` instance.
+    #[must_use]
     pub fn new(
         track: Option<Track>,
         show_format: bool,
@@ -260,7 +268,7 @@ impl HiFiMetadata {
                 let channels_text = match track_data.channels {
                     1 => "Mono".to_string(),
                     2 => "Stereo".to_string(),
-                    n => format!("{} ch", n),
+                    n => format!("{n} ch"),
                 };
                 let channels_label = Label::builder()
                     .label(&channels_text)
@@ -288,11 +296,12 @@ impl HiFiMetadata {
         }
     }
 
-    /// Creates a HiFiMetadata builder for configuration.
+    /// Creates a `HiFiMetadata` builder for configuration.
     ///
     /// # Returns
     ///
     /// A new `HiFiMetadataBuilder` instance.
+    #[must_use]
     pub fn builder() -> HiFiMetadataBuilder {
         HiFiMetadataBuilder::default()
     }
@@ -360,7 +369,7 @@ impl HiFiMetadata {
                 let channels_text = match track_data.channels {
                     1 => "Mono".to_string(),
                     2 => "Stereo".to_string(),
-                    n => format!("{} ch", n),
+                    n => format!("{n} ch"),
                 };
                 let channels_label = Label::builder()
                     .label(&channels_text)

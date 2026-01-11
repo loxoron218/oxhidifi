@@ -43,6 +43,7 @@ impl DrExtractor {
     /// # Panics
     ///
     /// Panics if the regex patterns cannot be compiled (should never happen with valid patterns).
+    #[must_use]
     pub fn new() -> Self {
         // Add patterns for Official DR value formats only
         // All patterns should capture only the numeric part (group 1)
@@ -100,7 +101,7 @@ impl DrExtractor {
             for pattern in &self.dr_patterns {
                 if let Some(captures) = pattern.captures(line) {
                     let dr_number = &captures[1];
-                    let dr_value = format!("DR{}", dr_number);
+                    let dr_value = format!("DR{dr_number}");
 
                     // Validate the extracted DR value
                     if self.validate_dr_value(&dr_value) {
@@ -122,6 +123,7 @@ impl DrExtractor {
     /// # Returns
     ///
     /// `true` if the DR value is valid, `false` otherwise.
+    #[must_use]
     pub fn validate_dr_value(&self, dr_value: &str) -> bool {
         // Only validate the canonical format (DR12)
         // Per specification, we only accept Official DR Values in canonical format
@@ -138,7 +140,7 @@ impl DrExtractor {
     /// Finds potential DR files in an album directory.
     ///
     /// Scans all text files in the directory for potential DR values,
-    /// since DR log files can have irregular names (e.g., "2012–2017_log.txt").
+    /// since DR log files can have irregular names (e.g., "`2012–2017_log.txt`").
     ///
     /// # Arguments
     ///

@@ -32,7 +32,7 @@ use crate::{
     state::{AppState, LibraryState},
 };
 
-/// Configuration for EmptyState display options.
+/// Configuration for `EmptyState` display options.
 #[derive(Debug, Clone)]
 pub struct EmptyStateConfig {
     /// Whether this empty state is for albums or artists.
@@ -65,7 +65,7 @@ pub struct EmptyState {
 }
 
 impl EmptyState {
-    /// Creates a new EmptyState component.
+    /// Creates a new `EmptyState` component.
     ///
     /// # Arguments
     ///
@@ -76,6 +76,7 @@ impl EmptyState {
     /// # Returns
     ///
     /// A new `EmptyState` instance.
+    #[must_use]
     pub fn new(
         app_state: Option<Arc<AppState>>,
         settings_manager: Option<SettingsManager>,
@@ -206,12 +207,12 @@ impl EmptyState {
                                         if let Err(e) =
                                             settings_manager_clone.update_settings(current_settings)
                                         {
-                                            eprintln!("Failed to update settings: {}", e);
+                                            eprintln!("Failed to update settings: {e}");
                                             return;
                                         }
 
                                         // Log successful addition
-                                        println!("Library directory added: {}", path_str);
+                                        println!("Library directory added: {path_str}");
 
                                         // Trigger library rescan
                                         EmptyState::trigger_library_rescan(
@@ -225,7 +226,7 @@ impl EmptyState {
                             }
                         }
                         Err(e) => {
-                            eprintln!("Folder selection cancelled or failed: {}", e);
+                            eprintln!("Folder selection cancelled or failed: {e}");
                         }
                     }
                 });
@@ -239,9 +240,10 @@ impl EmptyState {
     ///
     /// * `library_state` - Current library state to check for emptiness
     pub fn update_from_library_state(&self, library_state: &LibraryState) {
-        let is_empty = match self.config.is_album_view {
-            true => library_state.albums.is_empty(),
-            false => library_state.artists.is_empty(),
+        let is_empty = if self.config.is_album_view {
+            library_state.albums.is_empty()
+        } else {
+            library_state.artists.is_empty()
         };
 
         self.widget.set_visible(is_empty);
@@ -323,7 +325,7 @@ impl EmptyState {
                                                         let albums = match db_refresh.get_albums(None).await {
                                                             Ok(albums) => albums,
                                                             Err(e) => {
-                                                                eprintln!("Failed to refresh albums: {}", e);
+                                                                eprintln!("Failed to refresh albums: {e}");
                                                                 Vec::new()
                                                             }
                                                         };
@@ -332,7 +334,7 @@ impl EmptyState {
                                                         let artists = match db_refresh.get_artists(None).await {
                                                             Ok(artists) => artists,
                                                             Err(e) => {
-                                                                eprintln!("Failed to refresh artists: {}", e);
+                                                                eprintln!("Failed to refresh artists: {e}");
                                                                 Vec::new()
                                                             }
                                                         };
@@ -352,7 +354,7 @@ impl EmptyState {
                                     scanner_arc
                                 }
                                 Err(e) => {
-                                    eprintln!("Failed to create library scanner: {}", e);
+                                    eprintln!("Failed to create library scanner: {e}");
                                     return;
                                 }
                             }
@@ -371,7 +373,7 @@ impl EmptyState {
                         {
                             let mut scanner_write = scanner_for_task.write();
                             if let Err(e) = scanner_write.add_library_directory(&dir_for_task) {
-                                eprintln!("Failed to add directory to scanner: {}", e);
+                                eprintln!("Failed to add directory to scanner: {e}");
                             }
                         }
 
@@ -402,13 +404,13 @@ impl EmptyState {
                             )
                             .await
                         {
-                            eprintln!("Failed to process files: {}", e);
+                            eprintln!("Failed to process files: {e}");
                         }
                     });
 
                     // Await the background task (yields to main loop so UI stays responsive)
                     if let Err(e) = scan_handle.await {
-                        eprintln!("Scan task panicked: {}", e);
+                        eprintln!("Scan task panicked: {e}");
                     }
 
                     // Update UI state with new library data
@@ -418,16 +420,16 @@ impl EmptyState {
                                 app_state_clone.update_library_data(albums, artists);
                             }
                             Err(e) => {
-                                eprintln!("Failed to get artists from database: {}", e);
+                                eprintln!("Failed to get artists from database: {e}");
                             }
                         },
                         Err(e) => {
-                            eprintln!("Failed to get albums from database: {}", e);
+                            eprintln!("Failed to get albums from database: {e}");
                         }
                     }
                 }
                 Err(e) => {
-                    eprintln!("Failed to create library database: {}", e);
+                    eprintln!("Failed to create library database: {e}");
                 }
             }
         }

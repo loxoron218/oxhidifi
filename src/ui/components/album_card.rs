@@ -26,7 +26,7 @@ use crate::{
     },
 };
 
-/// Builder pattern for configuring AlbumCard components.
+/// Builder pattern for configuring `AlbumCard` components.
 #[derive(Default)]
 pub struct AlbumCardBuilder {
     /// The album data to display on the card.
@@ -57,6 +57,7 @@ impl AlbumCardBuilder {
     /// # Returns
     ///
     /// The builder instance for method chaining.
+    #[must_use]
     pub fn album(mut self, album: Album) -> Self {
         self.album = Some(album);
         self
@@ -71,6 +72,7 @@ impl AlbumCardBuilder {
     /// # Returns
     ///
     /// The builder instance for method chaining.
+    #[must_use]
     pub fn artist_name(mut self, artist_name: String) -> Self {
         self.artist_name = Some(artist_name);
         self
@@ -85,6 +87,7 @@ impl AlbumCardBuilder {
     /// # Returns
     ///
     /// The builder instance for method chaining.
+    #[must_use]
     pub fn format(mut self, format: String) -> Self {
         self.format = Some(format);
         self
@@ -99,6 +102,7 @@ impl AlbumCardBuilder {
     /// # Returns
     ///
     /// The builder instance for method chaining.
+    #[must_use]
     pub fn show_dr_badge(mut self, show_dr_badge: bool) -> Self {
         self.show_dr_badge = show_dr_badge;
         self
@@ -113,6 +117,7 @@ impl AlbumCardBuilder {
     /// # Returns
     ///
     /// The builder instance for method chaining.
+    #[must_use]
     pub fn compact(mut self, compact: bool) -> Self {
         self.compact = compact;
         self
@@ -127,6 +132,7 @@ impl AlbumCardBuilder {
     /// # Returns
     ///
     /// The builder instance for method chaining.
+    #[must_use]
     pub fn cover_size(mut self, cover_size: u32) -> Self {
         self.cover_size = Some(cover_size);
         self
@@ -166,7 +172,7 @@ impl AlbumCardBuilder {
         self
     }
 
-    /// Builds the AlbumCard component.
+    /// Builds the `AlbumCard` component.
     ///
     /// # Returns
     ///
@@ -175,6 +181,7 @@ impl AlbumCardBuilder {
     /// # Panics
     ///
     /// Panics if the album has not been set before building.
+    #[must_use]
     pub fn build(self) -> AlbumCard {
         AlbumCard::new(AlbumCardConfig {
             album: self.album.expect("Album must be set"),
@@ -191,7 +198,7 @@ impl AlbumCardBuilder {
     }
 }
 
-/// Configuration for AlbumCard creation.
+/// Configuration for `AlbumCard` creation.
 pub struct AlbumCardConfig {
     /// The album data to display
     pub album: Album,
@@ -217,7 +224,7 @@ pub struct AlbumCardConfig {
 /// in docs/4.\ album-cards.md with proper spacing, CSS classes, and interaction patterns.
 #[derive(Clone)]
 pub struct AlbumCard {
-    /// The underlying FlowBoxChild widget.
+    /// The underlying `FlowBoxChild` widget.
     pub widget: Widget,
     /// The main album tile container.
     pub album_tile: Box,
@@ -244,7 +251,7 @@ pub struct AlbumCard {
 }
 
 impl AlbumCard {
-    /// Creates a new AlbumCard component.
+    /// Creates a new `AlbumCard` component.
     ///
     /// # Arguments
     ///
@@ -256,7 +263,8 @@ impl AlbumCard {
     ///
     /// # Panics
     ///
-    /// Panics if the CoverArt widget is not an Overlay (should never happen with proper widget construction).
+    /// Panics if the `CoverArt` widget is not an Overlay (should never happen with proper widget construction).
+    #[must_use]
     pub fn new(config: AlbumCardConfig) -> Self {
         let AlbumCardConfig {
             album,
@@ -470,11 +478,12 @@ impl AlbumCard {
         }
     }
 
-    /// Creates an AlbumCard builder for configuration.
+    /// Creates an `AlbumCard` builder for configuration.
     ///
     /// # Returns
     ///
     /// A new `AlbumCardBuilder` instance.
+    #[must_use]
     pub fn builder() -> AlbumCardBuilder {
         AlbumCardBuilder::default()
     }

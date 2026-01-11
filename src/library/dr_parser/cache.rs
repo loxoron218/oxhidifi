@@ -24,6 +24,7 @@ impl AlbumDrCache {
     /// # Returns
     ///
     /// A new `AlbumDrCache` instance.
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -72,6 +73,7 @@ impl AlbumDrCache {
     /// # Returns
     ///
     /// The number of entries in the cache.
+    #[must_use]
     pub fn len(&self) -> usize {
         self.cache.read().len()
     }
@@ -81,6 +83,7 @@ impl AlbumDrCache {
     /// # Returns
     ///
     /// `true` if the cache is empty, `false` otherwise.
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.cache.read().is_empty()
     }

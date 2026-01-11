@@ -209,7 +209,7 @@ pub async fn handle_files_removed_incremental(
                 false // It's definitely a file
             } else {
                 // Check if there are any tracks under this path (directory)
-                let pattern = format!("{}/%", path_str);
+                let pattern = format!("{path_str}/%");
 
                 query_scalar::<_, i64>("SELECT COUNT(*) FROM tracks WHERE path LIKE ?")
                     .bind(&pattern)
@@ -377,15 +377,14 @@ async fn get_or_create_artist(
         .fetch_optional(&mut **tx)
         .await?;
 
-    match existing_artist {
-        Some(id) => Ok(id),
-        None => {
-            let id: i64 = query_scalar("INSERT INTO artists (name) VALUES (?) RETURNING id")
-                .bind(artist_name)
-                .fetch_one(&mut **tx)
-                .await?;
-            Ok(id)
-        }
+    if let Some(id) = existing_artist {
+        Ok(id)
+    } else {
+        let id: i64 = query_scalar("INSERT INTO artists (name) VALUES (?) RETURNING id")
+            .bind(artist_name)
+            .fetch_one(&mut **tx)
+            .await?;
+        Ok(id)
     }
 }
 
@@ -421,7 +420,7 @@ async fn get_or_create_album(
     let year = tracks_metadata
         .iter()
         .find_map(|(_, metadata)| metadata.standard.year)
-        .map(|y| y as i64);
+        .map(i64::from);
     let genre = tracks_metadata
         .iter()
         .find_map(|(_, metadata)| metadata.standard.genre.clone());
@@ -434,34 +433,31 @@ async fn get_or_create_album(
             .fetch_optional(&mut **tx)
             .await?;
 
-    match existing_album {
-        Some(id) => {
-            query(
-                "UPDATE albums SET path = ?, compilation = ?, artwork_path = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
-            )
-            .bind(album_dir.to_string_lossy().to_string())
-            .bind(is_compilation)
-            .bind(artwork_path)
-            .bind(id)
-            .execute(&mut **tx)
-            .await?;
-            Ok(id)
-        }
-        None => {
-            let id: i64 = query_scalar(
-                "INSERT INTO albums (artist_id, title, year, genre, compilation, path, artwork_path) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id"
-            )
-            .bind(artist_id)
-            .bind(album_title)
-            .bind(year)
-            .bind(genre)
-            .bind(is_compilation)
-            .bind(album_dir.to_string_lossy().to_string())
-            .bind(artwork_path)
-            .fetch_one(&mut **tx)
-            .await?;
-            Ok(id)
-        }
+    if let Some(id) = existing_album {
+        query(
+            "UPDATE albums SET path = ?, compilation = ?, artwork_path = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+        )
+        .bind(album_dir.to_string_lossy().to_string())
+        .bind(is_compilation)
+        .bind(artwork_path)
+        .bind(id)
+        .execute(&mut **tx)
+        .await?;
+        Ok(id)
+    } else {
+        let id: i64 = query_scalar(
+            "INSERT INTO albums (artist_id, title, year, genre, compilation, path, artwork_path) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id"
+        )
+        .bind(artist_id)
+        .bind(album_title)
+        .bind(year)
+        .bind(genre)
+        .bind(is_compilation)
+        .bind(album_dir.to_string_lossy().to_string())
+        .bind(artwork_path)
+        .fetch_one(&mut **tx)
+        .await?;
+        Ok(id)
     }
 }
 
@@ -533,14 +529,14 @@ async fn update_track_in_transaction(
         .title
         .as_deref()
         .unwrap_or("Unknown Track");
-    let track_number = metadata.standard.track_number.map(|n| n as i64);
-    let disc_number = metadata.standard.disc_number.unwrap_or(1) as i64;
+    let track_number = metadata.standard.track_number.map(i64::from);
+    let disc_number = i64::from(metadata.standard.disc_number.unwrap_or(1));
     let duration_ms = metadata.technical.duration_ms as i64;
     let file_size = metadata.technical.file_size as i64;
     let format = &metadata.technical.format;
-    let sample_rate = metadata.technical.sample_rate as i64;
-    let bits_per_sample = metadata.technical.bits_per_sample as i64;
-    let channels = metadata.technical.channels as i64;
+    let sample_rate = i64::from(metadata.technical.sample_rate);
+    let bits_per_sample = i64::from(metadata.technical.bits_per_sample);
+    let channels = i64::from(metadata.technical.channels);
 
     let existing_track: Option<i64> = query_scalar("SELECT id FROM tracks WHERE path = ?")
         .bind(track_path.to_string_lossy().to_string())

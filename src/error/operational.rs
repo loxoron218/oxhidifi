@@ -89,6 +89,7 @@ impl ErrorReporter {
     ///
     /// This method extracts the most relevant information from an error
     /// chain and formats it for display to end users.
+    #[must_use]
     pub fn to_user_message(error: &Error) -> String {
         // For now, just return the top-level error message
         // In a more sophisticated implementation, we'd have specific

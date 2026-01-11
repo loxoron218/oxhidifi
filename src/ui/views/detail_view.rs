@@ -26,7 +26,7 @@ use crate::{
     ui::components::{cover_art::CoverArt, hifi_metadata::HiFiMetadata, play_overlay::PlayOverlay},
 };
 
-/// Builder pattern for configuring DetailView components.
+/// Builder pattern for configuring `DetailView` components.
 #[derive(Debug, Default)]
 pub struct DetailViewBuilder {
     /// Optional application state reference for reactive updates.
@@ -47,6 +47,7 @@ impl DetailViewBuilder {
     /// # Returns
     ///
     /// The builder instance for method chaining.
+    #[must_use]
     pub fn app_state(mut self, app_state: Arc<AppState>) -> Self {
         self.app_state = Some(app_state);
         self
@@ -61,6 +62,7 @@ impl DetailViewBuilder {
     /// # Returns
     ///
     /// The builder instance for method chaining.
+    #[must_use]
     pub fn detail_type(mut self, detail_type: DetailType) -> Self {
         self.detail_type = detail_type;
         self
@@ -75,16 +77,18 @@ impl DetailViewBuilder {
     /// # Returns
     ///
     /// The builder instance for method chaining.
+    #[must_use]
     pub fn compact(mut self, compact: bool) -> Self {
         self.compact = compact;
         self
     }
 
-    /// Builds the DetailView component.
+    /// Builds the `DetailView` component.
     ///
     /// # Returns
     ///
     /// A new `DetailView` instance.
+    #[must_use]
     pub fn build(self) -> DetailView {
         DetailView::new(self.app_state, self.detail_type, self.compact)
     }
@@ -125,7 +129,7 @@ pub struct DetailView {
     pub config: DetailViewConfig,
 }
 
-/// Configuration for DetailView display options.
+/// Configuration for `DetailView` display options.
 #[derive(Debug, Clone)]
 pub struct DetailViewConfig {
     /// Whether to use compact layout.
@@ -133,7 +137,7 @@ pub struct DetailViewConfig {
 }
 
 impl DetailView {
-    /// Creates a new DetailView component.
+    /// Creates a new `DetailView` component.
     ///
     /// # Arguments
     ///
@@ -144,6 +148,7 @@ impl DetailView {
     /// # Returns
     ///
     /// A new `DetailView` instance.
+    #[must_use]
     pub fn new(app_state: Option<Arc<AppState>>, detail_type: DetailType, compact: bool) -> Self {
         let config = DetailViewConfig { compact };
 
@@ -176,11 +181,12 @@ impl DetailView {
         view
     }
 
-    /// Creates a DetailView builder for configuration.
+    /// Creates a `DetailView` builder for configuration.
     ///
     /// # Returns
     ///
     /// A new `DetailViewBuilder` instance.
+    #[must_use]
     pub fn builder() -> DetailViewBuilder {
         DetailViewBuilder::default()
     }
@@ -430,7 +436,7 @@ impl DetailView {
         let duration_seconds = track.duration_ms / 1000;
         let duration_minutes = duration_seconds / 60;
         let duration_remaining = duration_seconds % 60;
-        let duration_text = format!("{:02}:{:02}", duration_minutes, duration_remaining);
+        let duration_text = format!("{duration_minutes:02}:{duration_remaining:02}");
         let duration_label = Label::builder()
             .label(&duration_text)
             .halign(Start)

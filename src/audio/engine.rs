@@ -222,7 +222,7 @@ impl AudioEngine {
             .send(ControlMessage::Play)
             .await
             .map_err(|e| AudioError::InvalidOperation {
-                reason: format!("Failed to send play command: {}", e),
+                reason: format!("Failed to send play command: {e}"),
             })?;
 
         Ok(())
@@ -249,7 +249,7 @@ impl AudioEngine {
             .send(ControlMessage::Pause)
             .await
             .map_err(|e| AudioError::InvalidOperation {
-                reason: format!("Failed to send pause command: {}", e),
+                reason: format!("Failed to send pause command: {e}"),
             })?;
 
         Ok(())
@@ -276,7 +276,7 @@ impl AudioEngine {
             .send(ControlMessage::Play)
             .await
             .map_err(|e| AudioError::InvalidOperation {
-                reason: format!("Failed to send resume command: {}", e),
+                reason: format!("Failed to send resume command: {e}"),
             })?;
 
         Ok(())
@@ -296,7 +296,7 @@ impl AudioEngine {
             .send(ControlMessage::Stop)
             .await
             .map_err(|e| AudioError::InvalidOperation {
-                reason: format!("Failed to send stop command: {}", e),
+                reason: format!("Failed to send stop command: {e}"),
             })?;
 
         Ok(())
@@ -324,7 +324,7 @@ impl AudioEngine {
             .send(ControlMessage::Seek(position_ms))
             .await
             .map_err(|e| AudioError::InvalidOperation {
-                reason: format!("Failed to send seek command: {}", e),
+                reason: format!("Failed to send seek command: {e}"),
             })?;
 
         Ok(())
@@ -335,6 +335,7 @@ impl AudioEngine {
     /// # Returns
     ///
     /// The current `PlaybackState`.
+    #[must_use]
     pub fn current_playback_state(&self) -> PlaybackState {
         self.state.read().clone()
     }
@@ -344,6 +345,7 @@ impl AudioEngine {
     /// # Returns
     ///
     /// An `Option` containing the `TrackInfo` if a track is loaded.
+    #[must_use]
     pub fn current_track_info(&self) -> Option<TrackInfo> {
         self.current_track.read().clone()
     }
@@ -353,6 +355,7 @@ impl AudioEngine {
     /// # Returns
     ///
     /// A `broadcast::Receiver` that receives `PlaybackState` updates.
+    #[must_use]
     pub fn subscribe_to_state_changes(&self) -> TokioReceiver<PlaybackState> {
         self.state_tx.subscribe()
     }
@@ -368,22 +371,22 @@ impl AudioEngine {
                     match message {
                         ControlMessage::Play => {
                             if let Err(e) = self.handle_play().await {
-                                eprintln!("Error handling play command: {}", e);
+                                eprintln!("Error handling play command: {e}");
                             }
                         }
                         ControlMessage::Pause => {
                             if let Err(e) = self.handle_pause().await {
-                                eprintln!("Error handling pause command: {}", e);
+                                eprintln!("Error handling pause command: {e}");
                             }
                         }
                         ControlMessage::Stop => {
                             if let Err(e) = self.handle_stop().await {
-                                eprintln!("Error handling stop command: {}", e);
+                                eprintln!("Error handling stop command: {e}");
                             }
                         }
                         ControlMessage::Seek(position_ms) => {
                             if let Err(e) = self.handle_seek(position_ms).await {
-                                eprintln!("Error handling seek command: {}", e);
+                                eprintln!("Error handling seek command: {e}");
                             }
                         }
                     }
@@ -430,7 +433,7 @@ impl AudioEngine {
             .stream_handle
             .write()
             .map_err(|e| AudioError::InvalidOperation {
-                reason: format!("Failed to acquire stream handle lock: {}", e),
+                reason: format!("Failed to acquire stream handle lock: {e}"),
             })? = Some(StreamHandle {
             stream,
             decoder_handle: Some(decoder_handle),
@@ -497,7 +500,7 @@ impl AudioEngine {
                 .stream_handle
                 .write()
                 .map_err(|e| AudioError::InvalidOperation {
-                    reason: format!("Failed to acquire stream handle lock: {}", e),
+                    reason: format!("Failed to acquire stream handle lock: {e}"),
                 })? = Some(StreamHandle {
                 stream,
                 decoder_handle: Some(decoder_handle),

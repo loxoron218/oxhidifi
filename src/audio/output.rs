@@ -127,8 +127,7 @@ impl AudioOutput {
                 Ok((host, device)) => {
                     let device_name = device
                         .description()
-                        .map(|d| d.to_string())
-                        .unwrap_or_else(|_| "Unknown".to_string());
+                        .map_or_else(|_| "Unknown".to_string(), |d| d.to_string());
                     info!(
                         "Successfully initialized host {:?} with device: {}",
                         host_id, device_name
@@ -296,19 +295,20 @@ impl AudioOutput {
             .map_err(|_| OutputError::NoDeviceFound)?
             .sample_format();
 
-        let err_fn = |err: StreamError| match err {
-            BackendSpecific { err } => {
+        let err_fn = |err: StreamError| {
+            if let BackendSpecific { err } = err {
                 let err_str = err.to_string();
                 if err_str.contains("buffer size changed") {
                     info!("Audio buffer size changed: {}", err_str);
                 } else {
                     error!("Audio backend error: {}", err_str);
                 }
+            } else {
+                error!("Audio stream error: {}", err)
             }
-            _ => error!("Audio stream error: {}", err),
         };
 
-        let timeout = Duration::from_millis(self.config.buffer_duration_ms as u64);
+        let timeout = Duration::from_millis(u64::from(self.config.buffer_duration_ms));
 
         let stream = match sample_format {
             F32 => {
@@ -342,7 +342,7 @@ impl AudioOutput {
                                     // Convert f32 [-1.0, 1.0] to i16 [-32768, 32767]
                                     // Clamp first to avoid overflow
                                     let clamped = value.clamp(-1.0, 1.0);
-                                    *sample = (clamped * i16::MAX as f32) as i16;
+                                    *sample = (clamped * f32::from(i16::MAX)) as i16;
                                 }
                                 Err(Empty) => {
                                     // Buffer underrun - fill with silence
@@ -365,7 +365,7 @@ impl AudioOutput {
                                     // Convert f32 [-1.0, 1.0] to u16 [0, 65535]
                                     // Map [-1.0, 1.0] to [0, 65535] where 0.0 maps to 32768
                                     let clamped = value.clamp(-1.0, 1.0);
-                                    *sample = ((clamped + 1.0) * (u16::MAX as f32) / 2.0) as u16;
+                                    *sample = ((clamped + 1.0) * f32::from(u16::MAX) / 2.0) as u16;
                                 }
                                 Err(Empty) => {
                                     // Buffer underrun - fill with silence
@@ -433,6 +433,7 @@ impl AudioOutput {
     /// # Returns
     ///
     /// A vector of device names.
+    #[must_use]
     pub fn get_available_devices(&self) -> Vec<String> {
         match self.host.output_devices() {
             Ok(devices) => devices
@@ -447,11 +448,11 @@ impl AudioOutput {
     /// # Returns
     ///
     /// The name of the current output device, or "Unknown" if unavailable.
+    #[must_use]
     pub fn get_current_device_name(&self) -> String {
         self.device
             .description()
-            .map(|desc| desc.to_string())
-            .unwrap_or_else(|_| "Unknown".to_string())
+            .map_or_else(|_| "Unknown".to_string(), |desc| desc.to_string())
     }
 }
 
@@ -460,6 +461,7 @@ impl AudioOutput {
     ///
     /// # Returns
     /// A reference to the selected CPAL output device. The lifetime is tied to `self`.
+    #[must_use]
     pub fn device(&self) -> &Device {
         &self.device
     }
@@ -468,6 +470,7 @@ impl AudioOutput {
     ///
     /// # Returns
     /// A reference to the current output configuration used to build streams.
+    #[must_use]
     pub fn config(&self) -> &OutputConfig {
         &self.config
     }

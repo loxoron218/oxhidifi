@@ -38,6 +38,7 @@ impl DrParser {
     /// # Returns
     ///
     /// A new `DrParser` instance.
+    #[must_use]
     pub fn new(database: Arc<LibraryDatabase>) -> Self {
         Self {
             extractor: DrExtractor::new(),
@@ -103,11 +104,10 @@ impl DrParser {
             if parsing_errors.is_empty() {
                 // No DR files found or no valid DR values
                 return Ok(None);
-            } else {
-                // All files failed to parse - this might indicate corrupted files
-                // But we treat this as no DR value found (not an error)
-                return Ok(None);
             }
+            // All files failed to parse - this might indicate corrupted files
+            // But we treat this as no DR value found (not an error)
+            return Ok(None);
         }
 
         // Remove duplicates and find the highest DR value
@@ -156,6 +156,7 @@ impl DrParser {
     /// # Returns
     ///
     /// A reference to the `AlbumDrCache`.
+    #[must_use]
     pub fn cache(&self) -> &AlbumDrCache {
         &self.cache
     }
@@ -165,6 +166,7 @@ impl DrParser {
     /// # Returns
     ///
     /// A reference to the `DrExtractor`.
+    #[must_use]
     pub fn extractor(&self) -> &DrExtractor {
         &self.extractor
     }

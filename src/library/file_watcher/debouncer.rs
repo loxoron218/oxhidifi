@@ -44,6 +44,7 @@ impl DebouncedEventProcessor {
     /// # Returns
     ///
     /// A new `DebouncedEventProcessor`.
+    #[must_use]
     pub fn new(
         event_receiver: Receiver<ProcessedEvent>,
         debounced_sender: Sender<DebouncedEvent>,
@@ -88,7 +89,7 @@ impl DebouncedEventProcessor {
 
             loop {
                 select! {
-                    _ = &mut sleep => {
+                    () = &mut sleep => {
                         // Timeout reached, stop collecting and send batch
                         break;
                     }

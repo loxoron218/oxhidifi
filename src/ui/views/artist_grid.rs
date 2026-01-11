@@ -28,7 +28,7 @@ use crate::{
     },
 };
 
-/// Builder pattern for configuring ArtistGridView components.
+/// Builder pattern for configuring `ArtistGridView` components.
 #[derive(Debug, Default)]
 pub struct ArtistGridViewBuilder {
     /// Optional application state reference for reactive updates.
@@ -49,6 +49,7 @@ impl ArtistGridViewBuilder {
     /// # Returns
     ///
     /// The builder instance for method chaining.
+    #[must_use]
     pub fn app_state(mut self, app_state: Arc<AppState>) -> Self {
         self.app_state = Some(app_state);
         self
@@ -63,6 +64,7 @@ impl ArtistGridViewBuilder {
     /// # Returns
     ///
     /// The builder instance for method chaining.
+    #[must_use]
     pub fn artists(mut self, artists: Vec<Artist>) -> Self {
         self.artists = artists;
         self
@@ -77,16 +79,18 @@ impl ArtistGridViewBuilder {
     /// # Returns
     ///
     /// The builder instance for method chaining.
+    #[must_use]
     pub fn compact(mut self, compact: bool) -> Self {
         self.compact = compact;
         self
     }
 
-    /// Builds the ArtistGridView component.
+    /// Builds the `ArtistGridView` component.
     ///
     /// # Returns
     ///
     /// A new `ArtistGridView` instance.
+    #[must_use]
     pub fn build(self) -> ArtistGridView {
         ArtistGridView::new(self.app_state, self.artists, self.compact)
     }
@@ -98,7 +102,7 @@ impl ArtistGridViewBuilder {
 /// that adapts from 360px to 4K+ displays, with support for virtual scrolling,
 /// real-time filtering, and keyboard navigation.
 pub struct ArtistGridView {
-    /// The underlying GTK widget (FlowBox).
+    /// The underlying GTK widget (`FlowBox`).
     pub widget: Widget,
     /// The flow box container.
     pub flow_box: FlowBox,
@@ -114,7 +118,7 @@ pub struct ArtistGridView {
     pub current_sort: ArtistSortCriteria,
 }
 
-/// Configuration for ArtistGridView display options.
+/// Configuration for `ArtistGridView` display options.
 #[derive(Debug, Clone)]
 pub struct ArtistGridViewConfig {
     /// Whether to use compact layout.
@@ -122,7 +126,7 @@ pub struct ArtistGridViewConfig {
 }
 
 impl ArtistGridView {
-    /// Creates a new ArtistGridView component.
+    /// Creates a new `ArtistGridView` component.
     ///
     /// # Arguments
     ///
@@ -133,6 +137,7 @@ impl ArtistGridView {
     /// # Returns
     ///
     /// A new `ArtistGridView` instance.
+    #[must_use]
     pub fn new(app_state: Option<Arc<AppState>>, artists: Vec<Artist>, compact: bool) -> Self {
         let config = ArtistGridViewConfig { compact };
 
@@ -188,11 +193,12 @@ impl ArtistGridView {
         view
     }
 
-    /// Creates an ArtistGridView builder for configuration.
+    /// Creates an `ArtistGridView` builder for configuration.
     ///
     /// # Returns
     ///
     /// A new `ArtistGridViewBuilder` instance.
+    #[must_use]
     pub fn builder() -> ArtistGridViewBuilder {
         ArtistGridViewBuilder::default()
     }

@@ -26,6 +26,7 @@ impl ArtworkCache {
     /// # Returns
     ///
     /// A new `ArtworkCache` instance.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             cache: Arc::new(RwLock::new(HashMap::new())),

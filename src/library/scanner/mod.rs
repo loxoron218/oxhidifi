@@ -225,6 +225,7 @@ impl LibraryScanner {
     }
 
     /// Subscribe to scanner events.
+    #[must_use]
     pub fn subscribe(&self) -> Receiver<ScannerEvent> {
         // Create a new unbounded channel for this subscriber
         let (tx, rx) = unbounded();
@@ -277,6 +278,7 @@ impl LibraryScanner {
     /// # Returns
     ///
     /// A reference to the current `ScannerConfig`.
+    #[must_use]
     pub fn config(&self) -> &ScannerConfig {
         &self.config
     }

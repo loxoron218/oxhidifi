@@ -89,14 +89,14 @@ impl FileWatcher {
             Config::default(),
         )
         .map_err(|e| LibraryError::InvalidData {
-            reason: format!("Failed to create file watcher: {}", e),
+            reason: format!("Failed to create file watcher: {e}"),
         })?;
 
         // Apply configuration - hidden file handling is done in our event filter
         watcher
             .configure(Config::default())
             .map_err(|e| LibraryError::InvalidData {
-                reason: format!("Failed to configure watcher: {}", e),
+                reason: format!("Failed to configure watcher: {e}"),
             })?;
 
         let file_watcher = Self {
@@ -313,6 +313,7 @@ impl FileWatcher {
     /// # Returns
     ///
     /// `true` if the path is a supported audio file, `false` otherwise.
+    #[must_use]
     pub fn is_supported_audio_file(path: &Path) -> bool {
         if let Some(extension) = path.extension() {
             if let Some(ext_str) = extension.to_str() {
@@ -336,6 +337,7 @@ impl FileWatcher {
     /// # Returns
     ///
     /// `true` if the path is a supported text file, `false` otherwise.
+    #[must_use]
     pub fn is_supported_text_file(path: &Path) -> bool {
         if let Some(extension) = path.extension() {
             if let Some(ext_str) = extension.to_str() {
@@ -373,7 +375,7 @@ impl FileWatcher {
         self._watcher
             .watch(path, Recursive)
             .map_err(|e| LibraryError::InvalidData {
-                reason: format!("Failed to watch directory {:?}: {}", path, e),
+                reason: format!("Failed to watch directory {path:?}: {e}"),
             })?;
 
         debug!("Started watching directory: {:?}", path);
@@ -403,7 +405,7 @@ impl FileWatcher {
         self._watcher
             .unwatch(path)
             .map_err(|e| LibraryError::InvalidData {
-                reason: format!("Failed to unwatch directory {:?}: {}", path, e),
+                reason: format!("Failed to unwatch directory {path:?}: {e}"),
             })?;
 
         debug!("Stopped watching directory: {:?}", path);
@@ -415,6 +417,7 @@ impl FileWatcher {
     /// # Returns
     ///
     /// A reference to the current `FileWatcherConfig`.
+    #[must_use]
     pub fn config(&self) -> &FileWatcherConfig {
         &self.config
     }
@@ -424,6 +427,7 @@ impl FileWatcher {
     /// # Returns
     ///
     /// A reference to the watched paths set.
+    #[must_use]
     pub fn watched_paths(&self) -> &Arc<RwLock<HashSet<PathBuf>>> {
         &self.watched_paths
     }

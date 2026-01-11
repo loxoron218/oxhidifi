@@ -16,7 +16,7 @@ use libadwaita::{
 
 use crate::ui::components::dr_badge::{DRBadge, DRBadgeBuilder};
 
-/// Builder pattern for configuring CoverArt components.
+/// Builder pattern for configuring `CoverArt` components.
 #[derive(Debug, Default)]
 pub struct CoverArtBuilder {
     /// Path to the artwork image file.
@@ -69,6 +69,7 @@ impl CoverArtBuilder {
     /// # Returns
     ///
     /// The builder instance for method chaining.
+    #[must_use]
     pub fn show_dr_badge(mut self, show_dr_badge: bool) -> Self {
         self.show_dr_badge = show_dr_badge;
         self
@@ -84,17 +85,19 @@ impl CoverArtBuilder {
     /// # Returns
     ///
     /// The builder instance for method chaining.
+    #[must_use]
     pub fn dimensions(mut self, width: i32, height: i32) -> Self {
         self.width = width;
         self.height = height;
         self
     }
 
-    /// Builds the CoverArt component.
+    /// Builds the `CoverArt` component.
     ///
     /// # Returns
     ///
     /// A new `CoverArt` instance.
+    #[must_use]
     pub fn build(self) -> CoverArt {
         CoverArt::new(
             self.artwork_path,
@@ -123,7 +126,7 @@ pub struct CoverArt {
 }
 
 impl CoverArt {
-    /// Creates a new CoverArt component.
+    /// Creates a new `CoverArt` component.
     ///
     /// # Arguments
     ///
@@ -136,6 +139,7 @@ impl CoverArt {
     /// # Returns
     ///
     /// A new `CoverArt` instance.
+    #[must_use]
     pub fn new(
         artwork_path: Option<String>,
         dr_value: Option<String>,
@@ -161,7 +165,7 @@ impl CoverArt {
         // Set ARIA attributes for accessibility
         picture.set_accessible_role(Img);
         if let Some(path) = &artwork_path {
-            picture.set_tooltip_text(Some(&format!("Album artwork for {}", path)));
+            picture.set_tooltip_text(Some(&format!("Album artwork for {path}")));
         } else {
             picture.set_tooltip_text(Some("Default album artwork"));
         }
@@ -221,11 +225,12 @@ impl CoverArt {
         }
     }
 
-    /// Creates a CoverArt builder for configuration.
+    /// Creates a `CoverArt` builder for configuration.
     ///
     /// # Returns
     ///
     /// A new `CoverArtBuilder` instance.
+    #[must_use]
     pub fn builder() -> CoverArtBuilder {
         CoverArtBuilder::default()
     }
@@ -240,7 +245,7 @@ impl CoverArt {
             if Path::new(&path).exists() {
                 self.picture.set_file(Some(&File::for_path(&path)));
                 self.picture
-                    .set_tooltip_text(Some(&format!("Album artwork for {}", path)));
+                    .set_tooltip_text(Some(&format!("Album artwork for {path}")));
             } else {
                 // Clear the image if path doesn't exist
                 self.picture.set_file(None::<&File>);
@@ -275,7 +280,7 @@ impl CoverArt {
     ///
     /// # Panics
     ///
-    /// Panics if the CoverArt widget is not an Overlay (should never happen with proper widget construction).
+    /// Panics if the `CoverArt` widget is not an Overlay (should never happen with proper widget construction).
     pub fn set_show_dr_badge(&mut self, show: bool) {
         let overlay = self
             .widget

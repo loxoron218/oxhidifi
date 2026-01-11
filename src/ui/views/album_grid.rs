@@ -46,7 +46,7 @@ use crate::{
     },
 };
 
-/// Builder pattern for configuring AlbumGridView components.
+/// Builder pattern for configuring `AlbumGridView` components.
 #[derive(Default)]
 pub struct AlbumGridViewBuilder {
     /// Optional application state reference for reactive updates.
@@ -73,6 +73,7 @@ impl AlbumGridViewBuilder {
     /// # Returns
     ///
     /// The builder instance for method chaining.
+    #[must_use]
     pub fn app_state(mut self, app_state: Arc<AppState>) -> Self {
         self.app_state = Some(app_state);
         self
@@ -87,6 +88,7 @@ impl AlbumGridViewBuilder {
     /// # Returns
     ///
     /// The builder instance for method chaining.
+    #[must_use]
     pub fn library_db(mut self, library_db: Arc<LibraryDatabase>) -> Self {
         self.library_db = Some(library_db);
         self
@@ -101,6 +103,7 @@ impl AlbumGridViewBuilder {
     /// # Returns
     ///
     /// The builder instance for method chaining.
+    #[must_use]
     pub fn audio_engine(mut self, audio_engine: Arc<AudioEngine>) -> Self {
         self.audio_engine = Some(audio_engine);
         self
@@ -115,6 +118,7 @@ impl AlbumGridViewBuilder {
     /// # Returns
     ///
     /// The builder instance for method chaining.
+    #[must_use]
     pub fn albums(mut self, albums: Vec<Album>) -> Self {
         self.albums = albums;
         self
@@ -129,6 +133,7 @@ impl AlbumGridViewBuilder {
     /// # Returns
     ///
     /// The builder instance for method chaining.
+    #[must_use]
     pub fn show_dr_badges(mut self, show_dr_badges: bool) -> Self {
         self.show_dr_badges = show_dr_badges;
         self
@@ -143,16 +148,18 @@ impl AlbumGridViewBuilder {
     /// # Returns
     ///
     /// The builder instance for method chaining.
+    #[must_use]
     pub fn compact(mut self, compact: bool) -> Self {
         self.compact = compact;
         self
     }
 
-    /// Builds the AlbumGridView component.
+    /// Builds the `AlbumGridView` component.
     ///
     /// # Returns
     ///
     /// A new `AlbumGridView` instance.
+    #[must_use]
     pub fn build(self) -> AlbumGridView {
         AlbumGridView::new(
             self.app_state,
@@ -171,7 +178,7 @@ impl AlbumGridViewBuilder {
 /// that adapts from 360px to 4K+ displays, with support for virtual scrolling,
 /// real-time filtering, and keyboard navigation.
 pub struct AlbumGridView {
-    /// The underlying GTK widget (FlowBox).
+    /// The underlying GTK widget (`FlowBox`).
     pub widget: Widget,
     /// The flow box container.
     pub flow_box: FlowBox,
@@ -197,7 +204,7 @@ pub struct AlbumGridView {
     _settings_subscription_handle: Option<JoinHandle<()>>,
 }
 
-/// Configuration for AlbumGridView display options.
+/// Configuration for `AlbumGridView` display options.
 #[derive(Debug, Clone)]
 pub struct AlbumGridViewConfig {
     /// Whether to show DR badges on album covers.
@@ -207,7 +214,7 @@ pub struct AlbumGridViewConfig {
 }
 
 impl AlbumGridView {
-    /// Creates a new AlbumGridView component.
+    /// Creates a new `AlbumGridView` component.
     ///
     /// # Arguments
     ///
@@ -221,6 +228,7 @@ impl AlbumGridView {
     /// # Returns
     ///
     /// A new `AlbumGridView` instance.
+    #[must_use]
     pub fn new(
         app_state: Option<Arc<AppState>>,
         library_db: Option<Arc<LibraryDatabase>>,
@@ -317,8 +325,10 @@ impl AlbumGridView {
                                         .artists
                                         .iter()
                                         .find(|artist| artist.id == album.artist_id)
-                                        .map(|artist| artist.name.clone())
-                                        .unwrap_or_else(|| "Unknown Artist".to_string())
+                                        .map_or_else(
+                                            || "Unknown Artist".to_string(),
+                                            |artist| artist.name.clone(),
+                                        )
                                 };
 
                                 // Create album card with proper callbacks
@@ -410,11 +420,12 @@ impl AlbumGridView {
         view
     }
 
-    /// Creates an AlbumGridView builder for configuration.
+    /// Creates an `AlbumGridView` builder for configuration.
     ///
     /// # Returns
     ///
     /// A new `AlbumGridViewBuilder` instance.
+    #[must_use]
     pub fn builder() -> AlbumGridViewBuilder {
         AlbumGridViewBuilder::default()
     }
@@ -482,8 +493,10 @@ impl AlbumGridView {
                 .artists
                 .iter()
                 .find(|artist| artist.id == album.artist_id)
-                .map(|artist| artist.name.clone())
-                .unwrap_or_else(|| "Unknown Artist".to_string())
+                .map_or_else(
+                    || "Unknown Artist".to_string(),
+                    |artist| artist.name.clone(),
+                )
         } else {
             "Unknown Artist".to_string()
         };
@@ -543,8 +556,8 @@ impl AlbumGridView {
                                 let first_track = &tracks[0];
                                 let track_path = &first_track.path;
 
-                                if let Ok(_) = audio_engine_clone.load_track(track_path).await
-                                    && let Ok(_) = audio_engine_clone.play().await
+                                if let Ok(()) = audio_engine_clone.load_track(track_path).await
+                                    && let Ok(()) = audio_engine_clone.play().await
                                 {
                                     app_state_clone.update_playback_state(Playing);
 

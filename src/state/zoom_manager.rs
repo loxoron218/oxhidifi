@@ -91,6 +91,7 @@ impl ZoomManager {
     /// # Returns
     ///
     /// The current grid zoom level (0-4).
+    #[must_use]
     pub fn get_grid_zoom_level(&self) -> u8 {
         *self.grid_zoom_level.read()
     }
@@ -100,6 +101,7 @@ impl ZoomManager {
     /// # Returns
     ///
     /// The current list zoom level (0-2).
+    #[must_use]
     pub fn get_list_zoom_level(&self) -> u8 {
         *self.list_zoom_level.read()
     }
@@ -181,6 +183,7 @@ impl ZoomManager {
     /// # Returns
     ///
     /// (width, height) tuple for cover art dimensions.
+    #[must_use]
     pub fn get_grid_cover_dimensions(&self) -> (i32, i32) {
         let zoom_level = self.get_grid_zoom_level();
         match zoom_level {
@@ -198,6 +201,7 @@ impl ZoomManager {
     /// # Returns
     ///
     /// (width, height) tuple for cover art dimensions.
+    #[must_use]
     pub fn get_list_cover_dimensions(&self) -> (i32, i32) {
         let zoom_level = self.get_list_zoom_level();
         match zoom_level {
@@ -213,6 +217,7 @@ impl ZoomManager {
     /// # Returns
     ///
     /// Row height in pixels.
+    #[must_use]
     pub fn get_list_row_height(&self) -> i32 {
         let zoom_level = self.get_list_zoom_level();
         match zoom_level {
@@ -228,6 +233,7 @@ impl ZoomManager {
     /// # Returns
     ///
     /// Minimum width in pixels.
+    #[must_use]
     pub fn get_grid_min_width(&self) -> i32 {
         let zoom_level = self.get_grid_zoom_level();
         match zoom_level {

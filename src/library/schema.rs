@@ -1,6 +1,6 @@
 //! Database schema definition and versioning for the music library.
 //!
-//! This module defines the SQLite database schema and provides schema
+//! This module defines the `SQLite` database schema and provides schema
 //! versioning capabilities for future migrations.
 
 use std::{env::var, fs::create_dir_all, path::PathBuf};
@@ -29,7 +29,7 @@ pub const CURRENT_SCHEMA_VERSION: i32 = 4;
 
 /// Database schema definition.
 pub struct SchemaManager {
-    /// SQLite connection pool for schema operations.
+    /// `SQLite` connection pool for schema operations.
     pool: SqlitePool,
 }
 
@@ -38,11 +38,12 @@ impl SchemaManager {
     ///
     /// # Arguments
     ///
-    /// * `pool` - The SQLite connection pool.
+    /// * `pool` - The `SQLite` connection pool.
     ///
     /// # Returns
     ///
     /// A `Result` containing the `SchemaManager` or a `SchemaError`.
+    #[must_use]
     pub fn new(pool: SqlitePool) -> Self {
         Self { pool }
     }
@@ -62,11 +63,11 @@ impl SchemaManager {
     pub async fn initialize_schema(&self) -> Result<(), SchemaError> {
         // Create schema version table if it doesn't exist
         query(
-            r#"
+            r"
             CREATE TABLE IF NOT EXISTS schema_version (
                 version INTEGER NOT NULL
             )
-            "#,
+            ",
         )
         .execute(&self.pool)
         .await?;
@@ -110,21 +111,21 @@ impl SchemaManager {
     async fn create_tables(&self) -> Result<(), SchemaError> {
         // Artists table
         query(
-            r#"
+            r"
             CREATE TABLE artists (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL UNIQUE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
-            "#,
+            ",
         )
         .execute(&self.pool)
         .await?;
 
         // Albums table
         query(
-            r#"
+            r"
             CREATE TABLE albums (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 artist_id INTEGER NOT NULL,
@@ -143,14 +144,14 @@ impl SchemaManager {
                 FOREIGN KEY (artist_id) REFERENCES artists (id) ON DELETE CASCADE,
                 UNIQUE (artist_id, title, year)
             )
-            "#,
+            ",
         )
         .execute(&self.pool)
         .await?;
 
         // Tracks table
         query(
-            r#"
+            r"
             CREATE TABLE tracks (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 album_id INTEGER NOT NULL,
@@ -171,7 +172,7 @@ impl SchemaManager {
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (album_id) REFERENCES albums (id) ON DELETE CASCADE
             )
-            "#,
+            ",
         )
         .execute(&self.pool)
         .await?;
@@ -291,8 +292,7 @@ impl SchemaManager {
         } else {
             return Err(SchemaError::MigrationError {
                 reason: format!(
-                    "Schema migration from version {} to {} not implemented",
-                    from_version, CURRENT_SCHEMA_VERSION
+                    "Schema migration from version {from_version} to {CURRENT_SCHEMA_VERSION} not implemented"
                 ),
             });
         }
@@ -323,6 +323,7 @@ impl SchemaManager {
 /// # Returns
 ///
 /// The database connection string.
+#[must_use]
 pub fn get_database_url() -> String {
     let mut config_dir = get_xdg_config_home();
     config_dir.push("oxhidifi");
@@ -338,7 +339,7 @@ pub fn get_database_url() -> String {
 
 /// Gets the XDG config home directory following XDG Base Directory specification.
 ///
-/// Uses XDG_CONFIG_HOME environment variable if set, otherwise defaults to $HOME/.config
+/// Uses `XDG_CONFIG_HOME` environment variable if set, otherwise defaults to $HOME/.config
 fn get_xdg_config_home() -> PathBuf {
     if let Ok(config_home) = var("XDG_CONFIG_HOME")
         && !config_home.is_empty()

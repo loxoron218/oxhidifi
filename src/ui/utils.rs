@@ -24,6 +24,7 @@ use crate::library::models::Album;
 /// # Returns
 ///
 /// A formatted string representing the sample rate in kHz (without "kHz" unit)
+#[must_use]
 pub fn format_sample_rate(sample_rate_hz: i64) -> String {
     let whole_khz = sample_rate_hz / 1000;
     let remainder = sample_rate_hz % 1000;
@@ -34,10 +35,10 @@ pub fn format_sample_rate(sample_rate_hz: i64) -> String {
     } else {
         // Format remainder with leading zeros to ensure correct decimal placement
         // e.g., 100 -> "100", 50 -> "050", 23 -> "023"
-        let remainder_str = format!("{:03}", remainder);
+        let remainder_str = format!("{remainder:03}");
 
         // Combine whole and fractional parts
-        let mut result = format!("{}.{}", whole_khz, remainder_str);
+        let mut result = format!("{whole_khz}.{remainder_str}");
 
         // Trim trailing zeros from the fractional part
         // Find the position of the decimal point
@@ -61,8 +62,8 @@ pub fn format_sample_rate(sample_rate_hz: i64) -> String {
 ///
 /// This function creates a display string that accurately represents the audio format
 /// without misleading the user. It follows these rules:
-/// - If complete format information is available (format, bits_per_sample, sample_rate),
-///   displays as "FORMAT bits/sample_rate_khz" (e.g., "FLAC 24/96", "FLAC 24/44.1")
+/// - If complete format information is available (format, `bits_per_sample`, `sample_rate`),
+///   displays as "FORMAT `bits/sample_rate_khz`" (e.g., "FLAC 24/96", "FLAC 24/44.1")
 /// - If only format name is available, displays just the format name (e.g., "FLAC")
 /// - If no format metadata is available, attempts to infer from file extension
 /// - If format cannot be determined, returns None to indicate format should not be displayed
@@ -75,6 +76,7 @@ pub fn format_sample_rate(sample_rate_hz: i64) -> String {
 ///
 /// An `Option<String>` containing the formatted display string, or `None` if format
 /// cannot be determined and should not be displayed.
+#[must_use]
 pub fn create_format_display(album: &Album) -> Option<String> {
     // Use actual format metadata if available
     if let Some(ref format_name) = album.format {
@@ -82,11 +84,10 @@ pub fn create_format_display(album: &Album) -> Option<String> {
             // Format as "FORMAT bits/sample_rate" (e.g., "FLAC 24/96", "FLAC 24/44.1")
             // Convert sample_rate from Hz to kHz for display with proper decimal handling
             let sample_rate_khz = format_sample_rate(sample_rate);
-            return Some(format!("{} {}/{}", format_name, bits, sample_rate_khz));
-        } else {
-            // Only format name available
-            return Some(format_name.clone());
+            return Some(format!("{format_name} {bits}/{sample_rate_khz}"));
         }
+        // Only format name available
+        return Some(format_name.clone());
     }
 
     // Fallback to file extension inference if no format metadata
