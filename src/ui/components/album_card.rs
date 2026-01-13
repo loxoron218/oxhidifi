@@ -147,6 +147,7 @@ impl AlbumCardBuilder {
     /// # Returns
     ///
     /// The builder instance for method chaining.
+    #[must_use]
     pub fn on_play_clicked<F>(mut self, callback: F) -> Self
     where
         F: Fn() + 'static,
@@ -164,6 +165,7 @@ impl AlbumCardBuilder {
     /// # Returns
     ///
     /// The builder instance for method chaining.
+    #[must_use]
     pub fn on_card_clicked<F>(mut self, callback: F) -> Self
     where
         F: Fn() + 'static,
@@ -495,7 +497,7 @@ impl AlbumCard {
     /// * `album` - New album data to display
     /// * `artist_name` - New artist name to display
     /// * `format` - Optional new format information
-    pub fn update_album(&mut self, album: Album, artist_name: String, format: Option<String>) {
+    pub fn update_album(&mut self, album: &Album, artist_name: String, format: Option<String>) {
         // Update cover art
         self.cover_art.update_artwork(Some(
             album
@@ -517,7 +519,7 @@ impl AlbumCard {
 
         let format_info = format.unwrap_or_else(|| {
             // If no explicit format provided, try to create one from album metadata
-            create_format_display(&album).unwrap_or_default()
+            create_format_display(album).unwrap_or_default()
         });
         self.format_label.set_label(&format_info);
         if format_info.is_empty() {

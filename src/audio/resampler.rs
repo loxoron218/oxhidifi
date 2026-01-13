@@ -169,8 +169,8 @@ impl AudioResampler {
         while available_frames >= needed_frames {
             // Extract exactly needed_frames frames per channel as interleaved slice
             let samples_to_process = &self.input_buffer[..needed_frames * ch];
-            let input_adapter =
-                InterleavedSlice::new(samples_to_process, ch, needed_frames).unwrap();
+            let input_adapter = InterleavedSlice::new(samples_to_process, ch, needed_frames)
+                .map_err(|e| ResamplingError::RubatoError(e.to_string()))?;
 
             let output_owned = self
                 .resampler
@@ -276,7 +276,7 @@ impl ResamplingAudioConsumer {
                 source_consumer,
                 target_producer,
                 resampler,
-                running_clone,
+                &running_clone,
                 channels,
             );
         }));
@@ -314,7 +314,7 @@ fn resampling_loop(
     mut source_consumer: Consumer<f32>,
     mut target_producer: Producer<f32>,
     mut resampler: AudioResampler,
-    running: Arc<AtomicBool>,
+    running: &Arc<AtomicBool>,
     channels: usize,
 ) {
     const INPUT_BUFFER_SIZE: usize = 4096;
@@ -407,7 +407,7 @@ fn resampling_loop(
 pub fn create_resampling_stream(
     output: &AudioOutput,
     mut resampled_consumer: Consumer<f32>,
-    target_config: StreamConfig,
+    target_config: &StreamConfig,
 ) -> Result<Stream, OutputError> {
     let sample_format = output
         .device()
@@ -424,7 +424,7 @@ pub fn create_resampling_stream(
                 error!("Audio backend error: {}", err_str);
             }
         } else {
-            error!("Audio stream error: {}", err)
+            error!("Audio stream error: {}", err);
         }
     };
 
@@ -432,7 +432,7 @@ pub fn create_resampling_stream(
 
     let stream = match sample_format {
         SampleFormat::F32 => output.device().build_output_stream(
-            &target_config,
+            target_config,
             move |data: &mut [f32], _: &OutputCallbackInfo| {
                 for sample in data.iter_mut() {
                     match resampled_consumer.pop() {
@@ -449,7 +449,7 @@ pub fn create_resampling_stream(
             Some(timeout),
         )?,
         SampleFormat::I16 => output.device().build_output_stream(
-            &target_config,
+            target_config,
             move |data: &mut [i16], _: &OutputCallbackInfo| {
                 for sample in data.iter_mut() {
                     match resampled_consumer.pop() {
@@ -467,7 +467,7 @@ pub fn create_resampling_stream(
             Some(timeout),
         )?,
         SampleFormat::U16 => output.device().build_output_stream(
-            &target_config,
+            target_config,
             move |data: &mut [u16], _: &OutputCallbackInfo| {
                 for sample in data.iter_mut() {
                     match resampled_consumer.pop() {

@@ -23,7 +23,15 @@ use libadwaita::{
 use crate::{
     library::models::{Album, Artist, Track},
     state::AppState,
-    ui::components::{cover_art::CoverArt, hifi_metadata::HiFiMetadata, play_overlay::PlayOverlay},
+    ui::components::{
+        cover_art::CoverArt,
+        hifi_metadata::{
+            BitDepthDisplay::Show as ShowBitDepth, ChannelsDisplay::Hide as HideChannels,
+            FormatDisplay::Show as ShowFormat, HiFiMetadata, LayoutMode::Compact,
+            SampleRateDisplay::Show as ShowSampleRate,
+        },
+        play_overlay::PlayOverlay,
+    },
 };
 
 /// Builder pattern for configuring `DetailView` components.
@@ -211,8 +219,8 @@ impl DetailView {
         self.detail_type = Some(detail_type.clone());
 
         match detail_type {
-            DetailType::Album(album) => self.display_album_detail(album),
-            DetailType::Artist(artist) => self.display_artist_detail(artist),
+            DetailType::Album(album) => self.display_album_detail(&album),
+            DetailType::Artist(artist) => self.display_artist_detail(&artist),
         }
     }
 
@@ -221,9 +229,9 @@ impl DetailView {
     /// # Arguments
     ///
     /// * `album` - The album to display details for
-    fn display_album_detail(&mut self, album: Album) {
+    fn display_album_detail(&mut self, album: &Album) {
         // Create header section with cover art and metadata
-        let header_container = self.create_album_header(&album);
+        let header_container = Self::create_album_header(album);
         self.main_container.append(&header_container);
 
         // Create track listing section
@@ -236,7 +244,7 @@ impl DetailView {
                 .collect();
 
             if !tracks.is_empty() {
-                let track_list = self.create_track_list(tracks);
+                let track_list = Self::create_track_list(&tracks);
                 self.main_container.append(&track_list);
             }
         }
@@ -253,7 +261,7 @@ impl DetailView {
     /// # Returns
     ///
     /// A new `Widget` representing the album header.
-    fn create_album_header(&self, album: &Album) -> Widget {
+    fn create_album_header(album: &Album) -> Widget {
         let header_container = Box::builder().orientation(Horizontal).spacing(24).build();
 
         // Large cover art with play overlay
@@ -360,7 +368,7 @@ impl DetailView {
     /// # Returns
     ///
     /// A new `Widget` representing the track list.
-    fn create_track_list(&self, tracks: Vec<Track>) -> Widget {
+    fn create_track_list(tracks: &[Track]) -> Widget {
         let list_container = Box::builder().orientation(Vertical).spacing(8).build();
 
         let title_label = Label::builder()
@@ -382,7 +390,7 @@ impl DetailView {
             .build();
 
         for (index, track) in tracks.iter().enumerate() {
-            let row = self.create_track_row(track, index + 1);
+            let row = Self::create_track_row(track, index + 1);
             track_list.append(&row);
         }
 
@@ -402,7 +410,7 @@ impl DetailView {
     /// # Returns
     ///
     /// A new `Widget` representing the track row.
-    fn create_track_row(&self, track: &Track, track_number: usize) -> Widget {
+    fn create_track_row(track: &Track, track_number: usize) -> Widget {
         let row_container = Box::builder()
             .orientation(Horizontal)
             .spacing(12)
@@ -448,11 +456,11 @@ impl DetailView {
         // Hi-Fi metadata
         let hifi_metadata = HiFiMetadata::builder()
             .track(track.clone())
-            .show_format(true)
-            .show_sample_rate(true)
-            .show_bit_depth(true)
-            .show_channels(false) // Save space in track list
-            .compact(true)
+            .show_format(ShowFormat)
+            .show_sample_rate(ShowSampleRate)
+            .show_bit_depth(ShowBitDepth)
+            .show_channels(HideChannels) // Save space in track list
+            .layout(Compact)
             .build();
         row_container.append(&hifi_metadata.widget);
 
@@ -472,13 +480,13 @@ impl DetailView {
     /// # Arguments
     ///
     /// * `artist` - The artist to display details for
-    fn display_artist_detail(&mut self, artist: Artist) {
+    fn display_artist_detail(&mut self, artist: &Artist) {
         // Create header section with artist image and metadata
-        let header_container = self.create_artist_header(&artist);
+        let header_container = Self::create_artist_header(artist);
         self.main_container.append(&header_container);
 
         // Create album listing section (placeholder - would need album data)
-        let album_list_placeholder = self.create_album_list_placeholder();
+        let album_list_placeholder = Self::create_album_list_placeholder();
         self.main_container.append(&album_list_placeholder);
 
         // set_accessible_description doesn't exist in GTK4, remove this line
@@ -493,7 +501,7 @@ impl DetailView {
     /// # Returns
     ///
     /// A new `Widget` representing the artist header.
-    fn create_artist_header(&self, artist: &Artist) -> Widget {
+    fn create_artist_header(artist: &Artist) -> Widget {
         let header_container = Box::builder().orientation(Horizontal).spacing(24).build();
 
         // Artist image (default avatar)
@@ -558,7 +566,7 @@ impl DetailView {
     /// # Returns
     ///
     /// A new `Widget` representing the album list placeholder.
-    fn create_album_list_placeholder(&self) -> Widget {
+    fn create_album_list_placeholder() -> Widget {
         let list_container = Box::builder().orientation(Vertical).spacing(8).build();
 
         let title_label = Label::builder()

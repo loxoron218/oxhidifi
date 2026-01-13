@@ -55,7 +55,7 @@ impl IncrementalUpdater {
     /// # Errors
     ///
     /// Returns `LibraryError` if initialization fails.
-    pub async fn new(
+    pub fn new(
         database: Arc<LibraryDatabase>,
         settings: Arc<parking_lot::RwLock<UserSettings>>,
         config: Option<IncrementalUpdaterConfig>,
@@ -114,7 +114,11 @@ impl IncrementalUpdater {
                 DebouncedEvent::FilesChanged { paths } => {
                     debug!("Processing {} changed files incrementally", paths.len());
                     if let Err(e) = handlers::handle_files_changed_incremental(
-                        paths, &database, &dr_parser, &settings, &config,
+                        paths,
+                        &database,
+                        dr_parser.as_ref(),
+                        &settings,
+                        &config,
                     )
                     .await
                     {
@@ -132,7 +136,11 @@ impl IncrementalUpdater {
                 DebouncedEvent::FilesRenamed { paths } => {
                     debug!("Processing {} renamed files incrementally", paths.len());
                     if let Err(e) = handlers::handle_files_renamed_incremental(
-                        paths, &database, &dr_parser, &settings, &config,
+                        paths,
+                        &database,
+                        dr_parser.as_ref(),
+                        &settings,
+                        &config,
                     )
                     .await
                     {

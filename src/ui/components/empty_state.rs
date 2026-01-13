@@ -294,12 +294,10 @@ impl EmptyState {
                         } else {
                             // Create new scanner
                             match LibraryScanner::new(
-                                library_db_arc.clone(),
-                                settings_arc.clone(),
+                                &library_db_arc.clone(),
+                                &settings_arc.clone(),
                                 None,
-                            )
-                            .await
-                            {
+                            ) {
                                 Ok(scanner) => {
                                     let scanner_arc = Arc::new(RwLock::new(scanner));
 
@@ -379,14 +377,13 @@ impl EmptyState {
 
                         // 2. Collect files (BLOCKING IO)
                         let all_audio_files = {
-                            let scanner_read = scanner_for_task.read();
                             let library_dirs = settings_for_task.read().library_directories.clone();
                             let mut all_files = Vec::new();
 
                             for dir in library_dirs {
                                 let dir_path = Path::new(&dir);
                                 if let Ok(audio_files) =
-                                    scanner_read.collect_audio_files_from_directory(dir_path)
+                                    LibraryScanner::collect_audio_files_from_directory(dir_path)
                                 {
                                     all_files.extend(audio_files);
                                 }

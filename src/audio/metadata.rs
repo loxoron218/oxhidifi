@@ -4,7 +4,7 @@
 //! (artist, album, title, etc.) and technical Hi-Fi metadata (format,
 //! bit depth, sample rate, duration) from audio files.
 
-use std::{fs::metadata, io::Error as StdError, path::Path};
+use std::{fs::metadata, io::Error as StdError, path::Path, string::ToString};
 
 use {
     anyhow::Context,
@@ -159,14 +159,14 @@ impl TagReader {
             album: primary_tag.and_then(|tag| tag.album().map(|s| s.to_string())),
             album_artist: primary_tag.and_then(|tag| {
                 tag.get_string(&AlbumArtist)
-                    .map(|s| s.to_string())
+                    .map(ToString::to_string)
                     .or_else(|| tag.artist().map(|s| s.to_string()))
             }),
-            track_number: primary_tag.and_then(|tag| tag.track()),
-            total_tracks: primary_tag.and_then(|tag| tag.track_total()),
-            disc_number: primary_tag.and_then(|tag| tag.disk()),
-            total_discs: primary_tag.and_then(|tag| tag.disk_total()),
-            year: primary_tag.and_then(|tag| tag.year()),
+            track_number: primary_tag.and_then(Accessor::track),
+            total_tracks: primary_tag.and_then(Accessor::track_total),
+            disc_number: primary_tag.and_then(Accessor::disk),
+            total_discs: primary_tag.and_then(Accessor::disk_total),
+            year: primary_tag.and_then(Accessor::year),
             genre: primary_tag.and_then(|tag| tag.genre().map(|s| s.to_string())),
             comment: primary_tag.and_then(|tag| tag.comment().map(|s| s.to_string())),
         };

@@ -70,7 +70,7 @@ impl ZoomManager {
 
     /// Helper to broadcast an event to all subscribers.
     /// Cleans up closed channels.
-    fn broadcast_event(&self, event: ZoomEvent) -> usize {
+    fn broadcast_event(&self, event: &ZoomEvent) -> usize {
         let mut subscribers = self.subscribers.write();
         let mut active = Vec::with_capacity(subscribers.len());
         let mut count = 0;
@@ -131,7 +131,7 @@ impl ZoomManager {
                 debug!("Failed to persist grid zoom level {}: {}", clamped_level, e);
             }
 
-            self.broadcast_event(ZoomEvent::GridZoomChanged(clamped_level));
+            self.broadcast_event(&ZoomEvent::GridZoomChanged(clamped_level));
         }
     }
 
@@ -160,7 +160,7 @@ impl ZoomManager {
                 debug!("Failed to persist list zoom level {}: {}", clamped_level, e);
             }
 
-            self.broadcast_event(ZoomEvent::ListZoomChanged(clamped_level));
+            self.broadcast_event(&ZoomEvent::ListZoomChanged(clamped_level));
         }
     }
 
@@ -189,10 +189,9 @@ impl ZoomManager {
         match zoom_level {
             0 => (120, 120), // Smallest
             1 => (150, 150), // Small
-            2 => (180, 180), // Medium (default)
             3 => (210, 210), // Large
             4 => (240, 240), // Largest
-            _ => (180, 180), // Fallback to default
+            _ => (180, 180), // Fallback to default (Medium)
         }
     }
 
@@ -206,9 +205,8 @@ impl ZoomManager {
         let zoom_level = self.get_list_zoom_level();
         match zoom_level {
             0 => (32, 32), // Smallest
-            1 => (48, 48), // Medium (default)
             2 => (64, 64), // Largest
-            _ => (48, 48), // Fallback to default
+            _ => (48, 48), // Fallback to default (Medium)
         }
     }
 
@@ -222,9 +220,8 @@ impl ZoomManager {
         let zoom_level = self.get_list_zoom_level();
         match zoom_level {
             0 => 60,  // Smallest
-            1 => 80,  // Medium (default)
             2 => 100, // Largest
-            _ => 80,  // Fallback to default
+            _ => 80,  // Fallback to default (Medium)
         }
     }
 
@@ -239,10 +236,9 @@ impl ZoomManager {
         match zoom_level {
             0 => 120, // Smallest
             1 => 150, // Small
-            2 => 180, // Medium (default)
             3 => 210, // Large
             4 => 240, // Largest
-            _ => 180, // Fallback to default
+            _ => 180, // Fallback to default (Medium)
         }
     }
 }

@@ -162,9 +162,9 @@ impl AlbumGridViewBuilder {
     #[must_use]
     pub fn build(self) -> AlbumGridView {
         AlbumGridView::new(
-            self.app_state,
-            self.library_db,
-            self.audio_engine,
+            self.app_state.as_ref(),
+            self.library_db.as_ref(),
+            self.audio_engine.as_ref(),
             self.albums,
             self.show_dr_badges,
             self.compact,
@@ -230,9 +230,9 @@ impl AlbumGridView {
     /// A new `AlbumGridView` instance.
     #[must_use]
     pub fn new(
-        app_state: Option<Arc<AppState>>,
-        library_db: Option<Arc<LibraryDatabase>>,
-        audio_engine: Option<Arc<AudioEngine>>,
+        app_state: Option<&Arc<AppState>>,
+        library_db: Option<&Arc<LibraryDatabase>>,
+        audio_engine: Option<&Arc<AudioEngine>>,
         albums: Vec<Album>,
         show_dr_badges: bool,
         compact: bool,
@@ -270,7 +270,7 @@ impl AlbumGridView {
         // Create empty state component
         let empty_state = app_state.as_ref().map(|state| {
             EmptyState::new(
-                Some(state.clone()),
+                Some(Arc::clone(state)),
                 None, // Will be set later when we have access to settings
                 EmptyStateConfig {
                     is_album_view: true,
@@ -289,17 +289,17 @@ impl AlbumGridView {
         let mut view = Self {
             widget: main_container.upcast_ref::<Widget>().clone(),
             flow_box: flow_box.clone(),
-            app_state: app_state.clone(),
-            library_db: library_db.clone(),
-            audio_engine: audio_engine.clone(),
+            app_state: app_state.cloned(),
+            library_db: library_db.cloned(),
+            audio_engine: audio_engine.cloned(),
             albums: Vec::new(),
             config: config.clone(),
             empty_state,
             current_sort: AlbumSortCriteria::Title, // Default sort by Title
             album_cards: album_cards.clone(),
-            _zoom_subscription_handle: if let Some(ref state) = app_state {
+            _zoom_subscription_handle: if let Some(state) = app_state {
                 // Subscribe to zoom changes
-                let state_clone = state.clone();
+                let state_clone: Arc<AppState> = state.clone();
                 let flow_box_clone = flow_box.clone();
                 let config_clone = config.clone();
                 let album_cards_clone = album_cards.clone();
@@ -372,9 +372,9 @@ impl AlbumGridView {
             } else {
                 None
             },
-            _settings_subscription_handle: if let Some(ref state) = app_state {
+            _settings_subscription_handle: if let Some(state) = app_state {
                 // Subscribe to settings changes
-                let state_clone = state.clone();
+                let state_clone: Arc<AppState> = state.clone();
                 let album_cards_clone = album_cards.clone();
                 let handle = MainContext::default().spawn_local(async move {
                     let rx = state_clone.subscribe();
@@ -556,7 +556,7 @@ impl AlbumGridView {
                                 let first_track = &tracks[0];
                                 let track_path = &first_track.path;
 
-                                if let Ok(()) = audio_engine_clone.load_track(track_path).await
+                                if let Ok(()) = audio_engine_clone.load_track(track_path)
                                     && let Ok(()) = audio_engine_clone.play().await
                                 {
                                     app_state_clone.update_playback_state(Playing);

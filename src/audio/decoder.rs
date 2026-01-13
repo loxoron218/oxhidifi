@@ -23,7 +23,7 @@ use {
             codecs::{CODEC_TYPE_NULL, Decoder, DecoderOptions},
             errors::Error as SymphoniaError,
             formats::{FormatOptions, FormatReader, SeekMode::Accurate, SeekTo::Time},
-            io::MediaSourceStream,
+            io::{MediaSourceStream, MediaSourceStreamOptions},
             meta::MetadataOptions,
             probe::Hint,
             units::Time as OtherTime,
@@ -114,7 +114,7 @@ impl AudioDecoder {
 
         // Create media source stream
         let file = File::open(path)?;
-        let mss = MediaSourceStream::new(Box::new(file), Default::default());
+        let mss = MediaSourceStream::new(Box::new(file), MediaSourceStreamOptions::default());
 
         // Create format hint
         let mut hint = Hint::new();
@@ -123,8 +123,8 @@ impl AudioDecoder {
         }
 
         // Probe the format
-        let format_opts: FormatOptions = Default::default();
-        let metadata_opts: MetadataOptions = Default::default();
+        let format_opts: FormatOptions = FormatOptions::default();
+        let metadata_opts: MetadataOptions = MetadataOptions::default();
         let probe = get_probe();
 
         let probed = probe
@@ -215,13 +215,8 @@ impl AudioDecoder {
                 Err(SymphoniaError::IoError(e)) => {
                     return Err(DecoderError::IoError(e));
                 }
-                Err(SymphoniaError::ResetRequired) => {
-                    // Try to reset the decoder - not directly supported, skip for now
-                    continue;
-                }
-                Err(SymphoniaError::DecodeError(_)) => {
+                Err(SymphoniaError::ResetRequired | SymphoniaError::DecodeError(_)) => {
                     // Skip corrupted packets and continue
-                    continue;
                 }
                 Err(SymphoniaError::SeekError(_)) => {
                     // End of file reached
@@ -388,8 +383,8 @@ impl AudioProducer {
                     let mut samples = Vec::with_capacity(buf.frames() * channels);
                     for frame in 0..buf.frames() {
                         for ch in 0..channels {
-                            let sample_u32 = buf.chan(ch)[frame].0 & 0x00FFFFFF;
-                            samples.push(sample_u32 as f32 / 16777215.0);
+                            let sample_u32 = buf.chan(ch)[frame].0 & 0x00FF_FFFF;
+                            samples.push(sample_u32 as f32 / 16_777_215.0);
                         }
                     }
                     samples

@@ -105,11 +105,11 @@ impl AudioPreferencesPage {
         // Create adjustment for sample rate (0 = auto, then common rates)
         let adjustment = Adjustment::new(
             f64::from(current_sample_rate),
-            0.0,      // minimum (0 = auto)
-            768000.0, // maximum (768kHz)
-            1.0,      // step
-            1000.0,   // page increment
-            0.0,      // page size
+            0.0,       // minimum (0 = auto)
+            768_000.0, // maximum (768kHz)
+            1.0,       // step
+            1_000.0,   // page increment
+            0.0,       // page size
         );
 
         let spin_row = SpinRow::builder()
@@ -126,8 +126,8 @@ impl AudioPreferencesPage {
 
             // Validate sample rate (common rates or 0 for auto)
             let valid_rates = [
-                0, 8000, 11025, 16000, 22050, 24000, 32000, 44100, 48000, 88200, 96000, 176400,
-                192000, 352800, 384000, 705600, 768000,
+                0, 8_000, 11_025, 16_000, 22_050, 24_000, 32_000, 44_100, 48_000, 88_200, 96_000,
+                176_400, 192_000, 352_800, 384_000, 705_600, 768_000,
             ];
 
             if !valid_rates.contains(&new_value) {

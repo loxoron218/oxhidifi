@@ -86,10 +86,9 @@ impl GeneralPreferencesPage {
 
         // Set current selection
         let current_index = match current_theme.as_str() {
-            "system" => 0,
             "light" => 1,
             "dark" => 2,
-            _ => 0,
+            _ => 0, // Default to system
         };
         combo_row.set_selected(current_index as u32);
 
@@ -98,10 +97,9 @@ impl GeneralPreferencesPage {
         combo_row.connect_selected_notify(move |row| {
             let selected_index = row.selected() as usize;
             let new_theme = match selected_index {
-                0 => "system".to_string(),
                 1 => "light".to_string(),
                 2 => "dark".to_string(),
-                _ => "system".to_string(),
+                _ => "system".to_string(), // Default to system
             };
 
             // Update settings
@@ -219,7 +217,6 @@ impl GeneralPreferencesPage {
 
         // Set current selection
         let current_index = match current_mode.as_str() {
-            "release" => 0,
             "original" => 1,
             _ => 0, // Default to release year
         };
@@ -231,14 +228,13 @@ impl GeneralPreferencesPage {
         combo_row.connect_selected_notify(move |row| {
             let selected_index = row.selected() as usize;
             let new_mode = match selected_index {
-                0 => "release".to_string(),
                 1 => "original".to_string(),
-                _ => "release".to_string(),
+                _ => "release".to_string(), // Default to release year
             };
 
             // Update settings
             let mut current_settings = settings_manager_clone.get_settings().clone();
-            current_settings.year_display_mode = new_mode.clone();
+            current_settings.year_display_mode.clone_from(&new_mode);
 
             if let Err(e) = settings_manager_clone.update_settings(current_settings) {
                 debug!("Failed to update year display mode preference: {}", e);

@@ -105,6 +105,7 @@ impl DrParser {
                 // No DR files found or no valid DR values
                 return Ok(None);
             }
+
             // All files failed to parse - this might indicate corrupted files
             // But we treat this as no DR value found (not an error)
             return Ok(None);

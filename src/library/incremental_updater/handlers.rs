@@ -48,7 +48,7 @@ use crate::{
 pub async fn handle_files_changed_incremental(
     paths: Vec<PathBuf>,
     database: &LibraryDatabase,
-    dr_parser: &Option<Arc<DrParser>>,
+    dr_parser: Option<&Arc<DrParser>>,
     settings: &RwLock<UserSettings>,
     config: &IncrementalUpdaterConfig,
 ) -> Result<(), LibraryError> {
@@ -79,7 +79,7 @@ pub async fn handle_files_changed_incremental(
 pub async fn process_file_batch(
     batch: &[PathBuf],
     database: &LibraryDatabase,
-    dr_parser: &Option<Arc<DrParser>>,
+    dr_parser: Option<&Arc<DrParser>>,
     _settings: &RwLock<UserSettings>,
 ) -> Result<(), LibraryError> {
     let pool = database.pool();
@@ -107,7 +107,6 @@ pub async fn process_file_batch(
                 }
                 Err(e) => {
                     warn!("Failed to read metadata for {:?}: {}", file_path, e);
-                    continue;
                 }
             }
         }
@@ -129,16 +128,16 @@ pub async fn process_file_batch(
             .collect();
 
         // Extract artwork path
-        let artwork_path = extract_album_artwork_path(&album_dir, &audio_files).await;
+        let artwork_path = extract_album_artwork_path(&album_dir, &audio_files);
 
         // Get or create artist
-        let artist_id = get_or_create_artist(&mut tx, &artist_info).await?;
+        let artist_id = get_or_create_artist(&mut tx, artist_info.as_ref()).await?;
 
         // Get or create album
         let album_id = get_or_create_album(
             &mut tx,
             artist_id,
-            &album_info,
+            album_info.as_ref(),
             &tracks_metadata,
             &album_dir,
             is_compilation,
@@ -266,7 +265,7 @@ pub async fn handle_files_removed_incremental(
 pub async fn handle_files_renamed_incremental(
     paths: Vec<(PathBuf, PathBuf)>,
     database: &LibraryDatabase,
-    dr_parser: &Option<Arc<DrParser>>,
+    dr_parser: Option<&Arc<DrParser>>,
     settings: &RwLock<UserSettings>,
     config: &IncrementalUpdaterConfig,
 ) -> Result<(), LibraryError> {
@@ -368,9 +367,9 @@ fn extract_album_artist_info(
 /// Returns `LibraryError` if database operations fail.
 async fn get_or_create_artist(
     tx: &mut Transaction<'_, Sqlite>,
-    artist_info: &Option<String>,
+    artist_info: Option<&String>,
 ) -> Result<i64, LibraryError> {
-    let artist_name = artist_info.as_deref().unwrap_or("Unknown Artist");
+    let artist_name = artist_info.map_or("Unknown Artist", |v| v);
 
     let existing_artist: Option<i64> = query_scalar("SELECT id FROM artists WHERE name = ?")
         .bind(artist_name)
@@ -410,13 +409,13 @@ async fn get_or_create_artist(
 async fn get_or_create_album(
     tx: &mut Transaction<'_, Sqlite>,
     artist_id: i64,
-    album_info: &Option<String>,
+    album_info: Option<&String>,
     tracks_metadata: &[(PathBuf, TrackMetadata)],
     album_dir: &Path,
     is_compilation: bool,
     artwork_path: Option<&str>,
 ) -> Result<i64, LibraryError> {
-    let album_title = album_info.as_deref().unwrap_or("Unknown Album");
+    let album_title = album_info.map_or("Unknown Album", |v| v);
     let year = tracks_metadata
         .iter()
         .find_map(|(_, metadata)| metadata.standard.year)
@@ -474,7 +473,7 @@ async fn get_or_create_album(
 /// # Returns
 ///
 /// An `Option<String>` containing the artwork file path if found.
-async fn extract_album_artwork_path(album_dir: &Path, audio_files: &[PathBuf]) -> Option<String> {
+fn extract_album_artwork_path(album_dir: &Path, audio_files: &[PathBuf]) -> Option<String> {
     // Try to extract artwork from the first audio file
     if let Some(first_file) = audio_files.first() {
         match extract_artwork(first_file) {

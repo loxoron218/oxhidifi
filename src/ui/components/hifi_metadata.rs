@@ -17,21 +17,71 @@ use libadwaita::{
 
 use crate::{library::models::Track, ui::utils::format_sample_rate};
 
+/// Whether to display the audio format.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum FormatDisplay {
+    /// Hide format display.
+    #[default]
+    Hide,
+    /// Show format display.
+    Show,
+}
+
+/// Whether to display the sample rate.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum SampleRateDisplay {
+    /// Hide sample rate display.
+    #[default]
+    Hide,
+    /// Show sample rate display.
+    Show,
+}
+
+/// Whether to display the bit depth.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum BitDepthDisplay {
+    /// Hide bit depth display.
+    #[default]
+    Hide,
+    /// Show bit depth display.
+    Show,
+}
+
+/// Whether to display the channel count.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ChannelsDisplay {
+    /// Hide channels display.
+    #[default]
+    Hide,
+    /// Show channels display.
+    Show,
+}
+
+/// Layout mode for metadata display.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum LayoutMode {
+    /// Compact single-line layout.
+    Compact,
+    /// Expanded multi-line layout.
+    #[default]
+    Expanded,
+}
+
 /// Builder pattern for configuring `HiFiMetadata` components.
 #[derive(Debug, Default)]
 pub struct HiFiMetadataBuilder {
     /// Track containing the metadata to display.
     track: Option<Track>,
     /// Whether to show the audio format (e.g., "FLAC", "MP3").
-    show_format: bool,
+    show_format: FormatDisplay,
     /// Whether to show the sample rate (e.g., "96 kHz").
-    show_sample_rate: bool,
+    show_sample_rate: SampleRateDisplay,
     /// Whether to show the bit depth (e.g., "24-bit").
-    show_bit_depth: bool,
+    show_bit_depth: BitDepthDisplay,
     /// Whether to show the channel count (e.g., "Stereo").
-    show_channels: bool,
+    show_channels: ChannelsDisplay,
     /// Whether to use compact layout (single line vs multiple lines).
-    compact: bool,
+    layout: LayoutMode,
 }
 
 impl HiFiMetadataBuilder {
@@ -60,7 +110,7 @@ impl HiFiMetadataBuilder {
     ///
     /// The builder instance for method chaining.
     #[must_use]
-    pub fn show_format(mut self, show_format: bool) -> Self {
+    pub fn show_format(mut self, show_format: FormatDisplay) -> Self {
         self.show_format = show_format;
         self
     }
@@ -75,7 +125,7 @@ impl HiFiMetadataBuilder {
     ///
     /// The builder instance for method chaining.
     #[must_use]
-    pub fn show_sample_rate(mut self, show_sample_rate: bool) -> Self {
+    pub fn show_sample_rate(mut self, show_sample_rate: SampleRateDisplay) -> Self {
         self.show_sample_rate = show_sample_rate;
         self
     }
@@ -90,7 +140,7 @@ impl HiFiMetadataBuilder {
     ///
     /// The builder instance for method chaining.
     #[must_use]
-    pub fn show_bit_depth(mut self, show_bit_depth: bool) -> Self {
+    pub fn show_bit_depth(mut self, show_bit_depth: BitDepthDisplay) -> Self {
         self.show_bit_depth = show_bit_depth;
         self
     }
@@ -105,7 +155,7 @@ impl HiFiMetadataBuilder {
     ///
     /// The builder instance for method chaining.
     #[must_use]
-    pub fn show_channels(mut self, show_channels: bool) -> Self {
+    pub fn show_channels(mut self, show_channels: ChannelsDisplay) -> Self {
         self.show_channels = show_channels;
         self
     }
@@ -114,14 +164,14 @@ impl HiFiMetadataBuilder {
     ///
     /// # Arguments
     ///
-    /// * `compact` - Whether to use compact layout
+    /// * `layout` - Layout mode to use
     ///
     /// # Returns
     ///
     /// The builder instance for method chaining.
     #[must_use]
-    pub fn compact(mut self, compact: bool) -> Self {
-        self.compact = compact;
+    pub fn layout(mut self, layout: LayoutMode) -> Self {
+        self.layout = layout;
         self
     }
 
@@ -132,14 +182,14 @@ impl HiFiMetadataBuilder {
     /// A new `HiFiMetadata` instance.
     #[must_use]
     pub fn build(self) -> HiFiMetadata {
-        HiFiMetadata::new(
-            self.track,
-            self.show_format,
-            self.show_sample_rate,
-            self.show_bit_depth,
-            self.show_channels,
-            self.compact,
-        )
+        let config = HiFiMetadataConfig {
+            show_format: self.show_format,
+            show_sample_rate: self.show_sample_rate,
+            show_bit_depth: self.show_bit_depth,
+            show_channels: self.show_channels,
+            layout: self.layout,
+        };
+        HiFiMetadata::new(self.track, config)
     }
 }
 
@@ -166,15 +216,27 @@ pub struct HiFiMetadata {
 #[derive(Debug, Clone)]
 pub struct HiFiMetadataConfig {
     /// Whether to show the audio format.
-    pub show_format: bool,
+    pub show_format: FormatDisplay,
     /// Whether to show the sample rate.
-    pub show_sample_rate: bool,
+    pub show_sample_rate: SampleRateDisplay,
     /// Whether to show the bit depth.
-    pub show_bit_depth: bool,
+    pub show_bit_depth: BitDepthDisplay,
     /// Whether to show the channel count.
-    pub show_channels: bool,
+    pub show_channels: ChannelsDisplay,
     /// Whether to use compact layout.
-    pub compact: bool,
+    pub layout: LayoutMode,
+}
+
+impl Default for HiFiMetadataConfig {
+    fn default() -> Self {
+        Self {
+            show_format: FormatDisplay::Show,
+            show_sample_rate: SampleRateDisplay::Show,
+            show_bit_depth: BitDepthDisplay::Show,
+            show_channels: ChannelsDisplay::Show,
+            layout: LayoutMode::Expanded,
+        }
+    }
 }
 
 impl HiFiMetadata {
@@ -183,47 +245,36 @@ impl HiFiMetadata {
     /// # Arguments
     ///
     /// * `track` - Optional track containing metadata to display
-    /// * `show_format` - Whether to show the audio format
-    /// * `show_sample_rate` - Whether to show the sample rate
-    /// * `show_bit_depth` - Whether to show the bit depth
-    /// * `show_channels` - Whether to show the channel count
-    /// * `compact` - Whether to use compact layout
+    /// * `config` - Configuration for display options
     ///
     /// # Returns
     ///
     /// A new `HiFiMetadata` instance.
     #[must_use]
-    pub fn new(
-        track: Option<Track>,
-        show_format: bool,
-        show_sample_rate: bool,
-        show_bit_depth: bool,
-        show_channels: bool,
-        compact: bool,
-    ) -> Self {
-        let config = HiFiMetadataConfig {
-            show_format,
-            show_sample_rate,
-            show_bit_depth,
-            show_channels,
-            compact,
+    pub fn new(track: Option<Track>, config: HiFiMetadataConfig) -> Self {
+        let orientation = if config.layout == LayoutMode::Compact {
+            Horizontal
+        } else {
+            Vertical
         };
-
-        let orientation = if compact { Horizontal } else { Vertical };
 
         let container = Box::builder()
             .orientation(orientation)
             .halign(Start)
             .valign(Fill)
             .css_classes(["hifi-metadata"])
-            .spacing(if compact { 8 } else { 2 })
+            .spacing(if config.layout == LayoutMode::Compact {
+                8
+            } else {
+                2
+            })
             .build();
 
         let mut labels = Vec::new();
 
         if let Some(ref track_data) = track {
             // Add format label
-            if show_format {
+            if config.show_format == FormatDisplay::Show {
                 let format_label = Label::builder()
                     .label(format!("{} ", track_data.format))
                     .halign(Start)
@@ -235,7 +286,7 @@ impl HiFiMetadata {
             }
 
             // Add sample rate label
-            if show_sample_rate {
+            if config.show_sample_rate == SampleRateDisplay::Show {
                 let sample_rate_text = if track_data.sample_rate >= 1000 {
                     format!("{} kHz", format_sample_rate(track_data.sample_rate))
                 } else {
@@ -252,7 +303,7 @@ impl HiFiMetadata {
             }
 
             // Add bit depth label
-            if show_bit_depth {
+            if config.show_bit_depth == BitDepthDisplay::Show {
                 let bit_depth_label = Label::builder()
                     .label(format!("{}-bit ", track_data.bits_per_sample))
                     .halign(Start)
@@ -264,7 +315,7 @@ impl HiFiMetadata {
             }
 
             // Add channels label
-            if show_channels {
+            if config.show_channels == ChannelsDisplay::Show {
                 let channels_text = match track_data.channels {
                     1 => "Mono".to_string(),
                     2 => "Stereo".to_string(),
@@ -311,18 +362,18 @@ impl HiFiMetadata {
     /// # Arguments
     ///
     /// * `track` - New track containing metadata to display
-    pub fn update_track(&mut self, track: Option<Track>) {
+    pub fn update_track(&mut self, track: Option<&Track>) {
         // Clear existing labels
         for label in &self.labels {
             self.container.remove(label);
         }
         self.labels.clear();
 
-        self.track = track.clone();
+        self.track = track.cloned();
 
-        if let Some(ref track_data) = track {
+        if let Some(track_data) = track {
             // Add format label
-            if self.config.show_format {
+            if self.config.show_format == FormatDisplay::Show {
                 let format_label = Label::builder()
                     .label(format!("{} ", track_data.format))
                     .halign(Start)
@@ -334,7 +385,7 @@ impl HiFiMetadata {
             }
 
             // Add sample rate label
-            if self.config.show_sample_rate {
+            if self.config.show_sample_rate == SampleRateDisplay::Show {
                 let sample_rate_text = if track_data.sample_rate >= 1000 {
                     format!("{} kHz", format_sample_rate(track_data.sample_rate))
                 } else {
@@ -352,7 +403,7 @@ impl HiFiMetadata {
             }
 
             // Add bit depth label
-            if self.config.show_bit_depth {
+            if self.config.show_bit_depth == BitDepthDisplay::Show {
                 let bit_depth_label = Label::builder()
                     .label(format!("{}-bit ", track_data.bits_per_sample))
                     .halign(Start)
@@ -365,7 +416,7 @@ impl HiFiMetadata {
             }
 
             // Add channels label
-            if self.config.show_channels {
+            if self.config.show_channels == ChannelsDisplay::Show {
                 let channels_text = match track_data.channels {
                     1 => "Mono".to_string(),
                     2 => "Stereo".to_string(),
@@ -388,30 +439,47 @@ impl HiFiMetadata {
     /// # Arguments
     ///
     /// * `config` - New display configuration
-    pub fn update_config(&mut self, config: HiFiMetadataConfig) {
+    pub fn update_config(&mut self, config: &HiFiMetadataConfig) {
         self.config = config.clone();
 
         // Recreate the display with new configuration
-        let current_track = self.track.clone();
-        self.update_track(current_track);
+        self.track = self.track.clone();
 
         // Update container orientation for compact mode
-        let orientation = if config.compact { Horizontal } else { Vertical };
+        let orientation = if config.layout == LayoutMode::Compact {
+            Horizontal
+        } else {
+            Vertical
+        };
         self.container.set_orientation(orientation);
         self.container
-            .set_spacing(if config.compact { 8 } else { 2 });
+            .set_spacing(if config.layout == LayoutMode::Compact {
+                8
+            } else {
+                2
+            });
     }
 }
 
 impl Default for HiFiMetadata {
     fn default() -> Self {
-        Self::new(None, true, true, true, true, false)
+        Self::new(None, HiFiMetadataConfig::default())
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{library::models::Track, ui::components::hifi_metadata::HiFiMetadata};
+    use crate::{
+        library::models::Track,
+        ui::components::hifi_metadata::{
+            BitDepthDisplay::Show as ShowBitDepth,
+            ChannelsDisplay::Show as ShowChannels,
+            FormatDisplay::Show as ShowFormat,
+            HiFiMetadata, HiFiMetadataConfig,
+            LayoutMode::{Compact, Expanded},
+            SampleRateDisplay::Show as ShowSampleRate,
+        },
+    };
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
@@ -438,16 +506,16 @@ mod tests {
 
         let metadata = HiFiMetadata::builder()
             .track(track)
-            .show_format(true)
-            .show_sample_rate(true)
-            .show_bit_depth(true)
-            .show_channels(true)
-            .compact(true)
+            .show_format(ShowFormat)
+            .show_sample_rate(ShowSampleRate)
+            .show_bit_depth(ShowBitDepth)
+            .show_channels(ShowChannels)
+            .layout(Compact)
             .build();
 
         assert!(metadata.track.is_some());
         assert_eq!(metadata.labels.len(), 4);
-        assert!(metadata.config.compact);
+        assert_eq!(metadata.config.layout, Compact);
     }
 
     #[test]
@@ -456,13 +524,13 @@ mod tests {
         let metadata = HiFiMetadata::default();
         assert!(metadata.track.is_none());
         assert_eq!(metadata.labels.len(), 0);
-        assert!(!metadata.config.compact);
+        assert_eq!(metadata.config.layout, Expanded);
     }
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
     fn test_hifi_metadata_update_track() {
-        let mut metadata = HiFiMetadata::new(None, true, true, true, true, false);
+        let mut metadata = HiFiMetadata::new(None, HiFiMetadataConfig::default());
         assert!(metadata.track.is_none());
         assert_eq!(metadata.labels.len(), 0);
 
@@ -486,7 +554,7 @@ mod tests {
             updated_at: None,
         };
 
-        metadata.update_track(Some(track));
+        metadata.update_track(Some(&track));
         assert!(metadata.track.is_some());
         assert_eq!(metadata.labels.len(), 4);
     }

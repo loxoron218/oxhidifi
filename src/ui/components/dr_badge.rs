@@ -111,6 +111,7 @@ impl DRBadgeBuilder {
     /// # Returns
     ///
     /// The builder instance for method chaining.
+    #[must_use]
     pub fn dr_value(mut self, dr_value: impl Into<String>) -> Self {
         self.dr_value = Some(dr_value.into());
         self

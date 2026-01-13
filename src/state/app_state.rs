@@ -166,7 +166,7 @@ impl AppState {
 
     /// Helper to broadcast an event to all subscribers.
     /// Cleans up closed channels.
-    fn broadcast_event(&self, event: AppStateEvent) -> usize {
+    fn broadcast_event(&self, event: &AppStateEvent) -> usize {
         let mut subscribers = self.subscribers.write();
         let mut active = Vec::with_capacity(subscribers.len());
         let mut count = 0;
@@ -194,7 +194,7 @@ impl AppState {
     pub fn update_playback_state(&self, state: PlaybackState) {
         debug!("AppState: Updating playback state to {:?}", state);
         *self.playback.write() = state.clone();
-        self.broadcast_event(AppStateEvent::PlaybackStateChanged(state));
+        self.broadcast_event(&AppStateEvent::PlaybackStateChanged(state));
     }
 
     /// Updates the current track and notifies subscribers.
@@ -203,8 +203,8 @@ impl AppState {
     ///
     /// * `track` - New current track information.
     pub fn update_current_track(&self, track: Option<TrackInfo>) {
-        *self.current_track.write() = track.clone();
-        self.broadcast_event(AppStateEvent::CurrentTrackChanged(Box::new(track)));
+        (*self.current_track.write()).clone_from(&track);
+        self.broadcast_event(&AppStateEvent::CurrentTrackChanged(Box::new(track)));
     }
 
     /// Updates only the library data (albums/artists) without changing navigation.
@@ -222,11 +222,11 @@ impl AppState {
 
         {
             let mut library = self.library.write();
-            library.albums = albums.clone();
-            library.artists = artists.clone();
+            library.albums.clone_from(&albums);
+            library.artists.clone_from(&artists);
         }
 
-        self.broadcast_event(AppStateEvent::LibraryDataChanged { albums, artists });
+        self.broadcast_event(&AppStateEvent::LibraryDataChanged { albums, artists });
     }
 
     /// Updates the navigation stack state.
@@ -247,7 +247,7 @@ impl AppState {
         };
 
         if changed {
-            self.broadcast_event(AppStateEvent::NavigationChanged(Box::new(state)));
+            self.broadcast_event(&AppStateEvent::NavigationChanged(Box::new(state)));
         }
     }
 
@@ -274,7 +274,7 @@ impl AppState {
         };
 
         if changed {
-            self.broadcast_event(AppStateEvent::ViewOptionsChanged {
+            self.broadcast_event(&AppStateEvent::ViewOptionsChanged {
                 current_tab,
                 view_mode,
             });
@@ -288,8 +288,8 @@ impl AppState {
     /// * `filter` - New search filter.
     pub fn update_search_filter(&self, filter: Option<String>) {
         debug!("AppState: Updating search filter to {:?}", filter);
-        self.library.write().search_filter = filter.clone();
-        self.broadcast_event(AppStateEvent::SearchFilterChanged(filter));
+        self.library.write().search_filter.clone_from(&filter);
+        self.broadcast_event(&AppStateEvent::SearchFilterChanged(filter));
     }
 
     /// Subscribes to application state changes.
@@ -408,7 +408,7 @@ impl AppState {
         drop(settings_write);
 
         // Broadcast settings change event
-        self.broadcast_event(AppStateEvent::SettingsChanged { show_dr_values });
+        self.broadcast_event(&AppStateEvent::SettingsChanged { show_dr_values });
     }
 
     /// Gets the settings manager reference.
@@ -444,7 +444,7 @@ impl AppState {
         drop(settings_write);
 
         // Broadcast settings change event
-        self.broadcast_event(AppStateEvent::MetadataOverlaysChanged { show_overlays });
+        self.broadcast_event(&AppStateEvent::MetadataOverlaysChanged { show_overlays });
     }
 
     /// Updates the `year_display_mode` setting and notifies subscribers.
@@ -458,7 +458,7 @@ impl AppState {
         // Update settings in settings manager
         let settings_write = self.settings_manager.write();
         let mut current_settings = settings_write.get_settings().clone();
-        current_settings.year_display_mode = mode.clone();
+        current_settings.year_display_mode.clone_from(&mode);
 
         if let Err(e) = settings_write.update_settings(current_settings) {
             debug!("Failed to update year_display_mode setting: {}", e);
@@ -467,7 +467,7 @@ impl AppState {
         drop(settings_write);
 
         // Broadcast settings change event
-        self.broadcast_event(AppStateEvent::YearDisplayModeChanged { mode });
+        self.broadcast_event(&AppStateEvent::YearDisplayModeChanged { mode });
     }
 }
 

@@ -3,7 +3,7 @@
 //! This module provides utility functions that can be reused across
 //! different preference page implementations.
 
-use std::sync::Arc;
+use std::{string::String, sync::Arc};
 
 use libadwaita::{ComboRow, gtk::StringList, prelude::ComboRowExt};
 
@@ -21,8 +21,8 @@ use crate::config::{SettingsManager, UserSettings};
 /// * `subtitle` - Optional subtitle for the combo row
 /// * `options` - Vector of string options to display
 /// * `current_value` - Current value from settings
-/// * `value_getter` - Function to get the current value from settings
-/// * `value_setter` - Function to set the new value in settings
+/// * `getter` - Function to get the current value from settings
+/// * `setter` - Function to set the new value in settings
 /// * `settings_manager` - Settings manager reference for persistence
 ///
 /// # Returns
@@ -33,8 +33,8 @@ pub fn create_combo_row_from_settings<F, G>(
     subtitle: Option<&str>,
     options: Vec<String>,
     _current_value: String,
-    value_getter: F,
-    value_setter: G,
+    getter: F,
+    setter: G,
     settings_manager: Arc<SettingsManager>,
 ) -> ComboRow
 where
@@ -48,13 +48,13 @@ where
     };
 
     // Create string list for combo row
-    let string_refs: Vec<&str> = options.iter().map(|s| s.as_str()).collect();
+    let string_refs: Vec<&str> = options.iter().map(String::as_str).collect();
     let string_list = StringList::new(&string_refs);
     combo_row.set_model(Some(&string_list));
 
     // Find and set current selection
     if let Some(current_index) = options.iter().position(|opt| {
-        let current_from_settings = value_getter(&settings_manager.get_settings());
+        let current_from_settings = getter(&settings_manager.get_settings());
         opt == &current_from_settings
     }) {
         combo_row.set_selected(current_index as u32);
@@ -68,7 +68,7 @@ where
 
             // Update settings
             let mut current_settings = settings_manager.get_settings().clone();
-            value_setter(&mut current_settings, new_value);
+            setter(&mut current_settings, new_value);
 
             let _ = settings_manager.update_settings(current_settings);
         }

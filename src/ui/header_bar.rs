@@ -89,7 +89,7 @@ impl HeaderBar {
     ///
     /// Panics if the action parameter is not an integer variant (should never happen with proper menu setup).
     pub fn new(
-        app_state: Arc<AppState>,
+        app_state: &Arc<AppState>,
         application: Option<Application>,
         settings_manager: Arc<SettingsManager>,
     ) -> Self {
@@ -362,7 +362,7 @@ impl HeaderBar {
         settings_button.connect_clicked(move |_| {
             if let Some(ref app) = application_clone {
                 let preferences_dialog =
-                    PreferencesDialog::new(app_state_clone.clone(), settings_manager_clone.clone());
+                    PreferencesDialog::new(&app_state_clone, &settings_manager_clone);
 
                 // Get the active window as parent
                 if let Some(window) = app.active_window() {
@@ -519,7 +519,7 @@ impl HeaderBar {
 impl HeaderBar {
     /// Creates a header bar with default configuration.
     pub fn default_with_state(
-        app_state: Arc<AppState>,
+        app_state: &Arc<AppState>,
         application: Application,
         settings_manager: Arc<SettingsManager>,
     ) -> Self {
@@ -554,7 +554,7 @@ mod tests {
                 .build(),
         );
         let settings_manager = Arc::new(SettingsManager::new().unwrap());
-        let header_bar = HeaderBar::new(Arc::new(app_state), application, settings_manager);
+        let header_bar = HeaderBar::new(&Arc::new(app_state), application, settings_manager);
 
         // Check icon names without requiring widget realization
         assert_eq!(

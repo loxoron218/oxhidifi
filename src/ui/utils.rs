@@ -3,6 +3,8 @@
 //! This module provides shared utility functions for UI components,
 //! including proper format display logic that adheres to fidelity principles.
 
+use std::path::Path;
+
 use crate::library::models::Album;
 
 /// Formats a sample rate in Hz to a clean kHz string representation.
@@ -86,37 +88,34 @@ pub fn create_format_display(album: &Album) -> Option<String> {
             let sample_rate_khz = format_sample_rate(sample_rate);
             return Some(format!("{format_name} {bits}/{sample_rate_khz}"));
         }
+
         // Only format name available
         return Some(format_name.clone());
     }
 
     // Fallback to file extension inference if no format metadata
-    let path_lower = album.path.to_lowercase();
-    if path_lower.ends_with(".flac") {
-        Some("FLAC".to_string())
-    } else if path_lower.ends_with(".wav") {
-        Some("WAV".to_string())
-    } else if path_lower.ends_with(".aiff") || path_lower.ends_with(".aif") {
-        Some("AIFF".to_string())
-    } else if path_lower.ends_with(".dsf") || path_lower.ends_with(".dff") {
-        Some("DSD".to_string())
-    } else if path_lower.ends_with(".mqa") {
-        Some("MQA".to_string())
-    } else if path_lower.ends_with(".mp3") {
-        Some("MP3".to_string())
-    } else if path_lower.ends_with(".aac") {
-        Some("AAC".to_string())
-    } else if path_lower.ends_with(".ogg") || path_lower.ends_with(".oga") {
-        Some("Ogg".to_string())
-    } else if path_lower.ends_with(".opus") {
-        Some("Opus".to_string())
-    } else if path_lower.ends_with(".wv") {
-        Some("WavPack".to_string())
-    } else if path_lower.ends_with(".ape") {
-        Some("Monkey's Audio".to_string())
-    } else {
-        // Format cannot be determined - return None to indicate it should not be displayed
-        None
+    let path = Path::new(&album.path);
+    let ext = path.extension().and_then(|e| e.to_str());
+
+    match ext {
+        Some(ext) if ext.eq_ignore_ascii_case("flac") => Some("FLAC".to_string()),
+        Some(ext) if ext.eq_ignore_ascii_case("wav") => Some("WAV".to_string()),
+        Some(ext) if ext.eq_ignore_ascii_case("aiff") || ext.eq_ignore_ascii_case("aif") => {
+            Some("AIFF".to_string())
+        }
+        Some(ext) if ext.eq_ignore_ascii_case("dsf") || ext.eq_ignore_ascii_case("dff") => {
+            Some("DSD".to_string())
+        }
+        Some(ext) if ext.eq_ignore_ascii_case("mqa") => Some("MQA".to_string()),
+        Some(ext) if ext.eq_ignore_ascii_case("mp3") => Some("MP3".to_string()),
+        Some(ext) if ext.eq_ignore_ascii_case("aac") => Some("AAC".to_string()),
+        Some(ext) if ext.eq_ignore_ascii_case("ogg") || ext.eq_ignore_ascii_case("oga") => {
+            Some("Ogg".to_string())
+        }
+        Some(ext) if ext.eq_ignore_ascii_case("opus") => Some("Opus".to_string()),
+        Some(ext) if ext.eq_ignore_ascii_case("wv") => Some("WavPack".to_string()),
+        Some(ext) if ext.eq_ignore_ascii_case("ape") => Some("Monkey's Audio".to_string()),
+        _ => None,
     }
 }
 

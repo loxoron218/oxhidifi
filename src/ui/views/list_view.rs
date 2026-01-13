@@ -95,7 +95,7 @@ impl ListViewBuilder {
     /// A new `ListView` instance.
     #[must_use]
     pub fn build(self) -> ListView {
-        ListView::new(self.app_state, self.view_type, self.compact)
+        ListView::new(self.app_state.as_ref(), &self.view_type, self.compact)
     }
 }
 
@@ -153,7 +153,7 @@ impl ListView {
     ///
     /// A new `ListView` instance.
     #[must_use]
-    pub fn new(app_state: Option<Arc<AppState>>, view_type: ListViewType, compact: bool) -> Self {
+    pub fn new(app_state: Option<&Arc<AppState>>, view_type: &ListViewType, compact: bool) -> Self {
         let config = ListViewConfig { compact };
 
         let list_box = ListBox::builder()
@@ -171,12 +171,12 @@ impl ListView {
         let mut view = Self {
             widget: list_box.clone().upcast_ref::<Widget>().clone(),
             list_box: list_box.clone(),
-            app_state: app_state.clone(),
+            app_state: app_state.cloned(),
             view_type: view_type.clone(),
             config: config.clone(),
-            _zoom_subscription_handle: if let Some(ref state) = app_state {
+            _zoom_subscription_handle: if let Some(state) = app_state {
                 // Subscribe to zoom changes
-                let state_clone = state.clone();
+                let state_clone: Arc<AppState> = state.clone();
                 let list_box_clone = list_box.clone();
                 let view_type_clone = view_type.clone();
                 let config_clone = config.clone();
@@ -203,8 +203,8 @@ impl ListView {
                                             album,
                                             Some(&state_clone),
                                             &config_clone,
-                                            &(state_clone.zoom_manager.get_list_cover_dimensions().0
-                                                as u32),
+                                            state_clone.zoom_manager.get_list_cover_dimensions().0
+                                                as u32,
                                             &cover_arts_clone,
                                         );
                                         list_box_clone.append(&row);
@@ -216,8 +216,8 @@ impl ListView {
                                             artist,
                                             Some(&state_clone),
                                             &config_clone,
-                                            &(state_clone.zoom_manager.get_list_cover_dimensions().0
-                                                as u32),
+                                            state_clone.zoom_manager.get_list_cover_dimensions().0
+                                                as u32,
                                         );
                                         list_box_clone.append(&row);
                                     }
@@ -230,9 +230,9 @@ impl ListView {
             } else {
                 None
             },
-            _settings_subscription_handle: if let Some(ref state) = app_state {
+            _settings_subscription_handle: if let Some(state) = app_state {
                 // Subscribe to settings changes
-                let state_clone = state.clone();
+                let state_clone: Arc<AppState> = state.clone();
                 let cover_arts_clone = cover_arts.clone();
                 let view_type_clone = view_type.clone();
                 let handle = MainContext::default().spawn_local(async move {
@@ -339,7 +339,7 @@ impl ListView {
             album,
             self.app_state.as_ref(),
             &self.config,
-            &(cover_size as u32),
+            cover_size as u32,
             &self.cover_arts,
         )
     }
@@ -365,7 +365,7 @@ impl ListView {
             artist,
             self.app_state.as_ref(),
             &self.config,
-            &(cover_size as u32),
+            cover_size as u32,
         )
     }
 
@@ -425,7 +425,7 @@ fn create_album_row_with_zoom(
     album: &Album,
     app_state: Option<&Arc<AppState>>,
     config: &ListViewConfig,
-    cover_size: &u32,
+    cover_size: u32,
     cover_arts: &Rc<RefCell<Vec<CoverArt>>>,
 ) -> Widget {
     // Create cover art
@@ -443,7 +443,7 @@ fn create_album_row_with_zoom(
         .artwork_path(album.artwork_path.as_deref().unwrap_or(&album.path))
         .dr_value(album.dr_value.clone().unwrap_or_else(|| "N/A".to_string()))
         .show_dr_badge(show_dr_badge)
-        .dimensions(*cover_size as i32, *cover_size as i32)
+        .dimensions(cover_size as i32, cover_size as i32)
         .build();
 
     // Store cover art for dynamic updates
@@ -564,13 +564,13 @@ fn create_artist_row_with_zoom(
     artist: &Artist,
     app_state: Option<&Arc<AppState>>,
     _config: &ListViewConfig,
-    cover_size: &u32,
+    cover_size: u32,
 ) -> Widget {
     // Create cover art (default image)
     let cover_art = CoverArt::builder()
         .artwork_path("")
         .show_dr_badge(false)
-        .dimensions(*cover_size as i32, *cover_size as i32)
+        .dimensions(cover_size as i32, cover_size as i32)
         .build();
 
     // Create main info container
@@ -624,7 +624,7 @@ fn create_artist_row_with_zoom(
 
 impl Default for ListView {
     fn default() -> Self {
-        Self::new(None, ListViewType::Albums, false)
+        Self::new(None, &ListViewType::Albums, false)
     }
 }
 

@@ -178,7 +178,7 @@ impl AudioEngine {
     /// # Errors
     ///
     /// Returns `AudioError` if the track cannot be loaded or metadata extracted.
-    pub async fn load_track<P: AsRef<Path>>(&self, track_path: P) -> Result<(), AudioError> {
+    pub fn load_track<P: AsRef<Path>>(&self, track_path: P) -> Result<(), AudioError> {
         let path = track_path.as_ref();
 
         // Extract metadata
@@ -370,22 +370,18 @@ impl AudioEngine {
                 while let Ok(message) = self.control_rx.recv().await {
                     match message {
                         ControlMessage::Play => {
-                            if let Err(e) = self.handle_play().await {
+                            if let Err(e) = self.handle_play() {
                                 eprintln!("Error handling play command: {e}");
                             }
                         }
                         ControlMessage::Pause => {
-                            if let Err(e) = self.handle_pause().await {
-                                eprintln!("Error handling pause command: {e}");
-                            }
+                            self.handle_pause();
                         }
                         ControlMessage::Stop => {
-                            if let Err(e) = self.handle_stop().await {
-                                eprintln!("Error handling stop command: {e}");
-                            }
+                            self.handle_stop();
                         }
                         ControlMessage::Seek(position_ms) => {
-                            if let Err(e) = self.handle_seek(position_ms).await {
+                            if let Err(e) = self.handle_seek(position_ms) {
                                 eprintln!("Error handling seek command: {e}");
                             }
                         }
@@ -395,7 +391,7 @@ impl AudioEngine {
     }
 
     /// Handles the play command.
-    async fn handle_play(&self) -> Result<(), AudioError> {
+    fn handle_play(&self) -> Result<(), AudioError> {
         let track_info = self
             .current_track
             .read()
@@ -403,7 +399,7 @@ impl AudioEngine {
             .ok_or(AudioError::NoTrackLoaded)?;
 
         // Stop any existing playback
-        self.stop_stream().await;
+        self.stop_stream();
 
         // Create ring buffer for audio samples
         let buffer_size = 4096; // Should be power of 2 for rtrb
@@ -446,36 +442,32 @@ impl AudioEngine {
     }
 
     /// Handles the pause command.
-    async fn handle_pause(&self) -> Result<(), AudioError> {
+    fn handle_pause(&self) {
         // For now, we'll just stop the stream and keep the track loaded
         // In a more sophisticated implementation, we'd actually pause the stream
-        self.stop_stream().await;
+        self.stop_stream();
 
         *self.state.write() = PlaybackState::Paused;
         self.notify_state_change();
-
-        Ok(())
     }
 
     /// Handles the stop command.
-    async fn handle_stop(&self) -> Result<(), AudioError> {
-        self.stop_stream().await;
+    fn handle_stop(&self) {
+        self.stop_stream();
 
         *self.state.write() = PlaybackState::Stopped;
         *self.current_track.write() = None;
         self.notify_state_change();
-
-        Ok(())
     }
 
     /// Handles the seek command.
-    async fn handle_seek(&self, position_ms: u64) -> Result<(), AudioError> {
+    fn handle_seek(&self, position_ms: u64) -> Result<(), AudioError> {
         // For now, we'll stop and restart playback at the new position
         // A more sophisticated implementation would seek within the current stream
         let current_state = self.state.read().clone();
         let was_playing = matches!(current_state, PlaybackState::Playing);
 
-        self.stop_stream().await;
+        self.stop_stream();
 
         if let Some(track_info) = self.current_track.read().clone() {
             // Create new decoder and seek
@@ -518,7 +510,7 @@ impl AudioEngine {
     }
 
     /// Stops the current audio stream gracefully.
-    async fn stop_stream(&self) {
+    fn stop_stream(&self) {
         if let Some(mut handle) = self.stream_handle.write().ok().and_then(|mut h| h.take()) {
             // Stop the stream
             let _ = handle.stream.pause();

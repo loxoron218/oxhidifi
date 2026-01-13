@@ -112,10 +112,8 @@ impl OxhidifiApplication {
         let library_scanner = if user_settings_shared.read().library_directories.is_empty() {
             None
         } else {
-            let scanner =
-                LibraryScanner::new(library_db.clone(), user_settings_shared.clone(), None)
-                    .await
-                    .map_err(|e| format!("Failed to initialize library scanner: {e}"))?;
+            let scanner = LibraryScanner::new(&library_db, &user_settings_shared, None)
+                .map_err(|e| format!("Failed to initialize library scanner: {e}"))?;
 
             // Perform initial scan of existing directories
             if let Err(e) = scanner
@@ -264,7 +262,7 @@ fn build_ui(
 
     // Create header bar with proper state integration
     let header_bar =
-        HeaderBar::default_with_state(app_state.clone(), app.clone(), settings_manager.clone());
+        HeaderBar::default_with_state(app_state, app.clone(), settings_manager.clone());
 
     // Create main content area with responsive layout
     let main_content = create_main_content(
@@ -674,7 +672,7 @@ fn create_player_bar(
     app_state: &Arc<AppState>,
     audio_engine: &Arc<AudioEngine>,
 ) -> (GtkBox, PlayerBar) {
-    let player_bar = PlayerBar::new(app_state.clone(), audio_engine.clone());
+    let player_bar = PlayerBar::new(app_state, audio_engine);
     let widget = player_bar.widget.clone();
 
     // Initially hide the player bar

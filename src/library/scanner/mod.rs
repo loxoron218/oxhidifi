@@ -76,9 +76,9 @@ impl LibraryScanner {
     /// # Errors
     ///
     /// Returns `LibraryError` if initialization fails.
-    pub async fn new(
-        database: Arc<LibraryDatabase>,
-        settings: Arc<RwLock<UserSettings>>,
+    pub fn new(
+        database: &Arc<LibraryDatabase>,
+        settings: &Arc<RwLock<UserSettings>>,
         config: Option<ScannerConfig>,
     ) -> Result<Self, LibraryError> {
         let config = config.unwrap_or_default();
@@ -155,7 +155,7 @@ impl LibraryScanner {
 
     /// Helper to broadcast an event to all subscribers.
     /// Cleans up closed channels.
-    fn broadcast_event(subscribers: &Arc<RwLock<Vec<Sender<ScannerEvent>>>>, event: ScannerEvent) {
+    fn broadcast_event(subscribers: &Arc<RwLock<Vec<Sender<ScannerEvent>>>>, event: &ScannerEvent) {
         let mut subscribers_lock = subscribers.write();
         let mut active = Vec::with_capacity(subscribers_lock.len());
         let mut count = 0;
@@ -219,7 +219,7 @@ impl LibraryScanner {
 
             if changes_processed {
                 debug!("Library changes processed, emitting LibraryChanged event");
-                Self::broadcast_event(&subscribers, ScannerEvent::LibraryChanged);
+                Self::broadcast_event(&subscribers, &ScannerEvent::LibraryChanged);
             }
         }
     }
@@ -311,7 +311,7 @@ impl LibraryScanner {
         // Walk through all library directories and collect audio files
         for dir in library_dirs {
             let dir_path = Path::new(&dir);
-            let audio_files = self.collect_audio_files_from_directory(dir_path)?;
+            let audio_files = Self::collect_audio_files_from_directory(dir_path)?;
             all_audio_files.extend(audio_files);
         }
 
@@ -337,7 +337,6 @@ impl LibraryScanner {
     ///
     /// Returns `LibraryError` if the directory cannot be read.
     pub fn collect_audio_files_from_directory(
-        &self,
         dir_path: &Path,
     ) -> Result<Vec<PathBuf>, LibraryError> {
         let mut audio_files = Vec::new();
@@ -353,7 +352,7 @@ impl LibraryScanner {
                     }
                 } else if path.is_dir() {
                     // Recursively process subdirectories
-                    let sub_audio_files = self.collect_audio_files_from_directory(&path)?;
+                    let sub_audio_files = Self::collect_audio_files_from_directory(&path)?;
                     audio_files.extend(sub_audio_files);
                 }
             }

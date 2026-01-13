@@ -142,7 +142,6 @@ impl AudioOutput {
                 }
                 Err(e) => {
                     warn!(host = ?host_id, error = %e, "Failed to initialize host");
-                    continue;
                 }
             }
         }
@@ -286,7 +285,7 @@ impl AudioOutput {
     /// Returns `OutputError` if stream creation fails.
     pub fn create_stream(
         &self,
-        stream_config: StreamConfig,
+        stream_config: &StreamConfig,
         mut consumer: Consumer<f32>,
     ) -> Result<Stream, OutputError> {
         let sample_format = self
@@ -304,7 +303,7 @@ impl AudioOutput {
                     error!("Audio backend error: {}", err_str);
                 }
             } else {
-                error!("Audio stream error: {}", err)
+                error!("Audio stream error: {}", err);
             }
         };
 
@@ -313,7 +312,7 @@ impl AudioOutput {
         let stream = match sample_format {
             F32 => {
                 self.device.build_output_stream(
-                    &stream_config,
+                    stream_config,
                     move |data: &mut [f32], _: &OutputCallbackInfo| {
                         for sample in data.iter_mut() {
                             match consumer.pop() {
@@ -334,7 +333,7 @@ impl AudioOutput {
             }
             I16 => {
                 self.device.build_output_stream(
-                    &stream_config,
+                    stream_config,
                     move |data: &mut [i16], _: &OutputCallbackInfo| {
                         for sample in data.iter_mut() {
                             match consumer.pop() {
@@ -357,7 +356,7 @@ impl AudioOutput {
             }
             U16 => {
                 self.device.build_output_stream(
-                    &stream_config,
+                    stream_config,
                     move |data: &mut [u16], _: &OutputCallbackInfo| {
                         for sample in data.iter_mut() {
                             match consumer.pop() {
@@ -560,13 +559,13 @@ impl AudioConsumer {
     /// Returns `OutputError` if stream creation or startup fails.
     pub fn run(
         self,
-        _source_format: &AudioFormat,
-        _source_spec: &SignalSpec,
+        source_format: &AudioFormat,
+        source_spec: &SignalSpec,
     ) -> Result<Stream, OutputError> {
         match self {
             AudioConsumer::Direct { output, consumer } => {
-                let (stream_config, _) = output.get_target_config(_source_format, _source_spec)?;
-                let stream = output.create_stream(stream_config, consumer)?;
+                let (stream_config, _) = output.get_target_config(source_format, source_spec)?;
+                let stream = output.create_stream(&stream_config, consumer)?;
                 stream.play()?;
                 Ok(stream)
             }
@@ -579,7 +578,7 @@ impl AudioConsumer {
                 let stream = crate::audio::resampler::create_resampling_stream(
                     &output,
                     resampled_consumer,
-                    stream_config,
+                    &stream_config,
                 )?;
                 stream.play()?;
 

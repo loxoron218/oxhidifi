@@ -53,7 +53,7 @@ const SUPPORTED_TEXT_EXTENSIONS: &[&str] = &["txt", "log", "md", "csv"];
 #[derive(Debug)]
 pub struct FileWatcher {
     /// Internal notify watcher.
-    _watcher: RecommendedWatcher,
+    watcher: RecommendedWatcher,
     /// Set of currently watched paths.
     watched_paths: Arc<RwLock<HashSet<PathBuf>>>,
     /// Configuration for watcher behavior.
@@ -84,7 +84,7 @@ impl FileWatcher {
         // Create notify watcher
         let mut watcher = RecommendedWatcher::new(
             move |res: Result<Event, notify::Error>| {
-                Self::handle_raw_event(res, event_sender.clone());
+                Self::handle_raw_event(res, &event_sender.clone());
             },
             Config::default(),
         )
@@ -100,7 +100,7 @@ impl FileWatcher {
             })?;
 
         let file_watcher = Self {
-            _watcher: watcher,
+            watcher,
             watched_paths: Arc::new(RwLock::new(HashSet::new())),
             config,
         };
@@ -112,7 +112,7 @@ impl FileWatcher {
     ///
     /// This method processes raw file system events, filters them based on
     /// supported audio formats, and sends processed events through the channel.
-    fn handle_raw_event(res: Result<Event, Error>, sender: Sender<ProcessedEvent>) {
+    fn handle_raw_event(res: Result<Event, Error>, sender: &Sender<ProcessedEvent>) {
         match res {
             Ok(event) => {
                 debug!("Raw file system event: {:?}", event);
@@ -372,10 +372,10 @@ impl FileWatcher {
         self.watched_paths.write().insert(path.to_path_buf());
 
         // Start watching the directory recursively
-        self._watcher
+        self.watcher
             .watch(path, Recursive)
             .map_err(|e| LibraryError::InvalidData {
-                reason: format!("Failed to watch directory {path:?}: {e}"),
+                reason: format!("Failed to watch directory {}: {e}", path.display()),
             })?;
 
         debug!("Started watching directory: {:?}", path);
@@ -402,10 +402,10 @@ impl FileWatcher {
         self.watched_paths.write().remove(path);
 
         // Stop watching the directory
-        self._watcher
+        self.watcher
             .unwatch(path)
             .map_err(|e| LibraryError::InvalidData {
-                reason: format!("Failed to unwatch directory {path:?}: {e}"),
+                reason: format!("Failed to unwatch directory {}: {e}", path.display()),
             })?;
 
         debug!("Stopped watching directory: {:?}", path);

@@ -14,7 +14,16 @@ mod component_tests {
     use crate::{
         library::models::Track,
         ui::components::{
-            cover_art::CoverArt, dr_badge::DRBadge, hifi_metadata::HiFiMetadata,
+            cover_art::CoverArt,
+            dr_badge::DRBadge,
+            hifi_metadata::{
+                BitDepthDisplay::{Hide as HideBitDepth, Show as ShowBitDepth},
+                ChannelsDisplay::{Hide as HideChannels, Show as ShowChannels},
+                FormatDisplay::{Hide as HideFormat, Show as ShowFormat},
+                HiFiMetadata, HiFiMetadataConfig,
+                LayoutMode::Compact,
+                SampleRateDisplay::Show as ShowSampleRate,
+            },
             play_overlay::PlayOverlay,
         },
     };
@@ -88,15 +97,15 @@ mod component_tests {
 
         let metadata = HiFiMetadata::builder()
             .track(track)
-            .show_format(true)
-            .show_sample_rate(true)
-            .show_bit_depth(true)
-            .show_channels(true)
-            .compact(true)
+            .show_format(ShowFormat)
+            .show_sample_rate(ShowSampleRate)
+            .show_bit_depth(ShowBitDepth)
+            .show_channels(ShowChannels)
+            .layout(Compact)
             .build();
 
         assert_eq!(metadata.labels.len(), 4);
-        assert!(metadata.config.compact);
+        assert_eq!(metadata.config.layout, Compact);
     }
 
     #[test]
@@ -125,8 +134,8 @@ mod component_tests {
 
         let metadata_441 = HiFiMetadata::builder()
             .track(track_441)
-            .show_sample_rate(true)
-            .compact(true)
+            .show_sample_rate(ShowSampleRate)
+            .layout(Compact)
             .build();
 
         // The label should contain "44.1 kHz"
@@ -146,11 +155,13 @@ mod component_tests {
 
         let metadata_882 = HiFiMetadata::new(
             Some(track_882),
-            false, // show_format
-            true,  // show_sample_rate
-            false, // show_bit_depth
-            false, // show_channels
-            true,  // compact
+            HiFiMetadataConfig {
+                show_format: HideFormat,
+                show_sample_rate: ShowSampleRate,
+                show_bit_depth: HideBitDepth,
+                show_channels: HideChannels,
+                layout: Compact,
+            },
         );
 
         let label_text_882 = metadata_882.labels[0].text().to_string();
@@ -166,7 +177,16 @@ mod component_tests {
             ..Track::default()
         };
 
-        let metadata_96 = HiFiMetadata::new(Some(track_96), false, true, false, false, true);
+        let metadata_96 = HiFiMetadata::new(
+            Some(track_96),
+            HiFiMetadataConfig {
+                show_format: HideFormat,
+                show_sample_rate: ShowSampleRate,
+                show_bit_depth: HideBitDepth,
+                show_channels: HideChannels,
+                layout: Compact,
+            },
+        );
 
         let label_text_96 = metadata_96.labels[0].text().to_string();
         assert!(
@@ -184,7 +204,7 @@ mod component_tests {
         assert!(badge.label.accessible_role() != AccessibleNone);
 
         // Test CoverArt accessibility
-        let cover_art = CoverArt::new(Option::None, Option::None, false, 50, 50);
+        let cover_art = CoverArt::new(None, Option::None, false, 50, 50);
         assert!(cover_art.picture.accessible_role() != AccessibleNone);
 
         // Test PlayOverlay accessibility

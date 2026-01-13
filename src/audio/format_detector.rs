@@ -10,6 +10,7 @@ use {
     serde::{Deserialize, Serialize},
     symphonia::{
         core::{
+            audio::Channels,
             codecs::{
                 CODEC_TYPE_AAC, CODEC_TYPE_ADPCM_IMA_QT, CODEC_TYPE_ADPCM_IMA_WAV,
                 CODEC_TYPE_ADPCM_MS, CODEC_TYPE_ALAC, CODEC_TYPE_FLAC, CODEC_TYPE_MP3,
@@ -20,7 +21,7 @@ use {
             },
             errors::Error as SymphoniaError,
             formats::{FormatOptions, FormatReader, Track},
-            io::MediaSourceStream,
+            io::{MediaSourceStream, MediaSourceStreamOptions},
             meta::MetadataOptions,
             probe::Hint,
         },
@@ -102,7 +103,7 @@ pub fn detect_audio_format<P: AsRef<Path>>(
 
     // Create media source stream
     let file = File::open(path)?;
-    let mss = MediaSourceStream::new(Box::new(file), Default::default());
+    let mss = MediaSourceStream::new(Box::new(file), MediaSourceStreamOptions::default());
 
     // Create format hint from file extension
     let mut hint = Hint::new();
@@ -111,8 +112,8 @@ pub fn detect_audio_format<P: AsRef<Path>>(
     }
 
     // Probe the format
-    let format_opts: FormatOptions = Default::default();
-    let metadata_opts: MetadataOptions = Default::default();
+    let format_opts: FormatOptions = FormatOptions::default();
+    let metadata_opts: MetadataOptions = MetadataOptions::default();
     let probe = get_probe();
 
     let probed = probe
@@ -135,7 +136,7 @@ pub fn detect_audio_format<P: AsRef<Path>>(
 
     let sample_rate = codec_params.sample_rate.unwrap_or(44100);
     let bits_per_sample = codec_params.bits_per_coded_sample.unwrap_or(16);
-    let channels = codec_params.channels.map_or(2, |ch| ch.count()) as u32;
+    let channels = codec_params.channels.map_or(2, Channels::count) as u32;
 
     // Determine if format is lossless
     let is_lossless = is_lossless_format(&codec_name);
@@ -163,14 +164,10 @@ fn extract_format_and_codec(_format_reader: &dyn FormatReader, track: &Track) ->
 
     // Get codec name
     let codec_name = match track.codec_params.codec {
-        CODEC_TYPE_PCM_F32LE => "PCM F32",
-        CODEC_TYPE_PCM_F32BE => "PCM F32",
-        CODEC_TYPE_PCM_S16LE => "PCM S16",
-        CODEC_TYPE_PCM_S16BE => "PCM S16",
-        CODEC_TYPE_PCM_S24LE => "PCM S24",
-        CODEC_TYPE_PCM_S24BE => "PCM S24",
-        CODEC_TYPE_PCM_S32LE => "PCM S32",
-        CODEC_TYPE_PCM_S32BE => "PCM S32",
+        CODEC_TYPE_PCM_F32LE | CODEC_TYPE_PCM_F32BE => "PCM F32",
+        CODEC_TYPE_PCM_S16LE | CODEC_TYPE_PCM_S16BE => "PCM S16",
+        CODEC_TYPE_PCM_S24LE | CODEC_TYPE_PCM_S24BE => "PCM S24",
+        CODEC_TYPE_PCM_S32LE | CODEC_TYPE_PCM_S32BE => "PCM S32",
         CODEC_TYPE_PCM_U8 => "PCM U8",
         CODEC_TYPE_PCM_ALAW => "A-Law",
         CODEC_TYPE_PCM_MULAW => "μ-Law",
@@ -187,7 +184,7 @@ fn extract_format_and_codec(_format_reader: &dyn FormatReader, track: &Track) ->
         _ => {
             // Check if this might be DSD based on sample rate
             if let Some(sample_rate) = track.codec_params.sample_rate {
-                if sample_rate >= 176400 {
+                if sample_rate >= 176_400 {
                     // DSD64 starts at 176.4kHz
                     "DSD"
                 } else {
@@ -203,9 +200,8 @@ fn extract_format_and_codec(_format_reader: &dyn FormatReader, track: &Track) ->
     let format_name = match codec_name {
         "FLAC" => "FLAC",
         "MP3" => "MP3",
-        "AAC" => "MP4",
+        "AAC" | "ALAC" => "MP4",
         "Vorbis" | "Opus" => "Ogg",
-        "ALAC" => "MP4",
         "DSD" => "DSD",
         "PCM F32" | "PCM S16" | "PCM S24" | "PCM S32" | "PCM U8" => {
             // For PCM, we need to guess based on common containers

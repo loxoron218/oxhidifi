@@ -146,20 +146,15 @@ mod view_integration_tests {
         let app_state = AppState::new(engine_weak, None, Arc::new(RwLock::new(settings_manager)));
 
         // Test that views support keyboard navigation
-        let album_grid = AlbumGridView::new(
-            Some(app_state.clone().into()),
-            None,
-            None,
-            Vec::new(),
-            true,
-            false,
-        );
+        let app_state_arc = Arc::new(app_state.clone());
+        let album_grid =
+            AlbumGridView::new(Some(&app_state_arc), None, None, Vec::new(), true, false);
         assert!(album_grid.flow_box.is_focusable() || true);
 
-        let artist_grid = ArtistGridView::new(Some(app_state.clone().into()), Vec::new(), false);
+        let artist_grid = ArtistGridView::new(Some(Arc::new(app_state.clone())), Vec::new(), false);
         assert!(artist_grid.flow_box.is_focusable() || true);
 
-        let album_list = ListView::new(Some(app_state.clone().into()), Albums, false);
+        let album_list = ListView::new(Some(&app_state_arc), &Albums, false);
         assert!(album_list.list_box.is_focusable() || true);
     }
 
@@ -172,20 +167,15 @@ mod view_integration_tests {
         let app_state = AppState::new(engine_weak, None, Arc::new(RwLock::new(settings_manager)));
 
         // Test accessibility attributes
-        let album_grid = AlbumGridView::new(
-            Some(app_state.clone().into()),
-            None,
-            None,
-            Vec::new(),
-            true,
-            false,
-        );
+        let app_state_arc = Arc::new(app_state.clone());
+        let album_grid =
+            AlbumGridView::new(Some(&app_state_arc), None, None, Vec::new(), true, false);
         assert_eq!(album_grid.flow_box.accessible_role(), Grid);
 
-        let artist_grid = ArtistGridView::new(Some(app_state.clone().into()), Vec::new(), false);
+        let artist_grid = ArtistGridView::new(Some(Arc::new(app_state.clone())), Vec::new(), false);
         assert_eq!(artist_grid.flow_box.accessible_role(), Grid);
 
-        let album_list = ListView::new(Some(app_state.clone().into()), Albums, false);
+        let album_list = ListView::new(Some(&app_state.into()), &Albums, false);
         assert_eq!(album_list.list_box.accessible_role(), List);
     }
 
@@ -194,7 +184,7 @@ mod view_integration_tests {
     fn test_cover_art_dr_badge_methods() {
         // Create a CoverArt instance
         let mut cover_art = CoverArt::new(
-            Some("/path/to/artwork.jpg".to_string()),
+            Some(&"/path/to/artwork.jpg".to_string()),
             Some("DR12".to_string()),
             true, // Initially show DR badge
             200,

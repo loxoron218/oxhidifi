@@ -42,7 +42,7 @@ impl PreferencesDialog {
     /// # Returns
     ///
     /// A new `PreferencesDialog` instance.
-    pub fn new(app_state: Arc<AppState>, settings_manager: Arc<SettingsManager>) -> Self {
+    pub fn new(app_state: &Arc<AppState>, settings_manager: &Arc<SettingsManager>) -> Self {
         let widget = LibadwaitaPreferencesDialog::builder().build();
 
         // Set fixed dialog dimensions for consistent layout across all form factors

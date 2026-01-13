@@ -114,7 +114,7 @@ impl PlayerBar {
     ///
     /// A new `PlayerBar` instance.
     #[must_use]
-    pub fn new(app_state: Arc<AppState>, audio_engine: Arc<AudioEngine>) -> Self {
+    pub fn new(app_state: &Arc<AppState>, audio_engine: &Arc<AudioEngine>) -> Self {
         let widget = Box::builder()
             .orientation(Horizontal)
             .spacing(12)
@@ -412,7 +412,7 @@ impl PlayerBar {
                                 prev_button: &prev_button,
                                 next_button: &next_button,
                             };
-                            Self::update_track_info(&track_info, update_context);
+                            Self::update_track_info(track_info.as_ref().as_ref(), &update_context);
                         }
                         PlaybackStateChanged(state) => {
                             debug!("PlayerBar: Playback state changed to {:?}", state);
@@ -430,7 +430,7 @@ impl PlayerBar {
     }
 
     /// Updates track information display.
-    fn update_track_info(track_info: &Option<TrackInfo>, ctx: TrackInfoUpdateContext) {
+    fn update_track_info(track_info: Option<&TrackInfo>, ctx: &TrackInfoUpdateContext) {
         if let Some(info) = track_info {
             // Update title and artist
             ctx.title_label

@@ -41,8 +41,9 @@ impl CoverArtBuilder {
     /// # Returns
     ///
     /// The builder instance for method chaining.
-    pub fn artwork_path(mut self, artwork_path: impl Into<String>) -> Self {
-        self.artwork_path = Some(artwork_path.into());
+    #[must_use]
+    pub fn artwork_path<S: Into<String>>(mut self, artwork_path: impl Into<Option<S>>) -> Self {
+        self.artwork_path = artwork_path.into().map(std::convert::Into::into);
         self
     }
 
@@ -55,6 +56,7 @@ impl CoverArtBuilder {
     /// # Returns
     ///
     /// The builder instance for method chaining.
+    #[must_use]
     pub fn dr_value(mut self, dr_value: impl Into<String>) -> Self {
         self.dr_value = Some(dr_value.into());
         self
@@ -100,7 +102,7 @@ impl CoverArtBuilder {
     #[must_use]
     pub fn build(self) -> CoverArt {
         CoverArt::new(
-            self.artwork_path,
+            self.artwork_path.as_ref(),
             self.dr_value,
             self.show_dr_badge,
             self.width,
@@ -141,7 +143,7 @@ impl CoverArt {
     /// A new `CoverArt` instance.
     #[must_use]
     pub fn new(
-        artwork_path: Option<String>,
+        artwork_path: Option<&String>,
         dr_value: Option<String>,
         show_dr_badge: bool,
         width: i32,
