@@ -631,8 +631,8 @@ mod tests {
             .build();
 
         match &detail_view.detail_type {
-            Some(DetailType::Artist(_)) => assert!(true),
-            _ => assert!(false),
+            Some(DetailType::Artist(_)) => {}
+            _ => unreachable!(),
         }
         assert!(detail_view.config.compact);
     }
@@ -642,8 +642,8 @@ mod tests {
     fn test_detail_view_default() {
         let detail_view = DetailView::default();
         match &detail_view.detail_type {
-            Some(DetailType::Album(_)) => assert!(true),
-            _ => assert!(false),
+            Some(DetailType::Album(_)) => {}
+            _ => unreachable!(),
         }
         assert!(!detail_view.config.compact);
     }

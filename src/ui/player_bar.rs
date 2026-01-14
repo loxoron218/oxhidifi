@@ -539,6 +539,5 @@ mod tests {
 
         // This test would require mocking AppState and AudioEngine properly
         // For now, we'll just verify the constructor signature compiles
-        assert!(true);
     }
 }

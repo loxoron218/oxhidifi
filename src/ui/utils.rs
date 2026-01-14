@@ -128,7 +128,7 @@ mod tests {
         // Test common decimal sample rates
         assert_eq!(format_sample_rate(44100), "44.1");
         assert_eq!(format_sample_rate(88200), "88.2");
-        assert_eq!(format_sample_rate(176400), "176.4");
+        assert_eq!(format_sample_rate(176_400), "176.4");
 
         // Test common whole number sample rates
         assert_eq!(format_sample_rate(8000), "8");
@@ -137,8 +137,8 @@ mod tests {
         assert_eq!(format_sample_rate(32000), "32");
         assert_eq!(format_sample_rate(48000), "48");
         assert_eq!(format_sample_rate(96000), "96");
-        assert_eq!(format_sample_rate(192000), "192");
-        assert_eq!(format_sample_rate(384000), "384");
+        assert_eq!(format_sample_rate(192_000), "192");
+        assert_eq!(format_sample_rate(384_000), "384");
 
         // Test lower sample rates with decimals
         assert_eq!(format_sample_rate(11025), "11.025");
@@ -153,7 +153,7 @@ mod tests {
         assert_eq!(format_sample_rate(48100), "48.1");
         assert_eq!(format_sample_rate(95900), "95.9");
         assert_eq!(format_sample_rate(44120), "44.12");
-        assert_eq!(format_sample_rate(123456), "123.456");
+        assert_eq!(format_sample_rate(123_456), "123.456");
     }
 
     #[test]
@@ -224,22 +224,16 @@ mod tests {
 
     #[test]
     fn test_dsd_formats() {
-        let album_dsf = Album {
+        let mut album = Album {
             format: None,
             bits_per_sample: None,
             sample_rate: None,
             path: "/path/to/album.dsf".to_string(),
             ..Album::default()
         };
-        assert_eq!(create_format_display(&album_dsf), Some("DSD".to_string()));
+        assert_eq!(create_format_display(&album), Some("DSD".to_string()));
 
-        let album_dff = Album {
-            format: None,
-            bits_per_sample: None,
-            sample_rate: None,
-            path: "/path/to/album.dff".to_string(),
-            ..Album::default()
-        };
-        assert_eq!(create_format_display(&album_dff), Some("DSD".to_string()));
+        album.path = "/path/to/album.dff".to_string();
+        assert_eq!(create_format_display(&album), Some("DSD".to_string()));
     }
 }

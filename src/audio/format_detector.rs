@@ -342,7 +342,7 @@ mod tests {
         let dsd_info = AudioFormatInfo {
             format: "DSDIFF".to_string(),
             codec: "DSD".to_string(),
-            sample_rate: 176400,
+            sample_rate: 176_400,
             bits_per_sample: 1,
             channels: 2,
             is_lossless: true,
@@ -353,7 +353,7 @@ mod tests {
         let wav_info = AudioFormatInfo {
             format: "WAV".to_string(),
             codec: "PCM S24".to_string(),
-            sample_rate: 192000,
+            sample_rate: 192_000,
             bits_per_sample: 24,
             channels: 2,
             is_lossless: true,

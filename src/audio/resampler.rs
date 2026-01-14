@@ -521,7 +521,7 @@ mod tests {
     fn test_gcd_calculation() {
         assert_eq!(gcd(44100, 48000), 300);
         assert_eq!(gcd(96000, 48000), 48000);
-        assert_eq!(gcd(192000, 48000), 48000);
+        assert_eq!(gcd(192_000, 48000), 48000);
     }
 
     #[test]
@@ -529,7 +529,7 @@ mod tests {
         let chunk_size = calculate_chunk_size(44100, 48000);
         assert!((256..=8192).contains(&chunk_size));
 
-        let chunk_size = calculate_chunk_size(192000, 48000);
+        let chunk_size = calculate_chunk_size(192_000, 48000);
         assert!((256..=8192).contains(&chunk_size));
     }
 

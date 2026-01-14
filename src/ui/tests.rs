@@ -40,7 +40,6 @@ mod ui_compliance_tests {
         let _detail_view = DetailView::default();
 
         // Spacing in detail view should follow guidelines
-        assert!(true);
     }
 
     #[test]
@@ -219,7 +218,6 @@ mod ui_compliance_tests {
         );
 
         // Compact mode should have different layout characteristics
-        assert!(true);
     }
 
     #[test]
@@ -227,6 +225,5 @@ mod ui_compliance_tests {
     fn test_smooth_animations_and_transitions() {
         // Test that views support smooth 60fps animations
         // This would require actual rendering tests in real implementation
-        assert!(true);
     }
 }

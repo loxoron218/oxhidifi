@@ -126,15 +126,12 @@ mod view_integration_tests {
         album_grid.filter_albums("A");
 
         // In real implementation, this would verify the filtered results
-        assert!(true);
 
         // Test sorting by title
         album_grid.sort_albums(Title);
-        assert!(true);
 
         // Test sorting by year
         album_grid.sort_albums(Year);
-        assert!(true);
     }
 
     #[test]

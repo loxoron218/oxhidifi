@@ -30,7 +30,7 @@ mod tests {
                     assert!(!data.is_empty());
                     assert!(mime_type.is_some());
                 }
-                _ => panic!("Expected embedded artwork"),
+                External(_) => panic!("Expected embedded artwork"),
             }
         }
     }
@@ -48,7 +48,7 @@ mod tests {
                     assert!(!data.is_empty());
                     assert!(mime_type.is_some());
                 }
-                _ => panic!("Expected embedded artwork"),
+                External(_) => panic!("Expected embedded artwork"),
             }
         }
     }
@@ -69,7 +69,7 @@ mod tests {
                         assert!(path.exists());
                         assert_eq!(path.file_name().unwrap(), "folder.jpg");
                     }
-                    _ => panic!("Expected external artwork"),
+                    Embedded(..) => panic!("Expected external artwork"),
                 }
             }
         }
