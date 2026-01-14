@@ -37,8 +37,8 @@ src/
 ## Commands you can use
 ### Build and lint
 - Format code: `cargo fmt`
-- Fix linting issues: `cargo clippy --fix --allow-dirty`
-- Format and lint together: `cargo fmt && cargo clippy --fix --allow-dirty`
+- Fix linting issues: `cargo clippy --fix --allow-dirty --all-targets -- -W clippy::pedantic`
+- Format and lint together: `cargo fmt && cargo clippy --fix --allow-dirty --all-targets -- -W clippy::pedantic`
 
 ### Testing
 - Run all tests: `cargo test`
@@ -156,5 +156,5 @@ pub async fn load_track<P: AsRef<Path>>(&self, track_path: P) -> Result<(), Audi
 - Proper tooltip text for interactive elements
 
 ## Boundaries
-- ✅ **Always do**: Write only `.rs` files, max 400 lines per file, run fmt/clippy before finishing, document all public APIs
+- ✅ **Always do**: Write only `.rs` files, max 400 lines per file, run `cargo fmt && cargo clippy --fix --allow-dirty --all-targets -- -W clippy::pedantic` before finishing, document all public APIs
 - 🚫 **Never do**: Remove existing documentation/comments, use `.ui`, `.xml` or `.blp` files, use unsafe code, commit with clippy warnings, add network dependencies
