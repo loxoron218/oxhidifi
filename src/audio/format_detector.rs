@@ -136,7 +136,7 @@ pub fn detect_audio_format<P: AsRef<Path>>(
 
     let sample_rate = codec_params.sample_rate.unwrap_or(44100);
     let bits_per_sample = codec_params.bits_per_coded_sample.unwrap_or(16);
-    let channels = codec_params.channels.map_or(2, Channels::count) as u32;
+    let channels = u32::try_from(codec_params.channels.map_or(2, Channels::count)).unwrap_or(2);
 
     // Determine if format is lossless
     let is_lossless = is_lossless_format(&codec_name);

@@ -228,6 +228,10 @@ impl AlbumGridView {
     /// # Returns
     ///
     /// A new `AlbumGridView` instance.
+    ///
+    /// # Panics
+    ///
+    /// Panics if cover size or audio format metadata (sample rate, channels, bits per sample) are negative.
     #[must_use]
     pub fn new(
         app_state: Option<&Arc<AppState>>,
@@ -350,7 +354,7 @@ impl AlbumGridView {
                                     .format(format)
                                     .show_dr_badge(show_dr_badge)
                                     .compact(config_clone.compact)
-                                    .cover_size(cover_size as u32)
+                                    .cover_size(u32::try_from(cover_size).unwrap())
                                     .on_card_clicked({
                                         let app_state_inner = state_clone.clone();
                                         let album_clone = album.clone();
@@ -531,7 +535,7 @@ impl AlbumGridView {
             .format(format)
             .show_dr_badge(show_dr_badge)
             .compact(self.config.compact)
-            .cover_size(cover_size as u32)
+            .cover_size(u32::try_from(cover_size).unwrap())
             .on_play_clicked({
                 let app_state = self.app_state.clone();
                 let library_db = self.library_db.clone();
@@ -566,12 +570,18 @@ impl AlbumGridView {
                                             path: track_path.clone(),
                                             metadata,
                                             format: AudioFormat {
-                                                sample_rate: first_track.sample_rate as u32,
-                                                channels: first_track.channels as u32,
-                                                bits_per_sample: first_track.bits_per_sample as u32,
+                                                sample_rate: u32::try_from(first_track.sample_rate)
+                                                    .unwrap_or(44100),
+                                                channels: u32::try_from(first_track.channels)
+                                                    .unwrap_or(2),
+                                                bits_per_sample: u32::try_from(
+                                                    first_track.bits_per_sample,
+                                                )
+                                                .unwrap_or(16),
                                                 channel_mask: 0,
                                             },
-                                            duration_ms: first_track.duration_ms as u64,
+                                            duration_ms: u64::try_from(first_track.duration_ms)
+                                                .unwrap_or(0),
                                         };
                                         app_state_clone.update_current_track(Some(track_info));
                                     }

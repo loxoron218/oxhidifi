@@ -20,6 +20,7 @@ use {
         },
         prelude::{AccessibleExt, BoxExt, ButtonExt, Cast, RangeExt, ToggleButtonExt, WidgetExt},
     },
+    num_traits::cast::ToPrimitive,
     tracing::debug,
 };
 
@@ -353,7 +354,8 @@ impl PlayerBar {
         // Progress scale seek
         let audio_engine_seek = audio_engine.clone();
         progress_scale.connect_value_changed(move |scale| {
-            let position = scale.value() as u64;
+            let clamped_value = scale.value().clamp(0.0_f64, f64::MAX);
+            let position = u64::try_from(clamped_value.to_i64().unwrap()).unwrap();
             let audio_engine_clone = audio_engine_seek.clone();
             MainContext::default().spawn_local(async move {
                 let _ = audio_engine_clone.seek(position).await;

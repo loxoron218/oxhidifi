@@ -4,7 +4,7 @@
 //! in a column/list layout with detailed metadata, supporting virtual scrolling
 //! for large datasets and real-time filtering/sorting.
 
-use std::{cell::RefCell, rc::Rc, sync::Arc};
+use std::{cell::RefCell, convert::TryFrom, rc::Rc, sync::Arc};
 
 use libadwaita::{
     glib::{JoinHandle, MainContext},
@@ -152,6 +152,10 @@ impl ListView {
     /// # Returns
     ///
     /// A new `ListView` instance.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the cover dimensions from zoom manager are negative.
     #[must_use]
     pub fn new(app_state: Option<&Arc<AppState>>, view_type: &ListViewType, compact: bool) -> Self {
         let config = ListViewConfig { compact };
@@ -203,8 +207,13 @@ impl ListView {
                                             album,
                                             Some(&state_clone),
                                             &config_clone,
-                                            state_clone.zoom_manager.get_list_cover_dimensions().0
-                                                as u32,
+                                            u32::try_from(
+                                                state_clone
+                                                    .zoom_manager
+                                                    .get_list_cover_dimensions()
+                                                    .0,
+                                            )
+                                            .unwrap(),
                                             &cover_arts_clone,
                                         );
                                         list_box_clone.append(&row);
@@ -216,8 +225,13 @@ impl ListView {
                                             artist,
                                             Some(&state_clone),
                                             &config_clone,
-                                            state_clone.zoom_manager.get_list_cover_dimensions().0
-                                                as u32,
+                                            u32::try_from(
+                                                state_clone
+                                                    .zoom_manager
+                                                    .get_list_cover_dimensions()
+                                                    .0,
+                                            )
+                                            .unwrap(),
                                         );
                                         list_box_clone.append(&row);
                                     }
@@ -339,7 +353,7 @@ impl ListView {
             album,
             self.app_state.as_ref(),
             &self.config,
-            cover_size as u32,
+            u32::try_from(cover_size).unwrap(),
             &self.cover_arts,
         )
     }
@@ -365,7 +379,7 @@ impl ListView {
             artist,
             self.app_state.as_ref(),
             &self.config,
-            cover_size as u32,
+            u32::try_from(cover_size).unwrap(),
         )
     }
 
@@ -443,7 +457,14 @@ fn create_album_row_with_zoom(
         .artwork_path(album.artwork_path.as_deref().unwrap_or(&album.path))
         .dr_value(album.dr_value.clone().unwrap_or_else(|| "N/A".to_string()))
         .show_dr_badge(show_dr_badge)
-        .dimensions(cover_size as i32, cover_size as i32)
+        .dimensions(
+            i32::try_from(cover_size).expect(
+                "ListView album cover_size (u32) should fit in i32 for GTK widget dimensions",
+            ),
+            i32::try_from(cover_size).expect(
+                "ListView album cover_size (u32) should fit in i32 for GTK widget dimensions",
+            ),
+        )
         .build();
 
     // Store cover art for dynamic updates
@@ -570,7 +591,14 @@ fn create_artist_row_with_zoom(
     let cover_art = CoverArt::builder()
         .artwork_path("")
         .show_dr_badge(false)
-        .dimensions(cover_size as i32, cover_size as i32)
+        .dimensions(
+            i32::try_from(cover_size).expect(
+                "ListView artist cover_size (u32) should fit in i32 for GTK widget dimensions",
+            ),
+            i32::try_from(cover_size).expect(
+                "ListView artist cover_size (u32) should fit in i32 for GTK widget dimensions",
+            ),
+        )
         .build();
 
     // Create main info container

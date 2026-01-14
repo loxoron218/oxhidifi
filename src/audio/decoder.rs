@@ -12,6 +12,7 @@ use std::{
 };
 
 use {
+    num_traits::cast::ToPrimitive,
     rtrb::{Producer, PushError::Full},
     serde::{Deserialize, Serialize},
     symphonia::{
@@ -161,7 +162,7 @@ impl AudioDecoder {
 
         let format = AudioFormat {
             sample_rate: signal_spec.rate,
-            channels: signal_spec.channels.count() as u32,
+            channels: u32::try_from(signal_spec.channels.count()).unwrap_or(2),
             bits_per_sample: codec_params.bits_per_coded_sample.unwrap_or(16),
             channel_mask: 0,
         };
@@ -191,12 +192,17 @@ impl AudioDecoder {
     /// # Errors
     ///
     /// Returns `DecoderError` if decoding fails.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self.track_index` cannot fit in a `u32`. This should never happen in practice
+    /// as track indices are always small integers.
     pub fn decode_next_packet(&mut self) -> Result<Option<AudioBufferRef<'_>>, DecoderError> {
         loop {
             match self.format_reader.next_packet() {
                 Ok(packet) => {
                     // Skip non-audio packets
-                    if packet.track_id() != self.track_index as u32 {
+                    if packet.track_id() != u32::try_from(self.track_index).unwrap() {
                         continue;
                     }
 
@@ -243,7 +249,9 @@ impl AudioDecoder {
     ///
     /// Returns `DecoderError` if seeking fails.
     pub fn seek(&mut self, position_ms: u64) -> Result<(), DecoderError> {
-        let time = OtherTime::new(position_ms / 1000, ((position_ms % 1000) as f64) / 1000.0);
+        let seconds = position_ms / 1000;
+        let frac_ms = (position_ms % 1000) as u32;
+        let time = OtherTime::new(seconds, f64::from(frac_ms) / 1000.0);
         self.format_reader
             .seek(
                 Accurate,
@@ -268,8 +276,8 @@ impl AudioDecoder {
             .get(self.track_index)
             .and_then(|track| track.codec_params.n_frames)
             .map(|frames| {
-                let sample_rate = f64::from(self.format.sample_rate);
-                (frames as f64 / sample_rate * 1000.0) as u64
+                let sample_rate = u64::from(self.format.sample_rate);
+                (frames * 1000 + sample_rate / 2) / sample_rate
             })
     }
 }
@@ -308,6 +316,11 @@ impl AudioProducer {
     /// # Errors
     ///
     /// Returns `DecoderError` if decoding fails.
+    ///
+    /// # Panics
+    ///
+    /// Panics if any `to_f32().unwrap()` call fails. This should never happen
+    /// as all values are clamped to valid ranges before conversion.
     pub fn run(mut self) -> Result<(), DecoderError> {
         while let Some(buffer) = self.decoder.decode_next_packet()? {
             let spec = buffer.spec();
@@ -328,7 +341,8 @@ impl AudioProducer {
                     let mut samples = Vec::with_capacity(buf.frames() * channels);
                     for frame in 0..buf.frames() {
                         for ch in 0..channels {
-                            samples.push(buf.chan(ch)[frame] as f32);
+                            let sample = buf.chan(ch)[frame].clamp(-1.0_f64, 1.0_f64);
+                            samples.push(sample.to_f32().unwrap());
                         }
                     }
                     samples
@@ -384,7 +398,8 @@ impl AudioProducer {
                     for frame in 0..buf.frames() {
                         for ch in 0..channels {
                             let sample_u32 = buf.chan(ch)[frame].0 & 0x00FF_FFFF;
-                            samples.push(sample_u32 as f32 / 16_777_215.0);
+                            let sample = f64::from(sample_u32) / 16_777_215.0_f64;
+                            samples.push(sample.to_f32().unwrap());
                         }
                     }
                     samples
@@ -395,9 +410,11 @@ impl AudioProducer {
                         for ch in 0..channels {
                             let s = buf.chan(ch)[frame].0 << 8 >> 8;
                             let v = if s == -8_388_608 {
-                                -1.0
+                                -1.0_f32
                             } else {
-                                s as f32 / 8_388_607.0
+                                let sample =
+                                    (f64::from(s) / 8_388_607.0_f64).clamp(-1.0_f64, 1.0_f64);
+                                sample.to_f32().unwrap()
                             };
                             samples.push(v);
                         }
@@ -409,7 +426,8 @@ impl AudioProducer {
                     for frame in 0..buf.frames() {
                         for ch in 0..channels {
                             let s = buf.chan(ch)[frame];
-                            let v = (s as f32 - 2_147_483_648.0_f32) / 2_147_483_647.0_f32;
+                            let sample = (f64::from(s) - 2_147_483_648.0_f64) / 2_147_483_647.0_f64;
+                            let v = sample.to_f32().unwrap();
                             samples.push(v);
                         }
                     }
@@ -421,9 +439,12 @@ impl AudioProducer {
                         for ch in 0..channels {
                             let s = buf.chan(ch)[frame];
                             let v = if s == i32::MIN {
-                                -1.0
+                                -1.0_f32
                             } else {
-                                s as f32 / i32::MAX as f32
+                                (f64::from(s) / f64::from(i32::MAX))
+                                    .clamp(-1.0_f64, 1.0_f64)
+                                    .to_f32()
+                                    .unwrap()
                             };
                             samples.push(v);
                         }

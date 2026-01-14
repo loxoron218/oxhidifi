@@ -17,6 +17,7 @@ libadwaita = { version = "0.8.1", features = [
 ] }
 lofty = "0.22.4"
 notify = "8.2.0"
+num-traits = "0.2.19"
 parking_lot = "0.12.5"
 regex = "1.12.2"
 rtrb = "0.3.2"

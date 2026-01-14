@@ -90,7 +90,7 @@ impl GeneralPreferencesPage {
             "dark" => 2,
             _ => 0, // Default to system
         };
-        combo_row.set_selected(current_index as u32);
+        combo_row.set_selected(u32::try_from(current_index).unwrap());
 
         // Connect change handler
         let settings_manager_clone = self.settings_manager.clone();
@@ -220,7 +220,7 @@ impl GeneralPreferencesPage {
             "original" => 1,
             _ => 0, // Default to release year
         };
-        combo_row.set_selected(current_index as u32);
+        combo_row.set_selected(u32::try_from(current_index).unwrap());
 
         // Connect change handler
         let settings_manager_clone = self.settings_manager.clone();

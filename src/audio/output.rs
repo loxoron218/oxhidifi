@@ -18,6 +18,7 @@ use {
         },
         traits::{DeviceTrait, HostTrait, StreamTrait},
     },
+    num_traits::cast::ToPrimitive,
     rtrb::{Consumer, PopError::Empty, RingBuffer},
     rubato::{Fft, FixedSync::Input, ResamplerConstructionError},
     symphonia::core::audio::SignalSpec,
@@ -283,6 +284,13 @@ impl AudioOutput {
     /// # Errors
     ///
     /// Returns `OutputError` if stream creation fails.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the audio sample conversion fails. This is guaranteed never to happen because:
+    /// 1. Input values are clamped to [-1.0, 1.0]
+    /// 2. The conversion formula `(clamped + 1.0) * u16::MAX / 2.0` always yields [0.0, 65535.0]
+    /// 3. Converting via i32 and using `try_from().unwrap()` ensures the value fits in u16 range
     pub fn create_stream(
         &self,
         stream_config: &StreamConfig,
@@ -341,7 +349,11 @@ impl AudioOutput {
                                     // Convert f32 [-1.0, 1.0] to i16 [-32768, 32767]
                                     // Clamp first to avoid overflow
                                     let clamped = value.clamp(-1.0, 1.0);
-                                    *sample = (clamped * f32::from(i16::MAX)) as i16;
+                                    let scaled = clamped * f32::from(i16::MAX);
+                                    *sample = scaled
+                                        .clamp(f32::from(i16::MIN), f32::from(i16::MAX))
+                                        .to_i16()
+                                        .unwrap();
                                 }
                                 Err(Empty) => {
                                     // Buffer underrun - fill with silence
@@ -364,7 +376,13 @@ impl AudioOutput {
                                     // Convert f32 [-1.0, 1.0] to u16 [0, 65535]
                                     // Map [-1.0, 1.0] to [0, 65535] where 0.0 maps to 32768
                                     let clamped = value.clamp(-1.0, 1.0);
-                                    *sample = ((clamped + 1.0) * f32::from(u16::MAX) / 2.0) as u16;
+
+                                    // Formula (clamped + 1.0) * 65535.0 / 2.0 always yields [0.0, 65535.0]
+                                    // Clamp to valid range and use try_from for safe conversion
+                                    let scaled = (clamped + 1.0) * f32::from(u16::MAX) / 2.0;
+                                    let clamped_scaled = scaled.clamp(0.0, f32::from(u16::MAX));
+                                    *sample =
+                                        u16::try_from(clamped_scaled.to_i32().unwrap()).unwrap();
                                 }
                                 Err(Empty) => {
                                     // Buffer underrun - fill with silence

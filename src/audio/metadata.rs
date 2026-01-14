@@ -186,7 +186,7 @@ impl TagReader {
             channels: properties
                 .channels()
                 .map_or(format_info.channels, u32::from),
-            duration_ms: properties.duration().as_millis() as u64,
+            duration_ms: u64::try_from(properties.duration().as_millis()).unwrap_or(u64::MAX),
             file_size,
             is_lossless: format_info.is_lossless,
             is_high_resolution: format_info.is_high_resolution,

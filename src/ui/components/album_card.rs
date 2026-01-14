@@ -4,7 +4,7 @@
 //! with cover art, DR badges, play overlays, and metadata following the
 //! exact specification from docs/4.\ album-cards.md.
 
-use std::rc::Rc;
+use std::{convert::TryFrom, rc::Rc};
 
 use libadwaita::{
     gtk::{
@@ -289,7 +289,14 @@ impl AlbumCard {
             .artwork_path(album.artwork_path.as_deref().unwrap_or(&album.path))
             .dr_value(album.dr_value.clone().unwrap_or_else(|| "N/A".to_string()))
             .show_dr_badge(show_dr_badge)
-            .dimensions(cover_width as i32, cover_height as i32)
+            .dimensions(
+                i32::try_from(cover_width).expect(
+                    "AlbumCard cover_width (u32) should fit in i32 for GTK widget dimensions",
+                ),
+                i32::try_from(cover_height).expect(
+                    "AlbumCard cover_height (u32) should fit in i32 for GTK widget dimensions",
+                ),
+            )
             .build();
 
         // Create play overlay with CSS-based hover handling
@@ -325,7 +332,9 @@ impl AlbumCard {
             .xalign(0.0)
             .ellipsize(EllipsizeEnd)
             .lines(2)
-            .max_width_chars((((cover_width - 16) / 10).max(8)) as i32) // Dynamic calculation as per spec
+            .max_width_chars(i32::try_from(((cover_width - 16) / 10).max(8)).expect(
+                "AlbumCard title max_width_chars calculation should fit in i32 for GTK label",
+            )) // Dynamic calculation as per spec
             .tooltip_text(&album.title)
             .css_classes(["album-title-label"])
             .build();
@@ -348,7 +357,9 @@ impl AlbumCard {
             .xalign(0.0)
             .ellipsize(EllipsizeEnd)
             .lines(1)
-            .max_width_chars((((cover_width - 16) / 10).max(8)) as i32) // Dynamic calculation
+            .max_width_chars(i32::try_from(((cover_width - 16) / 10).max(8)).expect(
+                "AlbumCard artist max_width_chars calculation should fit in i32 for GTK label",
+            )) // Dynamic calculation
             .tooltip_text(&artist_name)
             .css_classes(["album-artist-label"])
             .build();
@@ -363,7 +374,11 @@ impl AlbumCard {
             .halign(Start)
             .xalign(0.0)
             .lines(1)
-            .max_width_chars(((((cover_width - 16) / 2) / 10).max(8)) as i32) // Dynamic calculation
+            .max_width_chars(
+                i32::try_from((((cover_width - 16) / 2) / 10).max(8)).expect(
+                    "AlbumCard format max_width_chars calculation should fit in i32 for GTK label",
+                ),
+            ) // Dynamic calculation
             .css_classes(["album-format-label"]);
 
         if !format_info.is_empty() {
@@ -388,7 +403,9 @@ impl AlbumCard {
         let metadata_hbox = Box::builder()
             .orientation(Horizontal)
             .halign(Start)
-            .width_request(cover_width as i32) // Force full width to align year to right margin
+            .width_request(i32::try_from(cover_width).expect(
+                "AlbumCard cover_width (u32) should fit in i32 for GTK widget width_request",
+            )) // Force full width to align year to right margin
             .spacing(8)
             .build();
 

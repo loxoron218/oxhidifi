@@ -12,6 +12,7 @@ use {
         gtk::{AccessibleRole::Group, Adjustment},
         prelude::{ActionRowExt, PreferencesGroupExt, PreferencesPageExt},
     },
+    num_traits::cast::ToPrimitive,
     tracing::{debug, error},
 };
 
@@ -122,7 +123,8 @@ impl AudioPreferencesPage {
         // Connect change handler
         let settings_manager_clone = self.settings_manager.clone();
         spin_row.connect_value_notify(move |row| {
-            let new_value = row.value() as u32;
+            let clamped_value = row.value().clamp(0.0_f64, f64::MAX);
+            let new_value = u32::try_from(clamped_value.to_i64().unwrap()).unwrap();
 
             // Validate sample rate (common rates or 0 for auto)
             let valid_rates = [
@@ -216,7 +218,8 @@ impl AudioPreferencesPage {
         // Connect change handler
         let settings_manager_clone = self.settings_manager.clone();
         spin_row.connect_value_notify(move |row| {
-            let new_value = row.value() as u32;
+            let clamped_value = row.value().clamp(0.0_f64, f64::MAX);
+            let new_value = u32::try_from(clamped_value.to_i64().unwrap()).unwrap();
 
             // Validate buffer duration (reasonable range: 10-500ms)
             if !(10..=500).contains(&new_value) {

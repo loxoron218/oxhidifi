@@ -1876,6 +1876,7 @@ dependencies = [
  "libadwaita",
  "lofty",
  "notify",
+ "num-traits",
  "parking_lot",
  "regex",
  "rtrb",

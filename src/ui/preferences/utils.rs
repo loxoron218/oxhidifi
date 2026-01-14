@@ -57,7 +57,7 @@ where
         let current_from_settings = getter(&settings_manager.get_settings());
         opt == &current_from_settings
     }) {
-        combo_row.set_selected(current_index as u32);
+        combo_row.set_selected(u32::try_from(current_index).unwrap_or(0));
     }
 
     // Connect change handler
