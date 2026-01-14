@@ -286,7 +286,7 @@ mod tests {
 
             let (width, height) = zoom_manager.get_grid_cover_dimensions();
             assert_eq!(width, height); // Should be square
-            assert!(width >= 120 && width <= 240);
+            assert!((120..=240).contains(&width));
         }
 
         // Test clamping
@@ -313,10 +313,10 @@ mod tests {
 
             let (width, height) = zoom_manager.get_list_cover_dimensions();
             assert_eq!(width, height); // Should be square
-            assert!(width >= 32 && width <= 64);
+            assert!((32..=64).contains(&width));
 
             let row_height = zoom_manager.get_list_row_height();
-            assert!(row_height >= 60 && row_height <= 100);
+            assert!((60..=100).contains(&row_height));
         }
 
         // Test clamping

@@ -275,9 +275,9 @@ mod tests {
     fn test_user_settings_default() {
         let settings = UserSettings::default();
         assert_eq!(settings.sample_rate, 0);
-        assert_eq!(settings.exclusive_mode, true);
+        assert!(settings.exclusive_mode);
         assert_eq!(settings.buffer_duration_ms, 50);
-        assert_eq!(settings.show_dr_values, true);
+        assert!(settings.show_dr_values);
         assert_eq!(settings.theme_preference, "system");
     }
 

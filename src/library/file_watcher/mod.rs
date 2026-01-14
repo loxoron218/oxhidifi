@@ -467,8 +467,7 @@ mod tests {
             assert_eq!(
                 FileWatcher::is_supported_audio_file(&path),
                 expected,
-                "Failed for filename: {}",
-                filename
+                "Failed for filename: {filename}"
             );
         }
     }
@@ -491,8 +490,7 @@ mod tests {
             assert_eq!(
                 FileWatcher::is_supported_text_file(&path),
                 expected,
-                "Failed for filename: {}",
-                filename
+                "Failed for filename: {filename}"
             );
         }
     }

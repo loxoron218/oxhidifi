@@ -202,7 +202,7 @@ mod tests {
 
         for (input, expected_valid) in test_cases {
             let is_valid = extractor.validate_dr_value(input);
-            assert_eq!(is_valid, expected_valid, "Failed for input: {}", input);
+            assert_eq!(is_valid, expected_valid, "Failed for input: {input}");
         }
     }
 
@@ -219,8 +219,8 @@ mod tests {
 
         for content in dr12_test_cases {
             let result = extractor.extract_dr_from_content(content);
-            assert!(result.is_ok(), "Failed to extract from: {}", content);
-            assert_eq!(result.unwrap(), "DR12", "Content: {}", content);
+            assert!(result.is_ok(), "Failed to extract from: {content}");
+            assert_eq!(result.unwrap(), "DR12", "Content: {content}");
         }
 
         // Test official format cases with their expected values
@@ -236,8 +236,8 @@ mod tests {
 
         for (content, expected) in official_format_cases {
             let result = extractor.extract_dr_from_content(content);
-            assert!(result.is_ok(), "Failed to extract from: {}", content);
-            assert_eq!(result.unwrap(), expected, "Content: {}", content);
+            assert!(result.is_ok(), "Failed to extract from: {content}");
+            assert_eq!(result.unwrap(), expected, "Content: {content}");
         }
     }
 
@@ -258,8 +258,7 @@ mod tests {
             let result = extractor.extract_dr_from_content(content);
             assert!(
                 result.is_err(),
-                "Should not extract from per-track content: {}",
-                content
+                "Should not extract from per-track content: {content}"
             );
         }
     }

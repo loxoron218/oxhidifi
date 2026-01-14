@@ -134,7 +134,7 @@ mod ui_compliance_tests {
             .map(|i| Album {
                 id: i,
                 artist_id: i % 100,
-                title: format!("Album {}", i),
+                title: format!("Album {i}"),
                 ..Album::default()
             })
             .collect::<Vec<_>>();

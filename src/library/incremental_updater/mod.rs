@@ -170,6 +170,6 @@ mod tests {
     fn test_incremental_updater_config_default() {
         let config = IncrementalUpdaterConfig::default();
         assert_eq!(config.max_batch_size, 50);
-        assert_eq!(config.enable_dr_parsing, true);
+        assert!(config.enable_dr_parsing);
     }
 }

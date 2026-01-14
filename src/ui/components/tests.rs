@@ -143,8 +143,7 @@ mod component_tests {
         let label_text = metadata_441.labels[0].text().to_string();
         assert!(
             label_text.contains("44.1 kHz"),
-            "Expected '44.1 kHz' but got '{}'",
-            label_text
+            "Expected '44.1 kHz' but got '{label_text}'"
         );
 
         // Test 88.2 kHz sample rate
@@ -167,8 +166,7 @@ mod component_tests {
         let label_text_882 = metadata_882.labels[0].text().to_string();
         assert!(
             label_text_882.contains("88.2 kHz"),
-            "Expected '88.2 kHz' but got '{}'",
-            label_text_882
+            "Expected '88.2 kHz' but got '{label_text_882}'"
         );
 
         // Test 96 kHz (whole number) sample rate
@@ -191,8 +189,7 @@ mod component_tests {
         let label_text_96 = metadata_96.labels[0].text().to_string();
         assert!(
             label_text_96.contains("96 kHz"),
-            "Expected '96 kHz' but got '{}'",
-            label_text_96
+            "Expected '96 kHz' but got '{label_text_96}'"
         );
     }
 

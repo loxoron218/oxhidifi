@@ -527,10 +527,10 @@ mod tests {
     #[test]
     fn test_chunk_size_calculation() {
         let chunk_size = calculate_chunk_size(44100, 48000);
-        assert!(chunk_size >= 256 && chunk_size <= 8192);
+        assert!((256..=8192).contains(&chunk_size));
 
         let chunk_size = calculate_chunk_size(192000, 48000);
-        assert!(chunk_size >= 256 && chunk_size <= 8192);
+        assert!((256..=8192).contains(&chunk_size));
     }
 
     #[test]

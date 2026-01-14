@@ -695,8 +695,7 @@ mod tests {
         let format_text = card_441.format_label.text().to_string();
         assert_eq!(
             format_text, "FLAC 24/44.1",
-            "Expected 'FLAC 24/44.1' but got '{}'",
-            format_text
+            "Expected 'FLAC 24/44.1' but got '{format_text}'"
         );
 
         // Test 88.2 kHz sample rate
@@ -719,8 +718,7 @@ mod tests {
         let format_text_882 = card_882.format_label.text().to_string();
         assert_eq!(
             format_text_882, "FLAC 24/88.2",
-            "Expected 'FLAC 24/88.2' but got '{}'",
-            format_text_882
+            "Expected 'FLAC 24/88.2' but got '{format_text_882}'"
         );
 
         // Test 96 kHz (whole number) sample rate
@@ -743,8 +741,7 @@ mod tests {
         let format_text_96 = card_96.format_label.text().to_string();
         assert_eq!(
             format_text_96, "FLAC 24/96",
-            "Expected 'FLAC 24/96' but got '{}'",
-            format_text_96
+            "Expected 'FLAC 24/96' but got '{format_text_96}'"
         );
     }
 }

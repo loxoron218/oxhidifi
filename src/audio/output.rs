@@ -619,7 +619,7 @@ mod tests {
         assert_eq!(config.sample_rate, 44100);
         assert_eq!(config.channels, 2);
         assert_eq!(config.buffer_duration_ms, 50);
-        assert_eq!(config.exclusive_mode, true);
+        assert!(config.exclusive_mode);
     }
 
     #[test]

@@ -514,13 +514,13 @@ mod tests {
 
     #[test]
     fn test_view_mode_display() {
-        assert_eq!(format!("{:?}", Grid), "Grid");
-        assert_eq!(format!("{:?}", List), "List");
+        assert_eq!(format!("{Grid:?}"), "Grid");
+        assert_eq!(format!("{List:?}"), "List");
     }
 
     #[test]
     fn test_library_tab_display() {
-        assert_eq!(format!("{:?}", Albums), "Albums");
-        assert_eq!(format!("{:?}", Artists), "Artists");
+        assert_eq!(format!("{Albums:?}"), "Albums");
+        assert_eq!(format!("{Artists:?}"), "Artists");
     }
 }

@@ -792,7 +792,7 @@ mod tests {
     #[test]
     fn test_album_sort_criteria() {
         // This test doesn't require GTK, so no skip needed
-        let mut albums = vec![
+        let mut albums = [
             Album {
                 id: 1,
                 artist_id: 1,

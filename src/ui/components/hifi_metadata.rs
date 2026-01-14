@@ -578,7 +578,7 @@ mod tests {
             match mono_track.channels {
                 1 => "Mono".to_string(),
                 2 => "Stereo".to_string(),
-                n => format!("{} ch", n),
+                n => format!("{n} ch"),
             },
             "Mono"
         );
@@ -587,7 +587,7 @@ mod tests {
             match stereo_track.channels {
                 1 => "Mono".to_string(),
                 2 => "Stereo".to_string(),
-                n => format!("{} ch", n),
+                n => format!("{n} ch"),
             },
             "Stereo"
         );
@@ -596,7 +596,7 @@ mod tests {
             match multi_track.channels {
                 1 => "Mono".to_string(),
                 2 => "Stereo".to_string(),
-                n => format!("{} ch", n),
+                n => format!("{n} ch"),
             },
             "5 ch"
         );

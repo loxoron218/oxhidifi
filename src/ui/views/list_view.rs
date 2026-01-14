@@ -683,7 +683,7 @@ mod tests {
     #[test]
     fn test_list_view_types() {
         // This test doesn't require GTK, so no skip needed
-        assert_eq!(format!("{:?}", Albums), "Albums");
-        assert_eq!(format!("{:?}", Artists), "Artists");
+        assert_eq!(format!("{Albums:?}"), "Albums");
+        assert_eq!(format!("{Artists:?}"), "Artists");
     }
 }

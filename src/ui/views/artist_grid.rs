@@ -459,7 +459,7 @@ mod tests {
     #[test]
     fn test_artist_sort_criteria() {
         // This test doesn't require GTK, so no skip needed
-        let mut artists = vec![
+        let mut artists = [
             Artist {
                 id: 1,
                 name: "B Artist".to_string(),
