@@ -36,6 +36,9 @@ use {
 
 use crate::audio::metadata::{TagReader, TechnicalMetadata};
 
+/// Sleep duration when producer buffer is full.
+const PRODUCER_SLEEP_DURATION: Duration = Duration::from_micros(100);
+
 /// Error type for audio decoding operations.
 #[derive(Error, Debug)]
 pub enum DecoderError {
@@ -456,11 +459,14 @@ impl AudioProducer {
             // Write samples to ring buffer
             for &sample in &samples {
                 loop {
+                    if self.producer.is_abandoned() {
+                        return Ok(());
+                    }
                     match self.producer.push(sample) {
                         Ok(()) => break,
                         Err(Full(_)) => {
                             // Buffer is full, wait a bit and retry
-                            sleep(Duration::from_micros(100));
+                            sleep(PRODUCER_SLEEP_DURATION);
                         }
                     }
                 }

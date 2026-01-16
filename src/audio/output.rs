@@ -3,7 +3,7 @@
 //! This module handles audio device enumeration, stream creation, and
 //! bit-perfect playback configuration for high-fidelity audio output.
 
-use std::{mem::forget, time::Duration};
+use std::time::Duration;
 
 use {
     cpal::{
@@ -579,13 +579,13 @@ impl AudioConsumer {
         self,
         source_format: &AudioFormat,
         source_spec: &SignalSpec,
-    ) -> Result<Stream, OutputError> {
+    ) -> Result<(Stream, Option<ResamplingAudioConsumer>), OutputError> {
         match self {
             AudioConsumer::Direct { output, consumer } => {
                 let (stream_config, _) = output.get_target_config(source_format, source_spec)?;
                 let stream = output.create_stream(&stream_config, consumer)?;
                 stream.play()?;
-                Ok(stream)
+                Ok((stream, None))
             }
             AudioConsumer::Resampling {
                 output,
@@ -600,10 +600,9 @@ impl AudioConsumer {
                 )?;
                 stream.play()?;
 
-                // Keep the resampling thread alive for the lifetime of the stream.
-                // This intentionally leaks the consumer to avoid premature drop.
-                forget(resampling_consumer);
-                Ok(stream)
+                // Return the resampling consumer for RAII-based lifetime management.
+                // It's dropped when the stream stops, cleanly shutting down the resampling thread.
+                Ok((stream, Some(resampling_consumer)))
             }
         }
     }

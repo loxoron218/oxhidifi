@@ -35,6 +35,9 @@ use crate::audio::{
     },
 };
 
+/// Sleep duration when target buffer is full.
+const RESAMPLER_SLEEP_DURATION: Duration = Duration::from_micros(50);
+
 /// Error type for resampling operations.
 #[derive(Debug)]
 pub enum ResamplingError {
@@ -310,6 +313,22 @@ impl Drop for ResamplingAudioConsumer {
     }
 }
 
+/// Checks if a ring buffer producer has been abandoned and returns early if so.
+///
+/// This macro ensures the resampling thread exits promptly when the stream is stopped,
+/// preventing it from blocking indefinitely on abandoned ring buffers.
+///
+/// # Arguments
+///
+/// * `$producer` - A `Producer<T>` from the `rtrb` crate
+macro_rules! check_abandonment {
+    ($producer:expr) => {
+        if $producer.is_abandoned() {
+            return;
+        }
+    };
+}
+
 /// Main resampling loop that runs in a dedicated thread.
 fn resampling_loop(
     mut source_consumer: Consumer<f32>,
@@ -354,11 +373,12 @@ fn resampling_loop(
                 // Write resampled samples to target
                 for &sample in &output_buffer {
                     loop {
+                        check_abandonment!(target_producer);
                         match target_producer.push(sample) {
                             Ok(()) => break,
                             Err(Full(_)) => {
                                 // Target buffer is full, wait briefly
-                                sleep(Duration::from_micros(50));
+                                sleep(RESAMPLER_SLEEP_DURATION);
                             }
                         }
                     }
@@ -373,10 +393,11 @@ fn resampling_loop(
                     resampler.expected_output_size(input_buffer.len() / channels);
                 for _ in 0..(expected_output_size * channels) {
                     loop {
+                        check_abandonment!(target_producer);
                         match target_producer.push(0.0) {
                             Ok(()) => break,
                             Err(Full(_)) => {
-                                sleep(Duration::from_micros(50));
+                                sleep(RESAMPLER_SLEEP_DURATION);
                             }
                         }
                     }

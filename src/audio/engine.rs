@@ -11,7 +11,7 @@ use std::{
 
 use {
     async_channel::{Receiver, Sender, unbounded},
-    cpal::{Stream, traits::StreamTrait},
+    cpal::Stream,
     parking_lot::RwLock as ParkingRwLock,
     rtrb::RingBuffer,
     serde::{Deserialize, Serialize},
@@ -19,13 +19,17 @@ use {
     tokio::{
         runtime::Builder,
         sync::broadcast::{Receiver as TokioReceiver, Sender as TokioSender, channel},
+        task::spawn_blocking,
+        time::{Duration, timeout},
     },
+    tracing::{debug, error},
 };
 
 use crate::audio::{
     decoder::{AudioDecoder, AudioFormat, AudioProducer, DecoderError},
     metadata::{MetadataError, TagReader, TrackMetadata},
     output::{AudioConsumer, AudioOutput, OutputConfig, OutputError},
+    resampler::ResamplingAudioConsumer,
 };
 
 /// Current playback state.
@@ -130,6 +134,8 @@ struct StreamHandle {
     stream: Stream,
     /// Join handle for the decoder thread.
     decoder_handle: Option<JoinHandle<Result<(), DecoderError>>>,
+    /// Resampling consumer for graceful shutdown.
+    resampling_consumer: Option<ResamplingAudioConsumer>,
 }
 
 impl AudioEngine {
@@ -370,18 +376,18 @@ impl AudioEngine {
                 while let Ok(message) = self.control_rx.recv().await {
                     match message {
                         ControlMessage::Play => {
-                            if let Err(e) = self.handle_play() {
+                            if let Err(e) = self.handle_play().await {
                                 eprintln!("Error handling play command: {e}");
                             }
                         }
                         ControlMessage::Pause => {
-                            self.handle_pause();
+                            self.handle_pause().await;
                         }
                         ControlMessage::Stop => {
-                            self.handle_stop();
+                            self.handle_stop().await;
                         }
                         ControlMessage::Seek(position_ms) => {
-                            if let Err(e) = self.handle_seek(position_ms) {
+                            if let Err(e) = self.handle_seek(position_ms).await {
                                 eprintln!("Error handling seek command: {e}");
                             }
                         }
@@ -391,7 +397,7 @@ impl AudioEngine {
     }
 
     /// Handles the play command.
-    fn handle_play(&self) -> Result<(), AudioError> {
+    async fn handle_play(&self) -> Result<(), AudioError> {
         let track_info = self
             .current_track
             .read()
@@ -399,7 +405,7 @@ impl AudioEngine {
             .ok_or(AudioError::NoTrackLoaded)?;
 
         // Stop any existing playback
-        self.stop_stream();
+        self.stop_stream().await;
 
         // Create ring buffer for audio samples
         let buffer_size = 4096; // Should be power of 2 for rtrb
@@ -422,7 +428,7 @@ impl AudioEngine {
         let decoder_handle = spawn(move || producer.run());
 
         // Start audio stream
-        let stream = consumer.run(&track_info.format, &signal_spec)?;
+        let (stream, resampling_consumer) = consumer.run(&track_info.format, &signal_spec)?;
 
         // Store stream handle
         *self
@@ -433,6 +439,7 @@ impl AudioEngine {
             })? = Some(StreamHandle {
             stream,
             decoder_handle: Some(decoder_handle),
+            resampling_consumer,
         });
 
         *self.state.write() = PlaybackState::Playing;
@@ -442,18 +449,18 @@ impl AudioEngine {
     }
 
     /// Handles the pause command.
-    fn handle_pause(&self) {
+    async fn handle_pause(&self) {
         // For now, we'll just stop the stream and keep the track loaded
         // In a more sophisticated implementation, we'd actually pause the stream
-        self.stop_stream();
+        self.stop_stream().await;
 
         *self.state.write() = PlaybackState::Paused;
         self.notify_state_change();
     }
 
     /// Handles the stop command.
-    fn handle_stop(&self) {
-        self.stop_stream();
+    async fn handle_stop(&self) {
+        self.stop_stream().await;
 
         *self.state.write() = PlaybackState::Stopped;
         *self.current_track.write() = None;
@@ -461,13 +468,13 @@ impl AudioEngine {
     }
 
     /// Handles the seek command.
-    fn handle_seek(&self, position_ms: u64) -> Result<(), AudioError> {
+    async fn handle_seek(&self, position_ms: u64) -> Result<(), AudioError> {
         // For now, we'll stop and restart playback at the new position
         // A more sophisticated implementation would seek within the current stream
         let current_state = self.state.read().clone();
         let was_playing = matches!(current_state, PlaybackState::Playing);
 
-        self.stop_stream();
+        self.stop_stream().await;
 
         if let Some(track_info) = self.current_track.read().clone() {
             // Create new decoder and seek
@@ -486,7 +493,7 @@ impl AudioEngine {
 
             let decoder_handle = spawn(move || producer.run());
 
-            let stream = consumer.run(&track_info.format, &signal_spec)?;
+            let (stream, resampling_consumer) = consumer.run(&track_info.format, &signal_spec)?;
 
             *self
                 .stream_handle
@@ -496,6 +503,7 @@ impl AudioEngine {
                 })? = Some(StreamHandle {
                 stream,
                 decoder_handle: Some(decoder_handle),
+                resampling_consumer,
             });
 
             *self.state.write() = if was_playing {
@@ -510,14 +518,33 @@ impl AudioEngine {
     }
 
     /// Stops the current audio stream gracefully.
-    fn stop_stream(&self) {
+    async fn stop_stream(&self) {
         if let Some(mut handle) = self.stream_handle.write().ok().and_then(|mut h| h.take()) {
-            // Stop the stream
-            let _ = handle.stream.pause();
+            debug!("Stopping audio stream");
 
-            // Wait for decoder thread to finish
+            // Stop the resampling thread first to prevent deadlock
+            // The resampling thread might be blocked on target_producer.push()
+            if let Some(mut resampling_consumer) = handle.resampling_consumer.take() {
+                resampling_consumer.stop();
+            }
+
+            // Drop the stream to abandon the decoder's producer
+            drop(handle.stream);
+
+            // Wait for decoder thread to finish with timeout
             if let Some(decoder_handle) = handle.decoder_handle.take() {
-                let _ = decoder_handle.join();
+                match timeout(
+                    Duration::from_secs(2),
+                    spawn_blocking(move || decoder_handle.join()),
+                )
+                .await
+                {
+                    Ok(Ok(Ok(Ok(())))) => debug!("Decoder thread stopped successfully"),
+                    Ok(Ok(Ok(Err(e)))) => error!("Decoder thread stopped with error: {:?}", e),
+                    Ok(Ok(Err(e))) => error!("Decoder thread panicked: {:?}", e),
+                    Ok(Err(e)) => error!("Failed to spawn blocking task: {:?}", e),
+                    Err(_) => error!("Timeout waiting for decoder thread to stop"),
+                }
             }
         }
     }
