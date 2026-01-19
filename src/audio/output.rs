@@ -9,7 +9,7 @@ use {
     cpal::{
         BufferSize::Default as CpalDefault,
         BuildStreamError, ChannelCount, Device, Host, OutputCallbackInfo, PlayStreamError,
-        SampleFormat::{self, F32, I16, U16},
+        SampleFormat::{self, F32, F64, I8, I16, I24, I32, I64, U8, U16, U24, U32, U64},
         Stream, StreamConfig,
         StreamError::{self, BackendSpecific},
         platform::{
@@ -27,6 +27,36 @@ use {
 };
 
 use crate::audio::{decoder::AudioFormat, resampler::ResamplingAudioConsumer};
+
+/// Builds a sample output stream with format-specific conversion.
+///
+/// # Macro Parameters
+///
+/// * `$device` - The CPAL device to build the stream on
+/// * `$stream_config` - The stream configuration
+/// * `$consumer` - The ring buffer consumer to read samples from
+/// * `$err_fn` - Error handler callback
+/// * `$timeout` - Buffer timeout duration
+/// * `$type` - Type of samples for the output stream (e.g., `i16`, `f32`)
+/// * `$convert` - Closure expression to convert f32 samples to target type
+/// * `$silent` - Silence value for buffer underruns
+macro_rules! build_sample_stream {
+    ($device:expr, $stream_config:expr, $consumer:expr, $err_fn:expr, $timeout:expr, $type:ty, $convert:expr, $silent:expr) => {
+        $device.build_output_stream(
+            $stream_config,
+            move |data: &mut [$type], _: &OutputCallbackInfo| {
+                for sample in data.iter_mut() {
+                    match $consumer.pop() {
+                        Ok(value) => *sample = $convert(value),
+                        Err(Empty) => *sample = $silent,
+                    }
+                }
+            },
+            $err_fn,
+            Some($timeout),
+        )?
+    };
+}
 
 /// Error type for audio output operations.
 #[derive(Error, Debug)]
@@ -296,6 +326,14 @@ impl AudioOutput {
         stream_config: &StreamConfig,
         mut consumer: Consumer<f32>,
     ) -> Result<Stream, OutputError> {
+        // f64 precision constants for 64-bit integer formats
+        // Note: f64 has 53-bit mantissa, so i64 values above ±2^53 (9,007,199,254,740,992)
+        // cannot be precisely represented. This is acceptable for audio purposes as
+        // no audio content uses the full 64-bit range.
+        const U64_MAX_F64: f64 = 18_446_744_073_709_551_615_f64;
+        const I64_MAX_F64: f64 = 9_223_372_036_854_775_807.0;
+        const I64_MIN_F64: f64 = -9_223_372_036_854_775_808.0;
+
         let sample_format = self
             .device
             .default_output_config()
@@ -319,81 +357,199 @@ impl AudioOutput {
 
         let stream = match sample_format {
             F32 => {
-                self.device.build_output_stream(
+                build_sample_stream!(
+                    &self.device,
                     stream_config,
-                    move |data: &mut [f32], _: &OutputCallbackInfo| {
-                        for sample in data.iter_mut() {
-                            match consumer.pop() {
-                                Ok(value) => {
-                                    // For f32, just clamp to valid range [-1.0, 1.0]
-                                    *sample = value.clamp(-1.0, 1.0);
-                                }
-                                Err(Empty) => {
-                                    // Buffer underrun - fill with silence
-                                    *sample = 0.0;
-                                }
-                            }
-                        }
-                    },
+                    consumer,
                     err_fn,
-                    Some(timeout),
-                )?
+                    timeout,
+                    f32,
+                    |value: f32| { value.clamp(-1.0, 1.0) },
+                    0.0 // Silence at zero crossing for floating point formats
+                )
             }
             I16 => {
-                self.device.build_output_stream(
+                build_sample_stream!(
+                    &self.device,
                     stream_config,
-                    move |data: &mut [i16], _: &OutputCallbackInfo| {
-                        for sample in data.iter_mut() {
-                            match consumer.pop() {
-                                Ok(value) => {
-                                    // Convert f32 [-1.0, 1.0] to i16 [-32768, 32767]
-                                    // Clamp first to avoid overflow
-                                    let clamped = value.clamp(-1.0, 1.0);
-                                    let scaled = clamped * f32::from(i16::MAX);
-                                    *sample = scaled
-                                        .clamp(f32::from(i16::MIN), f32::from(i16::MAX))
-                                        .to_i16()
-                                        .unwrap();
-                                }
-                                Err(Empty) => {
-                                    // Buffer underrun - fill with silence
-                                    *sample = 0;
-                                }
-                            }
-                        }
-                    },
+                    consumer,
                     err_fn,
-                    Some(timeout),
-                )?
+                    timeout,
+                    i16,
+                    |value: f32| {
+                        let clamped = value.clamp(-1.0, 1.0);
+                        let scaled = clamped * f32::from(i16::MAX);
+                        let clamped_scaled = scaled.clamp(f32::from(i16::MIN), f32::from(i16::MAX));
+                        clamped_scaled.to_i16().unwrap_or(0)
+                    },
+                    0 // Silence at zero crossing for signed formats
+                )
             }
             U16 => {
-                self.device.build_output_stream(
+                build_sample_stream!(
+                    &self.device,
                     stream_config,
-                    move |data: &mut [u16], _: &OutputCallbackInfo| {
-                        for sample in data.iter_mut() {
-                            match consumer.pop() {
-                                Ok(value) => {
-                                    // Convert f32 [-1.0, 1.0] to u16 [0, 65535]
-                                    // Map [-1.0, 1.0] to [0, 65535] where 0.0 maps to 32768
-                                    let clamped = value.clamp(-1.0, 1.0);
-
-                                    // Formula (clamped + 1.0) * 65535.0 / 2.0 always yields [0.0, 65535.0]
-                                    // Clamp to valid range and use try_from for safe conversion
-                                    let scaled = (clamped + 1.0) * f32::from(u16::MAX) / 2.0;
-                                    let clamped_scaled = scaled.clamp(0.0, f32::from(u16::MAX));
-                                    *sample =
-                                        u16::try_from(clamped_scaled.to_i32().unwrap()).unwrap();
-                                }
-                                Err(Empty) => {
-                                    // Buffer underrun - fill with silence
-                                    *sample = 32768; // Midpoint for u16
-                                }
-                            }
-                        }
-                    },
+                    consumer,
                     err_fn,
-                    Some(timeout),
-                )?
+                    timeout,
+                    u16,
+                    |value: f32| {
+                        let clamped = value.clamp(-1.0, 1.0);
+                        let scaled = (clamped + 1.0) * f32::from(u16::MAX) / 2.0;
+                        let clamped_scaled = scaled.clamp(0.0, f32::from(u16::MAX));
+                        clamped_scaled.to_u16().unwrap_or(32768)
+                    },
+                    1_u16 << 15 // 32768, midpoint of unsigned 16-bit range
+                )
+            }
+            U8 => {
+                build_sample_stream!(
+                    &self.device,
+                    stream_config,
+                    consumer,
+                    err_fn,
+                    timeout,
+                    u8,
+                    |value: f32| {
+                        let clamped = value.clamp(-1.0, 1.0);
+                        let scaled = (clamped + 1.0) * f32::from(u8::MAX) / 2.0;
+                        let clamped_scaled = scaled.clamp(0.0, f32::from(u8::MAX));
+                        clamped_scaled.to_u8().unwrap_or(128)
+                    },
+                    1_u8 << 7 // 128, midpoint of unsigned 8-bit range
+                )
+            }
+            U24 => {
+                build_sample_stream!(
+                    &self.device,
+                    stream_config,
+                    consumer,
+                    err_fn,
+                    timeout,
+                    u32,
+                    |value: f32| {
+                        let clamped = f64::from(value.clamp(-1.0, 1.0));
+                        let scaled = (clamped + 1.0) * f64::from((1_u32 << 24) - 1) / 2.0;
+                        let clamped_scaled = scaled.clamp(0.0, f64::from((1_u32 << 24) - 1));
+                        clamped_scaled.to_u32().unwrap_or(1_u32 << 23)
+                    },
+                    1_u32 << 23 // 8388608, midpoint of unsigned 24-bit range
+                )
+            }
+            U32 => {
+                build_sample_stream!(
+                    &self.device,
+                    stream_config,
+                    consumer,
+                    err_fn,
+                    timeout,
+                    u32,
+                    |value: f32| {
+                        let clamped = f64::from(value.clamp(-1.0, 1.0));
+                        let scaled = (clamped + 1.0) * f64::from(u32::MAX) / 2.0;
+                        let clamped_scaled = scaled.clamp(0.0, f64::from(u32::MAX));
+                        clamped_scaled.to_u32().unwrap_or(1_u32 << 31)
+                    },
+                    1_u32 << 31 // 2147483648, midpoint of unsigned 32-bit range
+                )
+            }
+            U64 => {
+                build_sample_stream!(
+                    &self.device,
+                    stream_config,
+                    consumer,
+                    err_fn,
+                    timeout,
+                    u64,
+                    |value: f32| {
+                        let clamped = f64::from(value.clamp(-1.0, 1.0));
+                        let scaled = (clamped + 1.0) * U64_MAX_F64 / 2.0;
+                        let clamped_scaled = scaled.clamp(0.0, U64_MAX_F64);
+                        clamped_scaled.to_u64().unwrap_or(1_u64 << 63)
+                    },
+                    1_u64 << 63 // 9223372036854775808, midpoint of unsigned 64-bit range
+                )
+            }
+            I8 => {
+                build_sample_stream!(
+                    &self.device,
+                    stream_config,
+                    consumer,
+                    err_fn,
+                    timeout,
+                    i8,
+                    |value: f32| {
+                        let clamped = value.clamp(-1.0, 1.0);
+                        let scaled = clamped * f32::from(i8::MAX);
+                        let clamped_scaled = scaled.clamp(f32::from(i8::MIN), f32::from(i8::MAX));
+                        clamped_scaled.to_i8().unwrap_or(0)
+                    },
+                    0 // Silence at zero crossing for signed formats
+                )
+            }
+            I24 => {
+                build_sample_stream!(
+                    &self.device,
+                    stream_config,
+                    consumer,
+                    err_fn,
+                    timeout,
+                    i32,
+                    |value: f32| {
+                        let clamped = f64::from(value.clamp(-1.0, 1.0));
+                        let scaled = clamped * f64::from((1_i32 << 23) - 1);
+                        let clamped_scaled =
+                            scaled.clamp(f64::from(-(1_i32 << 23)), f64::from((1_i32 << 23) - 1));
+                        clamped_scaled.to_i32().unwrap_or(0)
+                    },
+                    0 // Silence at zero crossing for signed formats
+                )
+            }
+            I32 => {
+                build_sample_stream!(
+                    &self.device,
+                    stream_config,
+                    consumer,
+                    err_fn,
+                    timeout,
+                    i32,
+                    |value: f32| {
+                        let clamped = f64::from(value.clamp(-1.0, 1.0));
+                        let scaled = clamped * f64::from(i32::MAX);
+                        let clamped_scaled = scaled.clamp(f64::from(i32::MIN), f64::from(i32::MAX));
+                        clamped_scaled.to_i32().unwrap_or(0)
+                    },
+                    0 // Silence at zero crossing for signed formats
+                )
+            }
+            I64 => {
+                build_sample_stream!(
+                    &self.device,
+                    stream_config,
+                    consumer,
+                    err_fn,
+                    timeout,
+                    i64,
+                    |value: f32| {
+                        let clamped = f64::from(value.clamp(-1.0, 1.0));
+                        let scaled = clamped * I64_MAX_F64;
+                        let clamped_scaled = scaled.clamp(I64_MIN_F64, I64_MAX_F64);
+                        clamped_scaled.to_i64().unwrap_or(0)
+                    },
+                    0 // Silence at zero crossing for signed formats
+                )
+            }
+            F64 => {
+                build_sample_stream!(
+                    &self.device,
+                    stream_config,
+                    consumer,
+                    err_fn,
+                    timeout,
+                    f64,
+                    |value: f32| { f64::from(value.clamp(-1.0, 1.0)) },
+                    0.0 // Silence at zero crossing for floating point formats
+                )
             }
             _ => {
                 return Err(OutputError::UnsupportedSampleFormat {
