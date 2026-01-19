@@ -45,8 +45,6 @@ struct TrackInfoUpdateContext<'a> {
     artist_label: &'a Label,
     /// Picture widget displaying the album artwork.
     artwork: &'a Picture,
-    /// Optional Hi-Fi metadata display component.
-    hifi_metadata: &'a mut Option<HiFiMetadata>,
     /// Container widget for Hi-Fi metadata.
     hifi_metadata_container: &'a Box,
     /// Label widget displaying the total track duration.
@@ -75,6 +73,8 @@ pub struct PlayerBar {
     pub artist_label: Label,
     /// Hi-Fi metadata display.
     pub hifi_metadata: Option<HiFiMetadata>,
+    /// Container for Hi-Fi metadata labels.
+    pub hifi_metadata_container: Box,
     /// Play/pause toggle button.
     pub play_button: ToggleButton,
     /// Previous track button.
@@ -291,6 +291,7 @@ impl PlayerBar {
             title_label,
             artist_label,
             hifi_metadata: None,
+            hifi_metadata_container,
             play_button,
             prev_button,
             next_button,
@@ -391,8 +392,7 @@ impl PlayerBar {
         let _progress_scale = self.progress_scale.clone();
         let _current_time_label = self.current_time_label.clone();
         let total_duration_label = self.total_duration_label.clone();
-        let mut hifi_metadata = self.hifi_metadata.clone();
-        let hifi_metadata_container = self.widget.clone(); // Use main widget as container for now
+        let hifi_metadata_container = self.hifi_metadata_container.clone();
 
         // Subscribe to AppState changes with tracing
         debug!("PlayerBar: Subscribing to AppState changes");
@@ -407,7 +407,6 @@ impl PlayerBar {
                                 title_label: &title_label,
                                 artist_label: &artist_label,
                                 artwork: &artwork,
-                                hifi_metadata: &mut hifi_metadata,
                                 hifi_metadata_container: &hifi_metadata_container,
                                 total_duration_label: &total_duration_label,
                                 play_button: &play_button,
@@ -433,6 +432,11 @@ impl PlayerBar {
 
     /// Updates track information display.
     fn update_track_info(track_info: Option<&TrackInfo>, ctx: &TrackInfoUpdateContext) {
+        // Clear existing metadata labels
+        while let Some(child) = ctx.hifi_metadata_container.first_child() {
+            ctx.hifi_metadata_container.remove(&child);
+        }
+
         if let Some(info) = track_info {
             // Update title and artist
             ctx.title_label
@@ -457,30 +461,25 @@ impl PlayerBar {
             let duration_text = format!("{duration_minutes:02}:{duration_remaining:02}");
             ctx.total_duration_label.set_label(&duration_text);
 
-            // Create or update Hi-Fi metadata
-            // Note: This would require creating a Track from TrackInfo in real implementation
-            // For now, we'll just show basic format info
-            if ctx.hifi_metadata.is_none() {
-                // Create basic metadata display
-                let format_label = Label::builder()
-                    .label(format!(
-                        "{}-bit {}kHz {}ch ",
-                        info.format.bits_per_sample,
-                        info.format.sample_rate / 1000,
-                        info.format.channels
-                    ))
-                    .css_classes(["dim-label"])
-                    .build();
-                ctx.hifi_metadata_container
-                    .append(format_label.upcast_ref::<Widget>());
+            // Create Hi-Fi metadata labels
+            let format_label = Label::builder()
+                .label(format!(
+                    "{}-bit {}kHz {}ch ",
+                    info.format.bits_per_sample,
+                    info.format.sample_rate / 1000,
+                    info.format.channels
+                ))
+                .css_classes(["dim-label"])
+                .build();
+            ctx.hifi_metadata_container
+                .append(format_label.upcast_ref::<Widget>());
 
-                let sample_rate_label = Label::builder()
-                    .label(format!("{}kHz", info.format.sample_rate / 1000))
-                    .css_classes(["dim-label"])
-                    .build();
-                ctx.hifi_metadata_container
-                    .append(sample_rate_label.upcast_ref::<Widget>());
-            }
+            let sample_rate_label = Label::builder()
+                .label(format!("{}kHz", info.format.sample_rate / 1000))
+                .css_classes(["dim-label"])
+                .build();
+            ctx.hifi_metadata_container
+                .append(sample_rate_label.upcast_ref::<Widget>());
 
             // Enable controls
             ctx.play_button.set_sensitive(true);
