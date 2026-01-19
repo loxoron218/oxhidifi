@@ -12,7 +12,7 @@ You are a senior developer using high-performing, modern and idiomatic Rust and 
 
 ## Project knowledge
 ### Tech stack
-- **Audio**: `cpal` + `symphonia` + `rtrb` + `lofty` for bit-perfect/gapless playback, `rubato` for resampling
+- **Audio**: `cpal` + `symphonia` + `rtrb` + `lofty` for bit-perfect/gapless playback, `rubato` + `audioadapter-buffers` for resampling
 - **Concurrency**: `tokio`, `async-channel`, `async-traits`, `crossbeam-channel`, `parking-lot`, `rayon`
 - **Database**: `sqlx` (SQLite) with `tokio` runtime
 - **UI**: `libadwaita` (v1.8+), programmatic widget construction (no `.ui` files)
@@ -36,9 +36,8 @@ src/
 
 ## Commands you can use
 ### Build and lint
-- Format code: `cargo fmt`
-- Fix linting issues: `cargo clippy --fix --allow-dirty --all-targets -- -W clippy::pedantic`
-- Format and lint together: `cargo fmt && cargo clippy --fix --allow-dirty --all-targets -- -W clippy::pedantic`
+- Format and lint together: `cargo fmt && cargo clippy --fix --allow-dirty --all-targets -- -W clippy::pedantic -A clippy::too_many_lines`
+- Add blank lines before single-line comments after closing braces/semicolons: `find . -name "*.rs" -exec perl -i -0777 -pe 's/([;}])[ \t]*\r?\n([ \t]*\/\/(?!\/))/$1\n\n$2/g' {} +`
 
 ### Testing
 - Run all tests: `cargo test`
@@ -67,9 +66,14 @@ use crate::{audio::engine::AudioEngine, library::models::Album};
 
 ### Formatting
 - Always run `cargo fmt` before committing
+- Add blank lines before single-line comments after closing braces/semicolons (improves readability)
 - rustfmt.toml uses style edition 2024
 - Line length: default (100 chars)
 - Max 400 lines per `.rs` file (strict project rule)
+
+### Code organization
+- Use macros to avoid repeating code (declarative macros `macro_rules!` for patterns, procedural macros when appropriate)
+- Prefer abstractions and generic code over duplication
 
 ### Types
 - Use `Arc<T>` for shared ownership across threads
@@ -156,5 +160,5 @@ pub async fn load_track<P: AsRef<Path>>(&self, track_path: P) -> Result<(), Audi
 - Proper tooltip text for interactive elements
 
 ## Boundaries
-- ✅ **Always do**: Write only `.rs` files, max 400 lines per file, run `cargo fmt && cargo clippy --fix --allow-dirty --all-targets -- -W clippy::pedantic` before finishing, document all public APIs
-- 🚫 **Never do**: Remove existing documentation/comments, use `.ui`, `.xml` or `.blp` files, use unsafe code, commit with clippy warnings, add network dependencies
+- ✅ **Always do**: Write only `.rs` files, max 400 lines per file, run `cargo fmt && cargo clippy --fix --allow-dirty --all-targets -- -W clippy::pedantic -A clippy::too_many_lines` before finishing, document all public APIs
+- 🚫 **Never do**: Remove existing documentation/comments, use `.ui`, `.xml` or `.blp` files, use unsafe code, commit with clippy warnings, add network dependencies, use `#[allow(clippy::xyz)]` attributes
