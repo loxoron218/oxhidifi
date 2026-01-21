@@ -436,9 +436,8 @@ impl AlbumCard {
         // Set ARIA attributes for accessibility
         album_tile.set_accessible_role(Group);
         album_tile.set_tooltip_text(Some(&format!(
-            "{} by {} ({})",
+            "{} by {artist_name} ({})",
             album.title,
-            artist_name,
             album.year.unwrap_or(0)
         )));
 
@@ -551,9 +550,8 @@ impl AlbumCard {
 
         // Update tooltip
         self.album_tile.set_tooltip_text(Some(&format!(
-            "{} by {} ({})",
+            "{} by {artist_name} ({})",
             album.title,
-            artist_name,
             album.year.unwrap_or(0)
         )));
 
