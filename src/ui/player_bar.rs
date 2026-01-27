@@ -363,13 +363,13 @@ impl PlayerBar {
         // Previous button
         prev_button.connect_clicked(move |_| {
             // Implementation would handle previous track logic
-            println!("Previous track");
+            debug!("Previous track");
         });
 
         // Next button
         next_button.connect_clicked(move |_| {
             // Implementation would handle next track logic
-            println!("Next track");
+            debug!("Next track");
         });
 
         // Progress scale seek
@@ -388,7 +388,7 @@ impl PlayerBar {
             let volume = scale.value() / 100.0;
 
             // Implementation would handle volume setting
-            println!("Volume: {volume}");
+            debug!("Volume: {volume}");
         });
 
         // Mute button
@@ -396,7 +396,7 @@ impl PlayerBar {
             let muted = button.is_active();
 
             // Implementation would handle mute state
-            println!("Muted: {muted}");
+            debug!("Muted: {muted}");
         });
     }
 

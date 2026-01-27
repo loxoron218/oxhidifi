@@ -24,7 +24,7 @@ use {
         },
     },
     parking_lot::RwLock,
-    tracing::{debug, info},
+    tracing::{debug, error, info},
 };
 
 use crate::{
@@ -120,7 +120,7 @@ impl OxhidifiApplication {
                 .scan_initial_directories(&library_db, &user_settings_shared)
                 .await
             {
-                eprintln!("Failed to perform initial library scan: {e}");
+                error!("Failed to perform initial library scan: {e}");
             }
 
             Some(Arc::new(RwLock::new(scanner)))
@@ -136,13 +136,13 @@ impl OxhidifiApplication {
         // Always load existing library data from database on startup
         // This ensures library is displayed even if no directories are currently configured
         if let Err(e) = library_db.cleanup_orphaned_records().await {
-            eprintln!("Failed to cleanup orphaned records: {e}");
+            error!("Failed to cleanup orphaned records: {e}");
         }
 
         let albums = match library_db.get_albums(None).await {
             Ok(albums) => albums,
             Err(e) => {
-                eprintln!("Failed to get albums from database: {e}");
+                error!("Failed to get albums from database: {e}");
                 Vec::new()
             }
         };
@@ -150,7 +150,7 @@ impl OxhidifiApplication {
         let artists = match library_db.get_artists(None).await {
             Ok(artists) => artists,
             Err(e) => {
-                eprintln!("Failed to get artists from database: {e}");
+                error!("Failed to get artists from database: {e}");
                 Vec::new()
             }
         };
@@ -209,7 +209,7 @@ impl OxhidifiApplication {
                                     let albums = match db_refresh.get_albums(None).await {
                                         Ok(albums) => albums,
                                         Err(e) => {
-                                            eprintln!("Failed to refresh albums: {e}");
+                                            error!("Failed to refresh albums: {e}");
                                             Vec::new()
                                         }
                                     };
@@ -218,7 +218,7 @@ impl OxhidifiApplication {
                                     let artists = match db_refresh.get_artists(None).await {
                                         Ok(artists) => artists,
                                         Err(e) => {
-                                            eprintln!("Failed to refresh artists: {e}");
+                                            error!("Failed to refresh artists: {e}");
                                             Vec::new()
                                         }
                                     };

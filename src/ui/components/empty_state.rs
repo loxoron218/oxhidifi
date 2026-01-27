@@ -19,7 +19,7 @@ use {
     },
     parking_lot::RwLock,
     tokio::spawn,
-    tracing::debug,
+    tracing::{debug, error, info, warn},
 };
 
 use crate::{
@@ -207,12 +207,12 @@ impl EmptyState {
                                         if let Err(e) =
                                             settings_manager_clone.update_settings(current_settings)
                                         {
-                                            eprintln!("Failed to update settings: {e}");
+                                            error!("Failed to update settings: {e}");
                                             return;
                                         }
 
                                         // Log successful addition
-                                        println!("Library directory added: {path_str}");
+                                        info!("Library directory added: {path_str}");
 
                                         // Trigger library rescan
                                         EmptyState::trigger_library_rescan(
@@ -226,7 +226,7 @@ impl EmptyState {
                             }
                         }
                         Err(e) => {
-                            eprintln!("Folder selection cancelled or failed: {e}");
+                            warn!("Folder selection cancelled or failed: {e}");
                         }
                     }
                 });
@@ -323,7 +323,7 @@ impl EmptyState {
                                                         let albums = match db_refresh.get_albums(None).await {
                                                             Ok(albums) => albums,
                                                             Err(e) => {
-                                                                eprintln!("Failed to refresh albums: {e}");
+                                                                error!("Failed to refresh albums: {e}");
                                                                 Vec::new()
                                                             }
                                                         };
@@ -332,7 +332,7 @@ impl EmptyState {
                                                         let artists = match db_refresh.get_artists(None).await {
                                                             Ok(artists) => artists,
                                                             Err(e) => {
-                                                                eprintln!("Failed to refresh artists: {e}");
+                                                                error!("Failed to refresh artists: {e}");
                                                                 Vec::new()
                                                             }
                                                         };
@@ -352,7 +352,7 @@ impl EmptyState {
                                     scanner_arc
                                 }
                                 Err(e) => {
-                                    eprintln!("Failed to create library scanner: {e}");
+                                    error!("Failed to create library scanner: {e}");
                                     return;
                                 }
                             }
@@ -371,7 +371,7 @@ impl EmptyState {
                         {
                             let mut scanner_write = scanner_for_task.write();
                             if let Err(e) = scanner_write.add_library_directory(&dir_for_task) {
-                                eprintln!("Failed to add directory to scanner: {e}");
+                                error!("Failed to add directory to scanner: {e}");
                             }
                         }
 
@@ -401,13 +401,13 @@ impl EmptyState {
                             )
                             .await
                         {
-                            eprintln!("Failed to process files: {e}");
+                            error!("Failed to process files: {e}");
                         }
                     });
 
                     // Await the background task (yields to main loop so UI stays responsive)
                     if let Err(e) = scan_handle.await {
-                        eprintln!("Scan task panicked: {e}");
+                        error!("Scan task panicked: {e}");
                     }
 
                     // Update UI state with new library data
@@ -417,16 +417,16 @@ impl EmptyState {
                                 app_state_clone.update_library_data(albums, artists);
                             }
                             Err(e) => {
-                                eprintln!("Failed to get artists from database: {e}");
+                                error!("Failed to get artists from database: {e}");
                             }
                         },
                         Err(e) => {
-                            eprintln!("Failed to get albums from database: {e}");
+                            error!("Failed to get albums from database: {e}");
                         }
                     }
                 }
                 Err(e) => {
-                    eprintln!("Failed to create library database: {e}");
+                    error!("Failed to create library database: {e}");
                 }
             }
         }
