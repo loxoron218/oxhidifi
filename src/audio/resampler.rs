@@ -340,7 +340,9 @@ fn resampling_loop(
     running: &Arc<AtomicBool>,
     channels: usize,
 ) {
+    // Number of samples to read per iteration
     const INPUT_BUFFER_SIZE: usize = 4096;
+
     let mut input_buffer = Vec::with_capacity(INPUT_BUFFER_SIZE);
     let mut output_buffer = Vec::new();
 

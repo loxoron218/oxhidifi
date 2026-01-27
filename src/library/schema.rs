@@ -13,6 +13,9 @@ use {
     thiserror::Error,
 };
 
+/// Current schema version.
+pub const CURRENT_SCHEMA_VERSION: i32 = 4;
+
 /// Error type for schema operations.
 #[derive(Error, Debug)]
 pub enum SchemaError {
@@ -23,9 +26,6 @@ pub enum SchemaError {
     #[error("Schema migration error: {reason}")]
     MigrationError { reason: String },
 }
-
-/// Current schema version.
-pub const CURRENT_SCHEMA_VERSION: i32 = 4;
 
 /// Database schema definition.
 pub struct SchemaManager {

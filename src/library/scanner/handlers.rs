@@ -26,7 +26,10 @@ use crate::{
     library::{database::LibraryDatabase, dr_parser::DrParser, file_watcher::FileWatcher},
 };
 
+// Maximum allowed track duration (24 hours)
 const MAX_DURATION_MS: u64 = 24 * 60 * 60 * 1000;
+
+// Maximum allowed file size (100 GB)
 const MAX_FILE_SIZE_BYTES: u64 = 100 * 1024 * 1024 * 1024;
 
 /// Handles files that have been created or modified.
