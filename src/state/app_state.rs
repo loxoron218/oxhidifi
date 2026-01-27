@@ -8,6 +8,7 @@ use std::sync::{Arc, Weak};
 
 use {
     async_channel::{Receiver, Sender, unbounded},
+    libadwaita::glib::MainContext,
     parking_lot::RwLock,
     tracing::debug,
 };
@@ -151,7 +152,7 @@ impl AppState {
     ) -> Self {
         let zoom_manager = Arc::new(ZoomManager::new(settings_manager.clone()));
 
-        Self {
+        let state = Self {
             playback: Arc::new(RwLock::new(Stopped)),
             current_track: Arc::new(RwLock::new(None)),
             library: Arc::new(RwLock::new(LibraryState::default())),
@@ -161,6 +162,27 @@ impl AppState {
             subscribers: Arc::new(RwLock::new(Vec::new())),
             zoom_manager,
             settings_manager,
+        };
+
+        state.listen_to_audio_engine();
+        state
+    }
+
+    /// Listens to audio engine state changes and forwards them to subscribers.
+    fn listen_to_audio_engine(&self) {
+        if let Some(audio_engine) = self.audio_engine.upgrade() {
+            let subscribers = self.subscribers.clone();
+            let mut receiver = audio_engine.subscribe_to_state_changes();
+
+            MainContext::default().spawn_local(async move {
+                while let Ok(state) = receiver.recv().await {
+                    let current_subscribers = subscribers.read();
+                    let event = AppStateEvent::PlaybackStateChanged(state);
+                    for tx in current_subscribers.iter() {
+                        let _ = tx.try_send(event.clone());
+                    }
+                }
+            });
         }
     }
 

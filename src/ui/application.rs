@@ -380,12 +380,12 @@ fn build_ui(
         loop {
             if let Ok(event) = receiver.recv().await {
                 if let PlaybackStateChanged(state) = event {
-                    // Show player bar when playing or paused, hide when stopped
+                    // Show player bar when a track is loaded, hide only when stopped
                     match state {
-                        Playing | Paused | Buffering => {
+                        Playing | Paused | Buffering | Ready => {
                             player_bar_widget_clone.set_visible(true);
                         }
-                        Stopped | Ready => {
+                        Stopped => {
                             player_bar_widget_clone.set_visible(false);
                         }
                     }

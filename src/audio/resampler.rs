@@ -8,7 +8,10 @@ use std::{
     fmt::{Display, Formatter, Result as StdResult},
     sync::{
         Arc,
-        atomic::{AtomicBool, Ordering::Relaxed},
+        atomic::{
+            AtomicBool, AtomicU64,
+            Ordering::{Relaxed, SeqCst},
+        },
     },
     thread::{JoinHandle, sleep, spawn, yield_now},
     time::Duration,
@@ -418,6 +421,7 @@ fn resampling_loop(
 /// * `output` - The audio output device.
 /// * `resampled_consumer` - Ring buffer consumer for resampled audio data.
 /// * `target_config` - Target stream configuration.
+/// * `current_position` - Shared atomic for tracking actual playback position.
 ///
 /// # Returns
 ///
@@ -437,6 +441,7 @@ pub fn create_resampling_stream(
     output: &AudioOutput,
     mut resampled_consumer: Consumer<f32>,
     target_config: &StreamConfig,
+    current_position: &Arc<AtomicU64>,
 ) -> Result<Stream, OutputError> {
     let sample_format = output
         .device()
@@ -458,20 +463,32 @@ pub fn create_resampling_stream(
     };
 
     let timeout = Duration::from_millis(u64::from(output.config().buffer_duration_ms));
+    let channels = target_config.channels as usize;
+    let sample_rate = u64::from(target_config.sample_rate);
+    let position = Arc::clone(current_position);
 
     let stream = match sample_format {
         SampleFormat::F32 => output.device().build_output_stream(
             target_config,
             move |data: &mut [f32], _: &OutputCallbackInfo| {
+                let mut samples_consumed = 0;
                 for sample in data.iter_mut() {
                     match resampled_consumer.pop() {
                         Ok(value) => {
                             *sample = value.clamp(-1.0, 1.0);
+                            samples_consumed += 1;
                         }
                         Err(Empty) => {
                             *sample = 0.0;
                         }
                     }
+                }
+
+                // Update position based on samples actually consumed and played
+                if samples_consumed > 0 {
+                    let frames = samples_consumed / channels;
+                    let duration_ms = (frames as u64 * 1000) / sample_rate;
+                    position.fetch_add(duration_ms, SeqCst);
                 }
             },
             err_fn,
@@ -480,6 +497,7 @@ pub fn create_resampling_stream(
         SampleFormat::I16 => output.device().build_output_stream(
             target_config,
             move |data: &mut [i16], _: &OutputCallbackInfo| {
+                let mut samples_consumed = 0;
                 for sample in data.iter_mut() {
                     match resampled_consumer.pop() {
                         Ok(value) => {
@@ -489,11 +507,17 @@ pub fn create_resampling_stream(
                                 .clamp(f32::from(i16::MIN), f32::from(i16::MAX))
                                 .to_i16()
                                 .unwrap();
+                            samples_consumed += 1;
                         }
                         Err(Empty) => {
                             *sample = 0;
                         }
                     }
+                }
+                if samples_consumed > 0 {
+                    let frames = samples_consumed / channels;
+                    let duration_ms = (frames as u64 * 1000) / sample_rate;
+                    position.fetch_add(duration_ms, SeqCst);
                 }
             },
             err_fn,
@@ -502,6 +526,7 @@ pub fn create_resampling_stream(
         SampleFormat::U16 => output.device().build_output_stream(
             target_config,
             move |data: &mut [u16], _: &OutputCallbackInfo| {
+                let mut samples_consumed = 0;
                 for sample in data.iter_mut() {
                     match resampled_consumer.pop() {
                         Ok(value) => {
@@ -512,11 +537,17 @@ pub fn create_resampling_stream(
                             let scaled = (clamped + 1.0) * f32::from(u16::MAX) / 2.0;
                             let clamped_scaled = scaled.clamp(0.0, f32::from(u16::MAX));
                             *sample = u16::try_from(clamped_scaled.to_i32().unwrap()).unwrap();
+                            samples_consumed += 1;
                         }
                         Err(Empty) => {
                             *sample = 32768;
                         }
                     }
+                }
+                if samples_consumed > 0 {
+                    let frames = samples_consumed / channels;
+                    let duration_ms = (frames as u64 * 1000) / sample_rate;
+                    position.fetch_add(duration_ms, SeqCst);
                 }
             },
             err_fn,

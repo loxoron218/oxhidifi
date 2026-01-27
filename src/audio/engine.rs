@@ -5,7 +5,10 @@
 
 use std::{
     path::Path,
-    sync::{Arc, RwLock},
+    sync::{
+        Arc, RwLock,
+        atomic::{AtomicU64, Ordering::SeqCst},
+    },
     thread::{JoinHandle, spawn},
 };
 
@@ -99,6 +102,8 @@ pub struct AudioEngine {
     control_tx: Sender<ControlMessage>,
     /// Handle to the current audio stream (if any).
     stream_handle: Arc<RwLock<Option<StreamHandle>>>,
+    /// Thread-safe playback position in milliseconds.
+    current_position: Arc<AtomicU64>,
 }
 
 impl Clone for AudioEngine {
@@ -111,6 +116,7 @@ impl Clone for AudioEngine {
             control_rx: self.control_rx.clone(),
             control_tx: self.control_tx.clone(),
             stream_handle: Arc::clone(&self.stream_handle),
+            current_position: Arc::clone(&self.current_position),
         }
     }
 }
@@ -122,6 +128,8 @@ enum ControlMessage {
     Play,
     /// Pause playback.
     Pause,
+    /// Resume playback.
+    Resume,
     /// Stop playback.
     Stop,
     /// Seek to specified position in milliseconds.
@@ -160,6 +168,7 @@ impl AudioEngine {
             control_rx,
             control_tx,
             stream_handle: Arc::new(RwLock::new(None)),
+            current_position: Arc::new(AtomicU64::new(0)),
         };
 
         // Start the control loop in a background thread
@@ -279,7 +288,7 @@ impl AudioEngine {
         }
 
         self.control_tx
-            .send(ControlMessage::Play)
+            .send(ControlMessage::Resume)
             .await
             .map_err(|e| AudioError::InvalidOperation {
                 reason: format!("Failed to send resume command: {e}"),
@@ -356,6 +365,20 @@ impl AudioEngine {
         self.current_track.read().clone()
     }
 
+    /// Gets the current playback position in milliseconds.
+    ///
+    /// # Returns
+    ///
+    /// The current position in milliseconds, or None if no track is loaded.
+    #[must_use]
+    pub fn current_position(&self) -> Option<u64> {
+        if self.current_track.read().is_some() {
+            Some(self.current_position.load(SeqCst))
+        } else {
+            None
+        }
+    }
+
     /// Subscribes to playback state changes.
     ///
     /// # Returns
@@ -377,18 +400,23 @@ impl AudioEngine {
                     match message {
                         ControlMessage::Play => {
                             if let Err(e) = self.handle_play().await {
-                                eprintln!("Error handling play command: {e}");
+                                error!("Failed to handle play command: {e}");
                             }
                         }
                         ControlMessage::Pause => {
                             self.handle_pause().await;
+                        }
+                        ControlMessage::Resume => {
+                            if let Err(e) = self.handle_resume().await {
+                                error!("Failed to handle resume command: {e}");
+                            }
                         }
                         ControlMessage::Stop => {
                             self.handle_stop().await;
                         }
                         ControlMessage::Seek(position_ms) => {
                             if let Err(e) = self.handle_seek(position_ms).await {
-                                eprintln!("Error handling seek command: {e}");
+                                error!("Failed to handle seek command: {e}");
                             }
                         }
                     }
@@ -396,8 +424,19 @@ impl AudioEngine {
             });
     }
 
-    /// Handles the play command.
-    async fn handle_play(&self) -> Result<(), AudioError> {
+    /// Sets up playback stream with optional initial position.
+    ///
+    /// # Arguments
+    ///
+    /// * `initial_position_ms` - Optional position to seek to in milliseconds.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` indicating success or failure.
+    async fn setup_playback_stream(
+        &self,
+        initial_position_ms: Option<u64>,
+    ) -> Result<(), AudioError> {
         let track_info = self
             .current_track
             .read()
@@ -407,19 +446,36 @@ impl AudioEngine {
         // Stop any existing playback
         self.stop_stream().await;
 
+        // Reset current position
+        if let Some(pos) = initial_position_ms {
+            self.current_position.store(pos, SeqCst);
+        } else {
+            self.current_position.store(0, SeqCst);
+        }
+
         // Create ring buffer for audio samples
-        let buffer_size = 4096; // Should be power of 2 for rtrb
+        // Buffer size must be power of 2 for rtrb ring buffer efficient bitmask wrapping
+        let buffer_size = 4096;
         let (producer, consumer) = RingBuffer::<f32>::new(buffer_size);
 
         // Create audio output
         let output = AudioOutput::new(Some(self.output_config.clone()))?;
 
         // Create decoder to get signal spec
-        let decoder = AudioDecoder::new(&track_info.path)?;
+        let mut decoder = AudioDecoder::new(&track_info.path)?;
+        if let Some(pos) = initial_position_ms {
+            decoder.seek(pos)?;
+        }
         let signal_spec = decoder.signal_spec;
 
         // Create audio consumer
-        let consumer = AudioConsumer::new(output, consumer, &track_info.format, &signal_spec)?;
+        let consumer = AudioConsumer::new(
+            output,
+            consumer,
+            &track_info.format,
+            &signal_spec,
+            self.current_position.clone(),
+        )?;
 
         // Create audio producer
         let producer = AudioProducer::new(decoder, producer);
@@ -446,6 +502,17 @@ impl AudioEngine {
         self.notify_state_change();
 
         Ok(())
+    }
+
+    /// Handles the play command.
+    async fn handle_play(&self) -> Result<(), AudioError> {
+        self.setup_playback_stream(None).await
+    }
+
+    /// Handles the resume command.
+    async fn handle_resume(&self) -> Result<(), AudioError> {
+        let position_ms = self.current_position.load(SeqCst);
+        self.setup_playback_stream(Some(position_ms)).await
     }
 
     /// Handles the pause command.
@@ -481,14 +548,24 @@ impl AudioEngine {
             let mut decoder = AudioDecoder::new(&track_info.path)?;
             decoder.seek(position_ms)?;
 
+            // Update current position
+            self.current_position.store(position_ms, SeqCst);
+
             let signal_spec = decoder.signal_spec;
 
             // Recreate the playback stream
+            // Buffer size must be power of 2 for rtrb ring buffer efficient bitmask wrapping
             let buffer_size = 4096;
             let (producer, consumer) = RingBuffer::<f32>::new(buffer_size);
 
             let output = AudioOutput::new(Some(self.output_config.clone()))?;
-            let consumer = AudioConsumer::new(output, consumer, &track_info.format, &signal_spec)?;
+            let consumer = AudioConsumer::new(
+                output,
+                consumer,
+                &track_info.format,
+                &signal_spec,
+                self.current_position.clone(),
+            )?;
             let producer = AudioProducer::new(decoder, producer);
 
             let decoder_handle = spawn(move || producer.run());

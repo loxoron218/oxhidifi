@@ -21,7 +21,7 @@ use {
         prelude::{AccessibleExt, BoxExt, ButtonExt, Cast, RangeExt, ToggleButtonExt, WidgetExt},
     },
     num_traits::cast::ToPrimitive,
-    tracing::debug,
+    tracing::{debug, error},
 };
 
 use crate::{
@@ -330,12 +330,32 @@ impl PlayerBar {
         let audio_engine_for_play = audio_engine.clone();
         play_button.connect_clicked(move |_| {
             let audio_engine_clone = audio_engine_for_play.clone();
+
             MainContext::default().spawn_local(async move {
                 let state = audio_engine_clone.current_playback_state();
-                if matches!(state, Playing) {
-                    let _ = audio_engine_clone.pause().await;
-                } else {
-                    let _ = audio_engine_clone.play().await;
+
+                match state {
+                    Playing => {
+                        if let Err(e) = audio_engine_clone.pause().await {
+                            error!("Failed to pause playback: {e}");
+                        }
+                    }
+                    Paused => {
+                        if let Err(e) = audio_engine_clone.resume().await {
+                            error!("Failed to resume playback: {e}");
+                        }
+                    }
+                    Ready => {
+                        if let Err(e) = audio_engine_clone.play().await {
+                            error!("Failed to start playback: {e}");
+                        }
+                    }
+                    Buffering => {
+                        debug!("Ignoring play button click while buffering");
+                    }
+                    Stopped => {
+                        debug!("Ignoring play button click - no track loaded");
+                    }
                 }
             });
         });

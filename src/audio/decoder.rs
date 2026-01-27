@@ -39,6 +39,9 @@ use crate::audio::metadata::{TagReader, TechnicalMetadata};
 /// Sleep duration when producer buffer is full.
 const PRODUCER_SLEEP_DURATION: Duration = Duration::from_micros(100);
 
+/// Milliseconds per second.
+pub const MS_PER_SEC: u64 = 1000;
+
 /// Error type for audio decoding operations.
 #[derive(Error, Debug)]
 pub enum DecoderError {
@@ -252,8 +255,8 @@ impl AudioDecoder {
     ///
     /// Returns `DecoderError` if seeking fails.
     pub fn seek(&mut self, position_ms: u64) -> Result<(), DecoderError> {
-        let seconds = position_ms / 1000;
-        let frac_ms = (position_ms % 1000) as u32;
+        let seconds = position_ms / MS_PER_SEC;
+        let frac_ms = (position_ms % MS_PER_SEC) as u32;
         let time = OtherTime::new(seconds, f64::from(frac_ms) / 1000.0);
         self.format_reader
             .seek(
@@ -280,7 +283,7 @@ impl AudioDecoder {
             .and_then(|track| track.codec_params.n_frames)
             .map(|frames| {
                 let sample_rate = u64::from(self.format.sample_rate);
-                (frames * 1000 + sample_rate / 2) / sample_rate
+                (frames * MS_PER_SEC + sample_rate / 2) / sample_rate
             })
     }
 }

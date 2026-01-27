@@ -3,7 +3,13 @@
 //! This module handles audio device enumeration, stream creation, and
 //! bit-perfect playback configuration for high-fidelity audio output.
 
-use std::time::Duration;
+use std::{
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering::SeqCst},
+    },
+    time::Duration,
+};
 
 use {
     cpal::{
@@ -26,7 +32,10 @@ use {
     tracing::{debug, error, info, warn},
 };
 
-use crate::audio::{decoder::AudioFormat, resampler::ResamplingAudioConsumer};
+use crate::audio::{
+    decoder::{AudioFormat, MS_PER_SEC},
+    resampler::ResamplingAudioConsumer,
+};
 
 /// Builds a sample output stream with format-specific conversion.
 ///
@@ -40,22 +49,40 @@ use crate::audio::{decoder::AudioFormat, resampler::ResamplingAudioConsumer};
 /// * `$type` - Type of samples for the output stream (e.g., `i16`, `f32`)
 /// * `$convert` - Closure expression to convert f32 samples to target type
 /// * `$silent` - Silence value for buffer underruns
+/// * `$position` - Atomic position counter to update with consumed samples
+/// * `$channels` - Number of audio channels
+/// * `$sample_rate` - Sample rate for position calculation
 macro_rules! build_sample_stream {
-    ($device:expr, $stream_config:expr, $consumer:expr, $err_fn:expr, $timeout:expr, $type:ty, $convert:expr, $silent:expr) => {
+    ($device:expr, $stream_config:expr, $consumer:expr, $err_fn:expr, $timeout:expr, $type:ty, $convert:expr, $silent:expr, $position:expr, $channels:expr, $sample_rate:expr) => {{
+        let position = Arc::clone(&$position);
+        let channels = $channels as usize;
+        let sample_rate = u64::from($sample_rate);
+
         $device.build_output_stream(
             $stream_config,
             move |data: &mut [$type], _: &OutputCallbackInfo| {
+                let mut samples_consumed = 0;
                 for sample in data.iter_mut() {
                     match $consumer.pop() {
-                        Ok(value) => *sample = $convert(value),
+                        Ok(value) => {
+                            *sample = $convert(value);
+                            samples_consumed += 1;
+                        }
                         Err(Empty) => *sample = $silent,
                     }
+                }
+
+                // Update position based on samples actually consumed and played
+                if samples_consumed > 0 {
+                    let frames = samples_consumed / channels;
+                    let duration_ms = (frames as u64 * MS_PER_SEC) / sample_rate;
+                    position.fetch_add(duration_ms, SeqCst);
                 }
             },
             $err_fn,
             Some($timeout),
         )?
-    };
+    }};
 }
 
 /// Error type for audio output operations.
@@ -306,6 +333,7 @@ impl AudioOutput {
     ///
     /// * `stream_config` - The stream configuration to use.
     /// * `consumer` - The ring buffer consumer to read samples from.
+    /// * `current_position` - Shared atomic for tracking actual playback position.
     ///
     /// # Returns
     ///
@@ -325,6 +353,7 @@ impl AudioOutput {
         &self,
         stream_config: &StreamConfig,
         mut consumer: Consumer<f32>,
+        current_position: &Arc<AtomicU64>,
     ) -> Result<Stream, OutputError> {
         // f64 precision constants for 64-bit integer formats
         // Note: f64 has 53-bit mantissa, so i64 values above ±2^53 (9,007,199,254,740,992)
@@ -354,6 +383,8 @@ impl AudioOutput {
         };
 
         let timeout = Duration::from_millis(u64::from(self.config.buffer_duration_ms));
+        let channels = stream_config.channels;
+        let sample_rate = stream_config.sample_rate;
 
         let stream = match sample_format {
             F32 => {
@@ -365,7 +396,10 @@ impl AudioOutput {
                     timeout,
                     f32,
                     |value: f32| { value.clamp(-1.0, 1.0) },
-                    0.0 // Silence at zero crossing for floating point formats
+                    0.0, // Silence at zero crossing for floating point formats
+                    current_position,
+                    channels,
+                    sample_rate
                 )
             }
             I16 => {
@@ -382,7 +416,10 @@ impl AudioOutput {
                         let clamped_scaled = scaled.clamp(f32::from(i16::MIN), f32::from(i16::MAX));
                         clamped_scaled.to_i16().unwrap_or(0)
                     },
-                    0 // Silence at zero crossing for signed formats
+                    0, // Silence at zero crossing for signed formats
+                    current_position,
+                    channels,
+                    sample_rate
                 )
             }
             U16 => {
@@ -399,7 +436,10 @@ impl AudioOutput {
                         let clamped_scaled = scaled.clamp(0.0, f32::from(u16::MAX));
                         clamped_scaled.to_u16().unwrap_or(32768)
                     },
-                    1_u16 << 15 // 32768, midpoint of unsigned 16-bit range
+                    1_u16 << 15, // 32768, midpoint of unsigned 16-bit range
+                    current_position,
+                    channels,
+                    sample_rate
                 )
             }
             U8 => {
@@ -416,7 +456,10 @@ impl AudioOutput {
                         let clamped_scaled = scaled.clamp(0.0, f32::from(u8::MAX));
                         clamped_scaled.to_u8().unwrap_or(128)
                     },
-                    1_u8 << 7 // 128, midpoint of unsigned 8-bit range
+                    1_u8 << 7, // 128, midpoint of unsigned 8-bit range
+                    current_position,
+                    channels,
+                    sample_rate
                 )
             }
             U24 => {
@@ -433,7 +476,10 @@ impl AudioOutput {
                         let clamped_scaled = scaled.clamp(0.0, f64::from((1_u32 << 24) - 1));
                         clamped_scaled.to_u32().unwrap_or(1_u32 << 23)
                     },
-                    1_u32 << 23 // 8388608, midpoint of unsigned 24-bit range
+                    1_u32 << 23, // 8388608, midpoint of unsigned 24-bit range
+                    current_position,
+                    channels,
+                    sample_rate
                 )
             }
             U32 => {
@@ -450,7 +496,10 @@ impl AudioOutput {
                         let clamped_scaled = scaled.clamp(0.0, f64::from(u32::MAX));
                         clamped_scaled.to_u32().unwrap_or(1_u32 << 31)
                     },
-                    1_u32 << 31 // 2147483648, midpoint of unsigned 32-bit range
+                    1_u32 << 31, // 2147483648, midpoint of unsigned 32-bit range
+                    current_position,
+                    channels,
+                    sample_rate
                 )
             }
             U64 => {
@@ -467,7 +516,10 @@ impl AudioOutput {
                         let clamped_scaled = scaled.clamp(0.0, U64_MAX_F64);
                         clamped_scaled.to_u64().unwrap_or(1_u64 << 63)
                     },
-                    1_u64 << 63 // 9223372036854775808, midpoint of unsigned 64-bit range
+                    1_u64 << 63, // 9223372036854775808, midpoint of unsigned 64-bit range
+                    current_position,
+                    channels,
+                    sample_rate
                 )
             }
             I8 => {
@@ -484,7 +536,10 @@ impl AudioOutput {
                         let clamped_scaled = scaled.clamp(f32::from(i8::MIN), f32::from(i8::MAX));
                         clamped_scaled.to_i8().unwrap_or(0)
                     },
-                    0 // Silence at zero crossing for signed formats
+                    0, // Silence at zero crossing for signed formats
+                    current_position,
+                    channels,
+                    sample_rate
                 )
             }
             I24 => {
@@ -502,7 +557,10 @@ impl AudioOutput {
                             scaled.clamp(f64::from(-(1_i32 << 23)), f64::from((1_i32 << 23) - 1));
                         clamped_scaled.to_i32().unwrap_or(0)
                     },
-                    0 // Silence at zero crossing for signed formats
+                    0, // Silence at zero crossing for signed formats
+                    current_position,
+                    channels,
+                    sample_rate
                 )
             }
             I32 => {
@@ -519,7 +577,10 @@ impl AudioOutput {
                         let clamped_scaled = scaled.clamp(f64::from(i32::MIN), f64::from(i32::MAX));
                         clamped_scaled.to_i32().unwrap_or(0)
                     },
-                    0 // Silence at zero crossing for signed formats
+                    0, // Silence at zero crossing for signed formats
+                    current_position,
+                    channels,
+                    sample_rate
                 )
             }
             I64 => {
@@ -536,7 +597,10 @@ impl AudioOutput {
                         let clamped_scaled = scaled.clamp(I64_MIN_F64, I64_MAX_F64);
                         clamped_scaled.to_i64().unwrap_or(0)
                     },
-                    0 // Silence at zero crossing for signed formats
+                    0, // Silence at zero crossing for signed formats
+                    current_position,
+                    channels,
+                    sample_rate
                 )
             }
             F64 => {
@@ -548,7 +612,10 @@ impl AudioOutput {
                     timeout,
                     f64,
                     |value: f32| { f64::from(value.clamp(-1.0, 1.0)) },
-                    0.0 // Silence at zero crossing for floating point formats
+                    0.0, // Silence at zero crossing for floating point formats
+                    current_position,
+                    channels,
+                    sample_rate
                 )
             }
             _ => {
@@ -659,12 +726,14 @@ pub enum AudioConsumer {
     Direct {
         output: AudioOutput,
         consumer: Consumer<f32>,
+        current_position: Arc<AtomicU64>,
     },
     /// Resampling consumer (resampling needed).
     Resampling {
         output: AudioOutput,
         resampling_consumer: ResamplingAudioConsumer,
         resampled_consumer: Consumer<f32>,
+        current_position: Arc<AtomicU64>,
     },
 }
 
@@ -677,6 +746,7 @@ impl AudioConsumer {
     /// * `consumer` - The ring buffer consumer to read samples from.
     /// * `source_format` - The source audio format.
     /// * `source_spec` - The signal specification from symphonia.
+    /// * `current_position` - Shared atomic for tracking actual playback position.
     ///
     /// # Errors
     ///
@@ -686,6 +756,7 @@ impl AudioConsumer {
         consumer: Consumer<f32>,
         source_format: &AudioFormat,
         source_spec: &SignalSpec,
+        current_position: Arc<AtomicU64>,
     ) -> Result<Self, OutputError> {
         let (target_config, needs_resampling) =
             output.get_target_config(source_format, source_spec)?;
@@ -712,10 +783,15 @@ impl AudioConsumer {
                 output,
                 resampling_consumer,
                 resampled_consumer,
+                current_position,
             })
         } else {
             info!("Created direct audio consumer (no resampling needed)");
-            Ok(AudioConsumer::Direct { output, consumer })
+            Ok(AudioConsumer::Direct {
+                output,
+                consumer,
+                current_position,
+            })
         }
     }
 
@@ -737,9 +813,13 @@ impl AudioConsumer {
         source_spec: &SignalSpec,
     ) -> Result<(Stream, Option<ResamplingAudioConsumer>), OutputError> {
         match self {
-            AudioConsumer::Direct { output, consumer } => {
+            AudioConsumer::Direct {
+                output,
+                consumer,
+                current_position,
+            } => {
                 let (stream_config, _) = output.get_target_config(source_format, source_spec)?;
-                let stream = output.create_stream(&stream_config, consumer)?;
+                let stream = output.create_stream(&stream_config, consumer, &current_position)?;
                 stream.play()?;
                 Ok((stream, None))
             }
@@ -747,12 +827,14 @@ impl AudioConsumer {
                 output,
                 resampling_consumer,
                 resampled_consumer,
+                current_position,
             } => {
                 let stream_config = resampling_consumer.target_config().clone();
                 let stream = crate::audio::resampler::create_resampling_stream(
                     &output,
                     resampled_consumer,
                     &stream_config,
+                    &current_position,
                 )?;
                 stream.play()?;
 
