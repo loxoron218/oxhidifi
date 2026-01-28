@@ -26,7 +26,9 @@ use {
                 Signal, SignalSpec,
             },
             codecs::{CODEC_TYPE_NULL, Decoder, DecoderOptions},
-            errors::Error as SymphoniaError,
+            errors::Error::{
+                self as SymphoniaError, DecodeError, IoError, ResetRequired, SeekError, Unsupported,
+            },
             formats::{FormatOptions, FormatReader, SeekMode::Accurate, SeekTo::Time},
             io::{MediaSourceStream, MediaSourceStreamOptions},
             meta::MetadataOptions,
@@ -225,20 +227,20 @@ impl AudioDecoder {
 
                         return Ok(Some(decoded));
                     }
-                    return Err(DecoderError::SymphoniaError(SymphoniaError::Unsupported(
+                    return Err(DecoderError::SymphoniaError(Unsupported(
                         "No decoder available",
                     )));
                 }
-                Err(SymphoniaError::IoError(e)) => {
+                Err(IoError(e)) => {
                     if e.kind() == UnexpectedEof {
                         return Ok(None);
                     }
                     return Err(DecoderError::IoError(e));
                 }
-                Err(SymphoniaError::ResetRequired | SymphoniaError::DecodeError(_)) => {
+                Err(ResetRequired | DecodeError(_)) => {
                     // Skip corrupted packets and continue
                 }
-                Err(SymphoniaError::SeekError(_)) => {
+                Err(SeekError(_)) => {
                     // End of file reached
                     return Ok(None);
                 }
