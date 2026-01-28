@@ -138,14 +138,36 @@ impl QueueManager {
                             tracks.len()
                         );
 
-                        let mut queue_state = queue.write();
-                        queue_state.tracks = tracks;
-                        queue_state.current_index = if queue_state.tracks.is_empty() {
-                            None
-                        } else {
-                            Some(0)
+                        {
+                            let mut queue_state = queue.write();
+                            queue_state.tracks = tracks;
+                            queue_state.current_index = if queue_state.tracks.is_empty() {
+                                None
+                            } else {
+                                Some(0)
+                            };
+                        }
+
+                        // Preload second track if it exists
+                        let second_track_opt = {
+                            let queue_state = queue.read();
+                            if queue_state.tracks.len() > 1 {
+                                Some(queue_state.tracks[1].clone())
+                            } else {
+                                None
+                            }
                         };
-                        drop(queue_state);
+
+                        if let Some(next_track) = second_track_opt {
+                            debug!(
+                                "QueueManager: Preloading second track for gapless playback: {}",
+                                next_track.path
+                            );
+
+                            if let Err(e) = audio_engine.preload_next_track(&next_track.path) {
+                                debug!("QueueManager: Failed to preload next track: {e}");
+                            }
+                        }
 
                         Self::broadcast_queue_change(&queue, &app_state);
                     }
@@ -218,6 +240,30 @@ impl QueueManager {
         if let Err(e) = audio_engine.load_track(&track.path) {
             debug!("QueueManager: Failed to load track: {e}");
             return;
+        }
+
+        // Preload next track for gapless playback
+        let next_track_opt = {
+            let queue_state = queue.read();
+
+            if let Some(next_idx) = new_index.checked_add(1)
+                && next_idx < queue_state.tracks.len()
+            {
+                Some(queue_state.tracks[next_idx].clone())
+            } else {
+                None
+            }
+        };
+
+        if let Some(next_track) = next_track_opt {
+            debug!(
+                "QueueManager: Preloading next track for gapless playback: {}",
+                next_track.path
+            );
+
+            if let Err(e) = audio_engine.preload_next_track(&next_track.path) {
+                debug!("QueueManager: Failed to preload next track: {e}");
+            }
         }
 
         if let Err(e) = audio_engine.play().await {

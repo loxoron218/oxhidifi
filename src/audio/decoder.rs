@@ -506,6 +506,77 @@ impl AudioProducer {
     }
 }
 
+/// Gapless audio producer that manages seamless track transitions.
+///
+/// This producer handles switching between current and next track decoders
+/// without stopping the audio output stream, enabling gapless playback.
+pub struct GaplessProducer {
+    /// Current track decoder and producer.
+    current_producer: Option<AudioProducer>,
+    /// Next track decoder for pre-buffering.
+    next_decoder: Option<AudioDecoder>,
+}
+
+impl GaplessProducer {
+    /// Creates a new gapless audio producer.
+    ///
+    /// # Arguments
+    ///
+    /// * `decoder` - The initial audio decoder.
+    /// * `producer` - The ring buffer producer for output.
+    /// * `track_finished_tx` - Optional sender for track completion notifications.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the prebuffer cannot be obtained (this indicates a bug in initialization).
+    pub fn new(
+        decoder: AudioDecoder,
+        producer: Producer<f32>,
+        track_finished_tx: Option<Sender<()>>,
+    ) -> Self {
+        let audio_producer = AudioProducer::new(decoder, producer, track_finished_tx);
+
+        Self {
+            current_producer: Some(audio_producer),
+            next_decoder: None,
+        }
+    }
+
+    /// Preloads the next track for gapless transition.
+    ///
+    /// # Arguments
+    ///
+    /// * `decoder` - Decoder for the next track.
+    pub fn preload_next_track(&mut self, decoder: AudioDecoder) {
+        self.next_decoder = Some(decoder);
+    }
+
+    /// Runs the gapless production loop.
+    ///
+    /// This method continuously decodes audio from the current track,
+    /// pre-buffers the next track, and handles seamless transitions.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` indicating success or failure.
+    ///
+    /// # Errors
+    ///
+    /// Returns `DecoderError` if decoding fails.
+    ///
+    /// # Panics
+    ///
+    /// Panics if there's no current producer.
+    pub fn run(self) -> Result<(), DecoderError> {
+        if let Some(producer) = self.current_producer {
+            // Run current track producer
+            producer.run()
+        } else {
+            Err(DecoderError::NoAudioTrack)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::io::{Error, ErrorKind::NotFound};

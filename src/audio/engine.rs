@@ -34,6 +34,7 @@ use crate::audio::{
     decoder::{AudioDecoder, AudioFormat, AudioProducer, DecoderError},
     metadata::{MetadataError, TagReader, TrackMetadata},
     output::{AudioConsumer, AudioOutput, OutputConfig, OutputError},
+    prebuffer::{Prebuffer, PrebufferError},
     resampler::ResamplingAudioConsumer,
 };
 
@@ -77,6 +78,9 @@ pub enum AudioError {
     /// Metadata error.
     #[error("Metadata error: {0}")]
     MetadataError(#[from] MetadataError),
+    /// Pre-buffer error.
+    #[error("Pre-buffer error: {0}")]
+    PrebufferError(#[from] PrebufferError),
     /// Invalid operation for current state.
     #[error("Invalid operation: {reason}")]
     InvalidOperation { reason: String },
@@ -120,6 +124,8 @@ pub struct AudioEngine {
     track_completion_shutdown_tx: Arc<Mutex<Option<Sender<()>>>>,
     /// Shutdown sender for state change forwarding task.
     state_change_shutdown_tx: Arc<Mutex<Option<Sender<()>>>>,
+    /// Pre-buffer manager for gapless playback.
+    prebuffer: Arc<RwLock<Option<Arc<Prebuffer>>>>,
 }
 
 /// Internal control messages for the audio engine.
@@ -235,6 +241,7 @@ impl AudioEngine {
             current_position: Arc::new(AtomicU64::new(0)),
             track_completion_shutdown_tx: Arc::new(Mutex::new(Some(track_completion_shutdown_tx))),
             state_change_shutdown_tx: Arc::new(Mutex::new(Some(state_change_shutdown_tx))),
+            prebuffer: Arc::new(RwLock::new(None)),
         };
 
         // Start the control loop in a background thread
@@ -740,6 +747,60 @@ impl AudioEngine {
         drop(self.track_finished_tx.clone());
         drop(self.state_tx.clone());
         drop(self.control_tx.clone());
+    }
+
+    /// Preloads the next track for gapless playback.
+    ///
+    /// This method initiates pre-buffering of the specified track to enable
+    /// seamless transitions when the current track finishes.
+    ///
+    /// # Arguments
+    ///
+    /// * `track_path` - Path to the next track to preload.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` indicating success or failure.
+    ///
+    /// # Errors
+    ///
+    /// Returns `AudioError` if the track cannot be loaded or pre-buffering fails.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the prebuffer cannot be obtained (this indicates a bug in initialization).
+    pub fn preload_next_track<P: AsRef<Path>>(&self, track_path: P) -> Result<(), AudioError> {
+        let path = track_path.as_ref();
+
+        // Get or create prebuffer
+        let mut prebuffer_guard = self.prebuffer.write();
+        if prebuffer_guard.is_none() {
+            *prebuffer_guard = Some(Arc::new(Prebuffer::new()));
+        }
+
+        let prebuffer = prebuffer_guard.as_ref().unwrap().clone();
+        drop(prebuffer_guard);
+
+        // Preload the track
+        prebuffer.preload_track(path)?;
+
+        debug!("Prebuffer: Preloaded next track for gapless playback");
+
+        Ok(())
+    }
+
+    /// Checks if the next track is pre-buffered and ready for playback.
+    ///
+    /// # Returns
+    ///
+    /// `true` if a track is pre-buffered and ready, `false` otherwise.
+    #[must_use]
+    pub fn is_next_track_ready(&self) -> bool {
+        if let Some(prebuffer) = self.prebuffer.read().as_ref() {
+            prebuffer.is_ready()
+        } else {
+            false
+        }
     }
 }
 
