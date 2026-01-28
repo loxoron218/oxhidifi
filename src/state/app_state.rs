@@ -183,7 +183,7 @@ impl AppState {
     fn listen_to_audio_engine(&self) {
         if let Some(audio_engine) = self.audio_engine.upgrade() {
             let subscribers = self.subscribers.clone();
-            let mut receiver = audio_engine.subscribe_to_state_changes();
+            let receiver = audio_engine.subscribe_to_state_changes();
 
             MainContext::default().spawn_local(async move {
                 while let Ok(state) = receiver.recv().await {

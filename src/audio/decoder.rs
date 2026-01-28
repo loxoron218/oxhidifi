@@ -5,13 +5,17 @@
 
 use std::{
     fs::File,
-    io::{Error as StdError, ErrorKind::InvalidData},
+    io::{
+        Error as StdError,
+        ErrorKind::{InvalidData, UnexpectedEof},
+    },
     path::Path,
     thread::sleep,
     time::Duration,
 };
 
 use {
+    async_channel::Sender,
     num_traits::cast::ToPrimitive,
     rtrb::{Producer, PushError::Full},
     serde::{Deserialize, Serialize},
@@ -32,7 +36,7 @@ use {
         default::{get_codecs, get_probe},
     },
     thiserror::Error,
-    tokio::sync::broadcast::Sender,
+    tracing::warn,
 };
 
 use crate::audio::metadata::{TagReader, TechnicalMetadata};
@@ -226,6 +230,9 @@ impl AudioDecoder {
                     )));
                 }
                 Err(SymphoniaError::IoError(e)) => {
+                    if e.kind() == UnexpectedEof {
+                        return Ok(None);
+                    }
                     return Err(DecoderError::IoError(e));
                 }
                 Err(SymphoniaError::ResetRequired | SymphoniaError::DecodeError(_)) => {
@@ -489,8 +496,10 @@ impl AudioProducer {
         }
 
         // Notify that track has finished (normal end of file)
-        if let Some(ref tx) = self.track_finished_tx {
-            let _ = tx.send(());
+        if let Some(ref tx) = self.track_finished_tx
+            && let Err(e) = tx.try_send(())
+        {
+            warn!("AudioProducer: Failed to send track finished notification: {e}");
         }
 
         Ok(())

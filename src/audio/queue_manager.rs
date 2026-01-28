@@ -6,7 +6,6 @@ use {
     async_channel::{Receiver, Sender, unbounded},
     libadwaita::glib::MainContext,
     parking_lot::RwLock,
-    tokio::sync::broadcast::Receiver as TokioReceiver,
     tracing::debug,
 };
 
@@ -44,7 +43,7 @@ pub struct QueueManager {
     /// Sender for internal control messages.
     control_tx: Sender<QueueControlMessage>,
     /// Track completion event receiver from audio engine.
-    track_finished_rx: TokioReceiver<()>,
+    track_finished_rx: Receiver<()>,
 }
 
 impl QueueManager {
@@ -63,7 +62,7 @@ impl QueueManager {
     pub fn new(
         audio_engine: Arc<AudioEngine>,
         app_state: Arc<AppState>,
-        track_finished_rx: TokioReceiver<()>,
+        track_finished_rx: Receiver<()>,
     ) -> Self {
         let (control_tx, control_rx) = unbounded();
         let queue_manager = Self {
@@ -163,15 +162,16 @@ impl QueueManager {
 
     /// Starts the auto-advance listener for track completion.
     fn start_auto_advance(&self) {
-        let mut track_finished_rx = self.track_finished_rx.resubscribe();
+        let track_finished_rx = self.track_finished_rx.clone();
+        debug!("QueueManager: Set up track finished receiver for auto-advance");
 
         let queue = self.queue.clone();
         let app_state = self.app_state.clone();
         let audio_engine = self.audio_engine.clone();
 
         MainContext::default().spawn_local(async move {
-            while track_finished_rx.recv().await.is_ok() {
-                debug!("QueueManager: Track finished, auto-advancing");
+            while let Ok(()) = track_finished_rx.recv().await {
+                debug!("QueueManager: Track finished event received, auto-advancing");
                 Self::handle_next_track(&queue, &app_state, &audio_engine).await;
             }
         });

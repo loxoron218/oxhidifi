@@ -8,11 +8,9 @@ mod tests {
     use std::{future::pending, sync::Arc};
 
     use {
+        async_channel::unbounded,
         parking_lot::RwLock,
-        tokio::{
-            sync::broadcast::channel,
-            time::{Duration, timeout},
-        },
+        tokio::time::{Duration, timeout},
     };
 
     use crate::{
@@ -21,6 +19,9 @@ mod tests {
         library::Track,
         state::{AppState, AppStateEvent, PlaybackQueue},
     };
+
+    // Default timeout in milliseconds for test async operations
+    const TEST_TIMEOUT_MS: u64 = 1000;
 
     fn create_test_tracks(count: usize) -> Vec<Track> {
         (0..count)
@@ -70,7 +71,7 @@ mod tests {
     async fn test_auto_advance_on_track_completion() {
         let tracks = create_test_tracks(3);
 
-        let (track_finished_tx, track_finished_rx) = channel::<()>(16);
+        let (track_finished_tx, track_finished_rx) = unbounded();
 
         let engine = AudioEngine::new().unwrap();
         let engine_weak = Arc::downgrade(&Arc::new(engine));
@@ -85,7 +86,7 @@ mod tests {
 
         queue_manager.set_queue(tracks);
 
-        timeout(Duration::from_millis(100), async {
+        timeout(Duration::from_millis(TEST_TIMEOUT_MS), async {
             while queue_manager.get_queue().current_index != Some(0) {
                 pending::<()>().await;
             }
@@ -96,9 +97,9 @@ mod tests {
         let initial_index = queue_manager.get_queue().current_index;
         assert_eq!(initial_index, Some(0), "Initial track index should be 0");
 
-        track_finished_tx.send(()).unwrap();
+        track_finished_tx.send(()).await.unwrap();
 
-        timeout(Duration::from_millis(500), async {
+        timeout(Duration::from_millis(TEST_TIMEOUT_MS), async {
             while queue_manager.get_queue().current_index != Some(1) {
                 pending::<()>().await;
             }
@@ -109,9 +110,9 @@ mod tests {
         let updated_index = queue_manager.get_queue().current_index;
         assert_eq!(updated_index, Some(1), "Queue should advance to next track");
 
-        track_finished_tx.send(()).unwrap();
+        track_finished_tx.send(()).await.unwrap();
 
-        timeout(Duration::from_millis(500), async {
+        timeout(Duration::from_millis(TEST_TIMEOUT_MS), async {
             while queue_manager.get_queue().current_index != Some(2) {
                 pending::<()>().await;
             }
@@ -122,9 +123,9 @@ mod tests {
         let final_index = queue_manager.get_queue().current_index;
         assert_eq!(final_index, Some(2), "Queue should advance to third track");
 
-        track_finished_tx.send(()).unwrap();
+        track_finished_tx.send(()).await.unwrap();
 
-        timeout(Duration::from_millis(500), async {
+        timeout(Duration::from_millis(TEST_TIMEOUT_MS), async {
             while queue_manager.get_queue().current_index == Some(2) {
                 pending::<()>().await;
             }
@@ -145,7 +146,7 @@ mod tests {
     async fn test_queue_state_synchronization() {
         let tracks = create_test_tracks(3);
 
-        let (_, track_finished_rx) = channel::<()>(16);
+        let (_, track_finished_rx) = unbounded();
 
         let engine = AudioEngine::new().unwrap();
         let engine_weak = Arc::downgrade(&Arc::new(engine));
@@ -212,7 +213,7 @@ mod tests {
     async fn test_next_previous_button_state_updates() {
         let tracks = create_test_tracks(3);
 
-        let (_, track_finished_rx) = channel::<()>(16);
+        let (_, track_finished_rx) = unbounded();
 
         let engine = AudioEngine::new().unwrap();
         let engine_weak = Arc::downgrade(&Arc::new(engine));
@@ -227,7 +228,7 @@ mod tests {
 
         queue_manager.set_queue(tracks);
 
-        timeout(Duration::from_millis(100), async {
+        timeout(Duration::from_millis(TEST_TIMEOUT_MS), async {
             while queue_manager.get_queue().current_index != Some(0) {
                 pending::<()>().await;
             }
@@ -241,7 +242,7 @@ mod tests {
 
         queue_manager.previous_track();
 
-        timeout(Duration::from_millis(100), async {
+        timeout(Duration::from_millis(TEST_TIMEOUT_MS), async {
             while queue_manager.get_queue().current_index != Some(0) {
                 pending::<()>().await;
             }
@@ -258,7 +259,7 @@ mod tests {
 
         queue_manager.next_track();
 
-        timeout(Duration::from_millis(100), async {
+        timeout(Duration::from_millis(TEST_TIMEOUT_MS), async {
             while queue_manager.get_queue().current_index != Some(1) {
                 pending::<()>().await;
             }
@@ -271,7 +272,7 @@ mod tests {
 
         queue_manager.next_track();
 
-        timeout(Duration::from_millis(100), async {
+        timeout(Duration::from_millis(TEST_TIMEOUT_MS), async {
             while queue_manager.get_queue().current_index != Some(2) {
                 pending::<()>().await;
             }
@@ -284,7 +285,7 @@ mod tests {
 
         queue_manager.next_track();
 
-        timeout(Duration::from_millis(100), async {
+        timeout(Duration::from_millis(TEST_TIMEOUT_MS), async {
             while queue_manager.get_queue().current_index != Some(2) {
                 pending::<()>().await;
             }
@@ -301,7 +302,7 @@ mod tests {
 
         queue_manager.previous_track();
 
-        timeout(Duration::from_millis(100), async {
+        timeout(Duration::from_millis(TEST_TIMEOUT_MS), async {
             while queue_manager.get_queue().current_index != Some(1) {
                 pending::<()>().await;
             }

@@ -4,6 +4,7 @@
 //! decoder, output, and playback state management for high-fidelity playback.
 
 use std::{
+    mem::drop,
     path::Path,
     sync::{
         Arc,
@@ -15,17 +16,18 @@ use std::{
 use {
     async_channel::{Receiver, Sender, unbounded},
     cpal::Stream,
-    parking_lot::RwLock,
+    libadwaita::glib::MainContext,
+    parking_lot::{Mutex, RwLock},
     rtrb::RingBuffer,
     serde::{Deserialize, Serialize},
     thiserror::Error,
     tokio::{
         runtime::Builder,
-        sync::broadcast::{Receiver as TokioReceiver, Sender as TokioSender, channel},
+        select,
         task::spawn_blocking,
         time::{Duration, timeout},
     },
-    tracing::{debug, error},
+    tracing::{debug, error, warn},
 };
 
 use crate::audio::{
@@ -87,6 +89,10 @@ pub enum AudioError {
 ///
 /// The `AudioEngine` orchestrates the entire audio playback pipeline,
 /// managing the lifecycle of decoders, outputs, and playback state.
+///
+/// All fields are wrapped in `Arc<>` or implement `Clone` directly,
+/// enabling safe cloning for concurrent access across the application.
+#[derive(Clone)]
 pub struct AudioEngine {
     /// Current playback state.
     state: Arc<RwLock<PlaybackState>>,
@@ -94,10 +100,14 @@ pub struct AudioEngine {
     current_track: Arc<RwLock<Option<TrackInfo>>>,
     /// Audio output configuration.
     output_config: OutputConfig,
-    /// Broadcast channel for state change notifications.
-    state_tx: TokioSender<PlaybackState>,
-    /// Broadcast channel for track completion notifications.
-    track_finished_tx: TokioSender<()>,
+    /// Sender for track completion notifications.
+    track_finished_tx: Sender<()>,
+    /// Subscribers for track completion notifications.
+    track_completion_subscribers: Arc<Mutex<Vec<Sender<()>>>>,
+    /// Sender for state change notifications.
+    state_tx: Sender<PlaybackState>,
+    /// Subscribers for state change notifications.
+    state_subscribers: Arc<Mutex<Vec<Sender<PlaybackState>>>>,
     /// Receiver for internal control messages.
     control_rx: Receiver<ControlMessage>,
     /// Sender for internal control messages.
@@ -106,22 +116,10 @@ pub struct AudioEngine {
     stream_handle: Arc<RwLock<Option<StreamHandle>>>,
     /// Thread-safe playback position in milliseconds.
     current_position: Arc<AtomicU64>,
-}
-
-impl Clone for AudioEngine {
-    fn clone(&self) -> Self {
-        Self {
-            state: Arc::clone(&self.state),
-            current_track: Arc::clone(&self.current_track),
-            output_config: self.output_config.clone(),
-            state_tx: self.state_tx.clone(),
-            track_finished_tx: self.track_finished_tx.clone(),
-            control_rx: self.control_rx.clone(),
-            control_tx: self.control_tx.clone(),
-            stream_handle: Arc::clone(&self.stream_handle),
-            current_position: Arc::clone(&self.current_position),
-        }
-    }
+    /// Shutdown sender for track completion forwarding task.
+    track_completion_shutdown_tx: Arc<Mutex<Option<Sender<()>>>>,
+    /// Shutdown sender for state change forwarding task.
+    state_change_shutdown_tx: Arc<Mutex<Option<Sender<()>>>>,
 }
 
 /// Internal control messages for the audio engine.
@@ -160,20 +158,79 @@ impl AudioEngine {
     ///
     /// Returns `AudioError` if initialization fails.
     pub fn new() -> Result<Self, AudioError> {
-        let (state_tx, _) = channel(16);
-        let (track_finished_tx, _) = channel(16);
+        let (track_finished_tx, track_finished_rx) = unbounded::<()>();
+        let (state_tx, state_rx) = unbounded::<PlaybackState>();
         let (control_tx, control_rx) = unbounded();
+
+        let (track_completion_shutdown_tx, track_completion_shutdown_rx) = unbounded::<()>();
+        let (state_change_shutdown_tx, state_change_shutdown_rx) = unbounded::<()>();
+
+        let track_completion_subscribers: Arc<Mutex<Vec<Sender<()>>>> =
+            Arc::new(Mutex::new(Vec::new()));
+        let state_subscribers: Arc<Mutex<Vec<Sender<PlaybackState>>>> =
+            Arc::new(Mutex::new(Vec::new()));
+
+        // Start forwarding task for track completion notifications
+        let track_completion_subscribers_clone = Arc::clone(&track_completion_subscribers);
+        MainContext::default().spawn_local(async move {
+            loop {
+                select! {
+                    result = track_finished_rx.recv() => {
+                        if result.is_err() {
+                            debug!("Track completion channel closed, exiting forwarding task");
+                            break;
+                        }
+                        let subscribers = track_completion_subscribers_clone.lock();
+                        for tx in subscribers.iter() {
+                            let _ = tx.try_send(());
+                        }
+                    }
+                    _ = track_completion_shutdown_rx.recv() => {
+                        debug!("Track completion forwarding task received shutdown signal");
+                        break;
+                    }
+                }
+            }
+        });
+
+        // Start forwarding task for state change notifications
+        let state_subscribers_clone = Arc::clone(&state_subscribers);
+        MainContext::default().spawn_local(async move {
+            loop {
+                select! {
+                    result = state_rx.recv() => {
+                        if let Ok(state) = result {
+                            let subscribers = state_subscribers_clone.lock();
+                            for tx in subscribers.iter() {
+                                let _ = tx.try_send(state.clone());
+                            }
+                        } else {
+                            debug!("State change channel closed, exiting forwarding task");
+                            break;
+                        }
+                    }
+                    _ = state_change_shutdown_rx.recv() => {
+                        debug!("State change forwarding task received shutdown signal");
+                        break;
+                    }
+                }
+            }
+        });
 
         let engine = AudioEngine {
             state: Arc::new(RwLock::new(PlaybackState::Stopped)),
             current_track: Arc::new(RwLock::new(None)),
             output_config: OutputConfig::default(),
-            state_tx,
             track_finished_tx,
+            track_completion_subscribers,
+            state_tx,
+            state_subscribers,
             control_rx,
             control_tx,
             stream_handle: Arc::new(RwLock::new(None)),
             current_position: Arc::new(AtomicU64::new(0)),
+            track_completion_shutdown_tx: Arc::new(Mutex::new(Some(track_completion_shutdown_tx))),
+            state_change_shutdown_tx: Arc::new(Mutex::new(Some(state_change_shutdown_tx))),
         };
 
         // Start the control loop in a background thread
@@ -388,20 +445,35 @@ impl AudioEngine {
     ///
     /// # Returns
     ///
-    /// A `broadcast::Receiver` that receives `PlaybackState` updates.
+    /// An `async_channel::Receiver<PlaybackState>` that receives state updates,
+    /// including the current state immediately upon subscription.
     #[must_use]
-    pub fn subscribe_to_state_changes(&self) -> TokioReceiver<PlaybackState> {
-        self.state_tx.subscribe()
+    pub fn subscribe_to_state_changes(&self) -> Receiver<PlaybackState> {
+        let (tx, rx) = unbounded();
+
+        // Send current state immediately
+        let current_state = self.state.read().clone();
+        let _ = tx.try_send(current_state);
+
+        // Add to subscribers list
+        self.state_subscribers.lock().push(tx);
+
+        rx
     }
 
     /// Subscribes to track completion events.
     ///
     /// # Returns
     ///
-    /// A `broadcast::Receiver` that receives notification when a track finishes.
+    /// A `Receiver` that receives notification when a track finishes.
     #[must_use]
-    pub fn subscribe_to_track_completion(&self) -> TokioReceiver<()> {
-        self.track_finished_tx.subscribe()
+    pub fn subscribe_to_track_completion(&self) -> Receiver<()> {
+        let (tx, rx) = unbounded();
+
+        // Add to subscribers list
+        self.track_completion_subscribers.lock().push(tx);
+
+        rx
     }
 
     /// Main control loop that processes commands and manages playback.
@@ -629,6 +701,9 @@ impl AudioEngine {
                 .await
                 {
                     Ok(Ok(Ok(Ok(())))) => debug!("Decoder thread stopped successfully"),
+                    Ok(Ok(Ok(Err(DecoderError::IoError(e))))) => {
+                        error!("Decoder thread stopped with IO error: {:?}", e);
+                    }
                     Ok(Ok(Ok(Err(e)))) => error!("Decoder thread stopped with error: {:?}", e),
                     Ok(Ok(Err(e))) => error!("Decoder thread panicked: {:?}", e),
                     Ok(Err(e)) => error!("Failed to spawn blocking task: {:?}", e),
@@ -641,7 +716,26 @@ impl AudioEngine {
     /// Notifies subscribers of state changes.
     fn notify_state_change(&self) {
         let state = self.state.read().clone();
-        let _ = self.state_tx.send(state);
+        if let Err(e) = self.state_tx.try_send(state) {
+            warn!("AudioEngine: Failed to send state change notification: {e}");
+        }
+    }
+
+    /// Shuts down the audio engine and terminates all background tasks.
+    ///
+    /// This method stops the forwarding tasks for track completion and state change
+    /// notifications by sending shutdown signals.
+    pub fn shutdown(&self) {
+        debug!("Shutting down audio engine");
+
+        // Send shutdown signals to forwarding tasks by dropping the shutdown senders
+        drop(self.track_completion_shutdown_tx.lock().take());
+        drop(self.state_change_shutdown_tx.lock().take());
+
+        // Close the main channels to stop any remaining operations
+        drop(self.track_finished_tx.clone());
+        drop(self.state_tx.clone());
+        drop(self.control_tx.clone());
     }
 }
 
