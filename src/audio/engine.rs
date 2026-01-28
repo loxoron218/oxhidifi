@@ -147,6 +147,41 @@ struct StreamHandle {
     resampling_consumer: Option<ResamplingAudioConsumer>,
 }
 
+/// Macro to spawn forwarding tasks for notification channels.
+///
+/// This macro eliminates boilerplate for spawning async tasks that:
+/// 1. Receive messages from a source channel
+/// 2. Forward them to all subscribers
+/// 3. Handle shutdown signals gracefully
+macro_rules! spawn_forwarding_task {
+    ($subscribers:expr, $rx:expr, $shutdown_rx:expr, $task_name:expr) => {{
+        let subscribers_clone = Arc::clone(&$subscribers);
+        MainContext::default().spawn_local(async move {
+            loop {
+                select! {
+                    result = $rx.recv() => {
+                        match result {
+                            Ok(msg) => {
+                                for tx in subscribers_clone.lock().iter() {
+                                    let _ = tx.try_send(msg.clone());
+                                }
+                            }
+                            Err(_) => {
+                                debug!("{} channel closed, exiting forwarding task", $task_name);
+                                break;
+                            }
+                        }
+                    }
+                    _ = $shutdown_rx.recv() => {
+                        debug!("{} forwarding task received shutdown signal", $task_name);
+                        break;
+                    }
+                }
+            }
+        });
+    }};
+}
+
 impl AudioEngine {
     /// Creates a new audio engine.
     ///
@@ -171,51 +206,20 @@ impl AudioEngine {
             Arc::new(Mutex::new(Vec::new()));
 
         // Start forwarding task for track completion notifications
-        let track_completion_subscribers_clone = Arc::clone(&track_completion_subscribers);
-        MainContext::default().spawn_local(async move {
-            loop {
-                select! {
-                    result = track_finished_rx.recv() => {
-                        if result.is_err() {
-                            debug!("Track completion channel closed, exiting forwarding task");
-                            break;
-                        }
-                        let subscribers = track_completion_subscribers_clone.lock();
-                        for tx in subscribers.iter() {
-                            let _ = tx.try_send(());
-                        }
-                    }
-                    _ = track_completion_shutdown_rx.recv() => {
-                        debug!("Track completion forwarding task received shutdown signal");
-                        break;
-                    }
-                }
-            }
-        });
+        spawn_forwarding_task!(
+            track_completion_subscribers,
+            track_finished_rx,
+            track_completion_shutdown_rx,
+            "Track completion"
+        );
 
         // Start forwarding task for state change notifications
-        let state_subscribers_clone = Arc::clone(&state_subscribers);
-        MainContext::default().spawn_local(async move {
-            loop {
-                select! {
-                    result = state_rx.recv() => {
-                        if let Ok(state) = result {
-                            let subscribers = state_subscribers_clone.lock();
-                            for tx in subscribers.iter() {
-                                let _ = tx.try_send(state.clone());
-                            }
-                        } else {
-                            debug!("State change channel closed, exiting forwarding task");
-                            break;
-                        }
-                    }
-                    _ = state_change_shutdown_rx.recv() => {
-                        debug!("State change forwarding task received shutdown signal");
-                        break;
-                    }
-                }
-            }
-        });
+        spawn_forwarding_task!(
+            state_subscribers,
+            state_rx,
+            state_change_shutdown_rx,
+            "State change"
+        );
 
         let engine = AudioEngine {
             state: Arc::new(RwLock::new(PlaybackState::Stopped)),
