@@ -32,6 +32,7 @@ use {
         default::{get_codecs, get_probe},
     },
     thiserror::Error,
+    tokio::sync::broadcast::Sender,
 };
 
 use crate::audio::metadata::{TagReader, TechnicalMetadata};
@@ -291,12 +292,14 @@ impl AudioDecoder {
 /// Audio producer that feeds decoded samples into a ring buffer.
 ///
 /// This struct wraps an `AudioDecoder` and continuously decodes audio,
-/// writing the samples to the provided ring buffer producer.
+/// writing samples to the provided ring buffer producer.
 pub struct AudioProducer {
     /// The audio decoder that provides raw audio samples.
     decoder: AudioDecoder,
     /// Ring buffer producer for writing decoded samples.
     producer: Producer<f32>,
+    /// Sender for track completion notifications.
+    track_finished_tx: Option<Sender<()>>,
 }
 
 impl AudioProducer {
@@ -306,8 +309,17 @@ impl AudioProducer {
     ///
     /// * `decoder` - The audio decoder to use.
     /// * `producer` - The ring buffer producer to write samples to.
-    pub fn new(decoder: AudioDecoder, producer: Producer<f32>) -> Self {
-        Self { decoder, producer }
+    /// * `track_finished_tx` - Optional sender for track completion notifications.
+    pub fn new(
+        decoder: AudioDecoder,
+        producer: Producer<f32>,
+        track_finished_tx: Option<Sender<()>>,
+    ) -> Self {
+        Self {
+            decoder,
+            producer,
+            track_finished_tx,
+        }
     }
 
     /// Runs the audio production loop.
@@ -475,6 +487,12 @@ impl AudioProducer {
                 }
             }
         }
+
+        // Notify that track has finished (normal end of file)
+        if let Some(ref tx) = self.track_finished_tx {
+            let _ = tx.send(());
+        }
+
         Ok(())
     }
 }

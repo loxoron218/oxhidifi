@@ -25,14 +25,18 @@ use {
 };
 
 use crate::{
-    audio::engine::{
-        AudioEngine,
-        PlaybackState::{self, Buffering, Paused, Playing, Ready, Stopped},
-        TrackInfo,
+    audio::{
+        engine::{
+            AudioEngine,
+            PlaybackState::{self, Buffering, Paused, Playing, Ready, Stopped},
+            TrackInfo,
+        },
+        queue_manager::QueueManager,
     },
     state::{
         AppState,
-        AppStateEvent::{CurrentTrackChanged, PlaybackStateChanged},
+        AppStateEvent::{CurrentTrackChanged, PlaybackStateChanged, QueueChanged},
+        PlaybackQueue,
     },
     ui::components::hifi_metadata::HiFiMetadata,
 };
@@ -101,6 +105,8 @@ pub struct PlayerBar {
     pub app_state: Arc<AppState>,
     /// Audio engine reference.
     pub audio_engine: Arc<AudioEngine>,
+    /// Queue manager reference.
+    pub queue_manager: Option<Arc<QueueManager>>,
 }
 
 impl PlayerBar {
@@ -110,12 +116,17 @@ impl PlayerBar {
     ///
     /// * `app_state` - Application state reference for reactive updates
     /// * `audio_engine` - Audio engine reference for playback control
+    /// * `queue_manager` - Optional queue manager reference for queue navigation
     ///
     /// # Returns
     ///
     /// A new `PlayerBar` instance.
     #[must_use]
-    pub fn new(app_state: &Arc<AppState>, audio_engine: &Arc<AudioEngine>) -> Self {
+    pub fn new(
+        app_state: &Arc<AppState>,
+        audio_engine: &Arc<AudioEngine>,
+        queue_manager: Option<&Arc<QueueManager>>,
+    ) -> Self {
         let widget = Box::builder()
             .orientation(Horizontal)
             .spacing(12)
@@ -305,6 +316,7 @@ impl PlayerBar {
             routing_indicator,
             app_state: app_state.clone(),
             audio_engine: audio_engine.clone(),
+            queue_manager: queue_manager.cloned(),
         };
 
         // Connect UI controls to audio engine
@@ -325,6 +337,7 @@ impl PlayerBar {
         let progress_scale = self.progress_scale.clone();
         let volume_scale = self.volume_scale.clone();
         let mute_button = self.mute_button.clone();
+        let queue_manager = self.queue_manager.clone();
 
         // Play/Pause button
         let audio_engine_for_play = audio_engine.clone();
@@ -361,15 +374,19 @@ impl PlayerBar {
         });
 
         // Previous button
+        let prev_queue_manager = queue_manager.clone();
         prev_button.connect_clicked(move |_| {
-            // Implementation would handle previous track logic
-            debug!("Previous track");
+            if let Some(ref qm) = prev_queue_manager {
+                qm.previous_track();
+            }
         });
 
         // Next button
+        let next_queue_manager = queue_manager.clone();
         next_button.connect_clicked(move |_| {
-            // Implementation would handle next track logic
-            debug!("Next track");
+            if let Some(ref qm) = next_queue_manager {
+                qm.next_track();
+            }
         });
 
         // Progress scale seek
@@ -438,6 +455,10 @@ impl PlayerBar {
                         PlaybackStateChanged(state) => {
                             debug!("PlayerBar: Playback state changed to {:?}", state);
                             Self::update_playback_state(&state, &play_button);
+                        }
+                        QueueChanged(queue) => {
+                            debug!("PlayerBar: Queue changed - {} tracks", queue.tracks.len());
+                            Self::update_queue_buttons(&prev_button, &next_button, &queue);
                         }
                         _ => {}
                     }
@@ -537,6 +558,24 @@ impl PlayerBar {
                 play_button.set_tooltip_text(Some("Buffering..."));
             }
         }
+    }
+
+    /// Updates prev/next button sensitivity based on queue state.
+    fn update_queue_buttons(prev_button: &Button, next_button: &Button, queue: &PlaybackQueue) {
+        if queue.tracks.is_empty() {
+            prev_button.set_sensitive(false);
+            next_button.set_sensitive(false);
+            return;
+        }
+
+        let current_index = queue.current_index.unwrap_or(0);
+        let total_tracks = queue.tracks.len();
+
+        // Enable prev button if not at beginning
+        prev_button.set_sensitive(current_index > 0);
+
+        // Enable next button if not at end
+        next_button.set_sensitive(current_index + 1 < total_tracks);
     }
 }
 

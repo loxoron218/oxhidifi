@@ -138,8 +138,15 @@ mod view_integration_tests {
 
         // Test that views support keyboard navigation
         let app_state_arc = Arc::new(app_state.clone());
-        let _album_grid =
-            AlbumGridView::new(Some(&app_state_arc), None, None, Vec::new(), true, false);
+        let _album_grid = AlbumGridView::new(
+            Some(&app_state_arc),
+            None,
+            None,
+            None,
+            Vec::new(),
+            true,
+            false,
+        );
 
         let artist_grid = ArtistGridView::new(Some(Arc::new(app_state.clone())), Vec::new(), false);
         assert_eq!(artist_grid.flow_box.accessible_role(), Grid);

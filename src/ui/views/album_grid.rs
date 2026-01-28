@@ -27,6 +27,7 @@ use crate::{
         decoder::AudioFormat,
         engine::{AudioEngine, PlaybackState::Playing, TrackInfo},
         metadata::TagReader,
+        queue_manager::QueueManager,
     },
     library::{LibraryDatabase, models::Album},
     state::{
@@ -55,6 +56,8 @@ pub struct AlbumGridViewBuilder {
     library_db: Option<Arc<LibraryDatabase>>,
     /// Optional audio engine reference for playback.
     audio_engine: Option<Arc<AudioEngine>>,
+    /// Optional queue manager reference for queue operations.
+    queue_manager: Option<Arc<QueueManager>>,
     /// Vector of albums to display in the grid.
     albums: Vec<Album>,
     /// Whether to show DR badges on album covers.
@@ -106,6 +109,21 @@ impl AlbumGridViewBuilder {
     #[must_use]
     pub fn audio_engine(mut self, audio_engine: Arc<AudioEngine>) -> Self {
         self.audio_engine = Some(audio_engine);
+        self
+    }
+
+    /// Sets the queue manager reference for queue operations.
+    ///
+    /// # Arguments
+    ///
+    /// * `queue_manager` - Queue manager reference
+    ///
+    /// # Returns
+    ///
+    /// The builder instance for method chaining.
+    #[must_use]
+    pub fn queue_manager(mut self, queue_manager: Arc<QueueManager>) -> Self {
+        self.queue_manager = Some(queue_manager);
         self
     }
 
@@ -165,6 +183,7 @@ impl AlbumGridViewBuilder {
             self.app_state.as_ref(),
             self.library_db.as_ref(),
             self.audio_engine.as_ref(),
+            self.queue_manager.as_ref(),
             self.albums,
             self.show_dr_badges,
             self.compact,
@@ -188,6 +207,8 @@ pub struct AlbumGridView {
     pub library_db: Option<Arc<LibraryDatabase>>,
     /// Audio engine reference for playback.
     pub audio_engine: Option<Arc<AudioEngine>>,
+    /// Queue manager reference for queue operations.
+    pub queue_manager: Option<Arc<QueueManager>>,
     /// Current albums being displayed.
     pub albums: Vec<Album>,
     /// Configuration flags.
@@ -221,6 +242,7 @@ impl AlbumGridView {
     /// * `app_state` - Optional application state reference for reactive updates
     /// * `library_db` - Optional library database reference for fetching tracks
     /// * `audio_engine` - Optional audio engine reference for playback
+    /// * `queue_manager` - Optional queue manager reference for queue operations
     /// * `albums` - Initial albums to display
     /// * `show_dr_badges` - Whether to show DR badges on album covers
     /// * `compact` - Whether to use compact layout
@@ -237,6 +259,7 @@ impl AlbumGridView {
         app_state: Option<&Arc<AppState>>,
         library_db: Option<&Arc<LibraryDatabase>>,
         audio_engine: Option<&Arc<AudioEngine>>,
+        queue_manager: Option<&Arc<QueueManager>>,
         albums: Vec<Album>,
         show_dr_badges: bool,
         compact: bool,
@@ -296,6 +319,7 @@ impl AlbumGridView {
             app_state: app_state.cloned(),
             library_db: library_db.cloned(),
             audio_engine: audio_engine.cloned(),
+            queue_manager: queue_manager.cloned(),
             albums: Vec::new(),
             config: config.clone(),
             empty_state,
@@ -540,23 +564,32 @@ impl AlbumGridView {
                 let app_state = self.app_state.clone();
                 let library_db = self.library_db.clone();
                 let audio_engine = self.audio_engine.clone();
+                let queue_manager = self.queue_manager.clone();
                 let album_clone = album.clone();
                 move || {
-                    // Handle play button click - queue album for playback
-                    if let (Some(app_state), Some(library_db), Some(audio_engine)) = (
+                    if let (
+                        Some(app_state),
+                        Some(library_db),
+                        Some(audio_engine),
+                        Some(queue_manager),
+                    ) = (
                         app_state.as_ref(),
                         library_db.as_ref(),
                         audio_engine.as_ref(),
+                        queue_manager.as_ref(),
                     ) {
                         let album_id = album_clone.id;
                         let app_state_clone = app_state.clone();
                         let library_db_clone = library_db.clone();
                         let audio_engine_clone = audio_engine.clone();
+                        let queue_manager_clone = queue_manager.clone();
 
                         MainContext::default().spawn_local(async move {
                             if let Ok(tracks) = library_db_clone.get_tracks_by_album(album_id).await
                                 && !tracks.is_empty()
                             {
+                                queue_manager_clone.set_queue(tracks.clone());
+
                                 let first_track = &tracks[0];
                                 let track_path = &first_track.path;
 
@@ -723,7 +756,7 @@ pub enum AlbumSortCriteria {
 
 impl Default for AlbumGridView {
     fn default() -> Self {
-        Self::new(None, None, None, Vec::new(), true, false)
+        Self::new(None, None, None, None, Vec::new(), true, false)
     }
 }
 

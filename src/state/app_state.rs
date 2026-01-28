@@ -24,6 +24,15 @@ use crate::{
     state::zoom_manager::ZoomManager,
 };
 
+/// Playback queue state.
+#[derive(Debug, Clone, Default)]
+pub struct PlaybackQueue {
+    /// Tracks in the queue.
+    pub tracks: Vec<Track>,
+    /// Current track index (if any).
+    pub current_index: Option<usize>,
+}
+
 /// Central state container with thread-safe access.
 ///
 /// The `AppState` holds all global application state and provides
@@ -131,6 +140,8 @@ pub enum AppStateEvent {
     MetadataOverlaysChanged { show_overlays: bool },
     /// Year display mode setting changed.
     YearDisplayModeChanged { mode: String },
+    /// Playback queue changed.
+    QueueChanged(PlaybackQueue),
 }
 
 impl AppState {
@@ -490,6 +501,20 @@ impl AppState {
 
         // Broadcast settings change event
         self.broadcast_event(&AppStateEvent::YearDisplayModeChanged { mode });
+    }
+
+    /// Updates the playback queue and notifies subscribers.
+    ///
+    /// # Arguments
+    ///
+    /// * `queue` - New queue state
+    pub fn update_queue(&self, queue: PlaybackQueue) {
+        debug!(
+            "AppState: Updating queue - {} tracks, current index: {:?}",
+            queue.tracks.len(),
+            queue.current_index
+        );
+        self.broadcast_event(&AppStateEvent::QueueChanged(queue));
     }
 }
 

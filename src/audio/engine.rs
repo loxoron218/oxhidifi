@@ -96,6 +96,8 @@ pub struct AudioEngine {
     output_config: OutputConfig,
     /// Broadcast channel for state change notifications.
     state_tx: TokioSender<PlaybackState>,
+    /// Broadcast channel for track completion notifications.
+    track_finished_tx: TokioSender<()>,
     /// Receiver for internal control messages.
     control_rx: Receiver<ControlMessage>,
     /// Sender for internal control messages.
@@ -113,6 +115,7 @@ impl Clone for AudioEngine {
             current_track: Arc::clone(&self.current_track),
             output_config: self.output_config.clone(),
             state_tx: self.state_tx.clone(),
+            track_finished_tx: self.track_finished_tx.clone(),
             control_rx: self.control_rx.clone(),
             control_tx: self.control_tx.clone(),
             stream_handle: Arc::clone(&self.stream_handle),
@@ -158,6 +161,7 @@ impl AudioEngine {
     /// Returns `AudioError` if initialization fails.
     pub fn new() -> Result<Self, AudioError> {
         let (state_tx, _) = channel(16);
+        let (track_finished_tx, _) = channel(16);
         let (control_tx, control_rx) = unbounded();
 
         let engine = AudioEngine {
@@ -165,6 +169,7 @@ impl AudioEngine {
             current_track: Arc::new(ParkingRwLock::new(None)),
             output_config: OutputConfig::default(),
             state_tx,
+            track_finished_tx,
             control_rx,
             control_tx,
             stream_handle: Arc::new(RwLock::new(None)),
@@ -389,6 +394,16 @@ impl AudioEngine {
         self.state_tx.subscribe()
     }
 
+    /// Subscribes to track completion events.
+    ///
+    /// # Returns
+    ///
+    /// A `broadcast::Receiver` that receives notification when a track finishes.
+    #[must_use]
+    pub fn subscribe_to_track_completion(&self) -> TokioReceiver<()> {
+        self.track_finished_tx.subscribe()
+    }
+
     /// Main control loop that processes commands and manages playback.
     fn control_loop(&self) {
         Builder::new_current_thread()
@@ -478,7 +493,8 @@ impl AudioEngine {
         )?;
 
         // Create audio producer
-        let producer = AudioProducer::new(decoder, producer);
+        let track_finished_tx = self.track_finished_tx.clone();
+        let producer = AudioProducer::new(decoder, producer, Some(track_finished_tx));
 
         // Start decoder thread
         let decoder_handle = spawn(move || producer.run());
@@ -566,7 +582,8 @@ impl AudioEngine {
                 &signal_spec,
                 self.current_position.clone(),
             )?;
-            let producer = AudioProducer::new(decoder, producer);
+            let track_finished_tx = self.track_finished_tx.clone();
+            let producer = AudioProducer::new(decoder, producer, Some(track_finished_tx));
 
             let decoder_handle = spawn(move || producer.run());
 

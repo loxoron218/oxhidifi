@@ -12,4 +12,6 @@ pub mod engine;
 pub mod format_detector;
 pub mod metadata;
 pub mod output;
+pub mod queue_manager;
+pub mod queue_manager_tests;
 pub mod resampler;

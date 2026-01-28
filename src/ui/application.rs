@@ -28,9 +28,12 @@ use {
 };
 
 use crate::{
-    audio::engine::{
-        AudioEngine,
-        PlaybackState::{Buffering, Paused, Playing, Ready, Stopped},
+    audio::{
+        engine::{
+            AudioEngine,
+            PlaybackState::{Buffering, Paused, Playing, Ready, Stopped},
+        },
+        queue_manager::QueueManager,
     },
     config::SettingsManager,
     library::{
@@ -74,6 +77,8 @@ pub struct OxhidifiApplication {
     pub library_scanner: Option<Arc<RwLock<LibraryScanner>>>,
     /// Application state manager.
     pub app_state: Arc<AppState>,
+    /// Queue manager for playback queue operations.
+    pub queue_manager: Arc<QueueManager>,
     /// User settings manager.
     pub settings: Arc<SettingsManager>,
 }
@@ -102,6 +107,10 @@ impl OxhidifiApplication {
         let audio_engine =
             AudioEngine::new().map_err(|e| format!("Failed to initialize audio engine: {e}"))?;
 
+        // Initialize queue manager
+        let audio_engine_arc = Arc::new(audio_engine.clone());
+        let track_finished_rx = audio_engine.subscribe_to_track_completion();
+
         // Initialize library database
         let library_db_raw = LibraryDatabase::new()
             .await
@@ -128,10 +137,18 @@ impl OxhidifiApplication {
 
         // Create application state
         let app_state = AppState::new(
-            Arc::downgrade(&Arc::new(audio_engine.clone())),
+            Arc::downgrade(&audio_engine_arc),
             library_scanner.clone(),
             Arc::new(RwLock::new((*settings_manager_shared).clone())),
         );
+
+        // Initialize queue manager
+        let queue_manager = QueueManager::new(
+            audio_engine_arc.clone(),
+            Arc::new(app_state.clone()),
+            track_finished_rx,
+        );
+        let queue_manager = Arc::new(queue_manager);
 
         // Always load existing library data from database on startup
         // This ensures library is displayed even if no directories are currently configured
@@ -164,10 +181,11 @@ impl OxhidifiApplication {
 
         Ok(OxhidifiApplication {
             app,
-            audio_engine: Arc::new(audio_engine),
+            audio_engine: audio_engine_arc,
             library_db,
             library_scanner,
             app_state: Arc::new(app_state),
+            queue_manager,
             settings: settings_manager_shared.clone(),
         })
     }
@@ -182,6 +200,7 @@ impl OxhidifiApplication {
             let library_db_clone = self.library_db.clone();
             let app_state_clone = self.app_state.clone();
             let settings_manager_clone = self.settings.clone();
+            let queue_manager_clone = self.queue_manager.clone();
 
             move |_| {
                 build_ui(
@@ -190,6 +209,7 @@ impl OxhidifiApplication {
                     &library_db_clone,
                     &app_state_clone,
                     &settings_manager_clone,
+                    &queue_manager_clone,
                 );
 
                 // Subscribe to library scanner events if active
@@ -248,6 +268,7 @@ fn build_ui(
     library_db: &Arc<LibraryDatabase>,
     app_state: &Arc<AppState>,
     settings_manager: &Arc<SettingsManager>,
+    queue_manager: &Arc<QueueManager>,
 ) {
     // Create the main window
     let window = ApplicationWindow::builder()
@@ -270,6 +291,7 @@ fn build_ui(
         settings_manager,
         library_db,
         audio_engine,
+        queue_manager,
         &window,
     );
 
@@ -370,7 +392,8 @@ fn build_ui(
     });
 
     // Create player bar
-    let (player_bar_widget, _player_bar) = create_player_bar(app_state, audio_engine);
+    let (player_bar_widget, _player_bar) =
+        create_player_bar(app_state, audio_engine, queue_manager);
 
     // Subscribe to playback state changes to show/hide player bar
     let player_bar_widget_clone = player_bar_widget.clone();
@@ -437,6 +460,7 @@ fn create_main_content(
     settings_manager: &Arc<SettingsManager>,
     library_db: &Arc<LibraryDatabase>,
     audio_engine: &Arc<AudioEngine>,
+    queue_manager: &Arc<QueueManager>,
     window: &ApplicationWindow,
 ) -> Widget {
     // Create stack for efficient view switching
@@ -455,6 +479,7 @@ fn create_main_content(
         .app_state(app_state.clone())
         .library_db(library_db.clone())
         .audio_engine(audio_engine.clone())
+        .queue_manager(queue_manager.clone())
         .albums(library_state.albums.clone())
         .show_dr_badges(show_dr_badges)
         .compact(false)
@@ -671,8 +696,9 @@ fn create_main_content(
 fn create_player_bar(
     app_state: &Arc<AppState>,
     audio_engine: &Arc<AudioEngine>,
+    queue_manager: &Arc<QueueManager>,
 ) -> (GtkBox, PlayerBar) {
-    let player_bar = PlayerBar::new(app_state, audio_engine);
+    let player_bar = PlayerBar::new(app_state, audio_engine, Some(queue_manager));
     let widget = player_bar.widget.clone();
 
     // Initially hide the player bar

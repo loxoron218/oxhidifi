@@ -66,8 +66,15 @@ mod ui_compliance_tests {
         assert!(play_overlay.button.accessible_role() != AccessibleNone);
 
         let app_state_arc = Arc::new(app_state.clone());
-        let album_grid =
-            AlbumGridView::new(Some(&app_state_arc), None, None, Vec::new(), true, false);
+        let album_grid = AlbumGridView::new(
+            Some(&app_state_arc),
+            None,
+            None,
+            None,
+            Vec::new(),
+            true,
+            false,
+        );
         assert!(album_grid.flow_box.accessible_role() != AccessibleNone);
 
         let artist_grid = ArtistGridView::new(Some(app_state_arc.clone()), Vec::new(), false);
@@ -104,8 +111,15 @@ mod ui_compliance_tests {
         assert!(header_bar.settings_button.can_focus());
 
         let app_state_arc = Arc::new(app_state.clone());
-        let album_grid =
-            AlbumGridView::new(Some(&app_state_arc), None, None, Vec::new(), true, false);
+        let album_grid = AlbumGridView::new(
+            Some(&app_state_arc),
+            None,
+            None,
+            None,
+            Vec::new(),
+            true,
+            false,
+        );
         assert!(album_grid.flow_box.is_focusable());
 
         let detail_view = DetailView::new(
@@ -140,8 +154,15 @@ mod ui_compliance_tests {
 
         let start_time = Instant::now();
         let app_state_arc = Arc::new(app_state.clone());
-        let _album_grid =
-            AlbumGridView::new(Some(&app_state_arc), None, None, large_albums, true, false);
+        let _album_grid = AlbumGridView::new(
+            Some(&app_state_arc),
+            None,
+            None,
+            None,
+            large_albums,
+            true,
+            false,
+        );
         let duration = start_time.elapsed();
 
         // Should be able to create grid with 1000 albums in reasonable time
@@ -176,9 +197,16 @@ mod ui_compliance_tests {
                 application,
                 Arc::new(settings_manager),
             );
-            let _player_bar = PlayerBar::new(&app_state_arc, &Arc::new(engine));
-            let _album_grid =
-                AlbumGridView::new(Some(&app_state_arc), None, None, Vec::new(), true, false);
+            let _player_bar = PlayerBar::new(&app_state_arc, &Arc::new(engine), None);
+            let _album_grid = AlbumGridView::new(
+                Some(&app_state_arc),
+                None,
+                None,
+                None,
+                Vec::new(),
+                true,
+                false,
+            );
             let _detail_view = DetailView::new(
                 Some(app_state_arc.clone()),
                 DetailType::Album(Album::default()),
@@ -205,12 +233,33 @@ mod ui_compliance_tests {
 
         // Test that views adapt to different screen sizes
         let app_state_arc = Arc::new(app_state.clone());
-        let _small_album_grid =
-            AlbumGridView::new(Some(&app_state_arc), None, None, Vec::new(), true, true);
-        let _large_album_grid =
-            AlbumGridView::new(Some(&app_state_arc), None, None, Vec::new(), true, false);
-        let _album_grid =
-            AlbumGridView::new(Some(&app_state_arc), None, None, Vec::new(), true, false);
+        let _small_album_grid = AlbumGridView::new(
+            Some(&app_state_arc),
+            None,
+            None,
+            None,
+            Vec::new(),
+            true,
+            true,
+        );
+        let _large_album_grid = AlbumGridView::new(
+            Some(&app_state_arc),
+            None,
+            None,
+            None,
+            Vec::new(),
+            true,
+            false,
+        );
+        let _album_grid = AlbumGridView::new(
+            Some(&app_state_arc),
+            None,
+            None,
+            None,
+            Vec::new(),
+            true,
+            false,
+        );
         let _detail_view = DetailView::new(
             Some(app_state_arc.clone()),
             DetailType::Album(Album::default()),
