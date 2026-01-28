@@ -6,7 +6,7 @@
 use std::{
     path::Path,
     sync::{
-        Arc, RwLock,
+        Arc,
         atomic::{AtomicU64, Ordering::SeqCst},
     },
     thread::{JoinHandle, spawn},
@@ -15,7 +15,7 @@ use std::{
 use {
     async_channel::{Receiver, Sender, unbounded},
     cpal::Stream,
-    parking_lot::RwLock as ParkingRwLock,
+    parking_lot::RwLock,
     rtrb::RingBuffer,
     serde::{Deserialize, Serialize},
     thiserror::Error,
@@ -89,9 +89,9 @@ pub enum AudioError {
 /// managing the lifecycle of decoders, outputs, and playback state.
 pub struct AudioEngine {
     /// Current playback state.
-    state: Arc<ParkingRwLock<PlaybackState>>,
+    state: Arc<RwLock<PlaybackState>>,
     /// Information about the currently loaded track.
-    current_track: Arc<ParkingRwLock<Option<TrackInfo>>>,
+    current_track: Arc<RwLock<Option<TrackInfo>>>,
     /// Audio output configuration.
     output_config: OutputConfig,
     /// Broadcast channel for state change notifications.
@@ -165,8 +165,8 @@ impl AudioEngine {
         let (control_tx, control_rx) = unbounded();
 
         let engine = AudioEngine {
-            state: Arc::new(ParkingRwLock::new(PlaybackState::Stopped)),
-            current_track: Arc::new(ParkingRwLock::new(None)),
+            state: Arc::new(RwLock::new(PlaybackState::Stopped)),
+            current_track: Arc::new(RwLock::new(None)),
             output_config: OutputConfig::default(),
             state_tx,
             track_finished_tx,
@@ -503,12 +503,7 @@ impl AudioEngine {
         let (stream, resampling_consumer) = consumer.run(&track_info.format, &signal_spec)?;
 
         // Store stream handle
-        *self
-            .stream_handle
-            .write()
-            .map_err(|e| AudioError::InvalidOperation {
-                reason: format!("Failed to acquire stream handle lock: {e}"),
-            })? = Some(StreamHandle {
+        *self.stream_handle.write() = Some(StreamHandle {
             stream,
             decoder_handle: Some(decoder_handle),
             resampling_consumer,
@@ -589,12 +584,7 @@ impl AudioEngine {
 
             let (stream, resampling_consumer) = consumer.run(&track_info.format, &signal_spec)?;
 
-            *self
-                .stream_handle
-                .write()
-                .map_err(|e| AudioError::InvalidOperation {
-                    reason: format!("Failed to acquire stream handle lock: {e}"),
-                })? = Some(StreamHandle {
+            *self.stream_handle.write() = Some(StreamHandle {
                 stream,
                 decoder_handle: Some(decoder_handle),
                 resampling_consumer,
@@ -613,20 +603,25 @@ impl AudioEngine {
 
     /// Stops the current audio stream gracefully.
     async fn stop_stream(&self) {
-        if let Some(mut handle) = self.stream_handle.write().ok().and_then(|mut h| h.take()) {
+        let handle_opt = {
+            let mut guard = self.stream_handle.write();
+            guard.take()
+        };
+
+        if let Some(mut handle) = handle_opt {
             debug!("Stopping audio stream");
 
-            // Stop the resampling thread first to prevent deadlock
-            // The resampling thread might be blocked on target_producer.push()
-            if let Some(mut resampling_consumer) = handle.resampling_consumer.take() {
+            let resampling_consumer = handle.resampling_consumer.take();
+            let stream = handle.stream;
+            let decoder_handle = handle.decoder_handle.take();
+
+            if let Some(mut resampling_consumer) = resampling_consumer {
                 resampling_consumer.stop();
             }
 
-            // Drop the stream to abandon the decoder's producer
-            drop(handle.stream);
+            drop(stream);
 
-            // Wait for decoder thread to finish with timeout
-            if let Some(decoder_handle) = handle.decoder_handle.take() {
+            if let Some(decoder_handle) = decoder_handle {
                 match timeout(
                     Duration::from_secs(2),
                     spawn_blocking(move || decoder_handle.join()),
