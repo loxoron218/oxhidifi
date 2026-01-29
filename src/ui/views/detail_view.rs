@@ -660,7 +660,7 @@ mod tests {
         );
         assert_eq!(
             format!("{:?}", DetailType::Artist(artist)),
-            "Artist(Artist { id: 0, name: \"\", created_at: None, updated_at: None })"
+            "Artist(Artist { id: 0, name: \"\", album_count: 0, created_at: None, updated_at: None })"
         );
     }
 }

@@ -479,18 +479,22 @@ impl ArtistCard {
             .css_classes(["album-title-label"])
             .build();
 
-        let album_count_text = "Albums";
+        let album_count_text = if artist.album_count == 1 {
+            "1 Album".to_string()
+        } else {
+            format!("{} Albums", artist.album_count)
+        };
         let album_count_max_width = ((cover_size - 16) / 10).max(8);
         let album_count_max_width_i32 = i32::try_from(album_count_max_width)
             .expect("album_count max_width_chars calculation should always result in valid i32");
         let album_count_label = Label::builder()
-            .label(album_count_text)
+            .label(&album_count_text)
             .halign(Start)
             .xalign(0.0)
             .ellipsize(End)
             .lines(1)
             .max_width_chars(album_count_max_width_i32)
-            .tooltip_text(album_count_text)
+            .tooltip_text(&album_count_text)
             .css_classes(["album-artist-label"])
             .build();
 
@@ -690,6 +694,7 @@ mod tests {
         let artist = Artist {
             id: 1,
             name: "Test Artist".to_string(),
+            album_count: 5,
             created_at: None,
             updated_at: None,
         };
@@ -697,7 +702,7 @@ mod tests {
         let card = ArtistCard::new(&artist, 180, None);
 
         assert_eq!(card.name_label.label(), "Test Artist");
-        assert_eq!(card.album_count_label.label(), "Albums");
+        assert_eq!(card.album_count_label.label(), "5 Albums");
     }
 
     #[test]
@@ -706,6 +711,7 @@ mod tests {
         let artist = Artist {
             id: 1,
             name: "Test Artist".to_string(),
+            album_count: 3,
             created_at: None,
             updated_at: None,
         };
@@ -725,7 +731,7 @@ mod tests {
             .expect("Failed to build ArtistCard");
 
         assert_eq!(card.name_label.label(), "Test Artist");
-        assert_eq!(card.album_count_label.label(), "Albums");
+        assert_eq!(card.album_count_label.label(), "3 Albums");
     }
 
     #[test]
@@ -742,6 +748,7 @@ mod tests {
         let artist = Artist {
             id: 1,
             name: "Test Artist".to_string(),
+            album_count: 0,
             ..Artist::default()
         };
 
@@ -751,7 +758,7 @@ mod tests {
             .expect("Failed to build");
 
         assert_eq!(card.name_label.label(), "Test Artist");
-        assert_eq!(card.album_count_label.label(), "Albums");
+        assert_eq!(card.album_count_label.label(), "0 Albums");
     }
 
     #[test]
@@ -760,6 +767,7 @@ mod tests {
         let artist = Artist {
             id: 1,
             name: "Test Artist".to_string(),
+            album_count: 1,
             ..Artist::default()
         };
 
@@ -769,7 +777,7 @@ mod tests {
             .expect("Failed to update cover size");
 
         assert_eq!(card.name_label.label(), "Test Artist");
-        assert_eq!(card.album_count_label.label(), "Albums");
+        assert_eq!(card.album_count_label.label(), "1 Album");
     }
 
     #[test]
@@ -778,13 +786,14 @@ mod tests {
         let artist = Artist {
             id: 1,
             name: "Test Artist".to_string(),
+            album_count: 2,
             ..Artist::default()
         };
 
         let card = ArtistCard::new(&artist, 120, None);
 
         assert_eq!(card.name_label.label(), "Test Artist");
-        assert_eq!(card.album_count_label.label(), "Albums");
+        assert_eq!(card.album_count_label.label(), "2 Albums");
     }
 
     #[test]
@@ -793,13 +802,14 @@ mod tests {
         let artist = Artist {
             id: 1,
             name: "Test Artist".to_string(),
+            album_count: 10,
             ..Artist::default()
         };
 
         let card = ArtistCard::new(&artist, 400, None);
 
         assert_eq!(card.name_label.label(), "Test Artist");
-        assert_eq!(card.album_count_label.label(), "Albums");
+        assert_eq!(card.album_count_label.label(), "10 Albums");
     }
 
     #[test]
@@ -808,6 +818,7 @@ mod tests {
         let artist = Artist {
             id: 1,
             name: "A Very Long Artist Name That Should Be Elided".to_string(),
+            album_count: 1,
             ..Artist::default()
         };
 
@@ -817,7 +828,7 @@ mod tests {
             card.name_label.label(),
             "A Very Long Artist Name That Should Be Elided"
         );
-        assert_eq!(card.album_count_label.label(), "Albums");
+        assert_eq!(card.album_count_label.label(), "1 Album");
     }
 
     #[test]
@@ -827,12 +838,14 @@ mod tests {
             Artist {
                 id: 1,
                 name: "Test Artist 1".to_string(),
+                album_count: 3,
                 created_at: None,
                 updated_at: None,
             },
             Artist {
                 id: 2,
                 name: "Test Artist 2".to_string(),
+                album_count: 1,
                 created_at: None,
                 updated_at: None,
             },
@@ -862,11 +875,13 @@ mod tests {
             Artist {
                 id: 1,
                 name: "B Artist".to_string(),
+                album_count: 0,
                 ..Artist::default()
             },
             Artist {
                 id: 2,
                 name: "A Artist".to_string(),
+                album_count: 0,
                 ..Artist::default()
             },
         ];

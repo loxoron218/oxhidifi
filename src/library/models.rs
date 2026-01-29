@@ -15,6 +15,8 @@ pub struct Artist {
     pub id: i64,
     /// Artist name.
     pub name: String,
+    /// Number of albums by this artist.
+    pub album_count: i64,
     /// Timestamp when the artist was first added to the library.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_at: Option<String>,
@@ -151,6 +153,7 @@ mod tests {
         let artist = Artist {
             id: 1,
             name: "Test Artist".to_string(),
+            album_count: 5,
             created_at: Some("2023-01-01 00:00:00".to_string()),
             updated_at: Some("2023-01-02 00:00:00".to_string()),
         };
@@ -222,5 +225,6 @@ mod tests {
 
         let artist = Artist::default();
         assert_eq!(artist.name, "");
+        assert_eq!(artist.album_count, 0);
     }
 }

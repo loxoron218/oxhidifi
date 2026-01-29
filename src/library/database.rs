@@ -131,10 +131,12 @@ impl LibraryDatabase {
                 let search_pattern = format!("%{filter_str}%");
                 query_as::<_, Artist>(
                     r"
-                    SELECT id, name, created_at, updated_at
-                    FROM artists
-                    WHERE name LIKE ?
-                    ORDER BY name
+                    SELECT a.id, a.name, COUNT(a2.id) as album_count, a.created_at, a.updated_at
+                    FROM artists a
+                    LEFT JOIN albums a2 ON a.id = a2.artist_id
+                    WHERE a.name LIKE ?
+                    GROUP BY a.id, a.name, a.created_at, a.updated_at
+                    ORDER BY a.name
                     ",
                 )
                 .bind(search_pattern)
@@ -144,9 +146,11 @@ impl LibraryDatabase {
             None => {
                 query_as::<_, Artist>(
                     r"
-                    SELECT id, name, created_at, updated_at
-                    FROM artists
-                    ORDER BY name
+                    SELECT a.id, a.name, COUNT(a2.id) as album_count, a.created_at, a.updated_at
+                    FROM artists a
+                    LEFT JOIN albums a2 ON a.id = a2.artist_id
+                    GROUP BY a.id, a.name, a.created_at, a.updated_at
+                    ORDER BY a.name
                     ",
                 )
                 .fetch_all(&self.pool)
