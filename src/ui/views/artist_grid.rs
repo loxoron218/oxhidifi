@@ -4,24 +4,29 @@
 //! in a responsive grid layout with artist images, names, and album counts,
 //! supporting virtual scrolling for large datasets and real-time filtering.
 
-use std::sync::Arc;
+use std::{cell::RefCell, convert::TryFrom, rc::Rc, sync::Arc};
 
-use libadwaita::{
-    gtk::{
-        AccessibleRole::{Grid, Group},
-        Align::{Center, Start},
-        Box, FlowBox, FlowBoxChild, GestureClick, Label,
-        Orientation::Vertical,
-        SelectionMode::None as SelectionNone,
-        Widget,
-        pango::EllipsizeMode::End,
+use {
+    libadwaita::{
+        glib::{JoinHandle, MainContext},
+        gtk::{
+            AccessibleRole::{Grid, Group},
+            Align::{Fill, Start},
+            Box, FlowBox, FlowBoxChild, GestureClick, Label,
+            Orientation::Vertical,
+            SelectionMode::None as SelectionNone,
+            Widget,
+            pango::EllipsizeMode::End,
+        },
+        prelude::{AccessibleExt, BoxExt, Cast, FlowBoxChildExt, WidgetExt},
     },
-    prelude::{AccessibleExt, BoxExt, Cast, FlowBoxChildExt, WidgetExt},
+    tracing::error,
 };
 
 use crate::{
+    error::domain::UiError::{self, BuilderError},
     library::models::Artist,
-    state::{AppState, LibraryState, NavigationState::ArtistDetail},
+    state::{AppState, LibraryState, NavigationState::ArtistDetail, ZoomEvent::GridZoomChanged},
     ui::components::{
         cover_art::CoverArt,
         empty_state::{EmptyState, EmptyStateConfig},
@@ -116,6 +121,10 @@ pub struct ArtistGridView {
     pub empty_state: Option<EmptyState>,
     /// Current sort criteria.
     pub current_sort: ArtistSortCriteria,
+    /// Shared reference to artist cards for zoom updates.
+    artist_cards_ref: Rc<RefCell<Vec<Rc<ArtistCard>>>>,
+    /// Zoom subscription handle for cleanup.
+    zoom_subscription_handle: Option<JoinHandle<()>>,
 }
 
 /// Configuration for `ArtistGridView` display options.
@@ -142,11 +151,19 @@ impl ArtistGridView {
         let config = ArtistGridViewConfig { compact };
 
         let flow_box = FlowBox::builder()
-            .halign(Center)
+            .halign(Fill)
             .valign(Start)
             .homogeneous(true)
-            .max_children_per_line(100) // Will be adjusted based on available width
+            .max_children_per_line(100)
             .selection_mode(SelectionNone)
+            .row_spacing(8)
+            .column_spacing(8)
+            .margin_top(24)
+            .margin_bottom(24)
+            .margin_start(24)
+            .margin_end(24)
+            .hexpand(true)
+            .vexpand(false)
             .css_classes(["artist-grid"])
             .build();
 
@@ -177,17 +194,48 @@ impl ArtistGridView {
             main_container.append(&empty_state.widget);
         }
 
+        let artist_cards_ref = Rc::new(RefCell::new(Vec::new()));
+
         let mut view = Self {
             widget: main_container.upcast_ref::<Widget>().clone(),
-            flow_box,
-            app_state,
+            flow_box: flow_box.clone(),
+            app_state: app_state.clone(),
             artists: Vec::new(),
             config,
             empty_state,
-            current_sort: ArtistSortCriteria::Name, // Default sort by Name
+            current_sort: ArtistSortCriteria::Name,
+            artist_cards_ref: artist_cards_ref.clone(),
+            zoom_subscription_handle: if let Some(state) = app_state {
+                let state_clone = state.clone();
+                let flow_box_clone = flow_box.clone();
+                let artist_cards_ref_clone = artist_cards_ref.clone();
+                let handle = MainContext::default().spawn_local(async move {
+                    let rx = state_clone.zoom_manager.subscribe();
+                    while let Ok(event) = rx.recv().await {
+                        if let GridZoomChanged(_) = event {
+                            let cover_size = state_clone.zoom_manager.get_grid_cover_dimensions().0;
+                            let cover_size_u32 = u32::try_from(cover_size).unwrap_or_else(|_| {
+                                error!("Invalid cover size {cover_size}, using default 180");
+                                180
+                            });
+
+                            let cards = artist_cards_ref_clone.borrow();
+                            for card in cards.iter() {
+                                if let Err(e) = card.update_cover_size(cover_size_u32) {
+                                    error!("Failed to update cover size: {e}");
+                                }
+                            }
+
+                            flow_box_clone.queue_draw();
+                        }
+                    }
+                });
+                Some(handle)
+            } else {
+                None
+            },
         };
 
-        // Populate with initial artists
         view.set_artists(artists);
 
         view
@@ -208,15 +256,14 @@ impl ArtistGridView {
     /// # Arguments
     ///
     /// * `artists` - New vector of artists to display
-    ///
-    /// # Panics
-    ///
-    /// Panics if empty state exists but is None (should never happen with proper initialization).
     pub fn set_artists(&mut self, artists: Vec<Artist>) {
         // Clear existing children
         while let Some(child) = self.flow_box.first_child() {
             self.flow_box.remove(&child);
         }
+
+        // Clear existing artist cards
+        self.artist_cards_ref.borrow_mut().clear();
 
         self.artists = artists;
 
@@ -224,7 +271,7 @@ impl ArtistGridView {
         self.apply_sort();
 
         // Update empty state visibility
-        if let Some(_empty_state) = &self.empty_state {
+        if let Some(ref empty_state) = self.empty_state {
             // Get current library state from app state if available
             let library_state = if let Some(app_state) = &self.app_state {
                 app_state.get_library_state()
@@ -234,114 +281,70 @@ impl ArtistGridView {
                     ..Default::default()
                 }
             };
-            self.empty_state
-                .as_ref()
-                .unwrap()
-                .update_from_library_state(&library_state);
+            empty_state.update_from_library_state(&library_state);
         }
+
+        let cover_size = self.get_cover_size();
 
         // Add new artist items
         for artist in &self.artists {
-            let artist_item = self.create_artist_item(artist);
-            self.flow_box.insert(&artist_item, -1);
+            let artist_card = match self.create_artist_card(artist, cover_size) {
+                Ok(card) => card,
+                Err(e) => {
+                    error!("Failed to create artist card for '{}': {e}", artist.name);
+                    continue;
+                }
+            };
+            let card_arc = Rc::new(artist_card);
+            self.flow_box.insert(&card_arc.widget, -1);
+            self.artist_cards_ref.borrow_mut().push(card_arc);
         }
     }
 
-    /// Creates a single artist item widget for the grid.
-    ///
-    /// # Arguments
-    ///
-    /// * `artist` - The artist to create an item for
+    /// Gets the cover size for artist cards based on current configuration.
     ///
     /// # Returns
     ///
-    /// A new `Widget` representing the artist item.
-    fn create_artist_item(&self, artist: &Artist) -> Widget {
-        // Create cover art (using default image for artists)
-        let cover_art = CoverArt::builder()
-            .artwork_path("") // No specific artwork for artists yet
-            .show_dr_badge(false)
-            .dimensions(180, 180)
-            .build();
+    /// The cover size in pixels.
+    #[must_use]
+    fn get_cover_size(&self) -> i32 {
+        if let Some(app_state) = &self.app_state {
+            app_state.zoom_manager.get_grid_cover_dimensions().0
+        } else if self.config.compact {
+            120
+        } else {
+            180
+        }
+    }
 
-        // Create name label
-        let name_label = Label::builder()
-            .label(&artist.name)
-            .halign(Center)
-            .xalign(0.5)
-            .ellipsize(End)
-            .lines(2)
-            .tooltip_text(&artist.name)
-            .build();
-
-        // Create album count placeholder (will be populated from state)
-        let album_count_text = "Albums: ?";
-        let album_count_label = Label::builder()
-            .label(album_count_text)
-            .halign(Center)
-            .xalign(0.5)
-            .css_classes(["dim-label"])
-            .ellipsize(End)
-            .lines(1)
-            .tooltip_text(album_count_text)
-            .build();
-
-        // Create main container with fixed dimensions to ensure consistent sizing
-        let container = Box::builder()
-            .orientation(Vertical)
-            .halign(Center)
-            .valign(Start)
-            .hexpand(false)
-            .vexpand(false)
-            .spacing(4)
-            .margin_top(8)
-            .margin_bottom(8)
-            .margin_start(8)
-            .margin_end(8)
-            .width_request(196) // 180 (cover) + 8*2 (margins) = 196
-            .height_request(250) // Approximate height for cover + labels
-            .css_classes(["artist-item"])
-            .build();
-
-        container.append(&cover_art.widget);
-        container.append(name_label.upcast_ref::<Widget>());
-        container.append(album_count_label.upcast_ref::<Widget>());
-
-        // Set ARIA attributes for accessibility
-        container.set_accessible_role(Group);
-
-        // set_accessible_description doesn't exist in GTK4, remove this line
-
-        // Create FlowBoxChild wrapper
-        let child = FlowBoxChild::new();
-        child.set_child(Some(&container));
-        child.set_focusable(true);
-
-        // Add click controller for navigation
-        let click_controller = GestureClick::new();
-
+    /// Creates a single artist card for the grid.
+    ///
+    /// # Arguments
+    ///
+    /// * `artist` - The artist to create a card for
+    /// * `cover_size` - The size of cover art in pixels
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing the new `ArtistCard` instance or a `UiError` if
+    /// card creation fails.
+    fn create_artist_card(&self, artist: &Artist, cover_size: i32) -> Result<ArtistCard, UiError> {
         let artist_clone = artist.clone();
         let app_state = self.app_state.clone();
 
-        click_controller.connect_released(move |_, _, _, _| {
-            // Navigate to artist detail view
-            if let Some(ref state) = app_state {
-                state.update_navigation(ArtistDetail(artist_clone.clone()));
-            }
+        let cover_size_u32 = u32::try_from(cover_size).unwrap_or_else(|_| {
+            error!("Invalid cover size {cover_size}, using default 180");
+            180
         });
-
-        child.add_controller(click_controller);
-
-        // Support keyboard activation (Enter/Space)
-        let artist_clone = artist.clone();
-        let app_state = self.app_state.clone();
-        child.connect_activate(move |_| {
-            if let Some(ref state) = app_state {
-                state.update_navigation(ArtistDetail(artist_clone.clone()));
-            }
-        });
-
-        child.upcast_ref::<Widget>().clone()
+        ArtistCard::builder()
+            .artist(artist.clone())
+            .cover_size(cover_size_u32)
+            .on_card_clicked(move || {
+                if let Some(ref state) = app_state {
+                    state.update_navigation(ArtistDetail(artist_clone.clone()));
+                }
+            })
+            .build()
     }
 
     /// Updates the display configuration.
@@ -400,6 +403,257 @@ impl ArtistGridView {
             }
         }
     }
+
+    /// Stops the zoom subscription and cleans up resources.
+    pub fn cleanup(&mut self) {
+        if let Some(handle) = self.zoom_subscription_handle.take() {
+            handle.abort();
+        }
+    }
+}
+
+impl Drop for ArtistGridView {
+    fn drop(&mut self) {
+        self.cleanup();
+    }
+}
+
+/// Artist card component with cover art and metadata.
+///
+/// The `ArtistCard` component displays artists with cover art, names, and
+/// album counts, matching the album card styling.
+#[derive(Clone)]
+pub struct ArtistCard {
+    /// The underlying `FlowBoxChild` widget.
+    pub widget: Widget,
+    /// The main artist tile container.
+    pub artist_tile: Box,
+    /// The cover art component.
+    pub cover_art: CoverArt,
+    /// Artist name label.
+    pub name_label: Label,
+    /// Album count label.
+    pub album_count_label: Label,
+}
+
+impl ArtistCard {
+    /// Creates a new `ArtistCard` component.
+    ///
+    /// # Arguments
+    ///
+    /// * `artist` - The artist to display
+    /// * `cover_size` - The size of the cover art in pixels
+    /// * `on_card_clicked` - Optional callback for card clicks
+    ///
+    /// # Returns
+    ///
+    /// A new `ArtistCard` instance.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `cover_size` or the calculated `max_width_chars` values
+    /// cannot be converted to i32. This indicates a programming error as
+    /// the calculation logic should always produce valid values.
+    #[must_use]
+    pub fn new(artist: &Artist, cover_size: u32, on_card_clicked: Option<Rc<dyn Fn()>>) -> Self {
+        let cover_size_i32 = i32::try_from(cover_size).expect("Cover size (u32) should fit in i32");
+        let (cover_width, cover_height) = (cover_size_i32, cover_size_i32);
+
+        let cover_art = CoverArt::builder()
+            .icon_name("avatar-default-symbolic")
+            .show_dr_badge(false)
+            .dimensions(cover_width, cover_height)
+            .build();
+
+        let name_max_width = ((cover_size - 16) / 10).max(8);
+        let name_max_width_i32 = i32::try_from(name_max_width)
+            .expect("max_width_chars calculation should always result in valid i32");
+        let name_label = Label::builder()
+            .label(&artist.name)
+            .halign(Start)
+            .xalign(0.0)
+            .ellipsize(End)
+            .lines(2)
+            .max_width_chars(name_max_width_i32)
+            .tooltip_text(&artist.name)
+            .css_classes(["album-title-label"])
+            .build();
+
+        let album_count_text = "Albums";
+        let album_count_max_width = ((cover_size - 16) / 10).max(8);
+        let album_count_max_width_i32 = i32::try_from(album_count_max_width)
+            .expect("album_count max_width_chars calculation should always result in valid i32");
+        let album_count_label = Label::builder()
+            .label(album_count_text)
+            .halign(Start)
+            .xalign(0.0)
+            .ellipsize(End)
+            .lines(1)
+            .max_width_chars(album_count_max_width_i32)
+            .tooltip_text(album_count_text)
+            .css_classes(["album-artist-label"])
+            .build();
+
+        let artist_tile = Box::builder()
+            .orientation(Vertical)
+            .halign(Start)
+            .valign(Start)
+            .hexpand(false)
+            .vexpand(false)
+            .spacing(2)
+            .css_classes(["album-tile"])
+            .build();
+
+        artist_tile.append(&cover_art.widget);
+        artist_tile.append(name_label.upcast_ref::<Widget>());
+        artist_tile.append(album_count_label.upcast_ref::<Widget>());
+
+        artist_tile.set_accessible_role(Group);
+        artist_tile.set_tooltip_text(Some(&artist.name));
+
+        let child = FlowBoxChild::new();
+        child.set_child(Some(&artist_tile));
+        child.set_focusable(true);
+
+        let click_controller = GestureClick::new();
+
+        if let Some(callback) = on_card_clicked {
+            let callback_for_click = callback.clone();
+            let callback_for_activate = callback.clone();
+
+            click_controller.connect_released(move |_gesture, _n_press, _x, _y| {
+                callback_for_click();
+            });
+
+            child.connect_activate(move |_| {
+                callback_for_activate();
+            });
+        }
+
+        artist_tile.add_controller(click_controller);
+
+        Self {
+            widget: child.upcast_ref::<Widget>().clone(),
+            artist_tile,
+            cover_art,
+            name_label,
+            album_count_label,
+        }
+    }
+
+    /// Creates a builder for configuring artist cards.
+    #[must_use]
+    pub fn builder() -> ArtistCardBuilder {
+        ArtistCardBuilder::default()
+    }
+
+    /// Updates the cover size for this artist card.
+    ///
+    /// # Arguments
+    ///
+    /// * `cover_size` - New cover size in pixels
+    ///
+    /// # Returns
+    ///
+    /// A `Result` indicating success or a `UiError` if the size is invalid.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `UiError::BuilderError` if the cover size or calculated
+    /// `max_width_chars` cannot be converted to i32.
+    pub fn update_cover_size(&self, cover_size: u32) -> Result<(), UiError> {
+        let cover_size_i32 = i32::try_from(cover_size)
+            .map_err(|_| BuilderError(format!("Invalid cover size: {cover_size}")))?;
+
+        self.cover_art
+            .update_dimensions(cover_size_i32, cover_size_i32);
+
+        let max_width = ((cover_size - 16) / 10).max(8);
+        let max_width_i32 = i32::try_from(max_width)
+            .map_err(|_| BuilderError(format!("Invalid max_width_chars: {max_width}")))?;
+        self.name_label.set_max_width_chars(max_width_i32);
+        self.album_count_label.set_max_width_chars(max_width_i32);
+        Ok(())
+    }
+}
+
+/// Builder pattern for configuring `ArtistCard` components.
+#[derive(Default)]
+pub struct ArtistCardBuilder {
+    /// The artist data to display on the card.
+    artist: Option<Artist>,
+    /// Optional cover size override in pixels.
+    cover_size: Option<u32>,
+    /// Optional callback invoked when the card is clicked.
+    on_card_clicked: Option<Rc<dyn Fn()>>,
+}
+
+impl ArtistCardBuilder {
+    /// Sets the artist data for the card.
+    ///
+    /// # Arguments
+    ///
+    /// * `artist` - The artist to display
+    ///
+    /// # Returns
+    ///
+    /// The builder instance for method chaining.
+    #[must_use]
+    pub fn artist(mut self, artist: Artist) -> Self {
+        self.artist = Some(artist);
+        self
+    }
+
+    /// Sets the cover size for the artist card.
+    ///
+    /// # Arguments
+    ///
+    /// * `cover_size` - The size of the cover art in pixels
+    ///
+    /// # Returns
+    ///
+    /// The builder instance for method chaining.
+    #[must_use]
+    pub fn cover_size(mut self, cover_size: u32) -> Self {
+        self.cover_size = Some(cover_size);
+        self
+    }
+
+    /// Sets the callback for when the card is clicked.
+    ///
+    /// # Arguments
+    ///
+    /// * `callback` - Function to call when card is clicked
+    ///
+    /// # Returns
+    ///
+    /// The builder instance for method chaining.
+    #[must_use]
+    pub fn on_card_clicked<F>(mut self, callback: F) -> Self
+    where
+        F: Fn() + 'static,
+    {
+        self.on_card_clicked = Some(Rc::new(callback));
+        self
+    }
+
+    /// Builds the `ArtistCard` component.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing the new `ArtistCard` instance or a `UiError` if
+    /// required fields are missing.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `UiError::BuilderError` if the artist field has not been set.
+    pub fn build(self) -> Result<ArtistCard, UiError> {
+        let artist = self
+            .artist
+            .ok_or_else(|| BuilderError("Artist must be set".to_string()))?;
+        let cover_size = self.cover_size.unwrap_or(180);
+        Ok(ArtistCard::new(&artist, cover_size, self.on_card_clicked))
+    }
 }
 
 /// Sorting criteria for artists.
@@ -419,7 +673,152 @@ impl Default for ArtistGridView {
 
 #[cfg(test)]
 mod tests {
-    use crate::{library::models::Artist, ui::views::artist_grid::ArtistGridView};
+    use std::sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering::SeqCst},
+    };
+
+    use crate::{
+        error::domain::UiError::BuilderError,
+        library::models::Artist,
+        ui::views::artist_grid::{ArtistCard, ArtistGridView},
+    };
+
+    #[test]
+    #[ignore = "Requires GTK display for UI testing"]
+    fn test_artist_card_creation() {
+        let artist = Artist {
+            id: 1,
+            name: "Test Artist".to_string(),
+            created_at: None,
+            updated_at: None,
+        };
+
+        let card = ArtistCard::new(&artist, 180, None);
+
+        assert_eq!(card.name_label.label(), "Test Artist");
+        assert_eq!(card.album_count_label.label(), "Albums");
+    }
+
+    #[test]
+    #[ignore = "Requires GTK display for UI testing"]
+    fn test_artist_card_builder() {
+        let artist = Artist {
+            id: 1,
+            name: "Test Artist".to_string(),
+            created_at: None,
+            updated_at: None,
+        };
+        let clicked = AtomicBool::new(false);
+        let clicked = Arc::new(clicked);
+
+        let card = ArtistCard::builder()
+            .artist(artist.clone())
+            .cover_size(200)
+            .on_card_clicked({
+                let clicked = clicked.clone();
+                move || {
+                    clicked.store(true, SeqCst);
+                }
+            })
+            .build()
+            .expect("Failed to build ArtistCard");
+
+        assert_eq!(card.name_label.label(), "Test Artist");
+        assert_eq!(card.album_count_label.label(), "Albums");
+    }
+
+    #[test]
+    #[ignore = "Requires GTK display for UI testing"]
+    fn test_artist_card_builder_missing_artist() {
+        let result = ArtistCard::builder().cover_size(200).build();
+        assert!(result.is_err());
+        assert!(matches!(result, Err(BuilderError(_))));
+    }
+
+    #[test]
+    #[ignore = "Requires GTK display for UI testing"]
+    fn test_artist_card_default_cover_size() {
+        let artist = Artist {
+            id: 1,
+            name: "Test Artist".to_string(),
+            ..Artist::default()
+        };
+
+        let card = ArtistCard::builder()
+            .artist(artist)
+            .build()
+            .expect("Failed to build");
+
+        assert_eq!(card.name_label.label(), "Test Artist");
+        assert_eq!(card.album_count_label.label(), "Albums");
+    }
+
+    #[test]
+    #[ignore = "Requires GTK display for UI testing"]
+    fn test_artist_card_update_cover_size() {
+        let artist = Artist {
+            id: 1,
+            name: "Test Artist".to_string(),
+            ..Artist::default()
+        };
+
+        let card = ArtistCard::new(&artist, 180, None);
+
+        card.update_cover_size(250)
+            .expect("Failed to update cover size");
+
+        assert_eq!(card.name_label.label(), "Test Artist");
+        assert_eq!(card.album_count_label.label(), "Albums");
+    }
+
+    #[test]
+    #[ignore = "Requires GTK display for UI testing"]
+    fn test_artist_card_small_cover_size() {
+        let artist = Artist {
+            id: 1,
+            name: "Test Artist".to_string(),
+            ..Artist::default()
+        };
+
+        let card = ArtistCard::new(&artist, 120, None);
+
+        assert_eq!(card.name_label.label(), "Test Artist");
+        assert_eq!(card.album_count_label.label(), "Albums");
+    }
+
+    #[test]
+    #[ignore = "Requires GTK display for UI testing"]
+    fn test_artist_card_large_cover_size() {
+        let artist = Artist {
+            id: 1,
+            name: "Test Artist".to_string(),
+            ..Artist::default()
+        };
+
+        let card = ArtistCard::new(&artist, 400, None);
+
+        assert_eq!(card.name_label.label(), "Test Artist");
+        assert_eq!(card.album_count_label.label(), "Albums");
+    }
+
+    #[test]
+    #[ignore = "Requires GTK display for UI testing"]
+    fn test_artist_card_long_name() {
+        let artist = Artist {
+            id: 1,
+            name: "A Very Long Artist Name That Should Be Elided".to_string(),
+            ..Artist::default()
+        };
+
+        let card = ArtistCard::new(&artist, 180, None);
+
+        assert_eq!(
+            card.name_label.label(),
+            "A Very Long Artist Name That Should Be Elided"
+        );
+        assert_eq!(card.album_count_label.label(), "Albums");
+    }
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]

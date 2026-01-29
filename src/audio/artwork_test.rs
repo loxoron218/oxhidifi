@@ -24,8 +24,7 @@ mod tests {
         let test_file = Path::new("testdata/flac_with_artwork.flac");
         if test_file.exists() {
             let result = extract_artwork(test_file);
-            assert!(result.is_ok());
-            match result.unwrap() {
+            match result.expect("Artwork detection should succeed") {
                 Embedded(data, mime_type) => {
                     assert!(!data.is_empty());
                     assert!(mime_type.is_some());
@@ -42,8 +41,7 @@ mod tests {
         let test_file = Path::new("testdata/mp3_with_artwork.mp3");
         if test_file.exists() {
             let result = extract_artwork(test_file);
-            assert!(result.is_ok());
-            match result.unwrap() {
+            match result.expect("Artwork detection should succeed") {
                 Embedded(data, mime_type) => {
                     assert!(!data.is_empty());
                     assert!(mime_type.is_some());
@@ -63,11 +61,14 @@ mod tests {
             let audio_file = test_dir.join("track.flac");
             if audio_file.exists() {
                 let result = extract_artwork(&audio_file);
-                assert!(result.is_ok());
-                match result.unwrap() {
+                match result.expect("Artwork detection should succeed") {
                     External(path) => {
                         assert!(path.exists());
-                        assert_eq!(path.file_name().unwrap(), "folder.jpg");
+                        let file_name = path.file_name().expect("Path should have a file name");
+                        assert_eq!(
+                            file_name, "folder.jpg",
+                            "External artwork file should be named 'folder.jpg'"
+                        );
                     }
                     Embedded(..) => panic!("Expected external artwork"),
                 }
@@ -114,10 +115,10 @@ mod tests {
         let test_file = Path::new("testdata/flac_with_artwork.flac");
         if test_file.exists() {
             let result = TagReader::read_metadata(test_file);
-            assert!(result.is_ok());
-            let metadata = result.unwrap();
+            let metadata = result.expect("Metadata extraction should succeed");
             assert!(metadata.artwork.is_some());
-            assert!(!metadata.artwork.unwrap().is_empty());
+            let artwork = metadata.artwork.expect("Metadata should have artwork");
+            assert!(!artwork.is_empty(), "Artwork should not be empty");
         }
     }
 }

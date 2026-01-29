@@ -60,7 +60,15 @@ mod ui_compliance_tests {
         assert!(dr_badge.label.accessible_role() != AccessibleNone);
 
         let cover_art = CoverArt::default();
-        assert!(cover_art.picture.accessible_role() != AccessibleNone);
+        assert!(cover_art.picture.is_some());
+        let picture = cover_art
+            .picture
+            .as_ref()
+            .expect("CoverArt should have a picture widget");
+        assert!(
+            picture.accessible_role() != AccessibleNone,
+            "CoverArt picture should have an accessible role"
+        );
 
         let play_overlay = PlayOverlay::default();
         assert!(play_overlay.button.accessible_role() != AccessibleNone);

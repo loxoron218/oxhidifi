@@ -161,6 +161,7 @@ mod view_integration_tests {
         // Create a CoverArt instance
         let mut cover_art = CoverArt::new(
             Some(&"/path/to/artwork.jpg".to_string()),
+            None,
             Some("DR12".to_string()),
             true, // Initially show DR badge
             200,
@@ -176,7 +177,7 @@ mod view_integration_tests {
     #[ignore = "Requires GTK display for UI testing"]
     fn test_cover_art_edge_cases() {
         // Test with no DR value
-        let mut cover_art = CoverArt::new(None, None, false, 100, 100);
+        let mut cover_art = CoverArt::new(None, None, None, false, 100, 100);
 
         // Should not panic when updating DR value
         cover_art.update_dr_value(Some("DR8".to_string()));

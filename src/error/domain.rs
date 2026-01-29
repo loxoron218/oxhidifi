@@ -68,6 +68,9 @@ pub enum UiError {
     /// State update error.
     #[error("State update error: {0}")]
     StateError(String),
+    /// Builder pattern error.
+    #[error("Builder error: {0}")]
+    BuilderError(String),
 }
 
 /// Operational error context propagation with `anyhow`.

@@ -45,14 +45,23 @@ mod component_tests {
     #[ignore = "Requires GTK display for UI testing"]
     fn test_cover_art_creation_and_properties() {
         let cover_art = CoverArt::builder()
-            .artwork_path("/non/existent/path.jpg")
+            .artwork_path("/path/to/artwork.jpg")
             .dr_value("DR14")
             .show_dr_badge(true)
             .dimensions(100, 100)
             .build();
 
-        assert_eq!(cover_art.picture.width_request(), 100);
-        assert_eq!(cover_art.picture.height_request(), 100);
+        assert!(cover_art.picture.is_some());
+        let picture = cover_art
+            .picture
+            .as_ref()
+            .expect("CoverArt should have a picture widget");
+        assert_eq!(picture.width_request(), 100, "CoverArt width should be 100");
+        assert_eq!(
+            picture.height_request(),
+            100,
+            "CoverArt height should be 100"
+        );
         assert!(cover_art.dr_badge.is_some());
     }
 
@@ -201,8 +210,16 @@ mod component_tests {
         assert!(badge.label.accessible_role() != AccessibleNone);
 
         // Test CoverArt accessibility
-        let cover_art = CoverArt::new(None, Option::None, false, 50, 50);
-        assert!(cover_art.picture.accessible_role() != AccessibleNone);
+        let cover_art = CoverArt::new(None, Option::None, None, false, 50, 50);
+        assert!(cover_art.picture.is_some());
+        let picture = cover_art
+            .picture
+            .as_ref()
+            .expect("CoverArt should have a picture widget");
+        assert!(
+            picture.accessible_role() != AccessibleNone,
+            "CoverArt picture should have an accessible role"
+        );
 
         // Test PlayOverlay accessibility
         let overlay = PlayOverlay::new(false, false);
