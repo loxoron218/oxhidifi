@@ -11,9 +11,9 @@ use {
         gio::{Icon, Menu, MenuItem, SimpleAction, SimpleActionGroup},
         glib::{JoinHandle, MainContext, Variant, VariantTy},
         gtk::{
-            Box, Button, Entry, Image, Label,
+            Box, Button, Image, Label,
             Orientation::{Horizontal, Vertical},
-            Popover, SearchBar, Separator, ToggleButton,
+            Popover, SearchEntry, Separator, ToggleButton,
         },
         prelude::{
             ActionMapExt, BoxExt, ButtonExt, Cast, EditableExt, GtkApplicationExt, ToggleButtonExt,
@@ -50,10 +50,8 @@ pub struct HeaderBar {
     pub settings_button: Button,
     /// Application reference for preferences dialog.
     pub application: Option<Application>,
-    /// Search entry for expandable search.
-    pub search_entry: Entry,
-    /// Search bar container.
-    pub search_bar: SearchBar,
+    /// Search entry for inline search.
+    pub search_entry: SearchEntry,
     /// Album tab button.
     pub album_tab: ToggleButton,
     /// Artist tab button.
@@ -112,18 +110,11 @@ impl HeaderBar {
         widget.pack_start(&back_button);
 
         // Create search entry
-        let search_entry = Entry::builder()
+        let search_entry = SearchEntry::builder()
             .placeholder_text("Search albums and artists...")
             .width_request(200)
+            .visible(false)
             .build();
-
-        // Create search bar
-        let search_bar = SearchBar::builder()
-            .search_mode_enabled(false)
-            .show_close_button(true)
-            .build();
-
-        search_bar.set_child(Some(&search_entry));
 
         // Search button
         let search_button = ToggleButton::builder()
@@ -131,18 +122,26 @@ impl HeaderBar {
             .tooltip_text("Search")
             .build();
 
-        // Connect search button to search bar
-        let search_bar_clone = search_bar.clone();
+        // Connect search button to toggle entry visibility and focus
+        let search_entry_clone = search_entry.clone();
         search_button.connect_toggled(move |button: &ToggleButton| {
-            search_bar_clone.set_search_mode(button.is_active());
+            search_entry_clone.set_visible(button.is_active());
             if button.is_active() {
-                search_bar_clone.set_search_mode(true);
+                search_entry_clone.grab_focus();
+            } else {
+                search_entry_clone.set_text("");
             }
+        });
+
+        // Handle Escape to hide search entry
+        let search_button_clone = search_button.clone();
+        search_entry.connect_stop_search(move |_| {
+            search_button_clone.set_active(false);
         });
 
         // Connect search entry to app state
         let state_clone = app_state.clone();
-        search_entry.connect_changed(move |entry: &Entry| {
+        search_entry.connect_search_changed(move |entry| {
             let text = entry.text().to_string();
             if text.is_empty() {
                 state_clone.update_search_filter(None);
@@ -152,6 +151,7 @@ impl HeaderBar {
         });
 
         widget.pack_start(&search_button);
+        widget.pack_start(&search_entry);
 
         // View split button
         let current_view_mode = app_state.get_library_state().view_mode;
@@ -481,7 +481,6 @@ impl HeaderBar {
             view_split_button: view_split_button.clone(),
             settings_button,
             search_entry,
-            search_bar,
             album_tab,
             artist_tab,
             tab_box,
