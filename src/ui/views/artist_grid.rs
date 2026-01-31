@@ -115,6 +115,8 @@ pub struct ArtistGridView {
     pub app_state: Option<Arc<AppState>>,
     /// Current artists being displayed.
     pub artists: Vec<Artist>,
+    /// Full unfiltered list of all artists.
+    pub all_artists: Vec<Artist>,
     /// Configuration flags.
     pub config: ArtistGridViewConfig,
     /// Empty state component for when no artists are available.
@@ -201,6 +203,7 @@ impl ArtistGridView {
             flow_box: flow_box.clone(),
             app_state: app_state.clone(),
             artists: Vec::new(),
+            all_artists: artists.clone(),
             config,
             empty_state,
             current_sort: ArtistSortCriteria::Name,
@@ -271,7 +274,7 @@ impl ArtistGridView {
         self.apply_sort();
 
         // Update empty state visibility
-        if let Some(ref empty_state) = self.empty_state {
+        if let Some(empty_state) = &self.empty_state {
             // Get current library state from app state if available
             let library_state = if let Some(app_state) = &self.app_state {
                 app_state.get_library_state()
@@ -298,6 +301,27 @@ impl ArtistGridView {
             let card_arc = Rc::new(artist_card);
             self.flow_box.insert(&card_arc.widget, -1);
             self.artist_cards_ref.borrow_mut().push(card_arc);
+        }
+    }
+
+    /// Updates the full unfiltered artists list.
+    ///
+    /// This should be called when library data changes.
+    ///
+    /// # Arguments
+    ///
+    /// * `all_artists` - Complete list of all artists from database
+    pub fn update_all_artists(&mut self, all_artists: Vec<Artist>) {
+        self.all_artists = all_artists;
+
+        // If there's no active search filter, show all artists
+        let library_state = self.app_state.as_ref().map(|s| s.get_library_state());
+        if library_state
+            .as_ref()
+            .and_then(|s| s.search_filter.as_ref())
+            .is_none_or(String::is_empty)
+        {
+            self.set_artists(self.all_artists.clone());
         }
     }
 
@@ -356,7 +380,7 @@ impl ArtistGridView {
         self.config = config;
 
         // Rebuild all artist items with new configuration
-        self.set_artists(self.artists.clone());
+        self.set_artists(self.all_artists.clone());
     }
 
     /// Filters artists based on a search query.
@@ -366,7 +390,7 @@ impl ArtistGridView {
     /// * `query` - Search query string
     pub fn filter_artists(&mut self, query: &str) {
         let filtered_artists: Vec<Artist> = self
-            .artists
+            .all_artists
             .iter()
             .filter(|artist| artist.name.to_lowercase().contains(&query.to_lowercase()))
             .cloned()

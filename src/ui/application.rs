@@ -622,9 +622,11 @@ fn create_main_content(
                     LibraryDataChanged { albums, artists } => {
                         debug!("Handling LibraryDataChanged event");
 
-                        // Update data in all views
-                        album_grid_view.set_albums(albums.clone());
-                        artist_grid_view.set_artists(artists.clone());
+                        // Update full lists in grid views
+                        album_grid_view.update_all_albums(albums.clone());
+                        artist_grid_view.update_all_artists(artists.clone());
+
+                        // Update list views
                         album_list_view.set_albums(albums.clone());
                         artist_list_view.set_artists(artists.clone());
                     }

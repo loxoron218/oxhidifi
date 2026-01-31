@@ -211,6 +211,8 @@ pub struct AlbumGridView {
     pub queue_manager: Option<Arc<QueueManager>>,
     /// Current albums being displayed.
     pub albums: Vec<Album>,
+    /// Full unfiltered list of all albums.
+    pub all_albums: Vec<Album>,
     /// Configuration flags.
     pub config: AlbumGridViewConfig,
     /// Empty state component for when no albums are available.
@@ -321,6 +323,7 @@ impl AlbumGridView {
             audio_engine: audio_engine.cloned(),
             queue_manager: queue_manager.cloned(),
             albums: Vec::new(),
+            all_albums: albums.clone(),
             config: config.clone(),
             empty_state,
             current_sort: AlbumSortCriteria::Title, // Default sort by Title
@@ -474,6 +477,7 @@ impl AlbumGridView {
         }
 
         self.albums = albums;
+
         self.album_cards.borrow_mut().clear();
 
         // Apply current sort
@@ -501,6 +505,27 @@ impl AlbumGridView {
             let album_card = self.create_album_card(album);
             self.flow_box.insert(&album_card.widget, -1);
             self.album_cards.borrow_mut().push(album_card);
+        }
+    }
+
+    /// Updates the full unfiltered albums list.
+    ///
+    /// This should be called when library data changes.
+    ///
+    /// # Arguments
+    ///
+    /// * `all_albums` - Complete list of all albums from database
+    pub fn update_all_albums(&mut self, all_albums: Vec<Album>) {
+        self.all_albums = all_albums;
+
+        // If there's no active search filter, show all albums
+        let library_state = self.app_state.as_ref().map(|s| s.get_library_state());
+        if library_state
+            .as_ref()
+            .and_then(|s| s.search_filter.as_ref())
+            .is_none_or(String::is_empty)
+        {
+            self.set_albums(self.all_albums.clone());
         }
     }
 
@@ -651,7 +676,7 @@ impl AlbumGridView {
         self.config = config;
 
         // Rebuild all album items with new configuration
-        self.set_albums(self.albums.clone());
+        self.set_albums(self.all_albums.clone());
     }
 
     /// Updates the DR badge visibility setting for this view.
@@ -675,7 +700,7 @@ impl AlbumGridView {
     /// * `query` - Search query string
     pub fn filter_albums(&mut self, query: &str) {
         let filtered_albums: Vec<Album> = self
-            .albums
+            .all_albums
             .iter()
             .filter(|album| {
                 album.title.to_lowercase().contains(&query.to_lowercase())
