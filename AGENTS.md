@@ -166,6 +166,18 @@ pub enum AudioError {
 pub async fn load_track<P: AsRef<Path>>(&self, track_path: P) -> Result<(), AudioError>
 ```
 
+## GNOME Human Interface Guidelines
+- Use `adw::ApplicationWindow` and `adw::HeaderBar` for standard system chrome and controls
+- Implement adaptive layouts using `adw::Breakpoint` for mobile/desktop parity
+- Provide accessible labels via `set_tooltip_text` and `set_accessible_role` for all icons/buttons
+- Prioritize mnemonics (`set_use_underline(true)`) to ensure keyboard navigability
+- Default to system-standard 250ms animations
+- Adhere to the 6px spacing scale (6/12/18/24/30px) for all margins and padding
+- NEVER hardcode radii; use semantic classes (`.card`, `.boxed-list`) for corner rounding
+- Use `adw::StatusPage` for empty states and `adw::Toast` for non-intrusive feedback
+- Apply "suggested-action" or "destructive-action" CSS classes to primary/dangerous buttons
+- Organize settings using `adw::PreferencesDialog` containing `adw::PreferencesPage`, `adw::PreferencesGroup`
+
 ## Mandatory Behaviors
 
 **ALWAYS DO:**
