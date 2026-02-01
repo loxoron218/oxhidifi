@@ -189,21 +189,24 @@ impl PlayerBar {
         let prev_button = Button::builder()
             .icon_name("media-skip-backward-symbolic")
             .tooltip_text("Previous track")
-            .sensitive(false) // Disabled until track is loaded
+            .use_underline(true)
+            .sensitive(false)
             .build();
         controls.append(prev_button.upcast_ref::<Widget>());
 
         let play_button = ToggleButton::builder()
             .icon_name("media-playback-start-symbolic")
             .tooltip_text("Play")
-            .sensitive(false) // Disabled until track is loaded
+            .use_underline(true)
+            .sensitive(false)
             .build();
         controls.append(play_button.upcast_ref::<Widget>());
 
         let next_button = Button::builder()
             .icon_name("media-skip-forward-symbolic")
             .tooltip_text("Next track")
-            .sensitive(false) // Disabled until track is loaded
+            .use_underline(true)
+            .sensitive(false)
             .build();
         controls.append(next_button.upcast_ref::<Widget>());
 
@@ -247,6 +250,7 @@ impl PlayerBar {
         let mute_button = ToggleButton::builder()
             .icon_name("audio-volume-high-symbolic")
             .tooltip_text("Mute")
+            .use_underline(true)
             .build();
         volume_container.append(mute_button.upcast_ref::<Widget>());
 

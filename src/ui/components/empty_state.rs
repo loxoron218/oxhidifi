@@ -114,6 +114,7 @@ impl EmptyState {
             .valign(Center)
             .css_classes(["suggested-action"])
             .tooltip_text("Select a folder containing your music files")
+            .use_underline(true)
             .build();
 
         // Create main container

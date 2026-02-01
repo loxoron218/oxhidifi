@@ -75,6 +75,7 @@ impl LibraryPreferencesPage {
         let add_button = Button::builder()
             .label("Add Directory")
             .css_classes(["suggested-action"])
+            .use_underline(true)
             .build();
 
         let settings_manager_clone = self.settings_manager.clone();
@@ -160,6 +161,7 @@ impl LibraryPreferencesPage {
             .icon_name("edit-delete-symbolic")
             .tooltip_text("Remove directory")
             .css_classes(["flat"])
+            .use_underline(true)
             .build();
 
         let settings_manager_clone = self.settings_manager.clone();
@@ -287,6 +289,7 @@ impl LibraryPreferencesPage {
             .icon_name("edit-delete-symbolic")
             .tooltip_text("Remove directory")
             .css_classes(["flat"])
+            .use_underline(true)
             .build();
 
         let settings_manager_clone = settings_manager.clone();
