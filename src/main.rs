@@ -3,9 +3,8 @@
 //! This is the main entry point for the Oxhidifi music player application.
 //! It initializes GTK/Libadwaita and starts the main application loop.
 
-use std::error::Error;
-
 use {
+    anyhow::Result,
     libadwaita::init,
     tokio::main,
     tracing_subscriber::{EnvFilter, fmt::Subscriber},
@@ -18,7 +17,7 @@ use oxhidifi::ui::OxhidifiApplication;
 /// This function initializes the GTK and Libadwaita libraries,
 /// creates the main application instance, and starts the event loop.
 #[main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() -> Result<()> {
     // Initialize tracing for observability
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
