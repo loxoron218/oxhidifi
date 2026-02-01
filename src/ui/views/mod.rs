@@ -10,9 +10,10 @@ mod tests;
 pub mod album_grid;
 pub mod artist_grid;
 pub mod detail_view;
+pub mod filtering;
 pub mod list_view;
 
 pub use {
     album_grid::AlbumGridView, artist_grid::ArtistGridView, detail_view::DetailView,
-    list_view::ListView,
+    filtering::Filterable, list_view::ListView,
 };

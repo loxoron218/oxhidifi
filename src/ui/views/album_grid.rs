@@ -4,7 +4,7 @@
 //! in a responsive grid layout with cover art, DR badges, and metadata,
 //! supporting virtual scrolling for large datasets and real-time filtering.
 
-use std::{cell::RefCell, rc::Rc, sync::Arc};
+use std::{cell::RefCell, collections::HashSet, rc::Rc, sync::Arc};
 
 use {
     libadwaita::{
@@ -17,7 +17,7 @@ use {
             SelectionMode::None as SelectionNone,
             Widget,
         },
-        prelude::{AccessibleExt, BoxExt, Cast, WidgetExt},
+        prelude::{AccessibleExt, BoxExt, Cast, ObjectExt, WidgetExt},
     },
     tracing::debug,
 };
@@ -44,6 +44,7 @@ use crate::{
             empty_state::{EmptyState, EmptyStateConfig},
         },
         utils::create_format_display,
+        views::filtering::Filterable,
     },
 };
 
@@ -381,7 +382,10 @@ impl AlbumGridView {
                                     .format(format)
                                     .show_dr_badge(show_dr_badge)
                                     .compact(config_clone.compact)
-                                    .cover_size(u32::try_from(cover_size).unwrap())
+                                    .cover_size(
+                                        u32::try_from(cover_size)
+                                            .expect("cover_size should be within u32 range"),
+                                    )
                                     .on_card_clicked({
                                         let app_state_inner = state_clone.clone();
                                         let album_clone = album.clone();
@@ -471,6 +475,13 @@ impl AlbumGridView {
     ///
     /// Panics if empty state exists but is None (should never happen with proper initialization).
     pub fn set_albums(&mut self, albums: Vec<Album>) {
+        // Check if albums are actually different to avoid unnecessary widget recreation
+        let albums_unchanged = self.albums == albums;
+
+        if albums_unchanged {
+            return;
+        }
+
         // Clear existing children
         while let Some(child) = self.flow_box.first_child() {
             self.flow_box.remove(&child);
@@ -483,9 +494,8 @@ impl AlbumGridView {
         // Apply current sort
         self.apply_sort();
 
-        // Update empty state visibility
-        if let Some(_empty_state) = &self.empty_state {
-            // Get current library state from app state if available
+        // Update empty state visibility only when albums change
+        if let Some(ref empty_state) = self.empty_state {
             let library_state = if let Some(app_state) = &self.app_state {
                 app_state.get_library_state()
             } else {
@@ -494,10 +504,7 @@ impl AlbumGridView {
                     ..Default::default()
                 }
             };
-            self.empty_state
-                .as_ref()
-                .unwrap()
-                .update_from_library_state(&library_state);
+            empty_state.update_from_library_state(&library_state);
         }
 
         // Add new album items using the new AlbumCard component
@@ -584,7 +591,7 @@ impl AlbumGridView {
             .format(format)
             .show_dr_badge(show_dr_badge)
             .compact(self.config.compact)
-            .cover_size(u32::try_from(cover_size).unwrap())
+            .cover_size(u32::try_from(cover_size).expect("cover_size should be within u32 range"))
             .on_play_clicked({
                 let app_state = self.app_state.clone();
                 let library_db = self.library_db.clone();
@@ -699,19 +706,71 @@ impl AlbumGridView {
     ///
     /// * `query` - Search query string
     pub fn filter_albums(&mut self, query: &str) {
-        let filtered_albums: Vec<Album> = self
-            .all_albums
-            .iter()
-            .filter(|album| {
-                album.title.to_lowercase().contains(&query.to_lowercase())
-                    || album.artist_id.to_string().contains(&query.to_lowercase())
-            })
-            .cloned()
-            .collect();
-
-        self.set_albums(filtered_albums);
+        let all_albums = self.all_albums.clone();
+        self.filter_items(query, &all_albums, |album, query| {
+            album.title.to_lowercase().contains(query)
+                || album.artist_id.to_string().to_lowercase().contains(query)
+        });
     }
 
+    /// Clears the view by hiding all items.
+    ///
+    /// This is used when switching tabs with an active search to prevent
+    /// the unfiltered view from appearing during the transition.
+    pub fn clear_view(&self) {
+        Filterable::<Album>::clear_view(self);
+    }
+}
+
+impl Filterable<Album> for AlbumGridView {
+    /// Returns the unique identifier for an album item.
+    ///
+    /// # Arguments
+    ///
+    /// * `item` - The album to get the ID from
+    ///
+    /// # Returns
+    ///
+    /// The album's unique identifier.
+    fn get_widget_id(&self, item: &Album) -> i64 {
+        item.id
+    }
+
+    /// Returns a copy of the currently displayed albums.
+    ///
+    /// # Returns
+    ///
+    /// A vector of albums currently displayed in the view.
+    fn get_current_items(&self) -> Vec<Album> {
+        self.albums.clone()
+    }
+
+    /// Updates the albums currently displayed in the view.
+    ///
+    /// # Arguments
+    ///
+    /// * `items` - New vector of albums to display
+    fn set_current_items(&mut self, items: Vec<Album>) {
+        self.albums = items;
+    }
+
+    /// Sets the visibility of album cards based on filtered IDs.
+    ///
+    /// # Arguments
+    ///
+    /// * `visible_ids` - Set of album IDs that should be visible
+    fn set_visibility(&self, visible_ids: &HashSet<i64>) {
+        let _freeze_guard = self.flow_box.freeze_notify();
+
+        let cards = self.album_cards.borrow();
+        for card in cards.iter() {
+            let card_visible = visible_ids.contains(&card.album_id);
+            card.widget.set_visible(card_visible);
+        }
+    }
+}
+
+impl AlbumGridView {
     /// Sorts albums by the specified criteria.
     ///
     /// # Arguments

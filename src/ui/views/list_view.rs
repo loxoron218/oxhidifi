@@ -4,7 +4,7 @@
 //! in a column/list layout with detailed metadata, supporting virtual scrolling
 //! for large datasets and real-time filtering/sorting.
 
-use std::{cell::RefCell, convert::TryFrom, rc::Rc, sync::Arc};
+use std::{cell::RefCell, collections::HashSet, convert::TryFrom, rc::Rc, sync::Arc};
 
 use libadwaita::{
     glib::{JoinHandle, MainContext},
@@ -28,7 +28,7 @@ use crate::{
         ZoomEvent::ListZoomChanged,
         app_state::AppStateEvent::SettingsChanged,
     },
-    ui::components::cover_art::CoverArt,
+    ui::{components::cover_art::CoverArt, views::filtering::Filterable},
 };
 
 /// Builder pattern for configuring `ListView` components.
@@ -112,7 +112,7 @@ pub enum ListViewType {
 /// Column/list view for displaying albums or artists with detailed metadata.
 ///
 /// The `ListView` component displays items in a column layout that provides
-/// more detailed information than the grid view, with support for virtual
+/// more detailed information than grid view, with support for virtual
 /// scrolling, real-time filtering, and keyboard navigation.
 pub struct ListView {
     /// The underlying GTK widget (`ListBox`).
@@ -131,6 +131,12 @@ pub struct ListView {
     _settings_subscription_handle: Option<JoinHandle<()>>,
     /// References to cover art components for dynamic updates.
     cover_arts: Rc<RefCell<Vec<CoverArt>>>,
+    /// Current albums being displayed.
+    pub albums: Vec<Album>,
+    /// Current artists being displayed.
+    pub artists: Vec<Artist>,
+    /// Row widgets with their IDs for filtering.
+    rows: Rc<RefCell<Vec<(Widget, i64)>>>,
 }
 
 /// Configuration for `ListView` display options.
@@ -213,7 +219,7 @@ impl ListView {
                                                     .get_list_cover_dimensions()
                                                     .0,
                                             )
-                                            .unwrap(),
+                                            .expect("cover_size should be within u32 range"),
                                             &cover_arts_clone,
                                         );
                                         list_box_clone.append(&row);
@@ -231,7 +237,7 @@ impl ListView {
                                                     .get_list_cover_dimensions()
                                                     .0,
                                             )
-                                            .unwrap(),
+                                            .expect("cover_size should be within u32 range"),
                                         );
                                         list_box_clone.append(&row);
                                     }
@@ -269,6 +275,9 @@ impl ListView {
                 None
             },
             cover_arts,
+            albums: Vec::new(),
+            artists: Vec::new(),
+            rows: Rc::new(RefCell::new(Vec::new())),
         };
 
         // Initialize empty list
@@ -305,13 +314,29 @@ impl ListView {
             return;
         }
 
+        // Check if albums are actually different to avoid unnecessary widget recreation
+        let albums_unchanged = self.albums.len() == albums.len()
+            && self
+                .albums
+                .iter()
+                .zip(albums.iter())
+                .all(|(a, b)| a.id == b.id);
+
+        if albums_unchanged {
+            return;
+        }
+
         self.clear_list();
         self.cover_arts.borrow_mut().clear();
+        self.rows.borrow_mut().clear();
 
-        for album in albums {
-            let row = self.create_album_row(&album);
+        for album in &albums {
+            let row = self.create_album_row(album);
             self.list_box.append(&row);
+            self.rows.borrow_mut().push((row.clone(), album.id));
         }
+
+        self.albums = albums;
     }
 
     /// Sets the artists to display in the list.
@@ -324,12 +349,28 @@ impl ListView {
             return;
         }
 
-        self.clear_list();
+        // Check if artists are actually different to avoid unnecessary widget recreation
+        let artists_unchanged = self.artists.len() == artists.len()
+            && self
+                .artists
+                .iter()
+                .zip(artists.iter())
+                .all(|(a, b)| a.id == b.id);
 
-        for artist in artists {
-            let row = self.create_artist_row(&artist);
-            self.list_box.append(&row);
+        if artists_unchanged {
+            return;
         }
+
+        self.clear_list();
+        self.rows.borrow_mut().clear();
+
+        for artist in &artists {
+            let row = self.create_artist_row(artist);
+            self.list_box.append(&row);
+            self.rows.borrow_mut().push((row.clone(), artist.id));
+        }
+
+        self.artists = artists;
     }
 
     /// Creates a single album row widget for the list.
@@ -353,7 +394,7 @@ impl ListView {
             album,
             self.app_state.as_ref(),
             &self.config,
-            u32::try_from(cover_size).unwrap(),
+            u32::try_from(cover_size).expect("cover_size should be within u32 range"),
             &self.cover_arts,
         )
     }
@@ -379,7 +420,7 @@ impl ListView {
             artist,
             self.app_state.as_ref(),
             &self.config,
-            u32::try_from(cover_size).unwrap(),
+            u32::try_from(cover_size).expect("cover_size should be within u32 range"),
         )
     }
 
@@ -406,30 +447,124 @@ impl ListView {
     /// # Arguments
     ///
     /// * `query` - Search query string
-    pub fn filter_items(&mut self, query: &str) {
+    pub fn filter_view_items(&mut self, query: &str) {
         if let Some(ref app_state) = self.app_state {
             let library_state = app_state.get_library_state();
             match self.view_type {
                 ListViewType::Albums => {
-                    let filtered_albums: Vec<Album> = library_state
-                        .albums
-                        .into_iter()
-                        .filter(|album| {
-                            album.title.to_lowercase().contains(&query.to_lowercase())
-                                || album.artist_id.to_string().contains(&query.to_lowercase())
-                        })
-                        .collect();
-                    self.set_albums(filtered_albums);
+                    let albums = library_state.albums.clone();
+                    self.filter_items(query, &albums, |album, query| {
+                        album.title.to_lowercase().contains(query)
+                            || album.artist_id.to_string().to_lowercase().contains(query)
+                    });
                 }
                 ListViewType::Artists => {
-                    let filtered_artists: Vec<Artist> = library_state
-                        .artists
-                        .into_iter()
-                        .filter(|artist| artist.name.to_lowercase().contains(&query.to_lowercase()))
-                        .collect();
-                    self.set_artists(filtered_artists);
+                    let artists = library_state.artists.clone();
+                    self.filter_items(query, &artists, |artist, query| {
+                        artist.name.to_lowercase().contains(query)
+                    });
                 }
             }
+        }
+    }
+
+    /// Clears the view by hiding all items.
+    ///
+    /// This is used when switching tabs with an active search to prevent
+    /// the unfiltered view from appearing during the transition.
+    pub fn clear_view(&self) {
+        Filterable::<Album>::clear_view(self);
+    }
+}
+
+impl Filterable<Album> for ListView {
+    /// Returns the unique identifier for an album item.
+    ///
+    /// # Arguments
+    ///
+    /// * `item` - The album to get the ID from
+    ///
+    /// # Returns
+    ///
+    /// The album's unique identifier.
+    fn get_widget_id(&self, item: &Album) -> i64 {
+        item.id
+    }
+
+    /// Returns a copy of the currently displayed albums.
+    ///
+    /// # Returns
+    ///
+    /// A vector of albums currently displayed in the view.
+    fn get_current_items(&self) -> Vec<Album> {
+        self.albums.clone()
+    }
+
+    /// Updates the albums currently displayed in the view.
+    ///
+    /// # Arguments
+    ///
+    /// * `items` - New vector of albums to display
+    fn set_current_items(&mut self, items: Vec<Album>) {
+        self.albums = items;
+    }
+
+    /// Sets the visibility of album rows based on filtered IDs.
+    ///
+    /// # Arguments
+    ///
+    /// * `visible_ids` - Set of album IDs that should be visible
+    fn set_visibility(&self, visible_ids: &HashSet<i64>) {
+        let rows = self.rows.borrow();
+        for (row_widget, album_id) in rows.iter() {
+            let row_visible = visible_ids.contains(album_id);
+            row_widget.set_visible(row_visible);
+        }
+    }
+}
+
+impl Filterable<Artist> for ListView {
+    /// Returns the unique identifier for an artist item.
+    ///
+    /// # Arguments
+    ///
+    /// * `item` - The artist to get the ID from
+    ///
+    /// # Returns
+    ///
+    /// The artist's unique identifier.
+    fn get_widget_id(&self, item: &Artist) -> i64 {
+        item.id
+    }
+
+    /// Returns a copy of the currently displayed artists.
+    ///
+    /// # Returns
+    ///
+    /// A vector of artists currently displayed in the view.
+    fn get_current_items(&self) -> Vec<Artist> {
+        self.artists.clone()
+    }
+
+    /// Updates the artists currently displayed in the view.
+    ///
+    /// # Arguments
+    ///
+    /// * `items` - New vector of artists to display
+    fn set_current_items(&mut self, items: Vec<Artist>) {
+        self.artists = items;
+    }
+
+    /// Sets the visibility of artist rows based on filtered IDs.
+    ///
+    /// # Arguments
+    ///
+    /// * `visible_ids` - Set of artist IDs that should be visible
+    fn set_visibility(&self, visible_ids: &HashSet<i64>) {
+        let rows = self.rows.borrow();
+        for (row_widget, artist_id) in rows.iter() {
+            let row_visible = visible_ids.contains(artist_id);
+            row_widget.set_visible(row_visible);
         }
     }
 }

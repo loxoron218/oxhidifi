@@ -4,7 +4,7 @@
 //! in a responsive grid layout with artist images, names, and album counts,
 //! supporting virtual scrolling for large datasets and real-time filtering.
 
-use std::{cell::RefCell, convert::TryFrom, rc::Rc, sync::Arc};
+use std::{cell::RefCell, collections::HashSet, convert::TryFrom, rc::Rc, sync::Arc};
 
 use {
     libadwaita::{
@@ -18,7 +18,7 @@ use {
             Widget,
             pango::EllipsizeMode::End,
         },
-        prelude::{AccessibleExt, BoxExt, Cast, FlowBoxChildExt, WidgetExt},
+        prelude::{AccessibleExt, BoxExt, Cast, FlowBoxChildExt, ObjectExt, WidgetExt},
     },
     tracing::error,
 };
@@ -27,9 +27,12 @@ use crate::{
     error::domain::UiError::{self, BuilderError},
     library::models::Artist,
     state::{AppState, LibraryState, NavigationState::ArtistDetail, ZoomEvent::GridZoomChanged},
-    ui::components::{
-        cover_art::CoverArt,
-        empty_state::{EmptyState, EmptyStateConfig},
+    ui::{
+        components::{
+            cover_art::CoverArt,
+            empty_state::{EmptyState, EmptyStateConfig},
+        },
+        views::filtering::Filterable,
     },
 };
 
@@ -260,6 +263,18 @@ impl ArtistGridView {
     ///
     /// * `artists` - New vector of artists to display
     pub fn set_artists(&mut self, artists: Vec<Artist>) {
+        // Check if artists are actually different to avoid unnecessary widget recreation
+        let artists_unchanged = self.artists.len() == artists.len()
+            && self
+                .artists
+                .iter()
+                .zip(artists.iter())
+                .all(|(a, b)| a.id == b.id);
+
+        if artists_unchanged {
+            return;
+        }
+
         // Clear existing children
         while let Some(child) = self.flow_box.first_child() {
             self.flow_box.remove(&child);
@@ -273,9 +288,8 @@ impl ArtistGridView {
         // Apply current sort
         self.apply_sort();
 
-        // Update empty state visibility
-        if let Some(empty_state) = &self.empty_state {
-            // Get current library state from app state if available
+        // Update empty state visibility only when artists change
+        if let Some(ref empty_state) = self.empty_state {
             let library_state = if let Some(app_state) = &self.app_state {
                 app_state.get_library_state()
             } else {
@@ -389,16 +403,70 @@ impl ArtistGridView {
     ///
     /// * `query` - Search query string
     pub fn filter_artists(&mut self, query: &str) {
-        let filtered_artists: Vec<Artist> = self
-            .all_artists
-            .iter()
-            .filter(|artist| artist.name.to_lowercase().contains(&query.to_lowercase()))
-            .cloned()
-            .collect();
-
-        self.set_artists(filtered_artists);
+        let all_artists = self.all_artists.clone();
+        self.filter_items(query, &all_artists, |artist, query| {
+            artist.name.to_lowercase().contains(query)
+        });
     }
 
+    /// Clears the view by hiding all items.
+    ///
+    /// This is used when switching tabs with an active search to prevent
+    /// the unfiltered view from appearing during the transition.
+    pub fn clear_view(&self) {
+        Filterable::<Artist>::clear_view(self);
+    }
+}
+
+impl Filterable<Artist> for ArtistGridView {
+    /// Returns the unique identifier for an artist item.
+    ///
+    /// # Arguments
+    ///
+    /// * `item` - The artist to get the ID from
+    ///
+    /// # Returns
+    ///
+    /// The artist's unique identifier.
+    fn get_widget_id(&self, item: &Artist) -> i64 {
+        item.id
+    }
+
+    /// Returns a copy of the currently displayed artists.
+    ///
+    /// # Returns
+    ///
+    /// A vector of artists currently displayed in the view.
+    fn get_current_items(&self) -> Vec<Artist> {
+        self.artists.clone()
+    }
+
+    /// Updates the artists currently displayed in the view.
+    ///
+    /// # Arguments
+    ///
+    /// * `items` - New vector of artists to display
+    fn set_current_items(&mut self, items: Vec<Artist>) {
+        self.artists = items;
+    }
+
+    /// Sets the visibility of artist cards based on filtered IDs.
+    ///
+    /// # Arguments
+    ///
+    /// * `visible_ids` - Set of artist IDs that should be visible
+    fn set_visibility(&self, visible_ids: &HashSet<i64>) {
+        let _freeze_guard = self.flow_box.freeze_notify();
+
+        let cards = self.artist_cards_ref.borrow();
+        for card in cards.iter() {
+            let card_visible = visible_ids.contains(&card.artist_id);
+            card.widget.set_visible(card_visible);
+        }
+    }
+}
+
+impl ArtistGridView {
     /// Sorts artists by the specified criteria.
     ///
     /// # Arguments
@@ -458,6 +526,8 @@ pub struct ArtistCard {
     pub name_label: Label,
     /// Album count label.
     pub album_count_label: Label,
+    /// Artist ID for tracking during filtering.
+    pub artist_id: i64,
 }
 
 impl ArtistCard {
@@ -566,6 +636,7 @@ impl ArtistCard {
             cover_art,
             name_label,
             album_count_label,
+            artist_id: artist.id,
         }
     }
 

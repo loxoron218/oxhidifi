@@ -3,13 +3,13 @@
 //! This module implements the header bar component that provides
 //! essential controls for navigation, search, and application settings.
 
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use {
     libadwaita::{
         Application, ApplicationWindow, HeaderBar as LibadwaitaHeaderBar, SplitButton,
         gio::{Icon, Menu, MenuItem, SimpleAction, SimpleActionGroup},
-        glib::{JoinHandle, MainContext, Variant, VariantTy},
+        glib::{JoinHandle, MainContext, SourceId, Variant, VariantTy, timeout_add_local_once},
         gtk::{
             Box, Button, Image, Label,
             Orientation::{Horizontal, Vertical},
@@ -20,6 +20,7 @@ use {
             WidgetExt,
         },
     },
+    parking_lot::Mutex,
     tracing::{debug, info},
 };
 
@@ -74,6 +75,10 @@ pub struct HeaderBar {
     pub zoom_popover: Popover,
     /// Subscription handle for state changes (to ensure proper cleanup)
     _subscription_handle: Option<JoinHandle<()>>,
+    /// Debounce timer handle for search input.
+    _search_debounce_handle: Arc<Mutex<Option<SourceId>>>,
+    /// Flag to prevent search debounce during programmatic text clearing.
+    clearing_search: Arc<Mutex<bool>>,
 }
 
 impl HeaderBar {
@@ -93,11 +98,11 @@ impl HeaderBar {
     ) -> Self {
         let widget = LibadwaitaHeaderBar::builder().build();
 
-        // Create back button
         let back_button = Button::builder()
             .icon_name("go-previous-symbolic")
             .tooltip_text("Back")
-            .visible(false) // Hidden by default
+            .use_underline(true)
+            .visible(false)
             .build();
 
         // Connect back button to app state
@@ -120,33 +125,100 @@ impl HeaderBar {
         let search_button = ToggleButton::builder()
             .icon_name("system-search-symbolic")
             .tooltip_text("Search")
+            .use_underline(true)
             .build();
+
+        // Debounce timer handle for search
+        let debounce_handle: Arc<Mutex<Option<SourceId>>> = Arc::new(Mutex::new(None));
+
+        // Flag to prevent debounce during programmatic text clearing
+        let clearing_search: Arc<Mutex<bool>> = Arc::new(Mutex::new(false));
 
         // Connect search button to toggle entry visibility and focus
         let search_entry_clone = search_entry.clone();
+        let debounce_clone = debounce_handle.clone();
+        let clearing_clone_button = clearing_search.clone();
         search_button.connect_toggled(move |button: &ToggleButton| {
             search_entry_clone.set_visible(button.is_active());
             if button.is_active() {
                 search_entry_clone.grab_focus();
             } else {
+                {
+                    *clearing_clone_button.lock() = true;
+                }
                 search_entry_clone.set_text("");
+                *clearing_clone_button.lock() = false;
+
+                // Cancel any pending debounce timer
+                if let Some(timer_id) = debounce_clone.lock().take() {
+                    let () = timer_id.remove();
+                }
             }
         });
 
         // Handle Escape to hide search entry
         let search_button_clone = search_button.clone();
+        let debounce_clone_escape = debounce_handle.clone();
+        let search_entry_clone_escape = search_entry.clone();
+        let state_clone_escape = app_state.clone();
+        let clearing_clone_escape = clearing_search.clone();
         search_entry.connect_stop_search(move |_| {
             search_button_clone.set_active(false);
+
+            // Clear search text and filter when ESC is pressed
+            {
+                *clearing_clone_escape.lock() = true;
+            }
+            search_entry_clone_escape.set_text("");
+            *clearing_clone_escape.lock() = false;
+
+            // Cancel any pending debounce timer
+            if let Some(timer_id) = debounce_clone_escape.lock().take() {
+                let () = timer_id.remove();
+            }
+
+            // Reset search filter
+            state_clone_escape.update_search_filter(None);
         });
 
-        // Connect search entry to app state
+        // Connect search entry to app state with debouncing
         let state_clone = app_state.clone();
+        let debounce_clone_search = debounce_handle.clone();
+        let clearing_clone_search = clearing_search.clone();
+        let settings_manager_search = settings_manager.clone();
         search_entry.connect_search_changed(move |entry| {
+            // Skip debounce during programmatic text clearing
+            if *clearing_clone_search.lock() {
+                return;
+            }
+
             let text = entry.text().to_string();
+
+            // Cancel any pending debounce timer
+            if let Some(timer_id) = debounce_clone_search.lock().take() {
+                let () = timer_id.remove();
+            }
+
+            let state = state_clone.clone();
+
+            // Update immediately if empty, otherwise debounce
             if text.is_empty() {
-                state_clone.update_search_filter(None);
+                state.update_search_filter(None);
             } else {
-                state_clone.update_search_filter(Some(text));
+                let handle_clone = debounce_clone_search.clone();
+                let handle_clone_for_id = debounce_clone_search.clone();
+
+                let debounce_ms = settings_manager_search.get_settings().search_debounce_ms;
+
+                let timer_id =
+                    timeout_add_local_once(Duration::from_millis(debounce_ms), move || {
+                        state.update_search_filter(Some(text));
+
+                        // Clear timer ID after execution since it's already been removed by glib
+                        *handle_clone.lock() = None;
+                    });
+
+                *handle_clone_for_id.lock() = Some(timer_id);
             }
         });
 
@@ -217,12 +289,14 @@ impl HeaderBar {
         let zoom_out_button = Button::builder()
             .icon_name("zoom-out-symbolic")
             .tooltip_text("Zoom Out")
+            .use_underline(true)
             .css_classes(["flat"])
             .build();
 
         let zoom_in_button = Button::builder()
             .icon_name("zoom-in-symbolic")
             .tooltip_text("Zoom In")
+            .use_underline(true)
             .css_classes(["flat"])
             .build();
 
@@ -285,7 +359,9 @@ impl HeaderBar {
 
         set_mode_action.connect_activate(move |_action, parameter: Option<&Variant>| {
             if let Some(param) = parameter {
-                let mode_value = param.get::<i32>().unwrap();
+                let mode_value = param
+                    .get::<i32>()
+                    .expect("view.set-mode action requires i32 parameter");
                 let new_mode = match mode_value {
                     0 => Grid, // Grid = 0
                     1 => List, // List = 1
@@ -352,6 +428,7 @@ impl HeaderBar {
         let settings_button = Button::builder()
             .icon_name("open-menu-symbolic")
             .tooltip_text("Settings")
+            .use_underline(true)
             .build();
 
         // Connect settings button to show preferences dialog
@@ -398,6 +475,7 @@ impl HeaderBar {
         let album_tab = ToggleButton::builder()
             .child(&album_box)
             .tooltip_text("Browse albums")
+            .use_underline(true)
             .active(current_tab == Albums)
             .has_frame(false)
             .build();
@@ -414,6 +492,7 @@ impl HeaderBar {
         let artist_tab = ToggleButton::builder()
             .child(&artist_box)
             .tooltip_text("Browse artists")
+            .use_underline(true)
             .active(current_tab == Artists)
             .has_frame(false)
             .build();
@@ -492,6 +571,8 @@ impl HeaderBar {
             settings_manager,
             application,
             current_view_mode: current_view_mode.clone(),
+            _search_debounce_handle: debounce_handle.clone(),
+            clearing_search: clearing_search.clone(),
             _subscription_handle: {
                 // Create subscription handle for state changes
                 let state_clone_sub = app_state.clone();
@@ -524,6 +605,18 @@ impl HeaderBar {
     ) -> Self {
         Self::new(app_state, Some(application), settings_manager)
     }
+
+    /// Clears the search entry without triggering search debounce.
+    pub fn clear_search(&self) {
+        *self.clearing_search.lock() = true;
+        self.search_entry.set_text("");
+        *self.clearing_search.lock() = false;
+    }
+
+    /// Closes the search entry by deactivating the search button.
+    pub fn close_search(&self) {
+        self.search_button.set_active(false);
+    }
 }
 
 #[cfg(test)]
@@ -545,14 +638,17 @@ mod tests {
         let app_state = AppState::new(
             Weak::new(),
             None::<Arc<RwLock<LibraryScanner>>>,
-            Arc::new(RwLock::new(SettingsManager::new().unwrap())),
+            Arc::new(RwLock::new(
+                SettingsManager::new().expect("Failed to create SettingsManager in test"),
+            )),
         );
         let application = Some(
             Application::builder()
                 .application_id("com.example.oxhidifi")
                 .build(),
         );
-        let settings_manager = Arc::new(SettingsManager::new().unwrap());
+        let settings_manager =
+            Arc::new(SettingsManager::new().expect("Failed to create SettingsManager in test"));
         let header_bar = HeaderBar::new(&Arc::new(app_state), application, settings_manager);
 
         // Check icon names without requiring widget realization

@@ -325,6 +325,15 @@ impl AppState {
         self.broadcast_event(&AppStateEvent::SearchFilterChanged(filter));
     }
 
+    /// Clears the search filter without broadcasting an event.
+    ///
+    /// This is used when switching tabs to avoid updating views that are
+    /// still visible during the crossfade transition.
+    pub fn clear_search_filter_silent(&self) {
+        debug!("AppState: Clearing search filter (silent)");
+        self.library.write().search_filter = None;
+    }
+
     /// Subscribes to application state changes.
     ///
     /// # Returns

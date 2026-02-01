@@ -3,7 +3,7 @@
 //! This module implements the `OxhidifiApplication` which serves as the
 //! main entry point for the Libadwaita-based user interface.
 
-use std::{error::Error, sync::Arc};
+use std::{error::Error, rc::Rc, sync::Arc};
 
 use {
     libadwaita::{
@@ -282,8 +282,11 @@ fn build_ui(
     let navigation_view = NavigationView::builder().build();
 
     // Create header bar with proper state integration
-    let header_bar =
-        HeaderBar::default_with_state(app_state, app.clone(), settings_manager.clone());
+    let header_bar = Rc::new(HeaderBar::default_with_state(
+        app_state,
+        app.clone(),
+        settings_manager.clone(),
+    ));
 
     // Create main content area with responsive layout
     let main_content = create_main_content(
@@ -293,6 +296,7 @@ fn build_ui(
         audio_engine,
         queue_manager,
         &window,
+        &header_bar,
     );
 
     // Add main content as root page
@@ -462,6 +466,7 @@ fn create_main_content(
     audio_engine: &Arc<AudioEngine>,
     queue_manager: &Arc<QueueManager>,
     window: &ApplicationWindow,
+    header_bar: &Rc<HeaderBar>,
 ) -> Widget {
     // Create stack for efficient view switching
     let view_stack = Stack::builder()
@@ -603,12 +608,15 @@ fn create_main_content(
     debug!("Subscribing to AppState changes in main content");
     let app_state_clone = app_state.clone();
     let view_stack_clone = view_stack.clone();
+    let header_bar_clone = Rc::clone(header_bar);
+    let search_app_state = app_state.clone();
 
     // Use a weak reference to avoid potential memory leaks
     // and implement proper error handling for subscription
     MainContext::default().spawn_local(async move {
         let receiver = app_state_clone.subscribe();
         let mut switch_count = 0;
+        let mut previous_tab = None;
 
         // Move view controllers into this closure to keep them alive and update them
         let mut album_grid_view = album_grid_view;
@@ -616,19 +624,72 @@ fn create_main_content(
         let mut album_list_view = album_list_view;
         let mut artist_list_view = artist_list_view;
 
+        /// Applies a method or filter to the appropriate view based on child name.
+        ///
+        /// This macro dispatches operations to the correct view controller by matching
+        /// the stack child name, eliminating repetitive match statements.
+        ///
+        /// # Patterns
+        ///
+        /// * `($child_name:expr, same, $method:ident)` - Invokes parameterless method
+        /// * `($child_name:expr, same, $method:ident, $($arg:expr),*)` - Invokes method with args
+        /// * `($child_name:expr, filter, $query:expr)` - Applies view-specific filter methods
+        macro_rules! apply_to_views {
+            ($child_name:expr, same, $method:ident) => {
+                match $child_name {
+                    "album_grid" => album_grid_view.$method(),
+                    "album_list" => album_list_view.$method(),
+                    "artist_grid" => artist_grid_view.$method(),
+                    "artist_list" => artist_list_view.$method(),
+                    _ => {}
+                }
+            };
+            ($child_name:expr, same, $method:ident, $($arg:expr),*) => {
+                match $child_name {
+                    "album_grid" => album_grid_view.$method($($arg),*),
+                    "album_list" => album_list_view.$method($($arg),*),
+                    "artist_grid" => artist_grid_view.$method($($arg),*),
+                    "artist_list" => artist_list_view.$method($($arg),*),
+                    _ => {}
+                }
+            };
+            ($child_name:expr, filter, $query:expr) => {
+                match $child_name {
+                    "album_grid" => album_grid_view.filter_albums($query),
+                    "album_list" => album_list_view.filter_view_items($query),
+                    "artist_grid" => artist_grid_view.filter_artists($query),
+                    "artist_list" => artist_list_view.filter_view_items($query),
+                    _ => {}
+                }
+            };
+        }
+
         loop {
             if let Ok(event) = receiver.recv().await {
                 match event {
                     LibraryDataChanged { albums, artists } => {
                         debug!("Handling LibraryDataChanged event");
 
-                        // Update full lists in grid views
+                        // Save current search filter
+                        let current_filter =
+                            search_app_state.get_library_state().search_filter.clone();
+
+                        // Update full lists
                         album_grid_view.update_all_albums(albums.clone());
                         artist_grid_view.update_all_artists(artists.clone());
 
                         // Update list views
                         album_list_view.set_albums(albums.clone());
                         artist_list_view.set_artists(artists.clone());
+
+                        // Re-apply current search filter if active
+                        if let Some(ref filter) = current_filter {
+                            let query = filter.as_str();
+                            let visible_child = view_stack_clone.visible_child_name();
+                            if let Some(child_name) = visible_child.as_deref() {
+                                apply_to_views!(child_name, filter, query);
+                            }
+                        }
                     }
                     ViewOptionsChanged {
                         current_tab,
@@ -640,12 +701,52 @@ fn create_main_content(
                             switch_count, current_tab, view_mode
                         );
 
+                        // Check if tab changed (Albums ↔ Artists)
+                        // Determine if tab changed - treat first switch (previous_tab is None) as a change too
+                        let tab_changed = previous_tab.is_none_or(|prev| prev != current_tab);
+                        previous_tab = Some(current_tab.clone());
+
                         let child_name = match (&current_tab, &view_mode) {
                             (LibraryAlbums, Grid) => "album_grid",
                             (LibraryAlbums, List) => "album_list",
                             (LibraryArtists, Grid) => "artist_grid",
                             (LibraryArtists, List) => "artist_list",
                         };
+
+                        // Check if there's an active search filter
+                        let library_state = search_app_state.get_library_state();
+                        let has_active_search = library_state.search_filter.is_some();
+
+                        // Handle view switching
+                        if tab_changed {
+                            // Tab switch: clear search filter to prevent stale results
+                            debug!("Tab changed, resetting search filter");
+
+                            if has_active_search {
+                                debug!("Clearing target view before tab switch to prevent flicker");
+
+                                apply_to_views!(child_name, same, clear_view);
+                            } else {
+                                // No active search - restore view to show all items
+                                // (view may have been cleared in a previous switch with search)
+                                debug!("Restoring view to show all items");
+
+                                apply_to_views!(child_name, filter, "");
+                            }
+                        } else {
+                            // View mode switch within same tab: preserve search results
+                            debug!("View mode changed within same tab, preserving search");
+
+                            if let Some(ref filter) = library_state.search_filter {
+                                let query = filter.as_str();
+                                debug!("Applying search filter '{query}' to new view {child_name}");
+
+                                apply_to_views!(child_name, filter, query);
+                            } else {
+                                // No search - just show all items
+                                apply_to_views!(child_name, filter, "");
+                            }
+                        }
 
                         // Reset scroll position before switching
                         if let Some(child) = view_stack_clone.child_by_name(child_name)
@@ -656,18 +757,29 @@ fn create_main_content(
                         }
 
                         view_stack_clone.set_visible_child_name(child_name);
+
+                        // Clear search AFTER view switch but WITHOUT broadcasting to prevent
+                        // the outgoing view (still visible during crossfade) from showing all items
+                        if tab_changed && has_active_search {
+                            header_bar_clone.clear_search();
+                            header_bar_clone.close_search();
+                            search_app_state.clear_search_filter_silent();
+
+                            // Restore the view to show all items now that the search is cleared
+                            debug!("Restoring view after clearing search");
+
+                            apply_to_views!(child_name, filter, "");
+                        }
                     }
                     SearchFilterChanged(filter) => {
-                        // Search filter changed - update all views
-                        // Note: Each view handles filtering internally, we just need to pass the query
                         let query = filter.as_deref().unwrap_or("");
 
                         debug!("Updating search filter for all views: '{}'", query);
 
                         album_grid_view.filter_albums(query);
                         artist_grid_view.filter_artists(query);
-                        album_list_view.filter_items(query);
-                        artist_list_view.filter_items(query);
+                        album_list_view.filter_view_items(query);
+                        artist_list_view.filter_view_items(query);
                     }
                     SettingsChanged { show_dr_values } => {
                         // Update DR badge visibility in all views

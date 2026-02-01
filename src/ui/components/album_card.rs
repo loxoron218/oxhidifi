@@ -250,6 +250,8 @@ pub struct AlbumCard {
     pub title_area: Box,
     /// Metadata container (contains format and year labels).
     pub metadata_container: Box,
+    /// Album ID for tracking during filtering.
+    pub album_id: i64,
 }
 
 impl AlbumCard {
@@ -493,6 +495,7 @@ impl AlbumCard {
             artist_name,
             title_area,
             metadata_container,
+            album_id: album.id,
         }
     }
 

@@ -18,6 +18,11 @@ use {
     tracing::debug,
 };
 
+/// Default debounce timeout for search input (150ms).
+const fn default_search_debounce_ms() -> u64 {
+    150
+}
+
 /// Error type for settings operations.
 #[derive(Error, Debug)]
 pub enum SettingsError {
@@ -57,6 +62,9 @@ pub struct UserSettings {
     pub year_display_mode: String,
     /// Whether to show metadata overlays (title, artist, format, year) on album cards.
     pub show_metadata_overlays: bool,
+    /// Debounce timeout in milliseconds for search input (default: 150).
+    #[serde(default = "default_search_debounce_ms")]
+    pub search_debounce_ms: u64,
 }
 
 impl Default for UserSettings {
@@ -73,6 +81,7 @@ impl Default for UserSettings {
             theme_preference: "system".to_string(),
             year_display_mode: "release".to_string(), // Default to release year
             show_metadata_overlays: true,             // Default to showing metadata overlays
+            search_debounce_ms: 150,                  // Default debounce timeout for search
         }
     }
 }
@@ -295,10 +304,12 @@ mod tests {
             theme_preference: "dark".to_string(),
             year_display_mode: "original".to_string(),
             show_metadata_overlays: false,
+            search_debounce_ms: 150,
         };
 
-        let serialized = to_string(&settings).unwrap();
-        let deserialized: UserSettings = from_str(&serialized).unwrap();
+        let serialized = to_string(&settings).expect("Failed to serialize settings in test");
+        let deserialized: UserSettings =
+            from_str(&serialized).expect("Failed to deserialize settings in test");
         assert_eq!(settings, deserialized);
     }
 
