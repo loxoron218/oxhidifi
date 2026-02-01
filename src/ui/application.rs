@@ -3,7 +3,7 @@
 //! This module implements the `OxhidifiApplication` which serves as the
 //! main entry point for the Libadwaita-based user interface.
 
-use std::{error::Error, rc::Rc, sync::Arc};
+use std::{fs::read_to_string, path::Path, rc::Rc, sync::Arc};
 
 use {
     libadwaita::{
@@ -36,6 +36,7 @@ use crate::{
         queue_manager::QueueManager,
     },
     config::SettingsManager,
+    error::domain::UiError::{self, InitializationError},
     library::{
         LibraryDatabase,
         scanner::{LibraryScanner, ScannerEvent::LibraryChanged},
@@ -93,10 +94,10 @@ impl OxhidifiApplication {
     /// # Errors
     ///
     /// Returns an error if audio engine, library database, or settings initialization fails.
-    pub async fn new() -> Result<Self, Box<dyn Error>> {
+    pub async fn new() -> Result<Self, UiError> {
         // Initialize settings
-        let settings_manager =
-            SettingsManager::new().map_err(|e| format!("Failed to initialize settings: {e}"))?;
+        let settings_manager = SettingsManager::new()
+            .map_err(|e| InitializationError(format!("Failed to initialize settings: {e}")))?;
         let settings_manager_shared = Arc::new(settings_manager);
 
         // Extract UserSettings for components that need direct access
@@ -104,25 +105,27 @@ impl OxhidifiApplication {
         let user_settings_shared = Arc::new(RwLock::new(user_settings));
 
         // Initialize audio engine
-        let audio_engine =
-            AudioEngine::new().map_err(|e| format!("Failed to initialize audio engine: {e}"))?;
+        let audio_engine = AudioEngine::new()
+            .map_err(|e| InitializationError(format!("Failed to initialize audio engine: {e}")))?;
 
         // Initialize queue manager
         let audio_engine_arc = Arc::new(audio_engine.clone());
         let track_finished_rx = audio_engine.subscribe_to_track_completion();
 
         // Initialize library database
-        let library_db_raw = LibraryDatabase::new()
-            .await
-            .map_err(|e| format!("Failed to initialize library database: {e}"))?;
+        let library_db_raw = LibraryDatabase::new().await.map_err(|e| {
+            InitializationError(format!("Failed to initialize library database: {e}"))
+        })?;
         let library_db = Arc::new(library_db_raw);
 
         // Initialize library scanner if there are library directories
         let library_scanner = if user_settings_shared.read().library_directories.is_empty() {
             None
         } else {
-            let scanner = LibraryScanner::new(&library_db, &user_settings_shared, None)
-                .map_err(|e| format!("Failed to initialize library scanner: {e}"))?;
+            let scanner =
+                LibraryScanner::new(&library_db, &user_settings_shared, None).map_err(|e| {
+                    InitializationError(format!("Failed to initialize library scanner: {e}"))
+                })?;
 
             // Perform initial scan of existing directories
             if let Err(e) = scanner
@@ -435,7 +438,9 @@ fn build_ui(
     main_box.append(&player_bar_widget);
 
     // Load custom CSS for consistent styling
-    load_custom_css();
+    if let Err(e) = load_custom_css() {
+        error!("Failed to load custom CSS: {e}");
+    }
 
     // Set up ESC key shortcut for back navigation
     let app_state_esc = app_state.clone();
@@ -822,136 +827,30 @@ fn create_player_bar(
 }
 
 /// Loads custom CSS for consistent component styling.
-fn load_custom_css() {
-    // Define CSS for DR badges and cover art components
-    let css = r"
-        /* Cover art container styling */
-        .cover-art-container {
-            background-color: @theme_bg_color;
-            border-radius: 6px;
-        }
-        
-        /* Cover art picture styling */
-        .cover-art-picture {
-            border-radius: 6px;
-            background-color: @theme_unfocused_bg_color;
-        }
-        
-        /* DR badge styling - consistent 28x28px with proper positioning */
-        .dr-badge-label {
-            font-family: monospace;
-            font-weight: bold;
-            font-size: 12px;
-            min-width: 28px;
-            min-height: 28px;
-            border-radius: 4px;
-            padding: 0;
-            margin: 4px; /* Small margin to prevent touching edges */
-            color: black;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-        }
-        
-        /* DR badge quality colors */
-        .dr-badge-label.dr-14,
-        .dr-badge-label.dr-15 { background-color: #4CAF50; }    /* Green - Excellent */
-        .dr-badge-label.dr-12,
-        .dr-badge-label.dr-13 { background-color: #8BC34A; }    /* Light Green - Good */
-        .dr-badge-label.dr-10,
-        .dr-badge-label.dr-11 { background-color: #FFC107; }    /* Amber - Fair */
-        .dr-badge-label.dr-08,
-        .dr-badge-label.dr-09 { background-color: #FF9800; }    /* Orange - Poor */
-        .dr-badge-label.dr-00,
-        .dr-badge-label.dr-01,
-        .dr-badge-label.dr-02,
-        .dr-badge-label.dr-03,
-        .dr-badge-label.dr-04,
-        .dr-badge-label.dr-05,
-        .dr-badge-label.dr-06,
-        .dr-badge-label.dr-07 { background-color: #F44336; }    /* Red - Very Poor */
-        .dr-badge-label.dr-na { background-color: #9E9E9E; }    /* Gray - Unknown */
-        
-        /* Individual DR value classes for precise styling */
-        .dr-badge-label.dr-00 { background-color: #F44336; }
-        .dr-badge-label.dr-01 { background-color: #F44336; }
-        .dr-badge-label.dr-02 { background-color: #F44336; }
-        .dr-badge-label.dr-03 { background-color: #F44336; }
-        .dr-badge-label.dr-04 { background-color: #F44336; }
-        .dr-badge-label.dr-05 { background-color: #F44336; }
-        .dr-badge-label.dr-06 { background-color: #F44336; }
-        .dr-badge-label.dr-07 { background-color: #F44336; }
-        .dr-badge-label.dr-08 { background-color: #FF9800; }
-        .dr-badge-label.dr-09 { background-color: #FF9800; }
-        .dr-badge-label.dr-10 { background-color: #FFC107; }
-        .dr-badge-label.dr-11 { background-color: #FFC107; }
-        .dr-badge-label.dr-12 { background-color: #8BC34A; }
-        .dr-badge-label.dr-13 { background-color: #8BC34A; }
-        .dr-badge-label.dr-14 { background-color: #4CAF50; }
-        .dr-badge-label.dr-15 { background-color: #4CAF50; }
-        
-        /* Album card base styling */
-        .album-tile {
-            background-color: transparent;
-            border-radius: 12px; /* 12px border-radius as specified */
-            min-width: 64px; /* Minimum width for smallest zoom level */
-        }
-                
-        /* Album title label styling */
-        .album-title-label {
-            font-weight: 700; /* Bold 1.1em font-weight: 700 */
-            font-size: 1.1em;
-        }
-        
-        /* Album artist label styling */
-        .album-artist-label {
-            color: #AAA; /* Light gray (#AAA) */
-            font-weight: 400;
-            font-size: 0.95em;
-        }
-        
-        /* Album format/genre label styling */
-        .album-format-label {
-            color: #666; /* Darker gray (#666) */
-            font-style: italic;
-            font-size: 0.9em;
-            margin-top: 2px;
-        }
-        
-        /* Play overlay styling */
-        .play-overlay {
-            background-color: rgba(0, 0, 0, 0.6);
-            border-radius: 50%;
-            min-width: 40px;
-            min-height: 40px;
-            opacity: 0;
-            transition: opacity 0.2s ease-in-out;
-        }
-
-        .cover-play-button {
-            opacity: 0;
-            transition: opacity 0.2s ease-in-out;
-        }
-
-        /* Show play button when hovering over cover art container */
-        .cover-art-container:hover .cover-play-button {
-            opacity: 1;
-        }
-
-        .play-overlay:hover {
-            background-color: rgba(0, 0, 0, 0.9);
-        }
-        
-        /* Album grid styling */
-        .album-grid {
-            /* FlowBox will handle the responsive grid layout */
-            min-width: 360px; /* Minimum width for mobile-like displays */
-        }
-    ";
+///
+/// # Returns
+///
+/// A `Result` indicating success or failure.
+///
+/// # Errors
+///
+/// Returns an error if the CSS file cannot be read.
+fn load_custom_css() -> Result<(), UiError> {
+    let css_path = Path::new("data/style.css");
+    let css = read_to_string(css_path).map_err(|e| {
+        InitializationError(format!(
+            "Failed to load CSS from {}: {e}",
+            css_path.display()
+        ))
+    })?;
 
     let provider = CssProvider::new();
-    provider.load_from_string(css);
+    provider.load_from_string(&css);
     style_context_add_provider_for_display(
         &Display::default().expect("Could not connect to a display."),
         &provider,
         STYLE_PROVIDER_PRIORITY_APPLICATION,
     );
+
+    Ok(())
 }
