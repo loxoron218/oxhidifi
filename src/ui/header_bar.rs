@@ -335,7 +335,7 @@ impl HeaderBar {
                 return;
             }
 
-            info!("View mode toggled to: {:?}", new_mode);
+            debug!("View mode toggled to: {:?}", new_mode);
 
             // Update icon
             let icon_name = match new_mode {
@@ -516,7 +516,7 @@ impl HeaderBar {
                     return;
                 }
 
-                info!("Switching to Albums tab");
+                debug!("Switching to Albums tab");
 
                 // Update app state using lightweight navigation update
                 state_clone_album.update_view_options(Albums, current_state.view_mode);
@@ -536,7 +536,7 @@ impl HeaderBar {
                     return;
                 }
 
-                info!("Switching to Artists tab");
+                debug!("Switching to Artists tab");
 
                 // Update app state using lightweight navigation update
                 state_clone_artist.update_view_options(Artists, current_state.view_mode);

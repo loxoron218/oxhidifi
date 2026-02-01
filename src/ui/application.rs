@@ -24,7 +24,7 @@ use {
         },
     },
     parking_lot::RwLock,
-    tracing::{debug, error, info},
+    tracing::{debug, error},
 };
 
 use crate::{
@@ -696,7 +696,7 @@ fn create_main_content(
                         view_mode,
                     } => {
                         switch_count += 1;
-                        info!(
+                        debug!(
                             "View switch #{}: tab={:?}, view_mode={:?}",
                             switch_count, current_tab, view_mode
                         );
