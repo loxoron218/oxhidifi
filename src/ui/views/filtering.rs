@@ -95,10 +95,14 @@ pub trait Filterable<T: Clone> {
     /// * `all_items` - Complete list of all items to filter from
     /// * `matches` - Function that determines if an item matches the query
     ///
+    /// # Returns
+    ///
+    /// `true` if any items matched the query, `false` otherwise
+    ///
     /// # Example
     ///
     /// ```ignore
-    /// view.filter_items(
+    /// let has_results = view.filter_items(
     ///     "pink floyd",
     ///     &all_albums,
     ///     |album, query| {
@@ -107,7 +111,12 @@ pub trait Filterable<T: Clone> {
     ///     }
     /// );
     /// ```
-    fn filter_items(&mut self, query: &str, all_items: &[T], matches: impl Fn(&T, &str) -> bool) {
+    fn filter_items(
+        &mut self,
+        query: &str,
+        all_items: &[T],
+        matches: impl Fn(&T, &str) -> bool,
+    ) -> bool {
         let query_lower = query.to_lowercase();
 
         let filtered_ids: HashSet<i64> = all_items
@@ -115,6 +124,8 @@ pub trait Filterable<T: Clone> {
             .filter(|item| matches(item, &query_lower))
             .map(|item| self.get_widget_id(item))
             .collect();
+
+        let has_results = !filtered_ids.is_empty();
 
         let current_ids: HashSet<i64> = self
             .get_current_items()
@@ -134,5 +145,7 @@ pub trait Filterable<T: Clone> {
             self.set_current_items(filtered_items);
             self.set_visibility(&filtered_ids);
         }
+
+        has_results
     }
 }

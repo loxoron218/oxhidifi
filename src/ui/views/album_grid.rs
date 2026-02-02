@@ -42,6 +42,7 @@ use crate::{
         components::{
             album_card::AlbumCard,
             empty_state::{EmptyState, EmptyStateConfig},
+            search_empty_state::SearchEmptyState,
         },
         utils::create_format_display,
         views::filtering::Filterable,
@@ -218,6 +219,8 @@ pub struct AlbumGridView {
     pub config: AlbumGridViewConfig,
     /// Empty state component for when no albums are available.
     pub empty_state: Option<EmptyState>,
+    /// Search empty state component for when search returns no results.
+    pub search_empty_state: SearchEmptyState,
     /// Current sort criteria.
     pub current_sort: AlbumSortCriteria,
     /// References to album card instances for dynamic updates.
@@ -314,6 +317,11 @@ impl AlbumGridView {
             main_container.append(&empty_state.widget);
         }
 
+        // Create and add search empty state component
+        let search_empty_state = SearchEmptyState::builder().is_album_view(true).build();
+        main_container.append(search_empty_state.widget());
+        search_empty_state.hide();
+
         let album_cards = Rc::new(RefCell::new(Vec::new()));
 
         let mut view = Self {
@@ -327,6 +335,7 @@ impl AlbumGridView {
             all_albums: albums.clone(),
             config: config.clone(),
             empty_state,
+            search_empty_state,
             current_sort: AlbumSortCriteria::Title, // Default sort by Title
             album_cards: album_cards.clone(),
             _zoom_subscription_handle: if let Some(state) = app_state {
@@ -513,6 +522,9 @@ impl AlbumGridView {
             self.flow_box.insert(&album_card.widget, -1);
             self.album_cards.borrow_mut().push(album_card);
         }
+
+        // Hide search empty state when showing albums
+        self.search_empty_state.hide();
     }
 
     /// Updates the full unfiltered albums list.
@@ -707,10 +719,20 @@ impl AlbumGridView {
     /// * `query` - Search query string
     pub fn filter_albums(&mut self, query: &str) {
         let all_albums = self.all_albums.clone();
-        self.filter_items(query, &all_albums, |album, query| {
-            album.title.to_lowercase().contains(query)
-                || album.artist_id.to_string().to_lowercase().contains(query)
+
+        // Call filter_items to update the grid and get result status
+        let has_results = self.filter_items(query, &all_albums, |album, q| {
+            album.title.to_lowercase().contains(q)
+                || album.artist_id.to_string().to_lowercase().contains(q)
         });
+
+        // Update search empty state visibility
+        if has_results {
+            self.search_empty_state.hide();
+        } else {
+            self.search_empty_state.update_search_query(query);
+            self.search_empty_state.show();
+        }
     }
 
     /// Clears the view by hiding all items.

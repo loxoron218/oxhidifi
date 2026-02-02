@@ -28,7 +28,10 @@ use crate::{
         ZoomEvent::ListZoomChanged,
         app_state::AppStateEvent::SettingsChanged,
     },
-    ui::{components::cover_art::CoverArt, views::filtering::Filterable},
+    ui::{
+        components::{cover_art::CoverArt, search_empty_state::SearchEmptyState},
+        views::filtering::Filterable,
+    },
 };
 
 /// Builder pattern for configuring `ListView` components.
@@ -125,6 +128,8 @@ pub struct ListView {
     pub view_type: ListViewType,
     /// Configuration flags.
     pub config: ListViewConfig,
+    /// Search empty state component for when search returns no results.
+    pub search_empty_state: SearchEmptyState,
     /// Zoom subscription handle for cleanup.
     _zoom_subscription_handle: Option<JoinHandle<()>>,
     /// Settings subscription handle for cleanup.
@@ -178,12 +183,24 @@ impl ListView {
 
         let cover_arts = Rc::new(RefCell::new(Vec::new()));
 
+        // Create main container that can hold both list box and search empty state
+        let main_container = Box::builder().orientation(Vertical).build();
+        main_container.append(&list_box.clone().upcast::<Widget>());
+
+        // Create and add search empty state component
+        let search_empty_state = SearchEmptyState::builder()
+            .is_album_view(matches!(view_type, ListViewType::Albums))
+            .build();
+        main_container.append(search_empty_state.widget());
+        search_empty_state.hide();
+
         let mut view = Self {
-            widget: list_box.clone().upcast_ref::<Widget>().clone(),
+            widget: main_container.upcast_ref::<Widget>().clone(),
             list_box: list_box.clone(),
             app_state: app_state.cloned(),
             view_type: view_type.clone(),
             config: config.clone(),
+            search_empty_state,
             _zoom_subscription_handle: if let Some(state) = app_state {
                 // Subscribe to zoom changes
                 let state_clone: Arc<AppState> = state.clone();
@@ -302,6 +319,9 @@ impl ListView {
         while let Some(child) = self.list_box.first_child() {
             self.list_box.remove(&child);
         }
+
+        // Hide search empty state when clearing
+        self.search_empty_state.hide();
     }
 
     /// Sets the albums to display in the list.
@@ -337,6 +357,9 @@ impl ListView {
         }
 
         self.albums = albums;
+
+        // Hide search empty state when showing albums
+        self.search_empty_state.hide();
     }
 
     /// Sets the artists to display in the list.
@@ -371,6 +394,9 @@ impl ListView {
         }
 
         self.artists = artists;
+
+        // Hide search empty state when showing artists
+        self.search_empty_state.hide();
     }
 
     /// Creates a single album row widget for the list.
@@ -442,6 +468,21 @@ impl ListView {
         }
     }
 
+    /// Updates the search empty state visibility based on filter results.
+    ///
+    /// # Arguments
+    ///
+    /// * `query` - The search query string
+    /// * `has_results` - Whether the filter returned any results
+    fn update_empty_state(&mut self, query: &str, has_results: bool) {
+        if has_results {
+            self.search_empty_state.hide();
+        } else {
+            self.search_empty_state.update_search_query(query);
+            self.search_empty_state.show();
+        }
+    }
+
     /// Filters items based on a search query.
     ///
     /// # Arguments
@@ -450,19 +491,22 @@ impl ListView {
     pub fn filter_view_items(&mut self, query: &str) {
         if let Some(ref app_state) = self.app_state {
             let library_state = app_state.get_library_state();
+
             match self.view_type {
                 ListViewType::Albums => {
                     let albums = library_state.albums.clone();
-                    self.filter_items(query, &albums, |album, query| {
-                        album.title.to_lowercase().contains(query)
-                            || album.artist_id.to_string().to_lowercase().contains(query)
+                    let has_results = self.filter_items(query, &albums, |album, q| {
+                        album.title.to_lowercase().contains(q)
+                            || album.artist_id.to_string().to_lowercase().contains(q)
                     });
+                    self.update_empty_state(query, has_results);
                 }
                 ListViewType::Artists => {
                     let artists = library_state.artists.clone();
-                    self.filter_items(query, &artists, |artist, query| {
-                        artist.name.to_lowercase().contains(query)
+                    let has_results = self.filter_items(query, &artists, |artist, q| {
+                        artist.name.to_lowercase().contains(q)
                     });
+                    self.update_empty_state(query, has_results);
                 }
             }
         }

@@ -31,6 +31,7 @@ use crate::{
         components::{
             cover_art::CoverArt,
             empty_state::{EmptyState, EmptyStateConfig},
+            search_empty_state::SearchEmptyState,
         },
         views::filtering::Filterable,
     },
@@ -124,6 +125,8 @@ pub struct ArtistGridView {
     pub config: ArtistGridViewConfig,
     /// Empty state component for when no artists are available.
     pub empty_state: Option<EmptyState>,
+    /// Search empty state component for when search returns no results.
+    pub search_empty_state: SearchEmptyState,
     /// Current sort criteria.
     pub current_sort: ArtistSortCriteria,
     /// Shared reference to artist cards for zoom updates.
@@ -199,6 +202,11 @@ impl ArtistGridView {
             main_container.append(&empty_state.widget);
         }
 
+        // Create and add search empty state component
+        let search_empty_state = SearchEmptyState::builder().is_album_view(false).build();
+        main_container.append(search_empty_state.widget());
+        search_empty_state.hide();
+
         let artist_cards_ref = Rc::new(RefCell::new(Vec::new()));
 
         let mut view = Self {
@@ -209,6 +217,7 @@ impl ArtistGridView {
             all_artists: artists.clone(),
             config,
             empty_state,
+            search_empty_state,
             current_sort: ArtistSortCriteria::Name,
             artist_cards_ref: artist_cards_ref.clone(),
             zoom_subscription_handle: if let Some(state) = app_state {
@@ -316,6 +325,9 @@ impl ArtistGridView {
             self.flow_box.insert(&card_arc.widget, -1);
             self.artist_cards_ref.borrow_mut().push(card_arc);
         }
+
+        // Hide search empty state when showing artists
+        self.search_empty_state.hide();
     }
 
     /// Updates the full unfiltered artists list.
@@ -404,9 +416,19 @@ impl ArtistGridView {
     /// * `query` - Search query string
     pub fn filter_artists(&mut self, query: &str) {
         let all_artists = self.all_artists.clone();
-        self.filter_items(query, &all_artists, |artist, query| {
-            artist.name.to_lowercase().contains(query)
+
+        // Call filter_items to update the grid and get result status
+        let has_results = self.filter_items(query, &all_artists, |artist, q| {
+            artist.name.to_lowercase().contains(q)
         });
+
+        // Update search empty state visibility
+        if has_results {
+            self.search_empty_state.hide();
+        } else {
+            self.search_empty_state.update_search_query(query);
+            self.search_empty_state.show();
+        }
     }
 
     /// Clears the view by hiding all items.
