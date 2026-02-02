@@ -42,5 +42,4 @@ sqlx = { version = "0.8.6", features = ["runtime-tokio", "sqlite"] }
 [dev-dependencies]
 # Tests and bechmarking
 # criterion = "0.8.1"
-# test-log = "0.2.19"
 tempfile = "3.24.0"
