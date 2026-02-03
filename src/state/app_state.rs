@@ -10,7 +10,7 @@ use {
     async_channel::{Receiver, Sender, unbounded},
     libadwaita::glib::MainContext,
     parking_lot::RwLock,
-    tracing::debug,
+    tracing::{debug, error},
 };
 
 use crate::{
@@ -190,7 +190,9 @@ impl AppState {
                     let current_subscribers = subscribers.read();
                     let event = AppStateEvent::PlaybackStateChanged(state);
                     for tx in current_subscribers.iter() {
-                        let _ = tx.try_send(event.clone());
+                        if let Err(e) = tx.try_send(event.clone()) {
+                            error!(error = %e, "Failed to send playback state event to subscriber");
+                        }
                     }
                 }
             });

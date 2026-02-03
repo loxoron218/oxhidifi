@@ -101,7 +101,7 @@ impl LibraryScanner {
         let library_dirs = settings.read().library_directories.clone();
         for dir in &library_dirs {
             if let Err(e) = file_watcher.watch_directory(dir) {
-                warn!("Failed to watch directory {}: {}", dir, e);
+                warn!(directory = %dir, error = %e, "Failed to watch directory");
             }
         }
 
@@ -192,7 +192,7 @@ impl LibraryScanner {
                     if let Err(e) =
                         handle_files_changed(paths, &database, &settings, &dr_parser).await
                     {
-                        error!("Error handling changed files: {}", e);
+                        error!(error = %e, "Error handling changed files");
                     } else {
                         changes_processed = true;
                     }
@@ -200,7 +200,7 @@ impl LibraryScanner {
                 FilesRemoved { paths } => {
                     debug!("Processing {} removed files", paths.len());
                     if let Err(e) = handle_files_removed(paths, &database, &dr_parser).await {
-                        error!("Error handling removed files: {}", e);
+                        error!(error = %e, "Error handling removed files");
                     } else {
                         changes_processed = true;
                     }
@@ -210,7 +210,7 @@ impl LibraryScanner {
                     if let Err(e) =
                         handle_files_renamed(paths, &database, &settings, &dr_parser).await
                     {
-                        error!("Error handling renamed files: {}", e);
+                        error!(error = %e, "Error handling renamed files");
                     } else {
                         changes_processed = true;
                     }

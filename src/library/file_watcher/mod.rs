@@ -133,20 +133,32 @@ impl FileWatcher {
                                 debug!("FileWatcher: Detected new directory, scanning: {:?}", path);
                                 let files = Self::collect_audio_files_recursively(path);
                                 for file_path in files {
-                                    let _ = sender.try_send(FileChanged {
-                                        path: file_path,
+                                    if let Err(e) = sender.try_send(FileChanged {
+                                        path: file_path.clone(),
                                         is_new: true,
-                                    });
+                                    }) {
+                                        error!(
+                                            "Failed to send FileChanged event for '{}': {}",
+                                            file_path.display(),
+                                            e
+                                        );
+                                    }
                                 }
                             } else if Self::is_supported_audio_file(path)
                                 || Self::is_supported_text_file(path)
                             {
                                 // Text files might contain DR values, so treat them as file changes
                                 // This will trigger DR parsing for the parent album directory
-                                let _ = sender.try_send(FileChanged {
+                                if let Err(e) = sender.try_send(FileChanged {
                                     path: path.clone(),
                                     is_new: matches!(event.kind, Create(_)),
-                                });
+                                }) {
+                                    error!(
+                                        "Failed to send FileChanged event for '{}': {}",
+                                        path.display(),
+                                        e
+                                    );
+                                }
                             } else {
                                 debug!("Ignoring unsupported file change: {:?}", path);
                             }
@@ -165,7 +177,15 @@ impl FileWatcher {
                                         "FileWatcher: Propagating rename-from (remove) event for path: {:?}",
                                         path
                                     );
-                                    let _ = sender.try_send(FileRemoved { path: path.clone() });
+                                    if let Err(e) =
+                                        sender.try_send(FileRemoved { path: path.clone() })
+                                    {
+                                        error!(
+                                            "Failed to send FileRemoved event for '{}': {}",
+                                            path.display(),
+                                            e
+                                        );
+                                    }
                                 }
 
                                 // To: File was moved TO this path (creation/move dest)
@@ -177,10 +197,16 @@ impl FileWatcher {
                                         );
                                         let files = Self::collect_audio_files_recursively(path);
                                         for file_path in files {
-                                            let _ = sender.try_send(FileChanged {
-                                                path: file_path,
+                                            if let Err(e) = sender.try_send(FileChanged {
+                                                path: file_path.clone(),
                                                 is_new: true,
-                                            });
+                                            }) {
+                                                error!(
+                                                    "Failed to send FileChanged event for '{}': {}",
+                                                    file_path.display(),
+                                                    e
+                                                );
+                                            }
                                         }
                                     } else if Self::is_supported_audio_file(path)
                                         || Self::is_supported_text_file(path)
@@ -189,10 +215,16 @@ impl FileWatcher {
                                             "FileWatcher: Propagating rename-to (add) event for path: {:?}",
                                             path
                                         );
-                                        let _ = sender.try_send(FileChanged {
+                                        if let Err(e) = sender.try_send(FileChanged {
                                             path: path.clone(),
                                             is_new: true,
-                                        });
+                                        }) {
+                                            error!(
+                                                "Failed to send FileChanged event for '{}': {}",
+                                                path.display(),
+                                                e
+                                            );
+                                        }
                                     }
                                 }
 
@@ -210,9 +242,15 @@ impl FileWatcher {
                                         );
 
                                         // Handle From
-                                        let _ = sender.try_send(FileRemoved {
+                                        if let Err(e) = sender.try_send(FileRemoved {
                                             path: from_path.clone(),
-                                        });
+                                        }) {
+                                            error!(
+                                                "Failed to send FileRemoved event for '{}': {}",
+                                                from_path.display(),
+                                                e
+                                            );
+                                        }
 
                                         // Handle To
                                         if to_path.is_dir() {
@@ -223,18 +261,29 @@ impl FileWatcher {
                                             let files =
                                                 Self::collect_audio_files_recursively(to_path);
                                             for file_path in files {
-                                                let _ = sender.try_send(FileChanged {
-                                                    path: file_path,
+                                                if let Err(e) = sender.try_send(FileChanged {
+                                                    path: file_path.clone(),
                                                     is_new: true,
-                                                });
+                                                }) {
+                                                    error!(
+                                                        "Failed to send FileChanged event for '{}': {}",
+                                                        file_path.display(),
+                                                        e
+                                                    );
+                                                }
                                             }
-                                        } else if Self::is_supported_audio_file(to_path)
-                                            || Self::is_supported_text_file(to_path)
-                                        {
-                                            let _ = sender.try_send(FileChanged {
+                                        } else if (Self::is_supported_audio_file(to_path)
+                                            || Self::is_supported_text_file(to_path))
+                                            && let Err(e) = sender.try_send(FileChanged {
                                                 path: to_path.clone(),
                                                 is_new: true,
-                                            });
+                                            })
+                                        {
+                                            error!(
+                                                "Failed to send FileChanged event for '{}': {}",
+                                                to_path.display(),
+                                                e
+                                            );
                                         }
                                     } else {
                                         // Fallback if structure is unexpected, treat match path as potentially both?
@@ -259,7 +308,13 @@ impl FileWatcher {
                         // easily, and we need to catch directory deletions.
                         Remove(_) => {
                             debug!("FileWatcher: Propagating remove event for path: {:?}", path);
-                            let _ = sender.try_send(FileRemoved { path: path.clone() });
+                            if let Err(e) = sender.try_send(FileRemoved { path: path.clone() }) {
+                                error!(
+                                    "Failed to send FileRemoved event for '{}': {}",
+                                    path.display(),
+                                    e
+                                );
+                            }
                         }
                         Other => {
                             // Handle potential rename/move events
@@ -277,7 +332,7 @@ impl FileWatcher {
                 }
             }
             Err(e) => {
-                error!("File system watcher error: {}", e);
+                error!(error = %e, "File system watcher error");
             }
         }
     }

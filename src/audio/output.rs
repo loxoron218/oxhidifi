@@ -373,12 +373,12 @@ impl AudioOutput {
             if let BackendSpecific { err } = err {
                 let err_str = err.to_string();
                 if err_str.contains("buffer size changed") {
-                    info!("Audio buffer size changed: {}", err_str);
+                    info!(message = %err_str, "Audio buffer size changed");
                 } else {
-                    error!("Audio backend error: {}", err_str);
+                    error!(error = %err_str, "Audio backend error");
                 }
             } else {
-                error!("Audio stream error: {}", err);
+                error!(error = %err, "Audio stream error");
             }
         };
 
@@ -677,9 +677,18 @@ impl AudioOutput {
     pub fn get_available_devices(&self) -> Vec<String> {
         match self.host.output_devices() {
             Ok(devices) => devices
-                .filter_map(|device| device.description().ok().map(|desc| desc.to_string()))
+                .filter_map(|device| match device.description() {
+                    Ok(desc) => Some(desc.to_string()),
+                    Err(e) => {
+                        warn!(error = %e, "Failed to get device description");
+                        None
+                    }
+                })
                 .collect(),
-            Err(_) => Vec::new(),
+            Err(e) => {
+                warn!(error = %e, "Failed to enumerate output devices");
+                Vec::new()
+            }
         }
     }
 

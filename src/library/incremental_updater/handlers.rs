@@ -10,7 +10,7 @@ use std::{
 use {
     parking_lot::RwLock,
     sqlx::{Sqlite, Transaction, query, query_scalar},
-    tracing::warn,
+    tracing::{debug, warn},
 };
 
 use crate::{
@@ -113,7 +113,7 @@ pub async fn process_file_batch(
                     tracks_metadata.push((file_path.clone(), metadata));
                 }
                 Err(e) => {
-                    warn!("Failed to read metadata for {:?}: {}", file_path, e);
+                    warn!(file_path = ?file_path, error = %e, "Failed to read metadata");
                 }
             }
         }
@@ -494,8 +494,13 @@ fn extract_album_artwork_path(album_dir: &Path, audio_files: &[PathBuf]) -> Opti
             Ok(External(path)) => {
                 return Some(path.to_string_lossy().to_string());
             }
-            Err(_) => {
+            Err(e) => {
                 // Continue to external file search
+                debug!(
+                    "Failed to extract embedded artwork from '{}': {}",
+                    first_file.display(),
+                    e
+                );
             }
         }
     }

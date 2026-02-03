@@ -317,7 +317,7 @@ impl ArtistGridView {
             let artist_card = match self.create_artist_card(artist, cover_size) {
                 Ok(card) => card,
                 Err(e) => {
-                    error!("Failed to create artist card for '{}': {e}", artist.name);
+                    error!(artist_name = %artist.name, error = %e, "Failed to create artist card");
                     continue;
                 }
             };

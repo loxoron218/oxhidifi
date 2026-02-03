@@ -169,7 +169,9 @@ macro_rules! spawn_forwarding_task {
                         match result {
                             Ok(msg) => {
                                 for tx in subscribers_clone.lock().iter() {
-                                    let _ = tx.try_send(msg.clone());
+                                    if let Err(e) = tx.try_send(msg.clone()) {
+                                        error!(task_name = %$task_name, error = %e, "Failed to send message to subscriber");
+                                    }
                                 }
                             }
                             Err(_) => {
@@ -464,7 +466,9 @@ impl AudioEngine {
 
         // Send current state immediately
         let current_state = self.state.read().clone();
-        let _ = tx.try_send(current_state);
+        if let Err(e) = tx.try_send(current_state) {
+            error!(error = %e, "Failed to send initial state to subscriber");
+        }
 
         // Add to subscribers list
         self.state_subscribers.lock().push(tx);

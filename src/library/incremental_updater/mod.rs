@@ -122,7 +122,7 @@ impl IncrementalUpdater {
                     )
                     .await
                     {
-                        error!("Error handling changed files incrementally: {}", e);
+                        error!(error = %e, "Error handling changed files incrementally");
                     }
                 }
                 DebouncedEvent::FilesRemoved { paths } => {
@@ -130,7 +130,7 @@ impl IncrementalUpdater {
                     if let Err(e) =
                         handlers::handle_files_removed_incremental(paths, &database).await
                     {
-                        error!("Error handling removed files incrementally: {}", e);
+                        error!(error = %e, "Error handling removed files incrementally");
                     }
                 }
                 DebouncedEvent::FilesRenamed { paths } => {
@@ -144,7 +144,7 @@ impl IncrementalUpdater {
                     )
                     .await
                     {
-                        error!("Error handling renamed files incrementally: {}", e);
+                        error!(error = %e, "Error handling renamed files incrementally");
                     }
                 }
             }

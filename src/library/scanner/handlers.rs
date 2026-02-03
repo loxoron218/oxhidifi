@@ -97,7 +97,7 @@ pub async fn handle_files_changed(
                         tracks_metadata.push((file_path.clone(), metadata));
                     }
                     Err(e) => {
-                        warn!("Failed to read metadata for {:?}: {}", file_path, e);
+                        warn!(file_path = ?file_path, error = %e, "Failed to read metadata");
 
                         // Continue processing other files
                     }
@@ -127,12 +127,20 @@ pub async fn handle_files_changed(
             .await?;
 
             // Parse and update DR value if enabled
-            if let Some(parser) = dr_parser
-                && let Ok(Some(dr_value)) = parser.parse_dr_for_album(&album_dir).await
-            {
-                database
-                    .update_dr_value(&album_dir, Some(&dr_value))
-                    .await?;
+            if let Some(parser) = dr_parser {
+                match parser.parse_dr_for_album(&album_dir).await {
+                    Ok(dr_value) => {
+                        database
+                            .update_dr_value(&album_dir, dr_value.as_deref())
+                            .await?;
+                    }
+                    Err(e) => {
+                        warn!(album_dir = ?album_dir, error = %e, "Failed to parse DR value");
+
+                        // Update with None to clear any existing DR value
+                        database.update_dr_value(&album_dir, None).await?;
+                    }
+                }
             }
         }
     }
@@ -158,7 +166,7 @@ pub async fn handle_files_changed(
                         .await?;
                 }
                 Err(e) => {
-                    warn!("Failed to parse DR value for {:?}: {}", album_dir, e);
+                    warn!(album_dir = ?album_dir, error = %e, "Failed to parse DR value");
 
                     // Update with None to clear any existing DR value
                     database.update_dr_value(&album_dir, None).await?;
@@ -279,7 +287,7 @@ pub async fn handle_files_removed(
                         .await?;
                 }
                 Err(e) => {
-                    warn!("Failed to parse DR value for {:?}: {}", album_dir, e);
+                    warn!(album_dir = ?album_dir, error = %e, "Failed to parse DR value");
 
                     // Update with None to clear any existing DR value
                     database.update_dr_value(&album_dir, None).await?;
@@ -726,8 +734,13 @@ fn extract_album_artwork_path(album_dir: &Path, audio_files: &[PathBuf]) -> Opti
             Ok(External(path)) => {
                 return Some(path.to_string_lossy().to_string());
             }
-            Err(_) => {
+            Err(e) => {
                 // Continue to external file search
+                debug!(
+                    "Failed to extract embedded artwork from '{}': {}",
+                    first_file.display(),
+                    e
+                );
             }
         }
     }

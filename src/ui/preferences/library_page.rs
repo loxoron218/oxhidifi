@@ -213,7 +213,7 @@ impl LibraryPreferencesPage {
             .retain(|dir| dir != directory_to_remove);
 
         if let Err(e) = settings_manager.update_settings(current_settings) {
-            error!("Failed to remove directory from settings: {}", e);
+            error!(error = %e, "Failed to remove directory from settings");
             return;
         }
 

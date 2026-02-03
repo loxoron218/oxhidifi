@@ -11,6 +11,7 @@ use {
         sqlite::{SqliteConnectOptions, SqliteJournalMode::Wal, SqliteSynchronous::Normal},
     },
     thiserror::Error,
+    tracing::warn,
 };
 
 /// Current schema version.
@@ -330,8 +331,14 @@ pub fn get_database_url() -> String {
     config_dir.push("library.db");
 
     // Create parent directories if they don't exist
-    if let Some(parent) = config_dir.parent() {
-        create_dir_all(parent).ok();
+    if let Some(parent) = config_dir.parent()
+        && let Err(e) = create_dir_all(parent)
+    {
+        warn!(
+            "Failed to create config directory '{}': {}",
+            parent.display(),
+            e
+        );
     }
 
     format!("sqlite://{}", config_dir.to_string_lossy())

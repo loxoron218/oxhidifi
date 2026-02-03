@@ -78,7 +78,7 @@ impl DebouncedEventProcessor {
                     );
                 }
                 Err(e) => {
-                    error!("Error receiving file system event: {}", e);
+                    error!(error = %e, "Error receiving file system event");
                     break;
                 }
             }
@@ -104,7 +104,7 @@ impl DebouncedEventProcessor {
                                 );
                             }
                             Err(e) => {
-                                error!("Channel closed while debouncing: {}", e);
+                                error!(error = %e, "Channel closed while debouncing");
 
                                 // Don't break outer loop yet, flush current batch first
                                 break;
@@ -116,28 +116,40 @@ impl DebouncedEventProcessor {
 
             // Send debounced events if we have any
             if !changed_files.is_empty() {
-                let _ = self
+                let paths = take(&mut changed_files);
+                if let Err(e) = self
                     .debounced_sender
                     .send(FilesChanged {
-                        paths: take(&mut changed_files),
+                        paths: paths.clone(),
                     })
-                    .await;
+                    .await
+                {
+                    error!(paths = ?paths, error = %e, "Failed to send FilesChanged event");
+                }
             }
             if !removed_files.is_empty() {
-                let _ = self
+                let paths = take(&mut removed_files);
+                if let Err(e) = self
                     .debounced_sender
                     .send(FilesRemoved {
-                        paths: take(&mut removed_files),
+                        paths: paths.clone(),
                     })
-                    .await;
+                    .await
+                {
+                    error!(paths = ?paths, error = %e, "Failed to send FilesRemoved event");
+                }
             }
             if !renamed_files.is_empty() {
-                let _ = self
+                let paths = take(&mut renamed_files);
+                if let Err(e) = self
                     .debounced_sender
                     .send(FilesRenamed {
-                        paths: take(&mut renamed_files),
+                        paths: paths.clone(),
                     })
-                    .await;
+                    .await
+                {
+                    error!(paths = ?paths, error = %e, "Failed to send FilesRenamed event");
+                }
             }
 
             // Clear pending events tracking

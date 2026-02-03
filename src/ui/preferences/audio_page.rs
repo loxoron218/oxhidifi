@@ -145,7 +145,7 @@ impl AudioPreferencesPage {
             current_settings.sample_rate = new_value;
 
             if let Err(e) = settings_manager_clone.update_settings(current_settings) {
-                error!("Failed to update sample rate preference: {}", e);
+                error!(error = %e, "Failed to update sample rate preference");
             }
         });
 
@@ -174,7 +174,7 @@ impl AudioPreferencesPage {
             current_settings.exclusive_mode = new_value;
 
             if let Err(e) = settings_manager_clone.update_settings(current_settings) {
-                error!("Failed to update exclusive mode preference: {}", e);
+                error!(error = %e, "Failed to update exclusive mode preference");
             }
         });
 
@@ -237,7 +237,7 @@ impl AudioPreferencesPage {
             current_settings.buffer_duration_ms = new_value;
 
             if let Err(e) = settings_manager_clone.update_settings(current_settings) {
-                error!("Failed to update buffer duration preference: {}", e);
+                error!(error = %e, "Failed to update buffer duration preference");
             }
         });
 

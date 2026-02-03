@@ -247,7 +247,7 @@ impl ZoomManager {
 mod tests {
     use std::{fs::remove_file, path::PathBuf, sync::Arc};
 
-    use {parking_lot::RwLock, tempfile::TempDir, tokio::test as TokioTest};
+    use {parking_lot::RwLock, tempfile::TempDir, tokio::test as TokioTest, tracing::debug};
 
     use crate::{config::SettingsManager, state::zoom_manager::ZoomManager};
 
@@ -257,7 +257,13 @@ mod tests {
         let temp_file = PathBuf::from("/tmp/oxhidifi_test_settings_1.json");
 
         // Remove file if it exists to ensure clean state
-        let _ = remove_file(&temp_file);
+        if let Err(e) = remove_file(&temp_file) {
+            debug!(
+                "Test cleanup: Failed to remove file '{}': {}",
+                temp_file.display(),
+                e
+            );
+        }
 
         let settings_manager = SettingsManager::with_config_path(temp_file).unwrap();
         let settings_manager_arc = Arc::new(RwLock::new(settings_manager));
@@ -273,7 +279,13 @@ mod tests {
         let temp_file = PathBuf::from("/tmp/oxhidifi_test_settings_2.json");
 
         // Remove file if it exists to ensure clean state
-        let _ = remove_file(&temp_file);
+        if let Err(e) = remove_file(&temp_file) {
+            debug!(
+                "Test cleanup: Failed to remove file '{}': {}",
+                temp_file.display(),
+                e
+            );
+        }
 
         let settings_manager = SettingsManager::with_config_path(temp_file).unwrap();
         let settings_manager_arc = Arc::new(RwLock::new(settings_manager));
@@ -300,7 +312,13 @@ mod tests {
         let temp_file = PathBuf::from("/tmp/oxhidifi_test_settings_3.json");
 
         // Remove file if it exists to ensure clean state
-        let _ = remove_file(&temp_file);
+        if let Err(e) = remove_file(&temp_file) {
+            debug!(
+                "Test cleanup: Failed to remove file '{}': {}",
+                temp_file.display(),
+                e
+            );
+        }
 
         let settings_manager = SettingsManager::with_config_path(temp_file).unwrap();
         let settings_manager_arc = Arc::new(RwLock::new(settings_manager));
@@ -366,6 +384,12 @@ mod tests {
         assert_eq!(zoom_manager2.get_list_zoom_level(), 2);
 
         // Clean up (tempdir will be automatically cleaned up)
-        remove_file(settings_path).ok();
+        if let Err(e) = remove_file(&settings_path) {
+            debug!(
+                "Test cleanup: Failed to remove file '{}': {}",
+                settings_path.display(),
+                e
+            );
+        }
     }
 }

@@ -390,7 +390,7 @@ fn resampling_loop(
                 }
             }
             Err(e) => {
-                error!("Resampling error: {}", e);
+                error!(error = %e, "Resampling error");
 
                 // Continue processing despite errors to avoid complete failure
                 // Write silence to maintain timing
@@ -455,12 +455,12 @@ pub fn create_resampling_stream(
         if let BackendSpecific { err } = err {
             let err_str = err.to_string();
             if err_str.contains("buffer size changed") {
-                info!("Audio buffer size changed: {}", err_str);
+                info!(message = %err_str, "Audio buffer size changed");
             } else {
-                error!("Audio backend error: {}", err_str);
+                error!(error = %err_str, "Audio backend error");
             }
         } else {
-            error!("Audio stream error: {}", err);
+            error!(error = %err, "Audio stream error");
         }
     };
 

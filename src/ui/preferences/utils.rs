@@ -5,7 +5,10 @@
 
 use std::{string::String, sync::Arc};
 
-use libadwaita::{ComboRow, gtk::StringList, prelude::ComboRowExt};
+use {
+    libadwaita::{ComboRow, gtk::StringList, prelude::ComboRowExt},
+    tracing::warn,
+};
 
 use crate::config::{SettingsManager, UserSettings};
 
@@ -70,7 +73,9 @@ where
             let mut current_settings = settings_manager.get_settings().clone();
             setter(&mut current_settings, new_value);
 
-            let _ = settings_manager.update_settings(current_settings);
+            if let Err(e) = settings_manager.update_settings(current_settings) {
+                warn!(error = %e, "Failed to update settings");
+            }
         }
     });
 
@@ -81,7 +86,10 @@ where
 mod tests {
     use std::{fs::remove_file, path::PathBuf, sync::Arc};
 
-    use libadwaita::prelude::{ActionRowExt, PreferencesRowExt};
+    use {
+        libadwaita::prelude::{ActionRowExt, PreferencesRowExt},
+        tracing::debug,
+    };
 
     use crate::{config::SettingsManager, ui::preferences::utils::create_combo_row_from_settings};
 
@@ -90,7 +98,13 @@ mod tests {
     fn test_create_combo_row_from_settings() {
         // Create temporary settings file
         let temp_file = PathBuf::from("/tmp/oxhidifi_test_combo_row.json");
-        let _ = remove_file(&temp_file);
+        if let Err(e) = remove_file(&temp_file) {
+            debug!(
+                "Test cleanup: Failed to remove file '{}': {}",
+                temp_file.display(),
+                e
+            );
+        }
 
         let settings_manager = SettingsManager::with_config_path(temp_file.clone()).unwrap();
         let settings_manager_arc = Arc::new(settings_manager);
@@ -117,6 +131,12 @@ mod tests {
         assert_eq!(combo_row.subtitle().as_deref(), Some("Test Subtitle"));
 
         // Clean up
-        let _ = remove_file(temp_file);
+        if let Err(e) = remove_file(&temp_file) {
+            debug!(
+                "Test cleanup: Failed to remove file '{}': {}",
+                temp_file.display(),
+                e
+            );
+        }
     }
 }

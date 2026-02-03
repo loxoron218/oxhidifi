@@ -400,7 +400,9 @@ impl PlayerBar {
             let position = u64::try_from(clamped_value.to_i64().unwrap()).unwrap();
             let audio_engine_clone = audio_engine_seek.clone();
             MainContext::default().spawn_local(async move {
-                let _ = audio_engine_clone.seek(position).await;
+                if let Err(e) = audio_engine_clone.seek(position).await {
+                    error!(position = %position, error = %e, "Failed to seek to position");
+                }
             });
         });
 
