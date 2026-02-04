@@ -213,7 +213,9 @@ pub fn save_embedded_artwork<P: AsRef<Path>>(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use lofty::picture::MimeType::{Jpeg, Png};
+
+    use crate::audio::artwork::detect_mime_type;
 
     #[test]
     fn test_detect_mime_type() {
