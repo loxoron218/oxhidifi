@@ -22,9 +22,10 @@ mod view_integration_tests {
         ui::{
             components::cover_art::CoverArt,
             views::{
-                AlbumGridView, ArtistGridView, DetailView, ListView,
+                AlbumGridView, ArtistGridView,
+                DetailType::{Album as DetailTypeAlbum, Artist as DetailTypeArtist},
+                DetailView, ListView,
                 album_grid::AlbumSortCriteria::{Title, Year},
-                detail_view::DetailType,
                 list_view::ListViewType::{Albums, Artists},
             },
         },
@@ -71,7 +72,7 @@ mod view_integration_tests {
         let album = Album::default();
         let _album_detail = DetailView::builder()
             .app_state(Arc::new(app_state.clone()))
-            .detail_type(DetailType::Album(album))
+            .detail_type(Some(DetailTypeAlbum(album)))
             .compact(false)
             .build();
 
@@ -79,7 +80,7 @@ mod view_integration_tests {
         let artist = Artist::default();
         let _artist_detail = DetailView::builder()
             .app_state(Arc::new(app_state.clone()))
-            .detail_type(DetailType::Artist(artist))
+            .detail_type(Some(DetailTypeArtist(artist)))
             .compact(false)
             .build();
     }

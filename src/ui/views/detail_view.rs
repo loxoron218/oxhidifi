@@ -1,147 +1,82 @@
 //! Album/artist detail pages with comprehensive metadata and track listings.
-//!
-//! This module implements the `DetailView` component that displays detailed
-//! information for albums or artists, including comprehensive metadata,
-//! track listings with technical specifications, and playback controls.
 
-use std::sync::Arc;
+use std::{
+    fmt::{Debug, Formatter, Result as StdResult},
+    sync::Arc,
+};
 
 use libadwaita::{
-    gtk::{
-        AccessibleRole::Article,
-        Align::{Fill, Start},
-        Box, Button, Label, ListBox, ListBoxRow,
-        Orientation::{Horizontal, Vertical},
-        ScrolledWindow,
-        SelectionMode::None as SelectionNone,
-        Widget,
-        pango::EllipsizeMode::End,
-    },
-    prelude::{AccessibleExt, BoxExt, Cast, ListBoxRowExt, ListModelExt, WidgetExt},
+    ToastOverlay,
+    gtk::{AccessibleRole::Article, Align::Fill, Box, Orientation::Vertical, Widget},
+    prelude::{AccessibleExt, BoxExt, Cast, ListModelExt, WidgetExt},
 };
 
 use crate::{
-    library::models::{Album, Artist, Track},
+    audio::{
+        engine::{AudioEngine, PlaybackState, TrackInfo},
+        queue_manager::QueueManager,
+    },
+    library::{
+        database::LibraryDatabase,
+        models::{Album, Artist},
+    },
     state::AppState,
-    ui::components::{
-        cover_art::CoverArt,
-        hifi_metadata::{
-            BitDepthDisplay::Show as ShowBitDepth, ChannelsDisplay::Hide as HideChannels,
-            FormatDisplay::Show as ShowFormat, HiFiMetadata, LayoutMode::Compact,
-            SampleRateDisplay::Show as ShowSampleRate,
-        },
-        play_overlay::PlayOverlay,
+    ui::views::{
+        album_detail_renderer::AlbumDetailRenderer,
+        artist_detail_renderer::ArtistDetailRenderer,
+        detail_playback::PlaybackHandler,
+        detail_types::{DetailType, DetailViewBuilder, DetailViewConfig},
     },
 };
 
-/// Builder pattern for configuring `DetailView` components.
-#[derive(Debug, Default)]
-pub struct DetailViewBuilder {
-    /// Optional application state reference for reactive updates.
-    app_state: Option<Arc<AppState>>,
-    /// The type of detail to display (album or artist).
-    detail_type: DetailType,
-    /// Whether to use compact layout.
-    compact: bool,
-}
-
-impl DetailViewBuilder {
-    /// Sets the application state for reactive updates.
-    ///
-    /// # Arguments
-    ///
-    /// * `app_state` - Application state reference
-    ///
-    /// # Returns
-    ///
-    /// The builder instance for method chaining.
-    #[must_use]
-    pub fn app_state(mut self, app_state: Arc<AppState>) -> Self {
-        self.app_state = Some(app_state);
-        self
-    }
-
-    /// Sets the detail type (album or artist).
-    ///
-    /// # Arguments
-    ///
-    /// * `detail_type` - The type of detail to display
-    ///
-    /// # Returns
-    ///
-    /// The builder instance for method chaining.
-    #[must_use]
-    pub fn detail_type(mut self, detail_type: DetailType) -> Self {
-        self.detail_type = detail_type;
-        self
-    }
-
-    /// Configures whether to use compact layout.
-    ///
-    /// # Arguments
-    ///
-    /// * `compact` - Whether to use compact layout
-    ///
-    /// # Returns
-    ///
-    /// The builder instance for method chaining.
-    #[must_use]
-    pub fn compact(mut self, compact: bool) -> Self {
-        self.compact = compact;
-        self
-    }
-
-    /// Builds the `DetailView` component.
-    ///
-    /// # Returns
-    ///
-    /// A new `DetailView` instance.
-    #[must_use]
-    pub fn build(self) -> DetailView {
-        DetailView::new(self.app_state, self.detail_type, self.compact)
-    }
-}
-
-/// Type of detail to display.
-#[derive(Debug, Clone, PartialEq)]
-pub enum DetailType {
-    /// Display album detail
-    Album(Album),
-    /// Display artist detail
-    Artist(Artist),
-}
-
-impl Default for DetailType {
-    fn default() -> Self {
-        // Default to empty album (this should be handled by the application logic)
-        // Since we need a default, we'll use a placeholder album
-        DetailType::Album(Album::default())
-    }
-}
-
 /// Comprehensive detail view for albums or artists.
-///
-/// The `DetailView` component displays detailed information for a single
-/// album or artist, including artwork, metadata, track listings, and
-/// playback controls, with smooth transitions and proper navigation.
 pub struct DetailView {
     /// The underlying GTK widget (main container).
     pub widget: Widget,
     /// Main container box.
     pub main_container: Box,
+    /// Toast overlay for displaying feedback messages.
+    pub toast_overlay: ToastOverlay,
     /// Current application state reference.
     pub app_state: Option<Arc<AppState>>,
+    /// Library database reference for fetching tracks.
+    pub library_db: Option<Arc<LibraryDatabase>>,
+    /// Audio engine reference for playback.
+    pub audio_engine: Option<Arc<AudioEngine>>,
+    /// Queue manager reference for queue operations.
+    pub queue_manager: Option<Arc<QueueManager>>,
     /// Current detail type being displayed.
     pub detail_type: Option<DetailType>,
     /// Configuration flags.
     pub config: DetailViewConfig,
 }
 
-/// Configuration for `DetailView` display options.
-#[derive(Debug, Clone)]
-pub struct DetailViewConfig {
-    /// Whether to use compact layout.
-    pub compact: bool,
+impl Debug for DetailView {
+    fn fmt(&self, f: &mut Formatter<'_>) -> StdResult {
+        f.debug_struct("DetailView")
+            .field("widget", &self.widget)
+            .field("main_container", &self.main_container)
+            .field("toast_overlay", &self.toast_overlay)
+            .field(
+                "app_state",
+                &self.app_state.as_ref().map(|_| "Arc<AppState>"),
+            )
+            .field(
+                "library_db",
+                &self.library_db.as_ref().map(|_| "Arc<LibraryDatabase>"),
+            )
+            .field(
+                "audio_engine",
+                &self.audio_engine.as_ref().map(|_| "Arc<AudioEngine>"),
+            )
+            .field(
+                "queue_manager",
+                &self.queue_manager.as_ref().map(|_| "Arc<QueueManager>"),
+            )
+            .field("detail_type", &self.detail_type)
+            .field("config", &self.config)
+            .finish()
+    }
 }
 
 impl DetailView {
@@ -150,6 +85,9 @@ impl DetailView {
     /// # Arguments
     ///
     /// * `app_state` - Optional application state reference for reactive updates
+    /// * `library_db` - Optional library database reference for fetching tracks
+    /// * `audio_engine` - Optional audio engine reference for playback
+    /// * `queue_manager` - Optional queue manager reference for queue operations
     /// * `detail_type` - Initial detail type to display
     /// * `compact` - Whether to use compact layout
     ///
@@ -157,7 +95,14 @@ impl DetailView {
     ///
     /// A new `DetailView` instance.
     #[must_use]
-    pub fn new(app_state: Option<Arc<AppState>>, detail_type: DetailType, compact: bool) -> Self {
+    pub fn new(
+        app_state: Option<Arc<AppState>>,
+        library_db: Option<Arc<LibraryDatabase>>,
+        audio_engine: Option<Arc<AudioEngine>>,
+        queue_manager: Option<Arc<QueueManager>>,
+        detail_type: DetailType,
+        compact: bool,
+    ) -> Self {
         let config = DetailViewConfig { compact };
 
         let main_container = Box::builder()
@@ -175,10 +120,17 @@ impl DetailView {
         // Set ARIA attributes for accessibility
         main_container.set_accessible_role(Article);
 
+        let toast_overlay = ToastOverlay::new();
+        toast_overlay.set_child(Some(&main_container));
+
         let mut view = Self {
-            widget: main_container.clone().upcast_ref::<Widget>().clone(),
+            widget: toast_overlay.clone().upcast_ref::<Widget>().clone(),
             main_container,
+            toast_overlay,
             app_state,
+            library_db,
+            audio_engine,
+            queue_manager,
             detail_type: None,
             config,
         };
@@ -228,364 +180,29 @@ impl DetailView {
     ///
     /// # Arguments
     ///
-    /// * `album` - The album to display details for
+    /// * `album` - Reference to the album to display
     fn display_album_detail(&mut self, album: &Album) {
-        // Create header section with cover art and metadata
-        let header_container = Self::create_album_header(album);
-        self.main_container.append(&header_container);
+        let playback_handler = Some(PlaybackHandler::new(
+            self.audio_engine.clone(),
+            self.queue_manager.clone(),
+        ));
 
-        // Create track listing section
-        if let Some(ref app_state) = self.app_state {
-            let library_state = app_state.get_library_state();
-            let tracks: Vec<Track> = library_state
-                .current_tracks
-                .into_iter()
-                .filter(|track| track.album_id == album.id)
-                .collect();
+        let renderer = AlbumDetailRenderer::new(
+            self.app_state.clone(),
+            self.library_db.clone(),
+            playback_handler,
+        );
 
-            if !tracks.is_empty() {
-                let track_list = Self::create_track_list(&tracks);
-                self.main_container.append(&track_list);
-            }
-        }
-
-        // set_accessible_description doesn't exist in GTK4, remove this line
-    }
-
-    /// Creates the album header section with cover art and metadata.
-    ///
-    /// # Arguments
-    ///
-    /// * `album` - The album to create header for
-    ///
-    /// # Returns
-    ///
-    /// A new `Widget` representing the album header.
-    fn create_album_header(album: &Album) -> Widget {
-        let header_container = Box::builder().orientation(Horizontal).spacing(24).build();
-
-        // Large cover art with play overlay
-        let cover_art = CoverArt::builder()
-            .artwork_path(album.artwork_path.as_deref().unwrap_or(&album.path))
-            .dr_value(album.dr_value.clone().unwrap_or_else(|| "N/A".to_string()))
-            .show_dr_badge(true)
-            .dimensions(300, 300)
-            .build();
-
-        let play_overlay = PlayOverlay::builder()
-            .is_playing(false)
-            .show_on_hover(true)
-            .build();
-
-        let cover_container = Box::builder()
-            .orientation(Vertical)
-            .halign(Start)
-            .valign(Start)
-            .build();
-
-        cover_container.append(&cover_art.widget);
-        cover_container.append(&play_overlay.widget);
-
-        // Metadata container
-        let metadata_container = Box::builder()
-            .orientation(Vertical)
-            .hexpand(true)
-            .spacing(8)
-            .build();
-
-        // Title
-        let title_label = Label::builder()
-            .label(&album.title)
-            .halign(Start)
-            .xalign(0.0)
-            .css_classes(["title-1"])
-            .ellipsize(End)
-            .tooltip_text(&album.title)
-            .build();
-        metadata_container.append(title_label.upcast_ref::<Widget>());
-
-        // Artist
-        let artist_label = Label::builder()
-            .label(format!("Artist ID: {}", album.artist_id))
-            .halign(Start)
-            .xalign(0.0)
-            .css_classes(["title-2"])
-            .ellipsize(End)
-            .tooltip_text(format!("Artist ID: {}", album.artist_id))
-            .build();
-        metadata_container.append(artist_label.upcast_ref::<Widget>());
-
-        // Year and genre
-        if let Some(year) = album.year {
-            let year_label = Label::builder()
-                .label(year.to_string())
-                .halign(Start)
-                .xalign(0.0)
-                .css_classes(["dim-label"])
-                .build();
-            metadata_container.append(year_label.upcast_ref::<Widget>());
-        }
-
-        if let Some(ref genre) = album.genre {
-            let genre_label = Label::builder()
-                .label(genre)
-                .halign(Start)
-                .xalign(0.0)
-                .css_classes(["dim-label"])
-                .ellipsize(End)
-                .tooltip_text(genre)
-                .build();
-            metadata_container.append(genre_label.upcast_ref::<Widget>());
-        }
-
-        // Compilation indicator
-        if album.compilation {
-            let compilation_label = Label::builder()
-                .label("Compilation")
-                .halign(Start)
-                .xalign(0.0)
-                .css_classes(["dim-label"])
-                .build();
-            metadata_container.append(compilation_label.upcast_ref::<Widget>());
-        }
-
-        // Play all button
-        let play_all_button = Button::builder().label("Play All").halign(Start).build();
-        metadata_container.append(play_all_button.upcast_ref::<Widget>());
-
-        header_container.append(cover_container.upcast_ref::<Widget>());
-        header_container.append(metadata_container.upcast_ref::<Widget>());
-
-        header_container.upcast_ref::<Widget>().clone()
-    }
-
-    /// Creates the track listing section.
-    ///
-    /// # Arguments
-    ///
-    /// * `tracks` - Vector of tracks to display
-    ///
-    /// # Returns
-    ///
-    /// A new `Widget` representing the track list.
-    fn create_track_list(tracks: &[Track]) -> Widget {
-        let list_container = Box::builder().orientation(Vertical).spacing(8).build();
-
-        let title_label = Label::builder()
-            .label("Tracks")
-            .halign(Start)
-            .xalign(0.0)
-            .css_classes(["title-2"])
-            .build();
-        list_container.append(title_label.upcast_ref::<Widget>());
-
-        let scrolled_window = ScrolledWindow::builder()
-            .vexpand(true)
-            .min_content_height(300)
-            .build();
-
-        let track_list = ListBox::builder()
-            .selection_mode(SelectionNone)
-            .css_classes(["track-list"])
-            .build();
-
-        for (index, track) in tracks.iter().enumerate() {
-            let row = Self::create_track_row(track, index + 1);
-            track_list.append(&row);
-        }
-
-        scrolled_window.set_child(Some(&track_list));
-        list_container.append(scrolled_window.upcast_ref::<Widget>());
-
-        list_container.upcast_ref::<Widget>().clone()
-    }
-
-    /// Creates a single track row widget.
-    ///
-    /// # Arguments
-    ///
-    /// * `track` - The track to create a row for
-    /// * `track_number` - Display track number
-    ///
-    /// # Returns
-    ///
-    /// A new `Widget` representing the track row.
-    fn create_track_row(track: &Track, track_number: usize) -> Widget {
-        let row_container = Box::builder()
-            .orientation(Horizontal)
-            .spacing(12)
-            .margin_top(4)
-            .margin_bottom(4)
-            .margin_start(8)
-            .margin_end(8)
-            .build();
-
-        // Track number
-        let number_label = Label::builder()
-            .label(track_number.to_string())
-            .width_chars(3)
-            .xalign(1.0)
-            .css_classes(["dim-label"])
-            .build();
-        row_container.append(number_label.upcast_ref::<Widget>());
-
-        // Title
-        let title_label = Label::builder()
-            .label(&track.title)
-            .halign(Start)
-            .xalign(0.0)
-            .hexpand(true)
-            .ellipsize(End)
-            .tooltip_text(&track.title)
-            .build();
-        row_container.append(title_label.upcast_ref::<Widget>());
-
-        // Duration
-        let duration_seconds = track.duration_ms / 1000;
-        let duration_minutes = duration_seconds / 60;
-        let duration_remaining = duration_seconds % 60;
-        let duration_text = format!("{duration_minutes:02}:{duration_remaining:02}");
-        let duration_label = Label::builder()
-            .label(&duration_text)
-            .halign(Start)
-            .xalign(1.0)
-            .css_classes(["dim-label"])
-            .build();
-        row_container.append(duration_label.upcast_ref::<Widget>());
-
-        // Hi-Fi metadata
-        let hifi_metadata = HiFiMetadata::builder()
-            .track(track.clone())
-            .show_format(ShowFormat)
-            .show_sample_rate(ShowSampleRate)
-            .show_bit_depth(ShowBitDepth)
-            .show_channels(HideChannels) // Save space in track list
-            .layout(Compact)
-            .build();
-        row_container.append(&hifi_metadata.widget);
-
-        // Create ListBoxRow wrapper
-        let row = ListBoxRow::new();
-        row.set_child(Some(&row_container));
-        row.set_activatable(true);
-        row.set_selectable(true);
-
-        // set_accessible_description doesn't exist in GTK4, remove this block
-
-        row.upcast_ref::<Widget>().clone()
+        renderer.render(&self.main_container, album, &self.toast_overlay);
     }
 
     /// Displays detailed artist information.
     ///
     /// # Arguments
     ///
-    /// * `artist` - The artist to display details for
+    /// * `artist` - Reference to the artist to display
     fn display_artist_detail(&mut self, artist: &Artist) {
-        // Create header section with artist image and metadata
-        let header_container = Self::create_artist_header(artist);
-        self.main_container.append(&header_container);
-
-        // Create album listing section (placeholder - would need album data)
-        let album_list_placeholder = Self::create_album_list_placeholder();
-        self.main_container.append(&album_list_placeholder);
-
-        // set_accessible_description doesn't exist in GTK4, remove this line
-    }
-
-    /// Creates the artist header section with image and metadata.
-    ///
-    /// # Arguments
-    ///
-    /// * `artist` - The artist to create header for
-    ///
-    /// # Returns
-    ///
-    /// A new `Widget` representing the artist header.
-    fn create_artist_header(artist: &Artist) -> Widget {
-        let header_container = Box::builder().orientation(Horizontal).spacing(24).build();
-
-        // Artist image (default avatar)
-        let cover_art = CoverArt::builder()
-            .artwork_path("")
-            .show_dr_badge(false)
-            .dimensions(300, 300)
-            .build();
-
-        let cover_container = Box::builder()
-            .orientation(Vertical)
-            .halign(Start)
-            .valign(Start)
-            .build();
-
-        cover_container.append(&cover_art.widget);
-
-        // Metadata container
-        let metadata_container = Box::builder()
-            .orientation(Vertical)
-            .hexpand(true)
-            .spacing(8)
-            .build();
-
-        // Name
-        let name_label = Label::builder()
-            .label(&artist.name)
-            .halign(Start)
-            .xalign(0.0)
-            .css_classes(["title-1"])
-            .ellipsize(End)
-            .tooltip_text(&artist.name)
-            .build();
-        metadata_container.append(name_label.upcast_ref::<Widget>());
-
-        // Bio placeholder
-        let bio_label = Label::builder()
-            .label("Artist biography would appear here when available.")
-            .halign(Start)
-            .xalign(0.0)
-            .wrap(true)
-            .max_width_chars(80)
-            .css_classes(["dim-label"])
-            .build();
-        metadata_container.append(bio_label.upcast_ref::<Widget>());
-
-        // Play all button
-        let play_all_button = Button::builder()
-            .label("Play All Artist Tracks")
-            .halign(Start)
-            .build();
-        metadata_container.append(play_all_button.upcast_ref::<Widget>());
-
-        header_container.append(cover_container.upcast_ref::<Widget>());
-        header_container.append(metadata_container.upcast_ref::<Widget>());
-
-        header_container.upcast_ref::<Widget>().clone()
-    }
-
-    /// Creates a placeholder for the album listing section.
-    ///
-    /// # Returns
-    ///
-    /// A new `Widget` representing the album list placeholder.
-    fn create_album_list_placeholder() -> Widget {
-        let list_container = Box::builder().orientation(Vertical).spacing(8).build();
-
-        let title_label = Label::builder()
-            .label("Albums")
-            .halign(Start)
-            .xalign(0.0)
-            .css_classes(["title-2"])
-            .build();
-        list_container.append(title_label.upcast_ref::<Widget>());
-
-        let placeholder_label = Label::builder()
-            .label("Album listing would appear here.")
-            .halign(Start)
-            .xalign(0.0)
-            .css_classes(["dim-label"])
-            .build();
-        list_container.append(placeholder_label.upcast_ref::<Widget>());
-
-        list_container.upcast_ref::<Widget>().clone()
+        ArtistDetailRenderer::render(&self.main_container, artist);
     }
 
     /// Updates the display configuration.
@@ -601,11 +218,28 @@ impl DetailView {
             self.set_detail(detail_type);
         }
     }
-}
 
-impl Default for DetailView {
-    fn default() -> Self {
-        Self::new(None, DetailType::Album(Album::default()), false)
+    /// Gets the current track info from audio engine for state updates.
+    ///
+    /// # Returns
+    ///
+    /// The current `TrackInfo` if available, otherwise `None`.
+    #[must_use]
+    pub fn get_current_track_info(&self) -> Option<TrackInfo> {
+        self.audio_engine.as_ref()?.current_track_info()
+    }
+
+    /// Updates playback state and current track in application state.
+    ///
+    /// # Arguments
+    ///
+    /// * `state` - New playback state
+    /// * `track_info` - Track info to update
+    pub fn update_playback_state(&self, state: PlaybackState, track_info: TrackInfo) {
+        if let Some(app_state) = &self.app_state {
+            app_state.update_playback_state(state);
+            app_state.update_current_track(Some(track_info));
+        }
     }
 }
 
@@ -613,7 +247,10 @@ impl Default for DetailView {
 mod tests {
     use crate::{
         library::models::{Album, Artist},
-        ui::views::detail_view::{DetailType, DetailView},
+        ui::views::{
+            detail_types::{DetailType, DetailViewBuildError::MissingDetailType},
+            detail_view::DetailView,
+        },
     };
 
     #[test]
@@ -626,31 +263,30 @@ mod tests {
         };
 
         let detail_view = DetailView::builder()
-            .detail_type(DetailType::Artist(artist))
+            .detail_type(Some(DetailType::Artist(artist)))
             .compact(true)
-            .build();
+            .build()
+            .unwrap();
 
         match &detail_view.detail_type {
             Some(DetailType::Artist(_)) => {}
             _ => unreachable!(),
         }
-        assert!(detail_view.config.compact);
     }
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_detail_view_default() {
-        let detail_view = DetailView::default();
-        match &detail_view.detail_type {
-            Some(DetailType::Album(_)) => {}
-            _ => unreachable!(),
-        }
-        assert!(!detail_view.config.compact);
+    fn test_detail_view_builder_missing_detail_type() {
+        let error = DetailView::builder()
+            .compact(true)
+            .build()
+            .expect_err("Should fail without detail type");
+
+        assert!(matches!(error, MissingDetailType));
     }
 
     #[test]
     fn test_detail_types() {
-        // This test doesn't require GTK, so no skip needed
         let album = Album::default();
         let artist = Artist::default();
 

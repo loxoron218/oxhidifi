@@ -7,7 +7,7 @@ use std::{fs::read_to_string, path::Path, rc::Rc, sync::Arc};
 
 use {
     libadwaita::{
-        Application, ApplicationWindow, NavigationPage, NavigationView,
+        Application, ApplicationWindow, NavigationPage, NavigationView, Toast, ToastOverlay,
         gdk::{Display, Key},
         glib::{
             MainContext,
@@ -55,8 +55,9 @@ use crate::{
         header_bar::HeaderBar,
         player_bar::PlayerBar,
         views::{
-            AlbumGridView, ArtistGridView, DetailView, ListView,
-            detail_view::DetailType::{Album as AlbumDetailType, Artist as ArtistDetailType},
+            AlbumGridView, ArtistGridView,
+            DetailType::{Album as DetailTypeAlbum, Artist as DetailTypeArtist},
+            DetailView, ListView,
             list_view::ListViewType::{Albums, Artists},
         },
     },
@@ -309,9 +310,17 @@ fn build_ui(
         .build();
     navigation_view.add(&main_page);
 
+    // Create toast overlay for displaying error messages
+    let toast_overlay = ToastOverlay::new();
+    toast_overlay.set_child(Some(&navigation_view));
+
     // Handle navigation events and update HeaderBar state centrally
     let navigation_view_clone = navigation_view.clone();
+    let toast_overlay_clone = toast_overlay.clone();
     let app_state_nav = app_state.clone();
+    let library_db_nav = library_db.clone();
+    let audio_engine_nav = audio_engine.clone();
+    let queue_manager_nav = queue_manager.clone();
     let hb_widget = header_bar.widget.clone();
     let hb_back = header_bar.back_button.clone();
     let hb_search = header_bar.search_button.clone();
@@ -339,11 +348,23 @@ fn build_ui(
                         hb_widget.set_show_end_title_buttons(true);
                     }
                     AlbumDetail(album) => {
-                        let detail_view = DetailView::builder()
+                        let detail_view = match DetailView::builder()
                             .app_state(app_state_nav.clone())
-                            .detail_type(AlbumDetailType(album.clone()))
+                            .library_db(library_db_nav.clone())
+                            .audio_engine(audio_engine_nav.clone())
+                            .queue_manager(queue_manager_nav.clone())
+                            .detail_type(Some(DetailTypeAlbum(album.clone())))
                             .compact(false)
-                            .build();
+                            .build()
+                        {
+                            Ok(view) => view,
+                            Err(e) => {
+                                error!("Failed to build album detail view: {e}");
+                                let toast = Toast::new("Failed to load album details");
+                                toast_overlay_clone.add_toast(toast);
+                                continue;
+                            }
+                        };
 
                         let page = NavigationPage::builder()
                             .child(&detail_view.widget)
@@ -357,11 +378,23 @@ fn build_ui(
                         hb_widget.set_title_widget(Option::<&Widget>::None);
                     }
                     ArtistDetail(artist) => {
-                        let detail_view = DetailView::builder()
+                        let detail_view = match DetailView::builder()
                             .app_state(app_state_nav.clone())
-                            .detail_type(ArtistDetailType(artist.clone()))
+                            .library_db(library_db_nav.clone())
+                            .audio_engine(audio_engine_nav.clone())
+                            .queue_manager(queue_manager_nav.clone())
+                            .detail_type(Some(DetailTypeArtist(artist.clone())))
                             .compact(false)
-                            .build();
+                            .build()
+                        {
+                            Ok(view) => view,
+                            Err(e) => {
+                                error!("Failed to build artist detail view: {e}");
+                                let toast = Toast::new("Failed to load artist details");
+                                toast_overlay_clone.add_toast(toast);
+                                continue;
+                            }
+                        };
 
                         let page = NavigationPage::builder()
                             .child(&detail_view.widget)
@@ -434,7 +467,7 @@ fn build_ui(
     let main_box = GtkBox::builder().orientation(Vertical).build();
 
     main_box.append(&header_bar.widget);
-    main_box.append(&navigation_view.upcast::<Widget>());
+    main_box.append(&toast_overlay);
     main_box.append(&player_bar_widget);
 
     // Load custom CSS for consistent styling

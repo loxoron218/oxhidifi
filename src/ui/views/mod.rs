@@ -7,13 +7,24 @@
 #[cfg(test)]
 mod tests;
 
+pub mod album_detail_renderer;
 pub mod album_grid;
+pub mod artist_detail_renderer;
 pub mod artist_grid;
+pub mod detail_playback;
+pub mod detail_types;
 pub mod detail_view;
 pub mod filtering;
 pub mod list_view;
 
 pub use {
-    album_grid::AlbumGridView, artist_grid::ArtistGridView, detail_view::DetailView,
-    filtering::Filterable, list_view::ListView,
+    album_grid::AlbumGridView,
+    artist_grid::ArtistGridView,
+    detail_types::{
+        BuildResult, DetailType, DetailViewBuildError, DetailViewBuilder, DetailViewConfig,
+        TrackTechDetails,
+    },
+    detail_view::DetailView,
+    filtering::Filterable,
+    list_view::ListView,
 };

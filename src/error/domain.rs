@@ -71,6 +71,15 @@ pub enum UiError {
     /// Builder pattern error.
     #[error("Builder error: {0}")]
     BuilderError(String),
+    /// Artist not found in library state for an album.
+    #[error(
+        "Artist {artist_id} not found in library state for album {album_id} (album title: {album_title:?})"
+    )]
+    ArtistNotFound {
+        artist_id: i64,
+        album_id: i64,
+        album_title: String,
+    },
 }
 
 /// Operational error context propagation with `anyhow`.
@@ -81,14 +90,18 @@ pub type Result<T> = StdResult<T, Error>;
 
 #[cfg(test)]
 mod tests {
-    use crate::error::domain::{AudioError, LibraryError, UiError};
+    use crate::error::domain::{
+        AudioError::{InvalidOperation, NoTrackLoaded},
+        LibraryError::{InvalidData, NotFound},
+        UiError::{ArtistNotFound, InitializationError, WidgetError},
+    };
 
     #[test]
     fn test_audio_error_display() {
-        let no_track_error = AudioError::NoTrackLoaded;
+        let no_track_error = NoTrackLoaded;
         assert_eq!(no_track_error.to_string(), "No track loaded");
 
-        let invalid_op_error = AudioError::InvalidOperation {
+        let invalid_op_error = InvalidOperation {
             reason: "test reason".to_string(),
         };
         assert_eq!(
@@ -99,7 +112,7 @@ mod tests {
 
     #[test]
     fn test_library_error_display() {
-        let not_found_error = LibraryError::NotFound {
+        let not_found_error = NotFound {
             entity: "album".to_string(),
             id: 123,
         };
@@ -108,7 +121,7 @@ mod tests {
             "Record not found: album with id 123"
         );
 
-        let invalid_data_error = LibraryError::InvalidData {
+        let invalid_data_error = InvalidData {
             reason: "test reason".to_string(),
         };
         assert_eq!(invalid_data_error.to_string(), "Invalid data: test reason");
@@ -116,16 +129,26 @@ mod tests {
 
     #[test]
     fn test_ui_error_display() {
-        let init_error = UiError::InitializationError("Failed to init GTK".to_string());
+        let init_error = InitializationError("Failed to init GTK".to_string());
         assert_eq!(
             init_error.to_string(),
             "UI initialization error: Failed to init GTK"
         );
 
-        let widget_error = UiError::WidgetError("Failed to create button".to_string());
+        let widget_error = WidgetError("Failed to create button".to_string());
         assert_eq!(
             widget_error.to_string(),
             "Widget creation error: Failed to create button"
+        );
+
+        let artist_not_found = ArtistNotFound {
+            artist_id: 42,
+            album_id: 123,
+            album_title: "Test Album".to_string(),
+        };
+        assert_eq!(
+            artist_not_found.to_string(),
+            "Artist 42 not found in library state for album 123 (album title: \"Test Album\")"
         );
     }
 }

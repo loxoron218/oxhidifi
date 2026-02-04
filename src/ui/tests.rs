@@ -24,7 +24,7 @@ mod ui_compliance_tests {
         ui::{
             AlbumGridView, ArtistGridView, CoverArt, DRBadge, DetailView, HeaderBar, ListView,
             PlayOverlay, PlayerBar,
-            views::{detail_view::DetailType, list_view::ListViewType::Albums},
+            views::{DetailType, list_view::ListViewType::Albums},
         },
     };
 
@@ -37,7 +37,10 @@ mod ui_compliance_tests {
         // The margin values should follow GNOME spacing guidelines
         // This is verified by visual inspection in real implementation
 
-        let _detail_view = DetailView::default();
+        let _detail_view = DetailView::builder()
+            .detail_type(Some(DetailType::Album(Album::default())))
+            .build()
+            .unwrap();
 
         // Spacing in detail view should follow guidelines
     }
@@ -132,6 +135,9 @@ mod ui_compliance_tests {
 
         let detail_view = DetailView::new(
             Some(app_state_arc.clone()),
+            None,
+            None,
+            None,
             DetailType::Album(Album::default()),
             false,
         );
@@ -217,6 +223,9 @@ mod ui_compliance_tests {
             );
             let _detail_view = DetailView::new(
                 Some(app_state_arc.clone()),
+                None,
+                None,
+                None,
                 DetailType::Album(Album::default()),
                 false,
             );
@@ -270,6 +279,9 @@ mod ui_compliance_tests {
         );
         let _detail_view = DetailView::new(
             Some(app_state_arc.clone()),
+            None,
+            None,
+            None,
             DetailType::Album(Album::default()),
             false,
         );
