@@ -10,7 +10,7 @@ use {anyhow::Error, sqlx::Error as SqlxError, thiserror::Error};
 use crate::{
     audio::{decoder::DecoderError, metadata::MetadataError, output::OutputError},
     error::dr_error::DrError,
-    library::{database::LibraryError as DatabaseError, schema::SchemaError},
+    library::database::LibraryError as DatabaseError,
 };
 
 /// Audio-related errors.
@@ -39,9 +39,6 @@ pub enum LibraryError {
     /// Database connection or query error.
     #[error("Database error: {0}")]
     DatabaseError(#[from] SqlxError),
-    /// Schema initialization error.
-    #[error("Schema error: {0}")]
-    SchemaError(#[from] SchemaError),
     /// Invalid file path or metadata.
     #[error("Invalid data: {reason}")]
     InvalidData { reason: String },

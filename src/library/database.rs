@@ -7,14 +7,14 @@
 use std::path::Path;
 
 use {
-    sqlx::{SqlitePool, query, query_as, query_scalar},
+    sqlx::{Error, SqlitePool, query, query_as, query_scalar},
     thiserror::Error,
     tracing::debug,
 };
 
 use crate::library::{
+    connection::create_connection_pool,
     models::{Album, Artist, SearchResults, Track},
-    schema::{SchemaManager, create_connection_pool},
 };
 
 /// Error type for library database operations.
@@ -22,10 +22,7 @@ use crate::library::{
 pub enum LibraryError {
     /// Database connection or query error.
     #[error("Database error: {0}")]
-    DatabaseError(#[from] sqlx::Error),
-    /// Schema initialization error.
-    #[error("Schema error: {0}")]
-    SchemaError(#[from] crate::library::schema::SchemaError),
+    DatabaseError(#[from] Error),
     /// Invalid file path or metadata.
     #[error("Invalid data: {reason}")]
     InvalidData { reason: String },
@@ -59,10 +56,115 @@ impl LibraryDatabase {
     /// Returns `LibraryError` if database initialization fails.
     pub async fn new() -> Result<Self, LibraryError> {
         let pool = create_connection_pool().await?;
-        let schema_manager = SchemaManager::new(pool.clone());
-        schema_manager.initialize_schema().await?;
+        Self::initialize_schema(&pool).await?;
 
         Ok(LibraryDatabase { pool })
+    }
+
+    /// Initializes the database schema by creating all necessary tables and indexes.
+    ///
+    /// # Arguments
+    ///
+    /// * `pool` - The `SQLite` connection pool.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` indicating success or failure.
+    ///
+    /// # Errors
+    ///
+    /// Returns `LibraryError` if table creation fails.
+    async fn initialize_schema(pool: &SqlitePool) -> Result<(), LibraryError> {
+        // Artists table
+        query(
+            r"
+            CREATE TABLE IF NOT EXISTS artists (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            ",
+        )
+        .execute(pool)
+        .await?;
+
+        // Albums table
+        query(
+            r"
+            CREATE TABLE IF NOT EXISTS albums (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                artist_id INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                year INTEGER,
+                genre TEXT,
+                compilation BOOLEAN DEFAULT FALSE,
+                path TEXT NOT NULL UNIQUE,
+                dr_value TEXT,
+                artwork_path TEXT,
+                format TEXT,
+                bits_per_sample INTEGER,
+                sample_rate INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (artist_id) REFERENCES artists (id) ON DELETE CASCADE,
+                UNIQUE (artist_id, title, year)
+            )
+            ",
+        )
+        .execute(pool)
+        .await?;
+
+        // Tracks table
+        query(
+            r"
+            CREATE TABLE IF NOT EXISTS tracks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                album_id INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                track_number INTEGER,
+                disc_number INTEGER DEFAULT 1,
+                duration_ms INTEGER NOT NULL,
+                path TEXT NOT NULL UNIQUE,
+                file_size INTEGER NOT NULL,
+                format TEXT NOT NULL,
+                codec TEXT NOT NULL DEFAULT '',
+                sample_rate INTEGER NOT NULL,
+                bits_per_sample INTEGER NOT NULL,
+                channels INTEGER NOT NULL,
+                is_lossless BOOLEAN NOT NULL DEFAULT FALSE,
+                is_high_resolution BOOLEAN NOT NULL DEFAULT FALSE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (album_id) REFERENCES albums (id) ON DELETE CASCADE
+            )
+            ",
+        )
+        .execute(pool)
+        .await?;
+
+        // Create indexes for performance
+        query("CREATE INDEX IF NOT EXISTS idx_artists_name ON artists (name)")
+            .execute(pool)
+            .await?;
+
+        query("CREATE INDEX IF NOT EXISTS idx_albums_artist_id ON albums (artist_id)")
+            .execute(pool)
+            .await?;
+
+        query("CREATE INDEX IF NOT EXISTS idx_albums_title ON albums (title)")
+            .execute(pool)
+            .await?;
+
+        query("CREATE INDEX IF NOT EXISTS idx_tracks_album_id ON tracks (album_id)")
+            .execute(pool)
+            .await?;
+
+        query("CREATE INDEX IF NOT EXISTS idx_tracks_path ON tracks (path)")
+            .execute(pool)
+            .await?;
+
+        Ok(())
     }
 
     /// Gets all albums in the library.

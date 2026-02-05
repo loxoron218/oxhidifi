@@ -277,12 +277,9 @@ mod tests {
         write(&dr_file2, "Official DR value: DR9").unwrap();
         write(&dr_file3, "Some other content").unwrap();
 
-        // Test file finding - should find all text files
-        let database = LibraryDatabase::new().await.unwrap();
-        let files = DrParser::new(database.into())
-            .extractor
-            .find_dr_files(album_dir)
-            .unwrap();
+        // Test file finding - should find all text files (no database needed)
+        let extractor = DrExtractor::new();
+        let files = extractor.find_dr_files(album_dir).unwrap();
 
         assert_eq!(files.len(), 3);
         assert!(files.iter().any(|f| f == &dr_file1));
