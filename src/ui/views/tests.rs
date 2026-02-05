@@ -16,9 +16,10 @@ mod view_integration_tests {
     };
 
     use crate::{
-        AppState, AudioEngine,
+        audio::engine::AudioEngine,
         config::SettingsManager,
         library::models::{Album, Artist},
+        state::AppState,
         ui::{
             components::cover_art::CoverArt,
             views::{

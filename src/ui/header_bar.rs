@@ -629,7 +629,8 @@ mod tests {
     };
 
     use crate::{
-        AppState, SettingsManager, library::scanner::LibraryScanner, ui::header_bar::HeaderBar,
+        config::SettingsManager, library::scanner::LibraryScanner, state::AppState,
+        ui::header_bar::HeaderBar,
     };
 
     #[test]

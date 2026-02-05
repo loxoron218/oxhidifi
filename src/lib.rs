@@ -11,13 +11,3 @@ pub mod error;
 pub mod library;
 pub mod state;
 pub mod ui;
-
-// Re-export key types for convenience
-pub use {
-    audio::engine::{AudioEngine, AudioError, PlaybackState, TrackInfo},
-    config::{SettingsManager, UserSettings},
-    error::{AudioError as Error, LibraryError, UiError},
-    library::{Album, Artist, LibraryDatabase, SearchResults, Track},
-    state::{AppState, AppStateEvent, LibraryState, ViewMode},
-    ui::OxhidifiApplication,
-};
