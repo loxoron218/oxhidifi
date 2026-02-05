@@ -104,8 +104,8 @@ cargo bench         # Run benchmarks
 
 **Rules:**
 - NEVER leak `anyhow::Error` across library boundaries
-- NEVER use `unwrap()`, return errors with context instead
-- NEVER use `println!`, `eprintln!`, or `dbg!` for output - ALWAYS use `tracing`
+- NEVER use `let _`, `.unwrap()`, `.expect()` or `.ok()`, return errors with context instead
+- NEVER use `println!`, `eprintln!`, or `dbg!` for output - ALWAYS use structured `tracing` with fields (e.g., `error!(error = %err, "Audio stream error")`, `info!(message = %err_str, "Audio buffer size changed")`)
 - Document error types with summary comment
 - Document each variant/field with `///`
 
@@ -174,7 +174,7 @@ pub async fn load_track<P: AsRef<Path>>(&self, track_path: P) -> Result<(), Audi
 - NEVER hardcode radii; use semantic classes (`.card`, `.boxed-list`) for corner rounding
 - Use `adw::StatusPage` for empty states and `adw::Toast` for non-intrusive feedback
 - Apply "suggested-action" or "destructive-action" CSS classes to primary/dangerous buttons
-- Organize settings using `adw::PreferencesDialog` containing `adw::PreferencesPage`, `adw::PreferencesGroup`
+- Organize settings using `adw::PreferencesDialog` containing `adw::PreferencesPage` and `adw::PreferencesGroup`
 
 ## Mandatory Behaviors
 
