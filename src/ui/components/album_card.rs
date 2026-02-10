@@ -408,7 +408,7 @@ impl AlbumCard {
             .width_request(i32::try_from(cover_width).expect(
                 "AlbumCard cover_width (u32) should fit in i32 for GTK widget width_request",
             )) // Force full width to align year to right margin
-            .spacing(8)
+            .spacing(6)
             .build();
 
         metadata_hbox.append(format_label.upcast_ref::<Widget>());
@@ -426,7 +426,7 @@ impl AlbumCard {
             .valign(Start)
             .hexpand(false)
             .vexpand(false)
-            .spacing(2) // Exactly 2px spacing as specified
+            .spacing(6) // 6px spacing per GNOME HIG
             .css_classes(["album-tile"])
             .build();
 

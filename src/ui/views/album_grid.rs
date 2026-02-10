@@ -281,8 +281,8 @@ impl AlbumGridView {
             .homogeneous(true)
             .max_children_per_line(100) // Will be adjusted based on available width
             .selection_mode(SelectionNone)
-            .row_spacing(8) // 8px row spacing as specified
-            .column_spacing(8) // 8px column spacing as specified
+            .row_spacing(6) // 6px row spacing per GNOME HIG
+            .column_spacing(6) // 6px column spacing per GNOME HIG
             .margin_top(24) // 24px margins as specified
             .margin_bottom(24)
             .margin_start(24)

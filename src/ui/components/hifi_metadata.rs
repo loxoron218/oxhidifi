@@ -263,11 +263,7 @@ impl HiFiMetadata {
             .halign(Start)
             .valign(Fill)
             .css_classes(["hifi-metadata"])
-            .spacing(if config.layout == LayoutMode::Compact {
-                8
-            } else {
-                2
-            })
+            .spacing(6)
             .build();
 
         let mut labels = Vec::new();
@@ -452,12 +448,7 @@ impl HiFiMetadata {
             Vertical
         };
         self.container.set_orientation(orientation);
-        self.container
-            .set_spacing(if config.layout == LayoutMode::Compact {
-                8
-            } else {
-                2
-            });
+        self.container.set_spacing(6);
     }
 }
 

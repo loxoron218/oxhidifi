@@ -130,8 +130,6 @@ impl PlayerBar {
         let widget = Box::builder()
             .orientation(Horizontal)
             .spacing(12)
-            .margin_top(6)
-            .margin_bottom(6)
             .margin_start(12)
             .margin_end(12)
             .css_classes(["player-bar"])
@@ -178,7 +176,7 @@ impl PlayerBar {
         // Hi-Fi metadata (initially hidden)
         let hifi_metadata_container = Box::builder()
             .orientation(Horizontal)
-            .spacing(8)
+            .spacing(6)
             .css_classes(["hifi-metadata-container"])
             .build();
         widget.append(hifi_metadata_container.upcast_ref::<Widget>());
@@ -267,7 +265,7 @@ impl PlayerBar {
         // Status indicators container
         let status_container = Box::builder()
             .orientation(Horizontal)
-            .spacing(8)
+            .spacing(6)
             .css_classes(["status-indicators"])
             .build();
 

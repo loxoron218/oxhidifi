@@ -281,7 +281,6 @@ impl HeaderBar {
         // Create zoom buttons container (horizontal pill)
         let zoom_buttons_box = Box::builder()
             .orientation(Horizontal)
-            .spacing(0)
             .css_classes(["linked", "flat"])
             .build();
 

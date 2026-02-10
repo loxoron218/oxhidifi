@@ -653,7 +653,7 @@ fn create_album_row_with_zoom(
     let info_container = Box::builder()
         .orientation(Vertical)
         .hexpand(true)
-        .spacing(2)
+        .spacing(6)
         .build();
 
     // Title label
@@ -703,10 +703,10 @@ fn create_album_row_with_zoom(
     let row_container = Box::builder()
         .orientation(Horizontal)
         .spacing(12)
-        .margin_top(8)
-        .margin_bottom(8)
-        .margin_start(8)
-        .margin_end(8)
+        .margin_top(12)
+        .margin_bottom(12)
+        .margin_start(12)
+        .margin_end(12)
         .build();
 
     row_container.append(&cover_art.widget);
@@ -784,7 +784,7 @@ fn create_artist_row_with_zoom(
     let info_container = Box::builder()
         .orientation(Vertical)
         .hexpand(true)
-        .spacing(2)
+        .spacing(6)
         .build();
 
     // Name label
@@ -802,10 +802,10 @@ fn create_artist_row_with_zoom(
     let row_container = Box::builder()
         .orientation(Horizontal)
         .spacing(12)
-        .margin_top(8)
-        .margin_bottom(8)
-        .margin_start(8)
-        .margin_end(8)
+        .margin_top(12)
+        .margin_bottom(12)
+        .margin_start(12)
+        .margin_end(12)
         .build();
 
     row_container.append(&cover_art.widget);

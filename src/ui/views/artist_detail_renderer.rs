@@ -64,7 +64,7 @@ impl ArtistDetailRenderer {
         let metadata_container = Box::builder()
             .orientation(Vertical)
             .hexpand(true)
-            .spacing(8)
+            .spacing(6)
             .build();
 
         let name_label = Label::builder()
@@ -99,7 +99,7 @@ impl ArtistDetailRenderer {
     ///
     /// A new `Widget` representing the album list placeholder.
     fn create_album_list_placeholder() -> Widget {
-        let list_container = Box::builder().orientation(Vertical).spacing(8).build();
+        let list_container = Box::builder().orientation(Vertical).spacing(6).build();
 
         let title_label = Label::builder()
             .label("Albums")

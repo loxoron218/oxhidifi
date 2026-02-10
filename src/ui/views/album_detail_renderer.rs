@@ -196,7 +196,7 @@ impl AlbumDetailRenderer {
         let metadata_container = Box::builder()
             .orientation(Vertical)
             .hexpand(true)
-            .spacing(8)
+            .spacing(6)
             .build();
 
         let title_label = Label::builder()
@@ -271,7 +271,7 @@ impl AlbumDetailRenderer {
     where
         F: Fn(Track) + Clone + 'static,
     {
-        let list_container = Box::builder().orientation(Vertical).spacing(8).build();
+        let list_container = Box::builder().orientation(Vertical).spacing(6).build();
 
         let title_label = Label::builder()
             .label("Tracks")
@@ -322,10 +322,10 @@ impl AlbumDetailRenderer {
         let row_container = Box::builder()
             .orientation(Horizontal)
             .spacing(12)
-            .margin_top(4)
-            .margin_bottom(4)
-            .margin_start(8)
-            .margin_end(8)
+            .margin_top(6)
+            .margin_bottom(6)
+            .margin_start(12)
+            .margin_end(12)
             .build();
 
         let number_label = Label::builder()

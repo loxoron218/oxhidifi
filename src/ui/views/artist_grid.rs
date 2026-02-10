@@ -164,8 +164,8 @@ impl ArtistGridView {
             .homogeneous(true)
             .max_children_per_line(100)
             .selection_mode(SelectionNone)
-            .row_spacing(8)
-            .column_spacing(8)
+            .row_spacing(6)
+            .column_spacing(6)
             .margin_top(24)
             .margin_bottom(24)
             .margin_start(24)
@@ -620,7 +620,7 @@ impl ArtistCard {
             .valign(Start)
             .hexpand(false)
             .vexpand(false)
-            .spacing(2)
+            .spacing(6)
             .css_classes(["album-tile"])
             .build();
 
