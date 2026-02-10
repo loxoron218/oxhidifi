@@ -11,9 +11,8 @@ use {
     lofty::{
         error::{ErrorKind::Io, LoftyError},
         picture::PictureType::{CoverBack, CoverFront, Leaflet},
-        prelude::{AudioFile, ItemKey::AlbumArtist, TaggedFileExt},
+        prelude::{Accessor, AudioFile, ItemKey::AlbumArtist, TaggedFileExt},
         probe::Probe,
-        tag::Accessor,
     },
     serde::{Deserialize, Serialize},
     thiserror::Error,
@@ -158,7 +157,7 @@ impl TagReader {
             artist: primary_tag.and_then(|tag| tag.artist().map(|s| s.to_string())),
             album: primary_tag.and_then(|tag| tag.album().map(|s| s.to_string())),
             album_artist: primary_tag.and_then(|tag| {
-                tag.get_string(&AlbumArtist)
+                tag.get_string(AlbumArtist)
                     .map(ToString::to_string)
                     .or_else(|| tag.artist().map(|s| s.to_string()))
             }),
@@ -166,7 +165,7 @@ impl TagReader {
             total_tracks: primary_tag.and_then(Accessor::track_total),
             disc_number: primary_tag.and_then(Accessor::disk),
             total_discs: primary_tag.and_then(Accessor::disk_total),
-            year: primary_tag.and_then(Accessor::year),
+            year: primary_tag.and_then(|tag| tag.date().map(|d| u32::from(d.year))),
             genre: primary_tag.and_then(|tag| tag.genre().map(|s| s.to_string())),
             comment: primary_tag.and_then(|tag| tag.comment().map(|s| s.to_string())),
         };
