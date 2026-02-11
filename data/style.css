@@ -118,3 +118,11 @@
     /* FlowBox will handle the responsive grid layout */
     min-width: 360px; /* Minimum width for mobile-like displays */
 }
+
+/* Player bar artwork container - styled via widget properties in Rust */
+.artwork-container {
+}
+
+/* Player bar artwork picture - styled via widget properties in Rust */
+.player-bar-artwork {
+}

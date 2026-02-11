@@ -432,13 +432,18 @@ fn build_ui(
     });
 
     // Create player bar
-    let (player_bar_widget, _player_bar) =
-        create_player_bar(app_state, audio_engine, queue_manager);
+    let (player_bar_widget, player_bar) = create_player_bar(app_state, audio_engine, queue_manager);
+    let player_bar = Rc::new(player_bar);
+    let player_bar_for_keepalive = player_bar.clone();
 
     // Subscribe to playback state changes to show/hide player bar
     let player_bar_widget_clone = player_bar_widget.clone();
     let app_state_for_subscription = app_state.clone();
+
     MainContext::default().spawn_local(async move {
+        // Keep player_bar alive throughout the subscription closure lifetime
+        let _player_bar_keepalive = player_bar_for_keepalive;
+
         let receiver = app_state_for_subscription.subscribe();
         loop {
             if let Ok(event) = receiver.recv().await {
