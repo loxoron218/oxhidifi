@@ -84,18 +84,6 @@ impl ErrorReporter {
     pub fn error(error: &Error, context: &str) {
         error!(context = context, error = %error, "Error error");
     }
-
-    /// Converts an error to a user-friendly message.
-    ///
-    /// This method extracts the most relevant information from an error
-    /// chain and formats it for display to end users.
-    #[must_use]
-    pub fn to_user_message(error: &Error) -> String {
-        // For now, just return the top-level error message
-        // In a more sophisticated implementation, we'd have specific
-        // user-friendly messages for different error types
-        error.to_string()
-    }
 }
 
 #[cfg(test)]
@@ -105,9 +93,7 @@ mod tests {
         fmt::{Display, Formatter, Result as FmtResult},
     };
 
-    use anyhow::anyhow;
-
-    use crate::error::operational::{ErrorReporter, ResultExt};
+    use crate::error::operational::ResultExt;
 
     #[test]
     fn test_result_ext_with_context() {
@@ -149,12 +135,5 @@ mod tests {
 
         // The error should contain the context, not necessarily the original error message
         assert!(error.to_string().contains("Formatted context: test"));
-    }
-
-    #[test]
-    fn test_error_reporter_user_message() {
-        let error = anyhow!("Test error message");
-        let user_message = ErrorReporter::to_user_message(&error);
-        assert_eq!(user_message, "Test error message");
     }
 }
