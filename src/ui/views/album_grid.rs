@@ -19,7 +19,7 @@ use {
         },
         prelude::{AccessibleExt, BoxExt, Cast, ObjectExt, WidgetExt},
     },
-    tracing::debug,
+    tracing::{debug, error},
 };
 
 use crate::{
@@ -560,8 +560,42 @@ impl AlbumGridView {
     ///
     /// A new `AlbumCard` instance.
     fn create_album_card(&self, album: &Album) -> AlbumCard {
-        // Look up artist name from app state
-        let artist_name = if let Some(app_state) = &self.app_state {
+        let artist_name = self.resolve_artist_name(album);
+
+        let format = create_format_display(album).unwrap_or_default();
+
+        let cover_size = self.get_cover_size();
+
+        let (show_dr_badge, show_metadata_overlays) = self.get_visibility_settings();
+
+        let mut album_card = AlbumCard::builder()
+            .album(album.clone())
+            .artist_name(artist_name)
+            .format(format)
+            .show_dr_badge(show_dr_badge)
+            .compact(self.config.compact)
+            .cover_size(u32::try_from(cover_size).expect("cover_size should be within u32 range"))
+            .on_play_clicked(self.create_play_callback(album))
+            .on_card_clicked(self.create_card_click_callback(album))
+            .build();
+
+        // Apply metadata overlay visibility setting
+        album_card.update_metadata_overlay_visibility(show_metadata_overlays);
+
+        album_card
+    }
+
+    /// Resolves the artist name for an album.
+    ///
+    /// # Arguments
+    ///
+    /// * `album` - The album to resolve the artist for
+    ///
+    /// # Returns
+    ///
+    /// The artist name, or "Unknown Artist" if not found.
+    fn resolve_artist_name(&self, album: &Album) -> String {
+        if let Some(app_state) = &self.app_state {
             let library_state = app_state.get_library_state();
             library_state
                 .artists
@@ -573,22 +607,31 @@ impl AlbumGridView {
                 )
         } else {
             "Unknown Artist".to_string()
-        };
+        }
+    }
 
-        // Create album card with proper callbacks
-        // Use the actual format from the album metadata, including bit depth and sample rate
-        let format = create_format_display(album).unwrap_or_default();
-
-        // Get cover size from zoom manager if available
-        let cover_size = if let Some(app_state) = &self.app_state {
+    /// Gets the cover size for album cards.
+    ///
+    /// # Returns
+    ///
+    /// The cover size in pixels.
+    fn get_cover_size(&self) -> i32 {
+        if let Some(app_state) = &self.app_state {
             app_state.zoom_manager.get_grid_cover_dimensions().0
+        } else if self.config.compact {
+            120
         } else {
-            // Default cover size based on compact mode
-            if self.config.compact { 120 } else { 180 }
-        };
+            180
+        }
+    }
 
-        // Get settings for DR badge and metadata overlays visibility
-        let (show_dr_badge, show_metadata_overlays) = if let Some(app_state) = &self.app_state {
+    /// Gets visibility settings for DR badges and metadata overlays.
+    ///
+    /// # Returns
+    ///
+    /// A tuple of (`show_dr_badge`, `show_metadata_overlays`).
+    fn get_visibility_settings(&self) -> (bool, bool) {
+        if let Some(app_state) = &self.app_state {
             let settings = app_state
                 .get_settings_manager()
                 .read()
@@ -596,100 +639,102 @@ impl AlbumGridView {
                 .clone();
             (settings.show_dr_values, settings.show_metadata_overlays)
         } else {
-            (self.config.show_dr_badges, true) // Default to showing overlays
-        };
+            (self.config.show_dr_badges, true)
+        }
+    }
 
-        let mut album_card = AlbumCard::builder()
-            .album(album.clone())
-            .artist_name(artist_name)
-            .format(format)
-            .show_dr_badge(show_dr_badge)
-            .compact(self.config.compact)
-            .cover_size(u32::try_from(cover_size).expect("cover_size should be within u32 range"))
-            .on_play_clicked({
-                let app_state = self.app_state.clone();
-                let library_db = self.library_db.clone();
-                let audio_engine = self.audio_engine.clone();
-                let queue_manager = self.queue_manager.clone();
-                let album_clone = album.clone();
-                move || {
-                    if let (
-                        Some(app_state),
-                        Some(library_db),
-                        Some(audio_engine),
-                        Some(queue_manager),
-                    ) = (
-                        app_state.as_ref(),
-                        library_db.as_ref(),
-                        audio_engine.as_ref(),
-                        queue_manager.as_ref(),
-                    ) {
-                        let album_id = album_clone.id;
-                        let app_state_clone = app_state.clone();
-                        let library_db_clone = library_db.clone();
-                        let audio_engine_clone = audio_engine.clone();
-                        let queue_manager_clone = queue_manager.clone();
+    /// Creates the play button callback for an album.
+    ///
+    /// # Arguments
+    ///
+    /// * `album` - The album to play
+    ///
+    /// # Returns
+    ///
+    /// A callback function that plays the album.
+    fn create_play_callback(&self, album: &Album) -> impl Fn() + 'static {
+        let album_id = album.id;
 
-                        MainContext::default().spawn_local(async move {
-                            if let Ok(tracks) = library_db_clone.get_tracks_by_album(album_id).await
-                                && !tracks.is_empty()
-                            {
-                                queue_manager_clone.set_queue(tracks.clone());
+        let app_state = self.app_state.clone();
+        let library_db = self.library_db.clone();
+        let audio_engine = self.audio_engine.clone();
+        let queue_manager = self.queue_manager.clone();
 
-                                let first_track = &tracks[0];
-                                let track_path = &first_track.path;
+        move || {
+            if let (Some(app_state), Some(library_db), Some(audio_engine), Some(queue_manager)) = (
+                app_state.as_ref(),
+                library_db.as_ref(),
+                audio_engine.as_ref(),
+                queue_manager.as_ref(),
+            ) {
+                let app_state_clone = app_state.clone();
+                let library_db_clone = library_db.clone();
+                let audio_engine_clone = audio_engine.clone();
+                let queue_manager_clone = queue_manager.clone();
 
-                                if let Ok(()) = audio_engine_clone.load_track(track_path) {
-                                    if let Err(e) = audio_engine_clone.play().await {
-                                        if handle_exclusive_mode_error(&e, &app_state_clone) {}
-                                    } else {
-                                        app_state_clone.update_playback_state(Playing);
+                MainContext::default().spawn_local(async move {
+                    if let Ok(tracks) = library_db_clone.get_tracks_by_album(album_id).await
+                        && !tracks.is_empty()
+                    {
+                        queue_manager_clone.set_queue(tracks.clone());
 
-                                        if let Ok(metadata) = TagReader::read_metadata(track_path) {
-                                            let track_info = TrackInfo {
-                                                path: track_path.clone(),
-                                                metadata,
-                                                format: AudioFormat {
-                                                    sample_rate: u32::try_from(
-                                                        first_track.sample_rate,
-                                                    )
-                                                    .unwrap_or(44100),
-                                                    channels: u32::try_from(first_track.channels)
-                                                        .unwrap_or(2),
-                                                    bits_per_sample: u32::try_from(
-                                                        first_track.bits_per_sample,
-                                                    )
-                                                    .unwrap_or(16),
-                                                    channel_mask: 0,
-                                                },
-                                                duration_ms: u64::try_from(first_track.duration_ms)
-                                                    .unwrap_or(0),
-                                            };
-                                            app_state_clone.update_current_track(Some(track_info));
-                                        }
-                                    }
+                        let first_track = &tracks[0];
+                        let track_path = &first_track.path;
+
+                        if let Ok(()) = audio_engine_clone.load_track(track_path) {
+                            if let Err(e) = audio_engine_clone.play().await {
+                                if !handle_exclusive_mode_error(&e, &app_state_clone) {
+                                    error!(error = %e, "Failed to play track after loading");
+                                }
+                            } else {
+                                app_state_clone.update_playback_state(Playing);
+
+                                if let Ok(metadata) = TagReader::read_metadata(track_path) {
+                                    let track_info = TrackInfo {
+                                        path: track_path.clone(),
+                                        metadata,
+                                        format: AudioFormat {
+                                            sample_rate: u32::try_from(first_track.sample_rate)
+                                                .unwrap_or(44100),
+                                            channels: u32::try_from(first_track.channels)
+                                                .unwrap_or(2),
+                                            bits_per_sample: u32::try_from(
+                                                first_track.bits_per_sample,
+                                            )
+                                            .unwrap_or(16),
+                                            channel_mask: 0,
+                                        },
+                                        duration_ms: u64::try_from(first_track.duration_ms)
+                                            .unwrap_or(0),
+                                    };
+                                    app_state_clone.update_current_track(Some(track_info));
                                 }
                             }
-                        });
+                        }
                     }
-                }
-            })
-            .on_card_clicked({
-                let app_state = self.app_state.clone();
-                let album_clone = album.clone();
-                move || {
-                    // Handle card click - navigate to detail view
-                    if let Some(state) = &app_state {
-                        state.update_navigation(AlbumDetail(album_clone.clone()));
-                    }
-                }
-            })
-            .build();
+                });
+            }
+        }
+    }
 
-        // Apply metadata overlay visibility setting
-        album_card.update_metadata_overlay_visibility(show_metadata_overlays);
+    /// Creates the card click callback for navigation.
+    ///
+    /// # Arguments
+    ///
+    /// * `album` - The album to navigate to
+    ///
+    /// # Returns
+    ///
+    /// A callback function that navigates to the album detail view.
+    fn create_card_click_callback(&self, album: &Album) -> impl Fn() + 'static {
+        let app_state = self.app_state.clone();
+        let album_clone = album.clone();
 
-        album_card
+        move || {
+            if let Some(state) = &app_state {
+                state.update_navigation(AlbumDetail(album_clone.clone()));
+            }
+        }
     }
 
     /// Updates the display configuration.
