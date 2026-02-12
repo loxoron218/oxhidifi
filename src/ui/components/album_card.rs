@@ -375,7 +375,6 @@ impl AlbumCard {
             .label(&format_info)
             .halign(Start)
             .xalign(0.0)
-            .margin_top(6)
             .lines(1)
             .max_width_chars(
                 i32::try_from((((cover_width - 16) / 2) / 10).max(8)).expect(
@@ -394,9 +393,7 @@ impl AlbumCard {
         let year_label = Label::builder()
             .label(&year_info)
             .halign(End)
-            .xalign(0.0)
             .lines(1)
-            .max_width_chars(4) // Fixed 4 chars for a regular year number
             .tooltip_text(&year_info)
             .css_classes(["album-format-label"])
             .hexpand(true)
@@ -405,10 +402,7 @@ impl AlbumCard {
         // Create horizontal metadata container
         let metadata_hbox = Box::builder()
             .orientation(Horizontal)
-            .halign(Start)
-            .width_request(i32::try_from(cover_width).expect(
-                "AlbumCard cover_width (u32) should fit in i32 for GTK widget width_request",
-            )) // Force full width to align year to right margin
+            .halign(Fill)
             .spacing(6)
             .build();
 
@@ -416,7 +410,7 @@ impl AlbumCard {
         metadata_hbox.append(year_label.upcast_ref::<Widget>());
 
         // Create metadata container
-        let metadata_container = Box::builder().orientation(Vertical).halign(Start).build();
+        let metadata_container = Box::builder().orientation(Vertical).halign(Fill).build();
 
         metadata_container.append(metadata_hbox.upcast_ref::<Widget>());
 
