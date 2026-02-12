@@ -142,6 +142,10 @@ pub enum AppStateEvent {
     YearDisplayModeChanged { mode: String },
     /// Playback queue changed.
     QueueChanged(PlaybackQueue),
+    /// Exclusive mode setting changed.
+    ExclusiveModeChanged { enabled: bool },
+    /// Exclusive mode playback failed.
+    ExclusiveModeFailed { reason: String },
 }
 
 impl AppState {
@@ -334,6 +338,26 @@ impl AppState {
     pub fn clear_search_filter_silent(&self) {
         debug!("AppState: Clearing search filter (silent)");
         self.library.write().search_filter = None;
+    }
+
+    /// Updates exclusive mode setting and notifies subscribers.
+    ///
+    /// # Arguments
+    ///
+    /// * `enabled` - New exclusive mode state
+    pub fn update_exclusive_mode(&self, enabled: bool) {
+        debug!("AppState: Updating exclusive mode to {}", enabled);
+        self.broadcast_event(&AppStateEvent::ExclusiveModeChanged { enabled });
+    }
+
+    /// Reports exclusive mode playback failure and notifies subscribers.
+    ///
+    /// # Arguments
+    ///
+    /// * `reason` - Reason for the failure
+    pub fn report_exclusive_mode_failure(&self, reason: String) {
+        debug!("AppState: Reporting exclusive mode failure: {}", reason);
+        self.broadcast_event(&AppStateEvent::ExclusiveModeFailed { reason });
     }
 
     /// Subscribes to application state changes.

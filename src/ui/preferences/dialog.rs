@@ -58,7 +58,7 @@ impl PreferencesDialog {
         widget.add(&library_page.widget);
 
         // Create and add Audio preferences page
-        let audio_page = AudioPreferencesPage::new(app_state.clone(), settings_manager.clone());
+        let audio_page = AudioPreferencesPage::new(settings_manager.clone());
         widget.add(&audio_page.widget);
 
         debug!("PreferencesDialog: Created with three tabs");

@@ -29,6 +29,7 @@ use crate::{
         metadata::TagReader,
         queue_manager::QueueManager,
     },
+    error::audio_reporting::handle_exclusive_mode_error,
     library::{LibraryDatabase, models::Album},
     state::{
         AppState, LibraryState,
@@ -638,30 +639,34 @@ impl AlbumGridView {
                                 let first_track = &tracks[0];
                                 let track_path = &first_track.path;
 
-                                if let Ok(()) = audio_engine_clone.load_track(track_path)
-                                    && let Ok(()) = audio_engine_clone.play().await
-                                {
-                                    app_state_clone.update_playback_state(Playing);
+                                if let Ok(()) = audio_engine_clone.load_track(track_path) {
+                                    if let Err(e) = audio_engine_clone.play().await {
+                                        if handle_exclusive_mode_error(&e, &app_state_clone) {}
+                                    } else {
+                                        app_state_clone.update_playback_state(Playing);
 
-                                    if let Ok(metadata) = TagReader::read_metadata(track_path) {
-                                        let track_info = TrackInfo {
-                                            path: track_path.clone(),
-                                            metadata,
-                                            format: AudioFormat {
-                                                sample_rate: u32::try_from(first_track.sample_rate)
+                                        if let Ok(metadata) = TagReader::read_metadata(track_path) {
+                                            let track_info = TrackInfo {
+                                                path: track_path.clone(),
+                                                metadata,
+                                                format: AudioFormat {
+                                                    sample_rate: u32::try_from(
+                                                        first_track.sample_rate,
+                                                    )
                                                     .unwrap_or(44100),
-                                                channels: u32::try_from(first_track.channels)
-                                                    .unwrap_or(2),
-                                                bits_per_sample: u32::try_from(
-                                                    first_track.bits_per_sample,
-                                                )
-                                                .unwrap_or(16),
-                                                channel_mask: 0,
-                                            },
-                                            duration_ms: u64::try_from(first_track.duration_ms)
-                                                .unwrap_or(0),
-                                        };
-                                        app_state_clone.update_current_track(Some(track_info));
+                                                    channels: u32::try_from(first_track.channels)
+                                                        .unwrap_or(2),
+                                                    bits_per_sample: u32::try_from(
+                                                        first_track.bits_per_sample,
+                                                    )
+                                                    .unwrap_or(16),
+                                                    channel_mask: 0,
+                                                },
+                                                duration_ms: u64::try_from(first_track.duration_ms)
+                                                    .unwrap_or(0),
+                                            };
+                                            app_state_clone.update_current_track(Some(track_info));
+                                        }
                                     }
                                 }
                             }

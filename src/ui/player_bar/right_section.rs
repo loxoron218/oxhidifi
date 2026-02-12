@@ -51,6 +51,8 @@ pub struct RightSectionWidgets {
     pub gapless_badge: Label,
     /// Hi-Res badge widget.
     pub hires_badge: Label,
+    /// Exclusive mode indicator button.
+    pub exclusive_mode_button: GtkButton,
 }
 
 /// Creates the right section containing volume control and Hi-Fi indicator.
@@ -91,6 +93,15 @@ pub fn create_right_section() -> RightSectionWidgets {
 
     right_section.append(&hifi_button);
 
+    let exclusive_mode_button = GtkButton::builder()
+        .icon_name("changes-prevent-symbolic")
+        .tooltip_text("Toggle exclusive mode")
+        .css_classes(["exclusive-mode", "circular", "inactive"])
+        .accessible_role(Button)
+        .build();
+
+    right_section.append(&exclusive_mode_button);
+
     let spacer = Box::builder().orientation(Horizontal).hexpand(true).build();
     right_section.prepend(&spacer);
 
@@ -125,5 +136,6 @@ pub fn create_right_section() -> RightSectionWidgets {
         bitperfect_badge,
         gapless_badge,
         hires_badge,
+        exclusive_mode_button,
     }
 }

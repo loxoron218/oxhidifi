@@ -136,6 +136,21 @@
     color: @light_4;
 }
 
+/* Exclusive mode button styling */
+.exclusive-mode {
+    transition: all 250ms ease;
+    padding: 6px;
+}
+
+.exclusive-mode:not(.inactive) {
+    color: @green_4;
+}
+
+.exclusive-mode.inactive {
+    color: @light_5;
+    background-color: transparent;
+}
+
 /* Property row styling */
 .hifi-property-row {
     padding: 6px 0;

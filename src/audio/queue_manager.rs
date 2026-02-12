@@ -15,6 +15,7 @@ use crate::{
         engine::{AudioEngine, PlaybackState::Playing, TrackInfo},
         metadata::TagReader,
     },
+    error::audio_reporting::handle_exclusive_mode_error,
     library::Track,
     state::{AppState, PlaybackQueue},
 };
@@ -268,6 +269,11 @@ impl QueueManager {
 
         if let Err(e) = audio_engine.play().await {
             debug!("QueueManager: Failed to play track: {e}");
+
+            if handle_exclusive_mode_error(&e, app_state) {
+                return;
+            }
+
             return;
         }
 

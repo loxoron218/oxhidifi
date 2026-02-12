@@ -9,6 +9,7 @@ use {
     libadwaita::{
         glib::MainContext,
         gtk::{Button, Label, Picture, Scale, ToggleButton},
+        prelude::WidgetExt,
     },
     tracing::debug,
 };
@@ -21,7 +22,9 @@ use crate::{
     },
     state::{
         AppState,
-        AppStateEvent::{CurrentTrackChanged, PlaybackStateChanged, QueueChanged},
+        AppStateEvent::{
+            CurrentTrackChanged, ExclusiveModeChanged, PlaybackStateChanged, QueueChanged,
+        },
         PlaybackQueue,
     },
 };
@@ -81,6 +84,8 @@ pub struct StateSubscriptionContext {
     pub gapless_badge: Label,
     /// Hi-Res badge widget.
     pub hires_badge: Label,
+    /// Exclusive mode indicator button.
+    pub exclusive_mode_button: Button,
 }
 
 /// Creates Hi-Fi popover widgets struct from context.
@@ -176,6 +181,21 @@ fn handle_queue_changed(
     update_hifi_display(audio_engine, context);
 }
 
+/// Handles `ExclusiveModeChanged` event.
+fn handle_exclusive_mode_changed(enabled: bool, context: &StateSubscriptionContext) {
+    debug!("PlayerBar: Exclusive mode changed to {}", enabled);
+
+    let button = &context.exclusive_mode_button;
+
+    if enabled {
+        button.remove_css_class("inactive");
+        button.set_tooltip_text(Some("Exclusive mode active (click to disable)"));
+    } else {
+        button.add_css_class("inactive");
+        button.set_tooltip_text(Some("Exclusive mode disabled (click to enable)"));
+    }
+}
+
 /// Subscribes to `AppState` changes for reactive updates.
 ///
 /// # Arguments
@@ -191,6 +211,13 @@ pub fn subscribe_to_state_changes(
     state: PlayerBarState,
 ) {
     debug!("PlayerBar: Subscribing to AppState changes");
+
+    // Initialize exclusive mode button with current setting value
+    let settings_manager = app_state.get_settings_manager();
+    let settings = settings_manager.read();
+    let current_exclusive_mode = settings.get_settings().exclusive_mode;
+    handle_exclusive_mode_changed(current_exclusive_mode, &context);
+
     MainContext::default().spawn_local(async move {
         let state_clone = state.clone();
 
@@ -242,6 +269,9 @@ pub fn subscribe_to_state_changes(
                     }
                     QueueChanged(queue) => {
                         handle_queue_changed(&queue, &audio_engine, &context);
+                    }
+                    ExclusiveModeChanged { enabled } => {
+                        handle_exclusive_mode_changed(enabled, &context);
                     }
                     _ => {}
                 }

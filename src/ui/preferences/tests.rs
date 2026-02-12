@@ -114,7 +114,7 @@ fn test_audio_preferences_page_creation() {
     let app_state_arc = Arc::new(app_state);
 
     // Create audio preferences page
-    let page = AudioPreferencesPage::new(app_state_arc, settings_manager_arc);
+    let page = AudioPreferencesPage::new(settings_manager_arc);
 
     // Verify page was created successfully
     assert_eq!(page.widget.title(), "Audio");
@@ -169,7 +169,7 @@ fn test_settings_persistence_across_sessions() {
     assert_eq!(current_directories, vec!["/music/test".to_string()]);
 
     // Create audio preferences page and verify settings
-    let audio_page = AudioPreferencesPage::new(app_state_arc.clone(), settings_manager_arc.clone());
+    let audio_page = AudioPreferencesPage::new(settings_manager_arc.clone());
     let current_sample_rate = settings_manager_arc.get_settings().sample_rate;
     assert_eq!(current_sample_rate, 96000);
 

@@ -109,6 +109,9 @@ pub enum OutputError {
     /// Ring buffer error.
     #[error("Ring buffer error: {0}")]
     RingBufferError(String),
+    /// Exclusive mode requirements not met.
+    #[error("Exclusive mode requires bit-perfect playback: {reason}")]
+    ExclusiveModeFailed { reason: String },
 }
 
 /// Audio output configuration for bit-perfect playback.
@@ -179,6 +182,15 @@ impl AudioOutput {
     pub fn new(config: Option<OutputConfig>) -> Result<Self, OutputError> {
         let all_hosts = available_hosts();
 
+        let output_config = if let Some(cfg) = config {
+            cfg
+        } else {
+            debug!("No output config provided, using defaults");
+            OutputConfig::default()
+        };
+
+        let exclusive_mode = output_config.exclusive_mode;
+
         // Try multiple hosts in order of preference
         // For PipeWire systems, try Jack first (PipeWire has Jack compatibility)
         // Then fall back to Alsa
@@ -190,20 +202,20 @@ impl AudioOutput {
                 continue;
             }
 
-            match Self::try_host(host_id) {
+            match Self::try_host(host_id, exclusive_mode) {
                 Ok((host, device)) => {
                     let device_name = device
                         .description()
                         .map_or_else(|_| "Unknown".to_string(), |d| d.to_string());
                     info!(
-                        "Successfully initialized host {:?} with device: {}",
-                        host_id, device_name
+                        "Successfully initialized host {:?} with device: {}, exclusive_mode: {}",
+                        host_id, device_name, exclusive_mode
                     );
 
                     return Ok(AudioOutput {
                         host,
                         device,
-                        config: config.unwrap_or_default(),
+                        config: output_config,
                         is_resampling: false,
                     });
                 }
@@ -222,6 +234,7 @@ impl AudioOutput {
     /// # Arguments
     ///
     /// * `host_id` - The host ID to try
+    /// * `exclusive_mode` - Whether to try exclusive mode
     ///
     /// # Returns
     ///
@@ -230,15 +243,25 @@ impl AudioOutput {
     /// # Errors
     ///
     /// Returns `OutputError` if the host cannot be initialized or no device found.
-    fn try_host(host_id: HostId) -> Result<(Host, Device), OutputError> {
-        debug!("Instantiating host: {:?}", host_id);
+    fn try_host(host_id: HostId, exclusive_mode: bool) -> Result<(Host, Device), OutputError> {
+        debug!(
+            "Instantiating host: {:?}, exclusive_mode: {}",
+            host_id, exclusive_mode
+        );
 
         let host = host_from_id(host_id).map_err(|e| {
             error!(host = ?host_id, error = ?e, "Failed to instantiate host");
             OutputError::HostInitFailed { host: host_id }
         })?;
 
-        debug!("Getting default output device for host: {:?}", host_id);
+        debug!("Getting output device for host: {:?}", host_id);
+
+        if exclusive_mode {
+            info!(
+                "Attempting exclusive mode with host: {:?} (may fail if device is busy)",
+                host_id
+            );
+        }
 
         let device = host.default_output_device().ok_or_else(|| {
             warn!("No default output device found for host: {:?}", host_id);
@@ -269,7 +292,7 @@ impl AudioOutput {
     ///
     /// # Errors
     ///
-    /// Returns `OutputError` if device capabilities cannot be queried.
+    /// Returns `OutputError` if device capabilities cannot be queried or exclusive mode requires unsupported format.
     ///
     /// # Panics
     ///
@@ -279,6 +302,8 @@ impl AudioOutput {
         source_format: &AudioFormat,
         _source_spec: &SignalSpec,
     ) -> Result<(StreamConfig, bool), OutputError> {
+        let exclusive_mode = self.config.exclusive_mode;
+
         // Get all supported output configurations
         let supported_configs = self
             .device
@@ -287,6 +312,7 @@ impl AudioOutput {
 
         let source_sample_rate = source_format.sample_rate;
         let source_channels = source_format.channels;
+        let source_bits = source_format.bits_per_sample;
 
         // Try to find the best matching configuration
         let mut best_config = None;
@@ -310,7 +336,7 @@ impl AudioOutput {
             // Requires matching sample rate, channels, and bit depth
             if config_sample_rate == source_sample_rate
                 && <u32 as From<u16>>::from(config_channels) == source_channels
-                && target_bits == source_format.bits_per_sample
+                && target_bits == source_bits
             {
                 best_config = Some(config.with_max_sample_rate());
                 rate_match = true;
@@ -327,6 +353,15 @@ impl AudioOutput {
                     rate_match = true;
                 }
             }
+        }
+
+        // In exclusive mode, reject playback if no exact match is found
+        if exclusive_mode && !rate_match {
+            let reason = format!(
+                "Device doesn't support {source_sample_rate} Hz / {source_channels} ch / {source_bits}-bit audio"
+            );
+            warn!("Exclusive mode requires bit-perfect playback: {}", reason);
+            return Err(OutputError::ExclusiveModeFailed { reason });
         }
 
         let config = best_config.ok_or(OutputError::NoDeviceFound)?;
@@ -346,8 +381,12 @@ impl AudioOutput {
         };
 
         info!(
-            "Target config: {} Hz, {} channels, {:?} format, resampling needed: {}",
-            target_sample_rate, target_channels, target_sample_format, needs_resampling
+            "Target config: {} Hz, {} channels, {:?} format, resampling needed: {}, exclusive_mode: {}",
+            target_sample_rate,
+            target_channels,
+            target_sample_format,
+            needs_resampling,
+            exclusive_mode
         );
 
         Ok((stream_config, needs_resampling))

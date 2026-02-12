@@ -44,8 +44,8 @@ use crate::{
     state::{
         AppState,
         AppStateEvent::{
-            LibraryDataChanged, NavigationChanged, PlaybackStateChanged, SearchFilterChanged,
-            SettingsChanged, ViewOptionsChanged,
+            ExclusiveModeFailed, LibraryDataChanged, NavigationChanged, PlaybackStateChanged,
+            SearchFilterChanged, SettingsChanged, ViewOptionsChanged,
         },
         NavigationState::{AlbumDetail, ArtistDetail, Library},
         ViewMode::{Grid, List},
@@ -109,6 +109,16 @@ impl OxhidifiApplication {
         let audio_engine = AudioEngine::new()
             .map_err(|e| InitializationError(format!("Failed to initialize audio engine: {e}")))?;
 
+        // Apply user settings to audio engine output config
+        {
+            let settings = settings_manager_shared.get_settings();
+            let mut output_config = audio_engine.output_config();
+            output_config.exclusive_mode = settings.exclusive_mode;
+            output_config.sample_rate = settings.sample_rate;
+            output_config.buffer_duration_ms = settings.buffer_duration_ms;
+            audio_engine.update_output_config(output_config);
+        }
+
         // Initialize queue manager
         let audio_engine_arc = Arc::new(audio_engine.clone());
         let track_finished_rx = audio_engine.subscribe_to_track_completion();
@@ -146,6 +156,12 @@ impl OxhidifiApplication {
             Arc::new(RwLock::new((*settings_manager_shared).clone())),
         );
 
+        // Set up error callback for exclusive mode failures
+        let app_state_for_error = app_state.clone();
+        audio_engine.set_error_callback(move |error_msg: String| {
+            app_state_for_error.report_exclusive_mode_failure(error_msg);
+        });
+
         // Initialize queue manager
         let queue_manager = QueueManager::new(
             audio_engine_arc.clone(),
@@ -160,21 +176,23 @@ impl OxhidifiApplication {
             error!("Failed to cleanup orphaned records: {e}");
         }
 
-        let albums = match library_db.get_albums(None).await {
-            Ok(albums) => albums,
-            Err(e) => {
-                error!("Failed to get albums from database: {e}");
-                Vec::new()
-            }
-        };
+        let albums = library_db
+            .get_albums(None)
+            .await
+            .map_err(|e| {
+                error!(error = %e, "Failed to get albums from database");
+                e
+            })
+            .unwrap_or_default();
 
-        let artists = match library_db.get_artists(None).await {
-            Ok(artists) => artists,
-            Err(e) => {
-                error!("Failed to get artists from database: {e}");
-                Vec::new()
-            }
-        };
+        let artists = library_db
+            .get_artists(None)
+            .await
+            .map_err(|e| {
+                error!(error = %e, "Failed to get artists from database");
+                e
+            })
+            .unwrap_or_default();
 
         // Update AppState with library data
         app_state.update_library_data(albums, artists);
@@ -230,13 +248,14 @@ impl OxhidifiApplication {
                                     debug!("LibraryChanged event received, refreshing app state");
 
                                     // Refresh albums
-                                    let albums = match db_refresh.get_albums(None).await {
-                                        Ok(albums) => albums,
-                                        Err(e) => {
-                                            error!("Failed to refresh albums: {e}");
-                                            Vec::new()
-                                        }
-                                    };
+                                    let albums = db_refresh
+                                        .get_albums(None)
+                                        .await
+                                        .map_err(|e| {
+                                            error!(error = %e, "Failed to refresh albums");
+                                            e
+                                        })
+                                        .unwrap_or_default();
 
                                     // Refresh artists
                                     let artists = match db_refresh.get_artists(None).await {
@@ -285,6 +304,9 @@ fn build_ui(
     // Create navigation view for handling view transitions
     let navigation_view = NavigationView::builder().build();
 
+    // Create toast overlay for displaying error messages
+    let toast_overlay = ToastOverlay::new();
+
     // Create header bar with proper state integration
     let header_bar = Rc::new(HeaderBar::default_with_state(
         app_state,
@@ -295,12 +317,12 @@ fn build_ui(
     // Create main content area with responsive layout
     let main_content = create_main_content(
         app_state,
-        settings_manager,
         library_db,
         audio_engine,
         queue_manager,
         &window,
         &header_bar,
+        &toast_overlay,
     );
 
     // Add main content as root page
@@ -310,8 +332,7 @@ fn build_ui(
         .build();
     navigation_view.add(&main_page);
 
-    // Create toast overlay for displaying error messages
-    let toast_overlay = ToastOverlay::new();
+    // Set navigation view as child of toast overlay
     toast_overlay.set_child(Some(&navigation_view));
 
     // Handle navigation events and update HeaderBar state centrally
@@ -504,12 +525,12 @@ fn build_ui(
 /// Creates the main content area with responsive layout.
 fn create_main_content(
     app_state: &Arc<AppState>,
-    settings_manager: &Arc<SettingsManager>,
     library_db: &Arc<LibraryDatabase>,
     audio_engine: &Arc<AudioEngine>,
     queue_manager: &Arc<QueueManager>,
     window: &ApplicationWindow,
     header_bar: &Rc<HeaderBar>,
+    toast_overlay: &ToastOverlay,
 ) -> Widget {
     // Create stack for efficient view switching
     let view_stack = Stack::builder()
@@ -517,7 +538,11 @@ fn create_main_content(
         .transition_duration(200)
         .build();
 
-    let show_dr_badges = settings_manager.get_settings().show_dr_values;
+    let show_dr_badges = app_state
+        .settings_manager
+        .read()
+        .get_settings()
+        .show_dr_values;
 
     // Get current library state for view initialization
     let library_state = app_state.get_library_state();
@@ -535,7 +560,7 @@ fn create_main_content(
 
     // Inject settings manager and window reference into empty state
     if let Some(empty_state) = &mut album_grid_view.empty_state {
-        empty_state.settings_manager = Some((**settings_manager).clone());
+        empty_state.settings_manager = Some(app_state.settings_manager.read().clone());
         empty_state.window = Some(window.clone());
         empty_state.connect_button_handlers();
     }
@@ -579,7 +604,7 @@ fn create_main_content(
 
     // Inject settings manager and window reference into empty state
     if let Some(empty_state) = &mut artist_grid_view.empty_state {
-        empty_state.settings_manager = Some((**settings_manager).clone());
+        empty_state.settings_manager = Some(app_state.settings_manager.read().clone());
         empty_state.window = Some(window.clone());
         empty_state.connect_button_handlers();
     }
@@ -653,6 +678,7 @@ fn create_main_content(
     let view_stack_clone = view_stack.clone();
     let header_bar_clone = Rc::clone(header_bar);
     let search_app_state = app_state.clone();
+    let toast_overlay_clone = toast_overlay.clone();
 
     // Use a weak reference to avoid potential memory leaks
     // and implement proper error handling for subscription
@@ -836,6 +862,13 @@ fn create_main_content(
 
                         // Note: ListView doesn't currently have a set_show_dr_badges method,
                         // but it should respect the setting when creating new album rows
+                    }
+                    ExclusiveModeFailed { reason } => {
+                        debug!("Handling ExclusiveModeFailed event: reason='{}'", reason);
+
+                        let toast =
+                            Toast::new(&format!("Exclusive mode playback failed: {reason}"));
+                        toast_overlay_clone.add_toast(toast);
                     }
                     _ => {}
                 }

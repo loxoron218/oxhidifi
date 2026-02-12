@@ -15,7 +15,7 @@ use std::{
 
 use {
     async_channel::{Receiver, Sender, unbounded},
-    cpal::Stream,
+    cpal::{Stream, traits::StreamTrait},
     libadwaita::glib::MainContext,
     parking_lot::{Mutex, RwLock},
     rtrb::RingBuffer,
@@ -33,10 +33,19 @@ use {
 use crate::audio::{
     decoder::{AudioDecoder, AudioFormat, AudioProducer, DecoderError},
     metadata::{MetadataError, TagReader, TrackMetadata},
-    output::{AudioConsumer, AudioOutput, OutputConfig, OutputError},
+    output::{
+        AudioConsumer, AudioOutput, OutputConfig,
+        OutputError::{self},
+    },
     prebuffer::{Prebuffer, PrebufferError},
     resampler::ResamplingAudioConsumer,
 };
+
+/// Type alias for the error callback function.
+type ErrorCallbackFn = Box<dyn Fn(String) + Send + Sync>;
+
+/// Type alias for the thread-safe error callback wrapper.
+type ErrorCallback = Arc<RwLock<Option<ErrorCallbackFn>>>;
 
 /// Current playback state.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -126,6 +135,8 @@ pub struct AudioEngine {
     state_change_shutdown_tx: Arc<Mutex<Option<Sender<()>>>>,
     /// Pre-buffer manager for gapless playback.
     prebuffer: Arc<RwLock<Option<Arc<Prebuffer>>>>,
+    /// Error callback for reporting playback errors to UI.
+    error_callback: ErrorCallback,
 }
 
 /// Internal control messages for the audio engine.
@@ -141,6 +152,8 @@ enum ControlMessage {
     Stop,
     /// Seek to specified position in milliseconds.
     Seek(u64),
+    /// Seek to position and start playback (used for restart after config changes).
+    SeekAndPlay(u64),
 }
 
 /// Handle to a running audio stream.
@@ -244,12 +257,15 @@ impl AudioEngine {
             track_completion_shutdown_tx: Arc::new(Mutex::new(Some(track_completion_shutdown_tx))),
             state_change_shutdown_tx: Arc::new(Mutex::new(Some(state_change_shutdown_tx))),
             prebuffer: Arc::new(RwLock::new(None)),
+            error_callback: ErrorCallback::new(RwLock::new(None)),
         };
 
         // Start the control loop in a background thread
         let engine_clone = engine.clone();
         spawn(move || {
-            engine_clone.control_loop();
+            if let Err(e) = engine_clone.control_loop() {
+                error!(error = %e, "Control loop error");
+            }
         });
 
         Ok(engine)
@@ -501,6 +517,46 @@ impl AudioEngine {
         self.output_config.read().clone()
     }
 
+    /// Updates the output configuration with new settings.
+    ///
+    /// # Arguments
+    ///
+    /// * `new_config` - New output configuration to apply.
+    pub fn update_output_config(&self, new_config: OutputConfig) {
+        *self.output_config.write() = new_config;
+    }
+
+    /// Restarts playback with the current output configuration.
+    ///
+    /// This method stops the current playback and restarts it at the same
+    /// position with the updated output configuration. Used when audio settings
+    /// (such as exclusive mode) have changed.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` indicating success or failure.
+    ///
+    /// # Errors
+    ///
+    /// Returns `AudioError::NoTrackLoaded` if no track is currently loaded.
+    /// Returns `AudioError::OutputError` if restart fails due to device issues.
+    pub async fn restart_playback(&self) -> Result<(), AudioError> {
+        let position_ms = self.current_position.load(SeqCst);
+
+        if self.current_track.read().is_none() {
+            return Err(AudioError::NoTrackLoaded);
+        }
+
+        self.control_tx
+            .send(ControlMessage::SeekAndPlay(position_ms))
+            .await
+            .map_err(|e| AudioError::InvalidOperation {
+                reason: format!("Failed to restart playback: {e}"),
+            })?;
+
+        Ok(())
+    }
+
     /// Checks if the prebuffer has a track ready for gapless playback.
     ///
     /// # Returns
@@ -514,39 +570,99 @@ impl AudioEngine {
             .is_some_and(|pb| pb.is_ready())
     }
 
+    /// Sets the error callback for reporting playback errors to the UI.
+    ///
+    /// # Arguments
+    ///
+    /// * `callback` - A function that will be called with error messages.
+    pub fn set_error_callback<F>(&self, callback: F)
+    where
+        F: Fn(String) + Send + Sync + 'static,
+    {
+        *self.error_callback.write() = Some(Box::new(callback));
+    }
+
+    /// Reports an error through the error callback if one is set.
+    ///
+    /// # Arguments
+    ///
+    /// * `error_message` - The error message to report.
+    ///
+    /// # Returns
+    ///
+    /// Always returns `()`; errors are silently ignored if no callback is set.
+    fn report_error(&self, error_message: String) {
+        if let Some(ref callback) = *self.error_callback.read() {
+            callback(error_message);
+        }
+    }
+
+    /// Handles playback errors with consistent recovery.
+    ///
+    /// Reports all playback errors to the UI for user feedback, then cleans
+    /// up the stream and resets the playback state.
+    ///
+    /// # Arguments
+    ///
+    /// * `error` - The error that occurred.
+    async fn handle_playback_error(&self, error: AudioError) {
+        error!(error = %error, "Playback error");
+
+        // Report all errors to the UI for user feedback
+        self.report_error(error.to_string());
+
+        // Clean up stream on any failure to prevent state inconsistency
+        self.stop_stream().await;
+        *self.state.write() = PlaybackState::Ready;
+        self.notify_state_change();
+    }
+
     /// Main control loop that processes commands and manages playback.
-    fn control_loop(&self) {
-        Builder::new_current_thread()
+    ///
+    /// # Returns
+    ///
+    /// A `Result` indicating success or failure of the control loop.
+    fn control_loop(&self) -> Result<(), AudioError> {
+        let runtime = Builder::new_current_thread()
             .enable_all()
             .build()
-            .unwrap()
-            .block_on(async {
-                while let Ok(message) = self.control_rx.recv().await {
-                    match message {
-                        ControlMessage::Play => {
-                            if let Err(e) = self.handle_play().await {
-                                error!("Failed to handle play command: {e}");
-                            }
+            .map_err(|e| AudioError::InvalidOperation {
+                reason: format!("Failed to create tokio runtime: {e}"),
+            })?;
+        runtime.block_on(async {
+            while let Ok(message) = self.control_rx.recv().await {
+                match message {
+                    ControlMessage::Play => {
+                        if let Err(e) = self.handle_play().await {
+                            self.handle_playback_error(e).await;
                         }
-                        ControlMessage::Pause => {
-                            self.handle_pause().await;
+                    }
+                    ControlMessage::SeekAndPlay(position_ms) => {
+                        if let Err(e) = self.handle_seek_and_play(position_ms).await {
+                            self.handle_playback_error(e).await;
                         }
-                        ControlMessage::Resume => {
-                            if let Err(e) = self.handle_resume().await {
-                                error!("Failed to handle resume command: {e}");
-                            }
+                    }
+                    ControlMessage::Pause => {
+                        self.handle_pause().await;
+                    }
+                    ControlMessage::Resume => {
+                        if let Err(e) = self.handle_resume().await {
+                            error!(error = %e, "Failed to handle resume command");
                         }
-                        ControlMessage::Stop => {
-                            self.handle_stop().await;
-                        }
-                        ControlMessage::Seek(position_ms) => {
-                            if let Err(e) = self.handle_seek(position_ms).await {
-                                error!("Failed to handle seek command: {e}");
-                            }
+                    }
+                    ControlMessage::Stop => {
+                        self.handle_stop().await;
+                    }
+                    ControlMessage::Seek(position_ms) => {
+                        if let Err(e) = self.handle_seek(position_ms).await {
+                            error!(error = %e, "Failed to handle seek command");
                         }
                     }
                 }
-            });
+            }
+
+            Ok(())
+        })
     }
 
     /// Sets up playback stream with optional initial position.
@@ -583,8 +699,11 @@ impl AudioEngine {
         let buffer_size = 4096;
         let (producer, consumer) = RingBuffer::<f32>::new(buffer_size);
 
+        // Get current output configuration for stream creation
+        let current_config = self.output_config.read().clone();
+
         // Create audio output
-        let output = AudioOutput::new(Some(self.output_config.read().clone()))?;
+        let output = AudioOutput::new(Some(current_config))?;
 
         // Create decoder to get signal spec
         let mut decoder = AudioDecoder::new(&track_info.path)?;
@@ -657,13 +776,21 @@ impl AudioEngine {
         self.notify_state_change();
     }
 
-    /// Handles the seek command.
-    async fn handle_seek(&self, position_ms: u64) -> Result<(), AudioError> {
-        // For now, we'll stop and restart playback at the new position
-        // A more sophisticated implementation would seek within the current stream
-        let current_state = self.state.read().clone();
-        let was_playing = matches!(current_state, PlaybackState::Playing);
-
+    /// Recreates the playback stream at the specified position.
+    ///
+    /// # Arguments
+    ///
+    /// * `position_ms` - Position to seek to in milliseconds
+    /// * `always_playing` - If true, always set state to Playing; otherwise preserve previous state
+    ///
+    /// # Returns
+    ///
+    /// A `Result` indicating success or failure.
+    async fn recreate_stream_at_position(
+        &self,
+        position_ms: u64,
+        always_playing: bool,
+    ) -> Result<(), AudioError> {
         self.stop_stream().await;
 
         if let Some(track_info) = self.current_track.read().clone() {
@@ -699,13 +826,19 @@ impl AudioEngine {
 
             let (stream, resampling_consumer) = consumer.run(&track_info.format, &signal_spec)?;
 
+            if !always_playing {
+                stream.pause().map_err(|e| AudioError::InvalidOperation {
+                    reason: format!("Failed to pause stream: {e}"),
+                })?;
+            }
+
             *self.stream_handle.write() = Some(StreamHandle {
                 stream,
                 decoder_handle: Some(decoder_handle),
                 resampling_consumer,
             });
 
-            *self.state.write() = if was_playing {
+            *self.state.write() = if always_playing {
                 PlaybackState::Playing
             } else {
                 PlaybackState::Paused
@@ -716,6 +849,22 @@ impl AudioEngine {
         Ok(())
     }
 
+    /// Handles the seek command.
+    async fn handle_seek(&self, position_ms: u64) -> Result<(), AudioError> {
+        // For now, we'll stop and restart playback at the new position
+        // A more sophisticated implementation would seek within the current stream
+        let current_state = self.state.read().clone();
+        let was_playing = matches!(current_state, PlaybackState::Playing);
+
+        self.recreate_stream_at_position(position_ms, was_playing)
+            .await
+    }
+
+    /// Handles the seek and play command (used for restart after config changes).
+    async fn handle_seek_and_play(&self, position_ms: u64) -> Result<(), AudioError> {
+        self.recreate_stream_at_position(position_ms, true).await
+    }
+
     /// Stops the current audio stream gracefully.
     async fn stop_stream(&self) {
         let handle_opt = {
@@ -724,7 +873,7 @@ impl AudioEngine {
         };
 
         if let Some(mut handle) = handle_opt {
-            debug!("Stopping audio stream");
+            debug!("AudioEngine: Stopping audio stream");
 
             let resampling_consumer = handle.resampling_consumer.take();
             let stream = handle.stream;

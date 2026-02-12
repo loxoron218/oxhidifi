@@ -2,13 +2,13 @@
 //!
 //! This module implements the Audio preferences tab which handles
 //! audio output configuration including device selection, sample rate,
-//! exclusive mode, and buffer duration settings.
+//! and buffer duration settings.
 
 use std::sync::Arc;
 
 use {
     libadwaita::{
-        ActionRow, PreferencesGroup, PreferencesPage, SpinRow, SwitchRow,
+        ActionRow, PreferencesGroup, PreferencesPage, SpinRow,
         gtk::{AccessibleRole::Group, Adjustment},
         prelude::{ActionRowExt, PreferencesGroupExt, PreferencesPageExt},
     },
@@ -16,7 +16,7 @@ use {
     tracing::{debug, error},
 };
 
-use crate::{config::SettingsManager, state::AppState};
+use crate::config::SettingsManager;
 
 /// Audio preferences page with output configuration settings.
 pub struct AudioPreferencesPage {
@@ -31,13 +31,12 @@ impl AudioPreferencesPage {
     ///
     /// # Arguments
     ///
-    /// * `app_state` - Application state reference
     /// * `settings_manager` - Settings manager reference for persistence
     ///
     /// # Returns
     ///
     /// A new `AudioPreferencesPage` instance.
-    pub fn new(_app_state: Arc<AppState>, settings_manager: Arc<SettingsManager>) -> Self {
+    pub fn new(settings_manager: Arc<SettingsManager>) -> Self {
         let widget = PreferencesPage::builder()
             .title("Audio")
             .icon_name("audio-speakers-symbolic")
@@ -93,9 +92,6 @@ impl AudioPreferencesPage {
         // Sample rate configuration
         self.setup_sample_rate_preference(&group);
 
-        // Exclusive mode toggle
-        self.setup_exclusive_mode_preference(&group);
-
         self.widget.add(&group);
     }
 
@@ -122,7 +118,7 @@ impl AudioPreferencesPage {
 
         // Connect change handler
         let settings_manager_clone = self.settings_manager.clone();
-        spin_row.connect_value_notify(move |row| {
+        spin_row.connect_value_notify(move |row: &SpinRow| {
             let clamped_value = row.value().clamp(0.0_f64, f64::MAX);
             let new_value = u32::try_from(clamped_value.to_i64().unwrap()).unwrap();
 
@@ -150,35 +146,6 @@ impl AudioPreferencesPage {
         });
 
         group.add(&spin_row);
-    }
-
-    /// Sets up the exclusive mode preference switch row.
-    fn setup_exclusive_mode_preference(&self, group: &PreferencesGroup) {
-        let current_exclusive_mode = self.settings_manager.get_settings().exclusive_mode;
-
-        let switch_row = SwitchRow::builder()
-            .title("Exclusive Mode")
-            .subtitle(
-                "Use exclusive mode for bit-perfect audio playback (may not work with all devices)",
-            )
-            .active(current_exclusive_mode)
-            .build();
-
-        // Connect change handler
-        let settings_manager_clone = self.settings_manager.clone();
-        switch_row.connect_active_notify(move |row| {
-            let new_value = row.is_active();
-
-            // Update settings
-            let mut current_settings = settings_manager_clone.get_settings().clone();
-            current_settings.exclusive_mode = new_value;
-
-            if let Err(e) = settings_manager_clone.update_settings(current_settings) {
-                error!(error = %e, "Failed to update exclusive mode preference");
-            }
-        });
-
-        group.add(&switch_row);
     }
 
     /// Sets up the playback configuration group.
@@ -217,7 +184,7 @@ impl AudioPreferencesPage {
 
         // Connect change handler
         let settings_manager_clone = self.settings_manager.clone();
-        spin_row.connect_value_notify(move |row| {
+        spin_row.connect_value_notify(move |row: &SpinRow| {
             let clamped_value = row.value().clamp(0.0_f64, f64::MAX);
             let new_value = u32::try_from(clamped_value.to_i64().unwrap()).unwrap();
 

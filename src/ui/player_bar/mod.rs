@@ -3,13 +3,13 @@
 //! This module provides the player bar component that displays track information,
 //! playback controls, volume control, and Hi-Fi audio quality indicators.
 
-use std::sync::Arc;
+use std::{boxed::Box, pin::Pin, sync::Arc};
 
 use {
     libadwaita::{
         glib::MainContext,
         gtk::{
-            Box, Button, Label, Orientation::Horizontal, Picture, Popover, Scale, Switch,
+            Box as GtkBox, Button, Label, Orientation::Horizontal, Picture, Popover, Scale, Switch,
             ToggleButton,
         },
         prelude::{BoxExt, ButtonExt, PopoverExt},
@@ -20,11 +20,12 @@ use {
 use crate::{
     audio::{
         engine::{
-            AudioEngine,
+            AudioEngine, AudioError,
             PlaybackState::{Buffering, Paused, Playing, Ready, Stopped},
         },
         queue_manager::QueueManager,
     },
+    error::audio_reporting::handle_exclusive_mode_error,
     state::AppState,
 };
 
@@ -52,6 +53,34 @@ pub use {
     volume_popover::connect_volume_handlers,
 };
 
+/// Handles playback action execution with error reporting and exclusive mode handling.
+///
+/// Executes the provided async action on the audio engine, logs any errors,
+/// and handles exclusive mode conflicts through the app state.
+///
+/// # Arguments
+///
+/// * `audio_engine` - Reference to the audio engine for action execution
+/// * `app_state` - Reference to application state for error handling
+/// * `action` - Async closure returning a playback action result
+/// * `action_name` - Descriptive name for logging purposes
+async fn handle_playback_action(
+    audio_engine: &AudioEngine,
+    app_state: &AppState,
+    action: impl FnOnce(&AudioEngine) -> Pin<Box<dyn Future<Output = Result<(), AudioError>> + '_>>,
+    action_name: &str,
+) {
+    match action(audio_engine).await {
+        Ok(()) => {}
+        Err(e) => {
+            error!(error = %e, action = %action_name, "Playback action failed");
+
+            // Handle exclusive mode conflicts (e.g., device in use by another application)
+            if handle_exclusive_mode_error(&e, app_state) {}
+        }
+    }
+}
+
 /// Comprehensive Hi-Fi player control center with metadata display.
 ///
 /// The `PlayerBar` provides advanced playback controls, comprehensive
@@ -59,7 +88,7 @@ pub use {
 /// integrated with the `AudioEngine` and `AppState`.
 pub struct PlayerBar {
     /// The underlying GTK box widget.
-    pub widget: Box,
+    pub widget: GtkBox,
     /// Album artwork display.
     pub artwork: Picture,
     /// Track title label.
@@ -114,6 +143,8 @@ pub struct PlayerBar {
     pub gapless_badge: Label,
     /// Hi-Res badge widget.
     pub hires_badge: Label,
+    /// Exclusive mode indicator button.
+    pub exclusive_mode_button: Button,
     /// Application state reference.
     pub app_state: Arc<AppState>,
     /// Audio engine reference.
@@ -140,7 +171,7 @@ impl PlayerBar {
         audio_engine: &Arc<AudioEngine>,
         queue_manager: Option<&Arc<QueueManager>>,
     ) -> Self {
-        let widget = Box::builder()
+        let widget = GtkBox::builder()
             .orientation(Horizontal)
             .spacing(12)
             .margin_start(12)
@@ -201,6 +232,7 @@ impl PlayerBar {
             bitperfect_badge: right_section_widgets.bitperfect_badge,
             gapless_badge: right_section_widgets.gapless_badge,
             hires_badge: right_section_widgets.hires_badge,
+            exclusive_mode_button: right_section_widgets.exclusive_mode_button,
             app_state: app_state.clone(),
             audio_engine: audio_engine.clone(),
             queue_manager: queue_manager.cloned(),
@@ -224,28 +256,42 @@ impl PlayerBar {
         let next_button = self.next_button.clone();
         let queue_manager = self.queue_manager.clone();
         let audio_engine_for_play = self.audio_engine.clone();
+        let app_state_for_play = self.app_state.clone();
 
         play_button.connect_clicked(move |_| {
             let audio_engine_clone = audio_engine_for_play.clone();
+            let app_state_report = app_state_for_play.clone();
 
             MainContext::default().spawn_local(async move {
                 let playback_state = audio_engine_clone.current_playback_state();
 
                 match playback_state {
                     Playing => {
-                        if let Err(e) = audio_engine_clone.pause().await {
-                            error!(error = %e, "Failed to pause playback");
-                        }
+                        handle_playback_action(
+                            &audio_engine_clone,
+                            &app_state_report,
+                            |ae| Box::pin(ae.pause()),
+                            "pause",
+                        )
+                        .await;
                     }
                     Paused => {
-                        if let Err(e) = audio_engine_clone.resume().await {
-                            error!(error = %e, "Failed to resume playback");
-                        }
+                        handle_playback_action(
+                            &audio_engine_clone,
+                            &app_state_report,
+                            |ae| Box::pin(ae.resume()),
+                            "resume",
+                        )
+                        .await;
                     }
                     Ready => {
-                        if let Err(e) = audio_engine_clone.play().await {
-                            error!(error = %e, "Failed to start playback");
-                        }
+                        handle_playback_action(
+                            &audio_engine_clone,
+                            &app_state_report,
+                            |ae| Box::pin(ae.play()),
+                            "play",
+                        )
+                        .await;
                     }
                     Buffering | Stopped => {}
                 }
@@ -292,6 +338,41 @@ impl PlayerBar {
             volume_popover_clone.popup();
         });
 
+        let exclusive_mode_button_clone = self.exclusive_mode_button.clone();
+        let app_state_clone = self.app_state.clone();
+        let audio_engine_clone = self.audio_engine.clone();
+        exclusive_mode_button_clone.connect_clicked(move |_| {
+            let settings_manager = app_state_clone.get_settings_manager();
+            let old_value = settings_manager.read().get_settings().exclusive_mode;
+            let new_value = !old_value;
+
+            let settings_manager_write = settings_manager.write();
+            let mut current_settings = settings_manager_write.get_settings().clone();
+            current_settings.exclusive_mode = new_value;
+
+            if let Err(e) = settings_manager_write.update_settings(current_settings) {
+                error!(error = %e, "Failed to update exclusive mode");
+                return;
+            }
+            drop(settings_manager_write);
+
+            app_state_clone.update_exclusive_mode(new_value);
+
+            if let Some(audio_engine) = app_state_clone.audio_engine.upgrade() {
+                let output_config = audio_engine.output_config();
+                let mut new_config = output_config;
+                new_config.exclusive_mode = new_value;
+                audio_engine.update_output_config(new_config);
+
+                let audio_engine_for_restart = audio_engine_clone.clone();
+                MainContext::default().spawn_local(async move {
+                    if let Err(e) = audio_engine_for_restart.restart_playback().await {
+                        error!(error = %e, "Failed to restart playback for exclusive mode");
+                    }
+                });
+            }
+        });
+
         self
     }
 
@@ -328,6 +409,7 @@ impl PlayerBar {
             bitperfect_badge: self.bitperfect_badge.clone(),
             gapless_badge: self.gapless_badge.clone(),
             hires_badge: self.hires_badge.clone(),
+            exclusive_mode_button: self.exclusive_mode_button.clone(),
         };
 
         subscribe_to_state_changes(
