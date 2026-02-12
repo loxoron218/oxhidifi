@@ -6,21 +6,25 @@
 
 use std::{cell::RefCell, collections::HashSet, convert::TryFrom, rc::Rc, sync::Arc};
 
-use libadwaita::{
-    glib::{JoinHandle, MainContext},
-    gtk::{
-        AccessibleRole::List,
-        Align::Start,
-        Box, Label, ListBox, ListBoxRow,
-        Orientation::{Horizontal, Vertical},
-        SelectionMode::None as SelectionNone,
-        Widget,
-        pango::EllipsizeMode::End,
+use {
+    libadwaita::{
+        glib::{JoinHandle, MainContext},
+        gtk::{
+            AccessibleRole::List,
+            Align::Start,
+            Box, Label, ListBox, ListBoxRow,
+            Orientation::{Horizontal, Vertical},
+            SelectionMode::None as SelectionNone,
+            Widget,
+            pango::EllipsizeMode::End,
+        },
+        prelude::{AccessibleExt, BoxExt, Cast, ListBoxRowExt, WidgetExt},
     },
-    prelude::{AccessibleExt, BoxExt, Cast, ListBoxRowExt, WidgetExt},
+    tracing::error,
 };
 
 use crate::{
+    error::domain::UiError::{self, WidgetError},
     library::models::{Album, Artist},
     state::{
         AppState,
@@ -226,17 +230,23 @@ impl ListView {
                             match view_type_clone {
                                 ListViewType::Albums => {
                                     for album in &library_state.albums {
+                                        let cover_size = match u32::try_from(
+                                            state_clone
+                                                .zoom_manager
+                                                .get_list_cover_dimensions()
+                                                .0,
+                                        ) {
+                                            Ok(size) => size,
+                                            Err(e) => {
+                                                error!(error = %e, "Failed to convert cover size to u32, using default 48");
+                                                48
+                                            }
+                                        };
                                         let row = create_album_row_with_zoom(
                                             album,
                                             Some(&state_clone),
                                             &config_clone,
-                                            u32::try_from(
-                                                state_clone
-                                                    .zoom_manager
-                                                    .get_list_cover_dimensions()
-                                                    .0,
-                                            )
-                                            .expect("cover_size should be within u32 range"),
+                                            cover_size,
                                             &cover_arts_clone,
                                         );
                                         list_box_clone.append(&row);
@@ -244,17 +254,23 @@ impl ListView {
                                 }
                                 ListViewType::Artists => {
                                     for artist in &library_state.artists {
+                                        let cover_size = match u32::try_from(
+                                            state_clone
+                                                .zoom_manager
+                                                .get_list_cover_dimensions()
+                                                .0,
+                                        ) {
+                                            Ok(size) => size,
+                                            Err(e) => {
+                                                error!(error = %e, "Failed to convert cover size to u32, using default 48");
+                                                48
+                                            }
+                                        };
                                         let row = create_artist_row_with_zoom(
                                             artist,
                                             Some(&state_clone),
                                             &config_clone,
-                                            u32::try_from(
-                                                state_clone
-                                                    .zoom_manager
-                                                    .get_list_cover_dimensions()
-                                                    .0,
-                                            )
-                                            .expect("cover_size should be within u32 range"),
+                                            cover_size,
                                         );
                                         list_box_clone.append(&row);
                                     }
@@ -416,11 +432,19 @@ impl ListView {
             48 // Default cover size
         };
 
+        let cover_size = match u32::try_from(cover_size) {
+            Ok(size) => size,
+            Err(e) => {
+                error!(error = %e, "Failed to convert cover size to u32, using default 48");
+                48
+            }
+        };
+
         create_album_row_with_zoom(
             album,
             self.app_state.as_ref(),
             &self.config,
-            u32::try_from(cover_size).expect("cover_size should be within u32 range"),
+            cover_size,
             &self.cover_arts,
         )
     }
@@ -442,12 +466,15 @@ impl ListView {
             48 // Default cover size
         };
 
-        create_artist_row_with_zoom(
-            artist,
-            self.app_state.as_ref(),
-            &self.config,
-            u32::try_from(cover_size).expect("cover_size should be within u32 range"),
-        )
+        let cover_size = match u32::try_from(cover_size) {
+            Ok(size) => size,
+            Err(e) => {
+                error!(error = %e, "Failed to convert cover size to u32, using default 48");
+                48
+            }
+        };
+
+        create_artist_row_with_zoom(artist, self.app_state.as_ref(), &self.config, cover_size)
     }
 
     /// Updates the display configuration.
@@ -613,43 +640,95 @@ impl Filterable<Artist> for ListView {
     }
 }
 
-/// Helper function to create an album row with specific cover size.
-fn create_album_row_with_zoom(
-    album: &Album,
-    app_state: Option<&Arc<AppState>>,
-    config: &ListViewConfig,
-    cover_size: u32,
-    cover_arts: &Rc<RefCell<Vec<CoverArt>>>,
-) -> Widget {
-    // Create cover art
-    let show_dr_badge = if let Some(app_state_ref) = app_state {
-        app_state_ref
+/// Determines whether to show DR badges based on application settings.
+///
+/// # Arguments
+///
+/// * `app_state` - Optional application state reference
+///
+/// # Returns
+///
+/// `true` if DR badges should be shown, defaults to `true` if no app state is provided
+fn should_show_dr_badge(app_state: Option<&Arc<AppState>>) -> bool {
+    app_state.is_none_or(|state| {
+        state
             .get_settings_manager()
             .read()
             .get_settings()
             .show_dr_values
-    } else {
-        true // Default to showing DR badges
-    };
+    })
+}
 
-    let cover_art = CoverArt::builder()
+/// Creates the cover art widget for an album with DR badge support.
+///
+/// # Arguments
+///
+/// * `album` - The album to create cover art for
+/// * `cover_size` - The size of the cover art in pixels
+/// * `show_dr_badge` - Whether to show the DR badge
+///
+/// # Returns
+///
+/// A configured `CoverArt` instance
+///
+/// # Errors
+///
+/// Returns an error if cover size conversion fails
+fn create_cover_art_for_album(
+    album: &Album,
+    cover_size: u32,
+    show_dr_badge: bool,
+) -> Result<CoverArt, UiError> {
+    let size = i32::try_from(cover_size).map_err(|e| {
+        error!(error = %e, cover_size = cover_size, "Cover size conversion failed");
+        WidgetError(format!("Cover size conversion failed: {e}"))
+    })?;
+
+    Ok(CoverArt::builder()
         .artwork_path(album.artwork_path.as_deref().unwrap_or(&album.path))
         .dr_value(album.dr_value.clone().unwrap_or_else(|| "N/A".to_string()))
         .show_dr_badge(show_dr_badge)
-        .dimensions(
-            i32::try_from(cover_size).expect(
-                "ListView album cover_size (u32) should fit in i32 for GTK widget dimensions",
-            ),
-            i32::try_from(cover_size).expect(
-                "ListView album cover_size (u32) should fit in i32 for GTK widget dimensions",
-            ),
-        )
-        .build();
+        .dimensions(size, size)
+        .build())
+}
 
-    // Store cover art for dynamic updates
-    cover_arts.borrow_mut().push(cover_art.clone());
+/// Looks up the artist name for an album from the library state.
+///
+/// # Arguments
+///
+/// * `album` - The album to look up the artist for
+/// * `app_state` - Optional application state reference
+///
+/// # Returns
+///
+/// The artist name or "Unknown Artist" if not found
+fn get_artist_name_for_album(album: &Album, app_state: Option<&Arc<AppState>>) -> String {
+    if let Some(state) = app_state {
+        let library_state = state.get_library_state();
+        library_state
+            .artists
+            .iter()
+            .find(|artist| artist.id == album.artist_id)
+            .map_or_else(
+                || "Unknown Artist".to_string(),
+                |artist| artist.name.clone(),
+            )
+    } else {
+        "Unknown Artist".to_string()
+    }
+}
 
-    // Create main info container
+/// Creates the info labels (title and artist/year) for an album row.
+///
+/// # Arguments
+///
+/// * `album` - The album to create labels for
+/// * `artist_name` - The artist name to display
+///
+/// # Returns
+///
+/// A `Box` widget containing the title and artist/year labels
+fn create_album_info_labels(album: &Album, artist_name: &str) -> Box {
     let info_container = Box::builder()
         .orientation(Vertical)
         .hexpand(true)
@@ -665,27 +744,11 @@ fn create_album_row_with_zoom(
         .tooltip_text(&album.title)
         .build();
 
-    // Look up artist name from app state
-    let artist_name = if let Some(app_state_ref) = app_state {
-        let library_state = app_state_ref.get_library_state();
-        library_state
-            .artists
-            .iter()
-            .find(|artist| artist.id == album.artist_id)
-            .map_or_else(
-                || "Unknown Artist".to_string(),
-                |artist| artist.name.clone(),
-            )
-    } else {
-        "Unknown Artist".to_string()
-    };
-
     // Artist/year info
-    let artist_year_text = if let Some(year) = album.year {
-        format!("{artist_name} ({year})")
-    } else {
-        artist_name
-    };
+    let artist_year_text = album.year.map_or_else(
+        || artist_name.to_string(),
+        |year| format!("{artist_name} ({year})"),
+    );
 
     let artist_year_label = Label::builder()
         .label(&artist_year_text)
@@ -698,6 +761,99 @@ fn create_album_row_with_zoom(
 
     info_container.append(title_label.upcast_ref::<Widget>());
     info_container.append(artist_year_label.upcast_ref::<Widget>());
+
+    info_container
+}
+
+/// Creates optional metadata labels (genre and compilation) for an album row.
+///
+/// # Arguments
+///
+/// * `album` - The album to create metadata labels for
+/// * `row_container` - The row container to append labels to
+fn create_optional_metadata_labels(album: &Album, row_container: &Box) {
+    // Genre info
+    if let Some(ref genre) = album.genre {
+        let genre_label = Label::builder()
+            .label(genre)
+            .halign(Start)
+            .xalign(0.0)
+            .css_classes(["dim-label"])
+            .ellipsize(End)
+            .tooltip_text(genre)
+            .build();
+        row_container.append(genre_label.upcast_ref::<Widget>());
+    }
+
+    // Compilation indicator
+    if album.compilation {
+        let compilation_label = Label::builder()
+            .label("Compilation")
+            .halign(Start)
+            .xalign(0.0)
+            .css_classes(["dim-label"])
+            .ellipsize(End)
+            .tooltip_text("Compilation album")
+            .build();
+        row_container.append(compilation_label.upcast_ref::<Widget>());
+    }
+}
+
+/// Sets up the activation handler for an album row.
+///
+/// # Arguments
+///
+/// * `row` - The list box row to configure
+/// * `album` - The album associated with this row
+/// * `app_state` - Optional application state reference for navigation
+fn setup_album_row_activation(row: &ListBoxRow, album: &Album, app_state: Option<Arc<AppState>>) {
+    let album_clone = album.clone();
+    row.connect_activate(move |_| {
+        if let Some(ref state) = app_state {
+            state.update_navigation(AlbumDetail(album_clone.clone()));
+        }
+    });
+}
+
+/// Creates an album row widget with specific cover size and DR badge support.
+///
+/// # Arguments
+///
+/// * `album` - The album to display
+/// * `app_state` - Optional application state reference for reactive updates
+/// * `config` - Configuration options for the list view
+/// * `cover_size` - The size of the cover art in pixels
+/// * `cover_arts` - Shared collection to store cover art references for dynamic updates
+///
+/// # Returns
+///
+/// A `Widget` representing the album row
+fn create_album_row_with_zoom(
+    album: &Album,
+    app_state: Option<&Arc<AppState>>,
+    config: &ListViewConfig,
+    cover_size: u32,
+    cover_arts: &Rc<RefCell<Vec<CoverArt>>>,
+) -> Widget {
+    let show_dr_badge = should_show_dr_badge(app_state);
+    let cover_art = match create_cover_art_for_album(album, cover_size, show_dr_badge) {
+        Ok(art) => art,
+        Err(e) => {
+            error!(error = %e, "Failed to create cover art, using default");
+            CoverArt::builder()
+                .artwork_path("")
+                .dr_value("N/A".to_string())
+                .show_dr_badge(show_dr_badge)
+                .dimensions(48, 48)
+                .build()
+        }
+    };
+
+    // Store cover art for dynamic updates
+    cover_arts.borrow_mut().push(cover_art.clone());
+
+    let artist_name = get_artist_name_for_album(album, app_state);
+    let info_container = create_album_info_labels(album, &artist_name);
 
     // Create main row container
     let row_container = Box::builder()
@@ -712,33 +868,9 @@ fn create_album_row_with_zoom(
     row_container.append(&cover_art.widget);
     row_container.append(info_container.upcast_ref::<Widget>());
 
-    // Add additional metadata if not compact
+    // Add optional metadata if not in compact mode
     if !config.compact {
-        // Genre info
-        if let Some(ref genre) = album.genre {
-            let genre_label = Label::builder()
-                .label(genre)
-                .halign(Start)
-                .xalign(0.0)
-                .css_classes(["dim-label"])
-                .ellipsize(End)
-                .tooltip_text(genre)
-                .build();
-            row_container.append(genre_label.upcast_ref::<Widget>());
-        }
-
-        // Compilation indicator
-        if album.compilation {
-            let compilation_label = Label::builder()
-                .label("Compilation")
-                .halign(Start)
-                .xalign(0.0)
-                .css_classes(["dim-label"])
-                .ellipsize(End)
-                .tooltip_text("Compilation album")
-                .build();
-            row_container.append(compilation_label.upcast_ref::<Widget>());
-        }
+        create_optional_metadata_labels(album, &row_container);
     }
 
     // Create ListBoxRow wrapper
@@ -747,14 +879,7 @@ fn create_album_row_with_zoom(
     row.set_activatable(true);
     row.set_selectable(true);
 
-    // Handle row activation for navigation
-    let album_clone = album.clone();
-    let app_state_clone = app_state.cloned();
-    row.connect_activate(move |_| {
-        if let Some(ref state) = app_state_clone {
-            state.update_navigation(AlbumDetail(album_clone.clone()));
-        }
-    });
+    setup_album_row_activation(&row, album, app_state.cloned());
 
     row.upcast_ref::<Widget>().clone()
 }
@@ -767,17 +892,18 @@ fn create_artist_row_with_zoom(
     cover_size: u32,
 ) -> Widget {
     // Create cover art (default image)
+    let size = match i32::try_from(cover_size) {
+        Ok(s) => s,
+        Err(e) => {
+            error!(error = %e, cover_size = cover_size, "Failed to convert cover size to i32, using default 48");
+            48
+        }
+    };
+
     let cover_art = CoverArt::builder()
         .artwork_path("")
         .show_dr_badge(false)
-        .dimensions(
-            i32::try_from(cover_size).expect(
-                "ListView artist cover_size (u32) should fit in i32 for GTK widget dimensions",
-            ),
-            i32::try_from(cover_size).expect(
-                "ListView artist cover_size (u32) should fit in i32 for GTK widget dimensions",
-            ),
-        )
+        .dimensions(size, size)
         .build();
 
     // Create main info container
