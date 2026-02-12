@@ -161,6 +161,7 @@ impl ArtistGridView {
         let flow_box = FlowBox::builder()
             .halign(Fill)
             .valign(Start)
+            .width_request(360)
             .homogeneous(true)
             .max_children_per_line(100)
             .selection_mode(SelectionNone)

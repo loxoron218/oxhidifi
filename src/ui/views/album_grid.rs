@@ -278,6 +278,7 @@ impl AlbumGridView {
         let flow_box = FlowBox::builder()
             .halign(Fill) // Fill available horizontal space instead of centering
             .valign(Start)
+            .width_request(360)
             .homogeneous(true)
             .max_children_per_line(100) // Will be adjusted based on available width
             .selection_mode(SelectionNone)

@@ -15,11 +15,8 @@
     font-family: monospace;
     font-weight: bold;
     font-size: 12px;
-    min-width: 28px;
-    min-height: 28px;
     border-radius: 4px;
     padding: 0;
-    margin: 4px; /* Small margin to prevent touching edges */
     color: black;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
@@ -65,7 +62,6 @@
 .album-tile {
     background-color: transparent;
     border-radius: 12px; /* 12px border-radius as specified */
-    min-width: 64px; /* Minimum width for smallest zoom level */
 }
 
 /* Album title label styling */
@@ -86,15 +82,12 @@
     color: #666; /* Darker gray (#666) */
     font-style: italic;
     font-size: 0.9em;
-    margin-top: 2px;
 }
 
 /* Play overlay styling */
 .play-overlay {
     background-color: rgba(0, 0, 0, 0.6);
     border-radius: 50%;
-    min-width: 40px;
-    min-height: 40px;
     opacity: 0;
     transition: opacity 0.2s ease-in-out;
 }
@@ -111,12 +104,6 @@
 
 .play-overlay:hover {
     background-color: rgba(0, 0, 0, 0.9);
-}
-
-/* Album grid styling */
-.album-grid {
-    /* FlowBox will handle the responsive grid layout */
-    min-width: 360px; /* Minimum width for mobile-like displays */
 }
 
 /* Player bar artwork container - styled via widget properties in Rust */

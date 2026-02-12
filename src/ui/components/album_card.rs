@@ -375,6 +375,7 @@ impl AlbumCard {
             .label(&format_info)
             .halign(Start)
             .xalign(0.0)
+            .margin_top(6)
             .lines(1)
             .max_width_chars(
                 i32::try_from((((cover_width - 16) / 2) / 10).max(8)).expect(
@@ -426,6 +427,7 @@ impl AlbumCard {
             .valign(Start)
             .hexpand(false)
             .vexpand(false)
+            .width_request(64)
             .spacing(6) // 6px spacing per GNOME HIG
             .css_classes(["album-tile"])
             .build();

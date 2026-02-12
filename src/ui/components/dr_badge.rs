@@ -213,6 +213,10 @@ impl DRBadge {
             .valign(End)
             .width_request(28)
             .height_request(28)
+            .margin_start(6)
+            .margin_end(6)
+            .margin_top(6)
+            .margin_bottom(6)
             .css_classes(&["dr-badge-label", "dr-badge-label-grid"] as &[&str])
             .tooltip_text(quality.aria_label());
         let label = label_builder.build();

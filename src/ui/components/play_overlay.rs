@@ -103,6 +103,8 @@ impl PlayOverlay {
             .icon_name(icon_name)
             .halign(Center)
             .valign(Center)
+            .width_request(40)
+            .height_request(40)
             .css_classes(vec!["play-overlay".to_string()])
             .tooltip_text(if is_playing { "Pause" } else { "Play" })
             .build();
