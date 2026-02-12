@@ -40,24 +40,6 @@
 .dr-badge-label.dr-07 { background-color: #F44336; }    /* Red - Very Poor */
 .dr-badge-label.dr-na { background-color: #9E9E9E; }    /* Gray - Unknown */
 
-/* Individual DR value classes for precise styling */
-.dr-badge-label.dr-00 { background-color: #F44336; }
-.dr-badge-label.dr-01 { background-color: #F44336; }
-.dr-badge-label.dr-02 { background-color: #F44336; }
-.dr-badge-label.dr-03 { background-color: #F44336; }
-.dr-badge-label.dr-04 { background-color: #F44336; }
-.dr-badge-label.dr-05 { background-color: #F44336; }
-.dr-badge-label.dr-06 { background-color: #F44336; }
-.dr-badge-label.dr-07 { background-color: #F44336; }
-.dr-badge-label.dr-08 { background-color: #FF9800; }
-.dr-badge-label.dr-09 { background-color: #FF9800; }
-.dr-badge-label.dr-10 { background-color: #FFC107; }
-.dr-badge-label.dr-11 { background-color: #FFC107; }
-.dr-badge-label.dr-12 { background-color: #8BC34A; }
-.dr-badge-label.dr-13 { background-color: #8BC34A; }
-.dr-badge-label.dr-14 { background-color: #4CAF50; }
-.dr-badge-label.dr-15 { background-color: #4CAF50; }
-
 /* Album card base styling */
 .album-tile {
     background-color: transparent;
@@ -106,10 +88,3 @@
     background-color: rgba(0, 0, 0, 0.9);
 }
 
-/* Player bar artwork container - styled via widget properties in Rust */
-.artwork-container {
-}
-
-/* Player bar artwork picture - styled via widget properties in Rust */
-.player-bar-artwork {
-}
