@@ -113,18 +113,25 @@ pub fn create_hifi_popover(
         .label("Bit-perfect")
         .css_classes(["hifi-status-badge", "inactive", "tag"])
         .build();
+    bitperfect_badge.set_tooltip_text(Some(
+        "Audio is being played without any modification or resampling",
+    ));
     badges_row.append(&bitperfect_badge);
 
     let gapless_badge = Label::builder()
         .label("Gapless")
         .css_classes(["hifi-status-badge", "inactive", "tag"])
         .build();
+    gapless_badge.set_tooltip_text(Some("Tracks will transition without gaps between them"));
     badges_row.append(&gapless_badge);
 
     let hires_badge = Label::builder()
         .label("Hi-Res")
         .css_classes(["hifi-status-badge", "inactive", "tag"])
         .build();
+    hires_badge.set_tooltip_text(Some(
+        "Audio has high-resolution quality (greater than 44.1kHz or 16-bit)",
+    ));
     badges_row.append(&hires_badge);
 
     content_box.append(&badges_row);
@@ -258,6 +265,18 @@ fn create_property_row(label_text: &str, value_text: &str) -> (Box, Label) {
         .hexpand(true)
         .css_classes(["hifi-property-label", "dim-label"])
         .build();
+
+    let tooltip = match label_text {
+        "Format" => "Audio format of the source audio file",
+        "Sample Rate" => "Sample rate of the source audio file in Hz",
+        "Bit Depth" => "Bit depth of the source audio file in bits",
+        "Status" => "Current audio processing status",
+        "Device" => "Name of the output audio device",
+        _ => "",
+    };
+    if !tooltip.is_empty() {
+        label.set_tooltip_text(Some(tooltip));
+    }
     row.append(&label);
 
     let value = Label::builder()
@@ -265,6 +284,18 @@ fn create_property_row(label_text: &str, value_text: &str) -> (Box, Label) {
         .halign(Align::End)
         .css_classes(["hifi-property-value"])
         .build();
+
+    let value_tooltip = match label_text {
+        "Format" => "The codec/container format of the audio file (e.g., FLAC, MP3, WAV)",
+        "Sample Rate" => "Number of samples per second, affecting audio frequency range",
+        "Bit Depth" => "Number of bits per sample, affecting dynamic range",
+        "Status" => "Indicates if any audio processing is being applied (e.g., resampling)",
+        "Device" => "The audio output device currently being used",
+        _ => "",
+    };
+    if !value_tooltip.is_empty() {
+        value.set_tooltip_text(Some(value_tooltip));
+    }
     row.append(&value);
 
     (row, value)
