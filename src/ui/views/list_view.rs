@@ -156,6 +156,206 @@ pub struct ListViewConfig {
 }
 
 impl ListView {
+    /// Creates the base widgets for the list view.
+    ///
+    /// # Arguments
+    ///
+    /// * `view_type` - Type of items to display (albums or artists)
+    ///
+    /// # Returns
+    ///
+    /// A tuple containing the list box, main container, search empty state, and cover arts collection
+    fn create_base_widgets(
+        view_type: &ListViewType,
+    ) -> (ListBox, Box, SearchEmptyState, Rc<RefCell<Vec<CoverArt>>>) {
+        let list_box = ListBox::builder()
+            .selection_mode(SelectionNone)
+            .css_classes(["list-view"])
+            .build();
+
+        // Set ARIA attributes for accessibility
+        list_box.set_accessible_role(List);
+
+        let cover_arts = Rc::new(RefCell::new(Vec::new()));
+
+        // Create main container that can hold both list box and search empty state
+        let main_container = Box::builder().orientation(Vertical).build();
+        main_container.append(&list_box.clone().upcast::<Widget>());
+
+        // Create and add search empty state component
+        let search_empty_state = SearchEmptyState::builder()
+            .is_album_view(matches!(view_type, ListViewType::Albums))
+            .build();
+        main_container.append(search_empty_state.widget());
+        search_empty_state.hide();
+
+        (list_box, main_container, search_empty_state, cover_arts)
+    }
+
+    /// Gets the cover size for list items with proper error handling.
+    ///
+    /// # Arguments
+    ///
+    /// * `state` - Application state for accessing zoom manager
+    ///
+    /// # Returns
+    ///
+    /// Cover size in pixels, defaults to 48 if conversion fails
+    fn get_cover_size(state: &Arc<AppState>) -> u32 {
+        match u32::try_from(state.zoom_manager.get_list_cover_dimensions().0) {
+            Ok(size) => size,
+            Err(e) => {
+                error!(error = %e, "Failed to convert cover size to u32, using default 48");
+                48
+            }
+        }
+    }
+
+    /// Gets the cover size for list items with proper error handling (optional `app_state`).
+    ///
+    /// # Arguments
+    ///
+    /// * `app_state` - Optional application state for accessing zoom manager
+    ///
+    /// # Returns
+    ///
+    /// Cover size in pixels, defaults to 48 if no app state or conversion fails
+    fn get_cover_size_optional(app_state: Option<&Arc<AppState>>) -> u32 {
+        let cover_size = if let Some(state) = app_state {
+            state.zoom_manager.get_list_cover_dimensions().0
+        } else {
+            48
+        };
+
+        match u32::try_from(cover_size) {
+            Ok(size) => size,
+            Err(e) => {
+                error!(error = %e, "Failed to convert cover size to u32, using default 48");
+                48
+            }
+        }
+    }
+
+    /// Handles zoom change events by rebuilding the list with updated cover sizes.
+    ///
+    /// # Arguments
+    ///
+    /// * `state` - Application state reference for retrieving library and zoom data
+    /// * `list_box` - List box widget to rebuild
+    /// * `view_type` - Type of items to display (albums or artists)
+    /// * `config` - Configuration options for the list view
+    /// * `cover_arts` - Cover arts collection to clear and refill
+    fn rebuild_list_on_zoom(
+        state: &Arc<AppState>,
+        list_box: &ListBox,
+        view_type: &ListViewType,
+        config: &ListViewConfig,
+        cover_arts: &Rc<RefCell<Vec<CoverArt>>>,
+    ) {
+        // Rebuild all list items with new zoom level
+        // Get current library state
+        let library_state = state.get_library_state();
+
+        // Clear existing children
+        while let Some(child) = list_box.first_child() {
+            list_box.remove(&child);
+        }
+        cover_arts.borrow_mut().clear();
+
+        let cover_size = Self::get_cover_size(state);
+
+        // Rebuild list with updated dimensions
+        match view_type {
+            ListViewType::Albums => {
+                for album in &library_state.albums {
+                    let row = create_album_row_with_zoom(
+                        album,
+                        Some(state),
+                        config,
+                        cover_size,
+                        cover_arts,
+                    );
+                    list_box.append(&row);
+                }
+            }
+            ListViewType::Artists => {
+                for artist in &library_state.artists {
+                    let row = create_artist_row_with_zoom(artist, Some(state), config, cover_size);
+                    list_box.append(&row);
+                }
+            }
+        }
+    }
+
+    /// Creates a subscription to zoom change events.
+    ///
+    /// # Arguments
+    ///
+    /// * `state` - Application state reference for subscribing to zoom changes
+    /// * `list_box` - List box widget to rebuild on zoom changes
+    /// * `view_type` - Type of items to display (albums or artists)
+    /// * `config` - Configuration options for the list view
+    /// * `cover_arts` - Cover arts collection to update on zoom changes
+    ///
+    /// # Returns
+    ///
+    /// A join handle for the subscription task
+    fn create_zoom_subscription(
+        state: &Arc<AppState>,
+        list_box: ListBox,
+        view_type: ListViewType,
+        config: ListViewConfig,
+        cover_arts: Rc<RefCell<Vec<CoverArt>>>,
+    ) -> JoinHandle<()> {
+        let state_clone = state.clone();
+        MainContext::default().spawn_local(async move {
+            let rx = state_clone.zoom_manager.subscribe();
+            while let Ok(event) = rx.recv().await {
+                if let ListZoomChanged(_) = event {
+                    Self::rebuild_list_on_zoom(
+                        &state_clone,
+                        &list_box,
+                        &view_type,
+                        &config,
+                        &cover_arts,
+                    );
+                }
+            }
+        })
+    }
+
+    /// Creates a subscription to settings change events.
+    ///
+    /// # Arguments
+    ///
+    /// * `state` - Application state reference for subscribing to settings changes
+    /// * `view_type` - Type of items to display (albums or artists)
+    /// * `cover_arts` - Cover arts collection to update on settings changes
+    ///
+    /// # Returns
+    ///
+    /// A join handle for the subscription task
+    fn create_settings_subscription(
+        state: &Arc<AppState>,
+        view_type: ListViewType,
+        cover_arts: Rc<RefCell<Vec<CoverArt>>>,
+    ) -> JoinHandle<()> {
+        let state_clone = state.clone();
+        MainContext::default().spawn_local(async move {
+            let rx = state_clone.subscribe();
+            while let Ok(event) = rx.recv().await {
+                if let SettingsChanged { show_dr_values } = event
+                    && view_type == ListViewType::Albums
+                {
+                    let mut cover_arts = cover_arts.borrow_mut();
+                    for cover_art in cover_arts.iter_mut() {
+                        cover_art.set_show_dr_badge(show_dr_values);
+                    }
+                }
+            }
+        })
+    }
+
     /// Creates a new `ListView` component.
     ///
     /// # Arguments
@@ -175,138 +375,32 @@ impl ListView {
     pub fn new(app_state: Option<&Arc<AppState>>, view_type: &ListViewType, compact: bool) -> Self {
         let config = ListViewConfig { compact };
 
-        let list_box = ListBox::builder()
-            .selection_mode(SelectionNone)
-            .css_classes(["list-view"])
-            .build();
+        let (list_box, main_container, search_empty_state, cover_arts) =
+            Self::create_base_widgets(view_type);
 
-        // Set ARIA attributes for accessibility
-        list_box.set_accessible_role(List);
+        let zoom_subscription_handle = app_state.map(|state| {
+            Self::create_zoom_subscription(
+                state,
+                list_box.clone(),
+                view_type.clone(),
+                config.clone(),
+                cover_arts.clone(),
+            )
+        });
 
-        // set_accessible_description doesn't exist in GTK4, remove this line
-
-        let cover_arts = Rc::new(RefCell::new(Vec::new()));
-
-        // Create main container that can hold both list box and search empty state
-        let main_container = Box::builder().orientation(Vertical).build();
-        main_container.append(&list_box.clone().upcast::<Widget>());
-
-        // Create and add search empty state component
-        let search_empty_state = SearchEmptyState::builder()
-            .is_album_view(matches!(view_type, ListViewType::Albums))
-            .build();
-        main_container.append(search_empty_state.widget());
-        search_empty_state.hide();
+        let settings_subscription_handle = app_state.map(|state| {
+            Self::create_settings_subscription(state, view_type.clone(), cover_arts.clone())
+        });
 
         let mut view = Self {
             widget: main_container.upcast_ref::<Widget>().clone(),
-            list_box: list_box.clone(),
+            list_box,
             app_state: app_state.cloned(),
             view_type: view_type.clone(),
-            config: config.clone(),
+            config,
             search_empty_state,
-            _zoom_subscription_handle: if let Some(state) = app_state {
-                // Subscribe to zoom changes
-                let state_clone: Arc<AppState> = state.clone();
-                let list_box_clone = list_box.clone();
-                let view_type_clone = view_type.clone();
-                let config_clone = config.clone();
-                let cover_arts_clone = cover_arts.clone();
-                let handle = MainContext::default().spawn_local(async move {
-                    let rx = state_clone.zoom_manager.subscribe();
-                    while let Ok(event) = rx.recv().await {
-                        if let ListZoomChanged(_) = event {
-                            // Rebuild all list items with new zoom level
-                            // Get current library state
-                            let library_state = state_clone.get_library_state();
-
-                            // Clear existing children
-                            while let Some(child) = list_box_clone.first_child() {
-                                list_box_clone.remove(&child);
-                            }
-                            cover_arts_clone.borrow_mut().clear();
-
-                            // Rebuild list with updated dimensions
-                            match view_type_clone {
-                                ListViewType::Albums => {
-                                    for album in &library_state.albums {
-                                        let cover_size = match u32::try_from(
-                                            state_clone
-                                                .zoom_manager
-                                                .get_list_cover_dimensions()
-                                                .0,
-                                        ) {
-                                            Ok(size) => size,
-                                            Err(e) => {
-                                                error!(error = %e, "Failed to convert cover size to u32, using default 48");
-                                                48
-                                            }
-                                        };
-                                        let row = create_album_row_with_zoom(
-                                            album,
-                                            Some(&state_clone),
-                                            &config_clone,
-                                            cover_size,
-                                            &cover_arts_clone,
-                                        );
-                                        list_box_clone.append(&row);
-                                    }
-                                }
-                                ListViewType::Artists => {
-                                    for artist in &library_state.artists {
-                                        let cover_size = match u32::try_from(
-                                            state_clone
-                                                .zoom_manager
-                                                .get_list_cover_dimensions()
-                                                .0,
-                                        ) {
-                                            Ok(size) => size,
-                                            Err(e) => {
-                                                error!(error = %e, "Failed to convert cover size to u32, using default 48");
-                                                48
-                                            }
-                                        };
-                                        let row = create_artist_row_with_zoom(
-                                            artist,
-                                            Some(&state_clone),
-                                            &config_clone,
-                                            cover_size,
-                                        );
-                                        list_box_clone.append(&row);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                });
-                Some(handle)
-            } else {
-                None
-            },
-            _settings_subscription_handle: if let Some(state) = app_state {
-                // Subscribe to settings changes
-                let state_clone: Arc<AppState> = state.clone();
-                let cover_arts_clone = cover_arts.clone();
-                let view_type_clone = view_type.clone();
-                let handle = MainContext::default().spawn_local(async move {
-                    let rx = state_clone.subscribe();
-                    while let Ok(event) = rx.recv().await {
-                        if let SettingsChanged { show_dr_values } = event {
-                            // Only update albums, not artists
-                            if view_type_clone == ListViewType::Albums {
-                                // Update all cover art components with new DR badge visibility
-                                let mut cover_arts = cover_arts_clone.borrow_mut();
-                                for cover_art in cover_arts.iter_mut() {
-                                    cover_art.set_show_dr_badge(show_dr_values);
-                                }
-                            }
-                        }
-                    }
-                });
-                Some(handle)
-            } else {
-                None
-            },
+            _zoom_subscription_handle: zoom_subscription_handle,
+            _settings_subscription_handle: settings_subscription_handle,
             cover_arts,
             albums: Vec::new(),
             artists: Vec::new(),
@@ -425,20 +519,7 @@ impl ListView {
     ///
     /// A new `Widget` representing the album row.
     fn create_album_row(&self, album: &Album) -> Widget {
-        // Get cover size from zoom manager if available
-        let cover_size = if let Some(app_state) = &self.app_state {
-            app_state.zoom_manager.get_list_cover_dimensions().0
-        } else {
-            48 // Default cover size
-        };
-
-        let cover_size = match u32::try_from(cover_size) {
-            Ok(size) => size,
-            Err(e) => {
-                error!(error = %e, "Failed to convert cover size to u32, using default 48");
-                48
-            }
-        };
+        let cover_size = Self::get_cover_size_optional(self.app_state.as_ref());
 
         create_album_row_with_zoom(
             album,
@@ -459,20 +540,7 @@ impl ListView {
     ///
     /// A new `Widget` representing the artist row.
     fn create_artist_row(&self, artist: &Artist) -> Widget {
-        // Get cover size from zoom manager if available
-        let cover_size = if let Some(app_state) = &self.app_state {
-            app_state.zoom_manager.get_list_cover_dimensions().0
-        } else {
-            48 // Default cover size
-        };
-
-        let cover_size = match u32::try_from(cover_size) {
-            Ok(size) => size,
-            Err(e) => {
-                error!(error = %e, "Failed to convert cover size to u32, using default 48");
-                48
-            }
-        };
+        let cover_size = Self::get_cover_size_optional(self.app_state.as_ref());
 
         create_artist_row_with_zoom(artist, self.app_state.as_ref(), &self.config, cover_size)
     }
