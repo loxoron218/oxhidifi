@@ -15,10 +15,7 @@ use {
 
 use crate::{
     audio::{
-        artwork::{
-            ArtworkSource::{Embedded, External},
-            extract_artwork, find_external_artwork, save_embedded_artwork,
-        },
+        artwork::{extract_artwork, save_embedded_artwork},
         metadata::{TagReader, TrackMetadata},
     },
     config::settings::UserSettings,
@@ -709,8 +706,7 @@ async fn update_track_in_transaction(
 
 /// Extracts artwork path for an album directory.
 ///
-/// Attempts to find artwork by checking the first audio file in the album
-/// for embedded artwork, then falls back to external artwork files.
+/// Attempts to extract embedded artwork from the first audio file in the album.
 ///
 /// # Arguments
 ///
@@ -721,33 +717,13 @@ async fn update_track_in_transaction(
 ///
 /// An `Option<String>` containing the artwork file path if found.
 fn extract_album_artwork_path(album_dir: &Path, audio_files: &[PathBuf]) -> Option<String> {
-    // Try to extract artwork from the first audio file
-    if let Some(first_file) = audio_files.first() {
-        match extract_artwork(first_file) {
-            Ok(Embedded(data, _mime_type)) => {
-                // Save embedded artwork to a file in the album directory
-                let artwork_path = album_dir.join("folder.jpg");
-                if save_embedded_artwork(&data, &artwork_path).is_ok() {
-                    return Some(artwork_path.to_string_lossy().to_string());
-                }
-            }
-            Ok(External(path)) => {
-                return Some(path.to_string_lossy().to_string());
-            }
-            Err(e) => {
-                // Continue to external file search
-                debug!(
-                    "Failed to extract embedded artwork from '{}': {}",
-                    first_file.display(),
-                    e
-                );
-            }
+    if let Some(first_file) = audio_files.first()
+        && let Ok((data, _mime_type)) = extract_artwork(first_file)
+    {
+        let artwork_path = album_dir.join("folder.jpg");
+        if save_embedded_artwork(&data, &artwork_path).is_ok() {
+            return Some(artwork_path.to_string_lossy().to_string());
         }
-    }
-
-    // Look for external artwork files directly
-    if let Ok(Some(external_path)) = find_external_artwork(album_dir) {
-        return Some(external_path.to_string_lossy().to_string());
     }
 
     None

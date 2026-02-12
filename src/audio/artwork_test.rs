@@ -10,10 +10,7 @@ mod tests {
     use lofty::picture::MimeType::{Jpeg, Png};
 
     use crate::audio::{
-        artwork::{
-            ArtworkSource::{Embedded, External},
-            detect_mime_type, extract_artwork,
-        },
+        artwork::{detect_mime_type, extract_artwork},
         metadata::TagReader,
     };
 
@@ -24,13 +21,9 @@ mod tests {
         let test_file = Path::new("testdata/flac_with_artwork.flac");
         if test_file.exists() {
             let result = extract_artwork(test_file);
-            match result.expect("Artwork detection should succeed") {
-                Embedded(data, mime_type) => {
-                    assert!(!data.is_empty());
-                    assert!(mime_type.is_some());
-                }
-                External(_) => panic!("Expected embedded artwork"),
-            }
+            let (data, mime_type) = result.expect("Artwork detection should succeed");
+            assert!(!data.is_empty());
+            assert!(mime_type.is_some());
         }
     }
 
@@ -41,38 +34,9 @@ mod tests {
         let test_file = Path::new("testdata/mp3_with_artwork.mp3");
         if test_file.exists() {
             let result = extract_artwork(test_file);
-            match result.expect("Artwork detection should succeed") {
-                Embedded(data, mime_type) => {
-                    assert!(!data.is_empty());
-                    assert!(mime_type.is_some());
-                }
-                External(_) => panic!("Expected embedded artwork"),
-            }
-        }
-    }
-
-    /// Test external artwork file detection.
-    #[test]
-    #[ignore = "Requires test directory structure"]
-    fn test_external_artwork_detection() {
-        let test_dir = Path::new("testdata/album_with_folder_jpg");
-        if test_dir.exists() {
-            // Create a dummy audio file in the test directory
-            let audio_file = test_dir.join("track.flac");
-            if audio_file.exists() {
-                let result = extract_artwork(&audio_file);
-                match result.expect("Artwork detection should succeed") {
-                    External(path) => {
-                        assert!(path.exists());
-                        let file_name = path.file_name().expect("Path should have a file name");
-                        assert_eq!(
-                            file_name, "folder.jpg",
-                            "External artwork file should be named 'folder.jpg'"
-                        );
-                    }
-                    Embedded(..) => panic!("Expected external artwork"),
-                }
-            }
+            let (data, mime_type) = result.expect("Artwork detection should succeed");
+            assert!(!data.is_empty());
+            assert!(mime_type.is_some());
         }
     }
 
