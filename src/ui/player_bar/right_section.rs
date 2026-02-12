@@ -78,6 +78,7 @@ pub fn create_right_section() -> RightSectionWidgets {
         .tooltip_text("Volume control")
         .use_underline(true)
         .has_frame(false)
+        .css_classes(["volume-button", "circular", "inactive"])
         .build();
     right_section.append(volume_button.upcast_ref::<Widget>());
 

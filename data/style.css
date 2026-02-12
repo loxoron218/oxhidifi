@@ -190,3 +190,14 @@
 .volume-popover {
     padding: 12px;
 }
+
+/* Volume button styling */
+.volume-button {
+    transition: all 250ms ease;
+    padding: 6px;
+}
+
+.volume-button.inactive {
+    color: @light_5;
+    background-color: transparent;
+}

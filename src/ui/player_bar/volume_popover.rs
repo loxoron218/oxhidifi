@@ -172,9 +172,17 @@ pub fn connect_volume_handlers(
     });
 
     let volume_mode_switch_clone = volume_mode_switch.clone();
+    let volume_button_for_mode = volume_button.clone();
     volume_mode_switch_clone.connect_state_set(move |_switch, state| {
         let mode = if state { "system" } else { "app" };
         debug!(mode = %mode, "Volume mode changed");
+
+        if state {
+            volume_button_for_mode.remove_css_class("inactive");
+        } else {
+            volume_button_for_mode.add_css_class("inactive");
+        }
+
         Proceed
     });
 }
