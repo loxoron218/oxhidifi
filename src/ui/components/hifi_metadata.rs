@@ -15,7 +15,7 @@ use libadwaita::{
     prelude::{AccessibleExt, BoxExt, Cast, OrientableExt},
 };
 
-use crate::{library::models::Track, ui::utils::format_sample_rate};
+use crate::{library::models::Track, ui::formatting::format_sample_rate};
 
 /// Whether to display the audio format.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]

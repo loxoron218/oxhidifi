@@ -7,7 +7,7 @@ pub mod audio_page;
 pub mod dialog;
 pub mod general_page;
 pub mod library_page;
-pub mod utils;
+pub mod widgets;
 
 pub use {
     audio_page::AudioPreferencesPage, dialog::PreferencesDialog,

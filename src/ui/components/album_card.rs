@@ -22,7 +22,7 @@ use crate::{
     library::models::Album,
     ui::{
         components::{cover_art::CoverArt, dr_badge::DRBadge, play_overlay::PlayOverlay},
-        utils::create_format_display,
+        formatting::create_format_display,
     },
 };
 

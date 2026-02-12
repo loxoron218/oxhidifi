@@ -18,7 +18,7 @@ use crate::{
 };
 
 mod config;
-mod handlers;
+mod event_processing;
 
 pub use config::IncrementalUpdaterConfig;
 
@@ -113,7 +113,7 @@ impl IncrementalUpdater {
             match event {
                 DebouncedEvent::FilesChanged { paths } => {
                     debug!("Processing {} changed files incrementally", paths.len());
-                    if let Err(e) = handlers::handle_files_changed_incremental(
+                    if let Err(e) = event_processing::handle_files_changed_incremental(
                         paths,
                         &database,
                         dr_parser.as_ref(),
@@ -128,14 +128,14 @@ impl IncrementalUpdater {
                 DebouncedEvent::FilesRemoved { paths } => {
                     debug!("Processing {} removed files incrementally", paths.len());
                     if let Err(e) =
-                        handlers::handle_files_removed_incremental(paths, &database).await
+                        event_processing::handle_files_removed_incremental(paths, &database).await
                     {
                         error!(error = %e, "Error handling removed files incrementally");
                     }
                 }
                 DebouncedEvent::FilesRenamed { paths } => {
                     debug!("Processing {} renamed files incrementally", paths.len());
-                    if let Err(e) = handlers::handle_files_renamed_incremental(
+                    if let Err(e) = event_processing::handle_files_renamed_incremental(
                         paths,
                         &database,
                         dr_parser.as_ref(),

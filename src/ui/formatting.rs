@@ -1,6 +1,6 @@
-//! Utility functions for UI components.
+//! Formatting functions for UI components.
 //!
-//! This module provides shared utility functions for UI components,
+//! This module provides shared formatting functions for UI components,
 //! including proper format display logic that adheres to fidelity principles.
 
 use std::path::Path;
@@ -121,7 +121,7 @@ pub fn create_format_display(album: &Album) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use crate::ui::utils::{Album, create_format_display, format_sample_rate};
+    use crate::ui::formatting::{Album, create_format_display, format_sample_rate};
 
     #[test]
     fn test_format_sample_rate_common_rates() {

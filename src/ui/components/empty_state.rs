@@ -27,7 +27,9 @@ use crate::{
     library::{
         database::LibraryDatabase,
         dr_parser::DrParser,
-        scanner::{LibraryScanner, ScannerEvent::LibraryChanged, handlers::handle_files_changed},
+        scanner::{
+            LibraryScanner, ScannerEvent::LibraryChanged, event_processing::handle_files_changed,
+        },
     },
     state::{AppState, LibraryState},
 };

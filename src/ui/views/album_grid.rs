@@ -44,7 +44,7 @@ use crate::{
             empty_state::{EmptyState, EmptyStateConfig},
             search_empty_state::SearchEmptyState,
         },
-        utils::create_format_display,
+        formatting::create_format_display,
         views::filtering::Filterable,
     },
 };

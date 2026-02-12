@@ -26,12 +26,14 @@ use crate::{
             DebouncedEvent::{self, FilesChanged, FilesRemoved, FilesRenamed},
             DebouncedEventProcessor, FileWatcher,
         },
-        scanner::handlers::{handle_files_changed, handle_files_removed, handle_files_renamed},
+        scanner::event_processing::{
+            handle_files_changed, handle_files_removed, handle_files_renamed,
+        },
     },
 };
 
 mod config;
-pub mod handlers;
+pub mod event_processing;
 
 pub use config::ScannerConfig;
 

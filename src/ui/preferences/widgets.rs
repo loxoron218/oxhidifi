@@ -1,6 +1,6 @@
-//! Shared utility functions for preferences pages.
+//! Shared widget building functions for preferences pages.
 //!
-//! This module provides utility functions that can be reused across
+//! This module provides widget building functions that can be reused across
 //! different preference page implementations.
 
 use std::{string::String, sync::Arc};
@@ -91,7 +91,9 @@ mod tests {
         tracing::debug,
     };
 
-    use crate::{config::SettingsManager, ui::preferences::utils::create_combo_row_from_settings};
+    use crate::{
+        config::SettingsManager, ui::preferences::widgets::create_combo_row_from_settings,
+    };
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
