@@ -217,7 +217,7 @@ impl DRBadge {
             .margin_end(6)
             .margin_top(6)
             .margin_bottom(6)
-            .css_classes(&["dr-badge-label", "dr-badge-label-grid"] as &[&str])
+            .css_classes(&["dr-badge-label", "dr-badge-label-grid", "tag"] as &[&str])
             .tooltip_text(quality.aria_label());
         let label = label_builder.build();
         label.add_css_class(&css_class);
@@ -280,7 +280,7 @@ impl DRBadge {
 
         // Update CSS classes - first set base classes, then add dynamic class
         self.label
-            .set_css_classes(&["dr-badge-label", "dr-badge-label-grid"]);
+            .set_css_classes(&["dr-badge-label", "dr-badge-label-grid", "tag"]);
         self.label.add_css_class(&css_class);
 
         self.quality = quality;

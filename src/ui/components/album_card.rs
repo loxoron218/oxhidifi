@@ -429,7 +429,7 @@ impl AlbumCard {
             .vexpand(false)
             .width_request(64)
             .spacing(6) // 6px spacing per GNOME HIG
-            .css_classes(["album-tile"])
+            .css_classes(["album-tile", "card"])
             .build();
 
         album_tile.append(&cover_container);

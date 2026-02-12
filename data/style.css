@@ -1,21 +1,18 @@
 /* Cover art container styling */
 .cover-art-container {
     background-color: @theme_bg_color;
-    border-radius: 6px;
 }
 
 /* Cover art picture styling */
 .cover-art-picture {
-    border-radius: 6px;
     background-color: @theme_unfocused_bg_color;
 }
 
 /* DR badge styling - consistent 28x28px with proper positioning */
 .dr-badge-label {
     font-family: monospace;
-    font-weight: bold;
+    font-weight: 700;
     font-size: 12px;
-    border-radius: 4px;
     padding: 0;
     color: black;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
@@ -43,7 +40,6 @@
 /* Album card base styling */
 .album-tile {
     background-color: transparent;
-    border-radius: 12px; /* 12px border-radius as specified */
 }
 
 /* Album title label styling */
@@ -69,14 +65,13 @@
 /* Play overlay styling */
 .play-overlay {
     background-color: rgba(0, 0, 0, 0.6);
-    border-radius: 50%;
     opacity: 0;
-    transition: opacity 0.2s ease-in-out;
+    transition: opacity 250ms ease;
 }
 
 .cover-play-button {
     opacity: 0;
-    transition: opacity 0.2s ease-in-out;
+    transition: opacity 250ms ease;
 }
 
 /* Show play button when hovering over cover art container */
