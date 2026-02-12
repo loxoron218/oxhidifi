@@ -23,6 +23,18 @@ const fn default_search_debounce_ms() -> u64 {
     150
 }
 
+/// Volume control mode - application or system volume.
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+pub enum VolumeMode {
+    /// Application-controlled volume.
+    #[default]
+    #[serde(rename = "app")]
+    App,
+    /// System-level volume control.
+    #[serde(rename = "system")]
+    System,
+}
+
 /// Error type for settings operations.
 #[derive(Error, Debug)]
 pub enum SettingsError {
@@ -65,6 +77,8 @@ pub struct UserSettings {
     /// Debounce timeout in milliseconds for search input (default: 150).
     #[serde(default = "default_search_debounce_ms")]
     pub search_debounce_ms: u64,
+    /// Volume control mode (application or system).
+    pub volume_mode: VolumeMode,
 }
 
 impl Default for UserSettings {
@@ -82,6 +96,7 @@ impl Default for UserSettings {
             year_display_mode: "release".to_string(), // Default to release year
             show_metadata_overlays: true,             // Default to showing metadata overlays
             search_debounce_ms: 150,                  // Default debounce timeout for search
+            volume_mode: VolumeMode::App,             // Default to application volume control
         }
     }
 }
@@ -278,7 +293,7 @@ mod tests {
 
     use serde_json::{from_str, to_string};
 
-    use crate::config::settings::{SettingsError, UserSettings};
+    use crate::config::settings::{SettingsError, UserSettings, VolumeMode::System};
 
     #[test]
     fn test_user_settings_default() {
@@ -305,6 +320,7 @@ mod tests {
             year_display_mode: "original".to_string(),
             show_metadata_overlays: false,
             search_debounce_ms: 150,
+            volume_mode: System,
         };
 
         let serialized = to_string(&settings).expect("Failed to serialize settings in test");

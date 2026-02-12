@@ -176,7 +176,7 @@ impl AudioDecoder {
         let format = AudioFormat {
             sample_rate: signal_spec.rate,
             channels: u32::try_from(signal_spec.channels.count()).unwrap_or(2),
-            bits_per_sample: codec_params.bits_per_coded_sample.unwrap_or(16),
+            bits_per_sample: technical_metadata.bits_per_sample,
             channel_mask: 0,
         };
 

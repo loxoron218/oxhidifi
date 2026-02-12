@@ -103,7 +103,7 @@ pub struct AudioEngine {
     /// Information about the currently loaded track.
     current_track: Arc<RwLock<Option<TrackInfo>>>,
     /// Audio output configuration.
-    output_config: OutputConfig,
+    output_config: Arc<RwLock<OutputConfig>>,
     /// Sender for track completion notifications.
     track_finished_tx: Sender<()>,
     /// Subscribers for track completion notifications.
@@ -232,7 +232,7 @@ impl AudioEngine {
         let engine = AudioEngine {
             state: Arc::new(RwLock::new(PlaybackState::Stopped)),
             current_track: Arc::new(RwLock::new(None)),
-            output_config: OutputConfig::default(),
+            output_config: Arc::new(RwLock::new(OutputConfig::default())),
             track_finished_tx,
             track_completion_subscribers,
             state_tx,
@@ -491,6 +491,29 @@ impl AudioEngine {
         rx
     }
 
+    /// Gets the current output configuration.
+    ///
+    /// # Returns
+    ///
+    /// A clone of the current `OutputConfig`.
+    #[must_use]
+    pub fn output_config(&self) -> OutputConfig {
+        self.output_config.read().clone()
+    }
+
+    /// Checks if the prebuffer has a track ready for gapless playback.
+    ///
+    /// # Returns
+    ///
+    /// `true` if the prebuffer is active and has a track ready.
+    #[must_use]
+    pub fn is_prebuffer_active(&self) -> bool {
+        self.prebuffer
+            .read()
+            .as_ref()
+            .is_some_and(|pb| pb.is_ready())
+    }
+
     /// Main control loop that processes commands and manages playback.
     fn control_loop(&self) {
         Builder::new_current_thread()
@@ -561,7 +584,7 @@ impl AudioEngine {
         let (producer, consumer) = RingBuffer::<f32>::new(buffer_size);
 
         // Create audio output
-        let output = AudioOutput::new(Some(self.output_config.clone()))?;
+        let output = AudioOutput::new(Some(self.output_config.read().clone()))?;
 
         // Create decoder to get signal spec
         let mut decoder = AudioDecoder::new(&track_info.path)?;
@@ -571,13 +594,15 @@ impl AudioEngine {
         let signal_spec = decoder.signal_spec;
 
         // Create audio consumer
-        let consumer = AudioConsumer::new(
+        let (consumer, target_output_config) = AudioConsumer::new(
             output,
             consumer,
             &track_info.format,
             &signal_spec,
             self.current_position.clone(),
         )?;
+
+        *self.output_config.write() = target_output_config;
 
         // Create audio producer
         let track_finished_tx = self.track_finished_tx.clone();
@@ -656,14 +681,17 @@ impl AudioEngine {
             let buffer_size = 4096;
             let (producer, consumer) = RingBuffer::<f32>::new(buffer_size);
 
-            let output = AudioOutput::new(Some(self.output_config.clone()))?;
-            let consumer = AudioConsumer::new(
+            let output = AudioOutput::new(Some(self.output_config.read().clone()))?;
+            let (consumer, target_output_config) = AudioConsumer::new(
                 output,
                 consumer,
                 &track_info.format,
                 &signal_spec,
                 self.current_position.clone(),
             )?;
+
+            *self.output_config.write() = target_output_config;
+
             let track_finished_tx = self.track_finished_tx.clone();
             let producer = AudioProducer::new(decoder, producer, Some(track_finished_tx));
 

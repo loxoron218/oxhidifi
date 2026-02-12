@@ -83,3 +83,95 @@
     background-color: rgba(0, 0, 0, 0.9);
 }
 
+/* Base Hi-Fi button styling */
+.hifi-button {
+    transition: all 250ms ease;
+    padding: 6px;
+}
+
+/* Perfect quality - bit-perfect, gapless, no resampling */
+.hifi-button.hifi-perfect {
+    color: @green_4;
+}
+
+/* Bit-perfect only - exclusive mode, but no gapless */
+.hifi-button.hifi-good {
+    color: @yellow_4;
+}
+
+/* Shared mode or resampling active */
+.hifi-button.hifi-compromised {
+    color: @orange_4;
+}
+
+/* Lossy - Bluetooth, high latency, or heavy processing */
+.hifi-button.hifi-lossy {
+    color: @red_4;
+}
+
+/* No track playing / inactive */
+.hifi-button.hifi-inactive {
+    color: @light_4;
+    background-color: transparent;
+}
+
+/* Volume mode row styling */
+.volume-mode-label {
+    font-weight: 500;
+}
+
+.volume-mode-subtitle {
+    font-size: 0.85em;
+    color: @light_5;
+}
+
+/* Hi-Fi popover container */
+.hifi-popover {
+    padding: 12px;
+}
+
+.hifi-popover .group-title {
+    font-weight: 700;
+    font-size: 0.9em;
+    color: @light_4;
+}
+
+/* Property row styling */
+.hifi-property-row {
+    padding: 6px 0;
+    border-bottom: 1px solid alpha(@borders, 0.5);
+}
+
+.hifi-property-row:last-child {
+    border-bottom: none;
+}
+
+.hifi-property-label {
+    color: @light_5;
+}
+
+.hifi-property-value {
+    font-weight: 500;
+}
+
+/* Status badge styling */
+.hifi-status-badge {
+    padding: 6px 12px;
+    font-size: 0.85em;
+    font-weight: 600;
+}
+
+.hifi-status-badge.active {
+    background-color: alpha(@green_4, 0.2);
+    color: @green_4;
+}
+
+.hifi-status-badge.inactive {
+    background-color: alpha(@light_4, 0.1);
+    color: @light_5;
+}
+
+/* Volume popover container */
+.volume-popover {
+    padding: 12px;
+}

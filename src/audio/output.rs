@@ -122,6 +122,12 @@ pub struct OutputConfig {
     pub buffer_duration_ms: u32,
     /// Whether to use exclusive mode (bit-perfect).
     pub exclusive_mode: bool,
+    /// Output device name (if available).
+    pub device_name: Option<String>,
+    /// Bits per sample for output format.
+    pub bits_per_sample: u32,
+    /// Whether resampling is currently active.
+    pub is_resampling: bool,
 }
 
 impl Default for OutputConfig {
@@ -131,6 +137,9 @@ impl Default for OutputConfig {
             channels: 2,
             buffer_duration_ms: 50,
             exclusive_mode: true,
+            device_name: None,
+            bits_per_sample: 24,
+            is_resampling: false,
         }
     }
 }
@@ -281,18 +290,30 @@ impl AudioOutput {
 
         // Try to find the best matching configuration
         let mut best_config = None;
-        let mut exact_match = false;
+        let mut rate_match = false;
 
         for config in supported_configs {
             let config_sample_rate = config.max_sample_rate();
             let config_channels = config.channels();
+            let config_sample_format = config.sample_format();
+
+            // Convert target sample format to bits for comparison
+            let target_bits = match config_sample_format {
+                U8 | I8 => 8,
+                I16 | U16 => 16,
+                I24 | U24 => 24,
+                F64 | I64 | U64 => 64,
+                _ => 32,
+            };
 
             // Check for exact match (bit-perfect)
+            // Requires matching sample rate, channels, and bit depth
             if config_sample_rate == source_sample_rate
                 && <u32 as From<u16>>::from(config_channels) == source_channels
+                && target_bits == source_format.bits_per_sample
             {
                 best_config = Some(config.with_max_sample_rate());
-                exact_match = true;
+                rate_match = true;
                 break;
             }
 
@@ -302,6 +323,9 @@ impl AudioOutput {
                     || config_sample_rate > best_config.as_ref().unwrap().sample_rate())
             {
                 best_config = Some(config.with_max_sample_rate());
+                if config_sample_rate == source_sample_rate {
+                    rate_match = true;
+                }
             }
         }
 
@@ -310,7 +334,9 @@ impl AudioOutput {
         let target_channels = config.channels();
         let target_sample_format = config.sample_format();
 
-        let needs_resampling = !exact_match;
+        // Only use resampler if sample rates differ
+        // Bit-depth conversion is handled automatically in stream creation
+        let needs_resampling = !rate_match;
 
         // Create stream config using the selected configuration
         let stream_config = StreamConfig {
@@ -757,23 +783,52 @@ impl AudioConsumer {
     /// * `source_spec` - The signal specification from symphonia.
     /// * `current_position` - Shared atomic for tracking actual playback position.
     ///
+    /// # Returns
+    ///
+    /// A tuple of the `AudioConsumer` and the actual target `OutputConfig`.
+    ///
     /// # Errors
     ///
     /// Returns `OutputError` if the output configuration cannot be determined.
     pub fn new(
-        output: AudioOutput,
+        mut output: AudioOutput,
         consumer: Consumer<f32>,
         source_format: &AudioFormat,
         source_spec: &SignalSpec,
         current_position: Arc<AtomicU64>,
-    ) -> Result<Self, OutputError> {
+    ) -> Result<(Self, OutputConfig), OutputError> {
         let (target_config, needs_resampling) =
             output.get_target_config(source_format, source_spec)?;
 
-        let mut output = output;
+        let sample_format = output
+            .device
+            .default_output_config()
+            .map_err(|_| OutputError::NoDeviceFound)?
+            .sample_format();
+
+        let bits_per_sample = match sample_format {
+            U8 | I8 => 8,
+            I16 | U16 => 16,
+            I24 | U24 => 24,
+            F64 | I64 | U64 => 64,
+            _ => 32,
+        };
+
+        let device_name = output.device.description().map(|d| d.to_string()).ok();
+
+        let target_output_config = OutputConfig {
+            sample_rate: target_config.sample_rate,
+            channels: target_config.channels,
+            buffer_duration_ms: output.config.buffer_duration_ms,
+            exclusive_mode: output.config.exclusive_mode,
+            device_name,
+            bits_per_sample,
+            is_resampling: needs_resampling,
+        };
+
         output.is_resampling = needs_resampling;
 
-        if needs_resampling {
+        let consumer = if needs_resampling {
             // Create ring buffers for resampling
             let buffer_size = 8192; // Larger buffer for resampling
             let (resampled_producer, resampled_consumer) = RingBuffer::<f32>::new(buffer_size);
@@ -788,20 +843,22 @@ impl AudioConsumer {
             .map_err(|e| OutputError::ResamplingError(e.to_string()))?;
 
             info!("Created resampling audio consumer");
-            Ok(AudioConsumer::Resampling {
+            AudioConsumer::Resampling {
                 output,
                 resampling_consumer,
                 resampled_consumer,
                 current_position,
-            })
+            }
         } else {
             info!("Created direct audio consumer (no resampling needed)");
-            Ok(AudioConsumer::Direct {
+            AudioConsumer::Direct {
                 output,
                 consumer,
                 current_position,
-            })
-        }
+            }
+        };
+
+        Ok((consumer, target_output_config))
     }
 
     /// Runs the audio consumption loop.
