@@ -277,6 +277,7 @@ impl PlayerBar {
         Label::builder()
             .label(initial_text)
             .halign(Start)
+            .hexpand(false)
             .xalign(0.0)
             .css_classes(css_classes)
             .ellipsize(End)
@@ -332,15 +333,12 @@ impl PlayerBar {
             .build();
         left_section.append(&artwork_container);
 
-        // Fixed-width track info container
+        // Track info labels container (wrapped in ScrolledWindow for width enforcement below)
         let track_info_container = GtkBox::builder()
             .orientation(Vertical)
             .spacing(2)
             .hexpand(false)
             .vexpand(false)
-            .width_request(320)
-            .halign(Start)
-            .valign(Center)
             .build();
 
         let title_label = Self::create_metadata_label("No track loaded", &[]);
@@ -355,7 +353,20 @@ impl PlayerBar {
         let format_label = Self::create_metadata_label("", &["dim-label"]);
         track_info_container.append(format_label.upcast_ref::<Widget>());
 
-        left_section.append(&track_info_container);
+        let track_info_wrapper = ScrolledWindow::builder()
+            .hscrollbar_policy(Never)
+            .vscrollbar_policy(Never)
+            .width_request(320) // Fixed wrapper width (320px)
+            .propagate_natural_width(false)
+            .propagate_natural_height(false)
+            .has_frame(false)
+            .min_content_width(200) // Ensure child box has reasonable minimum (200px)
+            .hexpand(false)
+            .vexpand(false)
+            .child(&track_info_container)
+            .build();
+
+        left_section.append(&track_info_wrapper);
 
         (
             left_section,
