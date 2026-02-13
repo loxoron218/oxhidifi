@@ -19,7 +19,7 @@ use {
         },
         prelude::{AccessibleExt, BoxExt, Cast, ObjectExt, WidgetExt},
     },
-    tracing::{debug, error},
+    tracing::{debug, error, warn},
 };
 
 use crate::{
@@ -276,25 +276,81 @@ impl AlbumGridView {
             compact,
         };
 
-        let flow_box = FlowBox::builder()
-            .halign(Fill) // Fill available horizontal space instead of centering
+        let flow_box = Self::create_flow_box();
+
+        let (main_container, empty_state, search_empty_state) =
+            Self::create_main_container(&flow_box, app_state);
+
+        let album_cards = Rc::new(RefCell::new(Vec::new()));
+
+        let zoom_subscription_handle =
+            Self::create_zoom_subscription(app_state, &flow_box, &config, &album_cards);
+
+        let settings_subscription_handle =
+            Self::create_settings_subscription(app_state, &album_cards);
+
+        let mut view = Self {
+            widget: main_container.upcast_ref::<Widget>().clone(),
+            flow_box,
+            app_state: app_state.cloned(),
+            library_db: library_db.cloned(),
+            audio_engine: audio_engine.cloned(),
+            queue_manager: queue_manager.cloned(),
+            albums: Vec::new(),
+            all_albums: albums.clone(),
+            config,
+            empty_state,
+            search_empty_state,
+            current_sort: AlbumSortCriteria::Title,
+            album_cards: album_cards.clone(),
+            _zoom_subscription_handle: zoom_subscription_handle,
+            _settings_subscription_handle: settings_subscription_handle,
+        };
+
+        view.set_albums(albums);
+
+        view
+    }
+
+    /// Creates the flow box widget for the grid layout.
+    ///
+    /// # Returns
+    ///
+    /// A configured `FlowBox` widget.
+    fn create_flow_box() -> FlowBox {
+        FlowBox::builder()
+            .halign(Fill)
             .valign(Start)
             .width_request(360)
             .homogeneous(true)
-            .max_children_per_line(100) // Will be adjusted based on available width
+            .max_children_per_line(100)
             .selection_mode(SelectionNone)
-            .row_spacing(6) // 6px row spacing per GNOME HIG
-            .column_spacing(6) // 6px column spacing per GNOME HIG
-            .margin_top(24) // 24px margins as specified
+            .row_spacing(6)
+            .column_spacing(6)
+            .margin_top(24)
             .margin_bottom(24)
             .margin_start(24)
             .margin_end(24)
-            .hexpand(true) // Expand horizontally to fill available space
+            .hexpand(true)
             .vexpand(false)
             .css_classes(["album-grid"])
-            .build();
+            .build()
+    }
 
-        // Create main container that can hold both flow box and empty state
+    /// Creates the main container and empty state components.
+    ///
+    /// # Arguments
+    ///
+    /// * `flow_box` - The flow box widget to add to the container
+    /// * `app_state` - Optional application state reference
+    ///
+    /// # Returns
+    ///
+    /// A tuple of (`main_container`, `empty_state`, `search_empty_state`).
+    fn create_main_container(
+        flow_box: &FlowBox,
+        app_state: Option<&Arc<AppState>>,
+    ) -> (Box, Option<EmptyState>, SearchEmptyState) {
         let main_container = Box::builder().orientation(Vertical).build();
 
         main_container.append(&flow_box.clone().upcast::<Widget>());
@@ -306,11 +362,11 @@ impl AlbumGridView {
         let empty_state = app_state.as_ref().map(|state| {
             EmptyState::new(
                 Some(Arc::clone(state)),
-                None, // Will be set later when we have access to settings
+                None,
                 EmptyStateConfig {
                     is_album_view: true,
                 },
-                None, // Will be set later when we have access to window
+                None,
             )
         });
 
@@ -324,35 +380,63 @@ impl AlbumGridView {
         main_container.append(search_empty_state.widget());
         search_empty_state.hide();
 
-        let album_cards = Rc::new(RefCell::new(Vec::new()));
+        (main_container, empty_state, search_empty_state)
+    }
 
-        let mut view = Self {
-            widget: main_container.upcast_ref::<Widget>().clone(),
-            flow_box: flow_box.clone(),
-            app_state: app_state.cloned(),
-            library_db: library_db.cloned(),
-            audio_engine: audio_engine.cloned(),
-            queue_manager: queue_manager.cloned(),
-            albums: Vec::new(),
-            all_albums: albums.clone(),
-            config: config.clone(),
-            empty_state,
-            search_empty_state,
-            current_sort: AlbumSortCriteria::Title, // Default sort by Title
-            album_cards: album_cards.clone(),
-            _zoom_subscription_handle: if let Some(state) = app_state {
-                // Subscribe to zoom changes
-                let state_clone: Arc<AppState> = state.clone();
-                let flow_box_clone = flow_box.clone();
-                let config_clone = config.clone();
-                let album_cards_clone = album_cards.clone();
-                let handle = MainContext::default().spawn_local(async move {
-                    let rx = state_clone.zoom_manager.subscribe();
-                    while let Ok(event) = rx.recv().await {
-                        if let GridZoomChanged(_) = event {
-                            // Rebuild all album items with new zoom level
-                            // Get current library state
-                            let library_state = state_clone.get_library_state();
+    /// Creates the zoom subscription handler.
+    ///
+    /// # Arguments
+    ///
+    /// * `app_state` - Optional application state reference
+    /// * `flow_box` - The flow box widget
+    /// * `config` - The album grid view configuration
+    /// * `album_cards` - The album cards reference
+    ///
+    /// # Returns
+    ///
+    /// An optional join handle for the subscription.
+    fn create_zoom_subscription(
+        app_state: Option<&Arc<AppState>>,
+        flow_box: &FlowBox,
+        config: &AlbumGridViewConfig,
+        album_cards: &Rc<RefCell<Vec<AlbumCard>>>,
+    ) -> Option<JoinHandle<()>> {
+        app_state.map(|state| {
+            let state_clone = state.clone();
+            let flow_box_clone = flow_box.clone();
+            let config_clone = config.clone();
+            let album_cards_clone = album_cards.clone();
+            MainContext::default().spawn_local(async move {
+                let rx = state_clone.zoom_manager.subscribe();
+                while let Ok(event) = rx.recv().await {
+                    if let GridZoomChanged(_) = event {
+                        // Rebuild all album items with new zoom level
+                        // Get current library state
+                        let library_state = state_clone.get_library_state();
+                        let cover_size_i32 = state_clone.zoom_manager.get_grid_cover_dimensions().0;
+                        let show_dr_badge = state_clone
+                            .get_settings_manager()
+                            .read()
+                            .get_settings()
+                            .show_dr_values;
+
+                        let mut cards = album_cards_clone.borrow_mut();
+
+                        if cards.len() == library_state.albums.len() {
+                            // Album list unchanged, just update existing cards
+                            for (album, card) in library_state.albums.iter().zip(cards.iter_mut()) {
+                                if album.id == card.album_id {
+                                    let size = Self::cover_size_to_u32(cover_size_i32);
+                                    card.cover_art.update_dimensions(
+                                        i32::try_from(size).unwrap_or(cover_size_i32),
+                                        i32::try_from(size).unwrap_or(cover_size_i32),
+                                    );
+                                    card.update_dr_badge_visibility(show_dr_badge);
+                                }
+                            }
+                        } else {
+                            // Album list changed, need to rebuild
+                            drop(cards);
 
                             // Clear existing children
                             while let Some(child) = flow_box_clone.first_child() {
@@ -363,29 +447,17 @@ impl AlbumGridView {
                             // Add new album items with updated dimensions
                             for album in &library_state.albums {
                                 // Look up artist name from app state
-                                let artist_name = {
-                                    library_state
-                                        .artists
-                                        .iter()
-                                        .find(|artist| artist.id == album.artist_id)
-                                        .map_or_else(
-                                            || "Unknown Artist".to_string(),
-                                            |artist| artist.name.clone(),
-                                        )
-                                };
+                                let artist_name = library_state
+                                    .artists
+                                    .iter()
+                                    .find(|artist| artist.id == album.artist_id)
+                                    .map_or_else(
+                                        || "Unknown Artist".to_string(),
+                                        |artist| artist.name.clone(),
+                                    );
 
                                 // Create album card with proper callbacks
                                 let format = create_format_display(album).unwrap_or_default();
-
-                                // Get cover size from zoom manager
-                                let cover_size =
-                                    state_clone.zoom_manager.get_grid_cover_dimensions().0;
-
-                                let show_dr_badge = state_clone
-                                    .get_settings_manager()
-                                    .read()
-                                    .get_settings()
-                                    .show_dr_values;
 
                                 let album_card = AlbumCard::builder()
                                     .album(album.clone())
@@ -393,10 +465,7 @@ impl AlbumGridView {
                                     .format(format)
                                     .show_dr_badge(show_dr_badge)
                                     .compact(config_clone.compact)
-                                    .cover_size(
-                                        u32::try_from(cover_size)
-                                            .expect("cover_size should be within u32 range"),
-                                    )
+                                    .cover_size(Self::cover_size_to_u32(cover_size_i32))
                                     .on_card_clicked({
                                         let app_state_inner = state_clone.clone();
                                         let album_clone = album.clone();
@@ -413,57 +482,58 @@ impl AlbumGridView {
                             }
                         }
                     }
-                });
-                Some(handle)
-            } else {
-                None
-            },
-            _settings_subscription_handle: if let Some(state) = app_state {
-                // Subscribe to settings changes
-                let state_clone: Arc<AppState> = state.clone();
-                let album_cards_clone = album_cards.clone();
-                let handle = MainContext::default().spawn_local(async move {
-                    let rx = state_clone.subscribe();
-                    while let Ok(event) = rx.recv().await {
-                        match event {
-                            SettingsChanged { show_dr_values } => {
-                                // Update all album cards with new DR badge visibility
-                                let mut cards = album_cards_clone.borrow_mut();
-                                for card in cards.iter_mut() {
-                                    card.update_dr_badge_visibility(show_dr_values);
-                                }
-                            }
-                            MetadataOverlaysChanged { show_overlays } => {
-                                // Update all album cards with new metadata overlay visibility
-                                let mut cards = album_cards_clone.borrow_mut();
-                                for card in cards.iter_mut() {
-                                    card.update_metadata_overlay_visibility(show_overlays);
-                                }
-                            }
-                            YearDisplayModeChanged { mode } => {
-                                // Update all album cards with new year display mode
-                                // For now, this doesn't change anything since we only have release year
-                                // In the future, when original_year is implemented, this will update
-                                // the year labels to show either release or original year
-                                debug!("Year display mode changed to: {}", mode);
+                }
+            })
+        })
+    }
 
-                                // Note: This is a placeholder for future implementation
-                                // when original_year field is added to the Album model
+    /// Creates the settings subscription handler.
+    ///
+    /// # Arguments
+    ///
+    /// * `app_state` - Optional application state reference
+    /// * `album_cards` - The album cards reference
+    ///
+    /// # Returns
+    ///
+    /// An optional join handle for the subscription.
+    fn create_settings_subscription(
+        app_state: Option<&Arc<AppState>>,
+        album_cards: &Rc<RefCell<Vec<AlbumCard>>>,
+    ) -> Option<JoinHandle<()>> {
+        app_state.map(|state| {
+            let state_clone = state.clone();
+            let album_cards_clone = album_cards.clone();
+            MainContext::default().spawn_local(async move {
+                let rx = state_clone.subscribe();
+                while let Ok(event) = rx.recv().await {
+                    match event {
+                        SettingsChanged { show_dr_values } => {
+                            // Update all album cards with new DR badge visibility
+                            let mut cards = album_cards_clone.borrow_mut();
+                            for card in cards.iter_mut() {
+                                card.update_dr_badge_visibility(show_dr_values);
                             }
-                            _ => {}
                         }
+                        MetadataOverlaysChanged { show_overlays } => {
+                            // Update all album cards with new metadata overlay visibility
+                            let mut cards = album_cards_clone.borrow_mut();
+                            for card in cards.iter_mut() {
+                                card.update_metadata_overlay_visibility(show_overlays);
+                            }
+                        }
+                        YearDisplayModeChanged { mode } => {
+                            // Update all album cards with new year display mode
+                            // For now, this doesn't change anything since we only have release year
+                            // In the future, when original_year is implemented, this will update
+                            // the year labels to show either release or original year
+                            debug!("Year display mode changed to: {}", mode);
+                        }
+                        _ => {}
                     }
-                });
-                Some(handle)
-            } else {
-                None
-            },
-        };
-
-        // Populate with initial albums
-        view.set_albums(albums);
-
-        view
+                }
+            })
+        })
     }
 
     /// Creates an `AlbumGridView` builder for configuration.
@@ -564,7 +634,7 @@ impl AlbumGridView {
 
         let format = create_format_display(album).unwrap_or_default();
 
-        let cover_size = self.get_cover_size();
+        let cover_size_i32 = self.get_cover_size();
 
         let (show_dr_badge, show_metadata_overlays) = self.get_visibility_settings();
 
@@ -574,7 +644,7 @@ impl AlbumGridView {
             .format(format)
             .show_dr_badge(show_dr_badge)
             .compact(self.config.compact)
-            .cover_size(u32::try_from(cover_size).expect("cover_size should be within u32 range"))
+            .cover_size(Self::cover_size_to_u32(cover_size_i32))
             .on_play_clicked(self.create_play_callback(album))
             .on_card_clicked(self.create_card_click_callback(album))
             .build();
@@ -640,6 +710,24 @@ impl AlbumGridView {
             (settings.show_dr_values, settings.show_metadata_overlays)
         } else {
             (self.config.show_dr_badges, true)
+        }
+    }
+
+    /// Converts cover size from i32 to u32 with fallback.
+    ///
+    /// # Arguments
+    ///
+    /// * `size` - Cover size as i32
+    ///
+    /// # Returns
+    ///
+    /// Cover size as u32, falling back to 180 if negative or out of range.
+    fn cover_size_to_u32(size: i32) -> u32 {
+        if size <= 0 {
+            warn!(cover_size = size, "Invalid cover size, using fallback");
+            180
+        } else {
+            u32::try_from(size).unwrap_or(180)
         }
     }
 
