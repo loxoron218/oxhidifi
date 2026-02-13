@@ -19,6 +19,7 @@ use libadwaita::{
 };
 
 use crate::{
+    error::domain::UiError::{self, BuilderError, InvalidCoverWidth, WidgetError},
     library::models::Album,
     ui::{
         components::{cover_art::CoverArt, dr_badge::DRBadge, play_overlay::PlayOverlay},
@@ -178,15 +179,16 @@ impl AlbumCardBuilder {
     ///
     /// # Returns
     ///
-    /// A new `AlbumCard` instance.
+    /// A `Result` containing the new `AlbumCard` instance or an error.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics if the album has not been set before building.
-    #[must_use]
-    pub fn build(self) -> AlbumCard {
+    /// Returns `UiError::BuilderError` if the album has not been set before building.
+    pub fn build(self) -> Result<AlbumCard, UiError> {
         AlbumCard::new(AlbumCardConfig {
-            album: self.album.expect("Album must be set"),
+            album: self
+                .album
+                .ok_or_else(|| BuilderError("Album must be set".to_string()))?,
             artist_name: self
                 .artist_name
                 .unwrap_or_else(|| "Unknown Artist".to_string()),
@@ -263,13 +265,12 @@ impl AlbumCard {
     ///
     /// # Returns
     ///
-    /// A new `AlbumCard` instance.
+    /// A `Result` containing the new `AlbumCard` instance or an error.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics if the `CoverArt` widget is not an Overlay (should never happen with proper widget construction).
-    #[must_use]
-    pub fn new(config: AlbumCardConfig) -> Self {
+    /// Returns `UiError::InvalidCoverWidth` if cover dimensions exceed i32 bounds.
+    pub fn new(config: AlbumCardConfig) -> Result<Self, UiError> {
         let AlbumCardConfig {
             album,
             artist_name,
@@ -286,19 +287,18 @@ impl AlbumCard {
         let base_cover_size = cover_size.unwrap_or(if compact { 120 } else { 180 });
         let (cover_width, cover_height) = (base_cover_size, base_cover_size);
 
+        let cover_width_i32 =
+            i32::try_from(cover_width).map_err(|_| InvalidCoverWidth { cover_width })?;
+        let cover_height_i32 = i32::try_from(cover_height).map_err(|_| InvalidCoverWidth {
+            cover_width: cover_height,
+        })?;
+
         // Create cover art with DR badge if enabled
         let cover_art = CoverArt::builder()
             .artwork_path(album.artwork_path.as_deref().unwrap_or(&album.path))
             .dr_value(album.dr_value.clone().unwrap_or_else(|| "N/A".to_string()))
             .show_dr_badge(show_dr_badge)
-            .dimensions(
-                i32::try_from(cover_width).expect(
-                    "AlbumCard cover_width (u32) should fit in i32 for GTK widget dimensions",
-                ),
-                i32::try_from(cover_height).expect(
-                    "AlbumCard cover_height (u32) should fit in i32 for GTK widget dimensions",
-                ),
-            )
+            .dimensions(cover_width_i32, cover_height_i32)
             .build();
 
         // Create play overlay with CSS-based hover handling
@@ -320,12 +320,15 @@ impl AlbumCard {
         let cover_art_overlay = cover_art
             .widget
             .downcast_ref::<Overlay>()
-            .expect("CoverArt widget should be an Overlay");
+            .ok_or_else(|| WidgetError("CoverArt widget should be an Overlay".to_string()))?;
         cover_art_overlay.add_overlay(&play_overlay.widget);
 
         // The cover_art widget already includes proper overlay handling and sizing
         // Just use it directly as the cover container
         let cover_container = cover_art.widget.clone();
+
+        let title_max = i32::try_from(((cover_width - 16) / 10).max(8))
+            .map_err(|_| UiError::InvalidCoverWidth { cover_width })?;
 
         // Create title label
         let title_label = Label::builder()
@@ -334,9 +337,7 @@ impl AlbumCard {
             .xalign(0.0)
             .ellipsize(EllipsizeEnd)
             .lines(2)
-            .max_width_chars(i32::try_from(((cover_width - 16) / 10).max(8)).expect(
-                "AlbumCard title max_width_chars calculation should fit in i32 for GTK label",
-            )) // Dynamic calculation as per spec
+            .max_width_chars(title_max) // Dynamic calculation as per spec
             .tooltip_text(&album.title)
             .css_classes(["album-title-label"])
             .build();
@@ -352,6 +353,9 @@ impl AlbumCard {
 
         title_area.append(title_label.upcast_ref::<Widget>());
 
+        let artist_max = i32::try_from(((cover_width - 16) / 10).max(8))
+            .map_err(|_| InvalidCoverWidth { cover_width })?;
+
         // Create artist label
         let artist_label = Label::builder()
             .label(&artist_name)
@@ -359,9 +363,7 @@ impl AlbumCard {
             .xalign(0.0)
             .ellipsize(EllipsizeEnd)
             .lines(1)
-            .max_width_chars(i32::try_from(((cover_width - 16) / 10).max(8)).expect(
-                "AlbumCard artist max_width_chars calculation should fit in i32 for GTK label",
-            )) // Dynamic calculation
+            .max_width_chars(artist_max) // Dynamic calculation
             .tooltip_text(&artist_name)
             .css_classes(["album-artist-label"])
             .build();
@@ -371,16 +373,16 @@ impl AlbumCard {
             // If no explicit format provided, try to create one from album metadata
             create_format_display(&album).unwrap_or_default()
         });
+
+        let format_max = i32::try_from((((cover_width - 16) / 2) / 10).max(8))
+            .map_err(|_| InvalidCoverWidth { cover_width })?;
+
         let mut format_label_builder = Label::builder()
             .label(&format_info)
             .halign(Start)
             .xalign(0.0)
             .lines(1)
-            .max_width_chars(
-                i32::try_from((((cover_width - 16) / 2) / 10).max(8)).expect(
-                    "AlbumCard format max_width_chars calculation should fit in i32 for GTK label",
-                ),
-            ) // Dynamic calculation
+            .max_width_chars(format_max) // Dynamic calculation
             .css_classes(["album-format-label"]);
 
         if !format_info.is_empty() {
@@ -478,7 +480,7 @@ impl AlbumCard {
             });
         }
 
-        Self {
+        Ok(Self {
             widget: child.upcast_ref::<Widget>().clone(),
             album_tile,
             cover_art,
@@ -492,7 +494,7 @@ impl AlbumCard {
             title_area,
             metadata_container,
             album_id: album.id,
-        }
+        })
     }
 
     /// Creates an `AlbumCard` builder for configuration.
@@ -583,6 +585,33 @@ impl AlbumCard {
         self.title_area.set_visible(show_overlays);
         self.metadata_container.set_visible(show_overlays);
     }
+
+    /// Updates the `max_width_chars` for labels based on new cover size.
+    ///
+    /// # Arguments
+    ///
+    /// * `cover_width` - New cover width in pixels
+    ///
+    /// # Returns
+    ///
+    /// A `Result` indicating success or failure with conversion error.
+    ///
+    /// # Errors
+    ///
+    /// Returns `UiError::InvalidCoverWidth` if the cover width exceeds i32 bounds.
+    pub fn update_label_max_width_chars(&self, cover_width: u32) -> Result<(), UiError> {
+        let title_max = i32::try_from(((cover_width - 16) / 10).max(8))
+            .map_err(|_| InvalidCoverWidth { cover_width })?;
+        let artist_max = i32::try_from(((cover_width - 16) / 10).max(8))
+            .map_err(|_| InvalidCoverWidth { cover_width })?;
+        let format_max = i32::try_from((((cover_width - 16) / 2) / 10).max(8))
+            .map_err(|_| InvalidCoverWidth { cover_width })?;
+
+        self.title_label.set_max_width_chars(title_max);
+        self.artist_label.set_max_width_chars(artist_max);
+        self.format_label.set_max_width_chars(format_max);
+        Ok(())
+    }
 }
 
 impl Default for AlbumCard {
@@ -614,6 +643,7 @@ impl Default for AlbumCard {
             on_play_clicked: None,
             on_card_clicked: None,
         })
+        .expect("Default AlbumCard creation should never fail")
     }
 }
 
@@ -626,7 +656,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_album_card_builder() {
+    fn test_album_card_builder() -> Result<(), Box<dyn std::error::Error>> {
         let dummy_album = Album {
             id: 1,
             artist_id: 1,
@@ -648,9 +678,10 @@ mod tests {
             .album(dummy_album)
             .show_dr_badge(true)
             .compact(false)
-            .build();
+            .build()?;
 
         assert!(card.dr_badge.is_some());
+        Ok(())
     }
 
     #[test]
@@ -662,7 +693,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_album_card_sample_rate_decimal_formatting() {
+    fn test_album_card_sample_rate_decimal_formatting() -> Result<(), Box<dyn std::error::Error>> {
         // Test 44.1 kHz sample rate in album card
         let album_441 = Album {
             id: 1,
@@ -686,7 +717,7 @@ mod tests {
             .artist_name("Test Artist".to_string())
             .show_dr_badge(true)
             .compact(false)
-            .build();
+            .build()?;
 
         // The format label should contain "FLAC 24/44.1"
         let format_text = card_441.format_label.text().to_string();
@@ -710,7 +741,7 @@ mod tests {
             cover_size: None,
             on_play_clicked: None,
             on_card_clicked: None,
-        });
+        })?;
 
         let format_text_882 = card_882.format_label.text().to_string();
         assert_eq!(
@@ -733,12 +764,13 @@ mod tests {
             cover_size: None,
             on_play_clicked: None,
             on_card_clicked: None,
-        });
+        })?;
 
         let format_text_96 = card_96.format_label.text().to_string();
         assert_eq!(
             format_text_96, "FLAC 24/96",
             "Expected 'FLAC 24/96' but got '{format_text_96}'"
         );
+        Ok(())
     }
 }

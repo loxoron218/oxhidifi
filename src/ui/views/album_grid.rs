@@ -29,7 +29,7 @@ use crate::{
         metadata::TagReader,
         queue_manager::QueueManager,
     },
-    error::audio_reporting::handle_exclusive_mode_error,
+    error::{audio_reporting::handle_exclusive_mode_error, domain::UiError},
     library::{LibraryDatabase, models::Album},
     state::{
         AppState, LibraryState,
@@ -432,6 +432,9 @@ impl AlbumGridView {
                                         i32::try_from(size).unwrap_or(cover_size_i32),
                                     );
                                     card.update_dr_badge_visibility(show_dr_badge);
+                                    if let Err(e) = card.update_label_max_width_chars(size) {
+                                        error!(error = %e, "Failed to update label max width chars for album {}", album.title);
+                                    }
                                 }
                             }
                         } else {
@@ -459,7 +462,7 @@ impl AlbumGridView {
                                 // Create album card with proper callbacks
                                 let format = create_format_display(album).unwrap_or_default();
 
-                                let album_card = AlbumCard::builder()
+                                let album_card = match AlbumCard::builder()
                                     .album(album.clone())
                                     .artist_name(artist_name)
                                     .format(format)
@@ -475,7 +478,13 @@ impl AlbumGridView {
                                             ));
                                         }
                                     })
-                                    .build();
+                                    .build() {
+                                    Ok(card) => card,
+                                    Err(e) => {
+                                        error!(error = %e, album_id = album.id, "Failed to build album card in zoom subscription");
+                                        continue;
+                                    }
+                                };
 
                                 album_cards_clone.borrow_mut().push(album_card.clone());
                                 flow_box_clone.insert(&album_card.widget, -1);
@@ -590,9 +599,15 @@ impl AlbumGridView {
 
         // Add new album items using the new AlbumCard component
         for album in &self.albums {
-            let album_card = self.create_album_card(album);
-            self.flow_box.insert(&album_card.widget, -1);
-            self.album_cards.borrow_mut().push(album_card);
+            match self.create_album_card(album) {
+                Ok(album_card) => {
+                    self.flow_box.insert(&album_card.widget, -1);
+                    self.album_cards.borrow_mut().push(album_card);
+                }
+                Err(e) => {
+                    error!(error = %e, album_id = album.id, "Failed to create album card");
+                }
+            }
         }
 
         // Hide search empty state when showing albums
@@ -628,8 +643,12 @@ impl AlbumGridView {
     ///
     /// # Returns
     ///
-    /// A new `AlbumCard` instance.
-    fn create_album_card(&self, album: &Album) -> AlbumCard {
+    /// A `Result` containing the new `AlbumCard` instance or an error.
+    ///
+    /// # Errors
+    ///
+    /// Returns `UiError` if the album card creation fails.
+    fn create_album_card(&self, album: &Album) -> Result<AlbumCard, UiError> {
         let artist_name = self.resolve_artist_name(album);
 
         let format = create_format_display(album).unwrap_or_default();
@@ -647,12 +666,12 @@ impl AlbumGridView {
             .cover_size(Self::cover_size_to_u32(cover_size_i32))
             .on_play_clicked(self.create_play_callback(album))
             .on_card_clicked(self.create_card_click_callback(album))
-            .build();
+            .build()?;
 
         // Apply metadata overlay visibility setting
         album_card.update_metadata_overlay_visibility(show_metadata_overlays);
 
-        album_card
+        Ok(album_card)
     }
 
     /// Resolves the artist name for an album.

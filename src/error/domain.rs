@@ -77,6 +77,9 @@ pub enum UiError {
         album_id: i64,
         album_title: String,
     },
+    /// Invalid cover width value that exceeds i32 bounds.
+    #[error("Invalid cover width {cover_width} exceeds i32 bounds for GTK widget")]
+    InvalidCoverWidth { cover_width: u32 },
 }
 
 /// Operational error context propagation with `anyhow`.
