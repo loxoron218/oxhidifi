@@ -236,7 +236,7 @@ impl ListView {
         }
     }
 
-    /// Handles zoom change events by rebuilding the list with updated cover sizes.
+    /// Handles zoom change events by updating existing widgets with new cover sizes.
     ///
     /// # Arguments
     ///
@@ -244,7 +244,7 @@ impl ListView {
     /// * `list_box` - List box widget to rebuild
     /// * `view_type` - Type of items to display (albums or artists)
     /// * `config` - Configuration options for the list view
-    /// * `cover_arts` - Cover arts collection to clear and refill
+    /// * `cover_arts` - Cover arts collection to update
     fn rebuild_list_on_zoom(
         state: &Arc<AppState>,
         list_box: &ListBox,
@@ -255,33 +255,70 @@ impl ListView {
         // Rebuild all list items with new zoom level
         // Get current library state
         let library_state = state.get_library_state();
-
-        // Clear existing children
-        while let Some(child) = list_box.first_child() {
-            list_box.remove(&child);
-        }
-        cover_arts.borrow_mut().clear();
-
         let cover_size = Self::get_cover_size(state);
+        let show_dr_badge = should_show_dr_badge(Some(state));
+        let cover_size_i32 = match i32::try_from(cover_size) {
+            Ok(size) => size,
+            Err(e) => {
+                error!(error = %e, "Failed to convert cover size to i32, using default 48");
+                48
+            }
+        };
 
-        // Rebuild list with updated dimensions
         match view_type {
             ListViewType::Albums => {
-                for album in &library_state.albums {
-                    let row = create_album_row_with_zoom(
-                        album,
-                        Some(state),
-                        config,
-                        cover_size,
-                        cover_arts,
-                    );
-                    list_box.append(&row);
+                let mut cover_arts_guard = cover_arts.borrow_mut();
+
+                if cover_arts_guard.len() == library_state.albums.len() {
+                    // Album list unchanged, just update existing cover arts
+                    for cover_art in cover_arts_guard.iter_mut() {
+                        cover_art.update_dimensions(cover_size_i32, cover_size_i32);
+                        cover_art.set_show_dr_badge(show_dr_badge);
+                    }
+                } else {
+                    // Album list changed, need to rebuild
+                    drop(cover_arts_guard);
+
+                    // Clear existing children
+                    while let Some(child) = list_box.first_child() {
+                        list_box.remove(&child);
+                    }
+                    cover_arts.borrow_mut().clear();
+
+                    for album in &library_state.albums {
+                        let row = create_album_row_with_zoom(
+                            album,
+                            Some(state),
+                            config,
+                            cover_size,
+                            cover_arts,
+                        );
+                        list_box.append(&row);
+                    }
                 }
             }
             ListViewType::Artists => {
-                for artist in &library_state.artists {
-                    let row = create_artist_row_with_zoom(artist, Some(state), config, cover_size);
-                    list_box.append(&row);
+                let mut cover_arts_guard = cover_arts.borrow_mut();
+
+                if cover_arts_guard.len() == library_state.artists.len() {
+                    // Artist list unchanged, just update existing cover arts
+                    for cover_art in cover_arts_guard.iter_mut() {
+                        cover_art.update_dimensions(cover_size_i32, cover_size_i32);
+                    }
+                } else {
+                    // Artist list changed, need to rebuild
+                    drop(cover_arts_guard);
+
+                    while let Some(child) = list_box.first_child() {
+                        list_box.remove(&child);
+                    }
+                    cover_arts.borrow_mut().clear();
+
+                    for artist in &library_state.artists {
+                        let row =
+                            create_artist_row_with_zoom(artist, Some(state), config, cover_size);
+                        list_box.append(&row);
+                    }
                 }
             }
         }
