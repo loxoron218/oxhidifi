@@ -943,9 +943,34 @@ impl AlbumGridView {
         // Apply sort to current albums and refresh display
         self.apply_sort();
 
-        // Re-display sorted albums - this creates unnecessary object churn but preserves the pattern
-        // In a real implementation we would just re-order children or use a SortListModel
-        self.set_albums(self.albums.clone());
+        let _freeze_guard = self.flow_box.freeze_notify();
+
+        let mut album_cards = self.album_cards.borrow_mut();
+
+        // Sort album_cards to match the new album order
+        album_cards.sort_by(|a, b| {
+            self.albums
+                .iter()
+                .position(|album| album.id == a.album_id)
+                .unwrap_or(usize::MAX)
+                .cmp(
+                    &self
+                        .albums
+                        .iter()
+                        .position(|album| album.id == b.album_id)
+                        .unwrap_or(usize::MAX),
+                )
+        });
+
+        // Remove all children from flow_box
+        while let Some(child) = self.flow_box.first_child() {
+            self.flow_box.remove(&child);
+        }
+
+        // Re-insert children in the sorted order
+        for card in album_cards.iter() {
+            self.flow_box.insert(&card.widget, -1);
+        }
     }
 
     /// Applies the current sort criteria to the albums vector.
