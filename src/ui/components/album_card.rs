@@ -282,10 +282,74 @@ impl AlbumCard {
             on_card_clicked,
         } = config;
 
-        // Determine base cover dimensions based on cover_size parameter or compact mode
-        // These are starting points that will be adjusted by the parent container
+        let (cover_width, cover_height) = Self::calculate_cover_dimensions(compact, cover_size)?;
+
+        let cover_art = Self::create_cover_art(&album, show_dr_badge, cover_width, cover_height);
+
+        let play_overlay = Self::create_play_overlay(&cover_art)?;
+
+        let (title_label, title_area) = Self::create_title_section(&album.title, cover_width);
+
+        let artist_label = Self::create_artist_label(&artist_name, cover_width);
+
+        let (format_label, year_label, metadata_container) =
+            Self::create_metadata_section(&album, format, cover_width);
+
+        let album_tile = Self::create_album_tile(
+            &cover_art.widget,
+            &title_area,
+            &artist_label,
+            &metadata_container,
+            &album.title,
+            &artist_name,
+            album.year,
+        );
+
+        let child = Self::create_flow_box_child(
+            &album_tile,
+            on_play_clicked,
+            on_card_clicked,
+            &play_overlay,
+        );
+
+        Ok(Self {
+            widget: child.upcast_ref::<Widget>().clone(),
+            album_tile,
+            cover_art,
+            play_overlay,
+            dr_badge: None,
+            title_label,
+            artist_label,
+            format_label,
+            year_label,
+            artist_name,
+            title_area,
+            metadata_container,
+            album_id: album.id,
+        })
+    }
+
+    /// Calculates cover dimensions based on configuration.
+    ///
+    /// # Arguments
+    ///
+    /// * `compact` - Whether to use compact layout
+    /// * `cover_size` - Optional cover size override
+    ///
+    /// # Returns
+    ///
+    /// A tuple of (width, height) as i32 values.
+    ///
+    /// # Errors
+    ///
+    /// Returns `UiError::InvalidCoverWidth` if dimensions exceed i32 bounds.
+    fn calculate_cover_dimensions(
+        compact: bool,
+        cover_size: Option<u32>,
+    ) -> Result<(i32, i32), UiError> {
         let base_cover_size = cover_size.unwrap_or(if compact { 120 } else { 180 });
-        let (cover_width, cover_height) = (base_cover_size, base_cover_size);
+        let cover_width = base_cover_size;
+        let cover_height = base_cover_size;
 
         let cover_width_i32 =
             i32::try_from(cover_width).map_err(|_| InvalidCoverWidth { cover_width })?;
@@ -293,15 +357,49 @@ impl AlbumCard {
             cover_width: cover_height,
         })?;
 
-        // Create cover art with DR badge if enabled
-        let cover_art = CoverArt::builder()
+        Ok((cover_width_i32, cover_height_i32))
+    }
+
+    /// Creates the cover art widget for the album.
+    ///
+    /// # Arguments
+    ///
+    /// * `album` - The album data
+    /// * `show_dr_badge` - Whether to show DR badge
+    /// * `cover_width` - Cover width in pixels
+    /// * `cover_height` - Cover height in pixels
+    ///
+    /// # Returns
+    ///
+    /// The created `CoverArt` component.
+    fn create_cover_art(
+        album: &Album,
+        show_dr_badge: bool,
+        cover_width: i32,
+        cover_height: i32,
+    ) -> CoverArt {
+        CoverArt::builder()
             .artwork_path(album.artwork_path.as_deref().unwrap_or(&album.path))
             .dr_value(album.dr_value.clone().unwrap_or_else(|| "N/A".to_string()))
             .show_dr_badge(show_dr_badge)
-            .dimensions(cover_width_i32, cover_height_i32)
-            .build();
+            .dimensions(cover_width, cover_height)
+            .build()
+    }
 
-        // Create play overlay with CSS-based hover handling
+    /// Creates and configures the play overlay.
+    ///
+    /// # Arguments
+    ///
+    /// * `cover_art` - The cover art component to overlay the play button on
+    ///
+    /// # Returns
+    ///
+    /// The configured `PlayOverlay` component.
+    ///
+    /// # Errors
+    ///
+    /// Returns `UiError::WidgetError` if cover art widget is not an Overlay.
+    fn create_play_overlay(cover_art: &CoverArt) -> Result<PlayOverlay, UiError> {
         let play_overlay = PlayOverlay::builder()
             .is_playing(false)
             .show_on_hover(false)
@@ -313,9 +411,6 @@ impl AlbumCard {
         // Set explicit size for the play button
         play_overlay.widget.set_size_request(48, 48);
 
-        // DR badge is now handled by CoverArt component, so we don't need separate dr_badge field
-        let dr_badge = None;
-
         // Add play overlay to the cover art overlay
         let cover_art_overlay = cover_art
             .widget
@@ -323,22 +418,30 @@ impl AlbumCard {
             .ok_or_else(|| WidgetError("CoverArt widget should be an Overlay".to_string()))?;
         cover_art_overlay.add_overlay(&play_overlay.widget);
 
-        // The cover_art widget already includes proper overlay handling and sizing
-        // Just use it directly as the cover container
-        let cover_container = cover_art.widget.clone();
+        Ok(play_overlay)
+    }
 
-        let title_max = i32::try_from(((cover_width - 16) / 10).max(8))
-            .map_err(|_| UiError::InvalidCoverWidth { cover_width })?;
+    /// Creates the title label and title area container.
+    ///
+    /// # Arguments
+    ///
+    /// * `title` - The album title
+    /// * `cover_width` - Cover width for calculating max width chars
+    ///
+    /// # Returns
+    ///
+    /// A tuple of (`title_label`, `title_area_box`).
+    fn create_title_section(title: &str, cover_width: i32) -> (Label, Box) {
+        let title_max = Self::calculate_title_max_width(cover_width);
 
-        // Create title label
         let title_label = Label::builder()
-            .label(&album.title)
+            .label(title)
             .halign(Start)
             .xalign(0.0)
             .ellipsize(EllipsizeEnd)
             .lines(2)
-            .max_width_chars(title_max) // Dynamic calculation as per spec
-            .tooltip_text(&album.title)
+            .max_width_chars(title_max)
+            .tooltip_text(title)
             .css_classes(["album-title-label"])
             .build();
 
@@ -353,36 +456,74 @@ impl AlbumCard {
 
         title_area.append(title_label.upcast_ref::<Widget>());
 
-        let artist_max = i32::try_from(((cover_width - 16) / 10).max(8))
-            .map_err(|_| InvalidCoverWidth { cover_width })?;
+        (title_label, title_area)
+    }
 
-        // Create artist label
-        let artist_label = Label::builder()
-            .label(&artist_name)
+    /// Calculates the maximum width characters for title labels.
+    ///
+    /// # Arguments
+    ///
+    /// * `cover_width` - Cover width in pixels
+    ///
+    /// # Returns
+    ///
+    /// The calculated max width characters value.
+    fn calculate_title_max_width(cover_width: i32) -> i32 {
+        ((cover_width - 16) / 10).max(8)
+    }
+
+    /// Creates the artist label.
+    ///
+    /// # Arguments
+    ///
+    /// * `artist_name` - The artist name
+    /// * `cover_width` - Cover width for calculating max width chars
+    ///
+    /// # Returns
+    ///
+    /// The created artist label.
+    fn create_artist_label(artist_name: &str, cover_width: i32) -> Label {
+        let artist_max = ((cover_width - 16) / 10).max(8);
+
+        Label::builder()
+            .label(artist_name)
             .halign(Start)
             .xalign(0.0)
             .ellipsize(EllipsizeEnd)
             .lines(1)
-            .max_width_chars(artist_max) // Dynamic calculation
-            .tooltip_text(&artist_name)
+            .max_width_chars(artist_max)
+            .tooltip_text(artist_name)
             .css_classes(["album-artist-label"])
-            .build();
+            .build()
+    }
 
-        // Create format and year labels
-        let format_info = format.unwrap_or_else(|| {
-            // If no explicit format provided, try to create one from album metadata
-            create_format_display(&album).unwrap_or_default()
-        });
+    /// Creates the metadata section with format and year labels.
+    ///
+    /// # Arguments
+    ///
+    /// * `album` - The album data
+    /// * `format` - Optional explicit format string
+    /// * `cover_width` - Cover width for calculating max width chars
+    ///
+    /// # Returns
+    ///
+    /// A tuple of (`format_label`, `year_label`, `metadata_container`).
+    fn create_metadata_section(
+        album: &Album,
+        format: Option<String>,
+        cover_width: i32,
+    ) -> (Label, Label, Box) {
+        let format_info =
+            format.unwrap_or_else(|| create_format_display(album).unwrap_or_default());
 
-        let format_max = i32::try_from((((cover_width - 16) / 2) / 10).max(8))
-            .map_err(|_| InvalidCoverWidth { cover_width })?;
+        let format_max = (((cover_width - 16) / 2) / 10).max(8);
 
         let mut format_label_builder = Label::builder()
             .label(&format_info)
             .halign(Start)
             .xalign(0.0)
             .lines(1)
-            .max_width_chars(format_max) // Dynamic calculation
+            .max_width_chars(format_max)
             .css_classes(["album-format-label"]);
 
         if !format_info.is_empty() {
@@ -416,7 +557,33 @@ impl AlbumCard {
 
         metadata_container.append(metadata_hbox.upcast_ref::<Widget>());
 
-        // Create main album tile container with proper spacing
+        (format_label, year_label, metadata_container)
+    }
+
+    /// Creates the main album tile container.
+    ///
+    /// # Arguments
+    ///
+    /// * `cover_container` - The cover art widget
+    /// * `title_area` - The title area container
+    /// * `artist_label` - The artist label
+    /// * `metadata_container` - The metadata container
+    /// * `title` - The album title
+    /// * `artist_name` - The artist name
+    /// * `album_year` - Optional album year
+    ///
+    /// # Returns
+    ///
+    /// The configured album tile box widget.
+    fn create_album_tile(
+        cover_container: &Widget,
+        title_area: &Box,
+        artist_label: &Label,
+        metadata_container: &Box,
+        title: &str,
+        artist_name: &str,
+        album_year: Option<i64>,
+    ) -> Box {
         let album_tile = Box::builder()
             .orientation(Vertical)
             .halign(Start)
@@ -424,38 +591,81 @@ impl AlbumCard {
             .hexpand(false)
             .vexpand(false)
             .width_request(64)
-            .spacing(6) // 6px spacing per GNOME HIG
+            .spacing(6)
             .css_classes(["album-tile", "card"])
             .build();
 
-        album_tile.append(&cover_container);
-        album_tile.append(&title_area);
+        album_tile.append(cover_container);
+        album_tile.append(title_area);
         album_tile.append(artist_label.upcast_ref::<Widget>());
-        album_tile.append(&metadata_container);
+        album_tile.append(metadata_container);
 
         // Set ARIA attributes for accessibility
         album_tile.set_accessible_role(Group);
         album_tile.set_tooltip_text(Some(&format!(
-            "{} by {artist_name} ({})",
-            album.title,
-            album.year.unwrap_or(0)
+            "{title} by {artist_name} ({})",
+            album_year.unwrap_or(0)
         )));
 
-        // Create FlowBoxChild wrapper
+        album_tile
+    }
+
+    /// Creates the `FlowBoxChild` wrapper with click handlers.
+    ///
+    /// # Arguments
+    ///
+    /// * `album_tile` - The album tile widget
+    /// * `on_play_clicked` - Optional play button callback
+    /// * `on_card_clicked` - Optional card click callback
+    /// * `play_overlay` - The play overlay component
+    ///
+    /// # Returns
+    ///
+    /// The configured `FlowBoxChild` widget.
+    fn create_flow_box_child(
+        album_tile: &Box,
+        on_play_clicked: Option<Rc<dyn Fn()>>,
+        on_card_clicked: Option<Rc<dyn Fn()>>,
+        play_overlay: &PlayOverlay,
+    ) -> FlowBoxChild {
         let child = FlowBoxChild::new();
-        child.set_child(Some(&album_tile));
+        child.set_child(Some(album_tile));
         child.set_focusable(true);
 
+        Self::setup_click_handlers(
+            album_tile,
+            &child,
+            on_play_clicked,
+            on_card_clicked,
+            play_overlay,
+        );
+
+        child
+    }
+
+    /// Sets up click handlers for the album card.
+    ///
+    /// # Arguments
+    ///
+    /// * `album_tile` - The album tile widget
+    /// * `child` - The `FlowBoxChild` wrapper
+    /// * `on_play_clicked` - Optional play button callback
+    /// * `on_card_clicked` - Optional card click callback
+    /// * `play_overlay` - The play overlay component
+    fn setup_click_handlers(
+        album_tile: &Box,
+        child: &FlowBoxChild,
+        on_play_clicked: Option<Rc<dyn Fn()>>,
+        on_card_clicked: Option<Rc<dyn Fn()>>,
+        play_overlay: &PlayOverlay,
+    ) {
         // Handle click events
         // Note: FlowBoxChild handles selection/activation, but we want custom behavior
         // We use a GestureClick controller on the child widget to capture clicks
         let click_controller = GestureClick::new();
 
         // Clone for closures
-        let play_callback = on_play_clicked;
-        let card_callback = on_card_clicked;
-
-        let card_callback_clone = card_callback.clone();
+        let card_callback_clone = on_card_clicked.clone();
         click_controller.connect_released(move |_gesture, _n_press, _x, _y| {
             // If we have a card callback, trigger it
             if let Some(ref callback) = card_callback_clone {
@@ -467,34 +677,18 @@ impl AlbumCard {
         album_tile.add_controller(click_controller);
 
         // Support keyboard activation (Enter/Space)
-        if let Some(card_callback) = card_callback {
+        if let Some(card_callback) = on_card_clicked {
             child.connect_activate(move |_| {
                 card_callback();
             });
         }
 
         // Also connect the play button specifically if we have a callback
-        if let Some(play_callback) = play_callback {
+        if let Some(play_callback) = on_play_clicked {
             play_overlay.button.connect_clicked(move |_| {
                 play_callback();
             });
         }
-
-        Ok(Self {
-            widget: child.upcast_ref::<Widget>().clone(),
-            album_tile,
-            cover_art,
-            play_overlay,
-            dr_badge,
-            title_label,
-            artist_label,
-            format_label,
-            year_label,
-            artist_name,
-            title_area,
-            metadata_container,
-            album_id: album.id,
-        })
     }
 
     /// Creates an `AlbumCard` builder for configuration.
@@ -614,8 +808,17 @@ impl AlbumCard {
     }
 }
 
-impl Default for AlbumCard {
-    fn default() -> Self {
+impl AlbumCard {
+    /// Creates a default `AlbumCard` for testing purposes.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing the default `AlbumCard` instance or an error.
+    ///
+    /// # Errors
+    ///
+    /// Returns `UiError::InvalidCoverWidth` if cover dimensions exceed i32 bounds.
+    pub fn create_default() -> Result<Self, UiError> {
         let dummy_album = Album {
             id: 0,
             artist_id: 0,
@@ -643,7 +846,6 @@ impl Default for AlbumCard {
             on_play_clicked: None,
             on_card_clicked: None,
         })
-        .expect("Default AlbumCard creation should never fail")
     }
 }
 
@@ -686,9 +888,10 @@ mod tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_album_card_default() {
-        let card = AlbumCard::default();
+    fn test_album_card_create_default() -> Result<(), Box<dyn std::error::Error>> {
+        let card = AlbumCard::create_default()?;
         assert!(card.dr_badge.is_some());
+        Ok(())
     }
 
     #[test]
