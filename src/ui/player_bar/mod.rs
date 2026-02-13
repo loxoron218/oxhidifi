@@ -251,16 +251,53 @@ impl PlayerBar {
     ///
     /// Self for method chaining.
     fn connect_controls(self, state: &PlayerBarState) -> Self {
-        let play_button = self.play_button.clone();
-        let prev_button = self.prev_button.clone();
-        let next_button = self.next_button.clone();
-        let queue_manager = self.queue_manager.clone();
-        let audio_engine_for_play = self.audio_engine.clone();
-        let app_state_for_play = self.app_state.clone();
+        Self::connect_play_button(&self.play_button, &self.audio_engine, &self.app_state);
+        Self::connect_prev_button(&self.prev_button, self.queue_manager.as_ref());
+        Self::connect_next_button(&self.next_button, self.queue_manager.as_ref());
+
+        connect_seek_handler(
+            &self.progress_scale,
+            &self.current_time_label,
+            self.audio_engine.clone(),
+            state,
+        );
+
+        connect_volume_handlers(
+            &self.volume_button,
+            &self.volume_scale,
+            &self.mute_button,
+            &self.volume_mode_switch,
+        );
+
+        Self::connect_hifi_popover(&self.hifi_button, &self.hifi_popover);
+        Self::connect_volume_popover(&self.volume_button, &self.volume_popover);
+        Self::connect_exclusive_mode_button(
+            &self.exclusive_mode_button,
+            &self.app_state,
+            &self.audio_engine,
+        );
+
+        self
+    }
+
+    /// Connects the play button to toggle playback state.
+    ///
+    /// # Arguments
+    ///
+    /// * `play_button` - The play/pause toggle button
+    /// * `audio_engine` - Reference to the audio engine
+    /// * `app_state` - Reference to application state
+    fn connect_play_button(
+        play_button: &ToggleButton,
+        audio_engine: &Arc<AudioEngine>,
+        app_state: &Arc<AppState>,
+    ) {
+        let audio_engine_clone = audio_engine.clone();
+        let app_state_report = app_state.clone();
 
         play_button.connect_clicked(move |_| {
-            let audio_engine_clone = audio_engine_for_play.clone();
-            let app_state_report = app_state_for_play.clone();
+            let audio_engine_clone = audio_engine_clone.clone();
+            let app_state_report = app_state_report.clone();
 
             MainContext::default().spawn_local(async move {
                 let playback_state = audio_engine_clone.current_playback_state();
@@ -297,51 +334,82 @@ impl PlayerBar {
                 }
             });
         });
+    }
 
-        let prev_queue_manager = queue_manager.clone();
+    /// Connects the previous button to navigate to the previous track.
+    ///
+    /// # Arguments
+    ///
+    /// * `prev_button` - The previous track button
+    /// * `queue_manager` - Optional queue manager for navigation
+    fn connect_prev_button(prev_button: &Button, queue_manager: Option<&Arc<QueueManager>>) {
+        let queue_manager = queue_manager.cloned();
         prev_button.connect_clicked(move |_| {
-            if let Some(ref qm) = prev_queue_manager {
+            if let Some(ref qm) = queue_manager {
                 qm.previous_track();
             }
         });
+    }
 
-        let next_queue_manager = queue_manager.clone();
+    /// Connects the next button to navigate to the next track.
+    ///
+    /// # Arguments
+    ///
+    /// * `next_button` - The next track button
+    /// * `queue_manager` - Optional queue manager for navigation
+    fn connect_next_button(next_button: &Button, queue_manager: Option<&Arc<QueueManager>>) {
+        let queue_manager = queue_manager.cloned();
         next_button.connect_clicked(move |_| {
-            if let Some(ref qm) = next_queue_manager {
+            if let Some(ref qm) = queue_manager {
                 qm.next_track();
             }
         });
+    }
 
-        connect_seek_handler(
-            &self.progress_scale,
-            &self.current_time_label,
-            self.audio_engine.clone(),
-            state,
-        );
-
-        connect_volume_handlers(
-            &self.volume_button,
-            &self.volume_scale,
-            &self.mute_button,
-            &self.volume_mode_switch,
-        );
-
-        let hifi_button_clone = self.hifi_button.clone();
-        let hifi_popover_clone = self.hifi_popover.clone();
-        hifi_button_clone.connect_clicked(move |_| {
+    /// Connects the Hi-Fi button to show its popover.
+    ///
+    /// # Arguments
+    ///
+    /// * `hifi_button` - The Hi-Fi indicator button
+    /// * `hifi_popover` - The Hi-Fi details popover
+    fn connect_hifi_popover(hifi_button: &Button, hifi_popover: &Popover) {
+        let hifi_popover_clone = hifi_popover.clone();
+        hifi_button.connect_clicked(move |_| {
             hifi_popover_clone.popup();
         });
+    }
 
-        let volume_button_clone = self.volume_button.clone();
-        let volume_popover_clone = self.volume_popover.clone();
-        volume_button_clone.connect_clicked(move |_| {
+    /// Connects the volume button to show its popover.
+    ///
+    /// # Arguments
+    ///
+    /// * `volume_button` - The volume button widget
+    /// * `volume_popover` - The volume control popover
+    fn connect_volume_popover(volume_button: &Button, volume_popover: &Popover) {
+        let volume_popover_clone = volume_popover.clone();
+        volume_button.connect_clicked(move |_| {
             volume_popover_clone.popup();
         });
+    }
 
-        let exclusive_mode_button_clone = self.exclusive_mode_button.clone();
-        let app_state_clone = self.app_state.clone();
-        let audio_engine_clone = self.audio_engine.clone();
-        exclusive_mode_button_clone.connect_clicked(move |_| {
+    /// Connects the exclusive mode button to toggle exclusive audio mode.
+    ///
+    /// Updates settings, audio engine configuration, and restarts playback if needed.
+    ///
+    /// # Arguments
+    ///
+    /// * `exclusive_mode_button` - The exclusive mode toggle button
+    /// * `app_state` - Reference to application state
+    /// * `audio_engine` - Reference to audio engine
+    fn connect_exclusive_mode_button(
+        exclusive_mode_button: &Button,
+        app_state: &Arc<AppState>,
+        audio_engine: &Arc<AudioEngine>,
+    ) {
+        let app_state_clone = app_state.clone();
+        let audio_engine_clone = audio_engine.clone();
+
+        exclusive_mode_button.connect_clicked(move |_| {
             let settings_manager = app_state_clone.get_settings_manager();
             let old_value = settings_manager.read().get_settings().exclusive_mode;
             let new_value = !old_value;
@@ -372,8 +440,6 @@ impl PlayerBar {
                 });
             }
         });
-
-        self
     }
 
     /// Subscribes to `AppState` changes for reactive updates.
