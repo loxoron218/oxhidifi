@@ -21,7 +21,7 @@ use {
         },
     },
     parking_lot::Mutex,
-    tracing::{debug, info},
+    tracing::{debug, error, info, warn},
 };
 
 use crate::{
@@ -35,6 +35,12 @@ use crate::{
     },
     ui::preferences::PreferencesDialog,
 };
+
+/// Type alias for search debounce timer handle.
+type SearchDebounceHandle = Arc<Mutex<Option<SourceId>>>;
+
+/// Type alias for search clearing flag.
+type SearchClearingFlag = Arc<Mutex<bool>>;
 
 /// Adaptive header bar with search, navigation, and action controls.
 ///
@@ -50,7 +56,7 @@ pub struct HeaderBar {
     /// Settings button.
     pub settings_button: Button,
     /// Application reference for preferences dialog.
-    pub application: Option<Application>,
+    pub application: Option<Arc<Application>>,
     /// Search entry for inline search.
     pub search_entry: SearchEntry,
     /// Album tab button.
@@ -74,7 +80,7 @@ pub struct HeaderBar {
     /// Zoom popover container.
     pub zoom_popover: Popover,
     /// Subscription handle for state changes (to ensure proper cleanup)
-    _subscription_handle: Option<JoinHandle<()>>,
+    _subscription_handle: JoinHandle<()>,
     /// Debounce timer handle for search input.
     _search_debounce_handle: Arc<Mutex<Option<SourceId>>>,
     /// Flag to prevent search debounce during programmatic text clearing.
@@ -84,13 +90,15 @@ pub struct HeaderBar {
 impl HeaderBar {
     /// Creates a new header bar instance.
     ///
+    /// # Arguments
+    ///
+    /// * `app_state` - Application state reference
+    /// * `application` - Optional application reference for preferences dialog
+    /// * `settings_manager` - Settings manager reference
+    ///
     /// # Returns
     ///
     /// A new `HeaderBar` instance.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the action parameter is not an integer variant (should never happen with proper menu setup).
     pub fn new(
         app_state: &Arc<AppState>,
         application: Option<Application>,
@@ -98,6 +106,75 @@ impl HeaderBar {
     ) -> Self {
         let widget = LibadwaitaHeaderBar::builder().build();
 
+        let back_button = Self::create_back_button(app_state);
+        widget.pack_start(&back_button);
+
+        let current_view_mode = app_state.get_library_state().view_mode;
+        let (search_button, search_entry, debounce_handle, clearing_search) =
+            Self::setup_search_functionality(app_state, &settings_manager);
+
+        widget.pack_start(&search_button);
+        widget.pack_start(&search_entry);
+
+        let menu = Self::create_view_menu();
+
+        let view_split_button = SplitButton::builder()
+            .icon_name(Self::get_view_icon_name(&current_view_mode))
+            .tooltip_text("Toggle View")
+            .menu_model(&menu)
+            .build();
+
+        let (zoom_popover, zoom_out_button, zoom_in_button) = Self::create_zoom_popover();
+        view_split_button.set_popover(Some(&zoom_popover));
+
+        Self::connect_view_button_handlers(app_state, &view_split_button);
+
+        Self::connect_zoom_button_handlers(app_state, &zoom_out_button, &zoom_in_button);
+
+        let application_arc = application.map(Arc::new);
+        let settings_button =
+            Self::create_settings_button(app_state, application_arc.as_ref(), &settings_manager);
+        widget.pack_end(&settings_button);
+        widget.pack_end(&view_split_button);
+
+        let (album_tab, artist_tab, tab_box) = Self::create_tab_buttons(app_state);
+        widget.set_title_widget(Some(&tab_box));
+
+        let subscription_handle = Self::subscribe_to_view_options(app_state, &view_split_button);
+
+        Self {
+            widget,
+            search_button,
+            view_split_button,
+            settings_button,
+            search_entry,
+            album_tab,
+            artist_tab,
+            tab_box,
+            back_button,
+            zoom_out_button,
+            zoom_in_button,
+            zoom_popover,
+            app_state: app_state.clone(),
+            settings_manager,
+            application: application_arc,
+            current_view_mode,
+            _search_debounce_handle: debounce_handle,
+            clearing_search,
+            _subscription_handle: subscription_handle,
+        }
+    }
+
+    /// Creates and configures the back button.
+    ///
+    /// # Arguments
+    ///
+    /// * `app_state` - Application state reference for navigation updates
+    ///
+    /// # Returns
+    ///
+    /// Configured back button widget.
+    fn create_back_button(app_state: &Arc<AppState>) -> Button {
         let back_button = Button::builder()
             .icon_name("go-previous-symbolic")
             .tooltip_text("Back")
@@ -112,9 +189,28 @@ impl HeaderBar {
             state_clone.update_navigation(Library);
         });
 
-        widget.pack_start(&back_button);
+        back_button
+    }
 
-        // Create search entry
+    /// Creates search entry, button, and connects debounced search functionality.
+    ///
+    /// # Arguments
+    ///
+    /// * `app_state` - Application state reference
+    /// * `settings_manager` - Settings manager for debounce configuration
+    ///
+    /// # Returns
+    ///
+    /// Tuple of (`search_button`, `search_entry`, `debounce_handle`, `clearing_search_flag`).
+    fn setup_search_functionality(
+        app_state: &Arc<AppState>,
+        settings_manager: &Arc<SettingsManager>,
+    ) -> (
+        ToggleButton,
+        SearchEntry,
+        SearchDebounceHandle,
+        SearchClearingFlag,
+    ) {
         let search_entry = SearchEntry::builder()
             .placeholder_text("Search albums and artists...")
             .width_request(200)
@@ -129,28 +225,26 @@ impl HeaderBar {
             .build();
 
         // Debounce timer handle for search
-        let debounce_handle: Arc<Mutex<Option<SourceId>>> = Arc::new(Mutex::new(None));
+        let debounce_handle: SearchDebounceHandle = Arc::new(Mutex::new(None));
 
         // Flag to prevent debounce during programmatic text clearing
-        let clearing_search: Arc<Mutex<bool>> = Arc::new(Mutex::new(false));
+        let clearing_search: SearchClearingFlag = Arc::new(Mutex::new(false));
 
         // Connect search button to toggle entry visibility and focus
         let search_entry_clone = search_entry.clone();
-        let debounce_clone = debounce_handle.clone();
-        let clearing_clone_button = clearing_search.clone();
+        let debounce_btn = debounce_handle.clone();
+        let clearing_btn = clearing_search.clone();
         search_button.connect_toggled(move |button: &ToggleButton| {
             search_entry_clone.set_visible(button.is_active());
             if button.is_active() {
                 search_entry_clone.grab_focus();
             } else {
-                {
-                    *clearing_clone_button.lock() = true;
-                }
+                *clearing_btn.lock() = true;
                 search_entry_clone.set_text("");
-                *clearing_clone_button.lock() = false;
+                *clearing_btn.lock() = false;
 
                 // Cancel any pending debounce timer
-                if let Some(timer_id) = debounce_clone.lock().take() {
+                if let Some(timer_id) = debounce_btn.lock().take() {
                     let () = timer_id.remove();
                 }
             }
@@ -158,44 +252,42 @@ impl HeaderBar {
 
         // Handle Escape to hide search entry
         let search_button_clone = search_button.clone();
-        let debounce_clone_escape = debounce_handle.clone();
+        let debounce_esc = debounce_handle.clone();
         let search_entry_clone_escape = search_entry.clone();
-        let state_clone_escape = app_state.clone();
-        let clearing_clone_escape = clearing_search.clone();
+        let state_esc = app_state.clone();
+        let clearing_esc = clearing_search.clone();
         search_entry.connect_stop_search(move |_| {
             search_button_clone.set_active(false);
 
             // Clear search text and filter when ESC is pressed
-            {
-                *clearing_clone_escape.lock() = true;
-            }
+            *clearing_esc.lock() = true;
             search_entry_clone_escape.set_text("");
-            *clearing_clone_escape.lock() = false;
+            *clearing_esc.lock() = false;
 
             // Cancel any pending debounce timer
-            if let Some(timer_id) = debounce_clone_escape.lock().take() {
+            if let Some(timer_id) = debounce_esc.lock().take() {
                 let () = timer_id.remove();
             }
 
             // Reset search filter
-            state_clone_escape.update_search_filter(None);
+            state_esc.update_search_filter(None);
         });
 
         // Connect search entry to app state with debouncing
         let state_clone = app_state.clone();
-        let debounce_clone_search = debounce_handle.clone();
-        let clearing_clone_search = clearing_search.clone();
+        let debounce_search = debounce_handle.clone();
+        let clearing_ch = clearing_search.clone();
         let settings_manager_search = settings_manager.clone();
         search_entry.connect_search_changed(move |entry| {
             // Skip debounce during programmatic text clearing
-            if *clearing_clone_search.lock() {
+            if *clearing_ch.lock() {
                 return;
             }
 
             let text = entry.text().to_string();
 
             // Cancel any pending debounce timer
-            if let Some(timer_id) = debounce_clone_search.lock().take() {
+            if let Some(timer_id) = debounce_search.lock().take() {
                 let () = timer_id.remove();
             }
 
@@ -205,8 +297,8 @@ impl HeaderBar {
             if text.is_empty() {
                 state.update_search_filter(None);
             } else {
-                let handle_clone = debounce_clone_search.clone();
-                let handle_clone_for_id = debounce_clone_search.clone();
+                let handle_clone = debounce_search.clone();
+                let handle_clone_for_id = debounce_search.clone();
 
                 let debounce_ms = settings_manager_search.get_settings().search_debounce_ms;
 
@@ -222,18 +314,20 @@ impl HeaderBar {
             }
         });
 
-        widget.pack_start(&search_button);
-        widget.pack_start(&search_entry);
+        (
+            search_button,
+            search_entry,
+            debounce_handle,
+            clearing_search,
+        )
+    }
 
-        // View split button
-        let current_view_mode = app_state.get_library_state().view_mode;
-
-        let view_button_icon = match current_view_mode {
-            List => "view-list-symbolic",
-            Grid => "view-grid-symbolic",
-        };
-
-        // Create menu for dropdown
+    /// Creates the view mode menu with Grid and List options.
+    ///
+    /// # Returns
+    ///
+    /// Configured menu widget.
+    fn create_view_menu() -> Menu {
         let menu = Menu::new();
 
         // Add Grid view option
@@ -252,17 +346,16 @@ impl HeaderBar {
         }
         menu.append_item(&list_item);
 
-        let view_split_button = SplitButton::builder()
-            .icon_name(view_button_icon)
-            .tooltip_text("Toggle View")
-            .menu_model(&menu)
-            .build();
+        menu
+    }
 
-        // Create zoom popover content
-        let zoom_box = Box::builder()
-            .orientation(Vertical) // Changed to Vertical as per requirements
-            .spacing(6)
-            .build();
+    /// Creates the zoom popover with zoom in/out controls.
+    ///
+    /// # Returns
+    ///
+    /// Tuple of (`zoom_popover`, `zoom_out_button`, `zoom_in_button`).
+    fn create_zoom_popover() -> (Popover, Button, Button) {
+        let zoom_box = Box::builder().orientation(Vertical).spacing(6).build();
 
         // Create main horizontal container for label and zoom buttons
         let zoom_controls_box = Box::builder()
@@ -312,9 +405,16 @@ impl HeaderBar {
         // Create popover
         let zoom_popover = Popover::builder().child(&zoom_box).has_arrow(true).build();
 
-        // Set popover on the split button's arrow
-        view_split_button.set_popover(Some(&zoom_popover));
+        (zoom_popover, zoom_out_button, zoom_in_button)
+    }
 
+    /// Connects view button handlers for mode toggling and zoom controls.
+    ///
+    /// # Arguments
+    ///
+    /// * `app_state` - Application state reference
+    /// * `view_split_button` - View split button widget
+    fn connect_view_button_handlers(app_state: &Arc<AppState>, view_split_button: &SplitButton) {
         // Connect main button click to toggle view mode
         let state_clone_main = app_state.clone();
         let view_split_button_clone_main = view_split_button.clone();
@@ -337,10 +437,7 @@ impl HeaderBar {
             debug!("View mode toggled to: {:?}", new_mode);
 
             // Update icon
-            let icon_name = match new_mode {
-                List => "view-list-symbolic",
-                Grid => "view-grid-symbolic",
-            };
+            let icon_name = Self::get_view_icon_name(&new_mode);
             view_split_button_clone_main.set_icon_name(icon_name);
 
             // Update app state
@@ -348,52 +445,65 @@ impl HeaderBar {
         });
 
         // Connect menu actions to app state
-        let state_clone_menu = app_state.clone();
-        let view_split_button_clone_menu = view_split_button.clone();
-
-        // Handle set-mode action (menu item clicks)
         let set_mode_action = SimpleAction::new("view.set-mode", Some(VariantTy::INT32));
-        let state_clone_set = state_clone_menu.clone();
-        let view_split_button_clone_set = view_split_button_clone_menu.clone();
+        let state_clone_set = app_state.clone();
+        let view_split_button_clone_set = view_split_button.clone();
 
         set_mode_action.connect_activate(move |_action, parameter: Option<&Variant>| {
-            if let Some(param) = parameter {
-                let mode_value = param
-                    .get::<i32>()
-                    .expect("view.set-mode action requires i32 parameter");
-                let new_mode = match mode_value {
-                    0 => Grid, // Grid = 0
-                    1 => List, // List = 1
-                    _ => return,
-                };
+            let Some(param) = parameter else {
+                error!("view.set-mode action called without parameter");
+                return;
+            };
 
-                // Check if state actually changed
-                let current_state = state_clone_set.get_library_state();
-                if current_state.view_mode == new_mode {
-                    debug!("View mode unchanged, skipping update");
+            let Some(mode_value) = param.get::<i32>() else {
+                error!("view.set-mode action parameter is not an i32");
+                return;
+            };
+
+            let new_mode = match mode_value {
+                0 => Grid,
+                1 => List,
+                _ => {
+                    warn!("Invalid view mode value: {}", mode_value);
                     return;
                 }
+            };
 
-                info!("View mode changed to: {:?}", new_mode);
-
-                // Update icon
-                let icon_name = match new_mode {
-                    List => "view-list-symbolic",
-                    Grid => "view-grid-symbolic",
-                };
-                view_split_button_clone_set.set_icon_name(icon_name);
-
-                // Update app state
-                state_clone_set.update_view_options(current_state.current_tab, new_mode);
+            // Check if state actually changed
+            let current_state = state_clone_set.get_library_state();
+            if current_state.view_mode == new_mode {
+                debug!("View mode unchanged, skipping update");
+                return;
             }
+
+            info!("View mode changed to: {:?}", new_mode);
+
+            // Update icon
+            let icon_name = Self::get_view_icon_name(&new_mode);
+            view_split_button_clone_set.set_icon_name(icon_name);
+
+            // Update app state
+            state_clone_set.update_view_options(current_state.current_tab, new_mode);
         });
 
-        // Add action to the widget itself since we can't easily access parent action groups
+        // Add action to the widget itself
         let action_group = SimpleActionGroup::new();
         action_group.add_action(&set_mode_action);
         view_split_button.insert_action_group("win", Some(&action_group));
+    }
 
-        // Connect zoom buttons to app state if available
+    /// Connects zoom button handlers for zoom in/out functionality.
+    ///
+    /// # Arguments
+    ///
+    /// * `app_state` - Application state reference
+    /// * `zoom_out_button` - Zoom out button widget
+    /// * `zoom_in_button` - Zoom in button widget
+    fn connect_zoom_button_handlers(
+        app_state: &Arc<AppState>,
+        zoom_out_button: &Button,
+        zoom_in_button: &Button,
+    ) {
         let state_clone_zoom_out = app_state.clone();
         let state_clone_zoom_in = app_state.clone();
 
@@ -422,8 +532,24 @@ impl HeaderBar {
                 }
             }
         });
+    }
 
-        // Settings button
+    /// Creates and connects the settings button for preferences dialog.
+    ///
+    /// # Arguments
+    ///
+    /// * `app_state` - Application state reference
+    /// * `application` - Optional application reference for dialog parent
+    /// * `settings_manager` - Settings manager reference
+    ///
+    /// # Returns
+    ///
+    /// Configured settings button widget.
+    fn create_settings_button(
+        app_state: &Arc<AppState>,
+        application: Option<&Arc<Application>>,
+        settings_manager: &Arc<SettingsManager>,
+    ) -> Button {
         let settings_button = Button::builder()
             .icon_name("open-menu-symbolic")
             .tooltip_text("Settings")
@@ -433,10 +559,10 @@ impl HeaderBar {
         // Connect settings button to show preferences dialog
         let app_state_clone = app_state.clone();
         let settings_manager_clone = settings_manager.clone();
-        let application_clone = application.clone();
+        let application_clone = application.cloned();
 
         settings_button.connect_clicked(move |_| {
-            if let Some(ref app) = application_clone {
+            if let Some(app) = &application_clone {
                 let preferences_dialog =
                     PreferencesDialog::new(&app_state_clone, &settings_manager_clone);
 
@@ -455,13 +581,19 @@ impl HeaderBar {
             }
         });
 
-        // Pack settings button first (will appear on far right)
-        widget.pack_end(&settings_button);
+        settings_button
+    }
 
-        // Then pack view split button (will appear immediately to left of settings)
-        widget.pack_end(&view_split_button);
-
-        // Create tab navigation buttons for Albums/Artists
+    /// Creates tab navigation buttons for Albums/Artists.
+    ///
+    /// # Arguments
+    ///
+    /// * `app_state` - Application state reference
+    ///
+    /// # Returns
+    ///
+    /// Tuple of (`album_tab`, `artist_tab`, `tab_box`).
+    fn create_tab_buttons(app_state: &Arc<AppState>) -> (ToggleButton, ToggleButton, Box) {
         let current_tab = app_state.get_library_state().current_tab;
 
         // Create Albums tab with both icon and text
@@ -547,56 +679,72 @@ impl HeaderBar {
 
         // Create tab container box
         let tab_box = Box::builder().orientation(Horizontal).spacing(6).build();
-
         tab_box.append(&album_tab);
         tab_box.append(&artist_tab);
 
-        widget.set_title_widget(Some(&tab_box));
+        (album_tab, artist_tab, tab_box)
+    }
 
-        Self {
-            widget,
-            search_button,
-            view_split_button: view_split_button.clone(),
-            settings_button,
-            search_entry,
-            album_tab,
-            artist_tab,
-            tab_box,
-            back_button,
-            zoom_out_button,
-            zoom_in_button,
-            zoom_popover,
-            app_state: app_state.clone(),
-            settings_manager,
-            application,
-            current_view_mode: current_view_mode.clone(),
-            _search_debounce_handle: debounce_handle.clone(),
-            clearing_search: clearing_search.clone(),
-            _subscription_handle: {
-                // Create subscription handle for state changes
-                let state_clone_sub = app_state.clone();
-                let view_split_button_clone_sub = view_split_button.clone();
-                let handle = MainContext::default().spawn_local(async move {
-                    let rx = state_clone_sub.subscribe();
-                    while let Ok(event) = rx.recv().await {
-                        if let ViewOptionsChanged { view_mode, .. } = event {
-                            // Update icon based on new view mode
-                            let icon_name = match view_mode {
-                                List => "view-list-symbolic",
-                                Grid => "view-grid-symbolic",
-                            };
-                            view_split_button_clone_sub.set_icon_name(icon_name);
-                        }
-                    }
-                });
-                Some(handle)
-            },
+    /// Subscribes to view option changes and updates the view button icon.
+    ///
+    /// # Arguments
+    ///
+    /// * `app_state` - Application state reference
+    /// * `view_split_button` - View split button to update
+    ///
+    /// # Returns
+    ///
+    /// Join handle for the subscription.
+    fn subscribe_to_view_options(
+        app_state: &Arc<AppState>,
+        view_split_button: &SplitButton,
+    ) -> JoinHandle<()> {
+        let state_clone = app_state.clone();
+        let view_split_button_clone = view_split_button.clone();
+        MainContext::default().spawn_local(async move {
+            let rx = state_clone.subscribe();
+            while let Ok(event) = rx.recv().await {
+                if let ViewOptionsChanged { view_mode, .. } = event {
+                    // Update icon based on new view mode
+                    let icon_name = Self::get_view_icon_name(&view_mode);
+                    view_split_button_clone.set_icon_name(icon_name);
+                }
+            }
+        })
+    }
+
+    /// Returns the icon name for a given view mode.
+    ///
+    /// # Arguments
+    ///
+    /// * `view_mode` - View mode to get icon for
+    ///
+    /// # Returns
+    ///
+    /// Icon name string for the view mode.
+    fn get_view_icon_name(view_mode: &ViewMode) -> &'static str {
+        match view_mode {
+            List => "view-list-symbolic",
+            Grid => "view-grid-symbolic",
         }
     }
 }
 
 impl HeaderBar {
     /// Creates a header bar with default configuration.
+    ///
+    /// This is a convenience constructor that wraps [`HeaderBar::new`] with
+    /// the application parameter set to `Some(application)`.
+    ///
+    /// # Arguments
+    ///
+    /// * `app_state` - Application state reference for library state access
+    /// * `application` - Application instance for preferences dialog parent
+    /// * `settings_manager` - Settings manager reference for configuration
+    ///
+    /// # Returns
+    ///
+    /// A new `HeaderBar` instance with the application reference set.
     pub fn default_with_state(
         app_state: &Arc<AppState>,
         application: Application,
@@ -606,6 +754,9 @@ impl HeaderBar {
     }
 
     /// Clears the search entry without triggering search debounce.
+    ///
+    /// This method sets a flag to prevent the search debounce from firing
+    /// while the text is cleared programmatically.
     pub fn clear_search(&self) {
         *self.clearing_search.lock() = true;
         self.search_entry.set_text("");
@@ -613,6 +764,8 @@ impl HeaderBar {
     }
 
     /// Closes the search entry by deactivating the search button.
+    ///
+    /// This method hides the search entry and clears the search text.
     pub fn close_search(&self) {
         self.search_button.set_active(false);
     }
