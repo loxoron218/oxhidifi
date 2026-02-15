@@ -39,6 +39,7 @@ use crate::{
     error::domain::UiError::{self, InitializationError},
     library::{
         LibraryDatabase,
+        models::{Album, Artist},
         scanner::{LibraryScanner, ScannerEvent::LibraryChanged},
     },
     state::{
@@ -48,8 +49,11 @@ use crate::{
             SearchFilterChanged, SettingsChanged, ViewOptionsChanged,
         },
         NavigationState::{AlbumDetail, ArtistDetail, Library},
-        ViewMode::{Grid, List},
-        app_state::LibraryTab::{Albums as LibraryAlbums, Artists as LibraryArtists},
+        ViewMode::{self, Grid, List},
+        app_state::{
+            LibraryState,
+            LibraryTab::{self, Albums as LibraryAlbums, Artists as LibraryArtists},
+        },
     },
     ui::{
         header_bar::HeaderBar,
@@ -83,6 +87,32 @@ pub struct OxhidifiApplication {
     pub queue_manager: Arc<QueueManager>,
     /// User settings manager.
     pub settings: Arc<SettingsManager>,
+}
+
+/// Context struct holding all view controllers.
+struct ViewControllers {
+    /// Album grid view controller.
+    album_grid: AlbumGridView,
+    /// Album list view controller.
+    album_list: ListView,
+    /// Artist grid view controller.
+    artist_grid: ArtistGridView,
+    /// Artist list view controller.
+    artist_list: ListView,
+}
+
+/// Context struct for view options handling.
+struct ViewOptionsContext<'a> {
+    /// The view stack widget.
+    view_stack: &'a Stack,
+    /// The header bar widget.
+    header_bar: &'a Rc<HeaderBar>,
+    /// The application state.
+    app_state: &'a Arc<AppState>,
+    /// Mutable reference to view controllers.
+    views: &'a mut ViewControllers,
+    /// Previous tab state for detecting tab changes.
+    previous_tab: &'a mut Option<LibraryTab>,
 }
 
 impl OxhidifiApplication {
@@ -522,31 +552,63 @@ fn build_ui(
     window.present();
 }
 
-/// Creates the main content area with responsive layout.
-fn create_main_content(
+/// Creates the view stack widget with smooth transitions.
+///
+/// # Returns
+///
+/// A configured `Stack` widget ready for child addition.
+fn create_view_stack() -> Stack {
+    Stack::builder()
+        .transition_type(Crossfade)
+        .transition_duration(200)
+        .build()
+}
+
+/// Wraps a widget in a scrolled window with consistent margins.
+///
+/// # Arguments
+///
+/// * `child` - The widget to wrap
+///
+/// # Returns
+///
+/// A `ScrolledWindow` containing the child widget with 12px margins.
+fn create_scrolled_window(child: &Widget) -> ScrolledWindow {
+    ScrolledWindow::builder()
+        .vexpand(true)
+        .hexpand(true)
+        .margin_top(12)
+        .margin_bottom(12)
+        .margin_start(12)
+        .margin_end(12)
+        .child(child)
+        .build()
+}
+
+/// Creates album grid view with empty state handlers.
+///
+/// # Arguments
+///
+/// * `app_state` - Application state reference
+/// * `library_db` - Library database reference
+/// * `audio_engine` - Audio engine reference
+/// * `queue_manager` - Queue manager reference
+/// * `library_state` - Current library state
+/// * `show_dr_badges` - Whether to show DR value badges
+/// * `window` - Application window for empty state button handlers
+///
+/// # Returns
+///
+/// A tuple of the `AlbumGridView` and its wrapped `ScrolledWindow`.
+fn create_album_grid_view(
     app_state: &Arc<AppState>,
     library_db: &Arc<LibraryDatabase>,
     audio_engine: &Arc<AudioEngine>,
     queue_manager: &Arc<QueueManager>,
+    library_state: &LibraryState,
+    show_dr_badges: bool,
     window: &ApplicationWindow,
-    header_bar: &Rc<HeaderBar>,
-    toast_overlay: &ToastOverlay,
-) -> Widget {
-    // Create stack for efficient view switching
-    let view_stack = Stack::builder()
-        .transition_type(Crossfade)
-        .transition_duration(200)
-        .build();
-
-    let show_dr_badges = app_state
-        .settings_manager
-        .read()
-        .get_settings()
-        .show_dr_values;
-
-    // Get current library state for view initialization
-    let library_state = app_state.get_library_state();
-
+) -> (AlbumGridView, ScrolledWindow) {
     // Create all possible views upfront with individual scrolled windows
     let mut album_grid_view = AlbumGridView::builder()
         .app_state(app_state.clone())
@@ -566,16 +628,25 @@ fn create_main_content(
     }
 
     // Wrap album grid view in its own scrolled window
-    let album_grid_scrolled = ScrolledWindow::builder()
-        .vexpand(true)
-        .hexpand(true)
-        .margin_top(12)
-        .margin_bottom(12)
-        .margin_start(12)
-        .margin_end(12)
-        .child(&album_grid_view.widget)
-        .build();
+    let scrolled = create_scrolled_window(&album_grid_view.widget);
 
+    (album_grid_view, scrolled)
+}
+
+/// Creates album list view with initial data.
+///
+/// # Arguments
+///
+/// * `app_state` - Application state reference
+/// * `library_state` - Current library state
+///
+/// # Returns
+///
+/// A tuple of the `ListView` and its wrapped `ScrolledWindow`.
+fn create_album_list_view(
+    app_state: &Arc<AppState>,
+    library_state: &LibraryState,
+) -> (ListView, ScrolledWindow) {
     let mut album_list_view = ListView::builder()
         .app_state(app_state.clone())
         .view_type(Albums)
@@ -585,17 +656,27 @@ fn create_main_content(
     // Populate list view with initial data
     album_list_view.set_albums(library_state.albums.clone());
 
-    // Wrap album list view in its own scrolled window
-    let album_list_scrolled = ScrolledWindow::builder()
-        .vexpand(true)
-        .hexpand(true)
-        .margin_top(12)
-        .margin_bottom(12)
-        .margin_start(12)
-        .margin_end(12)
-        .child(&album_list_view.widget)
-        .build();
+    let scrolled = create_scrolled_window(&album_list_view.widget);
 
+    (album_list_view, scrolled)
+}
+
+/// Creates artist grid view with empty state handlers.
+///
+/// # Arguments
+///
+/// * `app_state` - Application state reference
+/// * `library_state` - Current library state
+/// * `window` - Application window for empty state button handlers
+///
+/// # Returns
+///
+/// A tuple of the `ArtistGridView` and its wrapped `ScrolledWindow`.
+fn create_artist_grid_view(
+    app_state: &Arc<AppState>,
+    library_state: &LibraryState,
+    window: &ApplicationWindow,
+) -> (ArtistGridView, ScrolledWindow) {
     let mut artist_grid_view = ArtistGridView::builder()
         .app_state(app_state.clone())
         .artists(library_state.artists.clone())
@@ -609,17 +690,25 @@ fn create_main_content(
         empty_state.connect_button_handlers();
     }
 
-    // Wrap artist grid view in its own scrolled window
-    let artist_grid_scrolled = ScrolledWindow::builder()
-        .vexpand(true)
-        .hexpand(true)
-        .margin_top(12)
-        .margin_bottom(12)
-        .margin_start(12)
-        .margin_end(12)
-        .child(&artist_grid_view.widget)
-        .build();
+    let scrolled = create_scrolled_window(&artist_grid_view.widget);
 
+    (artist_grid_view, scrolled)
+}
+
+/// Creates artist list view with initial data.
+///
+/// # Arguments
+///
+/// * `app_state` - Application state reference
+/// * `library_state` - Current library state
+///
+/// # Returns
+///
+/// A tuple of the `ListView` and its wrapped `ScrolledWindow`.
+fn create_artist_list_view(
+    app_state: &Arc<AppState>,
+    library_state: &LibraryState,
+) -> (ListView, ScrolledWindow) {
     let mut artist_list_view = ListView::builder()
         .app_state(app_state.clone())
         .view_type(Artists)
@@ -629,246 +718,329 @@ fn create_main_content(
     // Populate list view with initial data
     artist_list_view.set_artists(library_state.artists.clone());
 
-    // Wrap artist list view in its own scrolled window
-    let artist_list_scrolled = ScrolledWindow::builder()
-        .vexpand(true)
-        .hexpand(true)
-        .margin_top(12)
-        .margin_bottom(12)
-        .margin_start(12)
-        .margin_end(12)
-        .child(&artist_list_view.widget)
-        .build();
+    let scrolled = create_scrolled_window(&artist_list_view.widget);
 
-    // Store view references in app state for dynamic access
-    // This is a workaround since we can't easily pass mutable references
-    // In a real implementation, we'd use a proper view manager
+    (artist_list_view, scrolled)
+}
 
-    // Get current state
-    let library_state = app_state.get_library_state();
-    let current_tab = library_state.current_tab;
-    let current_view_mode = library_state.view_mode;
-
+/// Adds all views to the stack with unique names.
+///
+/// # Arguments
+///
+/// * `view_stack` - The stack widget to add views to
+/// * `album_grid_scrolled` - Album grid view wrapper
+/// * `album_list_scrolled` - Album list view wrapper
+/// * `artist_grid_scrolled` - Artist grid view wrapper
+/// * `artist_list_scrolled` - Artist list view wrapper
+fn add_views_to_stack(
+    view_stack: &Stack,
+    album_grid_scrolled: &ScrolledWindow,
+    album_list_scrolled: &ScrolledWindow,
+    artist_grid_scrolled: &ScrolledWindow,
+    artist_list_scrolled: &ScrolledWindow,
+) {
     // Add ALL scrolled views to the stack initially with unique names
-    view_stack.add_named(&album_grid_scrolled, Some("album_grid"));
-    view_stack.add_named(&album_list_scrolled, Some("album_list"));
-    view_stack.add_named(&artist_grid_scrolled, Some("artist_grid"));
-    view_stack.add_named(&artist_list_scrolled, Some("artist_list"));
+    view_stack.add_named(album_grid_scrolled, Some("album_grid"));
+    view_stack.add_named(album_list_scrolled, Some("album_list"));
+    view_stack.add_named(artist_grid_scrolled, Some("artist_grid"));
+    view_stack.add_named(artist_list_scrolled, Some("artist_list"));
+}
 
-    // Set initial visible view
-    match (current_tab.clone(), current_view_mode.clone()) {
-        (LibraryAlbums, Grid) => {
-            view_stack.set_visible_child_name("album_grid");
+/// Sets the initially visible view based on current tab and mode.
+///
+/// # Arguments
+///
+/// * `view_stack` - The stack widget
+/// * `current_tab` - Current library tab
+/// * `current_view_mode` - Current view mode
+fn set_initial_visible_view(
+    view_stack: &Stack,
+    current_tab: &LibraryTab,
+    current_view_mode: &ViewMode,
+) {
+    let child_name = match (current_tab, current_view_mode) {
+        (LibraryAlbums, Grid) => "album_grid",
+        (LibraryAlbums, List) => "album_list",
+        (LibraryArtists, Grid) => "artist_grid",
+        (LibraryArtists, List) => "artist_list",
+    };
+
+    view_stack.set_visible_child_name(child_name);
+}
+
+/// Handles library data changed events.
+///
+/// # Arguments
+///
+/// * `albums` - Updated album list
+/// * `artists` - Updated artist list
+/// * `views` - View controllers context
+/// * `search_app_state` - `AppState` for retrieving search filter
+/// * `view_stack` - View stack for getting current child
+fn handle_library_data_changed(
+    albums: &[Album],
+    artists: &[Artist],
+    views: &mut ViewControllers,
+    search_app_state: &Arc<AppState>,
+    view_stack: &Stack,
+) {
+    debug!("Handling LibraryDataChanged event");
+
+    // Save current search filter
+    let current_filter = search_app_state.get_library_state().search_filter.clone();
+
+    // Update full lists
+    views.album_grid.update_all_albums(albums.to_vec());
+    views.artist_grid.update_all_artists(artists.to_vec());
+
+    // Update list views
+    views.album_list.set_albums(albums.to_vec());
+    views.artist_list.set_artists(artists.to_vec());
+
+    // Re-apply current search filter if active
+    if let Some(ref filter) = current_filter {
+        let query = filter.as_str();
+        let visible_child = view_stack.visible_child_name();
+        if let Some(child_name) = visible_child.as_deref() {
+            match child_name {
+                "album_grid" => views.album_grid.filter_albums(query),
+                "album_list" => views.album_list.filter_view_items(query),
+                "artist_grid" => views.artist_grid.filter_artists(query),
+                "artist_list" => views.artist_list.filter_view_items(query),
+                _ => {}
+            }
         }
-        (LibraryAlbums, List) => {
-            view_stack.set_visible_child_name("album_list");
+    }
+}
+
+/// Handles view options changed events (tab and view mode switches).
+///
+/// # Arguments
+///
+/// * `current_tab` - New current tab
+/// * `view_mode` - New view mode
+/// * `ctx` - View options context containing all necessary references
+fn handle_view_options_changed(
+    current_tab: &LibraryTab,
+    view_mode: &ViewMode,
+    ctx: &mut ViewOptionsContext<'_>,
+) {
+    // Determine if tab changed - treat first switch (previous_tab is None) as a change too
+    let tab_changed = ctx
+        .previous_tab
+        .clone()
+        .is_none_or(|prev| prev != *current_tab);
+    *ctx.previous_tab = Some(current_tab.clone());
+
+    let child_name = match (current_tab, view_mode) {
+        (LibraryAlbums, Grid) => "album_grid",
+        (LibraryAlbums, List) => "album_list",
+        (LibraryArtists, Grid) => "artist_grid",
+        (LibraryArtists, List) => "artist_list",
+    };
+
+    // Check if there's an active search filter
+    let library_state = ctx.app_state.get_library_state();
+    let has_active_search = library_state.search_filter.is_some();
+
+    // Handle view switching
+    if tab_changed {
+        // Tab switch: clear search filter to prevent stale results
+        debug!("Tab changed, resetting search filter");
+
+        if has_active_search {
+            debug!("Clearing target view before tab switch to prevent flicker");
+
+            match child_name {
+                "album_grid" => ctx.views.album_grid.clear_view(),
+                "album_list" => ctx.views.album_list.clear_view(),
+                "artist_grid" => ctx.views.artist_grid.clear_view(),
+                "artist_list" => ctx.views.artist_list.clear_view(),
+                _ => {}
+            }
+        } else {
+            // No active search - restore view to show all items
+            debug!("Restoring view to show all items");
+
+            match child_name {
+                "album_grid" => ctx.views.album_grid.filter_albums(""),
+                "album_list" => ctx.views.album_list.filter_view_items(""),
+                "artist_grid" => ctx.views.artist_grid.filter_artists(""),
+                "artist_list" => ctx.views.artist_list.filter_view_items(""),
+                _ => {}
+            }
         }
-        (LibraryArtists, Grid) => {
-            view_stack.set_visible_child_name("artist_grid");
-        }
-        (LibraryArtists, List) => {
-            view_stack.set_visible_child_name("artist_list");
+    } else {
+        // View mode switch within same tab: preserve search results
+        debug!("View mode changed within same tab, preserving search");
+
+        if let Some(ref filter) = library_state.search_filter {
+            let query = filter.as_str();
+            debug!("Applying search filter '{query}' to new view {child_name}");
+
+            match child_name {
+                "album_grid" => ctx.views.album_grid.filter_albums(query),
+                "album_list" => ctx.views.album_list.filter_view_items(query),
+                "artist_grid" => ctx.views.artist_grid.filter_artists(query),
+                "artist_list" => ctx.views.artist_list.filter_view_items(query),
+                _ => {}
+            }
+        } else {
+            // No search - just show all items
+            match child_name {
+                "album_grid" => ctx.views.album_grid.filter_albums(""),
+                "album_list" => ctx.views.album_list.filter_view_items(""),
+                "artist_grid" => ctx.views.artist_grid.filter_artists(""),
+                "artist_list" => ctx.views.artist_list.filter_view_items(""),
+                _ => {}
+            }
         }
     }
 
-    // Subscribe to state changes for view updates
-    // Use tracing for monitoring
-    debug!("Subscribing to AppState changes in main content");
-    let app_state_clone = app_state.clone();
-    let view_stack_clone = view_stack.clone();
-    let header_bar_clone = Rc::clone(header_bar);
-    let search_app_state = app_state.clone();
-    let toast_overlay_clone = toast_overlay.clone();
+    // Reset scroll position before switching
+    if let Some(child) = ctx.view_stack.child_by_name(child_name)
+        && let Some(scrolled) = child.downcast_ref::<ScrolledWindow>()
+    {
+        scrolled.vadjustment().set_value(0.0);
+        scrolled.hadjustment().set_value(0.0);
+    }
 
-    // Use a weak reference to avoid potential memory leaks
-    // and implement proper error handling for subscription
+    ctx.view_stack.set_visible_child_name(child_name);
+
+    // Clear search AFTER view switch but WITHOUT broadcasting to prevent
+    // the outgoing view (still visible during crossfade) from showing all items
+    if tab_changed && has_active_search {
+        ctx.header_bar.clear_search();
+        ctx.header_bar.close_search();
+        ctx.app_state.clear_search_filter_silent();
+
+        // Restore the view to show all items now that the search is cleared
+        debug!("Restoring view after clearing search");
+
+        match child_name {
+            "album_grid" => ctx.views.album_grid.filter_albums(""),
+            "album_list" => ctx.views.album_list.filter_view_items(""),
+            "artist_grid" => ctx.views.artist_grid.filter_artists(""),
+            "artist_list" => ctx.views.artist_list.filter_view_items(""),
+            _ => {}
+        }
+    }
+}
+
+/// Handles search filter changed events.
+///
+/// # Arguments
+///
+/// * `filter` - Optional search filter query
+/// * `views` - View controllers context
+fn handle_search_filter_changed(filter: Option<&str>, views: &mut ViewControllers) {
+    let query = filter.unwrap_or("");
+
+    debug!("Updating search filter for all views: '{}'", query);
+
+    views.album_grid.filter_albums(query);
+    views.artist_grid.filter_artists(query);
+    views.album_list.filter_view_items(query);
+    views.artist_list.filter_view_items(query);
+}
+
+/// Handles settings changed events.
+///
+/// # Arguments
+///
+/// * `show_dr_values` - Whether to show DR value badges
+/// * `views` - View controllers context
+fn handle_settings_changed(show_dr_values: bool, views: &mut ViewControllers) {
+    debug!(
+        "Handling SettingsChanged event: show_dr_values={}",
+        show_dr_values
+    );
+
+    views.album_grid.set_show_dr_badges(show_dr_values);
+
+    // Note: ListView doesn't currently have a set_show_dr_badges method,
+    // but it should respect the setting when creating new album rows
+}
+
+/// Handles exclusive mode failed events.
+///
+/// # Arguments
+///
+/// * `reason` - Reason for the failure
+/// * `toast_overlay` - Toast overlay for displaying errors
+fn handle_exclusive_mode_failed(reason: &str, toast_overlay: &ToastOverlay) {
+    debug!("Handling ExclusiveModeFailed event: reason='{}'", reason);
+
+    let toast = Toast::new(&format!("Exclusive mode playback failed: {reason}"));
+    toast_overlay.add_toast(toast);
+}
+
+/// Spawns async event handler for view stack state changes.
+///
+/// # Arguments
+///
+/// * `app_state` - Application state reference
+/// * `view_stack` - View stack to update
+/// * `header_bar` - Header bar for search control
+/// * `toast_overlay` - Toast overlay for error display
+/// * `views` - View controllers
+fn spawn_view_stack_event_handler(
+    app_state: Arc<AppState>,
+    view_stack: Stack,
+    header_bar: Rc<HeaderBar>,
+    toast_overlay: ToastOverlay,
+    views: ViewControllers,
+) {
+    debug!("Subscribing to AppState changes in main content");
+
     MainContext::default().spawn_local(async move {
-        let receiver = app_state_clone.subscribe();
+        let receiver = app_state.subscribe();
         let mut switch_count = 0;
         let mut previous_tab = None;
-
-        // Move view controllers into this closure to keep them alive and update them
-        let mut album_grid_view = album_grid_view;
-        let mut artist_grid_view = artist_grid_view;
-        let mut album_list_view = album_list_view;
-        let mut artist_list_view = artist_list_view;
-
-        /// Applies a method or filter to the appropriate view based on child name.
-        ///
-        /// This macro dispatches operations to the correct view controller by matching
-        /// the stack child name, eliminating repetitive match statements.
-        ///
-        /// # Patterns
-        ///
-        /// * `($child_name:expr, same, $method:ident)` - Invokes parameterless method
-        /// * `($child_name:expr, same, $method:ident, $($arg:expr),*)` - Invokes method with args
-        /// * `($child_name:expr, filter, $query:expr)` - Applies view-specific filter methods
-        macro_rules! apply_to_views {
-            ($child_name:expr, same, $method:ident) => {
-                match $child_name {
-                    "album_grid" => album_grid_view.$method(),
-                    "album_list" => album_list_view.$method(),
-                    "artist_grid" => artist_grid_view.$method(),
-                    "artist_list" => artist_list_view.$method(),
-                    _ => {}
-                }
-            };
-            ($child_name:expr, same, $method:ident, $($arg:expr),*) => {
-                match $child_name {
-                    "album_grid" => album_grid_view.$method($($arg),*),
-                    "album_list" => album_list_view.$method($($arg),*),
-                    "artist_grid" => artist_grid_view.$method($($arg),*),
-                    "artist_list" => artist_list_view.$method($($arg),*),
-                    _ => {}
-                }
-            };
-            ($child_name:expr, filter, $query:expr) => {
-                match $child_name {
-                    "album_grid" => album_grid_view.filter_albums($query),
-                    "album_list" => album_list_view.filter_view_items($query),
-                    "artist_grid" => artist_grid_view.filter_artists($query),
-                    "artist_list" => artist_list_view.filter_view_items($query),
-                    _ => {}
-                }
-            };
-        }
+        let mut views = views;
+        let search_app_state = app_state.clone();
 
         loop {
             if let Ok(event) = receiver.recv().await {
+                switch_count += 1;
+
                 match event {
                     LibraryDataChanged { albums, artists } => {
-                        debug!("Handling LibraryDataChanged event");
-
-                        // Save current search filter
-                        let current_filter =
-                            search_app_state.get_library_state().search_filter.clone();
-
-                        // Update full lists
-                        album_grid_view.update_all_albums(albums.clone());
-                        artist_grid_view.update_all_artists(artists.clone());
-
-                        // Update list views
-                        album_list_view.set_albums(albums.clone());
-                        artist_list_view.set_artists(artists.clone());
-
-                        // Re-apply current search filter if active
-                        if let Some(ref filter) = current_filter {
-                            let query = filter.as_str();
-                            let visible_child = view_stack_clone.visible_child_name();
-                            if let Some(child_name) = visible_child.as_deref() {
-                                apply_to_views!(child_name, filter, query);
-                            }
-                        }
+                        handle_library_data_changed(
+                            &albums,
+                            &artists,
+                            &mut views,
+                            &search_app_state,
+                            &view_stack,
+                        );
                     }
                     ViewOptionsChanged {
                         current_tab,
                         view_mode,
                     } => {
-                        switch_count += 1;
                         debug!(
                             "View switch #{}: tab={:?}, view_mode={:?}",
                             switch_count, current_tab, view_mode
                         );
 
-                        // Check if tab changed (Albums ↔ Artists)
-                        // Determine if tab changed - treat first switch (previous_tab is None) as a change too
-                        let tab_changed = previous_tab.is_none_or(|prev| prev != current_tab);
-                        previous_tab = Some(current_tab.clone());
-
-                        let child_name = match (&current_tab, &view_mode) {
-                            (LibraryAlbums, Grid) => "album_grid",
-                            (LibraryAlbums, List) => "album_list",
-                            (LibraryArtists, Grid) => "artist_grid",
-                            (LibraryArtists, List) => "artist_list",
+                        let mut ctx = ViewOptionsContext {
+                            view_stack: &view_stack,
+                            header_bar: &header_bar,
+                            app_state: &search_app_state,
+                            views: &mut views,
+                            previous_tab: &mut previous_tab,
                         };
 
-                        // Check if there's an active search filter
-                        let library_state = search_app_state.get_library_state();
-                        let has_active_search = library_state.search_filter.is_some();
-
-                        // Handle view switching
-                        if tab_changed {
-                            // Tab switch: clear search filter to prevent stale results
-                            debug!("Tab changed, resetting search filter");
-
-                            if has_active_search {
-                                debug!("Clearing target view before tab switch to prevent flicker");
-
-                                apply_to_views!(child_name, same, clear_view);
-                            } else {
-                                // No active search - restore view to show all items
-                                // (view may have been cleared in a previous switch with search)
-                                debug!("Restoring view to show all items");
-
-                                apply_to_views!(child_name, filter, "");
-                            }
-                        } else {
-                            // View mode switch within same tab: preserve search results
-                            debug!("View mode changed within same tab, preserving search");
-
-                            if let Some(ref filter) = library_state.search_filter {
-                                let query = filter.as_str();
-                                debug!("Applying search filter '{query}' to new view {child_name}");
-
-                                apply_to_views!(child_name, filter, query);
-                            } else {
-                                // No search - just show all items
-                                apply_to_views!(child_name, filter, "");
-                            }
-                        }
-
-                        // Reset scroll position before switching
-                        if let Some(child) = view_stack_clone.child_by_name(child_name)
-                            && let Some(scrolled) = child.downcast_ref::<ScrolledWindow>()
-                        {
-                            scrolled.vadjustment().set_value(0.0);
-                            scrolled.hadjustment().set_value(0.0);
-                        }
-
-                        view_stack_clone.set_visible_child_name(child_name);
-
-                        // Clear search AFTER view switch but WITHOUT broadcasting to prevent
-                        // the outgoing view (still visible during crossfade) from showing all items
-                        if tab_changed && has_active_search {
-                            header_bar_clone.clear_search();
-                            header_bar_clone.close_search();
-                            search_app_state.clear_search_filter_silent();
-
-                            // Restore the view to show all items now that the search is cleared
-                            debug!("Restoring view after clearing search");
-
-                            apply_to_views!(child_name, filter, "");
-                        }
+                        handle_view_options_changed(&current_tab, &view_mode, &mut ctx);
                     }
                     SearchFilterChanged(filter) => {
-                        let query = filter.as_deref().unwrap_or("");
-
-                        debug!("Updating search filter for all views: '{}'", query);
-
-                        album_grid_view.filter_albums(query);
-                        artist_grid_view.filter_artists(query);
-                        album_list_view.filter_view_items(query);
-                        artist_list_view.filter_view_items(query);
+                        handle_search_filter_changed(filter.as_deref(), &mut views);
                     }
                     SettingsChanged { show_dr_values } => {
-                        // Update DR badge visibility in all views
-                        debug!(
-                            "Handling SettingsChanged event: show_dr_values={}",
-                            show_dr_values
-                        );
-
-                        // Update data in all views with new DR setting
-                        album_grid_view.set_show_dr_badges(show_dr_values);
-
-                        // Note: ListView doesn't currently have a set_show_dr_badges method,
-                        // but it should respect the setting when creating new album rows
+                        handle_settings_changed(show_dr_values, &mut views);
                     }
                     ExclusiveModeFailed { reason } => {
-                        debug!("Handling ExclusiveModeFailed event: reason='{}'", reason);
-
-                        let toast =
-                            Toast::new(&format!("Exclusive mode playback failed: {reason}"));
-                        toast_overlay_clone.add_toast(toast);
+                        handle_exclusive_mode_failed(&reason, &toast_overlay);
                     }
                     _ => {}
                 }
@@ -878,6 +1050,87 @@ fn create_main_content(
             }
         }
     });
+}
+
+/// Creates the main content area with responsive layout.
+///
+/// # Arguments
+///
+/// * `app_state` - Application state reference
+/// * `library_db` - Library database reference
+/// * `audio_engine` - Audio engine reference
+/// * `queue_manager` - Queue manager reference
+/// * `window` - Application window reference
+/// * `header_bar` - Header bar reference
+/// * `toast_overlay` - Toast overlay reference
+///
+/// # Returns
+///
+/// The main content widget containing all library views.
+fn create_main_content(
+    app_state: &Arc<AppState>,
+    library_db: &Arc<LibraryDatabase>,
+    audio_engine: &Arc<AudioEngine>,
+    queue_manager: &Arc<QueueManager>,
+    window: &ApplicationWindow,
+    header_bar: &Rc<HeaderBar>,
+    toast_overlay: &ToastOverlay,
+) -> Widget {
+    let view_stack = create_view_stack();
+
+    let show_dr_badges = app_state
+        .settings_manager
+        .read()
+        .get_settings()
+        .show_dr_values;
+
+    let library_state = app_state.get_library_state();
+
+    let (album_grid_view, album_grid_scrolled) = create_album_grid_view(
+        app_state,
+        library_db,
+        audio_engine,
+        queue_manager,
+        &library_state,
+        show_dr_badges,
+        window,
+    );
+
+    let (album_list_view, album_list_scrolled) = create_album_list_view(app_state, &library_state);
+
+    let (artist_grid_view, artist_grid_scrolled) =
+        create_artist_grid_view(app_state, &library_state, window);
+
+    let (artist_list_view, artist_list_scrolled) =
+        create_artist_list_view(app_state, &library_state);
+
+    add_views_to_stack(
+        &view_stack,
+        &album_grid_scrolled,
+        &album_list_scrolled,
+        &artist_grid_scrolled,
+        &artist_list_scrolled,
+    );
+
+    let current_tab = library_state.current_tab;
+    let current_view_mode = library_state.view_mode;
+
+    set_initial_visible_view(&view_stack, &current_tab, &current_view_mode);
+
+    let views = ViewControllers {
+        album_grid: album_grid_view,
+        album_list: album_list_view,
+        artist_grid: artist_grid_view,
+        artist_list: artist_list_view,
+    };
+
+    spawn_view_stack_event_handler(
+        Arc::clone(app_state),
+        view_stack.clone(),
+        Rc::clone(header_bar),
+        toast_overlay.clone(),
+        views,
+    );
 
     view_stack.upcast::<Widget>()
 }
@@ -917,8 +1170,10 @@ fn load_custom_css() -> Result<(), UiError> {
 
     let provider = CssProvider::new();
     provider.load_from_string(&css);
+    let display = Display::default()
+        .ok_or_else(|| InitializationError("Could not connect to a display".into()))?;
     style_context_add_provider_for_display(
-        &Display::default().expect("Could not connect to a display."),
+        &display,
         &provider,
         STYLE_PROVIDER_PRIORITY_APPLICATION,
     );
