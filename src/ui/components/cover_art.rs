@@ -230,17 +230,17 @@ impl CoverArt {
             pic.set_tooltip_text(Some("Default album artwork"));
             (None, Some(pic))
         };
-
-        let mut dr_badge = None;
-
-        if show_dr_badge {
-            // Create DR badge
-            let badge = DRBadgeBuilder::default()
-                .dr_value(dr_value.clone().unwrap_or_else(|| "N/A".to_string()))
-                .show_label(false) // Don't show "DR" prefix in grid view
-                .build();
-            dr_badge = Some(badge);
-        }
+        // Create DR badge
+        let dr_badge = if show_dr_badge {
+            Some(
+                DRBadgeBuilder::default()
+                    .dr_value(dr_value.clone().unwrap_or_else(|| "N/A".to_string()))
+                    .show_label(false) // Don't show "DR" prefix in grid view
+                    .build(),
+            )
+        } else {
+            None
+        };
 
         let overlay = if let Some(pic) = &picture {
             // Create ScrolledWindow to enforce strict sizing and break request propagation
