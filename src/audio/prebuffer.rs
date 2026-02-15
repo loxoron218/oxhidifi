@@ -8,7 +8,7 @@ use std::{path::Path, sync::Arc, thread::JoinHandle};
 use {
     parking_lot::Mutex,
     rtrb::{Producer, RingBuffer},
-    tracing::debug,
+    tracing::{debug, warn},
 };
 
 use crate::audio::{
@@ -133,8 +133,10 @@ impl Prebuffer {
 
     /// Stops pre-buffering gracefully.
     pub fn stop(&mut self) {
-        if let Some(handle) = self.thread_handle.take() {
-            let _ = handle.join();
+        if let Some(handle) = self.thread_handle.take()
+            && let Err(e) = handle.join()
+        {
+            warn!(error = ?e, "Pre-buffer thread panicked");
         }
     }
 

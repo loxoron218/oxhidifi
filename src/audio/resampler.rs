@@ -27,7 +27,7 @@ use {
     num_traits::cast::ToPrimitive,
     rtrb::{Consumer, PopError::Empty, Producer, PushError::Full},
     rubato::{Fft, FixedSync::Input, ResampleError, Resampler, ResamplerConstructionError},
-    tracing::{debug, error, info},
+    tracing::{debug, error, info, warn},
 };
 
 use crate::audio::{
@@ -305,7 +305,9 @@ impl ResamplingAudioConsumer {
     pub fn stop(&mut self) {
         if let Some(handle) = self.thread_handle.take() {
             self.running.store(false, Relaxed);
-            let _ = handle.join();
+            if let Err(e) = handle.join() {
+                warn!(error = ?e, "Resampler thread panicked");
+            }
         }
     }
 }
