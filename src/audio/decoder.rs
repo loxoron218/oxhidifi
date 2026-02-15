@@ -67,6 +67,9 @@ pub enum DecoderError {
     /// Failed to create audio buffer.
     #[error("Failed to create audio buffer")]
     BufferCreationFailed,
+    /// Invalid track index (cannot fit in u32).
+    #[error("Invalid track index")]
+    InvalidTrackIndex,
 }
 
 /// Audio format information extracted during decoding setup.
@@ -215,7 +218,10 @@ impl AudioDecoder {
             match self.format_reader.next_packet() {
                 Ok(packet) => {
                     // Skip non-audio packets
-                    if packet.track_id() != u32::try_from(self.track_index).unwrap() {
+                    if packet.track_id()
+                        != u32::try_from(self.track_index)
+                            .map_err(|_| DecoderError::InvalidTrackIndex)?
+                    {
                         continue;
                     }
 
