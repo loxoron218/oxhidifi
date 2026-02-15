@@ -230,6 +230,7 @@ impl CoverArt {
             pic.set_tooltip_text(Some("Default album artwork"));
             (None, Some(pic))
         };
+
         // Create DR badge
         let dr_badge = if show_dr_badge {
             Some(
