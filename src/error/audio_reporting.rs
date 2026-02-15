@@ -59,9 +59,7 @@ mod tests {
     #[test]
     fn test_handle_exclusive_mode_error_true() {
         let reason = "Device busy".to_string();
-        let error = AudioError::OutputError(ExclusiveModeFailed {
-            reason: reason.clone(),
-        });
+        let error = AudioError::OutputError(ExclusiveModeFailed { reason });
 
         let app_state = create_test_app_state().unwrap();
         let result = handle_exclusive_mode_error(&error, &app_state);

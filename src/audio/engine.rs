@@ -299,7 +299,7 @@ impl AudioEngine {
         let track_info = TrackInfo {
             path: path.to_string_lossy().to_string(),
             metadata,
-            format: decoder.format.clone(),
+            format: decoder.format,
             duration_ms,
         };
 

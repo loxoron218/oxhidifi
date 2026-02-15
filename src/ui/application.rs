@@ -485,7 +485,7 @@ fn build_ui(
     // Create player bar
     let (player_bar_widget, player_bar) = create_player_bar(app_state, audio_engine, queue_manager);
     let player_bar = Rc::new(player_bar);
-    let player_bar_for_keepalive = player_bar.clone();
+    let player_bar_for_keepalive = player_bar;
 
     // Subscribe to playback state changes to show/hide player bar
     let player_bar_widget_clone = player_bar_widget.clone();
@@ -787,7 +787,7 @@ fn handle_library_data_changed(
     debug!("Handling LibraryDataChanged event");
 
     // Save current search filter
-    let current_filter = search_app_state.get_library_state().search_filter.clone();
+    let current_filter = search_app_state.get_library_state().search_filter;
 
     // Update full lists
     views.album_grid.update_all_albums(albums.to_vec());

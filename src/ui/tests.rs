@@ -88,10 +88,10 @@ mod ui_compliance_tests {
         );
         assert!(album_grid.flow_box.accessible_role() != AccessibleNone);
 
-        let artist_grid = ArtistGridView::new(Some(app_state_arc.clone()), Vec::new(), false);
+        let artist_grid = ArtistGridView::new(Some(app_state_arc), Vec::new(), false);
         assert!(artist_grid.flow_box.accessible_role() != AccessibleNone);
 
-        let album_list = ListView::new(Some(&Arc::new(app_state.clone())), &Albums, false);
+        let album_list = ListView::new(Some(&Arc::new(app_state)), &Albums, false);
         assert!(album_list.list_box.accessible_role() != AccessibleNone);
     }
 
@@ -121,7 +121,7 @@ mod ui_compliance_tests {
         assert!(header_bar.view_split_button.can_focus());
         assert!(header_bar.settings_button.can_focus());
 
-        let app_state_arc = Arc::new(app_state.clone());
+        let app_state_arc = Arc::new(app_state);
         let album_grid = AlbumGridView::new(
             Some(&app_state_arc),
             None,
@@ -134,7 +134,7 @@ mod ui_compliance_tests {
         assert!(album_grid.flow_box.is_focusable());
 
         let detail_view = DetailView::new(
-            Some(app_state_arc.clone()),
+            Some(app_state_arc),
             None,
             None,
             None,
@@ -167,7 +167,7 @@ mod ui_compliance_tests {
             .collect::<Vec<_>>();
 
         let start_time = Instant::now();
-        let app_state_arc = Arc::new(app_state.clone());
+        let app_state_arc = Arc::new(app_state);
         let _album_grid = AlbumGridView::new(
             Some(&app_state_arc),
             None,
@@ -207,7 +207,7 @@ mod ui_compliance_tests {
                 .build();
             let settings_manager = SettingsManager::new().unwrap();
             let _header_bar = HeaderBar::default_with_state(
-                &app_state_arc.clone(),
+                &app_state_arc,
                 application,
                 Arc::new(settings_manager),
             );
@@ -222,7 +222,7 @@ mod ui_compliance_tests {
                 false,
             );
             let _detail_view = DetailView::new(
-                Some(app_state_arc.clone()),
+                Some(app_state_arc),
                 None,
                 None,
                 None,
@@ -249,7 +249,7 @@ mod ui_compliance_tests {
         );
 
         // Test that views adapt to different screen sizes
-        let app_state_arc = Arc::new(app_state.clone());
+        let app_state_arc = Arc::new(app_state);
         let _small_album_grid = AlbumGridView::new(
             Some(&app_state_arc),
             None,
@@ -278,7 +278,7 @@ mod ui_compliance_tests {
             false,
         );
         let _detail_view = DetailView::new(
-            Some(app_state_arc.clone()),
+            Some(app_state_arc),
             None,
             None,
             None,

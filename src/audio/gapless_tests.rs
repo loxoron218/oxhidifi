@@ -97,6 +97,6 @@ mod tests {
     #[test]
     fn test_prebuffer_clone() {
         let prebuffer = Prebuffer::new();
-        let _cloned = prebuffer.clone();
+        let _cloned = prebuffer;
     }
 }

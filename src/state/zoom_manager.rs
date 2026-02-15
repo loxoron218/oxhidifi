@@ -267,7 +267,7 @@ mod tests {
 
         let settings_manager = SettingsManager::with_config_path(temp_file).unwrap();
         let settings_manager_arc = Arc::new(RwLock::new(settings_manager));
-        let zoom_manager = ZoomManager::new(settings_manager_arc.clone());
+        let zoom_manager = ZoomManager::new(settings_manager_arc);
 
         assert_eq!(zoom_manager.get_grid_zoom_level(), 2);
         assert_eq!(zoom_manager.get_list_zoom_level(), 1);
@@ -289,7 +289,7 @@ mod tests {
 
         let settings_manager = SettingsManager::with_config_path(temp_file).unwrap();
         let settings_manager_arc = Arc::new(RwLock::new(settings_manager));
-        let zoom_manager = ZoomManager::new(settings_manager_arc.clone());
+        let zoom_manager = ZoomManager::new(settings_manager_arc);
 
         // Test all valid grid zoom levels
         for level in 0..=4 {
@@ -322,7 +322,7 @@ mod tests {
 
         let settings_manager = SettingsManager::with_config_path(temp_file).unwrap();
         let settings_manager_arc = Arc::new(RwLock::new(settings_manager));
-        let zoom_manager = ZoomManager::new(settings_manager_arc.clone());
+        let zoom_manager = ZoomManager::new(settings_manager_arc);
 
         // Test all valid list zoom levels
         for level in 0..=2 {
@@ -360,7 +360,7 @@ mod tests {
 
         // Create zoom manager and verify initial zoom levels
         let settings_manager_arc = Arc::new(RwLock::new(settings_manager));
-        let zoom_manager = ZoomManager::new(settings_manager_arc.clone());
+        let zoom_manager = ZoomManager::new(settings_manager_arc);
 
         // Verify that zoom levels were loaded correctly from settings
         assert_eq!(zoom_manager.get_grid_zoom_level(), initial_grid_level);
@@ -377,7 +377,7 @@ mod tests {
         // Second session: Create new zoom manager and verify persistence
         let settings_manager2 = SettingsManager::with_config_path(settings_path.clone()).unwrap();
         let settings_manager2_arc = Arc::new(RwLock::new(settings_manager2));
-        let zoom_manager2 = ZoomManager::new(settings_manager2_arc.clone());
+        let zoom_manager2 = ZoomManager::new(settings_manager2_arc);
 
         // Verify that zoom levels were restored from persisted settings
         assert_eq!(zoom_manager2.get_grid_zoom_level(), 1);

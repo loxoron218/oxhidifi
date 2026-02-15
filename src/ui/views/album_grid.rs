@@ -302,7 +302,7 @@ impl AlbumGridView {
             empty_state,
             search_empty_state,
             current_sort: AlbumSortCriteria::Title,
-            album_cards: album_cards.clone(),
+            album_cards,
             _zoom_subscription_handle: zoom_subscription_handle,
             _settings_subscription_handle: settings_subscription_handle,
         };

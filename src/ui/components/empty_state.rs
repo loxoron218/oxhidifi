@@ -205,7 +205,7 @@ impl EmptyState {
             // Get window reference for dialog parent
             if let Some(window) = &window_clone {
                 // Open folder selection dialog asynchronously
-                let dialog_clone = dialog.clone();
+                let dialog_clone = dialog;
                 let window_clone2 = window.clone();
                 let settings_manager_clone2 = settings_manager_clone.clone();
                 let app_state_clone2 = app_state_clone.clone();

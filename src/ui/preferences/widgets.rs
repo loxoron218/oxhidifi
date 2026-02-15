@@ -125,7 +125,7 @@ mod tests {
             current_value,
             |_settings| "grid".to_string(), // Default value since setting is removed
             |_settings, _value| {},         // No-op since setting is removed
-            settings_manager_arc.clone(),
+            settings_manager_arc,
         );
 
         // Verify the combo row was created with correct properties

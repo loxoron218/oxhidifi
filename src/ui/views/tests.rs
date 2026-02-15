@@ -80,7 +80,7 @@ mod view_integration_tests {
         // Test detail view creation for artist
         let artist = Artist::default();
         let _artist_detail = DetailView::builder()
-            .app_state(Arc::new(app_state.clone()))
+            .app_state(Arc::new(app_state))
             .detail_type(Some(DetailTypeArtist(artist)))
             .compact(false)
             .build();
@@ -112,8 +112,8 @@ mod view_integration_tests {
         ];
 
         let mut album_grid = AlbumGridView::builder()
-            .app_state(Arc::new(app_state.clone()))
-            .albums(albums.clone())
+            .app_state(Arc::new(app_state))
+            .albums(albums)
             .show_dr_badges(true)
             .compact(false)
             .build();

@@ -222,9 +222,9 @@ impl ArtistGridView {
             current_sort: ArtistSortCriteria::Name,
             artist_cards_ref: artist_cards_ref.clone(),
             zoom_subscription_handle: if let Some(state) = app_state {
-                let state_clone = state.clone();
-                let flow_box_clone = flow_box.clone();
-                let artist_cards_ref_clone = artist_cards_ref.clone();
+                let state_clone = state;
+                let flow_box_clone = flow_box;
+                let artist_cards_ref_clone = artist_cards_ref;
                 let handle = MainContext::default().spawn_local(async move {
                     let rx = state_clone.zoom_manager.subscribe();
                     while let Ok(event) = rx.recv().await {
@@ -837,13 +837,10 @@ mod tests {
         let clicked = Arc::new(clicked);
 
         let card = ArtistCard::builder()
-            .artist(artist.clone())
+            .artist(artist)
             .cover_size(200)
-            .on_card_clicked({
-                let clicked = clicked.clone();
-                move || {
-                    clicked.store(true, SeqCst);
-                }
+            .on_card_clicked(move || {
+                clicked.store(true, SeqCst);
             })
             .build()
             .expect("Failed to build ArtistCard");

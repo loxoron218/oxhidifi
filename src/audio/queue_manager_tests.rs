@@ -58,10 +58,10 @@ mod tests {
     fn test_playback_queue_cloned() {
         let tracks = vec![Track::default(), Track::default()];
         let queue = PlaybackQueue {
-            tracks: tracks.clone(),
+            tracks,
             current_index: Some(0),
         };
-        let cloned = queue.clone();
+        let cloned = queue;
         assert_eq!(cloned.tracks.len(), 2);
         assert_eq!(cloned.current_index, Some(0));
     }

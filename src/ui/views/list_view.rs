@@ -626,7 +626,7 @@ impl ListView {
 
             match self.view_type {
                 ListViewType::Albums => {
-                    let albums = library_state.albums.clone();
+                    let albums = library_state.albums;
                     let has_results = self.filter_items(query, &albums, |album, q| {
                         album.title.to_lowercase().contains(q)
                             || album.artist_id.to_string().to_lowercase().contains(q)
@@ -634,7 +634,7 @@ impl ListView {
                     self.update_empty_state(query, has_results);
                 }
                 ListViewType::Artists => {
-                    let artists = library_state.artists.clone();
+                    let artists = library_state.artists;
                     let has_results = self.filter_items(query, &artists, |artist, q| {
                         artist.name.to_lowercase().contains(q)
                     });
