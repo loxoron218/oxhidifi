@@ -100,7 +100,14 @@ impl PlaybackHandler {
         move |track: Track| {
             if audio_engine.is_none() || queue_manager.is_none() {
                 warn!("Missing dependencies for track playback");
-                let toast = Toast::new("Playback not available - check system configuration");
+                let missing_deps = if audio_engine.is_none() && queue_manager.is_none() {
+                    "audio engine and queue manager"
+                } else if audio_engine.is_none() {
+                    "audio engine"
+                } else {
+                    "queue manager"
+                };
+                let toast = Toast::new(&format!("Playback not available - missing {missing_deps}"));
                 toast_overlay.add_toast(toast);
                 return;
             }
@@ -281,15 +288,21 @@ impl PlaybackHandler {
         error!("Playback error for track {}: {}", track_path, error);
 
         let toast_message = match error {
-            PlaybackError::NoTracks(_) => "No tracks found in album",
-            PlaybackError::LoadError(_) => "Failed to load track",
-            PlaybackError::PlayError(_) => "Failed to play track",
-            PlaybackError::DatabaseError(_) => "Failed to load album tracks",
-            PlaybackError::MetadataError(_) => "Failed to read track metadata",
-            PlaybackError::InvalidFormat { .. } => "Unsupported audio format",
+            PlaybackError::NoTracks(_) => format!("No tracks found in album: {track_path}"),
+            PlaybackError::LoadError(_) => format!("Failed to load track: {track_path}"),
+            PlaybackError::PlayError(_) => format!("Failed to play track: {track_path}"),
+            PlaybackError::DatabaseError(_) => {
+                format!("Failed to load album tracks: {track_path}")
+            }
+            PlaybackError::MetadataError(_) => {
+                format!("Failed to read track metadata: {track_path}")
+            }
+            PlaybackError::InvalidFormat { .. } => {
+                format!("Unsupported audio format: {track_path}")
+            }
             PlaybackError::AudioEngineMissing | PlaybackError::QueueManagerMissing => return,
         };
 
-        toast_overlay.add_toast(Toast::new(toast_message));
+        toast_overlay.add_toast(Toast::new(&toast_message));
     }
 }

@@ -314,7 +314,347 @@ impl OxhidifiApplication {
     }
 }
 
-/// Builds the main user interface.
+/// Creates the main application window with default dimensions.
+///
+/// # Arguments
+///
+/// * `app` - The application instance
+///
+/// # Returns
+///
+/// A configured `ApplicationWindow`.
+fn create_main_window(app: &Application) -> ApplicationWindow {
+    ApplicationWindow::builder()
+        .application(app)
+        .title("Oxhidifi")
+        .default_width(1200)
+        .default_height(800)
+        .build()
+}
+
+/// Builds and pushes an album detail page to the navigation view.
+///
+/// # Arguments
+///
+/// * `navigation_view` - The navigation view to push to
+/// * `toast_overlay` - Toast overlay for error messages
+/// * `app_state` - Application state reference
+/// * `library_db` - Library database reference
+/// * `audio_engine` - Audio engine reference
+/// * `queue_manager` - Queue manager reference
+/// * `album` - The album to display
+fn push_album_detail_page(
+    navigation_view: &NavigationView,
+    toast_overlay: &ToastOverlay,
+    app_state: &Arc<AppState>,
+    library_db: &Arc<LibraryDatabase>,
+    audio_engine: &Arc<AudioEngine>,
+    queue_manager: &Arc<QueueManager>,
+    album: &Album,
+) {
+    let detail_view = match DetailView::builder()
+        .app_state(app_state.clone())
+        .library_db(library_db.clone())
+        .audio_engine(audio_engine.clone())
+        .queue_manager(queue_manager.clone())
+        .detail_type(Some(DetailTypeAlbum(album.clone())))
+        .compact(false)
+        .build()
+    {
+        Ok(view) => view,
+        Err(e) => {
+            error!("Failed to build album detail view: {e}");
+            let toast = Toast::new(&format!("Failed to load album: {}", album.title));
+            toast_overlay.add_toast(toast);
+            return;
+        }
+    };
+
+    let page = NavigationPage::builder()
+        .child(&detail_view.widget)
+        .title(&album.title)
+        .build();
+
+    navigation_view.push(&page);
+}
+
+/// Builds and pushes an artist detail page to the navigation view.
+///
+/// # Arguments
+///
+/// * `navigation_view` - The navigation view to push to
+/// * `toast_overlay` - Toast overlay for error messages
+/// * `app_state` - Application state reference
+/// * `library_db` - Library database reference
+/// * `audio_engine` - Audio engine reference
+/// * `queue_manager` - Queue manager reference
+/// * `artist` - The artist to display
+fn push_artist_detail_page(
+    navigation_view: &NavigationView,
+    toast_overlay: &ToastOverlay,
+    app_state: &Arc<AppState>,
+    library_db: &Arc<LibraryDatabase>,
+    audio_engine: &Arc<AudioEngine>,
+    queue_manager: &Arc<QueueManager>,
+    artist: &Artist,
+) {
+    let detail_view = match DetailView::builder()
+        .app_state(app_state.clone())
+        .library_db(library_db.clone())
+        .audio_engine(audio_engine.clone())
+        .queue_manager(queue_manager.clone())
+        .detail_type(Some(DetailTypeArtist(artist.clone())))
+        .compact(false)
+        .build()
+    {
+        Ok(view) => view,
+        Err(e) => {
+            error!("Failed to build artist detail view: {e}");
+            let toast = Toast::new(&format!("Failed to load artist: {}", artist.name));
+            toast_overlay.add_toast(toast);
+            return;
+        }
+    };
+
+    let page = NavigationPage::builder()
+        .child(&detail_view.widget)
+        .title(&artist.name)
+        .build();
+
+    navigation_view.push(&page);
+}
+
+/// Handles navigation state changes and updates the UI accordingly.
+///
+/// # Arguments
+///
+/// * `navigation_view` - The navigation view
+/// * `toast_overlay` - Toast overlay for error messages
+/// * `app_state` - Application state reference
+/// * `library_db` - Library database reference
+/// * `audio_engine` - Audio engine reference
+/// * `queue_manager` - Queue manager reference
+/// * `header_bar` - Header bar widgets to update
+fn handle_navigation_state_change(
+    navigation_view: &NavigationView,
+    toast_overlay: &ToastOverlay,
+    app_state: &Arc<AppState>,
+    library_db: &Arc<LibraryDatabase>,
+    audio_engine: &Arc<AudioEngine>,
+    queue_manager: &Arc<QueueManager>,
+    header_bar: &HeaderBar,
+) {
+    let current_nav = app_state.get_navigation_state();
+
+    match current_nav {
+        Library => {
+            let is_at_root =
+                navigation_view.visible_page().and_then(|p| p.tag()) == Some("root".into());
+
+            if !is_at_root {
+                navigation_view.pop_to_tag("root");
+            }
+
+            header_bar.back_button.set_visible(false);
+            header_bar.search_button.set_visible(true);
+            header_bar.view_split_button.set_visible(true);
+            header_bar
+                .widget
+                .set_title_widget(Some(&header_bar.tab_box));
+            header_bar.widget.set_show_start_title_buttons(true);
+            header_bar.widget.set_show_end_title_buttons(true);
+        }
+        AlbumDetail(ref album) => {
+            push_album_detail_page(
+                navigation_view,
+                toast_overlay,
+                app_state,
+                library_db,
+                audio_engine,
+                queue_manager,
+                album,
+            );
+
+            header_bar.back_button.set_visible(true);
+            header_bar.search_button.set_visible(false);
+            header_bar.view_split_button.set_visible(false);
+            header_bar.widget.set_title_widget(Option::<&Widget>::None);
+        }
+        ArtistDetail(ref artist) => {
+            push_artist_detail_page(
+                navigation_view,
+                toast_overlay,
+                app_state,
+                library_db,
+                audio_engine,
+                queue_manager,
+                artist,
+            );
+
+            header_bar.back_button.set_visible(true);
+            header_bar.search_button.set_visible(false);
+            header_bar.view_split_button.set_visible(false);
+            header_bar.widget.set_title_widget(Option::<&Widget>::None);
+        }
+    }
+}
+
+/// Spawns async handler for navigation state changes.
+///
+/// # Arguments
+///
+/// * `app_state` - Application state reference
+/// * `navigation_view` - The navigation view
+/// * `toast_overlay` - Toast overlay for error messages
+/// * `library_db` - Library database reference
+/// * `audio_engine` - Audio engine reference
+/// * `queue_manager` - Queue manager reference
+/// * `header_bar` - Header bar reference
+fn spawn_navigation_handler(
+    app_state: Arc<AppState>,
+    navigation_view: NavigationView,
+    toast_overlay: ToastOverlay,
+    library_db: Arc<LibraryDatabase>,
+    audio_engine: Arc<AudioEngine>,
+    queue_manager: Arc<QueueManager>,
+    header_bar: Rc<HeaderBar>,
+) {
+    MainContext::default().spawn_local(async move {
+        let receiver = app_state.subscribe();
+
+        while let Ok(event) = receiver.recv().await {
+            if let NavigationChanged(_nav_state) = event {
+                handle_navigation_state_change(
+                    &navigation_view,
+                    &toast_overlay,
+                    &app_state,
+                    &library_db,
+                    &audio_engine,
+                    &queue_manager,
+                    &header_bar,
+                );
+            }
+        }
+    });
+}
+
+/// Sets up callback to sync `AppState` when `NavigationView` pops.
+///
+/// # Arguments
+///
+/// * `app_state` - Application state reference
+/// * `navigation_view` - The navigation view
+fn setup_navigation_pop_callback(app_state: &Arc<AppState>, navigation_view: &NavigationView) {
+    let app_state_weak = Arc::downgrade(app_state);
+
+    navigation_view.connect_visible_page_notify(move |nv| {
+        if let Some(page) = nv.visible_page()
+            && page.tag().as_deref() == Some("root")
+            && let Some(app_state) = app_state_weak.upgrade()
+        {
+            let current_nav = app_state.get_navigation_state();
+            if current_nav != Library {
+                debug!("NavigationView synced to root, updating AppState");
+                app_state.update_navigation(Library);
+            }
+        }
+    });
+}
+
+/// Spawns async handler for playback state changes to show/hide player bar.
+///
+/// # Arguments
+///
+/// * `app_state` - Application state reference
+/// * `player_bar_widget` - Player bar widget to show/hide
+/// * `player_bar` - Player bar instance to keep alive
+fn spawn_player_bar_visibility_handler(
+    app_state: Arc<AppState>,
+    player_bar_widget: Widget,
+    player_bar: Rc<PlayerBar>,
+) {
+    MainContext::default().spawn_local(async move {
+        // Keep player_bar alive throughout the subscription closure lifetime
+        let _player_bar_keepalive = player_bar;
+
+        let receiver = app_state.subscribe();
+
+        while let Ok(event) = receiver.recv().await {
+            if let PlaybackStateChanged(state) = event {
+                // Show player bar when a track is loaded, hide only when stopped
+                match state {
+                    Playing | Paused | Buffering | Ready => {
+                        player_bar_widget.set_visible(true);
+                    }
+                    Stopped => {
+                        player_bar_widget.set_visible(false);
+                    }
+                }
+            }
+        }
+    });
+}
+
+/// Sets up ESC key controller for back navigation from detail views.
+///
+/// # Arguments
+///
+/// * `app_state` - Application state reference
+/// * `window` - The application window
+fn setup_esc_key_controller(app_state: &Arc<AppState>, window: &ApplicationWindow) {
+    let app_state_esc = app_state.clone();
+    let esc_controller = EventControllerKey::new();
+
+    esc_controller.connect_key_pressed(move |_, key, _, _| {
+        if key == Key::Escape {
+            let current_nav = app_state_esc.get_navigation_state();
+            if current_nav != Library {
+                debug!("ESC pressed in detail view, navigating back to library");
+                app_state_esc.update_navigation(Library);
+                return Stop;
+            }
+        }
+        Proceed
+    });
+
+    window.add_controller(esc_controller);
+}
+
+/// Assembles the main layout box with header, content, and player bar.
+///
+/// # Arguments
+///
+/// * `header_bar_widget` - Header bar widget
+/// * `toast_overlay` - Toast overlay widget
+/// * `player_bar_widget` - Player bar widget
+///
+/// # Returns
+///
+/// A vertical box widget containing all main layout elements.
+fn assemble_main_layout(
+    header_bar_widget: &Widget,
+    toast_overlay: &ToastOverlay,
+    player_bar_widget: &Widget,
+) -> GtkBox {
+    let main_box = GtkBox::builder().orientation(Vertical).build();
+
+    main_box.append(header_bar_widget);
+    main_box.append(toast_overlay);
+    main_box.append(player_bar_widget);
+
+    main_box
+}
+
+/// Builds the main user interface for the application.
+///
+/// # Arguments
+///
+/// * `app` - The application instance
+/// * `audio_engine` - Audio engine for playback functionality
+/// * `library_db` - Library database for music library operations
+/// * `app_state` - Application state manager
+/// * `settings_manager` - User settings manager
+/// * `queue_manager` - Queue manager for playback queue operations
 fn build_ui(
     app: &Application,
     audio_engine: &Arc<AudioEngine>,
@@ -323,21 +663,12 @@ fn build_ui(
     settings_manager: &Arc<SettingsManager>,
     queue_manager: &Arc<QueueManager>,
 ) {
-    // Create the main window
-    let window = ApplicationWindow::builder()
-        .application(app)
-        .title("Oxhidifi")
-        .default_width(1200)
-        .default_height(800)
-        .build();
+    let window = create_main_window(app);
 
-    // Create navigation view for handling view transitions
     let navigation_view = NavigationView::builder().build();
 
-    // Create toast overlay for displaying error messages
     let toast_overlay = ToastOverlay::new();
 
-    // Create header bar with proper state integration
     let header_bar = Rc::new(HeaderBar::default_with_state(
         app_state,
         app.clone(),
@@ -361,193 +692,40 @@ fn build_ui(
         .title("Main")
         .build();
     navigation_view.add(&main_page);
-
-    // Set navigation view as child of toast overlay
     toast_overlay.set_child(Some(&navigation_view));
 
-    // Handle navigation events and update HeaderBar state centrally
-    let navigation_view_clone = navigation_view.clone();
-    let toast_overlay_clone = toast_overlay.clone();
-    let app_state_nav = app_state.clone();
-    let library_db_nav = library_db.clone();
-    let audio_engine_nav = audio_engine.clone();
-    let queue_manager_nav = queue_manager.clone();
-    let hb_widget = header_bar.widget.clone();
-    let hb_back = header_bar.back_button.clone();
-    let hb_search = header_bar.search_button.clone();
-    let hb_view = header_bar.view_split_button.clone();
-    let hb_tabs = header_bar.tab_box.clone();
+    spawn_navigation_handler(
+        app_state.clone(),
+        navigation_view.clone(),
+        toast_overlay.clone(),
+        library_db.clone(),
+        audio_engine.clone(),
+        queue_manager.clone(),
+        header_bar.clone(),
+    );
 
-    MainContext::default().spawn_local(async move {
-        let receiver = app_state_nav.subscribe();
-        while let Ok(event) = receiver.recv().await {
-            if let NavigationChanged(nav_state) = event {
-                match *nav_state {
-                    Library => {
-                        let is_at_root = navigation_view_clone.visible_page().and_then(|p| p.tag())
-                            == Some("root".into());
-
-                        if !is_at_root {
-                            navigation_view_clone.pop_to_tag("root");
-                        }
-
-                        hb_back.set_visible(false);
-                        hb_search.set_visible(true);
-                        hb_view.set_visible(true);
-                        hb_widget.set_title_widget(Some(&hb_tabs));
-                        hb_widget.set_show_start_title_buttons(true);
-                        hb_widget.set_show_end_title_buttons(true);
-                    }
-                    AlbumDetail(album) => {
-                        let detail_view = match DetailView::builder()
-                            .app_state(app_state_nav.clone())
-                            .library_db(library_db_nav.clone())
-                            .audio_engine(audio_engine_nav.clone())
-                            .queue_manager(queue_manager_nav.clone())
-                            .detail_type(Some(DetailTypeAlbum(album.clone())))
-                            .compact(false)
-                            .build()
-                        {
-                            Ok(view) => view,
-                            Err(e) => {
-                                error!("Failed to build album detail view: {e}");
-                                let toast = Toast::new("Failed to load album details");
-                                toast_overlay_clone.add_toast(toast);
-                                continue;
-                            }
-                        };
-
-                        let page = NavigationPage::builder()
-                            .child(&detail_view.widget)
-                            .title(&album.title)
-                            .build();
-
-                        navigation_view_clone.push(&page);
-                        hb_back.set_visible(true);
-                        hb_search.set_visible(false);
-                        hb_view.set_visible(false);
-                        hb_widget.set_title_widget(Option::<&Widget>::None);
-                    }
-                    ArtistDetail(artist) => {
-                        let detail_view = match DetailView::builder()
-                            .app_state(app_state_nav.clone())
-                            .library_db(library_db_nav.clone())
-                            .audio_engine(audio_engine_nav.clone())
-                            .queue_manager(queue_manager_nav.clone())
-                            .detail_type(Some(DetailTypeArtist(artist.clone())))
-                            .compact(false)
-                            .build()
-                        {
-                            Ok(view) => view,
-                            Err(e) => {
-                                error!("Failed to build artist detail view: {e}");
-                                let toast = Toast::new("Failed to load artist details");
-                                toast_overlay_clone.add_toast(toast);
-                                continue;
-                            }
-                        };
-
-                        let page = NavigationPage::builder()
-                            .child(&detail_view.widget)
-                            .title(&artist.name)
-                            .build();
-
-                        navigation_view_clone.push(&page);
-                        hb_back.set_visible(true);
-                        hb_search.set_visible(false);
-                        hb_view.set_visible(false);
-                        hb_widget.set_title_widget(Option::<&Widget>::None);
-                    }
-                }
-            }
-        }
-    });
-
-    // Tag the root page so we can pop back to it
     main_page.set_tag(Some("root"));
 
-    // Sync AppState when NavigationView pops (e.g. via ESC or swipe)
-    // We use a weak reference to AppState to avoid circular Arc leaks
-    let app_state_weak = Arc::downgrade(app_state);
-    navigation_view.connect_visible_page_notify(move |nv| {
-        if let Some(page) = nv.visible_page()
-            && page.tag().as_deref() == Some("root")
-            && let Some(app_state) = app_state_weak.upgrade()
-        {
-            let current_nav = app_state.get_navigation_state();
-            if current_nav != Library {
-                debug!("NavigationView synced to root, updating AppState");
-                app_state.update_navigation(Library);
-            }
-        }
-    });
+    setup_navigation_pop_callback(app_state, &navigation_view);
 
-    // Create player bar
     let (player_bar_widget, player_bar) = create_player_bar(app_state, audio_engine, queue_manager);
     let player_bar = Rc::new(player_bar);
-    let player_bar_for_keepalive = player_bar;
 
-    // Subscribe to playback state changes to show/hide player bar
-    let player_bar_widget_clone = player_bar_widget.clone();
-    let app_state_for_subscription = app_state.clone();
+    spawn_player_bar_visibility_handler(app_state.clone(), player_bar_widget.clone(), player_bar);
 
-    MainContext::default().spawn_local(async move {
-        // Keep player_bar alive throughout the subscription closure lifetime
-        let _player_bar_keepalive = player_bar_for_keepalive;
-
-        let receiver = app_state_for_subscription.subscribe();
-        loop {
-            if let Ok(event) = receiver.recv().await {
-                if let PlaybackStateChanged(state) = event {
-                    // Show player bar when a track is loaded, hide only when stopped
-                    match state {
-                        Playing | Paused | Buffering | Ready => {
-                            player_bar_widget_clone.set_visible(true);
-                        }
-                        Stopped => {
-                            player_bar_widget_clone.set_visible(false);
-                        }
-                    }
-                }
-            } else {
-                // Channel was closed - resubscribe? Or just exit?
-                // For async-channel manual fan-out, close usually means the sender is gone (AppState dropped).
-                // So we should break.
-                debug!("Playback state subscription channel closed");
-                break;
-            }
-        }
-    });
-
-    // Assemble the main layout
-    let main_box = GtkBox::builder().orientation(Vertical).build();
-
-    main_box.append(&header_bar.widget);
-    main_box.append(&toast_overlay);
-    main_box.append(&player_bar_widget);
+    let main_box = assemble_main_layout(
+        &header_bar.widget.clone().upcast::<Widget>(),
+        &toast_overlay,
+        &player_bar_widget.clone(),
+    );
 
     // Load custom CSS for consistent styling
     if let Err(e) = load_custom_css() {
         error!("Failed to load custom CSS: {e}");
     }
 
-    // Set up ESC key shortcut for back navigation
-    let app_state_esc = app_state.clone();
-    let esc_controller = EventControllerKey::new();
-    esc_controller.connect_key_pressed(move |_, key, _, _| {
-        if key == Key::Escape {
-            let current_nav = app_state_esc.get_navigation_state();
-            if current_nav != Library {
-                debug!("ESC pressed in detail view, navigating back to library");
-                app_state_esc.update_navigation(Library);
-                return Stop;
-            }
-        }
-        Proceed
-    });
-    window.add_controller(esc_controller);
+    setup_esc_key_controller(app_state, &window);
 
-    // Set the window content
     window.set_content(Some(&main_box));
     window.present();
 }
@@ -1136,18 +1314,28 @@ fn create_main_content(
 }
 
 /// Creates the persistent player control bar.
+///
+/// # Arguments
+///
+/// * `app_state` - Application state manager
+/// * `audio_engine` - Audio engine for playback functionality
+/// * `queue_manager` - Queue manager for playback queue operations
+///
+/// # Returns
+///
+/// A tuple containing the player bar widget and the `PlayerBar` instance.
 fn create_player_bar(
     app_state: &Arc<AppState>,
     audio_engine: &Arc<AudioEngine>,
     queue_manager: &Arc<QueueManager>,
-) -> (GtkBox, PlayerBar) {
+) -> (Widget, PlayerBar) {
     let player_bar = PlayerBar::new(app_state, audio_engine, Some(queue_manager));
     let widget = player_bar.widget.clone();
 
     // Initially hide the player bar
     widget.set_visible(false);
 
-    (widget.upcast::<GtkBox>(), player_bar)
+    (widget.upcast::<Widget>(), player_bar)
 }
 
 /// Loads custom CSS for consistent component styling.
