@@ -18,9 +18,9 @@ use {
         RecursiveMode::Recursive,
         Watcher,
         event::{
-            EventKind::{Create, Modify, Other, Remove},
+            EventKind::{self, Create, Modify, Other, Remove},
             ModifyKind::{Data, Name},
-            RenameMode::{Both, From, To},
+            RenameMode::{self, Both, From, To},
         },
     },
     parking_lot::RwLock,
@@ -122,214 +122,7 @@ impl FileWatcher {
                     return;
                 }
 
-                // Process each path in the event
-                for path in &event.paths {
-                    // Check logic depending on event kind
-                    match event.kind {
-                        // For Create/Modify, we MUST check extensions to avoid processing non-audio files
-                        Create(_) | Modify(Data(_)) => {
-                            // Check if it's a directory creation
-                            if path.is_dir() && matches!(event.kind, Create(_)) {
-                                debug!("FileWatcher: Detected new directory, scanning: {:?}", path);
-                                let files = Self::collect_audio_files_recursively(path);
-                                for file_path in files {
-                                    if let Err(e) = sender.try_send(FileChanged {
-                                        path: file_path.clone(),
-                                        is_new: true,
-                                    }) {
-                                        error!(
-                                            "Failed to send FileChanged event for '{}': {}",
-                                            file_path.display(),
-                                            e
-                                        );
-                                    }
-                                }
-                            } else if Self::is_supported_audio_file(path)
-                                || Self::is_supported_text_file(path)
-                            {
-                                // Text files might contain DR values, so treat them as file changes
-                                // This will trigger DR parsing for the parent album directory
-                                if let Err(e) = sender.try_send(FileChanged {
-                                    path: path.clone(),
-                                    is_new: matches!(event.kind, Create(_)),
-                                }) {
-                                    error!(
-                                        "Failed to send FileChanged event for '{}': {}",
-                                        path.display(),
-                                        e
-                                    );
-                                }
-                            } else {
-                                debug!("Ignoring unsupported file change: {:?}", path);
-                            }
-                        }
-
-                        // Handle Rename/Move events (covers Move to Trash)
-                        Modify(Name(mode)) => {
-                            debug!(
-                                "FileWatcher: Processing rename event {:?} for path: {:?}",
-                                mode, path
-                            );
-                            match mode {
-                                // From: File was moved FROM this path (deletion/move source)
-                                From => {
-                                    debug!(
-                                        "FileWatcher: Propagating rename-from (remove) event for path: {:?}",
-                                        path
-                                    );
-                                    if let Err(e) =
-                                        sender.try_send(FileRemoved { path: path.clone() })
-                                    {
-                                        error!(
-                                            "Failed to send FileRemoved event for '{}': {}",
-                                            path.display(),
-                                            e
-                                        );
-                                    }
-                                }
-
-                                // To: File was moved TO this path (creation/move dest)
-                                To => {
-                                    if path.is_dir() {
-                                        debug!(
-                                            "FileWatcher: Detected moved directory, scanning: {:?}",
-                                            path
-                                        );
-                                        let files = Self::collect_audio_files_recursively(path);
-                                        for file_path in files {
-                                            if let Err(e) = sender.try_send(FileChanged {
-                                                path: file_path.clone(),
-                                                is_new: true,
-                                            }) {
-                                                error!(
-                                                    "Failed to send FileChanged event for '{}': {}",
-                                                    file_path.display(),
-                                                    e
-                                                );
-                                            }
-                                        }
-                                    } else if Self::is_supported_audio_file(path)
-                                        || Self::is_supported_text_file(path)
-                                    {
-                                        debug!(
-                                            "FileWatcher: Propagating rename-to (add) event for path: {:?}",
-                                            path
-                                        );
-                                        if let Err(e) = sender.try_send(FileChanged {
-                                            path: path.clone(),
-                                            is_new: true,
-                                        }) {
-                                            error!(
-                                                "Failed to send FileChanged event for '{}': {}",
-                                                path.display(),
-                                                e
-                                            );
-                                        }
-                                    }
-                                }
-
-                                // Both: Atomic rename (path contains both descriptors? Notify usually sends separate events or one event with two paths)
-                                // In Notify, Both usually usually comes with 2 paths in the event paths vector.
-                                Both => {
-                                    // If we have 2 paths, 0 is From, 1 is To.
-                                    if event.paths.len() == 2 {
-                                        let from_path = &event.paths[0];
-                                        let to_path = &event.paths[1];
-
-                                        debug!(
-                                            "FileWatcher: Propagating rename-both: {:?} -> {:?}",
-                                            from_path, to_path
-                                        );
-
-                                        // Handle From
-                                        if let Err(e) = sender.try_send(FileRemoved {
-                                            path: from_path.clone(),
-                                        }) {
-                                            error!(
-                                                "Failed to send FileRemoved event for '{}': {}",
-                                                from_path.display(),
-                                                e
-                                            );
-                                        }
-
-                                        // Handle To
-                                        if to_path.is_dir() {
-                                            debug!(
-                                                "FileWatcher: Detected moved directory (both), scanning: {:?}",
-                                                to_path
-                                            );
-                                            let files =
-                                                Self::collect_audio_files_recursively(to_path);
-                                            for file_path in files {
-                                                if let Err(e) = sender.try_send(FileChanged {
-                                                    path: file_path.clone(),
-                                                    is_new: true,
-                                                }) {
-                                                    error!(
-                                                        "Failed to send FileChanged event for '{}': {}",
-                                                        file_path.display(),
-                                                        e
-                                                    );
-                                                }
-                                            }
-                                        } else if (Self::is_supported_audio_file(to_path)
-                                            || Self::is_supported_text_file(to_path))
-                                            && let Err(e) = sender.try_send(FileChanged {
-                                                path: to_path.clone(),
-                                                is_new: true,
-                                            })
-                                        {
-                                            error!(
-                                                "Failed to send FileChanged event for '{}': {}",
-                                                to_path.display(),
-                                                e
-                                            );
-                                        }
-                                    } else {
-                                        // Fallback if structure is unexpected, treat match path as potentially both?
-                                        // Safer to treat as generic change or log warning.
-                                        debug!(
-                                            "FileWatcher: Received RenameMode::Both but path count is {}",
-                                            event.paths.len()
-                                        );
-                                    }
-                                }
-                                _ => {
-                                    debug!(
-                                        "FileWatcher: Ignored unknown RenameMode for path: {:?}",
-                                        path
-                                    );
-                                }
-                            }
-                        }
-
-                        // For Remove, we must allow it to pass even if it's a directory
-                        // or a file without extension, as we can't check the file type of a deleted path
-                        // easily, and we need to catch directory deletions.
-                        Remove(_) => {
-                            debug!("FileWatcher: Propagating remove event for path: {:?}", path);
-                            if let Err(e) = sender.try_send(FileRemoved { path: path.clone() }) {
-                                error!(
-                                    "Failed to send FileRemoved event for '{}': {}",
-                                    path.display(),
-                                    e
-                                );
-                            }
-                        }
-                        Other => {
-                            // Handle potential rename/move events
-                            if Self::is_supported_audio_file(path)
-                                || Self::is_supported_text_file(path)
-                            {
-                                debug!("Other event kind for path: {:?}", path);
-                            }
-                        }
-                        _ => {
-                            // Ignore other event kinds (access, metadata changes, etc.)
-                            debug!("Ignoring event kind {:?} for path: {:?}", event.kind, path);
-                        }
-                    }
-                }
+                Self::process_event_paths(&event, sender);
             }
             Err(e) => {
                 error!(error = %e, "File system watcher error");
@@ -337,21 +130,278 @@ impl FileWatcher {
         }
     }
 
+    /// Processes paths for a given event.
+    ///
+    /// # Arguments
+    ///
+    /// * `event` - The event to process.
+    /// * `sender` - Channel sender for processed events.
+    fn process_event_paths(event: &Event, sender: &Sender<ProcessedEvent>) {
+        for path in &event.paths {
+            // Check logic depending on event kind
+            match event.kind {
+                // For Create/Modify, we MUST check extensions to avoid processing non-audio files
+                Create(_) | Modify(Data(_)) => {
+                    Self::handle_create_modify(path, event.kind, sender);
+                }
+                Modify(Name(mode)) => {
+                    Self::handle_rename(path, mode, event, sender);
+                }
+                Remove(_) => {
+                    Self::handle_remove(path, sender);
+                }
+                Other => {
+                    Self::handle_other(path);
+                }
+                _ => {
+                    debug!("Ignoring event kind {:?} for path: {:?}", event.kind, path);
+                }
+            }
+        }
+    }
+
+    /// Handles create and modify events.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The path associated with the event.
+    /// * `kind` - The event kind.
+    /// * `sender` - Channel sender for processed events.
+    fn handle_create_modify(path: &Path, kind: EventKind, sender: &Sender<ProcessedEvent>) {
+        let is_create = matches!(kind, Create(_));
+
+        if path.is_dir() && is_create {
+            debug!("FileWatcher: Detected new directory, scanning: {:?}", path);
+            let files = Self::collect_audio_files_recursively(path);
+            for file_path in files {
+                Self::send_file_changed(sender, &file_path, true);
+            }
+        } else if Self::is_supported_audio_file(path) || Self::is_supported_text_file(path) {
+            // Text files might contain DR values, so treat them as file changes
+            // This will trigger DR parsing for the parent album directory
+            Self::send_file_changed(sender, path, is_create);
+        } else {
+            debug!("Ignoring unsupported file change: {:?}", path);
+        }
+    }
+
+    /// Handles rename/move events.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The path associated with the event.
+    /// * `mode` - The rename mode.
+    /// * `event` - The full event (needed for Both mode).
+    /// * `sender` - Channel sender for processed events.
+    fn handle_rename(
+        path: &Path,
+        mode: RenameMode,
+        event: &Event,
+        sender: &Sender<ProcessedEvent>,
+    ) {
+        debug!(
+            "FileWatcher: Processing rename event {:?} for path: {:?}",
+            mode, path
+        );
+
+        match mode {
+            // From: File was moved FROM this path (deletion/move source)
+            From => {
+                Self::handle_rename_from(path, sender);
+            }
+            To => {
+                Self::handle_rename_to(path, sender);
+            }
+            Both => {
+                Self::handle_rename_both(event, sender);
+            }
+            _ => {
+                debug!(
+                    "FileWatcher: Ignored unknown RenameMode for path: {:?}",
+                    path
+                );
+            }
+        }
+    }
+
+    /// Handles rename-from events (file moved from this path).
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The path the file was moved from.
+    /// * `sender` - Channel sender for processed events.
+    fn handle_rename_from(path: &Path, sender: &Sender<ProcessedEvent>) {
+        debug!(
+            "FileWatcher: Propagating rename-from (remove) event for path: {:?}",
+            path
+        );
+        Self::send_file_removed(sender, path);
+    }
+
+    /// Handles rename-to events (file moved to this path).
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The path the file was moved to.
+    /// * `sender` - Channel sender for processed events.
+    fn handle_rename_to(path: &Path, sender: &Sender<ProcessedEvent>) {
+        if path.is_dir() {
+            debug!(
+                "FileWatcher: Detected moved directory, scanning: {:?}",
+                path
+            );
+            let files = Self::collect_audio_files_recursively(path);
+            for file_path in files {
+                Self::send_file_changed(sender, &file_path, true);
+            }
+        } else if Self::is_supported_audio_file(path) || Self::is_supported_text_file(path) {
+            debug!(
+                "FileWatcher: Propagating rename-to (add) event for path: {:?}",
+                path
+            );
+            Self::send_file_changed(sender, path, true);
+        }
+    }
+
+    /// Handles rename-both events (atomic rename with source and destination).
+    ///
+    /// # Arguments
+    ///
+    /// * `event` - The full event containing both paths.
+    /// * `sender` - Channel sender for processed events.
+    fn handle_rename_both(event: &Event, sender: &Sender<ProcessedEvent>) {
+        // In Notify, Both usually comes with 2 paths in the event paths vector.
+        // If we have 2 paths, 0 is From, 1 is To.
+        if event.paths.len() == 2 {
+            let from_path = &event.paths[0];
+            let to_path = &event.paths[1];
+
+            debug!(
+                "FileWatcher: Propagating rename-both: {:?} -> {:?}",
+                from_path, to_path
+            );
+
+            // Handle From (removal)
+            Self::send_file_removed(sender, from_path);
+
+            // Handle To (addition)
+            if to_path.is_dir() {
+                debug!(
+                    "FileWatcher: Detected moved directory (both), scanning: {:?}",
+                    to_path
+                );
+                let files = Self::collect_audio_files_recursively(to_path);
+                for file_path in files {
+                    Self::send_file_changed(sender, &file_path, true);
+                }
+            } else if Self::is_supported_audio_file(to_path)
+                || Self::is_supported_text_file(to_path)
+            {
+                Self::send_file_changed(sender, to_path, true);
+            }
+        } else {
+            // Fallback if structure is unexpected
+            debug!(
+                "FileWatcher: Received RenameMode::Both but path count is {}",
+                event.paths.len()
+            );
+        }
+    }
+
+    /// Handles remove events.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The path to remove.
+    /// * `sender` - Channel sender for processed events.
+    fn handle_remove(path: &Path, sender: &Sender<ProcessedEvent>) {
+        debug!("FileWatcher: Propagating remove event for path: {:?}", path);
+        Self::send_file_removed(sender, path);
+    }
+
+    /// Handles other event types.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The path associated with the event.
+    fn handle_other(path: &Path) {
+        if Self::is_supported_audio_file(path) || Self::is_supported_text_file(path) {
+            debug!("Other event kind for path: {:?}", path);
+        }
+    }
+
+    /// Sends a `FileChanged` event.
+    ///
+    /// # Arguments
+    ///
+    /// * `sender` - Channel sender for processed events.
+    /// * `path` - The path that changed.
+    /// * `is_new` - Whether the file is newly created.
+    fn send_file_changed(sender: &Sender<ProcessedEvent>, path: &Path, is_new: bool) {
+        if let Err(e) = sender.try_send(FileChanged {
+            path: path.to_path_buf(),
+            is_new,
+        }) {
+            error!(
+                "Failed to send FileChanged event for '{}': {}",
+                path.display(),
+                e
+            );
+        }
+    }
+
+    /// Sends a `FileRemoved` event.
+    ///
+    /// # Arguments
+    ///
+    /// * `sender` - Channel sender for processed events.
+    /// * `path` - The path that was removed.
+    fn send_file_removed(sender: &Sender<ProcessedEvent>, path: &Path) {
+        if let Err(e) = sender.try_send(FileRemoved {
+            path: path.to_path_buf(),
+        }) {
+            error!(
+                "Failed to send FileRemoved event for '{}': {}",
+                path.display(),
+                e
+            );
+        }
+    }
+
     /// Recursively collects audio files from a directory.
+    ///
+    /// # Arguments
+    ///
+    /// * `dir_path` - The directory path to search.
+    ///
+    /// # Returns
+    ///
+    /// A vector of paths to all supported audio files found recursively.
     fn collect_audio_files_recursively(dir_path: &Path) -> Vec<PathBuf> {
         let mut audio_files = Vec::new();
 
         if let Ok(entries) = read_dir(dir_path) {
-            for entry in entries.flatten() {
-                let path = entry.path();
+            for entry in entries {
+                match entry {
+                    Ok(entry) => {
+                        let path = entry.path();
 
-                if path.is_file() {
-                    if Self::is_supported_audio_file(&path) {
-                        audio_files.push(path);
+                        if path.is_file() {
+                            if Self::is_supported_audio_file(&path) {
+                                audio_files.push(path);
+                            }
+                        } else if path.is_dir() {
+                            let sub_files = Self::collect_audio_files_recursively(&path);
+                            audio_files.extend(sub_files);
+                        }
                     }
-                } else if path.is_dir() {
-                    let sub_files = Self::collect_audio_files_recursively(&path);
-                    audio_files.extend(sub_files);
+                    Err(e) => {
+                        error!(
+                            error = %e,
+                            ?dir_path,
+                            "Failed to read directory entry",
+                        );
+                    }
                 }
             }
         }
