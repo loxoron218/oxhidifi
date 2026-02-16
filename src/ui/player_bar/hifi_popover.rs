@@ -14,6 +14,16 @@ use crate::{
     },
 };
 
+/// CSS classes that can be applied to the Hi-Fi button indicator.
+/// These are removed before applying the new state class.
+const HIFI_BUTTON_CLASSES: [&str; 5] = [
+    "hifi-perfect",
+    "hifi-good",
+    "hifi-compromised",
+    "hifi-lossy",
+    "hifi-inactive",
+];
+
 /// Creates the Hi-Fi details popover with audio routing information.
 ///
 /// # Arguments
@@ -171,16 +181,6 @@ pub fn update_hifi_indicator(
     gapless_badge: &Label,
     hires_badge: &Label,
 ) {
-    /// CSS classes that can be applied to the Hi-Fi button indicator.
-    /// These are removed before applying the new state class.
-    const HIFI_BUTTON_CLASSES: [&str; 5] = [
-        "hifi-perfect",
-        "hifi-good",
-        "hifi-compromised",
-        "hifi-lossy",
-        "hifi-inactive",
-    ];
-
     let track_info = audio_engine.current_track_info();
     let output_config = audio_engine.output_config();
     let output_config_opt = Some(&output_config);

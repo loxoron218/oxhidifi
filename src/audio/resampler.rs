@@ -41,6 +41,9 @@ use crate::audio::{
 /// Sleep duration when target buffer is full.
 const RESAMPLER_SLEEP_DURATION: Duration = Duration::from_micros(50);
 
+// Number of samples to read per iteration
+const INPUT_BUFFER_SIZE: usize = 4096;
+
 /// Error type for resampling operations.
 #[derive(Debug)]
 pub enum ResamplingError {
@@ -342,9 +345,6 @@ fn resampling_loop(
     running: &Arc<AtomicBool>,
     channels: usize,
 ) {
-    // Number of samples to read per iteration
-    const INPUT_BUFFER_SIZE: usize = 4096;
-
     let mut input_buffer = Vec::with_capacity(INPUT_BUFFER_SIZE);
     let mut output_buffer = Vec::new();
 

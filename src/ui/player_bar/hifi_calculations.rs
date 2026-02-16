@@ -7,6 +7,15 @@ use crate::audio::{
     output::OutputConfig,
 };
 
+/// Maximum acceptable buffer duration indicating a lossy/high-latency device.
+/// Values above this threshold suggest the audio path is not optimized
+/// for bit-perfect playback (typical for Bluetooth or wireless devices).
+const LOSSY_BUFFER_THRESHOLD_MS: u32 = 200;
+
+/// Minimum bit depth for lossless CD-quality audio.
+/// Anything below this indicates a compressed or reduced-quality audio path.
+const CD_QUALITY_BITS: u32 = 16;
+
 /// Hi-Fi quality state information.
 #[derive(Clone, Copy)]
 pub struct HifiQualityState {
@@ -117,15 +126,6 @@ pub fn calculate_hires(track_info: Option<&TrackInfo>) -> bool {
         None => false,
     }
 }
-
-/// Maximum acceptable buffer duration indicating a lossy/high-latency device.
-/// Values above this threshold suggest the audio path is not optimized
-/// for bit-perfect playback (typical for Bluetooth or wireless devices).
-const LOSSY_BUFFER_THRESHOLD_MS: u32 = 200;
-
-/// Minimum bit depth for lossless CD-quality audio.
-/// Anything below this indicates a compressed or reduced-quality audio path.
-const CD_QUALITY_BITS: u32 = 16;
 
 /// Detects if the output device is lossy (Bluetooth, high latency, etc.).
 ///
