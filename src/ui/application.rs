@@ -1003,11 +1003,11 @@ fn handle_view_options_changed(
     view_mode: &ViewMode,
     ctx: &mut ViewOptionsContext<'_>,
 ) {
-    // Determine if tab changed - treat first switch (previous_tab is None) as a change too
+    // Determine if tab changed
     let tab_changed = ctx
         .previous_tab
-        .clone()
-        .is_none_or(|prev| prev != *current_tab);
+        .as_ref()
+        .is_some_and(|prev| prev != current_tab);
     *ctx.previous_tab = Some(current_tab.clone());
 
     let child_name = match (current_tab, view_mode) {
@@ -1162,19 +1162,21 @@ fn handle_exclusive_mode_failed(reason: &str, toast_overlay: &ToastOverlay) {
 /// * `header_bar` - Header bar for search control
 /// * `toast_overlay` - Toast overlay for error display
 /// * `views` - View controllers
+/// * `initial_tab` - Initial library tab for tracking tab changes
 fn spawn_view_stack_event_handler(
     app_state: Arc<AppState>,
     view_stack: Stack,
     header_bar: Rc<HeaderBar>,
     toast_overlay: ToastOverlay,
     views: ViewControllers,
+    initial_tab: LibraryTab,
 ) {
     debug!("Subscribing to AppState changes in main content");
 
     MainContext::default().spawn_local(async move {
         let receiver = app_state.subscribe();
         let mut switch_count = 0;
-        let mut previous_tab = None;
+        let mut previous_tab = Some(initial_tab);
         let mut views = views;
         let search_app_state = app_state.clone();
 
@@ -1308,6 +1310,7 @@ fn create_main_content(
         Rc::clone(header_bar),
         toast_overlay.clone(),
         views,
+        current_tab,
     );
 
     view_stack.upcast::<Widget>()
