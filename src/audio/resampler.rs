@@ -416,6 +416,190 @@ fn resampling_loop(
     debug!("Resampling loop stopped");
 }
 
+/// Gets the sample format from the audio output device.
+///
+/// # Arguments
+///
+/// * `output` - The audio output device.
+///
+/// # Returns
+///
+/// A `Result` containing the sample format or an `OutputError`.
+///
+/// # Errors
+///
+/// Returns `NoDeviceFound` if the device configuration cannot be queried.
+fn get_sample_format(output: &AudioOutput) -> Result<SampleFormat, OutputError> {
+    Ok(output
+        .device()
+        .default_output_config()
+        .map_err(|_| NoDeviceFound)?
+        .sample_format())
+}
+
+/// Creates an error callback function for audio stream errors.
+///
+/// # Returns
+///
+/// A function that handles audio stream errors.
+fn create_error_callback() -> impl Fn(StreamError) {
+    move |err: StreamError| {
+        if let BackendSpecific { err } = err {
+            let err_str = err.to_string();
+            if err_str.contains("buffer size changed") {
+                info!(message = %err_str, "Audio buffer size changed");
+            } else {
+                error!(error = %err_str, "Audio backend error");
+            }
+        } else {
+            error!(error = %err, "Audio stream error");
+        }
+    }
+}
+
+/// Updates the playback position based on consumed samples.
+///
+/// # Arguments
+///
+/// * `samples_consumed` - Number of samples actually consumed.
+/// * `channels` - Number of audio channels.
+/// * `sample_rate` - Sample rate in Hz.
+/// * `position` - Shared atomic for tracking playback position.
+fn update_position(
+    samples_consumed: usize,
+    channels: usize,
+    sample_rate: u64,
+    position: &Arc<AtomicU64>,
+) {
+    if samples_consumed > 0 {
+        let frames = samples_consumed / channels;
+        let duration_ms = (frames as u64 * 1000) / sample_rate;
+        position.fetch_add(duration_ms, SeqCst);
+    }
+}
+
+/// Processes samples in F32 format and fills the output buffer.
+///
+/// # Arguments
+///
+/// * `data` - Output buffer to fill.
+/// * `consumer` - Ring buffer consumer for audio samples.
+/// * `channels` - Number of audio channels.
+/// * `sample_rate` - Sample rate in Hz.
+/// * `position` - Shared atomic for tracking playback position.
+///
+/// # Returns
+///
+/// The number of samples consumed.
+fn process_samples_f32(
+    data: &mut [f32],
+    consumer: &mut Consumer<f32>,
+    channels: usize,
+    sample_rate: u64,
+    position: &Arc<AtomicU64>,
+) -> usize {
+    let mut samples_consumed = 0;
+    for sample in data.iter_mut() {
+        match consumer.pop() {
+            Ok(value) => {
+                *sample = value.clamp(-1.0, 1.0);
+                samples_consumed += 1;
+            }
+            Err(Empty) => {
+                *sample = 0.0;
+            }
+        }
+    }
+
+    update_position(samples_consumed, channels, sample_rate, position);
+    samples_consumed
+}
+
+/// Processes samples in I16 format and fills the output buffer.
+///
+/// # Arguments
+///
+/// * `data` - Output buffer to fill.
+/// * `consumer` - Ring buffer consumer for audio samples.
+/// * `channels` - Number of audio channels.
+/// * `sample_rate` - Sample rate in Hz.
+/// * `position` - Shared atomic for tracking playback position.
+///
+/// # Returns
+///
+/// The number of samples consumed.
+fn process_samples_i16(
+    data: &mut [i16],
+    consumer: &mut Consumer<f32>,
+    channels: usize,
+    sample_rate: u64,
+    position: &Arc<AtomicU64>,
+) -> usize {
+    let mut samples_consumed = 0;
+    for sample in data.iter_mut() {
+        match consumer.pop() {
+            Ok(value) => {
+                let clamped = value.clamp(-1.0, 1.0);
+                let scaled = clamped * f32::from(i16::MAX);
+                *sample = scaled
+                    .clamp(f32::from(i16::MIN), f32::from(i16::MAX))
+                    .to_i16()
+                    .unwrap_or(0);
+                samples_consumed += 1;
+            }
+            Err(Empty) => {
+                *sample = 0;
+            }
+        }
+    }
+
+    update_position(samples_consumed, channels, sample_rate, position);
+    samples_consumed
+}
+
+/// Processes samples in U16 format and fills the output buffer.
+///
+/// # Arguments
+///
+/// * `data` - Output buffer to fill.
+/// * `consumer` - Ring buffer consumer for audio samples.
+/// * `channels` - Number of audio channels.
+/// * `sample_rate` - Sample rate in Hz.
+/// * `position` - Shared atomic for tracking playback position.
+///
+/// # Returns
+///
+/// The number of samples consumed.
+fn process_samples_u16(
+    data: &mut [u16],
+    consumer: &mut Consumer<f32>,
+    channels: usize,
+    sample_rate: u64,
+    position: &Arc<AtomicU64>,
+) -> usize {
+    let mut samples_consumed = 0;
+    for sample in data.iter_mut() {
+        match consumer.pop() {
+            Ok(value) => {
+                let clamped = value.clamp(-1.0, 1.0);
+
+                // Formula (clamped + 1.0) * f32::from(u16::MAX) / 2.0 always yields [0.0, 65535.0]
+                // Clamp to valid range and use to_u16 with fallback for safe conversion
+                let scaled = (clamped + 1.0) * f32::from(u16::MAX) / 2.0;
+                let clamped_scaled = scaled.clamp(0.0, f32::from(u16::MAX));
+                *sample = clamped_scaled.to_u16().unwrap_or(32768);
+                samples_consumed += 1;
+            }
+            Err(Empty) => {
+                *sample = 32768;
+            }
+        }
+    }
+
+    update_position(samples_consumed, channels, sample_rate, position);
+    samples_consumed
+}
+
 /// Creates a resampling stream for audio output.
 ///
 /// This function creates a CPAL audio stream that reads from a resampled ring buffer.
@@ -434,38 +618,14 @@ fn resampling_loop(
 /// # Errors
 ///
 /// Returns `OutputError` if the device configuration cannot be queried or the stream cannot be created.
-///
-/// # Panics
-///
-/// Panics if the audio sample conversion fails. This is guaranteed never to happen because:
-/// 1. Input values are clamped to [-1.0, 1.0]
-/// 2. The conversion formula `(clamped + 1.0) * u16::MAX / 2.0` always yields [0.0, 65535.0]
-/// 3. Converting via i32 and using `try_from().unwrap()` ensures the value fits in u16 range
 pub fn create_resampling_stream(
     output: &AudioOutput,
     mut resampled_consumer: Consumer<f32>,
     target_config: &StreamConfig,
     current_position: &Arc<AtomicU64>,
 ) -> Result<Stream, OutputError> {
-    let sample_format = output
-        .device()
-        .default_output_config()
-        .map_err(|_| NoDeviceFound)?
-        .sample_format();
-
-    let err_fn = |err: StreamError| {
-        if let BackendSpecific { err } = err {
-            let err_str = err.to_string();
-            if err_str.contains("buffer size changed") {
-                info!(message = %err_str, "Audio buffer size changed");
-            } else {
-                error!(error = %err_str, "Audio backend error");
-            }
-        } else {
-            error!(error = %err, "Audio stream error");
-        }
-    };
-
+    let sample_format = get_sample_format(output)?;
+    let err_fn = create_error_callback();
     let timeout = Duration::from_millis(u64::from(output.config().buffer_duration_ms));
     let channels = target_config.channels as usize;
     let sample_rate = u64::from(target_config.sample_rate);
@@ -475,25 +635,13 @@ pub fn create_resampling_stream(
         SampleFormat::F32 => output.device().build_output_stream(
             target_config,
             move |data: &mut [f32], _: &OutputCallbackInfo| {
-                let mut samples_consumed = 0;
-                for sample in data.iter_mut() {
-                    match resampled_consumer.pop() {
-                        Ok(value) => {
-                            *sample = value.clamp(-1.0, 1.0);
-                            samples_consumed += 1;
-                        }
-                        Err(Empty) => {
-                            *sample = 0.0;
-                        }
-                    }
-                }
-
-                // Update position based on samples actually consumed and played
-                if samples_consumed > 0 {
-                    let frames = samples_consumed / channels;
-                    let duration_ms = (frames as u64 * 1000) / sample_rate;
-                    position.fetch_add(duration_ms, SeqCst);
-                }
+                process_samples_f32(
+                    data,
+                    &mut resampled_consumer,
+                    channels,
+                    sample_rate,
+                    &position,
+                );
             },
             err_fn,
             Some(timeout),
@@ -501,28 +649,13 @@ pub fn create_resampling_stream(
         SampleFormat::I16 => output.device().build_output_stream(
             target_config,
             move |data: &mut [i16], _: &OutputCallbackInfo| {
-                let mut samples_consumed = 0;
-                for sample in data.iter_mut() {
-                    match resampled_consumer.pop() {
-                        Ok(value) => {
-                            let clamped = value.clamp(-1.0, 1.0);
-                            let scaled = clamped * f32::from(i16::MAX);
-                            *sample = scaled
-                                .clamp(f32::from(i16::MIN), f32::from(i16::MAX))
-                                .to_i16()
-                                .unwrap();
-                            samples_consumed += 1;
-                        }
-                        Err(Empty) => {
-                            *sample = 0;
-                        }
-                    }
-                }
-                if samples_consumed > 0 {
-                    let frames = samples_consumed / channels;
-                    let duration_ms = (frames as u64 * 1000) / sample_rate;
-                    position.fetch_add(duration_ms, SeqCst);
-                }
+                process_samples_i16(
+                    data,
+                    &mut resampled_consumer,
+                    channels,
+                    sample_rate,
+                    &position,
+                );
             },
             err_fn,
             Some(timeout),
@@ -530,29 +663,13 @@ pub fn create_resampling_stream(
         SampleFormat::U16 => output.device().build_output_stream(
             target_config,
             move |data: &mut [u16], _: &OutputCallbackInfo| {
-                let mut samples_consumed = 0;
-                for sample in data.iter_mut() {
-                    match resampled_consumer.pop() {
-                        Ok(value) => {
-                            let clamped = value.clamp(-1.0, 1.0);
-
-                            // Formula (clamped + 1.0) * 65535.0 / 2.0 always yields [0.0, 65535.0]
-                            // Clamp to valid range and use try_from for safe conversion
-                            let scaled = (clamped + 1.0) * f32::from(u16::MAX) / 2.0;
-                            let clamped_scaled = scaled.clamp(0.0, f32::from(u16::MAX));
-                            *sample = u16::try_from(clamped_scaled.to_i32().unwrap()).unwrap();
-                            samples_consumed += 1;
-                        }
-                        Err(Empty) => {
-                            *sample = 32768;
-                        }
-                    }
-                }
-                if samples_consumed > 0 {
-                    let frames = samples_consumed / channels;
-                    let duration_ms = (frames as u64 * 1000) / sample_rate;
-                    position.fetch_add(duration_ms, SeqCst);
-                }
+                process_samples_u16(
+                    data,
+                    &mut resampled_consumer,
+                    channels,
+                    sample_rate,
+                    &position,
+                );
             },
             err_fn,
             Some(timeout),
