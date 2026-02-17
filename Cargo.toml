@@ -41,5 +41,9 @@ sqlx = { version = "0.8.6", features = ["runtime-tokio", "sqlite"] }
 
 [dev-dependencies]
 # Tests and bechmarking
-# criterion = "0.8.1"
+criterion = "0.8.2"
 tempfile = "3.25.0"
+
+[[bench]]
+name = "audio_producer"
+harness = false
