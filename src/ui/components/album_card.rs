@@ -851,6 +851,8 @@ impl AlbumCard {
 
 #[cfg(test)]
 mod tests {
+    use std::error::Error;
+
     use crate::{
         library::models::Album,
         ui::components::album_card::{AlbumCard, AlbumCardConfig},
@@ -858,7 +860,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_album_card_builder() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_album_card_builder() -> Result<(), Box<dyn Error>> {
         let dummy_album = Album {
             id: 1,
             artist_id: 1,
@@ -888,7 +890,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_album_card_create_default() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_album_card_create_default() -> Result<(), Box<dyn Error>> {
         let card = AlbumCard::create_default()?;
         assert!(card.dr_badge.is_some());
         Ok(())
@@ -896,7 +898,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_album_card_sample_rate_decimal_formatting() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_album_card_sample_rate_decimal_formatting() -> Result<(), Box<dyn Error>> {
         // Test 44.1 kHz sample rate in album card
         let album_441 = Album {
             id: 1,
