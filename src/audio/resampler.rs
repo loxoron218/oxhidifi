@@ -13,7 +13,7 @@ use std::{
             Ordering::{Relaxed, SeqCst},
         },
     },
-    thread::{JoinHandle, sleep, spawn, yield_now},
+    thread::{JoinHandle, sleep, spawn},
     time::Duration,
 };
 
@@ -42,7 +42,8 @@ use crate::audio::{
 const RESAMPLER_SLEEP_DURATION: Duration = Duration::from_micros(50);
 
 // Number of samples to read per iteration
-const INPUT_BUFFER_SIZE: usize = 4096;
+// Larger buffer to accommodate rate mismatch and playback buffer management
+const INPUT_BUFFER_SIZE: usize = 32768;
 
 /// Error type for resampling operations.
 #[derive(Debug)]
@@ -353,7 +354,20 @@ fn resampling_loop(
         input_buffer.clear();
         let mut samples_read = 0;
 
-        while samples_read < INPUT_BUFFER_SIZE {
+        // Flow control: limit reads based on available target buffer space
+        // This prevents producer from overwhelming consumer during rate conversion
+        let available_space = target_producer.slots();
+        let samples_per_frame = channels;
+        let max_read = if available_space < INPUT_BUFFER_SIZE / 2 {
+            // If target buffer is less than half full, limit reads
+            (available_space / samples_per_frame) * samples_per_frame
+        } else {
+            // Otherwise, read full chunk
+            INPUT_BUFFER_SIZE
+        };
+
+        while samples_read < max_read {
+            check_abandonment!(source_consumer);
             match source_consumer.pop() {
                 Ok(sample) => {
                     input_buffer.push(sample);
@@ -367,7 +381,7 @@ fn resampling_loop(
         }
 
         if input_buffer.is_empty() {
-            yield_now();
+            sleep(Duration::from_micros(100));
             continue;
         }
 

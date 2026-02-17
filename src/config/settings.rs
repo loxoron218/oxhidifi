@@ -87,7 +87,7 @@ impl Default for UserSettings {
             audio_device: None,
             sample_rate: 0, // Auto-detect
             exclusive_mode: true,
-            buffer_duration_ms: 50,
+            buffer_duration_ms: 500,
             library_directories: vec![],
             show_dr_values: true,
             grid_zoom_level: 2, // Default medium zoom level (0-4)
@@ -300,7 +300,7 @@ mod tests {
         let settings = UserSettings::default();
         assert_eq!(settings.sample_rate, 0);
         assert!(settings.exclusive_mode);
-        assert_eq!(settings.buffer_duration_ms, 50);
+        assert_eq!(settings.buffer_duration_ms, 500);
         assert!(settings.show_dr_values);
         assert_eq!(settings.theme_preference, "system");
     }

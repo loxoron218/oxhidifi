@@ -14,7 +14,7 @@ use {
         },
         sample::{i24, u24},
     },
-    tracing::warn,
+    tracing::{debug, warn},
 };
 
 use crate::audio::{
@@ -88,6 +88,8 @@ pub struct AudioProducer {
     decoder: AudioDecoder,
     /// Ring buffer producer for writing decoded samples.
     producer: Producer<f32>,
+    /// Ring buffer capacity for flow control calculations.
+    buffer_capacity: usize,
     /// Sender for track completion notifications.
     track_finished_tx: Option<Sender<()>>,
 }
@@ -99,15 +101,18 @@ impl AudioProducer {
     ///
     /// * `decoder` - The audio decoder to use.
     /// * `producer` - The ring buffer producer to write samples to.
+    /// * `buffer_capacity` - The ring buffer capacity for flow control.
     /// * `track_finished_tx` - Optional sender for track completion notifications.
     pub fn new(
         decoder: AudioDecoder,
         producer: Producer<f32>,
+        buffer_capacity: usize,
         track_finished_tx: Option<Sender<()>>,
     ) -> Self {
         Self {
             decoder,
             producer,
+            buffer_capacity,
             track_finished_tx,
         }
     }
@@ -221,7 +226,43 @@ impl AudioProducer {
     /// A `bool` indicating if the producer was abandoned.
     /// Returns `true` if producer was abandoned, `false` if all samples written successfully.
     fn write_samples_to_buffer(&mut self, samples: &[f32]) -> bool {
+        let sample_count = samples.len();
         let mut retry_count = 0;
+
+        // Dynamic throttling based on buffer occupancy
+        // When buffer is filling up, sleep longer before writing
+        loop {
+            if self.producer.is_abandoned() {
+                return true;
+            }
+
+            let available = self.producer.slots();
+
+            // If buffer has sufficient space, write immediately
+            if available >= sample_count {
+                break;
+            }
+
+            // Calculate dynamic sleep time based on buffer occupancy
+            // Higher buffer fill percentage = longer sleep
+            let fill_ratio = 1.0
+                - (available.to_f64().unwrap_or(f64::MAX)
+                    / self.buffer_capacity.to_f64().unwrap_or(1.0));
+
+            let sleep_duration = if fill_ratio > 0.75 {
+                // Buffer is very full, sleep 5x longer
+                PRODUCER_SLEEP_DURATION * 5
+            } else if fill_ratio > 0.5 {
+                // Buffer is moderately full, sleep 2x longer
+                PRODUCER_SLEEP_DURATION * 2
+            } else {
+                // Buffer is below half full, use normal sleep
+                PRODUCER_SLEEP_DURATION
+            };
+
+            sleep(sleep_duration);
+        }
+
         for &sample in samples {
             loop {
                 if self.producer.is_abandoned() {
@@ -233,10 +274,9 @@ impl AudioProducer {
                         retry_count += 1;
                         if retry_count == 1 {
                             // Log first retry only to avoid spam
-                            tracing::warn!(
+                            warn!(
                                 retry_count,
-                                sample_count = samples.len(),
-                                "Audio buffer full, retrying after sleep"
+                                sample_count, "Audio buffer full, retrying after sleep"
                             );
                         }
 
@@ -247,7 +287,7 @@ impl AudioProducer {
             }
         }
         if retry_count > 0 {
-            tracing::debug!(
+            debug!(
                 total_retries = retry_count,
                 "Successfully wrote samples to buffer"
             );
@@ -288,6 +328,7 @@ impl GaplessProducer {
     ///
     /// * `decoder` - The initial audio decoder.
     /// * `producer` - The ring buffer producer for output.
+    /// * `buffer_capacity` - The ring buffer capacity for flow control.
     /// * `track_finished_tx` - Optional sender for track completion notifications.
     ///
     /// # Panics
@@ -296,9 +337,11 @@ impl GaplessProducer {
     pub fn new(
         decoder: AudioDecoder,
         producer: Producer<f32>,
+        buffer_capacity: usize,
         track_finished_tx: Option<Sender<()>>,
     ) -> Self {
-        let audio_producer = AudioProducer::new(decoder, producer, track_finished_tx);
+        let audio_producer =
+            AudioProducer::new(decoder, producer, buffer_capacity, track_finished_tx);
 
         Self {
             current_producer: Some(audio_producer),

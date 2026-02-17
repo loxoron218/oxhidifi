@@ -244,10 +244,12 @@ impl AudioEngine {
             "State change"
         );
 
+        let default_config = OutputConfig::default();
+
         let engine = AudioEngine {
             state: Arc::new(RwLock::new(PlaybackState::Stopped)),
             current_track: Arc::new(RwLock::new(None)),
-            output_config: Arc::new(RwLock::new(OutputConfig::default())),
+            output_config: Arc::new(RwLock::new(default_config)),
             track_finished_tx,
             track_completion_subscribers,
             state_tx,
@@ -698,8 +700,10 @@ impl AudioEngine {
 
         // Create ring buffer for audio samples
         // Buffer size must be power of 2 for rtrb ring buffer efficient bitmask wrapping
-        let buffer_size = 4096;
+        // Use larger buffer to handle resampling lag, rate mismatches, and packet bursts
+        let buffer_size = 65536;
         let (producer, consumer) = RingBuffer::<f32>::new(buffer_size);
+        let buffer_capacity = buffer_size;
 
         // Get current output configuration for stream creation
         let current_config = self.output_config.read().clone();
@@ -727,7 +731,8 @@ impl AudioEngine {
 
         // Create audio producer
         let track_finished_tx = self.track_finished_tx.clone();
-        let producer = AudioProducer::new(decoder, producer, Some(track_finished_tx));
+        let producer =
+            AudioProducer::new(decoder, producer, buffer_capacity, Some(track_finished_tx));
 
         // Start decoder thread
         let decoder_handle = spawn(move || producer.run());
@@ -807,10 +812,14 @@ impl AudioEngine {
 
             // Recreate the playback stream
             // Buffer size must be power of 2 for rtrb ring buffer efficient bitmask wrapping
-            let buffer_size = 4096;
+            // Use larger buffer to handle resampling lag, rate mismatches, and packet bursts
+            let buffer_size = 65536;
             let (producer, consumer) = RingBuffer::<f32>::new(buffer_size);
+            let buffer_capacity = buffer_size;
 
-            let output = AudioOutput::new(Some(self.output_config.read().clone()))?;
+            let config_for_output = self.output_config.read().clone();
+
+            let output = AudioOutput::new(Some(config_for_output))?;
             let (consumer, target_output_config) = AudioConsumer::new(
                 output,
                 consumer,
@@ -822,7 +831,8 @@ impl AudioEngine {
             *self.output_config.write() = target_output_config;
 
             let track_finished_tx = self.track_finished_tx.clone();
-            let producer = AudioProducer::new(decoder, producer, Some(track_finished_tx));
+            let producer =
+                AudioProducer::new(decoder, producer, buffer_capacity, Some(track_finished_tx));
 
             let decoder_handle = spawn(move || producer.run());
 

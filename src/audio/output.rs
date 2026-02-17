@@ -150,7 +150,7 @@ impl Default for OutputConfig {
         Self {
             sample_rate: 44100,
             channels: 2,
-            buffer_duration_ms: 50,
+            buffer_duration_ms: 500,
             exclusive_mode: true,
             device_name: None,
             bits_per_sample: 24,
@@ -710,7 +710,7 @@ impl AudioOutput {
         let resampler = Fft::<f32>::new(
             source_rate as usize,
             target_rate as usize,
-            1024, // chunk_size_in - reasonable default
+            4096, // chunk_size_in - larger for better throughput
             1,    // sub_chunks
             channels,
             Input,
@@ -856,7 +856,8 @@ impl AudioConsumer {
 
         let consumer = if needs_resampling {
             // Create ring buffers for resampling
-            let buffer_size = 8192; // Larger buffer for resampling
+            // Use very large buffer to handle resampling expansion, rate mismatches, and playback buffer management
+            let buffer_size = 65536;
             let (resampled_producer, resampled_consumer) = RingBuffer::<f32>::new(buffer_size);
 
             // Create resampling consumer
@@ -947,7 +948,7 @@ mod tests {
         let config = OutputConfig::default();
         assert_eq!(config.sample_rate, 44100);
         assert_eq!(config.channels, 2);
-        assert_eq!(config.buffer_duration_ms, 50);
+        assert_eq!(config.buffer_duration_ms, 500);
         assert!(config.exclusive_mode);
     }
 
