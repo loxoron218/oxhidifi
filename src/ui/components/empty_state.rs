@@ -29,7 +29,7 @@ use {
 };
 
 use crate::{
-    config::SettingsManager,
+    config::{SettingsManager, UserSettings},
     library::{
         database::LibraryDatabase,
         dr_parser::DrParser,
@@ -295,10 +295,10 @@ impl EmptyState {
     ///
     /// A tuple containing the database arc, settings arc, and optional DR parser
     async fn prepare_scan_resources(
-        settings_snapshot: crate::config::UserSettings,
+        settings_snapshot: UserSettings,
     ) -> Option<(
         Arc<LibraryDatabase>,
-        Arc<RwLock<crate::config::UserSettings>>,
+        Arc<RwLock<UserSettings>>,
         Option<Arc<DrParser>>,
     )> {
         // NOTE: This creates a snapshot of the settings at the time of the scan.
@@ -405,7 +405,7 @@ impl EmptyState {
     fn get_or_create_scanner(
         app_state: &Arc<AppState>,
         library_db: &Arc<LibraryDatabase>,
-        settings_arc: &Arc<RwLock<crate::config::UserSettings>>,
+        settings_arc: &Arc<RwLock<UserSettings>>,
         cancel_token: &Arc<AtomicBool>,
     ) -> Option<Arc<RwLock<LibraryScanner>>> {
         let existing_scanner = app_state.library_scanner.read().clone();
@@ -453,7 +453,7 @@ impl EmptyState {
     async fn execute_background_scan(
         scanner: Arc<RwLock<LibraryScanner>>,
         db: Arc<LibraryDatabase>,
-        settings: Arc<RwLock<crate::config::UserSettings>>,
+        settings: Arc<RwLock<UserSettings>>,
         dr_parser: Option<Arc<DrParser>>,
         new_directory: String,
     ) {
