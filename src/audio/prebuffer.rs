@@ -12,6 +12,7 @@ use {
 };
 
 use crate::audio::{
+    buffer_config::BufferConfig,
     decoder::{AudioDecoder, MS_PER_SEC},
     decoder_types::{AudioFormat, DecoderError},
     metadata::{MetadataError, TagReader},
@@ -47,6 +48,8 @@ pub struct Prebuffer {
     thread_handle: Option<JoinHandle<Result<(), PrebufferError>>>,
     /// Pre-buffered track data.
     prebuffered_track: Arc<Mutex<Option<PrebufferedTrack>>>,
+    /// Buffer size configuration.
+    buffer_config: BufferConfig,
 }
 
 impl Prebuffer {
@@ -57,11 +60,26 @@ impl Prebuffer {
     /// A new `Prebuffer` instance.
     #[must_use]
     pub fn new() -> Self {
+        Self::with_buffer_config(BufferConfig::default())
+    }
+
+    /// Creates a new pre-buffer manager with the specified buffer configuration.
+    ///
+    /// # Arguments
+    ///
+    /// * `buffer_config` - Buffer size configuration.
+    ///
+    /// # Returns
+    ///
+    /// A new `Prebuffer` instance.
+    #[must_use]
+    pub fn with_buffer_config(buffer_config: BufferConfig) -> Self {
         let prebuffered_track = Arc::new(Mutex::new(None));
 
         Self {
             thread_handle: None,
             prebuffered_track,
+            buffer_config,
         }
     }
 
@@ -94,7 +112,7 @@ impl Prebuffer {
         let duration_ms = decoder.duration_ms().unwrap_or(0);
 
         // Create ring buffer for pre-buffered samples
-        let buffer_size = Self::calculate_buffer_size(duration_ms, &decoder.format);
+        let buffer_size = self.calculate_buffer_size(duration_ms, &decoder.format);
 
         let (producer, _) = RingBuffer::<f32>::new(buffer_size);
 
@@ -152,15 +170,16 @@ impl Prebuffer {
     ///
     /// The calculated buffer size in samples.
     #[must_use]
-    pub fn calculate_buffer_size(duration_ms: u64, format: &AudioFormat) -> usize {
+    pub fn calculate_buffer_size(&self, duration_ms: u64, format: &AudioFormat) -> usize {
         let sample_rate = u64::from(format.sample_rate);
         let channels = usize::try_from(format.channels).unwrap_or(2);
 
         // Calculate samples needed for pre-buffer duration
         let pre_buffer_samples = (duration_ms * sample_rate / MS_PER_SEC) * channels as u64;
 
-        // Limit to reasonable maximum
-        pre_buffer_samples.min(65536) as usize
+        // Limit to configured maximum
+        usize::try_from(pre_buffer_samples.min(self.buffer_config.main_buffer_size as u64))
+            .unwrap_or(usize::MAX)
     }
 }
 
@@ -175,13 +194,16 @@ impl Clone for Prebuffer {
         Self {
             thread_handle: None,
             prebuffered_track: Arc::clone(&self.prebuffered_track),
+            buffer_config: self.buffer_config.clone(),
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::audio::{decoder_types::AudioFormat, prebuffer::Prebuffer};
+    use crate::audio::{
+        buffer_config::BufferConfig, decoder_types::AudioFormat, prebuffer::Prebuffer,
+    };
 
     #[test]
     fn test_prebuffer_creation() {
@@ -197,6 +219,7 @@ mod tests {
 
     #[test]
     fn test_calculate_buffer_size() {
+        let prebuffer = Prebuffer::new();
         let format = AudioFormat {
             sample_rate: 44100,
             channels: 2,
@@ -204,15 +227,18 @@ mod tests {
             channel_mask: 0,
         };
 
+        let max_size = BufferConfig::default().main_buffer_size;
+
         // Test with various durations
-        let buffer_size = Prebuffer::calculate_buffer_size(5000, &format);
+        let buffer_size = prebuffer.calculate_buffer_size(5000, &format);
 
         // Should be reasonable size
-        assert!(buffer_size > 0 && buffer_size <= 65536);
+        assert!(buffer_size > 0 && buffer_size <= max_size);
     }
 
     #[test]
     fn test_calculate_buffer_size_short_duration() {
+        let prebuffer = Prebuffer::new();
         let format = AudioFormat {
             sample_rate: 48000,
             channels: 2,
@@ -220,12 +246,14 @@ mod tests {
             channel_mask: 0,
         };
 
-        let buffer_size = Prebuffer::calculate_buffer_size(1000, &format);
-        assert!(buffer_size > 0 && buffer_size <= 65536);
+        let max_size = BufferConfig::default().main_buffer_size;
+        let buffer_size = prebuffer.calculate_buffer_size(1000, &format);
+        assert!(buffer_size > 0 && buffer_size <= max_size);
     }
 
     #[test]
     fn test_calculate_buffer_size_high_sample_rate() {
+        let prebuffer = Prebuffer::new();
         let format = AudioFormat {
             sample_rate: 192_000,
             channels: 2,
@@ -233,12 +261,14 @@ mod tests {
             channel_mask: 0,
         };
 
-        let buffer_size = Prebuffer::calculate_buffer_size(5000, &format);
-        assert_eq!(buffer_size, 65536);
+        let max_size = BufferConfig::default().main_buffer_size;
+        let buffer_size = prebuffer.calculate_buffer_size(5000, &format);
+        assert_eq!(buffer_size, max_size);
     }
 
     #[test]
     fn test_calculate_buffer_size_mono() {
+        let prebuffer = Prebuffer::new();
         let format = AudioFormat {
             sample_rate: 44100,
             channels: 1,
@@ -246,8 +276,9 @@ mod tests {
             channel_mask: 0,
         };
 
-        let buffer_size = Prebuffer::calculate_buffer_size(5000, &format);
-        assert!(buffer_size > 0 && buffer_size <= 65536);
+        let max_size = BufferConfig::default().main_buffer_size;
+        let buffer_size = prebuffer.calculate_buffer_size(5000, &format);
+        assert!(buffer_size > 0 && buffer_size <= max_size);
     }
 
     #[test]

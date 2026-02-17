@@ -2,7 +2,9 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::audio::{decoder_types::AudioFormat, prebuffer::Prebuffer};
+    use crate::audio::{
+        buffer_config::BufferConfig, decoder_types::AudioFormat, prebuffer::Prebuffer,
+    };
 
     #[test]
     fn test_prebuffer_preload_nonexistent_file() {
@@ -28,6 +30,7 @@ mod tests {
 
     #[test]
     fn test_prebuffer_calculate_buffer_size() {
+        let prebuffer = Prebuffer::new();
         let format = AudioFormat {
             sample_rate: 44100,
             channels: 2,
@@ -35,13 +38,15 @@ mod tests {
             channel_mask: 0,
         };
 
-        let buffer_size = Prebuffer::calculate_buffer_size(5000, &format);
-        assert!(buffer_size <= 65536);
+        let max_size = BufferConfig::default().main_buffer_size;
+        let buffer_size = prebuffer.calculate_buffer_size(5000, &format);
+        assert!(buffer_size <= max_size);
         assert!(buffer_size > 0);
     }
 
     #[test]
     fn test_prebuffer_calculate_buffer_size_short() {
+        let prebuffer = Prebuffer::new();
         let format = AudioFormat {
             sample_rate: 48000,
             channels: 2,
@@ -49,13 +54,15 @@ mod tests {
             channel_mask: 0,
         };
 
-        let buffer_size = Prebuffer::calculate_buffer_size(1000, &format);
-        assert!(buffer_size <= 65536);
+        let max_size = BufferConfig::default().main_buffer_size;
+        let buffer_size = prebuffer.calculate_buffer_size(1000, &format);
+        assert!(buffer_size <= max_size);
         assert!(buffer_size > 0);
     }
 
     #[test]
     fn test_prebuffer_calculate_buffer_size_high_sample_rate() {
+        let prebuffer = Prebuffer::new();
         let format = AudioFormat {
             sample_rate: 192_000,
             channels: 2,
@@ -63,12 +70,14 @@ mod tests {
             channel_mask: 0,
         };
 
-        let buffer_size = Prebuffer::calculate_buffer_size(5000, &format);
-        assert_eq!(buffer_size, 65536);
+        let max_size = BufferConfig::default().main_buffer_size;
+        let buffer_size = prebuffer.calculate_buffer_size(5000, &format);
+        assert_eq!(buffer_size, max_size);
     }
 
     #[test]
     fn test_prebuffer_calculate_buffer_size_mono() {
+        let prebuffer = Prebuffer::new();
         let format = AudioFormat {
             sample_rate: 44100,
             channels: 1,
@@ -76,8 +85,9 @@ mod tests {
             channel_mask: 0,
         };
 
-        let buffer_size = Prebuffer::calculate_buffer_size(5000, &format);
-        assert!(buffer_size <= 65536);
+        let max_size = BufferConfig::default().main_buffer_size;
+        let buffer_size = prebuffer.calculate_buffer_size(5000, &format);
+        assert!(buffer_size <= max_size);
         assert!(buffer_size > 0);
     }
 

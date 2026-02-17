@@ -9,6 +9,7 @@ pub mod producer_tests;
 
 pub mod artwork;
 pub mod artwork_test;
+pub mod buffer_config;
 pub mod decoder;
 pub mod decoder_types;
 pub mod engine;

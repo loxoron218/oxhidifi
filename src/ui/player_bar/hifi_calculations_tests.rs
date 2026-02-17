@@ -2,6 +2,7 @@
 
 use crate::{
     audio::{
+        buffer_config::BufferConfig,
         decoder_types::AudioFormat,
         engine::TrackInfo,
         metadata::{StandardMetadata, TechnicalMetadata, TrackMetadata},
@@ -69,6 +70,7 @@ fn create_test_output_config(
         device_name,
         bits_per_sample,
         is_resampling,
+        buffer_config: BufferConfig::default(),
     }
 }
 

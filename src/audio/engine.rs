@@ -698,15 +698,15 @@ impl AudioEngine {
             self.current_position.store(0, SeqCst);
         }
 
+        // Get current output configuration for stream creation
+        let current_config = self.output_config.read().clone();
+
         // Create ring buffer for audio samples
         // Buffer size must be power of 2 for rtrb ring buffer efficient bitmask wrapping
         // Use larger buffer to handle resampling lag, rate mismatches, and packet bursts
-        let buffer_size = 65536;
+        let buffer_size = current_config.buffer_config.main_buffer_size;
         let (producer, consumer) = RingBuffer::<f32>::new(buffer_size);
         let buffer_capacity = buffer_size;
-
-        // Get current output configuration for stream creation
-        let current_config = self.output_config.read().clone();
 
         // Create audio output
         let output = AudioOutput::new(Some(current_config))?;
@@ -810,14 +810,14 @@ impl AudioEngine {
 
             let signal_spec = decoder.signal_spec;
 
+            let config_for_output = self.output_config.read().clone();
+
             // Recreate the playback stream
             // Buffer size must be power of 2 for rtrb ring buffer efficient bitmask wrapping
             // Use larger buffer to handle resampling lag, rate mismatches, and packet bursts
-            let buffer_size = 65536;
+            let buffer_size = config_for_output.buffer_config.main_buffer_size;
             let (producer, consumer) = RingBuffer::<f32>::new(buffer_size);
             let buffer_capacity = buffer_size;
-
-            let config_for_output = self.output_config.read().clone();
 
             let output = AudioOutput::new(Some(config_for_output))?;
             let (consumer, target_output_config) = AudioConsumer::new(

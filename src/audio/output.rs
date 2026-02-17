@@ -33,6 +33,7 @@ use {
 };
 
 use crate::audio::{
+    buffer_config::BufferConfig,
     decoder::MS_PER_SEC,
     decoder_types::AudioFormat,
     resampler::{ResamplingAudioConsumer, create_resampling_stream},
@@ -143,6 +144,8 @@ pub struct OutputConfig {
     pub bits_per_sample: u32,
     /// Whether resampling is currently active.
     pub is_resampling: bool,
+    /// Buffer size configuration for ring buffers.
+    pub buffer_config: BufferConfig,
 }
 
 impl Default for OutputConfig {
@@ -155,6 +158,7 @@ impl Default for OutputConfig {
             device_name: None,
             bits_per_sample: 24,
             is_resampling: false,
+            buffer_config: BufferConfig::default(),
         }
     }
 }
@@ -850,6 +854,7 @@ impl AudioConsumer {
             device_name,
             bits_per_sample,
             is_resampling: needs_resampling,
+            buffer_config: output.config.buffer_config.clone(),
         };
 
         output.is_resampling = needs_resampling;
@@ -857,7 +862,7 @@ impl AudioConsumer {
         let consumer = if needs_resampling {
             // Create ring buffers for resampling
             // Use very large buffer to handle resampling expansion, rate mismatches, and playback buffer management
-            let buffer_size = 65536;
+            let buffer_size = output.config.buffer_config.resampler_buffer_size;
             let (resampled_producer, resampled_consumer) = RingBuffer::<f32>::new(buffer_size);
 
             // Create resampling consumer
@@ -866,6 +871,7 @@ impl AudioConsumer {
                 resampled_producer,
                 source_format,
                 target_config,
+                &output.config.buffer_config,
             )
             .map_err(|e| OutputError::ResamplingError(e.to_string()))?;
 

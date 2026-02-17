@@ -31,6 +31,7 @@ use {
 };
 
 use crate::audio::{
+    buffer_config::BufferConfig,
     decoder_types::AudioFormat,
     output::{
         AudioOutput,
@@ -40,10 +41,6 @@ use crate::audio::{
 
 /// Sleep duration when target buffer is full.
 const RESAMPLER_SLEEP_DURATION: Duration = Duration::from_micros(50);
-
-// Number of samples to read per iteration
-// Larger buffer to accommodate rate mismatch and playback buffer management
-const INPUT_BUFFER_SIZE: usize = 32768;
 
 /// Error type for resampling operations.
 #[derive(Debug)]
@@ -258,6 +255,7 @@ impl ResamplingAudioConsumer {
     /// * `target_producer` - Ring buffer producer to the audio output.
     /// * `source_format` - Source audio format information.
     /// * `target_config` - Target stream configuration from the audio device.
+    /// * `buffer_config` - Buffer size configuration.
     ///
     /// # Returns
     ///
@@ -271,6 +269,7 @@ impl ResamplingAudioConsumer {
         target_producer: Producer<f32>,
         source_format: &AudioFormat,
         target_config: StreamConfig,
+        buffer_config: &BufferConfig,
     ) -> Result<Self, ResamplingError> {
         let source_rate = source_format.sample_rate;
         let target_rate = target_config.sample_rate;
@@ -280,6 +279,7 @@ impl ResamplingAudioConsumer {
 
         let running = Arc::new(AtomicBool::new(true));
         let running_clone = Arc::clone(&running);
+        let input_buffer_size = buffer_config.input_buffer_size;
 
         // Start resampling thread
         let thread_handle = Some(spawn(move || {
@@ -289,6 +289,7 @@ impl ResamplingAudioConsumer {
                 resampler,
                 &running_clone,
                 channels,
+                input_buffer_size,
             );
         }));
 
@@ -345,8 +346,9 @@ fn resampling_loop(
     mut resampler: AudioResampler,
     running: &Arc<AtomicBool>,
     channels: usize,
+    input_buffer_size: usize,
 ) {
-    let mut input_buffer = Vec::with_capacity(INPUT_BUFFER_SIZE);
+    let mut input_buffer = Vec::with_capacity(input_buffer_size);
     let mut output_buffer = Vec::new();
 
     while running.load(Relaxed) {
@@ -358,12 +360,12 @@ fn resampling_loop(
         // This prevents producer from overwhelming consumer during rate conversion
         let available_space = target_producer.slots();
         let samples_per_frame = channels;
-        let max_read = if available_space < INPUT_BUFFER_SIZE / 2 {
+        let max_read = if available_space < input_buffer_size / 2 {
             // If target buffer is less than half full, limit reads
             (available_space / samples_per_frame) * samples_per_frame
         } else {
             // Otherwise, read full chunk
-            INPUT_BUFFER_SIZE
+            input_buffer_size
         };
 
         while samples_read < max_read {

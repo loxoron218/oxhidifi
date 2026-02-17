@@ -231,11 +231,7 @@ impl AudioProducer {
 
         // Dynamic throttling based on buffer occupancy
         // When buffer is filling up, sleep longer before writing
-        loop {
-            if self.producer.is_abandoned() {
-                return true;
-            }
-
+        while !self.producer.is_abandoned() {
             let available = self.producer.slots();
 
             // If buffer has sufficient space, write immediately
@@ -245,9 +241,13 @@ impl AudioProducer {
 
             // Calculate dynamic sleep time based on buffer occupancy
             // Higher buffer fill percentage = longer sleep
-            let fill_ratio = 1.0
-                - (available.to_f64().unwrap_or(f64::MAX)
-                    / self.buffer_capacity.to_f64().unwrap_or(1.0));
+            let fill_ratio = if self.buffer_capacity == 0 {
+                1.0
+            } else {
+                let available_f64 = available.to_f64().unwrap_or(0.0);
+                let capacity_f64 = self.buffer_capacity.to_f64().unwrap_or(1.0);
+                (1.0 - (available_f64 / capacity_f64)).clamp(0.0, 1.0)
+            };
 
             let sleep_duration = if fill_ratio > 0.75 {
                 // Buffer is very full, sleep 5x longer
@@ -261,6 +261,11 @@ impl AudioProducer {
             };
 
             sleep(sleep_duration);
+        }
+
+        // Producer was abandoned
+        if self.producer.is_abandoned() {
+            return true;
         }
 
         for &sample in samples {
