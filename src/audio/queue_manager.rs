@@ -11,7 +11,7 @@ use {
 
 use crate::{
     audio::{
-        decoder::AudioFormat,
+        decoder_types::AudioFormat,
         engine::{AudioEngine, PlaybackState::Playing, TrackInfo},
         metadata::TagReader,
     },

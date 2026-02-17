@@ -6,84 +6,33 @@
 use std::{
     fs::File,
     io::{
-        Error as StdError,
+        Error,
         ErrorKind::{InvalidData, UnexpectedEof},
     },
     path::Path,
-    thread::sleep,
-    time::Duration,
 };
 
-use {
-    async_channel::Sender,
-    num_traits::cast::ToPrimitive,
-    rtrb::{Producer, PushError::Full},
-    serde::{Deserialize, Serialize},
-    symphonia::{
-        core::{
-            audio::{
-                AudioBufferRef::{self, F32, F64, S8, S16, S24, S32, U8, U16, U24, U32},
-                Signal, SignalSpec,
-            },
-            codecs::{CODEC_TYPE_NULL, Decoder, DecoderOptions},
-            errors::Error::{
-                self as SymphoniaError, DecodeError, IoError, ResetRequired, SeekError, Unsupported,
-            },
-            formats::{FormatOptions, FormatReader, SeekMode::Accurate, SeekTo::Time},
-            io::{MediaSourceStream, MediaSourceStreamOptions},
-            meta::MetadataOptions,
-            probe::Hint,
-            units::Time as OtherTime,
-        },
-        default::{get_codecs, get_probe},
+use symphonia::{
+    core::{
+        audio::{AudioBufferRef, SignalSpec},
+        codecs::{CODEC_TYPE_NULL, Decoder, DecoderOptions},
+        errors::Error::{DecodeError, IoError, ResetRequired, SeekError, Unsupported},
+        formats::{FormatOptions, FormatReader, SeekMode::Accurate, SeekTo::Time},
+        io::{MediaSourceStream, MediaSourceStreamOptions},
+        meta::MetadataOptions,
+        probe::Hint,
+        units::Time as OtherTime,
     },
-    thiserror::Error,
-    tracing::warn,
+    default::{get_codecs, get_probe},
 };
 
-use crate::audio::metadata::{TagReader, TechnicalMetadata};
-
-/// Sleep duration when producer buffer is full.
-const PRODUCER_SLEEP_DURATION: Duration = Duration::from_micros(100);
+use crate::audio::{
+    decoder_types::{AudioFormat, DecoderError},
+    metadata::{TagReader, TechnicalMetadata},
+};
 
 /// Milliseconds per second.
 pub const MS_PER_SEC: u64 = 1000;
-
-/// Error type for audio decoding operations.
-#[derive(Error, Debug)]
-pub enum DecoderError {
-    /// Failed to open or read the audio file.
-    #[error("IO error: {0}")]
-    IoError(#[from] StdError),
-    /// Symphonia decoding error.
-    #[error("Decoding error: {0}")]
-    SymphoniaError(#[from] SymphoniaError),
-    /// Unsupported audio format.
-    #[error("Unsupported audio format")]
-    UnsupportedFormat,
-    /// No audio track found in file.
-    #[error("No audio track found")]
-    NoAudioTrack,
-    /// Failed to create audio buffer.
-    #[error("Failed to create audio buffer")]
-    BufferCreationFailed,
-    /// Invalid track index (cannot fit in u32).
-    #[error("Invalid track index")]
-    InvalidTrackIndex,
-}
-
-/// Audio format information extracted during decoding setup.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AudioFormat {
-    /// Sample rate in Hz.
-    pub sample_rate: u32,
-    /// Number of channels.
-    pub channels: u32,
-    /// Bits per sample.
-    pub bits_per_sample: u32,
-    /// Channel mask (for surround sound).
-    pub channel_mask: u16,
-}
 
 /// Audio decoder that reads and decodes audio files.
 ///
@@ -126,7 +75,7 @@ impl AudioDecoder {
 
         // Extract technical metadata first
         let technical_metadata = TagReader::read_metadata(path)
-            .map_err(|e| DecoderError::IoError(StdError::new(InvalidData, e.to_string())))?
+            .map_err(|e| DecoderError::IoError(Error::new(InvalidData, e.to_string())))?
             .technical;
 
         // Create media source stream
@@ -301,315 +250,5 @@ impl AudioDecoder {
                 let sample_rate = u64::from(self.format.sample_rate);
                 (frames * MS_PER_SEC + sample_rate / 2) / sample_rate
             })
-    }
-}
-
-/// Audio producer that feeds decoded samples into a ring buffer.
-///
-/// This struct wraps an `AudioDecoder` and continuously decodes audio,
-/// writing samples to the provided ring buffer producer.
-pub struct AudioProducer {
-    /// The audio decoder that provides raw audio samples.
-    decoder: AudioDecoder,
-    /// Ring buffer producer for writing decoded samples.
-    producer: Producer<f32>,
-    /// Sender for track completion notifications.
-    track_finished_tx: Option<Sender<()>>,
-}
-
-impl AudioProducer {
-    /// Creates a new audio producer.
-    ///
-    /// # Arguments
-    ///
-    /// * `decoder` - The audio decoder to use.
-    /// * `producer` - The ring buffer producer to write samples to.
-    /// * `track_finished_tx` - Optional sender for track completion notifications.
-    pub fn new(
-        decoder: AudioDecoder,
-        producer: Producer<f32>,
-        track_finished_tx: Option<Sender<()>>,
-    ) -> Self {
-        Self {
-            decoder,
-            producer,
-            track_finished_tx,
-        }
-    }
-
-    /// Runs the audio production loop.
-    ///
-    /// This method continuously decodes audio and writes samples to the ring buffer.
-    /// It should be run on a dedicated worker thread.
-    ///
-    /// # Returns
-    ///
-    /// A `Result` indicating success or failure.
-    ///
-    /// # Errors
-    ///
-    /// Returns `DecoderError` if decoding fails.
-    ///
-    /// # Panics
-    ///
-    /// Panics if any `to_f32().unwrap()` call fails. This should never happen
-    /// as all values are clamped to valid ranges before conversion.
-    pub fn run(mut self) -> Result<(), DecoderError> {
-        while let Some(buffer) = self.decoder.decode_next_packet()? {
-            let spec = buffer.spec();
-            let channels = spec.channels.count();
-
-            // Convert audio buffer to f32 samples in INTERLEAVED format
-            let samples = match buffer {
-                F32(buf) => {
-                    let mut samples = Vec::with_capacity(buf.frames() * channels);
-                    for frame in 0..buf.frames() {
-                        for ch in 0..channels {
-                            samples.push(buf.chan(ch)[frame]);
-                        }
-                    }
-                    samples
-                }
-                F64(buf) => {
-                    let mut samples = Vec::with_capacity(buf.frames() * channels);
-                    for frame in 0..buf.frames() {
-                        for ch in 0..channels {
-                            let sample = buf.chan(ch)[frame].clamp(-1.0_f64, 1.0_f64);
-                            samples.push(sample.to_f32().unwrap());
-                        }
-                    }
-                    samples
-                }
-                U8(buf) => {
-                    let mut samples = Vec::with_capacity(buf.frames() * channels);
-                    for frame in 0..buf.frames() {
-                        for ch in 0..channels {
-                            let s = buf.chan(ch)[frame];
-                            let v = (f32::from(s) - 128.0_f32) / 127.0_f32;
-                            samples.push(v);
-                        }
-                    }
-                    samples
-                }
-                S8(buf) => {
-                    let mut samples = Vec::with_capacity(buf.frames() * channels);
-                    for frame in 0..buf.frames() {
-                        for ch in 0..channels {
-                            samples.push(f32::from(buf.chan(ch)[frame]) / 127.0);
-                        }
-                    }
-                    samples
-                }
-                U16(buf) => {
-                    let mut samples = Vec::with_capacity(buf.frames() * channels);
-                    for frame in 0..buf.frames() {
-                        for ch in 0..channels {
-                            let s = buf.chan(ch)[frame];
-                            let v = (f32::from(s) - 32768.0_f32) / 32767.0_f32;
-                            samples.push(v);
-                        }
-                    }
-                    samples
-                }
-                S16(buf) => {
-                    let mut samples = Vec::with_capacity(buf.frames() * channels);
-                    for frame in 0..buf.frames() {
-                        for ch in 0..channels {
-                            let s = buf.chan(ch)[frame];
-                            let v = if s == i16::MIN {
-                                -1.0
-                            } else {
-                                f32::from(s) / f32::from(i16::MAX)
-                            };
-                            samples.push(v);
-                        }
-                    }
-                    samples
-                }
-                U24(buf) => {
-                    let mut samples = Vec::with_capacity(buf.frames() * channels);
-                    for frame in 0..buf.frames() {
-                        for ch in 0..channels {
-                            let sample_u32 = buf.chan(ch)[frame].0 & 0x00FF_FFFF;
-                            let sample = f64::from(sample_u32) / 16_777_215.0_f64;
-                            samples.push(sample.to_f32().unwrap());
-                        }
-                    }
-                    samples
-                }
-                S24(buf) => {
-                    let mut samples = Vec::with_capacity(buf.frames() * channels);
-                    for frame in 0..buf.frames() {
-                        for ch in 0..channels {
-                            let s = buf.chan(ch)[frame].0 << 8 >> 8;
-                            let v = if s == -8_388_608 {
-                                -1.0_f32
-                            } else {
-                                let sample =
-                                    (f64::from(s) / 8_388_607.0_f64).clamp(-1.0_f64, 1.0_f64);
-                                sample.to_f32().unwrap()
-                            };
-                            samples.push(v);
-                        }
-                    }
-                    samples
-                }
-                U32(buf) => {
-                    let mut samples = Vec::with_capacity(buf.frames() * channels);
-                    for frame in 0..buf.frames() {
-                        for ch in 0..channels {
-                            let s = buf.chan(ch)[frame];
-                            let sample = (f64::from(s) - 2_147_483_648.0_f64) / 2_147_483_647.0_f64;
-                            let v = sample.to_f32().unwrap();
-                            samples.push(v);
-                        }
-                    }
-                    samples
-                }
-                S32(buf) => {
-                    let mut samples = Vec::with_capacity(buf.frames() * channels);
-                    for frame in 0..buf.frames() {
-                        for ch in 0..channels {
-                            let s = buf.chan(ch)[frame];
-                            let v = if s == i32::MIN {
-                                -1.0_f32
-                            } else {
-                                (f64::from(s) / f64::from(i32::MAX))
-                                    .clamp(-1.0_f64, 1.0_f64)
-                                    .to_f32()
-                                    .unwrap()
-                            };
-                            samples.push(v);
-                        }
-                    }
-                    samples
-                }
-            };
-
-            // Write samples to ring buffer
-            for &sample in &samples {
-                loop {
-                    if self.producer.is_abandoned() {
-                        return Ok(());
-                    }
-                    match self.producer.push(sample) {
-                        Ok(()) => break,
-                        Err(Full(_)) => {
-                            // Buffer is full, wait a bit and retry
-                            sleep(PRODUCER_SLEEP_DURATION);
-                        }
-                    }
-                }
-            }
-        }
-
-        // Notify that track has finished (normal end of file)
-        if let Some(ref tx) = self.track_finished_tx
-            && let Err(e) = tx.try_send(())
-        {
-            warn!("AudioProducer: Failed to send track finished notification: {e}");
-        }
-
-        Ok(())
-    }
-}
-
-/// Gapless audio producer that manages seamless track transitions.
-///
-/// This producer handles switching between current and next track decoders
-/// without stopping the audio output stream, enabling gapless playback.
-pub struct GaplessProducer {
-    /// Current track decoder and producer.
-    current_producer: Option<AudioProducer>,
-    /// Next track decoder for pre-buffering.
-    next_decoder: Option<AudioDecoder>,
-}
-
-impl GaplessProducer {
-    /// Creates a new gapless audio producer.
-    ///
-    /// # Arguments
-    ///
-    /// * `decoder` - The initial audio decoder.
-    /// * `producer` - The ring buffer producer for output.
-    /// * `track_finished_tx` - Optional sender for track completion notifications.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the prebuffer cannot be obtained (this indicates a bug in initialization).
-    pub fn new(
-        decoder: AudioDecoder,
-        producer: Producer<f32>,
-        track_finished_tx: Option<Sender<()>>,
-    ) -> Self {
-        let audio_producer = AudioProducer::new(decoder, producer, track_finished_tx);
-
-        Self {
-            current_producer: Some(audio_producer),
-            next_decoder: None,
-        }
-    }
-
-    /// Preloads the next track for gapless transition.
-    ///
-    /// # Arguments
-    ///
-    /// * `decoder` - Decoder for the next track.
-    pub fn preload_next_track(&mut self, decoder: AudioDecoder) {
-        self.next_decoder = Some(decoder);
-    }
-
-    /// Runs the gapless production loop.
-    ///
-    /// This method continuously decodes audio from the current track,
-    /// pre-buffers the next track, and handles seamless transitions.
-    ///
-    /// # Returns
-    ///
-    /// A `Result` indicating success or failure.
-    ///
-    /// # Errors
-    ///
-    /// Returns `DecoderError` if decoding fails.
-    ///
-    /// # Panics
-    ///
-    /// Panics if there's no current producer.
-    pub fn run(self) -> Result<(), DecoderError> {
-        if let Some(producer) = self.current_producer {
-            // Run current track producer
-            producer.run()
-        } else {
-            Err(DecoderError::NoAudioTrack)
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::io::{Error, ErrorKind::NotFound};
-
-    use crate::audio::decoder::{AudioFormat, DecoderError};
-
-    #[test]
-    fn test_decoder_error_display() {
-        let io_error = Error::new(NotFound, "File not found");
-        let decoder_error = DecoderError::IoError(io_error);
-        assert!(decoder_error.to_string().contains("IO error"));
-
-        let unsupported_error = DecoderError::UnsupportedFormat;
-        assert_eq!(unsupported_error.to_string(), "Unsupported audio format");
-    }
-
-    #[test]
-    fn test_audio_format_creation() {
-        let format = AudioFormat {
-            sample_rate: 96000,
-            channels: 2,
-            bits_per_sample: 24,
-            channel_mask: 0x3, // Stereo
-        };
-        assert_eq!(format.sample_rate, 96000);
-        assert_eq!(format.channels, 2);
     }
 }

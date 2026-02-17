@@ -8,7 +8,7 @@ use std::result::Result as StdResult;
 use {anyhow::Error, sqlx::Error as SqlxError, thiserror::Error};
 
 use crate::{
-    audio::{decoder::DecoderError, metadata::MetadataError, output::OutputError},
+    audio::{decoder_types::DecoderError, metadata::MetadataError, output::OutputError},
     error::dr_error::DrError,
     library::database::LibraryError as DatabaseError,
 };

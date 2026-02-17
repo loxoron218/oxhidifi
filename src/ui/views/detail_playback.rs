@@ -10,7 +10,7 @@ use {
 
 use crate::{
     audio::{
-        decoder::AudioFormat,
+        decoder_types::AudioFormat,
         engine::{AudioEngine, AudioError as EngineAudioError, TrackInfo},
         metadata::{MetadataError, TagReader},
         queue_manager::QueueManager,

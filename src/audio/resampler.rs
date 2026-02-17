@@ -31,7 +31,7 @@ use {
 };
 
 use crate::audio::{
-    decoder::AudioFormat,
+    decoder_types::AudioFormat,
     output::{
         AudioOutput,
         OutputError::{self, NoDeviceFound, UnsupportedSampleFormat},

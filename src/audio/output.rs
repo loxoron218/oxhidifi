@@ -33,8 +33,9 @@ use {
 };
 
 use crate::audio::{
-    decoder::{AudioFormat, MS_PER_SEC},
-    resampler::ResamplingAudioConsumer,
+    decoder::MS_PER_SEC,
+    decoder_types::AudioFormat,
+    resampler::{ResamplingAudioConsumer, create_resampling_stream},
 };
 
 // Maximum i64 value as f64 for scaling
@@ -921,7 +922,7 @@ impl AudioConsumer {
                 current_position,
             } => {
                 let stream_config = resampling_consumer.target_config().clone();
-                let stream = crate::audio::resampler::create_resampling_stream(
+                let stream = create_resampling_stream(
                     &output,
                     resampled_consumer,
                     &stream_config,

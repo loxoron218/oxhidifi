@@ -31,13 +31,15 @@ use {
 };
 
 use crate::audio::{
-    decoder::{AudioDecoder, AudioFormat, AudioProducer, DecoderError},
+    decoder::AudioDecoder,
+    decoder_types::{AudioFormat, DecoderError},
     metadata::{MetadataError, TagReader, TrackMetadata},
     output::{
         AudioConsumer, AudioOutput, OutputConfig,
         OutputError::{self},
     },
     prebuffer::{Prebuffer, PrebufferError},
+    producer::AudioProducer,
     resampler::ResamplingAudioConsumer,
 };
 

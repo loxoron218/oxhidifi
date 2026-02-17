@@ -39,7 +39,7 @@ mod tests {
 
     use crate::{
         audio::{
-            decoder::DecoderError::NoAudioTrack, engine::AudioError,
+            decoder_types::DecoderError::NoAudioTrack, engine::AudioError,
             output::OutputError::ExclusiveModeFailed,
         },
         config::SettingsManager,

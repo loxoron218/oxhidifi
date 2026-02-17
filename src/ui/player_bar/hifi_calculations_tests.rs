@@ -2,7 +2,7 @@
 
 use crate::{
     audio::{
-        decoder::AudioFormat,
+        decoder_types::AudioFormat,
         engine::TrackInfo,
         metadata::{StandardMetadata, TechnicalMetadata, TrackMetadata},
         output::OutputConfig,

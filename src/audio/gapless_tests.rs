@@ -2,7 +2,7 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::audio::{decoder::AudioFormat, prebuffer::Prebuffer};
+    use crate::audio::{decoder_types::AudioFormat, prebuffer::Prebuffer};
 
     #[test]
     fn test_prebuffer_preload_nonexistent_file() {
