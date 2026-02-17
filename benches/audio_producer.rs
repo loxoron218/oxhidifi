@@ -4,7 +4,6 @@ use std::{hint::black_box, time::Duration};
 
 use {
     criterion::{Criterion, criterion_group, criterion_main},
-    num_traits::cast,
     rtrb::RingBuffer,
 };
 
@@ -41,25 +40,19 @@ fn benchmark_write_with_buffer_moderately_full(c: &mut Criterion) {
             }
 
             let available = producer.slots();
-            let fill_ratio = if buffer_capacity == 0 {
-                1.0
-            } else {
-                let available_f64 = cast::<usize, f64>(available).unwrap();
-                let capacity_f64 = cast::<usize, f64>(buffer_capacity).unwrap();
-                (1.0 - (available_f64 / capacity_f64)).clamp(0.0, 1.0)
-            };
 
-            // Dynamic throttling: 2x sleep for 50-75% buffer occupancy prevents premature buffer overflow
-            let sleep_duration = if fill_ratio > 0.75 {
-                Duration::from_micros(500)
-            } else if fill_ratio > 0.5 {
-                Duration::from_micros(200)
-            } else {
-                Duration::from_micros(100)
-            };
+            // Dynamic throttling: integer comparisons avoid f64 conversion overhead
+            let sleep_duration =
+                if available == 0 || buffer_capacity == 0 || available < buffer_capacity / 4 {
+                    Duration::from_micros(500)
+                } else if available < buffer_capacity / 2 {
+                    Duration::from_micros(200)
+                } else {
+                    Duration::from_micros(100)
+                };
 
             black_box(sleep_duration);
-            black_box(fill_ratio);
+            black_box(available);
         });
     });
 }
@@ -78,25 +71,19 @@ fn benchmark_write_with_buffer_very_full(c: &mut Criterion) {
             }
 
             let available = producer.slots();
-            let fill_ratio = if buffer_capacity == 0 {
-                1.0
-            } else {
-                let available_f64 = cast::<usize, f64>(available).unwrap();
-                let capacity_f64 = cast::<usize, f64>(buffer_capacity).unwrap();
-                (1.0 - (available_f64 / capacity_f64)).clamp(0.0, 1.0)
-            };
 
-            // Dynamic throttling: 5x sleep for 75%+ buffer occupancy provides aggressive backpressure
-            let sleep_duration = if fill_ratio > 0.75 {
-                Duration::from_micros(500)
-            } else if fill_ratio > 0.5 {
-                Duration::from_micros(200)
-            } else {
-                Duration::from_micros(100)
-            };
+            // Dynamic throttling: integer comparisons avoid f64 conversion overhead
+            let sleep_duration =
+                if available == 0 || buffer_capacity == 0 || available < buffer_capacity / 4 {
+                    Duration::from_micros(500)
+                } else if available < buffer_capacity / 2 {
+                    Duration::from_micros(200)
+                } else {
+                    Duration::from_micros(100)
+                };
 
             black_box(sleep_duration);
-            black_box(fill_ratio);
+            black_box(available);
         });
     });
 }
@@ -109,25 +96,18 @@ fn benchmark_throttle_calculation(c: &mut Criterion) {
             // Test different fill ratios to measure throttle calculation overhead
             let available = black_box(32768_usize);
 
-            let fill_ratio = if buffer_capacity == 0 {
-                1.0
-            } else {
-                let available_f64 = cast::<usize, f64>(available).unwrap();
-                let capacity_f64 = cast::<usize, f64>(buffer_capacity).unwrap();
-                (1.0 - (available_f64 / capacity_f64)).clamp(0.0, 1.0)
-            };
-
-            // Dynamic throttling: Scale sleep duration based on buffer fill ratio to balance throughput and memory pressure
-            let sleep_duration = if fill_ratio > 0.75 {
-                Duration::from_micros(500)
-            } else if fill_ratio > 0.5 {
-                Duration::from_micros(200)
-            } else {
-                Duration::from_micros(100)
-            };
+            // Dynamic throttling: integer comparisons avoid f64 conversion overhead
+            let sleep_duration =
+                if available == 0 || buffer_capacity == 0 || available < buffer_capacity / 4 {
+                    Duration::from_micros(500)
+                } else if available < buffer_capacity / 2 {
+                    Duration::from_micros(200)
+                } else {
+                    Duration::from_micros(100)
+                };
 
             black_box(sleep_duration);
-            black_box(fill_ratio);
+            black_box(available);
         });
     });
 }

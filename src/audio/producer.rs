@@ -239,20 +239,10 @@ impl AudioProducer {
                 break;
             }
 
-            // Calculate dynamic sleep time based on buffer occupancy
-            // Higher buffer fill percentage = longer sleep
-            let fill_ratio = if self.buffer_capacity == 0 {
-                1.0
-            } else {
-                let available_f64 = available.to_f64().unwrap_or(0.0);
-                let capacity_f64 = self.buffer_capacity.to_f64().unwrap_or(1.0);
-                (1.0 - (available_f64 / capacity_f64)).clamp(0.0, 1.0)
-            };
-
-            let sleep_duration = if fill_ratio > 0.75 {
+            let sleep_duration = if available == 0 || self.buffer_capacity == 0 || available < self.buffer_capacity / 4 {
                 // Buffer is very full, sleep 5x longer
                 PRODUCER_SLEEP_DURATION * 5
-            } else if fill_ratio > 0.5 {
+            } else if available < self.buffer_capacity / 2 {
                 // Buffer is moderately full, sleep 2x longer
                 PRODUCER_SLEEP_DURATION * 2
             } else {
