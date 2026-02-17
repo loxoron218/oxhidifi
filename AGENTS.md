@@ -65,7 +65,7 @@ src/
 
 **Lint & Format:**
 ```bash
-cargo fmt && cargo clippy --fix --allow-dirty --all-targets -- -W clippy::pedantic -A clippy::too_many_lines
+cargo fmt && cargo clippy --fix --allow-dirty --all-targets -- -W clippy::pedantic
 ```
 
 **Add blank lines before single-line comments after braces/semicolons:**
