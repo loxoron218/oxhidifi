@@ -45,5 +45,5 @@ criterion = "0.8.2"
 tempfile = "3.25.0"
 
 [[bench]]
-name = "audio_producer"
 harness = false
+name = "audio_producer"
