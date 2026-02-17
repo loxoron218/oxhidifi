@@ -239,7 +239,10 @@ impl AudioProducer {
                 break;
             }
 
-            let sleep_duration = if available == 0 || self.buffer_capacity == 0 || available < self.buffer_capacity / 4 {
+            let sleep_duration = if available == 0
+                || self.buffer_capacity == 0
+                || available < self.buffer_capacity / 4
+            {
                 // Buffer is very full, sleep 5x longer
                 PRODUCER_SLEEP_DURATION * 5
             } else if available < self.buffer_capacity / 2 {
