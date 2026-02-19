@@ -716,7 +716,7 @@ fn build_ui(
     let main_box = assemble_main_layout(
         &header_bar.widget.clone().upcast::<Widget>(),
         &toast_overlay,
-        &player_bar_widget.clone(),
+        &player_bar_widget,
     );
 
     // Load custom CSS for consistent styling
