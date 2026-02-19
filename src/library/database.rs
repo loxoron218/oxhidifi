@@ -77,7 +77,7 @@ impl LibraryDatabase {
     async fn initialize_schema(pool: &SqlitePool) -> Result<(), LibraryError> {
         // Artists table
         query(
-            r"
+            "
             CREATE TABLE IF NOT EXISTS artists (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL UNIQUE,
@@ -91,7 +91,7 @@ impl LibraryDatabase {
 
         // Albums table
         query(
-            r"
+            "
             CREATE TABLE IF NOT EXISTS albums (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 artist_id INTEGER NOT NULL,
@@ -117,7 +117,7 @@ impl LibraryDatabase {
 
         // Tracks table
         query(
-            r"
+            "
             CREATE TABLE IF NOT EXISTS tracks (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 album_id INTEGER NOT NULL,
@@ -185,7 +185,7 @@ impl LibraryDatabase {
             Some(filter_str) => {
                 let search_pattern = format!("%{filter_str}%");
                 query_as::<_, Album>(
-                    r"
+                    "
                     SELECT id, artist_id, title, year, genre, compilation, path, dr_value,
                            artwork_path, format, bits_per_sample, sample_rate, created_at, updated_at
                     FROM albums
@@ -199,7 +199,7 @@ impl LibraryDatabase {
             }
             None => {
                 query_as::<_, Album>(
-                    r"
+                    "
                     SELECT id, artist_id, title, year, genre, compilation, path, dr_value,
                            artwork_path, format, bits_per_sample, sample_rate, created_at, updated_at
                     FROM albums
@@ -232,7 +232,7 @@ impl LibraryDatabase {
             Some(filter_str) => {
                 let search_pattern = format!("%{filter_str}%");
                 query_as::<_, Artist>(
-                    r"
+                    "
                     SELECT a.id, a.name, COUNT(a2.id) as album_count, a.created_at, a.updated_at
                     FROM artists a
                     LEFT JOIN albums a2 ON a.id = a2.artist_id
@@ -247,7 +247,7 @@ impl LibraryDatabase {
             }
             None => {
                 query_as::<_, Artist>(
-                    r"
+                    "
                     SELECT a.id, a.name, COUNT(a2.id) as album_count, a.created_at, a.updated_at
                     FROM artists a
                     LEFT JOIN albums a2 ON a.id = a2.artist_id
@@ -291,7 +291,7 @@ impl LibraryDatabase {
         }
 
         let tracks = query_as::<_, Track>(
-            r"
+            "
             SELECT id, album_id, title, track_number, disc_number, duration_ms, path,
                    file_size, format, codec, sample_rate, bits_per_sample, channels, is_lossless, is_high_resolution, created_at, updated_at
             FROM tracks
@@ -334,7 +334,7 @@ impl LibraryDatabase {
         }
 
         let tracks = query_as::<_, Track>(
-            r"
+            "
             SELECT t.id, t.album_id, t.title, t.track_number, t.disc_number, t.duration_ms, t.path,
                    t.file_size, t.format, t.codec, t.sample_rate, t.bits_per_sample, t.channels, t.is_lossless, t.is_high_resolution, t.created_at, t.updated_at
             FROM tracks t
@@ -367,7 +367,7 @@ impl LibraryDatabase {
         let search_pattern = format!("%{query}%");
 
         let albums = query_as::<_, Album>(
-            r"
+            "
             SELECT id, artist_id, title, year, genre, compilation, path, dr_value,
                    artwork_path, format, bits_per_sample, sample_rate, created_at, updated_at
             FROM albums
@@ -380,7 +380,7 @@ impl LibraryDatabase {
         .await?;
 
         let artists = query_as::<_, Artist>(
-            r"
+            "
             SELECT id, name, created_at, updated_at
             FROM artists
             WHERE name LIKE ?
