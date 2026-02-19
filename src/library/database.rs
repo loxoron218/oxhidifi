@@ -58,7 +58,7 @@ impl LibraryDatabase {
         let pool = create_connection_pool().await?;
         Self::initialize_schema(&pool).await?;
 
-        Ok(LibraryDatabase { pool })
+        Ok(Self { pool })
     }
 
     /// Initializes the database schema by creating all necessary tables and indexes.

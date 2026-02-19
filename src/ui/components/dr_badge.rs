@@ -45,15 +45,15 @@ impl DRQuality {
 
         if let Ok(value) = numeric_part.parse::<i32>() {
             match value {
-                14.. => DRQuality::Excellent,
-                12..=13 => DRQuality::Good,
-                10..=11 => DRQuality::Fair,
-                8..=9 => DRQuality::Poor,
-                0..=7 => DRQuality::VeryPoor,
-                _ => DRQuality::Unknown,
+                14.. => Self::Excellent,
+                12..=13 => Self::Good,
+                10..=11 => Self::Fair,
+                8..=9 => Self::Poor,
+                0..=7 => Self::VeryPoor,
+                _ => Self::Unknown,
             }
         } else {
-            DRQuality::Unknown
+            Self::Unknown
         }
     }
 
@@ -65,12 +65,12 @@ impl DRQuality {
     #[must_use]
     pub fn css_class(&self) -> &'static str {
         match self {
-            DRQuality::Excellent => "dr-14", // Using highest DR value as representative
-            DRQuality::Good => "dr-12",
-            DRQuality::Fair => "dr-10",
-            DRQuality::Poor => "dr-08",
-            DRQuality::VeryPoor => "dr-00",
-            DRQuality::Unknown => "dr-na",
+            Self::Excellent => "dr-14", // Using highest DR value as representative
+            Self::Good => "dr-12",
+            Self::Fair => "dr-10",
+            Self::Poor => "dr-08",
+            Self::VeryPoor => "dr-00",
+            Self::Unknown => "dr-na",
         }
     }
 
@@ -82,12 +82,12 @@ impl DRQuality {
     #[must_use]
     pub fn aria_label(&self) -> &'static str {
         match self {
-            DRQuality::Excellent => "Excellent dynamic range quality",
-            DRQuality::Good => "Good dynamic range quality",
-            DRQuality::Fair => "Fair dynamic range quality",
-            DRQuality::Poor => "Poor dynamic range quality",
-            DRQuality::VeryPoor => "Very poor dynamic range quality",
-            DRQuality::Unknown => "Unknown dynamic range quality",
+            Self::Excellent => "Excellent dynamic range quality",
+            Self::Good => "Good dynamic range quality",
+            Self::Fair => "Fair dynamic range quality",
+            Self::Poor => "Poor dynamic range quality",
+            Self::VeryPoor => "Very poor dynamic range quality",
+            Self::Unknown => "Unknown dynamic range quality",
         }
     }
 }

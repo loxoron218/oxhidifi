@@ -250,7 +250,7 @@ impl EmptyState {
                                         info!("Library directory added: {path_str}");
 
                                         // Trigger library rescan
-                                        EmptyState::trigger_library_rescan(
+                                        Self::trigger_library_rescan(
                                             path_str,
                                             &settings_manager_clone,
                                             app_state_clone2.as_ref(),

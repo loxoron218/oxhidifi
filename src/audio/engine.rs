@@ -246,7 +246,7 @@ impl AudioEngine {
 
         let default_config = OutputConfig::default();
 
-        let engine = AudioEngine {
+        let engine = Self {
             state: Arc::new(RwLock::new(PlaybackState::Stopped)),
             current_track: Arc::new(RwLock::new(None)),
             output_config: Arc::new(RwLock::new(default_config)),

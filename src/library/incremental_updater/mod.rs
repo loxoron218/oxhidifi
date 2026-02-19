@@ -71,7 +71,7 @@ impl IncrementalUpdater {
 
         let tasks = Vec::new();
 
-        Ok(IncrementalUpdater {
+        Ok(Self {
             database,
             dr_parser,
             settings,

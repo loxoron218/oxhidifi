@@ -231,7 +231,7 @@ impl OxhidifiApplication {
             .application_id("com.example.oxhidifi")
             .build();
 
-        Ok(OxhidifiApplication {
+        Ok(Self {
             app,
             audio_engine: audio_engine_arc,
             library_db,

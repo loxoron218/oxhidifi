@@ -56,9 +56,9 @@ pub enum ResamplingError {
 impl Display for ResamplingError {
     fn fmt(&self, f: &mut Formatter<'_>) -> StdResult {
         match self {
-            ResamplingError::RubatoError(msg) => write!(f, "Rubato error: {msg}"),
-            ResamplingError::RingBufferError(msg) => write!(f, "Ring buffer error: {msg}"),
-            ResamplingError::InvalidConfiguration(msg) => {
+            Self::RubatoError(msg) => write!(f, "Rubato error: {msg}"),
+            Self::RingBufferError(msg) => write!(f, "Ring buffer error: {msg}"),
+            Self::InvalidConfiguration(msg) => {
                 write!(f, "Invalid configuration: {msg}")
             }
         }
@@ -138,7 +138,7 @@ impl AudioResampler {
             source_rate, target_rate, channels, chunk_size
         );
 
-        Ok(AudioResampler {
+        Ok(Self {
             resampler,
             source_rate,
             target_rate,
@@ -293,7 +293,7 @@ impl ResamplingAudioConsumer {
             );
         }));
 
-        Ok(ResamplingAudioConsumer {
+        Ok(Self {
             running,
             thread_handle,
             target_config,

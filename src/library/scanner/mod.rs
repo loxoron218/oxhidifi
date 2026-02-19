@@ -146,7 +146,7 @@ impl LibraryScanner {
             .await;
         }));
 
-        Ok(LibraryScanner {
+        Ok(Self {
             file_watcher,
             config,
             _tasks: tasks,

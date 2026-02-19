@@ -161,7 +161,7 @@ impl SettingsManager {
             UserSettings::default()
         };
 
-        Ok(SettingsManager {
+        Ok(Self {
             settings: RwLock::new(settings),
             config_path,
         })

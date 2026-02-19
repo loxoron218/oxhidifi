@@ -137,7 +137,7 @@ impl AudioDecoder {
             .make(codec_params, &DecoderOptions::default())
             .map_err(DecoderError::SymphoniaError)?;
 
-        Ok(AudioDecoder {
+        Ok(Self {
             format_reader,
             decoder: Some(decoder),
             track_index,

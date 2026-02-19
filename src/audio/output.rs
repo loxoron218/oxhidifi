@@ -396,7 +396,7 @@ impl AudioOutput {
                         host_id, device_name, exclusive_mode
                     );
 
-                    return Ok(AudioOutput {
+                    return Ok(Self {
                         host,
                         device,
                         config: output_config,
@@ -619,7 +619,7 @@ impl AudioOutput {
             sample_rate,
         };
 
-        let stream = AudioOutput::create_stream_for_format(sample_format, ctx)?;
+        let stream = Self::create_stream_for_format(sample_format, ctx)?;
 
         Ok(stream)
     }
@@ -876,7 +876,7 @@ impl AudioConsumer {
             .map_err(|e| OutputError::ResamplingError(e.to_string()))?;
 
             info!("Created resampling audio consumer");
-            AudioConsumer::Resampling {
+            Self::Resampling {
                 output,
                 resampling_consumer,
                 resampled_consumer,
@@ -884,7 +884,7 @@ impl AudioConsumer {
             }
         } else {
             info!("Created direct audio consumer (no resampling needed)");
-            AudioConsumer::Direct {
+            Self::Direct {
                 output,
                 consumer,
                 current_position,
@@ -912,7 +912,7 @@ impl AudioConsumer {
         source_spec: &SignalSpec,
     ) -> Result<(Stream, Option<ResamplingAudioConsumer>), OutputError> {
         match self {
-            AudioConsumer::Direct {
+            Self::Direct {
                 output,
                 consumer,
                 current_position,
@@ -922,7 +922,7 @@ impl AudioConsumer {
                 stream.play()?;
                 Ok((stream, None))
             }
-            AudioConsumer::Resampling {
+            Self::Resampling {
                 output,
                 resampling_consumer,
                 resampled_consumer,
