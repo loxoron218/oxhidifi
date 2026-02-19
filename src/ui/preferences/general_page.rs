@@ -44,7 +44,7 @@ impl GeneralPreferencesPage {
             .accessible_role(Group)
             .build();
 
-        let mut page = Self {
+        let page = Self {
             widget,
             app_state,
             settings_manager,
@@ -61,7 +61,7 @@ impl GeneralPreferencesPage {
     }
 
     /// Sets up the theme preference combo row.
-    fn setup_theme_preference(&mut self) {
+    fn setup_theme_preference(&self) {
         let group = PreferencesGroup::builder()
             .title("Appearance")
             .description("Customize the application's visual appearance")
@@ -116,7 +116,7 @@ impl GeneralPreferencesPage {
     }
 
     /// Sets up the DR values display switch row.
-    fn setup_dr_values_preference(&mut self) {
+    fn setup_dr_values_preference(&self) {
         let group = PreferencesGroup::builder()
             .title("Dynamic Range")
             .description("Display DR (Dynamic Range) values on album covers")
@@ -154,7 +154,7 @@ impl GeneralPreferencesPage {
     }
 
     /// Sets up the metadata overlays visibility switch row.
-    fn setup_metadata_overlays_preference(&mut self) {
+    fn setup_metadata_overlays_preference(&self) {
         let group = PreferencesGroup::builder()
             .title("Metadata Display")
             .description("Configure how metadata is displayed on album cards")
@@ -192,7 +192,7 @@ impl GeneralPreferencesPage {
     }
 
     /// Sets up the year display mode combo row.
-    fn setup_year_display_preference(&mut self) {
+    fn setup_year_display_preference(&self) {
         let group = PreferencesGroup::builder()
             .title("Year Display")
             .description("Choose which year to display for albums")

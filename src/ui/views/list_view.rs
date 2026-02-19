@@ -429,7 +429,7 @@ impl ListView {
             Self::create_settings_subscription(state, view_type.clone(), cover_arts.clone())
         });
 
-        let mut view = Self {
+        let view = Self {
             widget: main_container.upcast_ref::<Widget>().clone(),
             list_box,
             app_state: app_state.cloned(),
@@ -461,7 +461,7 @@ impl ListView {
     }
 
     /// Clears the current list and prepares for new items.
-    fn clear_list(&mut self) {
+    fn clear_list(&self) {
         // Clear all children from the list box
         while let Some(child) = self.list_box.first_child() {
             self.list_box.remove(&child);
@@ -606,7 +606,7 @@ impl ListView {
     ///
     /// * `query` - The search query string
     /// * `has_results` - Whether the filter returned any results
-    fn update_empty_state(&mut self, query: &str, has_results: bool) {
+    fn update_empty_state(&self, query: &str, has_results: bool) {
         if has_results {
             self.search_empty_state.hide();
         } else {

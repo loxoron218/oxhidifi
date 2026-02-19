@@ -50,7 +50,7 @@ impl LibraryPreferencesPage {
             .accessible_role(Group)
             .build();
 
-        let mut page = Self {
+        let page = Self {
             widget,
             settings_manager,
             directory_list_box: ListBox::new(),
@@ -65,7 +65,7 @@ impl LibraryPreferencesPage {
     }
 
     /// Sets up the library directories management group.
-    fn setup_library_directories_group(&mut self) {
+    fn setup_library_directories_group(&self) {
         let group = PreferencesGroup::builder()
             .title("Music Library")
             .description("Manage directories containing your music collection")

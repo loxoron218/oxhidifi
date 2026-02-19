@@ -43,7 +43,7 @@ impl AudioPreferencesPage {
             .accessible_role(Group)
             .build();
 
-        let mut page = Self {
+        let page = Self {
             widget,
             settings_manager,
         };
@@ -57,7 +57,7 @@ impl AudioPreferencesPage {
     }
 
     /// Sets up the audio output configuration group.
-    fn setup_audio_output_group(&mut self) {
+    fn setup_audio_output_group(&self) {
         let group = PreferencesGroup::builder()
             .title("Audio Output")
             .description("Configure audio playback device and format")
@@ -149,7 +149,7 @@ impl AudioPreferencesPage {
     }
 
     /// Sets up the playback configuration group.
-    fn setup_playback_group(&mut self) {
+    fn setup_playback_group(&self) {
         let group = PreferencesGroup::builder()
             .title("Playback")
             .description("Configure playback buffer and performance settings")

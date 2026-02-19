@@ -181,7 +181,7 @@ impl DetailView {
     /// # Arguments
     ///
     /// * `album` - Reference to the album to display
-    fn display_album_detail(&mut self, album: &Album) {
+    fn display_album_detail(&self, album: &Album) {
         let playback_handler = Some(PlaybackHandler::new(
             self.audio_engine.clone(),
             self.queue_manager.clone(),
@@ -201,7 +201,7 @@ impl DetailView {
     /// # Arguments
     ///
     /// * `artist` - Reference to the artist to display
-    fn display_artist_detail(&mut self, artist: &Artist) {
+    fn display_artist_detail(&self, artist: &Artist) {
         ArtistDetailRenderer::render(&self.main_container, artist);
     }
 
