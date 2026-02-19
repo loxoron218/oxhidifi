@@ -251,8 +251,6 @@ where
         let scaled = clamped * f32::from(i8::MAX);
         let clamped_scaled = scaled.clamp(f32::from(i8::MIN), f32::from(i8::MAX));
 
-        // SAFETY: Value is clamped to valid i8 range, so unwrap_or never triggers.
-        // The fallback to 0 is defensive and should never execute.
         clamped_scaled.to_i8().unwrap_or(0)
     });
 
@@ -261,8 +259,6 @@ where
         let scaled = clamped * f32::from(i16::MAX);
         let clamped_scaled = scaled.clamp(f32::from(i16::MIN), f32::from(i16::MAX));
 
-        // SAFETY: Value is clamped to valid i16 range, so unwrap_or never triggers.
-        // The fallback to 0 is defensive and should never execute.
         clamped_scaled.to_i16().unwrap_or(0)
     });
 
@@ -271,8 +267,6 @@ where
         let scaled = clamped * f64::from(i32::MAX);
         let clamped_scaled = scaled.clamp(f64::from(i32::MIN), f64::from(i32::MAX));
 
-        // SAFETY: Value is clamped to valid i32 range, so unwrap_or never triggers.
-        // The fallback to 0 is defensive and should never execute.
         clamped_scaled.to_i32().unwrap_or(0)
     });
 
@@ -281,8 +275,6 @@ where
         let scaled = clamped * I64_MAX_F64;
         let clamped_scaled = scaled.clamp(I64_MIN_F64, I64_MAX_F64);
 
-        // SAFETY: Value is clamped to valid i64 range, so unwrap_or never triggers.
-        // The fallback to 0 is defensive and should never execute.
         clamped_scaled.to_i64().unwrap_or(0)
     });
 
@@ -291,8 +283,6 @@ where
         let scaled = (clamped + 1.0) * f32::from(u8::MAX) / 2.0;
         let clamped_scaled = scaled.clamp(0.0, f32::from(u8::MAX));
 
-        // SAFETY: Value is clamped to valid u8 range, so unwrap_or never triggers.
-        // The fallback to 128 (midpoint) is defensive and should never execute.
         clamped_scaled.to_u8().unwrap_or(128)
     });
 
@@ -301,8 +291,6 @@ where
         let scaled = (clamped + 1.0) * f32::from(u16::MAX) / 2.0;
         let clamped_scaled = scaled.clamp(0.0, f32::from(u16::MAX));
 
-        // SAFETY: Value is clamped to valid u16 range, so unwrap_or never triggers.
-        // The fallback to 32768 (midpoint) is defensive and should never execute.
         clamped_scaled.to_u16().unwrap_or(32768)
     });
 
@@ -311,8 +299,6 @@ where
         let scaled = clamped * f64::from((1_i32 << 23) - 1);
         let clamped_scaled = scaled.clamp(f64::from(-(1_i32 << 23)), f64::from((1_i32 << 23) - 1));
 
-        // SAFETY: Value is clamped to valid 24-bit range (stored in i32), so unwrap_or never triggers.
-        // The fallback to 0 is defensive and should never execute.
         clamped_scaled.to_i32().unwrap_or(0)
     });
 
@@ -321,8 +307,6 @@ where
         let scaled = (clamped + 1.0) * f64::from((1_u32 << 24) - 1) / 2.0;
         let clamped_scaled = scaled.clamp(0.0, f64::from((1_u32 << 24) - 1));
 
-        // SAFETY: Value is clamped to valid 24-bit range (stored in u32), so unwrap_or never triggers.
-        // The fallback to midpoint (1_u32 << 23) is defensive and should never execute.
         clamped_scaled.to_u32().unwrap_or(1_u32 << 23)
     });
 
@@ -331,8 +315,6 @@ where
         let scaled = (clamped + 1.0) * f64::from(u32::MAX) / 2.0;
         let clamped_scaled = scaled.clamp(0.0, f64::from(u32::MAX));
 
-        // SAFETY: Value is clamped to valid u32 range, so unwrap_or never triggers.
-        // The fallback to midpoint (1_u32 << 31) is defensive and should never execute.
         clamped_scaled.to_u32().unwrap_or(1_u32 << 31)
     });
 
@@ -341,8 +323,6 @@ where
         let scaled = (clamped + 1.0) * U64_MAX_F64 / 2.0;
         let clamped_scaled = scaled.clamp(0.0, U64_MAX_F64);
 
-        // SAFETY: Value is clamped to valid u64 range, so unwrap_or never triggers.
-        // The fallback to midpoint (1_u64 << 63) is defensive and should never execute.
         clamped_scaled.to_u64().unwrap_or(1_u64 << 63)
     });
 }
