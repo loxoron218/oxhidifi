@@ -215,7 +215,7 @@ impl AppState {
             // try_send should only fail if the channel is closed.
             // If it were bounded and full, this would return an error, effectively dropping the event.
             // But for UI events, unbounded is preferable to ensure delivery.
-            if let Ok(()) = tx.try_send(event.clone()) {
+            if matches!(tx.try_send(event.clone()), Ok(())) {
                 active.push(tx.clone());
                 count += 1;
             }

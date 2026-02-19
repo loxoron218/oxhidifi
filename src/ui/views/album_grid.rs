@@ -788,7 +788,7 @@ impl AlbumGridView {
                         let first_track = &tracks[0];
                         let track_path = &first_track.path;
 
-                        if let Ok(()) = audio_engine_clone.load_track(track_path) {
+                        if matches!(audio_engine_clone.load_track(track_path), Ok(())) {
                             if let Err(e) = audio_engine_clone.play().await {
                                 if !handle_exclusive_mode_error(&e, &app_state_clone) {
                                     error!(error = %e, "Failed to play track after loading");

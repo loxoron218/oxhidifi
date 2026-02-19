@@ -163,7 +163,7 @@ impl LibraryScanner {
         for tx in subscribers_lock.iter() {
             // We use try_send to avoid blocking. Since these are unbounded channels (created in subscribe),
             // try_send should only fail if the channel is closed.
-            if let Ok(()) = tx.try_send(event.clone()) {
+            if matches!(tx.try_send(event.clone()), Ok(())) {
                 active.push(tx.clone());
                 count += 1;
             }

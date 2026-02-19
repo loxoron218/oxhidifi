@@ -189,7 +189,7 @@ impl QueueManager {
         let audio_engine = self.audio_engine.clone();
 
         MainContext::default().spawn_local(async move {
-            while let Ok(()) = track_finished_rx.recv().await {
+            while track_finished_rx.recv().await == Ok(()) {
                 debug!("QueueManager: Track finished event received, auto-advancing");
                 Self::handle_next_track(&queue, &app_state, &audio_engine).await;
             }

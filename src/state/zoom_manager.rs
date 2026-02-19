@@ -76,7 +76,7 @@ impl ZoomManager {
         let mut count = 0;
 
         for tx in subscribers.iter() {
-            if let Ok(()) = tx.try_send(event.clone()) {
+            if matches!(tx.try_send(event.clone()), Ok(())) {
                 active.push(tx.clone());
                 count += 1;
             }
