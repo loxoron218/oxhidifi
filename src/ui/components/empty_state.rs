@@ -314,11 +314,9 @@ impl EmptyState {
                 let settings_arc = Arc::new(RwLock::new(settings_snapshot.clone()));
 
                 // Initialize DR parser if enabled
-                let dr_parser = if settings_snapshot.show_dr_values {
-                    Some(Arc::new(DrParser::new(library_db_arc.clone())))
-                } else {
-                    None
-                };
+                let dr_parser = settings_snapshot
+                    .show_dr_values
+                    .then(|| Arc::new(DrParser::new(library_db_arc.clone())));
 
                 Some((library_db_arc, settings_arc, dr_parser))
             }

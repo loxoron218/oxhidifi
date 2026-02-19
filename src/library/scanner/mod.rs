@@ -115,12 +115,10 @@ impl LibraryScanner {
         );
 
         // Initialize DR parser if enabled in settings
-        let dr_parser = if settings.read().show_dr_values {
+        let dr_parser = settings.read().show_dr_values.then(|| {
             let parser = DrParser::new(database.clone());
-            Some(Arc::new(parser))
-        } else {
-            None
-        };
+            Arc::new(parser)
+        });
 
         // Spawn background tasks
         let mut tasks = Vec::new();

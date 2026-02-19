@@ -63,11 +63,9 @@ impl IncrementalUpdater {
         let config = config.unwrap_or_default();
 
         // Create DR parser if enabled
-        let dr_parser = if config.enable_dr_parsing {
-            Some(Arc::new(DrParser::new(database.clone())))
-        } else {
-            None
-        };
+        let dr_parser = config
+            .enable_dr_parsing
+            .then(|| Arc::new(DrParser::new(database.clone())));
 
         let tasks = Vec::new();
 

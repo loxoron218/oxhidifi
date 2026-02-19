@@ -152,11 +152,7 @@ impl QueueManager {
                         // Preload second track if it exists
                         let second_track_opt = {
                             let queue_state = queue.read();
-                            if queue_state.tracks.len() > 1 {
-                                Some(queue_state.tracks[1].clone())
-                            } else {
-                                None
-                            }
+                            (queue_state.tracks.len() > 1).then(|| queue_state.tracks[1].clone())
                         };
 
                         if let Some(next_track) = second_track_opt {

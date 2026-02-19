@@ -467,11 +467,10 @@ impl AudioEngine {
     /// The current position in milliseconds, or None if no track is loaded.
     #[must_use]
     pub fn current_position(&self) -> Option<u64> {
-        if self.current_track.read().is_some() {
-            Some(self.current_position.load(SeqCst))
-        } else {
-            None
-        }
+        self.current_track
+            .read()
+            .is_some()
+            .then(|| self.current_position.load(SeqCst))
     }
 
     /// Subscribes to playback state changes.

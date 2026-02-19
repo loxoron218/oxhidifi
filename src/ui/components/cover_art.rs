@@ -232,16 +232,12 @@ impl CoverArt {
         };
 
         // Create DR badge
-        let dr_badge = if show_dr_badge {
-            Some(
-                DRBadgeBuilder::default()
-                    .dr_value(dr_value.clone().unwrap_or_else(|| "N/A".to_string()))
-                    .show_label(false) // Don't show "DR" prefix in grid view
-                    .build(),
-            )
-        } else {
-            None
-        };
+        let dr_badge = show_dr_badge.then(|| {
+            DRBadgeBuilder::default()
+                .dr_value(dr_value.clone().unwrap_or_else(|| "N/A".to_string()))
+                .show_label(false) // Don't show "DR" prefix in grid view
+                .build()
+        });
 
         let overlay = if let Some(pic) = &picture {
             // Create ScrolledWindow to enforce strict sizing and break request propagation
