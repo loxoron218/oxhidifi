@@ -40,13 +40,13 @@ use crate::audio::{
 };
 
 // Maximum i64 value as f64 for scaling
-const I64_MAX_F64: f64 = 9_223_372_036_854_775_807.0;
+const I64_MAX_F64: f64 = 9_223_372_036_854_776_000.0;
 
 // Minimum i64 value as f64 for scaling
-const I64_MIN_F64: f64 = -9_223_372_036_854_775_808.0;
+const I64_MIN_F64: f64 = -9_223_372_036_854_776_000.0;
 
 // Maximum u64 value as f64 for scaling
-const U64_MAX_F64: f64 = 18_446_744_073_709_551_615_f64;
+const U64_MAX_F64: f64 = 18_446_744_073_709_552_000_f64;
 
 /// Builds a sample output stream with format-specific conversion.
 ///
