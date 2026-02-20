@@ -199,7 +199,7 @@ impl ArtistGridView {
         });
 
         // Add empty state to main container if it exists
-        if let Some(ref empty_state) = empty_state {
+        if let Some(empty_state) = &empty_state {
             main_container.append(&empty_state.widget);
         }
 
@@ -299,7 +299,7 @@ impl ArtistGridView {
         self.apply_sort();
 
         // Update empty state visibility only when artists change
-        if let Some(ref empty_state) = self.empty_state {
+        if let Some(empty_state) = &self.empty_state {
             let library_state = if let Some(app_state) = &self.app_state {
                 app_state.get_library_state()
             } else {
@@ -391,7 +391,7 @@ impl ArtistGridView {
             .artist(artist.clone())
             .cover_size(cover_size_u32)
             .on_card_clicked(move || {
-                if let Some(ref state) = app_state {
+                if let Some(state) = &app_state {
                     state.update_navigation(ArtistDetail(artist_clone.clone()));
                 }
             })

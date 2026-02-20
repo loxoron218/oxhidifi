@@ -591,7 +591,7 @@ impl ListView {
         self.config = config;
 
         // Rebuild the list with new configuration
-        if let Some(ref app_state) = self.app_state {
+        if let Some(app_state) = &self.app_state {
             let library_state = app_state.get_library_state();
             match self.view_type {
                 ListViewType::Albums => self.set_albums(library_state.albums),
@@ -621,7 +621,7 @@ impl ListView {
     ///
     /// * `query` - Search query string
     pub fn filter_view_items(&mut self, query: &str) {
-        if let Some(ref app_state) = self.app_state {
+        if let Some(app_state) = &self.app_state {
             let library_state = app_state.get_library_state();
 
             match self.view_type {
@@ -878,7 +878,7 @@ fn create_album_info_labels(album: &Album, artist_name: &str) -> Box {
 /// * `row_container` - The row container to append labels to
 fn create_optional_metadata_labels(album: &Album, row_container: &Box) {
     // Genre info
-    if let Some(ref genre) = album.genre {
+    if let Some(genre) = &album.genre {
         let genre_label = Label::builder()
             .label(genre)
             .halign(Start)
@@ -914,7 +914,7 @@ fn create_optional_metadata_labels(album: &Album, row_container: &Box) {
 fn setup_album_row_activation(row: &ListBoxRow, album: &Album, app_state: Option<Arc<AppState>>) {
     let album_clone = album.clone();
     row.connect_activate(move |_| {
-        if let Some(ref state) = app_state {
+        if let Some(state) = &app_state {
             state.update_navigation(AlbumDetail(album_clone.clone()));
         }
     });
@@ -1052,7 +1052,7 @@ fn create_artist_row_with_zoom(
     let artist_clone = artist.clone();
     let app_state_clone = app_state.cloned();
     row.connect_activate(move |_| {
-        if let Some(ref state) = app_state_clone {
+        if let Some(state) = &app_state_clone {
             state.update_navigation(ArtistDetail(artist_clone.clone()));
         }
     });

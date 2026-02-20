@@ -132,7 +132,7 @@ impl AlbumDetailRenderer {
     /// * `container` - Container widget to append track list to
     /// * `toast_overlay` - Toast overlay for displaying feedback messages
     fn load_tracks_async(&self, album_id: i64, container: &Box, toast_overlay: &ToastOverlay) {
-        if let Some(ref library_db) = self.library_db {
+        if let Some(library_db) = &self.library_db {
             let library_db = Arc::clone(library_db);
             let playback_handler = self.playback_handler.clone();
             let container = container.clone();
@@ -141,7 +141,7 @@ impl AlbumDetailRenderer {
             MainContext::default().spawn_local(async move {
                 match library_db.get_tracks_by_album(album_id).await {
                     Ok(tracks) if !tracks.is_empty() => {
-                        if let Some(ref handler) = playback_handler {
+                        if let Some(handler) = &playback_handler {
                             let on_track_clicked =
                                 handler.create_track_click_handler(tracks.clone(), toast_overlay);
                             let track_list = Self::create_track_list(&tracks, on_track_clicked);
@@ -229,7 +229,7 @@ impl AlbumDetailRenderer {
             metadata_container.append(year_label.upcast_ref::<Widget>());
         }
 
-        if let Some(ref genre) = album.genre {
+        if let Some(genre) = &album.genre {
             let genre_label = Label::builder()
                 .label(genre)
                 .halign(Start)

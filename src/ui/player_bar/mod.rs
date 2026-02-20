@@ -345,7 +345,7 @@ impl PlayerBar {
     fn connect_prev_button(prev_button: &Button, queue_manager: Option<&Arc<QueueManager>>) {
         let queue_manager = queue_manager.cloned();
         prev_button.connect_clicked(move |_| {
-            if let Some(ref qm) = queue_manager {
+            if let Some(qm) = &queue_manager {
                 qm.previous_track();
             }
         });
@@ -360,7 +360,7 @@ impl PlayerBar {
     fn connect_next_button(next_button: &Button, queue_manager: Option<&Arc<QueueManager>>) {
         let queue_manager = queue_manager.cloned();
         next_button.connect_clicked(move |_| {
-            if let Some(ref qm) = queue_manager {
+            if let Some(qm) = &queue_manager {
                 qm.next_track();
             }
         });

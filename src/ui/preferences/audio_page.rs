@@ -71,7 +71,7 @@ impl AudioPreferencesPage {
             .subtitle("Select audio output device for playback")
             .build();
 
-        let device_subtitle = if let Some(ref device) = current_device {
+        let device_subtitle = if let Some(device) = &current_device {
             device.clone()
         } else {
             "System Default".to_string()

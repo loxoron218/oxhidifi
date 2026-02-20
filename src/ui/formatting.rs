@@ -81,7 +81,7 @@ pub fn format_sample_rate(sample_rate_hz: i64) -> String {
 #[must_use]
 pub fn create_format_display(album: &Album) -> Option<String> {
     // Use actual format metadata if available
-    if let Some(ref format_name) = album.format {
+    if let Some(format_name) = &album.format {
         if let (Some(bits), Some(sample_rate)) = (album.bits_per_sample, album.sample_rate) {
             // Format as "FORMAT bits/sample_rate" (e.g., "FLAC 24/96", "FLAC 24/44.1")
             // Convert sample_rate from Hz to kHz for display with proper decimal handling

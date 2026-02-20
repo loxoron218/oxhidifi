@@ -668,7 +668,7 @@ impl AlbumCard {
         let card_callback_clone = on_card_clicked.clone();
         click_controller.connect_released(move |_gesture, _n_press, _x, _y| {
             // If we have a card callback, trigger it
-            if let Some(ref callback) = card_callback_clone {
+            if let Some(callback) = &card_callback_clone {
                 callback();
             }
         });

@@ -138,7 +138,7 @@ pub fn calculate_hires(track_info: Option<&TrackInfo>) -> bool {
 /// True if output device is lossy, false otherwise.
 #[must_use]
 pub fn is_lossy_device(output_config: &OutputConfig) -> bool {
-    if let Some(ref device_name) = output_config.device_name {
+    if let Some(device_name) = &output_config.device_name {
         let device_lower = device_name.to_lowercase();
         return device_lower.contains("bluetooth")
             || device_lower.contains("airpods")

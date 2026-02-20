@@ -595,7 +595,7 @@ impl AudioEngine {
     ///
     /// Always returns `()`; errors are silently ignored if no callback is set.
     fn report_error(&self, error_message: String) {
-        if let Some(ref callback) = *self.error_callback.read() {
+        if let Some(callback) = &*self.error_callback.read() {
             callback(error_message);
         }
     }

@@ -268,7 +268,7 @@ impl HiFiMetadata {
 
         let mut labels = Vec::new();
 
-        if let Some(ref track_data) = track {
+        if let Some(track_data) = &track {
             // Add format label
             if config.show_format == FormatDisplay::Show {
                 let format_label = Label::builder()

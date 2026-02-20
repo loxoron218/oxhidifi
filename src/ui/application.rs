@@ -464,7 +464,7 @@ fn handle_navigation_state_change(
             header_bar.widget.set_show_start_title_buttons(true);
             header_bar.widget.set_show_end_title_buttons(true);
         }
-        AlbumDetail(ref album) => {
+        AlbumDetail(album) => {
             push_album_detail_page(
                 navigation_view,
                 toast_overlay,
@@ -472,7 +472,7 @@ fn handle_navigation_state_change(
                 library_db,
                 audio_engine,
                 queue_manager,
-                album,
+                &album,
             );
 
             header_bar.back_button.set_visible(true);
@@ -480,7 +480,7 @@ fn handle_navigation_state_change(
             header_bar.view_split_button.set_visible(false);
             header_bar.widget.set_title_widget(Option::<&Widget>::None);
         }
-        ArtistDetail(ref artist) => {
+        ArtistDetail(artist) => {
             push_artist_detail_page(
                 navigation_view,
                 toast_overlay,
@@ -488,7 +488,7 @@ fn handle_navigation_state_change(
                 library_db,
                 audio_engine,
                 queue_manager,
-                artist,
+                &artist,
             );
 
             header_bar.back_button.set_visible(true);
@@ -976,7 +976,7 @@ fn handle_library_data_changed(
     views.artist_list.set_artists(artists.to_vec());
 
     // Re-apply current search filter if active
-    if let Some(ref filter) = current_filter {
+    if let Some(filter) = &current_filter {
         let query = filter.as_str();
         let visible_child = view_stack.visible_child_name();
         if let Some(child_name) = visible_child.as_deref() {
@@ -1052,7 +1052,7 @@ fn handle_view_options_changed(
         // View mode switch within same tab: preserve search results
         debug!("View mode changed within same tab, preserving search");
 
-        if let Some(ref filter) = library_state.search_filter {
+        if let Some(filter) = &library_state.search_filter {
             let query = filter.as_str();
             debug!("Applying search filter '{query}' to new view {child_name}");
 

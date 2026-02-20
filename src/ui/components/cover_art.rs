@@ -266,7 +266,7 @@ impl CoverArt {
             Self::build_overlay(None::<&ScrolledWindow>, width, height)
         };
 
-        if let Some(ref badge) = dr_badge {
+        if let Some(badge) = &dr_badge {
             // Add DR badge as overlay - it will align to the Overlay's bounds
             overlay.add_overlay(&badge.widget);
         }
@@ -312,7 +312,7 @@ impl CoverArt {
                 let file = File::for_path(&path);
 
                 if file.peek_path().is_some() {
-                    if let Some(ref pic) = self.picture {
+                    if let Some(pic) = &self.picture {
                         pic.set_file(Some(&file));
                         pic.set_tooltip_text(Some(&format!("Album artwork for {path}")));
                     } else if self.image.is_some() {
@@ -357,16 +357,16 @@ impl CoverArt {
                     }
                 } else {
                     warn!("Failed to load artwork from {path}: file path not accessible");
-                    if let Some(ref pic) = self.picture {
+                    if let Some(pic) = &self.picture {
                         pic.set_file(None::<&File>);
                         pic.set_tooltip_text(Some("Default album artwork"));
                     }
                 }
-            } else if let Some(ref pic) = self.picture {
+            } else if let Some(pic) = &self.picture {
                 pic.set_file(None::<&File>);
                 pic.set_tooltip_text(Some("Default album artwork"));
             }
-        } else if let Some(ref pic) = self.picture {
+        } else if let Some(pic) = &self.picture {
             pic.set_file(None::<&File>);
             pic.set_tooltip_text(Some("Default album artwork"));
         }
@@ -412,11 +412,11 @@ impl CoverArt {
                 self.dr_badge = Some(badge);
             } else {
                 // Ensure existing badge is visible
-                if let Some(ref badge) = self.dr_badge {
+                if let Some(badge) = &self.dr_badge {
                     badge.widget.set_visible(true);
                 }
             }
-        } else if let Some(ref badge) = self.dr_badge {
+        } else if let Some(badge) = &self.dr_badge {
             // Remove badge from overlay and clear reference
             overlay.remove_overlay(&badge.widget);
             self.dr_badge = None;
@@ -454,7 +454,7 @@ impl CoverArt {
         }
 
         // Update Image pixel size if using icon
-        if let Some(ref img) = self.image {
+        if let Some(img) = &self.image {
             img.set_pixel_size(height.max(width));
         }
     }
