@@ -43,18 +43,16 @@ impl DRQuality {
             .skip_while(|c| !c.is_ascii_digit())
             .collect::<String>();
 
-        if let Ok(value) = numeric_part.parse::<i32>() {
-            match value {
+        numeric_part
+            .parse::<i32>()
+            .map_or(Self::Unknown, |value| match value {
                 14.. => Self::Excellent,
                 12..=13 => Self::Good,
                 10..=11 => Self::Fair,
                 8..=9 => Self::Poor,
                 0..=7 => Self::VeryPoor,
                 _ => Self::Unknown,
-            }
-        } else {
-            Self::Unknown
-        }
+            })
     }
 
     /// Gets the CSS class name for this quality level.
@@ -174,38 +172,44 @@ impl DRBadge {
             .map_or(DRQuality::Unknown, DRQuality::from_dr_value);
 
         // Extract numeric part for CSS class and display
-        let (display_text, css_class) = if let Some(value) = dr_value {
-            if let Ok(numeric_part) = value
-                .chars()
-                .skip_while(|c| !c.is_ascii_digit())
-                .collect::<String>()
-                .parse::<u8>()
-            {
-                let formatted_display = if show_label {
-                    format!("DR{numeric_part:02}")
-                } else {
-                    format!("{numeric_part:02}")
-                };
-                let css_class = format!("dr-{numeric_part:02}");
-                (formatted_display, css_class)
-            } else {
-                // Invalid DR value format
+        let (display_text, css_class) = dr_value.map_or_else(
+            || {
+                // No DR value provided
                 let display_text = if show_label {
                     "DR N/A".to_string()
                 } else {
                     "N/A".to_string()
                 };
                 (display_text, "dr-na".to_string())
-            }
-        } else {
-            // No DR value provided
-            let display_text = if show_label {
-                "DR N/A".to_string()
-            } else {
-                "N/A".to_string()
-            };
-            (display_text, "dr-na".to_string())
-        };
+            },
+            |value| {
+                value
+                    .chars()
+                    .skip_while(|c| !c.is_ascii_digit())
+                    .collect::<String>()
+                    .parse::<u8>()
+                    .map_or_else(
+                        |_| {
+                            // Invalid DR value format
+                            let display_text = if show_label {
+                                "DR N/A".to_string()
+                            } else {
+                                "N/A".to_string()
+                            };
+                            (display_text, "dr-na".to_string())
+                        },
+                        |numeric_part| {
+                            let formatted_display = if show_label {
+                                format!("DR{numeric_part:02}")
+                            } else {
+                                format!("{numeric_part:02}")
+                            };
+                            let css_class = format!("dr-{numeric_part:02}");
+                            (formatted_display, css_class)
+                        },
+                    )
+            },
+        );
 
         let label_builder = Label::builder()
             .label(&display_text)
@@ -256,24 +260,27 @@ impl DRBadge {
             .map_or(DRQuality::Unknown, DRQuality::from_dr_value);
 
         // Extract numeric part for CSS class and display
-        let (display_text, css_class) = if let Some(value) = dr_value {
-            if let Ok(numeric_part) = value
-                .chars()
-                .skip_while(|c| !c.is_ascii_digit())
-                .collect::<String>()
-                .parse::<u8>()
-            {
-                let formatted_display = format!("DR{numeric_part:02}");
-                let css_class = format!("dr-{numeric_part:02}");
-                (formatted_display, css_class)
-            } else {
-                // Invalid DR value format
-                ("DR N/A".to_string(), "dr-na".to_string())
-            }
-        } else {
-            // No DR value provided
-            ("DR N/A".to_string(), "dr-na".to_string())
-        };
+        let (display_text, css_class) = dr_value.map_or_else(
+            || ("DR N/A".to_string(), "dr-na".to_string()),
+            |value| {
+                value
+                    .chars()
+                    .skip_while(|c| !c.is_ascii_digit())
+                    .collect::<String>()
+                    .parse::<u8>()
+                    .map_or_else(
+                        |_| {
+                            // Invalid DR value format
+                            ("DR N/A".to_string(), "dr-na".to_string())
+                        },
+                        |numeric_part| {
+                            let formatted_display = format!("DR{numeric_part:02}");
+                            let css_class = format!("dr-{numeric_part:02}");
+                            (formatted_display, css_class)
+                        },
+                    )
+            },
+        );
 
         self.label.set_label(&display_text);
         self.label.set_tooltip_text(Some(quality.aria_label()));

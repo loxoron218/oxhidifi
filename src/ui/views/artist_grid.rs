@@ -235,32 +235,34 @@ impl ArtistGridView {
             search_empty_state,
             current_sort: ArtistSortCriteria::Name,
             artist_cards_ref: artist_cards_ref.clone(),
-            zoom_subscription_handle: if let Some(state) = app_state {
-                let state_clone = state;
-                let flow_box_clone = flow_box;
-                let artist_cards_ref_clone = artist_cards_ref;
-                let handle = MainContext::default().spawn_local(async move {
-                    let rx = state_clone.zoom_manager.subscribe();
-                    while let Ok(event) = rx.recv().await {
-                        if let GridZoomChanged(_) = event {
-                            let cover_size = state_clone.zoom_manager.get_grid_cover_dimensions().0;
-                            let cover_size_u32 = safe_i32_to_u32(cover_size, 180, "cover_size");
+            zoom_subscription_handle: app_state.map_or_else(
+                || None,
+                |state| {
+                    let state_clone = state;
+                    let flow_box_clone = flow_box;
+                    let artist_cards_ref_clone = artist_cards_ref;
+                    let handle = MainContext::default().spawn_local(async move {
+                        let rx = state_clone.zoom_manager.subscribe();
+                        while let Ok(event) = rx.recv().await {
+                            if let GridZoomChanged(_) = event {
+                                let cover_size =
+                                    state_clone.zoom_manager.get_grid_cover_dimensions().0;
+                                let cover_size_u32 = safe_i32_to_u32(cover_size, 180, "cover_size");
 
-                            let cards = artist_cards_ref_clone.borrow();
-                            for card in cards.iter() {
-                                if let Err(e) = card.update_cover_size(cover_size_u32) {
-                                    error!("Failed to update cover size: {e}");
+                                let cards = artist_cards_ref_clone.borrow();
+                                for card in cards.iter() {
+                                    if let Err(e) = card.update_cover_size(cover_size_u32) {
+                                        error!("Failed to update cover size: {e}");
+                                    }
                                 }
-                            }
 
-                            flow_box_clone.queue_draw();
+                                flow_box_clone.queue_draw();
+                            }
                         }
-                    }
-                });
-                Some(handle)
-            } else {
-                None
-            },
+                    });
+                    Some(handle)
+                },
+            ),
         };
 
         view.set_artists(artists);
@@ -370,13 +372,11 @@ impl ArtistGridView {
     /// The cover size in pixels.
     #[must_use]
     fn get_cover_size(&self) -> i32 {
-        if let Some(app_state) = &self.app_state {
-            app_state.zoom_manager.get_grid_cover_dimensions().0
-        } else if self.config.compact {
-            120
-        } else {
-            180
-        }
+        self.app_state
+            .as_ref()
+            .map_or(if self.config.compact { 120 } else { 180 }, |app_state| {
+                app_state.zoom_manager.get_grid_cover_dimensions().0
+            })
     }
 
     /// Creates a single artist card for the grid.

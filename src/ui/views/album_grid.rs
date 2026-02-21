@@ -684,19 +684,20 @@ impl AlbumGridView {
     ///
     /// The artist name, or "Unknown Artist" if not found.
     fn resolve_artist_name(&self, album: &Album) -> String {
-        if let Some(app_state) = &self.app_state {
-            let library_state = app_state.get_library_state();
-            library_state
-                .artists
-                .iter()
-                .find(|artist| artist.id == album.artist_id)
-                .map_or_else(
-                    || "Unknown Artist".to_string(),
-                    |artist| artist.name.clone(),
-                )
-        } else {
-            "Unknown Artist".to_string()
-        }
+        self.app_state.as_ref().map_or_else(
+            || "Unknown Artist".to_string(),
+            |app_state| {
+                let library_state = app_state.get_library_state();
+                library_state
+                    .artists
+                    .iter()
+                    .find(|artist| artist.id == album.artist_id)
+                    .map_or_else(
+                        || "Unknown Artist".to_string(),
+                        |artist| artist.name.clone(),
+                    )
+            },
+        )
     }
 
     /// Gets the cover size for album cards.
@@ -705,13 +706,11 @@ impl AlbumGridView {
     ///
     /// The cover size in pixels.
     fn get_cover_size(&self) -> i32 {
-        if let Some(app_state) = &self.app_state {
-            app_state.zoom_manager.get_grid_cover_dimensions().0
-        } else if self.config.compact {
-            120
-        } else {
-            180
-        }
+        self.app_state
+            .as_ref()
+            .map_or(if self.config.compact { 120 } else { 180 }, |app_state| {
+                app_state.zoom_manager.get_grid_cover_dimensions().0
+            })
     }
 
     /// Gets visibility settings for DR badges and metadata overlays.
@@ -720,16 +719,16 @@ impl AlbumGridView {
     ///
     /// A tuple of (`show_dr_badge`, `show_metadata_overlays`).
     fn get_visibility_settings(&self) -> (bool, bool) {
-        if let Some(app_state) = &self.app_state {
-            let settings = app_state
-                .get_settings_manager()
-                .read()
-                .get_settings()
-                .clone();
-            (settings.show_dr_values, settings.show_metadata_overlays)
-        } else {
-            (self.config.show_dr_badges, true)
-        }
+        self.app_state
+            .as_ref()
+            .map_or((self.config.show_dr_badges, true), |app_state| {
+                let settings = app_state
+                    .get_settings_manager()
+                    .read()
+                    .get_settings()
+                    .clone();
+                (settings.show_dr_values, settings.show_metadata_overlays)
+            })
     }
 
     /// Converts cover size from i32 to u32 with fallback.

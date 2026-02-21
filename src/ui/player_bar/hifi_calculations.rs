@@ -121,10 +121,7 @@ pub fn calculate_gapless(audio_engine: &AudioEngine) -> bool {
 /// True if track is Hi-Res (sample rate >= 48 kHz), false otherwise.
 #[must_use]
 pub fn calculate_hires(track_info: Option<&TrackInfo>) -> bool {
-    match track_info {
-        Some(track) => track.format.sample_rate >= 48000,
-        None => false,
-    }
+    track_info.is_some_and(|track| track.format.sample_rate >= 48000)
 }
 
 /// Detects if the output device is lossy (Bluetooth, high latency, etc.).

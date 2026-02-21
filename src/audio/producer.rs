@@ -377,11 +377,9 @@ impl GaplessProducer {
     ///
     /// Panics if there's no current producer.
     pub fn run(self) -> Result<(), DecoderError> {
-        if let Some(producer) = self.current_producer {
+        self.current_producer.map_or(Err(NoAudioTrack), |producer| {
             // Run current track producer
             producer.run()
-        } else {
-            Err(NoAudioTrack)
-        }
+        })
     }
 }

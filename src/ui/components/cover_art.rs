@@ -246,32 +246,40 @@ impl CoverArt {
                 .build()
         });
 
-        let overlay = if let Some(pic) = &picture {
-            // Create ScrolledWindow to enforce strict sizing and break request propagation
-            // This acts as a clipping container for the Picture
-            let scrolled_window = ScrolledWindow::builder()
-                .hscrollbar_policy(Never)
-                .vscrollbar_policy(Never)
-                .width_request(width)
-                .height_request(height)
-                .propagate_natural_width(false)
-                .propagate_natural_height(false)
-                .has_frame(false)
-                .min_content_width(width)
-                .min_content_height(height)
-                .child(pic)
-                .build();
+        let overlay = picture.as_ref().map_or_else(
+            || {
+                image.as_ref().map_or_else(
+                    || {
+                        // Fallback - should never happen
+                        Self::build_overlay(None::<&ScrolledWindow>, width, height)
+                    },
+                    |img| {
+                        // For icons, use Image directly in Overlay
+                        Self::build_overlay(Some(img), width, height)
+                    },
+                )
+            },
+            |pic| {
+                // Create ScrolledWindow to enforce strict sizing and break request propagation
+                // This acts as a clipping container for the Picture
+                let scrolled_window = ScrolledWindow::builder()
+                    .hscrollbar_policy(Never)
+                    .vscrollbar_policy(Never)
+                    .width_request(width)
+                    .height_request(height)
+                    .propagate_natural_width(false)
+                    .propagate_natural_height(false)
+                    .has_frame(false)
+                    .min_content_width(width)
+                    .min_content_height(height)
+                    .child(pic)
+                    .build();
 
-            // Create overlay container
-            // Overlay holds the ScrolledWindow (which holds the Picture) and the Badge
-            Self::build_overlay(Some(&scrolled_window), width, height)
-        } else if let Some(img) = &image {
-            // For icons, use Image directly in Overlay
-            Self::build_overlay(Some(img), width, height)
-        } else {
-            // Fallback - should never happen
-            Self::build_overlay(None::<&ScrolledWindow>, width, height)
-        };
+                // Create overlay container
+                // Overlay holds the ScrolledWindow (which holds the Picture) and the Badge
+                Self::build_overlay(Some(&scrolled_window), width, height)
+            },
+        );
 
         if let Some(badge) = &dr_badge {
             // Add DR badge as overlay - it will align to the Overlay's bounds

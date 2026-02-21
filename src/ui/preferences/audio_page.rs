@@ -71,11 +71,9 @@ impl AudioPreferencesPage {
             .subtitle("Select audio output device for playback")
             .build();
 
-        let device_subtitle = if let Some(device) = &current_device {
-            device.clone()
-        } else {
-            "System Default".to_string()
-        };
+        let device_subtitle = current_device
+            .as_ref()
+            .map_or_else(|| "System Default".to_string(), Clone::clone);
         device_row.set_subtitle(&device_subtitle);
 
         // In a complete implementation, this would open a device selection dialog

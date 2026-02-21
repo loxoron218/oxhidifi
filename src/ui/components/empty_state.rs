@@ -419,35 +419,36 @@ impl EmptyState {
     ) -> Option<Arc<RwLock<LibraryScanner>>> {
         let existing_scanner = app_state.library_scanner.read().clone();
 
-        if let Some(scanner) = existing_scanner {
-            Some(scanner)
-        } else {
-            // Create new scanner
+        existing_scanner.map_or_else(
+            || {
+                // Create new scanner
 
-            match LibraryScanner::new(library_db, settings_arc, None) {
-                Ok(scanner) => {
-                    let scanner_arc = Arc::new(RwLock::new(scanner));
+                match LibraryScanner::new(library_db, settings_arc, None) {
+                    Ok(scanner) => {
+                        let scanner_arc = Arc::new(RwLock::new(scanner));
 
-                    // IMPORTANT: Store the scanner in AppState to prevent it from being dropped
-                    *app_state.library_scanner.write() = Some(scanner_arc.clone());
+                        // IMPORTANT: Store the scanner in AppState to prevent it from being dropped
+                        *app_state.library_scanner.write() = Some(scanner_arc.clone());
 
-                    // Start the event listener loop for the new scanner
-                    // This mirrors the logic in OxhidifiApplication::run
-                    Self::start_scanner_event_listener(
-                        &scanner_arc,
-                        app_state,
-                        library_db,
-                        cancel_token,
-                    );
+                        // Start the event listener loop for the new scanner
+                        // This mirrors the logic in OxhidifiApplication::run
+                        Self::start_scanner_event_listener(
+                            &scanner_arc,
+                            app_state,
+                            library_db,
+                            cancel_token,
+                        );
 
-                    Some(scanner_arc)
+                        Some(scanner_arc)
+                    }
+                    Err(e) => {
+                        error!(error = %e, "Failed to create library scanner");
+                        None
+                    }
                 }
-                Err(e) => {
-                    error!(error = %e, "Failed to create library scanner");
-                    None
-                }
-            }
-        }
+            },
+            Some,
+        )
     }
 
     /// Executes the background scanning task for library directories.

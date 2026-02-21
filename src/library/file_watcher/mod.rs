@@ -420,17 +420,13 @@ impl FileWatcher {
     /// `true` if the path is a supported audio file, `false` otherwise.
     #[must_use]
     pub fn is_supported_audio_file(path: &Path) -> bool {
-        if let Some(extension) = path.extension() {
-            if let Some(ext_str) = extension.to_str() {
+        path.extension().is_some_and(|extension| {
+            extension.to_str().is_some_and(|ext_str| {
                 supported_audio_extensions()
                     .iter()
                     .any(|&ext| ext.eq_ignore_ascii_case(ext_str))
-            } else {
-                false
-            }
-        } else {
-            false
-        }
+            })
+        })
     }
 
     /// Checks if a path corresponds to a supported text file for DR value monitoring.
@@ -444,17 +440,13 @@ impl FileWatcher {
     /// `true` if the path is a supported text file, `false` otherwise.
     #[must_use]
     pub fn is_supported_text_file(path: &Path) -> bool {
-        if let Some(extension) = path.extension() {
-            if let Some(ext_str) = extension.to_str() {
+        path.extension().is_some_and(|extension| {
+            extension.to_str().is_some_and(|ext_str| {
                 SUPPORTED_TEXT_EXTENSIONS
                     .iter()
                     .any(|&ext| ext.eq_ignore_ascii_case(ext_str))
-            } else {
-                false
-            }
-        } else {
-            false
-        }
+            })
+        })
     }
 
     /// Adds a directory to be watched.

@@ -181,19 +181,17 @@ fn extract_format_and_codec(_format_reader: &dyn FormatReader, track: &Track) ->
         CODEC_TYPE_OPUS => "Opus",
         CODEC_TYPE_ALAC => "ALAC",
         // Handle DSD formats - these might be detected as PCM with high sample rates
-        _ => {
-            // Check if this might be DSD based on sample rate
-            if let Some(sample_rate) = track.codec_params.sample_rate {
+        _ => track
+            .codec_params
+            .sample_rate
+            .map_or("Unknown", |sample_rate| {
                 if sample_rate >= 176_400 {
                     // DSD64 starts at 176.4kHz
                     "DSD"
                 } else {
                     "Unknown"
                 }
-            } else {
-                "Unknown"
-            }
-        }
+            }),
     };
 
     // Determine container format based on codec and common patterns

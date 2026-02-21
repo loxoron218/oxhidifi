@@ -101,8 +101,9 @@ impl AlbumDetailRenderer {
     ///
     /// Artist name as a string, or "Unknown Artist" if not found.
     fn fetch_artist_name(&self, album: &Album) -> String {
-        match self.app_state.as_ref() {
-            Some(state) => {
+        self.app_state.as_ref().map_or_else(
+            || "Unknown Artist".to_string(),
+            |state| {
                 let library_state = state.get_library_state();
                 library_state
                     .artists
@@ -119,9 +120,8 @@ impl AlbumDetailRenderer {
                         },
                         |artist| artist.name.clone(),
                     )
-            }
-            None => "Unknown Artist".to_string(),
-        }
+            },
+        )
     }
 
     /// Loads tracks asynchronously and renders track list.

@@ -1026,11 +1026,10 @@ impl AudioEngine {
     /// `true` if a track is pre-buffered and ready, `false` otherwise.
     #[must_use]
     pub fn is_next_track_ready(&self) -> bool {
-        if let Some(prebuffer) = self.prebuffer.read().as_ref() {
-            prebuffer.is_ready()
-        } else {
-            false
-        }
+        self.prebuffer
+            .read()
+            .as_ref()
+            .is_some_and(|prebuffer| prebuffer.is_ready())
     }
 }
 

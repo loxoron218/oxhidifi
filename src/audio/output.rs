@@ -4,6 +4,7 @@
 //! bit-perfect playback configuration for high-fidelity audio output.
 
 use std::{
+    convert::identity,
     sync::{
         Arc,
         atomic::{AtomicU64, Ordering::SeqCst},
@@ -352,12 +353,13 @@ impl AudioOutput {
     pub fn new(config: Option<OutputConfig>) -> Result<Self, OutputError> {
         let all_hosts = available_hosts();
 
-        let output_config = if let Some(cfg) = config {
-            cfg
-        } else {
-            debug!("No output config provided, using defaults");
-            OutputConfig::default()
-        };
+        let output_config = config.map_or_else(
+            || {
+                debug!("No output config provided, using defaults");
+                OutputConfig::default()
+            },
+            identity,
+        );
 
         let exclusive_mode = output_config.exclusive_mode;
 

@@ -221,11 +221,8 @@ impl ListView {
     ///
     /// Cover size in pixels, defaults to 48 if no app state or conversion fails
     fn get_cover_size_optional(app_state: Option<&Arc<AppState>>) -> u32 {
-        let cover_size = if let Some(state) = app_state {
-            state.zoom_manager.get_list_cover_dimensions().0
-        } else {
-            48
-        };
+        let cover_size =
+            app_state.map_or(48, |state| state.zoom_manager.get_list_cover_dimensions().0);
 
         match u32::try_from(cover_size) {
             Ok(size) => size,
@@ -808,19 +805,20 @@ fn create_cover_art_for_album(
 ///
 /// The artist name or "Unknown Artist" if not found
 fn get_artist_name_for_album(album: &Album, app_state: Option<&Arc<AppState>>) -> String {
-    if let Some(state) = app_state {
-        let library_state = state.get_library_state();
-        library_state
-            .artists
-            .iter()
-            .find(|artist| artist.id == album.artist_id)
-            .map_or_else(
-                || "Unknown Artist".to_string(),
-                |artist| artist.name.clone(),
-            )
-    } else {
-        "Unknown Artist".to_string()
-    }
+    app_state.map_or_else(
+        || "Unknown Artist".to_string(),
+        |state| {
+            let library_state = state.get_library_state();
+            library_state
+                .artists
+                .iter()
+                .find(|artist| artist.id == album.artist_id)
+                .map_or_else(
+                    || "Unknown Artist".to_string(),
+                    |artist| artist.name.clone(),
+                )
+        },
+    )
 }
 
 /// Creates the info labels (title and artist/year) for an album row.

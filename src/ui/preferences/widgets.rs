@@ -44,11 +44,10 @@ where
     F: Fn(&UserSettings) -> String + 'static,
     G: Fn(&mut UserSettings, String) + 'static,
 {
-    let combo_row = if let Some(sub) = subtitle {
-        ComboRow::builder().title(title).subtitle(sub).build()
-    } else {
-        ComboRow::builder().title(title).build()
-    };
+    let combo_row = subtitle.map_or_else(
+        || ComboRow::builder().title(title).build(),
+        |sub| ComboRow::builder().title(title).subtitle(sub).build(),
+    );
 
     // Create string list for combo row
     let string_refs: Vec<&str> = options.iter().map(String::as_str).collect();
