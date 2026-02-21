@@ -214,8 +214,7 @@ pub fn subscribe_to_state_changes(
 
     // Initialize exclusive mode button with current setting value
     let settings_manager = app_state.get_settings_manager();
-    let settings = settings_manager.read();
-    let current_exclusive_mode = settings.get_settings().exclusive_mode;
+    let current_exclusive_mode = settings_manager.read().get_settings().exclusive_mode;
     handle_exclusive_mode_changed(current_exclusive_mode, &context);
 
     MainContext::default().spawn_local(async move {

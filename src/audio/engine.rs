@@ -4,7 +4,6 @@
 //! decoder, output, and playback state management for high-fidelity playback.
 
 use std::{
-    mem::drop,
     path::Path,
     sync::{
         Arc,

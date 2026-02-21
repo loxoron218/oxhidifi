@@ -146,6 +146,7 @@ impl OxhidifiApplication {
             output_config.exclusive_mode = settings.exclusive_mode;
             output_config.sample_rate = settings.sample_rate;
             output_config.buffer_duration_ms = settings.buffer_duration_ms;
+            drop(settings);
             audio_engine.update_output_config(output_config);
         }
 
@@ -266,8 +267,7 @@ impl OxhidifiApplication {
 
                 // Subscribe to library scanner events if active
                 if let Some(scanner_lock) = &app_state_clone.library_scanner.read().clone() {
-                    let scanner = scanner_lock.read();
-                    let rx = scanner.subscribe();
+                    let rx = scanner_lock.read().subscribe();
                     let app_state_refresh = app_state_clone.clone();
                     let db_refresh = library_db_clone.clone();
 

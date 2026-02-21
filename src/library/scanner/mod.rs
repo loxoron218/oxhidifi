@@ -177,6 +177,7 @@ impl LibraryScanner {
         }
 
         *subscribers_lock = active;
+        drop(subscribers_lock);
         debug!("Broadcasted event to {} subscribers", count);
     }
 

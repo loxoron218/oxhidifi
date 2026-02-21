@@ -354,8 +354,7 @@ impl EmptyState {
     ) {
         // Start the event listener loop for the new scanner
         // This mirrors the logic in OxhidifiApplication::run
-        let scanner_read = scanner_arc.read();
-        let rx = scanner_read.subscribe();
+        let rx = scanner_arc.read().subscribe();
         let app_state_refresh = app_state.clone();
         let db_refresh = library_db.clone();
         let cancel_token_clone = cancel_token.clone();
@@ -670,6 +669,7 @@ mod tests {
         if settings_read.show_dr_values {
             bail!("Show DR values should be false");
         }
+        drop(settings_read);
         Ok(())
     }
 
@@ -694,6 +694,7 @@ mod tests {
         if !settings_read.show_dr_values {
             bail!("Show DR values should be true");
         }
+        drop(settings_read);
         if dr_parser.is_none() {
             bail!("DR parser should be Some");
         }

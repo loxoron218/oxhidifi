@@ -52,8 +52,12 @@ impl ZoomManager {
     pub fn new(settings_manager: Arc<RwLock<SettingsManager>>) -> Self {
         let (grid_zoom_level, list_zoom_level) = {
             let settings_guard = settings_manager.read();
-            let settings = settings_guard.get_settings();
-            (settings.grid_zoom_level, settings.list_zoom_level)
+            let (grid, list) = {
+                let settings = settings_guard.get_settings();
+                (settings.grid_zoom_level, settings.list_zoom_level)
+            };
+            drop(settings_guard);
+            (grid, list)
         };
         debug!(
             "ZoomManager: Loaded initial zoom levels from settings - grid: {}, list: {}",
@@ -130,6 +134,7 @@ impl ZoomManager {
             if let Err(e) = settings_manager_write.update_settings(current_settings) {
                 debug!("Failed to persist grid zoom level {}: {}", clamped_level, e);
             }
+            drop(settings_manager_write);
 
             self.broadcast_event(&ZoomEvent::GridZoomChanged(clamped_level));
         }
@@ -159,6 +164,7 @@ impl ZoomManager {
             if let Err(e) = settings_manager_write.update_settings(current_settings) {
                 debug!("Failed to persist list zoom level {}: {}", clamped_level, e);
             }
+            drop(settings_manager_write);
 
             self.broadcast_event(&ZoomEvent::ListZoomChanged(clamped_level));
         }
