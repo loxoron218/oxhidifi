@@ -242,27 +242,29 @@ impl PlaybackHandler {
         let metadata =
             TagReader::read_metadata(track_path).map_err(PlaybackError::MetadataError)?;
 
-        let sr =
-            u32::try_from(tech_details.sample_rate).map_err(|_| PlaybackError::InvalidFormat {
+        let sr = u32::try_from(tech_details.sample_rate).map_err(|_err| {
+            PlaybackError::InvalidFormat {
                 path: track_path.to_string(),
                 field: "sample_rate".to_string(),
-            })?;
+            }
+        })?;
         let ch =
-            u32::try_from(tech_details.channels).map_err(|_| PlaybackError::InvalidFormat {
+            u32::try_from(tech_details.channels).map_err(|_err| PlaybackError::InvalidFormat {
                 path: track_path.to_string(),
                 field: "channels".to_string(),
             })?;
-        let bps = u32::try_from(tech_details.bits_per_sample).map_err(|_| {
+        let bps = u32::try_from(tech_details.bits_per_sample).map_err(|_err| {
             PlaybackError::InvalidFormat {
                 path: track_path.to_string(),
                 field: "bits_per_sample".to_string(),
             }
         })?;
-        let dur =
-            u64::try_from(tech_details.duration_ms).map_err(|_| PlaybackError::InvalidFormat {
+        let dur = u64::try_from(tech_details.duration_ms).map_err(|_err| {
+            PlaybackError::InvalidFormat {
                 path: track_path.to_string(),
                 field: "duration_ms".to_string(),
-            })?;
+            }
+        })?;
 
         Ok(TrackInfo {
             path: track_path.to_string(),

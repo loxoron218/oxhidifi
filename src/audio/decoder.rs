@@ -169,7 +169,7 @@ impl AudioDecoder {
                     // Skip non-audio packets
                     if packet.track_id()
                         != u32::try_from(self.track_index)
-                            .map_err(|_| DecoderError::InvalidTrackIndex)?
+                            .map_err(|_err| DecoderError::InvalidTrackIndex)?
                     {
                         continue;
                     }

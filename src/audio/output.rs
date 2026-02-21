@@ -478,7 +478,7 @@ impl AudioOutput {
         let supported_configs = self
             .device
             .supported_output_configs()
-            .map_err(|_| OutputError::NoDeviceFound)?;
+            .map_err(|_err| OutputError::NoDeviceFound)?;
 
         let source_sample_rate = source_format.sample_rate;
         let source_channels = source_format.channels;
@@ -590,7 +590,7 @@ impl AudioOutput {
         let sample_format = self
             .device
             .default_output_config()
-            .map_err(|_| OutputError::NoDeviceFound)?
+            .map_err(|_err| OutputError::NoDeviceFound)?
             .sample_format();
 
         let err_fn = Self::create_error_handler();
@@ -823,7 +823,7 @@ impl AudioConsumer {
         let sample_format = output
             .device
             .default_output_config()
-            .map_err(|_| OutputError::NoDeviceFound)?
+            .map_err(|_err| OutputError::NoDeviceFound)?
             .sample_format();
 
         let bits_per_sample = match sample_format {

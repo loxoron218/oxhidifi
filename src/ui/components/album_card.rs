@@ -352,8 +352,8 @@ impl AlbumCard {
         let cover_height = base_cover_size;
 
         let cover_width_i32 =
-            i32::try_from(cover_width).map_err(|_| InvalidCoverWidth { cover_width })?;
-        let cover_height_i32 = i32::try_from(cover_height).map_err(|_| InvalidCoverWidth {
+            i32::try_from(cover_width).map_err(|_err| InvalidCoverWidth { cover_width })?;
+        let cover_height_i32 = i32::try_from(cover_height).map_err(|_err| InvalidCoverWidth {
             cover_width: cover_height,
         })?;
 
@@ -795,11 +795,11 @@ impl AlbumCard {
     /// Returns `UiError::InvalidCoverWidth` if the cover width exceeds i32 bounds.
     pub fn update_label_max_width_chars(&self, cover_width: u32) -> Result<(), UiError> {
         let title_max = i32::try_from(((cover_width - 16) / 10).max(8))
-            .map_err(|_| InvalidCoverWidth { cover_width })?;
+            .map_err(|_err| InvalidCoverWidth { cover_width })?;
         let artist_max = i32::try_from(((cover_width - 16) / 10).max(8))
-            .map_err(|_| InvalidCoverWidth { cover_width })?;
+            .map_err(|_err| InvalidCoverWidth { cover_width })?;
         let format_max = i32::try_from((((cover_width - 16) / 2) / 10).max(8))
-            .map_err(|_| InvalidCoverWidth { cover_width })?;
+            .map_err(|_err| InvalidCoverWidth { cover_width })?;
 
         self.title_label.set_max_width_chars(title_max);
         self.artist_label.set_max_width_chars(artist_max);

@@ -449,7 +449,7 @@ fn get_sample_format(output: &AudioOutput) -> Result<SampleFormat, OutputError> 
     Ok(output
         .device()
         .default_output_config()
-        .map_err(|_| NoDeviceFound)?
+        .map_err(|_err| NoDeviceFound)?
         .sample_format())
 }
 

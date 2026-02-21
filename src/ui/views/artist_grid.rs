@@ -704,14 +704,14 @@ impl ArtistCard {
     pub fn update_cover_size(&self, cover_size: u32) -> Result<(), UiError> {
         let clamped_cover_size = cover_size.min(MAX_COVER_SIZE);
         let cover_size_i32 = i32::try_from(clamped_cover_size)
-            .map_err(|_| BuilderError(format!("Invalid cover size: {cover_size}")))?;
+            .map_err(|_err| BuilderError(format!("Invalid cover size: {cover_size}")))?;
 
         self.cover_art
             .update_dimensions(cover_size_i32, cover_size_i32);
 
         let max_width = ((clamped_cover_size - 16) / 10).max(8);
         let max_width_i32 = i32::try_from(max_width)
-            .map_err(|_| BuilderError(format!("Invalid max_width_chars: {max_width}")))?;
+            .map_err(|_err| BuilderError(format!("Invalid max_width_chars: {max_width}")))?;
         self.name_label.set_max_width_chars(max_width_i32);
         self.album_count_label.set_max_width_chars(max_width_i32);
         Ok(())
