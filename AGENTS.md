@@ -102,13 +102,14 @@ cargo bench         # Run benchmarks
 
 **Binaries:** Use `anyhow` at top level only
 
+**Tests:** Return `anyhow::Result` with `bail!` for assertions, or `()` for simple tests
+
 **Rules:**
 - NEVER leak `anyhow::Error` across library boundaries
 - NEVER use `let _`, `.unwrap()`, `.expect()` or `.ok()`, return errors with context instead
 - NEVER use `println!`, `eprintln!`, or `dbg!` for output
-- ALWAYS use structured `tracing` with fields (e.g., `error!(error = %err, "Audio stream error")`, `info!(message = %err_str, "Audio buffer size changed")`)
-- Document error types with summary comment
-- Document each variant/field with `///`
+- ALWAYS use structured `tracing` with fields (e.g., `error!(error = %err, "Audio stream error")`)
+- Document error types with summary comment and each variant with `///`
 
 **Example:**
 ```rust
