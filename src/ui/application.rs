@@ -8,19 +8,19 @@ use std::{fs::read_to_string, path::Path, rc::Rc, sync::Arc};
 use {
     libadwaita::{
         Application, ApplicationWindow, NavigationPage, NavigationView, Toast, ToastOverlay,
+        ToolbarView,
         gdk::{Display, Key},
         glib::{
             MainContext,
             Propagation::{Proceed, Stop},
         },
         gtk::{
-            Box as GtkBox, CssProvider, EventControllerKey, Orientation::Vertical,
-            STYLE_PROVIDER_PRIORITY_APPLICATION, ScrolledWindow, Stack,
-            StackTransitionType::Crossfade, Widget, style_context_add_provider_for_display,
+            CssProvider, EventControllerKey, STYLE_PROVIDER_PRIORITY_APPLICATION, ScrolledWindow,
+            Stack, StackTransitionType::Crossfade, Widget, style_context_add_provider_for_display,
         },
         prelude::{
-            AdjustmentExt, AdwApplicationWindowExt, ApplicationExt, ApplicationExtManual, BoxExt,
-            Cast, GtkWindowExt, NavigationPageExt, WidgetExt,
+            AdjustmentExt, AdwApplicationWindowExt, ApplicationExt, ApplicationExtManual, Cast,
+            GtkWindowExt, NavigationPageExt, WidgetExt,
         },
     },
     parking_lot::RwLock,
@@ -620,7 +620,7 @@ fn setup_esc_key_controller(app_state: &Arc<AppState>, window: &ApplicationWindo
     window.add_controller(esc_controller);
 }
 
-/// Assembles the main layout box with header, content, and player bar.
+/// Assembles the main layout using `ToolbarView` with header, content, and player bar.
 ///
 /// # Arguments
 ///
@@ -630,19 +630,19 @@ fn setup_esc_key_controller(app_state: &Arc<AppState>, window: &ApplicationWindo
 ///
 /// # Returns
 ///
-/// A vertical box widget containing all main layout elements.
+/// A `ToolbarView` widget containing all main layout elements.
 fn assemble_main_layout(
     header_bar_widget: &Widget,
     toast_overlay: &ToastOverlay,
     player_bar_widget: &Widget,
-) -> GtkBox {
-    let main_box = GtkBox::builder().orientation(Vertical).build();
+) -> ToolbarView {
+    let toolbar_view = ToolbarView::builder().build();
 
-    main_box.append(header_bar_widget);
-    main_box.append(toast_overlay);
-    main_box.append(player_bar_widget);
+    toolbar_view.add_top_bar(header_bar_widget);
+    toolbar_view.set_content(Some(toast_overlay));
+    toolbar_view.add_bottom_bar(player_bar_widget);
 
-    main_box
+    toolbar_view
 }
 
 /// Builds the main user interface for the application.
