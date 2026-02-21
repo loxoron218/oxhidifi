@@ -63,9 +63,9 @@ pub async fn handle_files_changed(
             audio_files.push(path);
         } else if FileWatcher::is_supported_text_file(&path) {
             text_files.push(path);
+        } else {
+            // Ignore unsupported files
         }
-
-        // Ignore unsupported files
     }
 
     // Process audio files for metadata and database updates

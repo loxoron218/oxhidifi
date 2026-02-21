@@ -369,6 +369,8 @@ impl CoverArt {
                         overlay.set_child(Some(&scrolled_window));
 
                         self.picture = Some(pic);
+                    } else {
+                        // No image or picture widget available
                     }
                 } else {
                     warn!("Failed to load artwork from {path}: file path not accessible");
@@ -380,10 +382,14 @@ impl CoverArt {
             } else if let Some(pic) = &self.picture {
                 pic.set_file(None::<&File>);
                 pic.set_tooltip_text(Some("Default album artwork"));
+            } else {
+                // No picture widget to clear
             }
         } else if let Some(pic) = &self.picture {
             pic.set_file(None::<&File>);
             pic.set_tooltip_text(Some("Default album artwork"));
+        } else {
+            // No picture widget to clear
         }
     }
 
@@ -435,6 +441,8 @@ impl CoverArt {
             // Remove badge from overlay and clear reference
             overlay.remove_overlay(&badge.widget);
             self.dr_badge = None;
+        } else {
+            // No badge to remove
         }
     }
 

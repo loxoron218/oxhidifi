@@ -362,6 +362,8 @@ impl LibraryScanner {
                     // Recursively process subdirectories
                     let sub_audio_files = Self::collect_audio_files_from_directory(&path)?;
                     audio_files.extend(sub_audio_files);
+                } else {
+                    // Ignore other file types (symlinks, etc.)
                 }
             }
         }

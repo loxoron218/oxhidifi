@@ -164,6 +164,8 @@ fn handle_playback_state_changed(
         start_position_updates();
     } else if matches!(playback_state, Stopped) {
         stop_position_updates();
+    } else {
+        // Paused state: position updates continue but paused
     }
 
     update_hifi_display(audio_engine, context);

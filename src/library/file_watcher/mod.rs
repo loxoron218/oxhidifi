@@ -260,6 +260,8 @@ impl FileWatcher {
                 path
             );
             Self::send_file_changed(sender, path, true);
+        } else {
+            // Ignore unsupported files
         }
     }
 
@@ -298,6 +300,8 @@ impl FileWatcher {
                 || Self::is_supported_text_file(to_path)
             {
                 Self::send_file_changed(sender, to_path, true);
+            } else {
+                // Ignore unsupported files
             }
         } else {
             // Fallback if structure is unexpected
@@ -393,6 +397,8 @@ impl FileWatcher {
                         } else if path.is_dir() {
                             let sub_files = Self::collect_audio_files_recursively(&path);
                             audio_files.extend(sub_files);
+                        } else {
+                            // Ignore other file types (symlinks, etc.)
                         }
                     }
                     Err(e) => {
