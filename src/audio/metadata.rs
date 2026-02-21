@@ -10,7 +10,7 @@ use {
     anyhow::Context,
     lofty::{
         error::{ErrorKind::Io, LoftyError},
-        picture::PictureType::{CoverBack, CoverFront, Leaflet},
+        picture::PictureType::{CoverBack, CoverFront, Leaflet, Other},
         prelude::{Accessor, AudioFile, ItemKey::AlbumArtist, TaggedFileExt},
         probe::Probe,
     },
@@ -196,10 +196,16 @@ impl TagReader {
             // Try to get front cover first
             tag.get_picture_type(CoverFront)
                 .or_else(|| {
-                    // Fall back to any cover if front cover not available
-                    tag.pictures()
-                        .iter()
-                        .find(|pic| matches!(pic.pic_type(), CoverFront | CoverBack | Leaflet))
+                    // Fall back to back cover
+                    tag.get_picture_type(CoverBack)
+                })
+                .or_else(|| {
+                    // Fall back to leaflet
+                    tag.get_picture_type(Leaflet)
+                })
+                .or_else(|| {
+                    // Fall back to "Other" type (common in some encoders)
+                    tag.get_picture_type(Other)
                 })
                 .map(|pic| pic.data().to_vec())
         });
