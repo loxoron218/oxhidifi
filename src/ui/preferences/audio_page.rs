@@ -13,7 +13,7 @@ use {
         prelude::{ActionRowExt, PreferencesGroupExt, PreferencesPageExt},
     },
     num_traits::cast::ToPrimitive,
-    tracing::{debug, error},
+    tracing::{debug, error, info},
 };
 
 use crate::config::SettingsManager;
@@ -120,7 +120,14 @@ impl AudioPreferencesPage {
         let settings_manager_clone = self.settings_manager.clone();
         spin_row.connect_value_notify(move |row: &SpinRow| {
             let clamped_value = row.value().clamp(0.0_f64, f64::MAX);
-            let new_value = u32::try_from(clamped_value.to_i64().unwrap()).unwrap();
+            let Some(i64_value) = clamped_value.to_i64() else {
+                info!("Invalid sample rate value: cannot convert to i64");
+                return;
+            };
+            let Ok(new_value) = u32::try_from(i64_value) else {
+                info!("Invalid sample rate value: exceeds u32 range");
+                return;
+            };
 
             // Validate sample rate (common rates or 0 for auto)
             let valid_rates = [
@@ -129,7 +136,7 @@ impl AudioPreferencesPage {
             ];
 
             if !valid_rates.contains(&new_value) {
-                debug!("Invalid sample rate: {}, reverting to auto", new_value);
+                info!("Invalid sample rate: {}, reverting to auto", new_value);
 
                 // Revert to auto if invalid
                 row.set_value(0.0);
@@ -186,11 +193,18 @@ impl AudioPreferencesPage {
         let settings_manager_clone = self.settings_manager.clone();
         spin_row.connect_value_notify(move |row: &SpinRow| {
             let clamped_value = row.value().clamp(0.0_f64, f64::MAX);
-            let new_value = u32::try_from(clamped_value.to_i64().unwrap()).unwrap();
+            let Some(i64_value) = clamped_value.to_i64() else {
+                info!("Invalid buffer duration value: cannot convert to i64");
+                return;
+            };
+            let Ok(new_value) = u32::try_from(i64_value) else {
+                info!("Invalid buffer duration value: exceeds u32 range");
+                return;
+            };
 
             // Validate buffer duration (reasonable range: 10-500ms)
             if !(10..=500).contains(&new_value) {
-                debug!(
+                info!(
                     "Invalid buffer duration: {}, clamping to valid range",
                     new_value
                 );

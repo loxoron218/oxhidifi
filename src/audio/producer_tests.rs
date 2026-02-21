@@ -20,7 +20,7 @@ macro_rules! assert_float_eq {
     ($left:expr, $right:expr) => {
         assert!(
             ($left - $right).abs() < f32::EPSILON,
-            "expected {} but got {}",
+            "Expected {}, got {}",
             $right,
             $left
         );

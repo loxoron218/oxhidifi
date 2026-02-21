@@ -192,7 +192,10 @@ impl EmptyState {
         if self.scanner_cancel_token.is_none() {
             self.scanner_cancel_token = Some(Arc::new(AtomicBool::new(false)));
         }
-        let cancel_token_clone = self.scanner_cancel_token.clone().unwrap();
+        let Some(cancel_token_clone) = self.scanner_cancel_token.clone() else {
+            warn!("Scanner cancellation token is None");
+            return;
+        };
 
         self.add_button.connect_clicked(move |_| {
             // Create file dialog for folder selection
@@ -314,9 +317,17 @@ impl EmptyState {
                 let settings_arc = Arc::new(RwLock::new(settings_snapshot.clone()));
 
                 // Initialize DR parser if enabled
-                let dr_parser = settings_snapshot
-                    .show_dr_values
-                    .then(|| Arc::new(DrParser::new(library_db_arc.clone())));
+                let dr_parser = if settings_snapshot.show_dr_values {
+                    match DrParser::new(library_db_arc.clone()) {
+                        Ok(parser) => Some(Arc::new(parser)),
+                        Err(e) => {
+                            error!("Failed to initialize DR parser: {}", e);
+                            None
+                        }
+                    }
+                } else {
+                    None
+                };
 
                 Some((library_db_arc, settings_arc, dr_parser))
             }
@@ -597,6 +608,8 @@ mod tests {
         sync::{Arc, atomic::AtomicBool},
     };
 
+    use anyhow::{Result, anyhow, bail};
+
     use {parking_lot::RwLock, tempfile::TempDir};
 
     use crate::{
@@ -621,7 +634,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_prepare_scan_resources_with_dr_parser() {
+    async fn test_prepare_scan_resources_with_dr_parser() -> Result<()> {
         let settings = UserSettings {
             show_dr_values: true,
             ..Default::default()
@@ -629,13 +642,15 @@ mod tests {
 
         let result = EmptyState::prepare_scan_resources(settings).await;
 
-        assert!(result.is_some());
-        let (_, _, dr_parser) = result.unwrap();
-        assert!(dr_parser.is_some());
+        let (_, _, dr_parser) = result.ok_or_else(|| anyhow!("result should be Some"))?;
+        if dr_parser.is_none() {
+            bail!("DR parser should be Some");
+        }
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_prepare_scan_resources_without_dr_parser() {
+    async fn test_prepare_scan_resources_without_dr_parser() -> Result<()> {
         let settings = UserSettings {
             show_dr_values: false,
             ..Default::default()
@@ -643,17 +658,22 @@ mod tests {
 
         let result = EmptyState::prepare_scan_resources(settings).await;
 
-        assert!(result.is_some());
-        let (_library_db, settings_arc, dr_parser) = result.unwrap();
+        let (_library_db, settings_arc, dr_parser) =
+            result.ok_or_else(|| anyhow!("result should be Some"))?;
 
-        assert!(dr_parser.is_none());
+        if dr_parser.is_some() {
+            bail!("DR parser should be None");
+        }
 
         let settings_read = settings_arc.read();
-        assert!(!settings_read.show_dr_values);
+        if settings_read.show_dr_values {
+            bail!("Show DR values should be false");
+        }
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_prepare_scan_resources_settings_arc_content() {
+    async fn test_prepare_scan_resources_settings_arc_content() -> Result<()> {
         let test_dirs = vec!["/music/test".to_string(), "/another/path".to_string()];
         let settings = UserSettings {
             library_directories: test_dirs.clone(),
@@ -662,30 +682,37 @@ mod tests {
         };
 
         let result = EmptyState::prepare_scan_resources(settings).await;
-        assert!(result.is_some());
 
-        let (_library_db, settings_arc, dr_parser) = result.unwrap();
+        let (_library_db, settings_arc, dr_parser) =
+            result.ok_or_else(|| anyhow!("result should be Some"))?;
 
         let settings_read = settings_arc.read();
-        assert_eq!(settings_read.library_directories, test_dirs);
-        assert!(settings_read.show_dr_values);
-        assert!(dr_parser.is_some());
+        if settings_read.library_directories != test_dirs {
+            bail!("Library directories mismatch");
+        }
+        if !settings_read.show_dr_values {
+            bail!("Show DR values should be true");
+        }
+        if dr_parser.is_none() {
+            bail!("DR parser should be Some");
+        }
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_get_or_create_scanner_returns_existing() {
-        let library_db = LibraryDatabase::new().await.unwrap();
+    async fn test_get_or_create_scanner_returns_existing() -> Result<()> {
+        let library_db = LibraryDatabase::new().await?;
         let library_db_arc = Arc::new(library_db);
 
         let settings = UserSettings::default();
         let settings_arc = Arc::new(RwLock::new(settings));
 
-        let existing_scanner = LibraryScanner::new(&library_db_arc, &settings_arc, None).unwrap();
+        let existing_scanner = LibraryScanner::new(&library_db_arc, &settings_arc, None)?;
         let existing_scanner_arc = Arc::new(RwLock::new(existing_scanner));
 
-        let engine = AudioEngine::new().unwrap();
+        let engine = AudioEngine::new()?;
         let engine_weak = Arc::downgrade(&Arc::new(engine));
-        let settings_manager = SettingsManager::new().unwrap();
+        let settings_manager = SettingsManager::new()?;
         let app_state = Arc::new(AppState::new(
             engine_weak,
             Some(existing_scanner_arc.clone()),
@@ -701,17 +728,16 @@ mod tests {
             &cancel_token,
         );
 
-        assert!(result.is_some());
-        let scanner_arc = result.unwrap();
-        assert!(
-            Arc::ptr_eq(&scanner_arc, &existing_scanner_arc),
-            "Should return existing scanner"
-        );
+        let scanner_arc = result.ok_or_else(|| anyhow!("result should be Some"))?;
+        if !Arc::ptr_eq(&scanner_arc, &existing_scanner_arc) {
+            bail!("Should return existing scanner");
+        }
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_get_or_create_scanner_creates_new() {
-        let library_db = LibraryDatabase::new().await.unwrap();
+    async fn test_get_or_create_scanner_creates_new() -> Result<()> {
+        let library_db = LibraryDatabase::new().await?;
         let library_db_arc = Arc::new(library_db);
 
         let settings = UserSettings::default();
@@ -719,20 +745,23 @@ mod tests {
 
         let result = LibraryScanner::new(&library_db_arc, &settings_arc, None);
 
-        assert!(result.is_ok(), "Scanner should be created successfully");
+        if result.is_err() {
+            bail!("Scanner should be created successfully");
+        }
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_get_or_create_scanner_stores_in_app_state() {
-        let library_db = LibraryDatabase::new().await.unwrap();
+    async fn test_get_or_create_scanner_stores_in_app_state() -> Result<()> {
+        let library_db = LibraryDatabase::new().await?;
         let library_db_arc = Arc::new(library_db);
 
         let settings = UserSettings::default();
         let settings_arc = Arc::new(RwLock::new(settings));
 
-        let engine = AudioEngine::new().unwrap();
+        let engine = AudioEngine::new()?;
         let engine_weak = Arc::downgrade(&Arc::new(engine));
-        let settings_manager = SettingsManager::new().unwrap();
+        let settings_manager = SettingsManager::new()?;
 
         let app_state = Arc::new(AppState::new(
             engine_weak,
@@ -740,10 +769,9 @@ mod tests {
             Arc::new(RwLock::new(settings_manager)),
         ));
 
-        assert!(
-            app_state.library_scanner.read().is_none(),
-            "Scanner should be None initially"
-        );
+        if app_state.library_scanner.read().is_some() {
+            bail!("Scanner should be None initially");
+        }
 
         let cancel_token = Arc::new(AtomicBool::new(false));
 
@@ -753,22 +781,24 @@ mod tests {
             &settings_arc,
             &cancel_token,
         );
-        assert!(result.is_some());
+        if result.is_none() {
+            bail!("Result should be Some");
+        }
 
         let stored_scanner = app_state.library_scanner.read().clone();
-        assert!(
-            stored_scanner.is_some(),
-            "Scanner should be stored in app_state"
-        );
+        if stored_scanner.is_none() {
+            bail!("Scanner should be stored in app_state");
+        }
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_execute_background_scan_adds_directory() {
-        let temp_dir = TempDir::new().unwrap();
+    async fn test_execute_background_scan_adds_directory() -> Result<()> {
+        let temp_dir = TempDir::new()?;
         let music_dir = temp_dir.path().join("music");
-        create_dir_all(&music_dir).unwrap();
+        create_dir_all(&music_dir)?;
 
-        let library_db = LibraryDatabase::new().await.unwrap();
+        let library_db = LibraryDatabase::new().await?;
         let library_db_arc = Arc::new(library_db);
 
         let settings = UserSettings {
@@ -777,7 +807,7 @@ mod tests {
         };
         let settings_arc = Arc::new(RwLock::new(settings));
 
-        let scanner = LibraryScanner::new(&library_db_arc, &settings_arc, None).unwrap();
+        let scanner = LibraryScanner::new(&library_db_arc, &settings_arc, None)?;
         let scanner_arc = Arc::new(RwLock::new(scanner));
 
         let test_path = music_dir.to_string_lossy().to_string();
@@ -790,18 +820,19 @@ mod tests {
             test_path,
         )
         .await;
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_execute_background_scan_with_files() {
-        let temp_dir = TempDir::new().unwrap();
+    async fn test_execute_background_scan_with_files() -> Result<()> {
+        let temp_dir = TempDir::new()?;
         let music_dir = temp_dir.path().join("music");
-        create_dir_all(&music_dir).unwrap();
+        create_dir_all(&music_dir)?;
 
         let audio_file = music_dir.join("test_audio.mp3");
-        write(&audio_file, b"fake audio data").unwrap();
+        write(&audio_file, b"fake audio data")?;
 
-        let library_db = LibraryDatabase::new().await.unwrap();
+        let library_db = LibraryDatabase::new().await?;
         let library_db_arc = Arc::new(library_db);
 
         let settings = UserSettings {
@@ -810,7 +841,7 @@ mod tests {
         };
         let settings_arc = Arc::new(RwLock::new(settings));
 
-        let scanner = LibraryScanner::new(&library_db_arc, &settings_arc, None).unwrap();
+        let scanner = LibraryScanner::new(&library_db_arc, &settings_arc, None)?;
         let scanner_arc = Arc::new(RwLock::new(scanner));
 
         let test_path = music_dir.to_string_lossy().to_string();
@@ -826,19 +857,22 @@ mod tests {
 
         let albums = library_db_arc.get_albums(None).await;
         let artists = library_db_arc.get_artists(None).await;
-        assert!(albums.is_ok() || artists.is_ok());
+        if albums.is_err() && artists.is_err() {
+            bail!("At least one of albums or artists should be ok");
+        }
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_execute_background_scan_with_dr_parser() {
-        let temp_dir = TempDir::new().unwrap();
+    async fn test_execute_background_scan_with_dr_parser() -> Result<()> {
+        let temp_dir = TempDir::new()?;
         let music_dir = temp_dir.path().join("music");
-        create_dir_all(&music_dir).unwrap();
+        create_dir_all(&music_dir)?;
 
         let dr_file = music_dir.join("dr.txt");
-        write(&dr_file, "Official DR value: DR12").unwrap();
+        write(&dr_file, "Official DR value: DR12")?;
 
-        let library_db = LibraryDatabase::new().await.unwrap();
+        let library_db = LibraryDatabase::new().await?;
         let library_db_arc = Arc::new(library_db);
 
         let settings = UserSettings {
@@ -848,10 +882,13 @@ mod tests {
         };
         let settings_arc = Arc::new(RwLock::new(settings));
 
-        let scanner = LibraryScanner::new(&library_db_arc, &settings_arc, None).unwrap();
+        let scanner = LibraryScanner::new(&library_db_arc, &settings_arc, None)?;
         let scanner_arc = Arc::new(RwLock::new(scanner));
 
-        let dr_parser = Some(Arc::new(DrParser::new(library_db_arc.clone())));
+        let dr_parser = {
+            let parser = DrParser::new(library_db_arc.clone())?;
+            Some(Arc::new(parser))
+        };
 
         let test_path = music_dir.to_string_lossy().to_string();
 
@@ -863,11 +900,12 @@ mod tests {
             test_path,
         )
         .await;
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_execute_background_scan_empty_library_directories() {
-        let library_db = LibraryDatabase::new().await.unwrap();
+    async fn test_execute_background_scan_empty_library_directories() -> Result<()> {
+        let library_db = LibraryDatabase::new().await?;
         let library_db_arc = Arc::new(library_db);
 
         let settings = UserSettings {
@@ -876,10 +914,10 @@ mod tests {
         };
         let settings_arc = Arc::new(RwLock::new(settings));
 
-        let scanner = LibraryScanner::new(&library_db_arc, &settings_arc, None).unwrap();
+        let scanner = LibraryScanner::new(&library_db_arc, &settings_arc, None)?;
         let scanner_arc = Arc::new(RwLock::new(scanner));
 
-        let temp_dir = TempDir::new().unwrap();
+        let temp_dir = TempDir::new()?;
         let test_path = temp_dir.path().to_string_lossy().to_string();
 
         EmptyState::execute_background_scan(
@@ -890,5 +928,6 @@ mod tests {
             test_path,
         )
         .await;
+        Ok(())
     }
 }

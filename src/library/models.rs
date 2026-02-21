@@ -144,12 +144,15 @@ impl Default for Track {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::{from_str, to_string};
+    use {
+        anyhow::{Result, bail},
+        serde_json::{from_str, to_string},
+    };
 
     use crate::library::models::{Album, Artist, Track};
 
     #[test]
-    fn test_artist_serialization() {
+    fn test_artist_serialization() -> Result<()> {
         let artist = Artist {
             id: 1,
             name: "Test Artist".to_string(),
@@ -158,13 +161,18 @@ mod tests {
             updated_at: Some("2023-01-02 00:00:00".to_string()),
         };
 
-        let serialized = to_string(&artist).unwrap();
-        let deserialized: Artist = from_str(&serialized).unwrap();
-        assert_eq!(artist, deserialized);
+        let serialized = to_string(&artist)?;
+        let deserialized: Artist = from_str(&serialized)?;
+        if artist != deserialized {
+            bail!(
+                "Artist serialization roundtrip failed: expected {artist:?}, got {deserialized:?}"
+            );
+        }
+        Ok(())
     }
 
     #[test]
-    fn test_album_serialization() {
+    fn test_album_serialization() -> Result<()> {
         let album = Album {
             id: 1,
             artist_id: 1,
@@ -182,13 +190,16 @@ mod tests {
             updated_at: Some("2023-01-02 00:00:00".to_string()),
         };
 
-        let serialized = to_string(&album).unwrap();
-        let deserialized: Album = from_str(&serialized).unwrap();
-        assert_eq!(album, deserialized);
+        let serialized = to_string(&album)?;
+        let deserialized: Album = from_str(&serialized)?;
+        if album != deserialized {
+            bail!("Album serialization roundtrip failed: expected {album:?}, got {deserialized:?}");
+        }
+        Ok(())
     }
 
     #[test]
-    fn test_track_serialization() {
+    fn test_track_serialization() -> Result<()> {
         let track = Track {
             id: 1,
             album_id: 1,
@@ -209,22 +220,36 @@ mod tests {
             updated_at: Some("2023-01-02 00:00:00".to_string()),
         };
 
-        let serialized = to_string(&track).unwrap();
-        let deserialized: Track = from_str(&serialized).unwrap();
-        assert_eq!(track, deserialized);
+        let serialized = to_string(&track)?;
+        let deserialized: Track = from_str(&serialized)?;
+        if track != deserialized {
+            bail!("Track serialization roundtrip failed: expected {track:?}, got {deserialized:?}");
+        }
+        Ok(())
     }
 
     #[test]
-    fn test_default_implementations() {
+    fn test_default_implementations() -> Result<()> {
         let track = Track::default();
-        assert_eq!(track.disc_number, 1);
-        assert_eq!(track.sample_rate, 44100);
+        if track.disc_number != 1 {
+            bail!("Expected disc_number to be 1");
+        }
+        if track.sample_rate != 44100 {
+            bail!("Expected sample_rate to be 44100");
+        }
 
         let album = Album::default();
-        assert!(!album.compilation);
+        if album.compilation {
+            bail!("Expected compilation to be false");
+        }
 
         let artist = Artist::default();
-        assert_eq!(artist.name, "");
-        assert_eq!(artist.album_count, 0);
+        if !artist.name.is_empty() {
+            bail!("Expected name to be empty");
+        }
+        if artist.album_count != 0 {
+            bail!("Expected album_count to be 0");
+        }
+        Ok(())
     }
 }

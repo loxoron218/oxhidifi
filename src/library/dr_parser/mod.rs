@@ -37,14 +37,17 @@ impl DrParser {
     ///
     /// # Returns
     ///
-    /// A new `DrParser` instance.
-    #[must_use]
-    pub fn new(database: Arc<LibraryDatabase>) -> Self {
-        Self {
-            extractor: DrExtractor::new(),
+    /// A Result containing the new `DrParser` instance or a `DrError`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `DrError::RegexError` if DR extractor initialization fails.
+    pub fn new(database: Arc<LibraryDatabase>) -> Result<Self, DrError> {
+        Ok(Self {
+            extractor: DrExtractor::new()?,
             cache: AlbumDrCache::new(),
             database,
-        }
+        })
     }
 
     /// Parses DR value for an album directory.
@@ -132,7 +135,10 @@ impl DrParser {
             b_num.cmp(&a_num) // Higher DR values first
         });
 
-        let best_dr_value = sorted_values.first().unwrap().clone();
+        let best_dr_value = sorted_values
+            .first()
+            .cloned()
+            .ok_or(DrError::NoDrValueFound)?;
 
         // Cache the result
         self.cache.insert(album_path, best_dr_value.clone());
@@ -177,7 +183,10 @@ impl DrParser {
 mod tests {
     use std::fs::{remove_file, write};
 
-    use tempfile::TempDir;
+    use {
+        anyhow::{Result, bail},
+        tempfile::TempDir,
+    };
 
     use crate::library::{
         database::LibraryDatabase,
@@ -185,8 +194,8 @@ mod tests {
     };
 
     #[test]
-    fn test_dr_extractor_patterns() {
-        let extractor = DrExtractor::new();
+    fn test_dr_extractor_patterns() -> Result<()> {
+        let extractor = DrExtractor::new()?;
 
         let test_cases = vec![
             ("DR12", true),
@@ -202,13 +211,16 @@ mod tests {
 
         for (input, expected_valid) in test_cases {
             let is_valid = extractor.validate_dr_value(input);
-            assert_eq!(is_valid, expected_valid, "Failed for input: {input}");
+            if is_valid != expected_valid {
+                bail!("Failed for input: {input}");
+            }
         }
+        Ok(())
     }
 
     #[test]
-    fn test_dr_extraction_from_content() {
-        let extractor = DrExtractor::new();
+    fn test_dr_extraction_from_content() -> Result<()> {
+        let extractor = DrExtractor::new()?;
 
         // Test cases that should return DR12 (Official DR Value format only)
         let dr12_test_cases = vec![
@@ -219,8 +231,13 @@ mod tests {
 
         for content in dr12_test_cases {
             let result = extractor.extract_dr_from_content(content);
-            assert!(result.is_ok(), "Failed to extract from: {content}");
-            assert_eq!(result.unwrap(), "DR12", "Content: {content}");
+            if result.is_err() {
+                bail!("Failed to extract from: {content}");
+            }
+            let extracted = result?;
+            if extracted != "DR12" {
+                bail!("Content: {content}");
+            }
         }
 
         // Test official format cases with their expected values
@@ -236,14 +253,20 @@ mod tests {
 
         for (content, expected) in official_format_cases {
             let result = extractor.extract_dr_from_content(content);
-            assert!(result.is_ok(), "Failed to extract from: {content}");
-            assert_eq!(result.unwrap(), expected, "Content: {content}");
+            if result.is_err() {
+                bail!("Failed to extract from: {content}");
+            }
+            let extracted = result?;
+            if extracted != expected {
+                bail!("Content: {content}");
+            }
         }
+        Ok(())
     }
 
     #[test]
-    fn test_per_track_dr_values_rejected() {
-        let extractor = DrExtractor::new();
+    fn test_per_track_dr_values_rejected() -> Result<()> {
+        let extractor = DrExtractor::new()?;
 
         // These should all fail to extract since they're per-track values, not Official DR Values
         let per_track_cases = vec![
@@ -256,16 +279,16 @@ mod tests {
 
         for content in per_track_cases {
             let result = extractor.extract_dr_from_content(content);
-            assert!(
-                result.is_err(),
-                "Should not extract from per-track content: {content}"
-            );
+            if result.is_ok() {
+                bail!("Should not extract from per-track content: {content}");
+            }
         }
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_dr_parser_with_files() {
-        let temp_dir = TempDir::new().unwrap();
+    async fn test_dr_parser_with_files() -> Result<()> {
+        let temp_dir = TempDir::new()?;
         let album_dir = temp_dir.path();
 
         // Create various DR files including irregular names
@@ -273,99 +296,124 @@ mod tests {
         let dr_file2 = album_dir.join("2012–2017_log.txt");
         let dr_file3 = album_dir.join("analysis.log");
 
-        write(&dr_file1, "Official DR value: DR12").unwrap();
-        write(&dr_file2, "Official DR value: DR9").unwrap();
-        write(&dr_file3, "Some other content").unwrap();
+        write(&dr_file1, "Official DR value: DR12")?;
+        write(&dr_file2, "Official DR value: DR9")?;
+        write(&dr_file3, "Some other content")?;
 
         // Test file finding - should find all text files (no database needed)
-        let extractor = DrExtractor::new();
-        let files = extractor.find_dr_files(album_dir).unwrap();
+        let extractor = DrExtractor::new()?;
+        let files = extractor.find_dr_files(album_dir)?;
 
-        assert_eq!(files.len(), 3);
-        assert!(files.iter().any(|f| f == &dr_file1));
-        assert!(files.iter().any(|f| f == &dr_file2));
-        assert!(files.iter().any(|f| f == &dr_file3));
+        if files.len() != 3 {
+            bail!("Expected 3 files, got {}", files.len());
+        }
+        if !files.iter().any(|f| f == &dr_file1) {
+            bail!("DR file 1 not found");
+        }
+        if !files.iter().any(|f| f == &dr_file2) {
+            bail!("DR file 2 not found");
+        }
+        if !files.iter().any(|f| f == &dr_file3) {
+            bail!("DR file 3 not found");
+        }
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_dr_parser_extraction_from_irregular_files() {
-        let temp_dir = TempDir::new().unwrap();
+    async fn test_dr_parser_extraction_from_irregular_files() -> Result<()> {
+        let temp_dir = TempDir::new()?;
         let album_dir = temp_dir.path();
 
         // Create irregular filename with official DR format
         let irregular_file = album_dir.join("2012–2017_log.txt");
-        write(&irregular_file, "Official DR value: DR9").unwrap();
+        write(&irregular_file, "Official DR value: DR9")?;
 
         // Test full parsing
-        let database = LibraryDatabase::new().await.unwrap();
-        let parser = DrParser::new(database.into());
-        let result = parser.parse_dr_for_album(album_dir).await.unwrap();
+        let database = LibraryDatabase::new().await?;
+        let parser = DrParser::new(database.into())?;
+        let result = parser.parse_dr_for_album(album_dir).await?;
 
-        assert_eq!(result, Some("DR9".to_string()));
+        if result != Some("DR9".to_string()) {
+            bail!("Expected DR9, got {result:?}");
+        }
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_dr_parser_multiple_values_conflict_resolution() {
-        let temp_dir = TempDir::new().unwrap();
+    async fn test_dr_parser_multiple_values_conflict_resolution() -> Result<()> {
+        let temp_dir = TempDir::new()?;
         let album_dir = temp_dir.path();
 
         // Create multiple files with different DR values
         let file1 = album_dir.join("analysis1.txt");
         let file2 = album_dir.join("analysis2.txt");
-        write(&file1, "Official DR value: DR6").unwrap();
-        write(&file2, "Official DR value: DR9").unwrap();
+        write(&file1, "Official DR value: DR6")?;
+        write(&file2, "Official DR value: DR9")?;
 
         // Test conflict resolution - should return highest DR value
-        let database = LibraryDatabase::new().await.unwrap();
-        let parser = DrParser::new(database.into());
-        let result = parser.parse_dr_for_album(album_dir).await.unwrap();
+        let database = LibraryDatabase::new().await?;
+        let parser = DrParser::new(database.into())?;
+        let result = parser.parse_dr_for_album(album_dir).await?;
 
-        assert_eq!(result, Some("DR9".to_string()));
+        if result != Some("DR9".to_string()) {
+            bail!("Expected DR9, got {result:?}");
+        }
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_dr_parser_duplicate_values() {
-        let temp_dir = TempDir::new().unwrap();
+    async fn test_dr_parser_duplicate_values() -> Result<()> {
+        let temp_dir = TempDir::new()?;
         let album_dir = temp_dir.path();
 
         // Create multiple files with same DR value
         let file1 = album_dir.join("analysis1.txt");
         let file2 = album_dir.join("analysis2.txt");
-        write(&file1, "Official DR value: DR8").unwrap();
-        write(&file2, "Official DR Value: DR8").unwrap();
+        write(&file1, "Official DR value: DR8")?;
+        write(&file2, "Official DR Value: DR8")?;
 
         // Test duplicate handling
-        let database = LibraryDatabase::new().await.unwrap();
-        let parser = DrParser::new(database.into());
-        let result = parser.parse_dr_for_album(album_dir).await.unwrap();
+        let database = LibraryDatabase::new().await?;
+        let parser = DrParser::new(database.into())?;
+        let result = parser.parse_dr_for_album(album_dir).await?;
 
-        assert_eq!(result, Some("DR8".to_string()));
+        if result != Some("DR8".to_string()) {
+            bail!("Expected DR8, got {result:?}");
+        }
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_dr_parser_file_removal_clears_value() {
-        let temp_dir = TempDir::new().unwrap();
+    async fn test_dr_parser_file_removal_clears_value() -> Result<()> {
+        let temp_dir = TempDir::new()?;
         let album_dir = temp_dir.path();
 
         // Create a DR file
         let dr_file = album_dir.join("dr.txt");
-        write(&dr_file, "Official DR value: DR7").unwrap();
+        write(&dr_file, "Official DR value: DR7")?;
 
         // Parse initially - should get DR7
-        let database = LibraryDatabase::new().await.unwrap();
-        let parser = DrParser::new(database.clone().into());
-        let result = parser.parse_dr_for_album(album_dir).await.unwrap();
-        assert_eq!(result, Some("DR7".to_string()));
+        let database = LibraryDatabase::new().await?;
+        let parser = DrParser::new(database.clone().into())?;
+        let result = parser.parse_dr_for_album(album_dir).await?;
+        if result != Some("DR7".to_string()) {
+            bail!("Expected DR7, got {result:?}");
+        }
 
         // Remove the DR file
-        remove_file(&dr_file).unwrap();
+        remove_file(&dr_file)?;
 
         // Parse again - should get None
-        let result2 = parser.parse_dr_for_album(album_dir).await.unwrap();
-        assert_eq!(result2, None);
+        let result2 = parser.parse_dr_for_album(album_dir).await?;
+        if result2.is_some() {
+            bail!("Expected None, got {result2:?}");
+        }
 
         // Verify database was updated to clear the value
-        let db_dr_value = database.get_dr_value(album_dir).await.unwrap();
-        assert_eq!(db_dr_value, None);
+        let db_dr_value = database.get_dr_value(album_dir).await?;
+        if db_dr_value.is_some() {
+            bail!("Expected database DR value None, got {db_dr_value:?}");
+        }
+        Ok(())
     }
 }

@@ -289,9 +289,12 @@ fn get_xdg_cache_home() -> PathBuf {
 
 #[cfg(test)]
 mod tests {
-    use std::io::{Error, ErrorKind::NotFound};
+    use std::io::{Error as IoError, ErrorKind::NotFound};
 
-    use serde_json::{from_str, to_string};
+    use {
+        anyhow::{Result, bail},
+        serde_json::{from_str, to_string},
+    };
 
     use crate::config::settings::{SettingsError, UserSettings, VolumeMode::System};
 
@@ -306,7 +309,7 @@ mod tests {
     }
 
     #[test]
-    fn test_user_settings_serialization() {
+    fn test_user_settings_serialization() -> Result<()> {
         let settings = UserSettings {
             audio_device: Some("Test Device".to_string()),
             sample_rate: 96000,
@@ -323,24 +326,29 @@ mod tests {
             volume_mode: System,
         };
 
-        let serialized = to_string(&settings).expect("Failed to serialize settings in test");
-        let deserialized: UserSettings =
-            from_str(&serialized).expect("Failed to deserialize settings in test");
-        assert_eq!(settings, deserialized);
+        let serialized = to_string(&settings)?;
+        let deserialized: UserSettings = from_str(&serialized)?;
+        if settings != deserialized {
+            bail!("Expected equality after serialization roundtrip");
+        }
+        Ok(())
     }
 
     #[test]
-    fn test_settings_error_display() {
-        let io_error = Error::new(NotFound, "File not found");
+    fn test_settings_error_display() -> Result<()> {
+        let io_error = IoError::new(NotFound, "File not found");
         let settings_error = SettingsError::IoError(io_error);
-        assert!(settings_error.to_string().contains("IO error"));
+        if !settings_error.to_string().contains("IO error") {
+            bail!("Expected 'IO error' in error string, got '{settings_error}'");
+        }
 
         let invalid_value_error = SettingsError::InvalidValue {
-            reason: "test reason".to_string(),
+            reason: "Test reason".to_string(),
         };
-        assert_eq!(
-            invalid_value_error.to_string(),
-            "Invalid settings value: test reason"
-        );
+        let error_string = invalid_value_error.to_string();
+        if error_string != "Invalid settings value: Test reason" {
+            bail!("Expected 'Invalid settings value: Test reason', got '{error_string}'");
+        }
+        Ok(())
     }
 }

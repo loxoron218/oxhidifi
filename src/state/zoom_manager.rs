@@ -247,12 +247,18 @@ impl ZoomManager {
 mod tests {
     use std::{fs::remove_file, path::PathBuf, sync::Arc};
 
-    use {parking_lot::RwLock, tempfile::TempDir, tokio::test as TokioTest, tracing::debug};
+    use {
+        anyhow::{Result, bail},
+        parking_lot::RwLock,
+        tempfile::TempDir,
+        tokio::test as TokioTest,
+        tracing::debug,
+    };
 
     use crate::{config::SettingsManager, state::zoom_manager::ZoomManager};
 
     #[test]
-    fn test_zoom_manager_creation() {
+    fn test_zoom_manager_creation() -> Result<()> {
         // Use a non-existent file path to ensure default settings are used
         let temp_file = PathBuf::from("/tmp/oxhidifi_test_settings_1.json");
 
@@ -265,16 +271,21 @@ mod tests {
             );
         }
 
-        let settings_manager = SettingsManager::with_config_path(temp_file).unwrap();
+        let settings_manager = SettingsManager::with_config_path(temp_file)?;
         let settings_manager_arc = Arc::new(RwLock::new(settings_manager));
         let zoom_manager = ZoomManager::new(settings_manager_arc);
 
-        assert_eq!(zoom_manager.get_grid_zoom_level(), 2);
-        assert_eq!(zoom_manager.get_list_zoom_level(), 1);
+        if zoom_manager.get_grid_zoom_level() != 2 {
+            bail!("Expected grid zoom level to be 2");
+        }
+        if zoom_manager.get_list_zoom_level() != 1 {
+            bail!("Expected list zoom level to be 1");
+        }
+        Ok(())
     }
 
     #[test]
-    fn test_grid_zoom_levels() {
+    fn test_grid_zoom_levels() -> Result<()> {
         // Use a non-existent file path to ensure default settings are used
         let temp_file = PathBuf::from("/tmp/oxhidifi_test_settings_2.json");
 
@@ -287,27 +298,36 @@ mod tests {
             );
         }
 
-        let settings_manager = SettingsManager::with_config_path(temp_file).unwrap();
+        let settings_manager = SettingsManager::with_config_path(temp_file)?;
         let settings_manager_arc = Arc::new(RwLock::new(settings_manager));
         let zoom_manager = ZoomManager::new(settings_manager_arc);
 
         // Test all valid grid zoom levels
         for level in 0..=4 {
             zoom_manager.set_grid_zoom_level(level);
-            assert_eq!(zoom_manager.get_grid_zoom_level(), level);
+            if zoom_manager.get_grid_zoom_level() != level {
+                bail!("Expected grid zoom level to be {level}");
+            }
 
             let (width, height) = zoom_manager.get_grid_cover_dimensions();
-            assert_eq!(width, height); // Should be square
-            assert!((120..=240).contains(&width));
+            if width != height {
+                bail!("Expected grid cover dimensions to be square");
+            }
+            if !(120..=240).contains(&width) {
+                bail!("Grid cover width {width} out of expected range 120-240");
+            }
         }
 
         // Test clamping
         zoom_manager.set_grid_zoom_level(10);
-        assert_eq!(zoom_manager.get_grid_zoom_level(), 4);
+        if zoom_manager.get_grid_zoom_level() != 4 {
+            bail!("Expected grid zoom level to be clamped to 4");
+        }
+        Ok(())
     }
 
     #[test]
-    fn test_list_zoom_levels() {
+    fn test_list_zoom_levels() -> Result<()> {
         // Use a non-existent file path to ensure default settings are used
         let temp_file = PathBuf::from("/tmp/oxhidifi_test_settings_3.json");
 
@@ -320,68 +340,91 @@ mod tests {
             );
         }
 
-        let settings_manager = SettingsManager::with_config_path(temp_file).unwrap();
+        let settings_manager = SettingsManager::with_config_path(temp_file)?;
         let settings_manager_arc = Arc::new(RwLock::new(settings_manager));
         let zoom_manager = ZoomManager::new(settings_manager_arc);
 
         // Test all valid list zoom levels
         for level in 0..=2 {
             zoom_manager.set_list_zoom_level(level);
-            assert_eq!(zoom_manager.get_list_zoom_level(), level);
+            if zoom_manager.get_list_zoom_level() != level {
+                bail!("Expected list zoom level to be {level}");
+            }
 
             let (width, height) = zoom_manager.get_list_cover_dimensions();
-            assert_eq!(width, height); // Should be square
-            assert!((32..=64).contains(&width));
+            if width != height {
+                bail!("Expected list cover dimensions to be square");
+            }
+            if !(32..=64).contains(&width) {
+                bail!("List cover width {width} out of expected range 32-64");
+            }
 
             let row_height = zoom_manager.get_list_row_height();
-            assert!((60..=100).contains(&row_height));
+            if !(60..=100).contains(&row_height) {
+                bail!("List row height {row_height} out of expected range 60-100");
+            }
         }
 
         // Test clamping
         zoom_manager.set_list_zoom_level(10);
-        assert_eq!(zoom_manager.get_list_zoom_level(), 2);
+        if zoom_manager.get_list_zoom_level() != 2 {
+            bail!("Expected list zoom level to be clamped to 2");
+        }
+        Ok(())
     }
 
     #[TokioTest]
-    async fn test_zoom_persistence_across_sessions() {
+    async fn test_zoom_persistence_across_sessions() -> Result<()> {
         // Create a temporary directory for our test
-        let temp_dir = TempDir::new().unwrap();
+        let temp_dir = TempDir::new()?;
         let settings_path = temp_dir.path().join("settings.json");
 
         // First session: Create settings with non-default zoom levels
         let initial_grid_level = 3;
         let initial_list_level = 0;
 
-        let settings_manager = SettingsManager::with_config_path(settings_path.clone()).unwrap();
+        let settings_manager = SettingsManager::with_config_path(settings_path.clone())?;
         let mut current_settings = settings_manager.get_settings().clone();
         current_settings.grid_zoom_level = initial_grid_level;
         current_settings.list_zoom_level = initial_list_level;
-        settings_manager.update_settings(current_settings).unwrap();
+        settings_manager.update_settings(current_settings)?;
 
         // Create zoom manager and verify initial zoom levels
         let settings_manager_arc = Arc::new(RwLock::new(settings_manager));
         let zoom_manager = ZoomManager::new(settings_manager_arc);
 
         // Verify that zoom levels were loaded correctly from settings
-        assert_eq!(zoom_manager.get_grid_zoom_level(), initial_grid_level);
-        assert_eq!(zoom_manager.get_list_zoom_level(), initial_list_level);
+        if zoom_manager.get_grid_zoom_level() != initial_grid_level {
+            bail!("Expected grid zoom level to be {initial_grid_level}");
+        }
+        if zoom_manager.get_list_zoom_level() != initial_list_level {
+            bail!("Expected list zoom level to be {initial_list_level}");
+        }
 
         // Change zoom levels
         zoom_manager.set_grid_zoom_level(1);
         zoom_manager.set_list_zoom_level(2);
 
         // Verify changes are reflected immediately
-        assert_eq!(zoom_manager.get_grid_zoom_level(), 1);
-        assert_eq!(zoom_manager.get_list_zoom_level(), 2);
+        if zoom_manager.get_grid_zoom_level() != 1 {
+            bail!("Expected grid zoom level to be 1");
+        }
+        if zoom_manager.get_list_zoom_level() != 2 {
+            bail!("Expected list zoom level to be 2");
+        }
 
         // Second session: Create new zoom manager and verify persistence
-        let settings_manager2 = SettingsManager::with_config_path(settings_path.clone()).unwrap();
+        let settings_manager2 = SettingsManager::with_config_path(settings_path.clone())?;
         let settings_manager2_arc = Arc::new(RwLock::new(settings_manager2));
         let zoom_manager2 = ZoomManager::new(settings_manager2_arc);
 
         // Verify that zoom levels were restored from persisted settings
-        assert_eq!(zoom_manager2.get_grid_zoom_level(), 1);
-        assert_eq!(zoom_manager2.get_list_zoom_level(), 2);
+        if zoom_manager2.get_grid_zoom_level() != 1 {
+            bail!("Expected persisted grid zoom level to be 1");
+        }
+        if zoom_manager2.get_list_zoom_level() != 2 {
+            bail!("Expected persisted list zoom level to be 2");
+        }
 
         // Clean up (tempdir will be automatically cleaned up)
         if let Err(e) = remove_file(&settings_path) {
@@ -391,5 +434,6 @@ mod tests {
                 e
             );
         }
+        Ok(())
     }
 }

@@ -776,6 +776,7 @@ mod tests {
     use std::sync::{Arc, Weak};
 
     use {
+        anyhow::{Result, bail},
         libadwaita::{Application, prelude::ButtonExt},
         parking_lot::RwLock,
     };
@@ -787,35 +788,30 @@ mod tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_header_bar_creation() {
+    fn test_header_bar_creation() -> Result<()> {
         let app_state = AppState::new(
             Weak::new(),
             None::<Arc<RwLock<LibraryScanner>>>,
-            Arc::new(RwLock::new(
-                SettingsManager::new().expect("Failed to create SettingsManager in test"),
-            )),
+            Arc::new(RwLock::new(SettingsManager::new()?)),
         );
         let application = Some(
             Application::builder()
                 .application_id("com.example.oxhidifi")
                 .build(),
         );
-        let settings_manager =
-            Arc::new(SettingsManager::new().expect("Failed to create SettingsManager in test"));
+        let settings_manager = Arc::new(SettingsManager::new()?);
         let header_bar = HeaderBar::new(&Arc::new(app_state), application, settings_manager);
 
         // Check icon names without requiring widget realization
-        assert_eq!(
-            header_bar.search_button.icon_name().as_deref(),
-            Some("system-search-symbolic")
-        );
-        assert_eq!(
-            header_bar.view_split_button.icon_name().as_deref(),
-            Some("view-grid-symbolic")
-        );
-        assert_eq!(
-            header_bar.settings_button.icon_name().as_deref(),
-            Some("open-menu-symbolic")
-        );
+        if header_bar.search_button.icon_name().as_deref() != Some("system-search-symbolic") {
+            bail!("Search button icon should be 'system-search-symbolic'");
+        }
+        if header_bar.view_split_button.icon_name().as_deref() != Some("view-grid-symbolic") {
+            bail!("View split button icon should be 'view-grid-symbolic'");
+        }
+        if header_bar.settings_button.icon_name().as_deref() != Some("open-menu-symbolic") {
+            bail!("Settings button icon should be 'open-menu-symbolic'");
+        }
+        Ok(())
     }
 }

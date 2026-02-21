@@ -851,7 +851,7 @@ impl AlbumCard {
 
 #[cfg(test)]
 mod tests {
-    use std::error::Error;
+    use anyhow::{Result, bail};
 
     use crate::{
         library::models::Album,
@@ -860,7 +860,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_album_card_builder() -> Result<(), Box<dyn Error>> {
+    fn test_album_card_with_dr_badge() -> Result<()> {
         let dummy_album = Album {
             id: 1,
             artist_id: 1,
@@ -884,21 +884,25 @@ mod tests {
             .compact(false)
             .build()?;
 
-        assert!(card.dr_badge.is_some());
+        if card.dr_badge.is_none() {
+            bail!("AlbumCard dr_badge should exist");
+        }
         Ok(())
     }
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_album_card_create_default() -> Result<(), Box<dyn Error>> {
+    fn test_album_card_create_default() -> Result<()> {
         let card = AlbumCard::create_default()?;
-        assert!(card.dr_badge.is_some());
+        if card.dr_badge.is_none() {
+            bail!("AlbumCard dr_badge should exist");
+        }
         Ok(())
     }
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_album_card_sample_rate_decimal_formatting() -> Result<(), Box<dyn Error>> {
+    fn test_album_card_sample_rate_decimal_formatting() -> Result<()> {
         // Test 44.1 kHz sample rate in album card
         let album_441 = Album {
             id: 1,
@@ -926,10 +930,9 @@ mod tests {
 
         // The format label should contain "FLAC 24/44.1"
         let format_text = card_441.format_label.text().to_string();
-        assert_eq!(
-            format_text, "FLAC 24/44.1",
-            "Expected 'FLAC 24/44.1' but got '{format_text}'"
-        );
+        if format_text != "FLAC 24/44.1" {
+            bail!("Expected 'FLAC 24/44.1', got '{format_text}'");
+        }
 
         // Test 88.2 kHz sample rate
         let album_882 = Album {
@@ -949,10 +952,9 @@ mod tests {
         })?;
 
         let format_text_882 = card_882.format_label.text().to_string();
-        assert_eq!(
-            format_text_882, "FLAC 24/88.2",
-            "Expected 'FLAC 24/88.2' but got '{format_text_882}'"
-        );
+        if format_text_882 != "FLAC 24/88.2" {
+            bail!("Expected 'FLAC 24/88.2', got '{format_text_882}'");
+        }
 
         // Test 96 kHz (whole number) sample rate
         let album_96 = Album {
@@ -972,10 +974,9 @@ mod tests {
         })?;
 
         let format_text_96 = card_96.format_label.text().to_string();
-        assert_eq!(
-            format_text_96, "FLAC 24/96",
-            "Expected 'FLAC 24/96' but got '{format_text_96}'"
-        );
+        if format_text_96 != "FLAC 24/96" {
+            bail!("Expected 'FLAC 24/96', got '{format_text_96}'");
+        }
         Ok(())
     }
 }

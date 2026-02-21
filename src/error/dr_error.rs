@@ -13,6 +13,9 @@ pub enum DrError {
     /// Failed to read or parse a DR file.
     #[error("Failed to read DR file: {0}")]
     ReadError(#[from] Error),
+    /// Failed to compile regex pattern.
+    #[error("Failed to compile regex pattern '{pattern}': {error}")]
+    RegexError { pattern: String, error: String },
     /// The DR file content is malformed or invalid.
     #[error("Invalid DR file content: {reason}")]
     InvalidContent { reason: String },
@@ -60,13 +63,27 @@ impl DrError {
 mod tests {
     use std::io::{Error, ErrorKind::NotFound};
 
-    use crate::error::dr_error::DrError;
+    use crate::error::dr_error::DrError::{self, NoDrValueFound, ReadError, RegexError};
 
     #[test]
     fn test_dr_error_display() {
         let read_error = Error::new(NotFound, "File not found");
-        let dr_error = DrError::ReadError(read_error);
+        let dr_error = ReadError(read_error);
         assert!(dr_error.to_string().contains("Failed to read DR file"));
+
+        let regex_error = RegexError {
+            pattern: "(invalid[".to_string(),
+            error: "unclosed character class".to_string(),
+        };
+        let error_str = regex_error.to_string();
+        assert!(
+            error_str.contains("'(invalid['"),
+            "Error should contain the pattern: {error_str}"
+        );
+        assert!(
+            error_str.contains("unclosed character class"),
+            "Error should contain the error message: {error_str}"
+        );
 
         let invalid_content_error = DrError::invalid_content("Missing required fields");
         assert_eq!(
@@ -74,7 +91,7 @@ mod tests {
             "Invalid DR file content: Missing required fields"
         );
 
-        let no_dr_value_error = DrError::NoDrValueFound;
+        let no_dr_value_error = NoDrValueFound;
         assert_eq!(
             no_dr_value_error.to_string(),
             "No valid DR value found in file"

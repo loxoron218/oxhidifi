@@ -4,7 +4,7 @@
 //! in a responsive grid layout with artist images, names, and album counts,
 //! supporting virtual scrolling for large datasets and real-time filtering.
 
-use std::{cell::RefCell, collections::HashSet, convert::TryFrom, rc::Rc, sync::Arc};
+use std::{cell::RefCell, collections::HashSet, rc::Rc, sync::Arc};
 
 use {
     libadwaita::{
@@ -24,7 +24,10 @@ use {
 };
 
 use crate::{
-    error::domain::UiError::{self, BuilderError},
+    error::{
+        domain::UiError::{self, BuilderError},
+        numeric_conversion::{safe_i32_to_u32, safe_u32_to_i32},
+    },
     library::models::Artist,
     state::{AppState, LibraryState, NavigationState::ArtistDetail, ZoomEvent::GridZoomChanged},
     ui::{
@@ -36,6 +39,17 @@ use crate::{
         views::filtering::Filterable,
     },
 };
+
+/// Maximum cover size in pixels to prevent UI rendering issues.
+const MAX_COVER_SIZE: u32 = 4096;
+
+/// Maximum cover size as i32 (same value, for convenience).
+const MAX_COVER_SIZE_I32: i32 = 4096;
+
+const _: () = assert!(
+    MAX_COVER_SIZE == MAX_COVER_SIZE_I32 as u32,
+    "const mismatch"
+);
 
 /// Builder pattern for configuring `ArtistGridView` components.
 #[derive(Debug, Default)]
@@ -230,10 +244,7 @@ impl ArtistGridView {
                     while let Ok(event) = rx.recv().await {
                         if let GridZoomChanged(_) = event {
                             let cover_size = state_clone.zoom_manager.get_grid_cover_dimensions().0;
-                            let cover_size_u32 = u32::try_from(cover_size).unwrap_or_else(|_| {
-                                error!("Invalid cover size {cover_size}, using default 180");
-                                180
-                            });
+                            let cover_size_u32 = safe_i32_to_u32(cover_size, 180, "cover_size");
 
                             let cards = artist_cards_ref_clone.borrow();
                             for card in cards.iter() {
@@ -379,14 +390,16 @@ impl ArtistGridView {
     ///
     /// A `Result` containing the new `ArtistCard` instance or a `UiError` if
     /// card creation fails.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `UiError` if the cover size cannot be converted to a valid
+    /// unsigned integer or if the artist card cannot be built.
     fn create_artist_card(&self, artist: &Artist, cover_size: i32) -> Result<ArtistCard, UiError> {
         let artist_clone = artist.clone();
         let app_state = self.app_state.clone();
 
-        let cover_size_u32 = u32::try_from(cover_size).unwrap_or_else(|_| {
-            error!("Invalid cover size {cover_size}, using default 180");
-            180
-        });
+        let cover_size_u32 = safe_i32_to_u32(cover_size, 180, "cover_size");
         ArtistCard::builder()
             .artist(artist.clone())
             .cover_size(cover_size_u32)
@@ -573,7 +586,13 @@ impl ArtistCard {
     /// the calculation logic should always produce valid values.
     #[must_use]
     pub fn new(artist: &Artist, cover_size: u32, on_card_clicked: Option<Rc<dyn Fn()>>) -> Self {
-        let cover_size_i32 = i32::try_from(cover_size).expect("Cover size (u32) should fit in i32");
+        let clamped_cover_size = cover_size.min(MAX_COVER_SIZE);
+        let cover_size_i32 = safe_u32_to_i32(
+            clamped_cover_size,
+            MAX_COVER_SIZE,
+            MAX_COVER_SIZE_I32,
+            "cover_size",
+        );
         let (cover_width, cover_height) = (cover_size_i32, cover_size_i32);
 
         let cover_art = CoverArt::builder()
@@ -582,9 +601,8 @@ impl ArtistCard {
             .dimensions(cover_width, cover_height)
             .build();
 
-        let name_max_width = ((cover_size - 16) / 10).max(8);
-        let name_max_width_i32 = i32::try_from(name_max_width)
-            .expect("max_width_chars calculation should always result in valid i32");
+        let name_max_width = ((clamped_cover_size - 16) / 10).max(8);
+        let name_max_width_i32 = safe_u32_to_i32(name_max_width, 408, 408, "name_max_width");
         let name_label = Label::builder()
             .label(&artist.name)
             .halign(Start)
@@ -601,9 +619,9 @@ impl ArtistCard {
         } else {
             format!("{} Albums", artist.album_count)
         };
-        let album_count_max_width = ((cover_size - 16) / 10).max(8);
-        let album_count_max_width_i32 = i32::try_from(album_count_max_width)
-            .expect("album_count max_width_chars calculation should always result in valid i32");
+        let album_count_max_width = ((clamped_cover_size - 16) / 10).max(8);
+        let album_count_max_width_i32 =
+            safe_u32_to_i32(album_count_max_width, 408, 408, "album_count_max_width");
         let album_count_label = Label::builder()
             .label(&album_count_text)
             .halign(Start)
@@ -684,13 +702,14 @@ impl ArtistCard {
     /// Returns a `UiError::BuilderError` if the cover size or calculated
     /// `max_width_chars` cannot be converted to i32.
     pub fn update_cover_size(&self, cover_size: u32) -> Result<(), UiError> {
-        let cover_size_i32 = i32::try_from(cover_size)
+        let clamped_cover_size = cover_size.min(MAX_COVER_SIZE);
+        let cover_size_i32 = i32::try_from(clamped_cover_size)
             .map_err(|_| BuilderError(format!("Invalid cover size: {cover_size}")))?;
 
         self.cover_art
             .update_dimensions(cover_size_i32, cover_size_i32);
 
-        let max_width = ((cover_size - 16) / 10).max(8);
+        let max_width = ((clamped_cover_size - 16) / 10).max(8);
         let max_width_i32 = i32::try_from(max_width)
             .map_err(|_| BuilderError(format!("Invalid max_width_chars: {max_width}")))?;
         self.name_label.set_max_width_chars(max_width_i32);
@@ -800,6 +819,8 @@ mod tests {
         atomic::{AtomicBool, Ordering::SeqCst},
     };
 
+    use anyhow::{Result, bail};
+
     use crate::{
         error::domain::UiError::BuilderError,
         library::models::Artist,
@@ -825,7 +846,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_artist_card_builder() {
+    fn test_artist_card_builder() -> Result<()> {
         let artist = Artist {
             id: 1,
             name: "Test Artist".to_string(),
@@ -842,24 +863,29 @@ mod tests {
             .on_card_clicked(move || {
                 clicked.store(true, SeqCst);
             })
-            .build()
-            .expect("Failed to build ArtistCard");
+            .build();
 
-        assert_eq!(card.name_label.label(), "Test Artist");
-        assert_eq!(card.album_count_label.label(), "3 Albums");
+        let card = card?;
+
+        if card.name_label.label() != "Test Artist" {
+            bail!("Name label should be 'Test Artist'");
+        }
+        if card.album_count_label.label() != "3 Albums" {
+            bail!("Album count label should be '3 Albums'");
+        }
+        Ok(())
     }
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
     fn test_artist_card_builder_missing_artist() {
         let result = ArtistCard::builder().cover_size(200).build();
-        assert!(result.is_err());
         assert!(matches!(result, Err(BuilderError(_))));
     }
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_artist_card_default_cover_size() {
+    fn test_artist_card_default_cover_size() -> Result<()> {
         let artist = Artist {
             id: 1,
             name: "Test Artist".to_string(),
@@ -867,18 +893,20 @@ mod tests {
             ..Artist::default()
         };
 
-        let card = ArtistCard::builder()
-            .artist(artist)
-            .build()
-            .expect("Failed to build");
+        let card = ArtistCard::builder().artist(artist).build()?;
 
-        assert_eq!(card.name_label.label(), "Test Artist");
-        assert_eq!(card.album_count_label.label(), "0 Albums");
+        if card.name_label.label() != "Test Artist" {
+            bail!("Name label should be 'Test Artist'");
+        }
+        if card.album_count_label.label() != "0 Albums" {
+            bail!("Album count label should be '0 Albums'");
+        }
+        Ok(())
     }
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_artist_card_update_cover_size() {
+    fn test_artist_card_update_cover_size() -> Result<()> {
         let artist = Artist {
             id: 1,
             name: "Test Artist".to_string(),
@@ -888,11 +916,15 @@ mod tests {
 
         let card = ArtistCard::new(&artist, 180, None);
 
-        card.update_cover_size(250)
-            .expect("Failed to update cover size");
+        card.update_cover_size(250)?;
 
-        assert_eq!(card.name_label.label(), "Test Artist");
-        assert_eq!(card.album_count_label.label(), "1 Album");
+        if card.name_label.label() != "Test Artist" {
+            bail!("Name label should be 'Test Artist'");
+        }
+        if card.album_count_label.label() != "1 Album" {
+            bail!("Album count label should be '1 Album'");
+        }
+        Ok(())
     }
 
     #[test]

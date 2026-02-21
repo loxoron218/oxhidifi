@@ -151,6 +151,13 @@ pub struct CoverArt {
 }
 
 impl CoverArt {
+    /// Builds an overlay widget for cover art display.
+    ///
+    /// # Arguments
+    ///
+    /// * `child` - Optional child widget to display
+    /// * `width` - Width of the overlay
+    /// * `height` - Height of the overlay
     fn build_overlay<W: IsA<Widget>>(child: Option<&W>, width: i32, height: i32) -> Overlay {
         let mut builder = Overlay::builder()
             .halign(Center)
@@ -318,10 +325,10 @@ impl CoverArt {
                     } else if self.image.is_some() {
                         warn!("Transitioning CoverArt from icon to picture mode");
 
-                        let overlay = self
-                            .widget
-                            .downcast_ref::<Overlay>()
-                            .expect("CoverArt widget should be an Overlay");
+                        let Some(overlay) = self.widget.downcast_ref::<Overlay>() else {
+                            warn!("CoverArt widget is not an Overlay");
+                            return;
+                        };
 
                         self.image.take();
 
@@ -396,10 +403,10 @@ impl CoverArt {
     ///
     /// Panics if the `CoverArt` widget is not an Overlay (should never happen with proper widget construction).
     pub fn set_show_dr_badge(&mut self, show: bool) {
-        let overlay = self
-            .widget
-            .downcast_ref::<Overlay>()
-            .expect("CoverArt widget should be an Overlay");
+        let Some(overlay) = self.widget.downcast_ref::<Overlay>() else {
+            warn!("CoverArt widget is not an Overlay");
+            return;
+        };
 
         if show {
             if self.dr_badge.is_none() {
@@ -434,10 +441,10 @@ impl CoverArt {
     ///
     /// Panics if the `CoverArt` widget is not an Overlay (should never happen with proper widget construction).
     pub fn update_dimensions(&self, width: i32, height: i32) {
-        let overlay = self
-            .widget
-            .downcast_ref::<Overlay>()
-            .expect("CoverArt widget should be an Overlay");
+        let Some(overlay) = self.widget.downcast_ref::<Overlay>() else {
+            warn!("CoverArt widget is not an Overlay");
+            return;
+        };
 
         overlay.set_width_request(width);
         overlay.set_height_request(height);
@@ -468,13 +475,16 @@ impl Default for CoverArt {
 
 #[cfg(test)]
 mod tests {
-    use libadwaita::prelude::WidgetExt;
+    use {
+        anyhow::{Result, anyhow, bail},
+        libadwaita::prelude::WidgetExt,
+    };
 
     use crate::ui::components::cover_art::CoverArt;
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_cover_art_builder() {
+    fn test_cover_art_builder() -> Result<()> {
         let cover_art = CoverArt::builder()
             .artwork_path("/path/to/artwork.jpg")
             .dr_value("DR12")
@@ -482,20 +492,40 @@ mod tests {
             .dimensions(150, 150)
             .build();
 
-        assert!(cover_art.dr_badge.is_some());
-        assert!(cover_art.picture.is_some());
-        assert_eq!(cover_art.picture.as_ref().unwrap().width_request(), 150);
-        assert_eq!(cover_art.picture.as_ref().unwrap().height_request(), 150);
+        if cover_art.dr_badge.is_none() {
+            bail!("DR badge should be Some");
+        }
+        let picture = cover_art
+            .picture
+            .as_ref()
+            .ok_or_else(|| anyhow!("picture should be Some"))?;
+        if picture.width_request() != 150 {
+            bail!("Width request should be 150");
+        }
+        if picture.height_request() != 150 {
+            bail!("Height request should be 150");
+        }
+        Ok(())
     }
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_cover_art_default() {
+    fn test_cover_art_default() -> Result<()> {
         let cover_art = CoverArt::default();
-        assert!(cover_art.dr_badge.is_none());
-        assert!(cover_art.picture.is_some());
-        assert_eq!(cover_art.picture.as_ref().unwrap().width_request(), 200);
-        assert_eq!(cover_art.picture.as_ref().unwrap().height_request(), 200);
+        if cover_art.dr_badge.is_some() {
+            bail!("DR badge should be None");
+        }
+        let picture = cover_art
+            .picture
+            .as_ref()
+            .ok_or_else(|| anyhow!("picture should be Some"))?;
+        if picture.width_request() != 200 {
+            bail!("Width request should be 200");
+        }
+        if picture.height_request() != 200 {
+            bail!("Height request should be 200");
+        }
+        Ok(())
     }
 
     #[test]

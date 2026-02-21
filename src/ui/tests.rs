@@ -8,6 +8,7 @@ mod ui_compliance_tests {
     use std::{sync::Arc, time::Instant};
 
     use {
+        anyhow::{Result, anyhow, bail},
         libadwaita::{
             Application,
             gtk::AccessibleRole::None as AccessibleNone,
@@ -30,7 +31,7 @@ mod ui_compliance_tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_gnome_hig_compliance() {
+    fn test_gnome_hig_compliance() -> Result<()> {
         // Test spacing guidelines (6px, 12px, 18px, 24px increments)
         let _album_grid = AlbumGridView::default();
 
@@ -39,18 +40,18 @@ mod ui_compliance_tests {
 
         let _detail_view = DetailView::builder()
             .detail_type(Some(DetailType::Album(Album::default())))
-            .build()
-            .unwrap();
+            .build()?;
 
         // Spacing in detail view should follow guidelines
+        Ok(())
     }
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_accessibility_compliance() {
-        let engine = AudioEngine::new().unwrap();
+    fn test_accessibility_compliance() -> Result<()> {
+        let engine = AudioEngine::new()?;
         let engine_weak = Arc::downgrade(&Arc::new(engine));
-        let settings_manager = SettingsManager::new().unwrap();
+        let settings_manager = SettingsManager::new()?;
         let app_state = AppState::new(
             engine_weak,
             None::<Arc<RwLock<LibraryScanner>>>,
@@ -60,21 +61,26 @@ mod ui_compliance_tests {
         // Test that all major components have proper ARIA attributes
         // accessible_description doesn't exist in GTK4, so we'll test other accessibility features
         let dr_badge = DRBadge::default();
-        assert!(dr_badge.label.accessible_role() != AccessibleNone);
+        if dr_badge.label.accessible_role() == AccessibleNone {
+            bail!("Expected non-None accessible role, got None");
+        }
 
         let cover_art = CoverArt::default();
-        assert!(cover_art.picture.is_some());
+        if cover_art.picture.is_none() {
+            bail!("Expected Some(picture), got None");
+        }
         let picture = cover_art
             .picture
             .as_ref()
-            .expect("CoverArt should have a picture widget");
-        assert!(
-            picture.accessible_role() != AccessibleNone,
-            "CoverArt picture should have an accessible role"
-        );
+            .ok_or_else(|| anyhow!("no picture"))?;
+        if picture.accessible_role() == AccessibleNone {
+            bail!("Expected non-None accessible role, got None");
+        }
 
         let play_overlay = PlayOverlay::default();
-        assert!(play_overlay.button.accessible_role() != AccessibleNone);
+        if play_overlay.button.accessible_role() == AccessibleNone {
+            bail!("Expected non-None accessible role, got None");
+        }
 
         let app_state_arc = Arc::new(app_state.clone());
         let album_grid = AlbumGridView::new(
@@ -86,21 +92,28 @@ mod ui_compliance_tests {
             true,
             false,
         );
-        assert!(album_grid.flow_box.accessible_role() != AccessibleNone);
+        if album_grid.flow_box.accessible_role() == AccessibleNone {
+            bail!("Expected non-None accessible role, got None");
+        }
 
         let artist_grid = ArtistGridView::new(Some(app_state_arc), Vec::new(), false);
-        assert!(artist_grid.flow_box.accessible_role() != AccessibleNone);
+        if artist_grid.flow_box.accessible_role() == AccessibleNone {
+            bail!("Expected non-None accessible role, got None");
+        }
 
         let album_list = ListView::new(Some(&Arc::new(app_state)), &Albums, false);
-        assert!(album_list.list_box.accessible_role() != AccessibleNone);
+        if album_list.list_box.accessible_role() == AccessibleNone {
+            bail!("Expected non-None accessible role, got None");
+        }
+        Ok(())
     }
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_keyboard_navigation_compliance() {
-        let engine = AudioEngine::new().unwrap();
+    fn test_keyboard_navigation_compliance() -> Result<()> {
+        let engine = AudioEngine::new()?;
         let engine_weak = Arc::downgrade(&Arc::new(engine));
-        let settings_manager = SettingsManager::new().unwrap();
+        let settings_manager = SettingsManager::new()?;
         let app_state = AppState::new(
             engine_weak,
             None::<Arc<RwLock<LibraryScanner>>>,
@@ -111,15 +124,21 @@ mod ui_compliance_tests {
         let application = Application::builder()
             .application_id("com.example.oxhidifi")
             .build();
-        let settings_manager = SettingsManager::new().unwrap();
+        let settings_manager = SettingsManager::new()?;
         let header_bar = HeaderBar::default_with_state(
             &Arc::new(app_state.clone()),
             application,
             Arc::new(settings_manager),
         );
-        assert!(header_bar.search_button.can_focus());
-        assert!(header_bar.view_split_button.can_focus());
-        assert!(header_bar.settings_button.can_focus());
+        if !header_bar.search_button.can_focus() {
+            bail!("Expected true, got false");
+        }
+        if !header_bar.view_split_button.can_focus() {
+            bail!("Expected true, got false");
+        }
+        if !header_bar.settings_button.can_focus() {
+            bail!("Expected true, got false");
+        }
 
         let app_state_arc = Arc::new(app_state);
         let album_grid = AlbumGridView::new(
@@ -131,7 +150,9 @@ mod ui_compliance_tests {
             true,
             false,
         );
-        assert!(album_grid.flow_box.is_focusable());
+        if !album_grid.flow_box.is_focusable() {
+            bail!("Expected true, got false");
+        }
 
         let detail_view = DetailView::new(
             Some(app_state_arc),
@@ -141,15 +162,18 @@ mod ui_compliance_tests {
             DetailType::Album(Album::default()),
             false,
         );
-        assert!(detail_view.main_container.is_focusable());
+        if !detail_view.main_container.is_focusable() {
+            bail!("Expected true, got false");
+        }
+        Ok(())
     }
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_performance_validation() {
-        let engine = AudioEngine::new().unwrap();
+    fn test_performance_validation() -> Result<()> {
+        let engine = AudioEngine::new()?;
         let engine_weak = Arc::downgrade(&Arc::new(engine));
-        let settings_manager = SettingsManager::new().unwrap();
+        let settings_manager = SettingsManager::new()?;
         let app_state = AppState::new(
             engine_weak,
             None::<Arc<RwLock<LibraryScanner>>>,
@@ -181,15 +205,18 @@ mod ui_compliance_tests {
 
         // Should be able to create grid with 1000 albums in reasonable time
         // In real implementation, this would use virtual scrolling for better performance
-        assert!(duration.as_millis() < 5000); // Less than 5 seconds
+        if duration.as_millis() >= 5000 {
+            bail!("Expected <5000ms, got {duration:?}");
+        }
+        Ok(())
     }
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_memory_leak_detection() {
-        let engine = AudioEngine::new().unwrap();
+    fn test_memory_leak_detection() -> Result<()> {
+        let engine = AudioEngine::new()?;
         let engine_weak = Arc::downgrade(&Arc::new(engine.clone()));
-        let settings_manager = SettingsManager::new().unwrap();
+        let settings_manager = SettingsManager::new()?;
         let app_state = AppState::new(
             engine_weak,
             None::<Arc<RwLock<LibraryScanner>>>,
@@ -205,7 +232,7 @@ mod ui_compliance_tests {
             let application = Application::builder()
                 .application_id("com.example.oxhidifi")
                 .build();
-            let settings_manager = SettingsManager::new().unwrap();
+            let settings_manager = SettingsManager::new()?;
             let _header_bar = HeaderBar::default_with_state(
                 &app_state_arc,
                 application,
@@ -233,15 +260,19 @@ mod ui_compliance_tests {
 
         // After dropping all components, ref count should be back to initial
         // Note: This may not work perfectly due to GTK's internal references
-        assert!(Arc::strong_count(&Arc::new(app_state)) <= initial_ref_count + 2);
+        let final_count = Arc::strong_count(&Arc::new(app_state));
+        if final_count > initial_ref_count + 2 {
+            bail!("Expected <= {}, got {final_count}", initial_ref_count + 2);
+        }
+        Ok(())
     }
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_responsive_layout_adaptation() {
-        let engine = AudioEngine::new().unwrap();
+    fn test_responsive_layout_adaptation() -> Result<()> {
+        let engine = AudioEngine::new()?;
         let engine_weak = Arc::downgrade(&Arc::new(engine));
-        let settings_manager = SettingsManager::new().unwrap();
+        let settings_manager = SettingsManager::new()?;
         let app_state = AppState::new(
             engine_weak,
             None::<Arc<RwLock<LibraryScanner>>>,
@@ -287,6 +318,7 @@ mod ui_compliance_tests {
         );
 
         // Compact mode should have different layout characteristics
+        Ok(())
     }
 
     #[test]

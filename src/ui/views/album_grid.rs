@@ -999,11 +999,10 @@ impl AlbumGridView {
                 self.albums.sort_by(|a, b| a.title.cmp(&b.title));
             }
             AlbumSortCriteria::Artist => {
-                self.albums.sort_by(|a, b| a.artist_id.cmp(&b.artist_id));
+                self.albums.sort_by_key(|a| a.artist_id);
             }
             AlbumSortCriteria::Year => {
-                self.albums
-                    .sort_by(|a, b| a.year.unwrap_or(0).cmp(&b.year.unwrap_or(0)));
+                self.albums.sort_by_key(|a| a.year.unwrap_or(0));
             }
             AlbumSortCriteria::DRValue => {
                 self.albums.sort_by(|a, b| {
@@ -1138,7 +1137,7 @@ mod tests {
         assert_eq!(albums[0].title, "A Album");
 
         // Test year sorting
-        albums.sort_by(|a, b| a.year.unwrap_or(0).cmp(&b.year.unwrap_or(0)));
+        albums.sort_by_key(|a| a.year.unwrap_or(0));
         assert_eq!(albums[0].year, Some(2022));
     }
 }

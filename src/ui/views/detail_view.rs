@@ -245,6 +245,10 @@ impl DetailView {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
+    use anyhow::Result;
+
     use crate::{
         library::models::{Album, Artist},
         ui::views::{
@@ -255,7 +259,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_detail_view_builder() {
+    fn test_detail_view_builder() -> Result<()> {
         let artist = Artist {
             id: 1,
             name: "Test Artist".to_string(),
@@ -265,24 +269,18 @@ mod tests {
         let detail_view = DetailView::builder()
             .detail_type(Some(DetailType::Artist(artist)))
             .compact(true)
-            .build()
-            .unwrap();
+            .build()?;
 
-        match &detail_view.detail_type {
-            Some(DetailType::Artist(_)) => {}
-            _ => unreachable!(),
-        }
+        assert_matches!(&detail_view.detail_type, Some(DetailType::Artist(_)));
+        Ok(())
     }
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
     fn test_detail_view_builder_missing_detail_type() {
-        let error = DetailView::builder()
-            .compact(true)
-            .build()
-            .expect_err("Should fail without detail type");
+        let result = DetailView::builder().compact(true).build();
 
-        assert!(matches!(error, MissingDetailType));
+        assert!(matches!(result, Err(MissingDetailType)));
     }
 
     #[test]

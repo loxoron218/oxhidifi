@@ -11,7 +11,7 @@ use {
         gtk::{AccessibleRole::Group, StringList},
         prelude::{ComboRowExt, PreferencesGroupExt, PreferencesPageExt},
     },
-    tracing::debug,
+    tracing::{debug, error},
 };
 
 use crate::{config::SettingsManager, state::AppState};
@@ -90,7 +90,7 @@ impl GeneralPreferencesPage {
             "dark" => 2,
             _ => 0, // Default to system
         };
-        combo_row.set_selected(u32::try_from(current_index).unwrap());
+        combo_row.set_selected(current_index);
 
         // Connect change handler
         let settings_manager_clone = self.settings_manager.clone();
@@ -107,7 +107,7 @@ impl GeneralPreferencesPage {
             current_settings.theme_preference = new_theme;
 
             if let Err(e) = settings_manager_clone.update_settings(current_settings) {
-                debug!("Failed to update theme preference: {}", e);
+                error!(error = %e, "Failed to update theme preference");
             }
         });
 
@@ -141,7 +141,7 @@ impl GeneralPreferencesPage {
             current_settings.show_dr_values = new_value;
 
             if let Err(e) = settings_manager_clone.update_settings(current_settings) {
-                debug!("Failed to update DR values preference: {}", e);
+                error!(error = %e, "Failed to update DR values preference");
                 return;
             }
 
@@ -179,7 +179,7 @@ impl GeneralPreferencesPage {
             current_settings.show_metadata_overlays = new_value;
 
             if let Err(e) = settings_manager_clone.update_settings(current_settings) {
-                debug!("Failed to update metadata overlays preference: {}", e);
+                error!(error = %e, "Failed to update metadata overlays preference");
                 return;
             }
 
@@ -220,7 +220,7 @@ impl GeneralPreferencesPage {
             "original" => 1,
             _ => 0, // Default to release year
         };
-        combo_row.set_selected(u32::try_from(current_index).unwrap());
+        combo_row.set_selected(current_index);
 
         // Connect change handler
         let settings_manager_clone = self.settings_manager.clone();
@@ -237,7 +237,7 @@ impl GeneralPreferencesPage {
             current_settings.year_display_mode.clone_from(&new_mode);
 
             if let Err(e) = settings_manager_clone.update_settings(current_settings) {
-                debug!("Failed to update year display mode preference: {}", e);
+                error!(error = %e, "Failed to update year display mode preference");
                 return;
             }
 

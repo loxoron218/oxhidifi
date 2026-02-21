@@ -6,9 +6,12 @@
 
 #[cfg(test)]
 mod component_tests {
-    use libadwaita::{
-        gtk::AccessibleRole::None as AccessibleNone,
-        prelude::{AccessibleExt, ButtonExt, WidgetExt},
+    use {
+        anyhow::{Result, anyhow, bail},
+        libadwaita::{
+            gtk::AccessibleRole::None as AccessibleNone,
+            prelude::{AccessibleExt, ButtonExt, WidgetExt},
+        },
     };
 
     use crate::{
@@ -43,7 +46,7 @@ mod component_tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_cover_art_creation_and_properties() {
+    fn test_cover_art_creation_and_properties() -> Result<()> {
         let cover_art = CoverArt::builder()
             .artwork_path("/path/to/artwork.jpg")
             .dr_value("DR14")
@@ -51,18 +54,20 @@ mod component_tests {
             .dimensions(100, 100)
             .build();
 
-        assert!(cover_art.picture.is_some());
         let picture = cover_art
             .picture
             .as_ref()
-            .expect("CoverArt should have a picture widget");
-        assert_eq!(picture.width_request(), 100, "CoverArt width should be 100");
-        assert_eq!(
-            picture.height_request(),
-            100,
-            "CoverArt height should be 100"
-        );
-        assert!(cover_art.dr_badge.is_some());
+            .ok_or_else(|| anyhow!("no picture"))?;
+        if picture.width_request() != 100 {
+            bail!("Expected 100, got {}", picture.width_request());
+        }
+        if picture.height_request() != 100 {
+            bail!("Expected 100, got {}", picture.height_request());
+        }
+        if cover_art.dr_badge.is_none() {
+            bail!("Expected Some(dr_badge), got None");
+        }
+        Ok(())
     }
 
     #[test]
@@ -152,7 +157,7 @@ mod component_tests {
         let label_text = metadata_441.labels[0].text().to_string();
         assert!(
             label_text.contains("44.1 kHz"),
-            "Expected '44.1 kHz' but got '{label_text}'"
+            "Expected '44.1 kHz', got '{label_text}'"
         );
 
         // Test 88.2 kHz sample rate
@@ -175,7 +180,7 @@ mod component_tests {
         let label_text_882 = metadata_882.labels[0].text().to_string();
         assert!(
             label_text_882.contains("88.2 kHz"),
-            "Expected '88.2 kHz' but got '{label_text_882}'"
+            "Expected '88.2 kHz', got '{label_text_882}'"
         );
 
         // Test 96 kHz (whole number) sample rate
@@ -198,31 +203,34 @@ mod component_tests {
         let label_text_96 = metadata_96.labels[0].text().to_string();
         assert!(
             label_text_96.contains("96 kHz"),
-            "Expected '96 kHz' but got '{label_text_96}'"
+            "Expected '96 kHz', got '{label_text_96}'"
         );
     }
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_component_accessibility_attributes() {
+    fn test_component_accessibility_attributes() -> Result<()> {
         // Test DRBadge accessibility
         let badge = DRBadge::new(Some("DR12".to_string()), true);
-        assert!(badge.label.accessible_role() != AccessibleNone);
+        if badge.label.accessible_role() == AccessibleNone {
+            bail!("Expected non-None accessible role, got None");
+        }
 
         // Test CoverArt accessibility
         let cover_art = CoverArt::new(None, Option::None, None, false, 50, 50);
-        assert!(cover_art.picture.is_some());
         let picture = cover_art
             .picture
             .as_ref()
-            .expect("CoverArt should have a picture widget");
-        assert!(
-            picture.accessible_role() != AccessibleNone,
-            "CoverArt picture should have an accessible role"
-        );
+            .ok_or_else(|| anyhow!("no picture"))?;
+        if picture.accessible_role() == AccessibleNone {
+            bail!("Expected non-None accessible role, got None");
+        }
 
         // Test PlayOverlay accessibility
         let overlay = PlayOverlay::new(false, false);
-        assert!(overlay.button.accessible_role() != AccessibleNone);
+        if overlay.button.accessible_role() == AccessibleNone {
+            bail!("Expected non-None accessible role, got None");
+        }
+        Ok(())
     }
 }

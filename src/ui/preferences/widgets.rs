@@ -87,6 +87,7 @@ mod tests {
     use std::{fs::remove_file, path::PathBuf, sync::Arc};
 
     use {
+        anyhow::{Result, bail},
         libadwaita::prelude::{ActionRowExt, PreferencesRowExt},
         tracing::debug,
     };
@@ -97,7 +98,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_create_combo_row_from_settings() {
+    fn test_create_combo_row_from_settings() -> Result<()> {
         // Create temporary settings file
         let temp_file = PathBuf::from("/tmp/oxhidifi_test_combo_row.json");
         if let Err(e) = remove_file(&temp_file) {
@@ -108,7 +109,7 @@ mod tests {
             );
         }
 
-        let settings_manager = SettingsManager::with_config_path(temp_file.clone()).unwrap();
+        let settings_manager = SettingsManager::with_config_path(temp_file.clone())?;
         let settings_manager_arc = Arc::new(settings_manager);
 
         let options = vec![
@@ -129,8 +130,12 @@ mod tests {
         );
 
         // Verify the combo row was created with correct properties
-        assert_eq!(combo_row.title(), "Test Title");
-        assert_eq!(combo_row.subtitle().as_deref(), Some("Test Subtitle"));
+        if combo_row.title() != "Test Title" {
+            bail!("Combo row title should be 'Test Title'");
+        }
+        if combo_row.subtitle().as_deref() != Some("Test Subtitle") {
+            bail!("Combo row subtitle should be 'Test Subtitle'");
+        }
 
         // Clean up
         if let Err(e) = remove_file(&temp_file) {
@@ -140,5 +145,6 @@ mod tests {
                 e
             );
         }
+        Ok(())
     }
 }

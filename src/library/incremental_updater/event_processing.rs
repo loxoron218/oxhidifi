@@ -2,7 +2,6 @@
 
 use std::{
     collections::{HashMap, HashSet},
-    convert::TryFrom,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -19,17 +18,17 @@ use crate::{
         metadata::{TagReader, TrackMetadata},
     },
     config::settings::UserSettings,
-    error::domain::LibraryError,
+    error::{domain::LibraryError, numeric_conversion::safe_u64_to_i64},
     library::{
         database::LibraryDatabase, dr_parser::DrParser, file_watcher::FileWatcher,
         incremental_updater::config::IncrementalUpdaterConfig,
     },
 };
 
-// Maximum allowed track duration (24 hours)
+/// Maximum allowed track duration (24 hours).
 const MAX_DURATION_MS: u64 = 24 * 60 * 60 * 1000;
 
-// Maximum allowed file size (100 GB)
+/// Maximum allowed file size (100 GB).
 const MAX_FILE_SIZE_BYTES: u64 = 100 * 1024 * 1024 * 1024;
 
 /// Handles files that have been created or modified incrementally.
@@ -518,10 +517,16 @@ async fn update_track_in_transaction(
         .unwrap_or("Unknown Track");
     let track_number = metadata.standard.track_number.map(i64::from);
     let disc_number = i64::from(metadata.standard.disc_number.unwrap_or(1));
-    let duration_ms = i64::try_from(metadata.technical.duration_ms.min(MAX_DURATION_MS))
-        .expect("Clamped track duration_ms (max 24h) should fit in i64 for database storage");
-    let file_size = i64::try_from(metadata.technical.file_size.min(MAX_FILE_SIZE_BYTES))
-        .expect("Clamped file_size (max 100GB) should fit in i64 for database storage");
+    let duration_ms = safe_u64_to_i64(
+        metadata.technical.duration_ms,
+        MAX_DURATION_MS,
+        "duration_ms",
+    );
+    let file_size = safe_u64_to_i64(
+        metadata.technical.file_size,
+        MAX_FILE_SIZE_BYTES,
+        "file_size",
+    );
     let format = &metadata.technical.format;
     let sample_rate = i64::from(metadata.technical.sample_rate);
     let bits_per_sample = i64::from(metadata.technical.bits_per_sample);

@@ -177,9 +177,13 @@ impl AudioProducer {
     #[must_use]
     pub fn safe_f64_to_f32(sample: f64) -> f32 {
         let clamped = sample.clamp(F32_MIN, F32_MAX);
-        clamped
-            .to_f32()
-            .expect("f64 to f32 conversion failed after clamping to valid f32 range")
+        clamped.to_f32().unwrap_or_else(|| {
+            if clamped.is_sign_positive() {
+                f32::MAX
+            } else {
+                f32::MIN
+            }
+        })
     }
 
     impl_convert!(simple convert_f32_to_interleaved, f32, |s: f32| s);

@@ -8,6 +8,7 @@ mod tests {
     use std::{future::pending, sync::Arc};
 
     use {
+        anyhow::{Result, bail},
         async_channel::unbounded,
         parking_lot::RwLock,
         tokio::time::{Duration, timeout},
@@ -25,24 +26,30 @@ mod tests {
 
     fn create_test_tracks(count: usize) -> Vec<Track> {
         (0..count)
-            .map(|i| Track {
-                id: i64::try_from(i).unwrap(),
-                album_id: 0,
-                title: format!("Track {i}"),
-                track_number: Some(i64::try_from(i).unwrap()),
-                disc_number: 1,
-                duration_ms: 300_000,
-                path: format!("/path/to/track_{i}.flac"),
-                file_size: 1024,
-                format: "FLAC".to_string(),
-                codec: "FLAC".to_string(),
-                sample_rate: 96000,
-                bits_per_sample: 24,
-                channels: 2,
-                is_lossless: true,
-                is_high_resolution: true,
-                created_at: None,
-                updated_at: None,
+            .map(|i| {
+                let id = i64::try_from(i).unwrap_or({
+                    // Test count will never exceed i64::MAX in practice
+                    i64::MAX
+                });
+                Track {
+                    id,
+                    album_id: 0,
+                    title: format!("Track {i}"),
+                    track_number: Some(id),
+                    disc_number: 1,
+                    duration_ms: 300_000,
+                    path: format!("/path/to/track_{i}.flac"),
+                    file_size: 1024,
+                    format: "FLAC".to_string(),
+                    codec: "FLAC".to_string(),
+                    sample_rate: 96000,
+                    bits_per_sample: 24,
+                    channels: 2,
+                    is_lossless: true,
+                    is_high_resolution: true,
+                    created_at: None,
+                    updated_at: None,
+                }
             })
             .collect()
     }
@@ -68,18 +75,18 @@ mod tests {
 
     #[tokio::test]
     #[ignore = "Requires GTK display for UI testing"]
-    async fn test_auto_advance_on_track_completion() {
+    async fn test_auto_advance_on_track_completion() -> Result<()> {
         let tracks = create_test_tracks(3);
 
         let (track_finished_tx, track_finished_rx) = unbounded();
 
-        let engine = AudioEngine::new().unwrap();
+        let engine = AudioEngine::new()?;
         let engine_weak = Arc::downgrade(&Arc::new(engine));
-        let settings_manager = SettingsManager::new().unwrap();
+        let settings_manager = SettingsManager::new()?;
         let app_state = AppState::new(engine_weak, None, Arc::new(RwLock::new(settings_manager)));
 
         let queue_manager = QueueManager::new(
-            Arc::new(AudioEngine::new().unwrap()),
+            Arc::new(AudioEngine::new()?),
             Arc::new(app_state),
             track_finished_rx,
         );
@@ -91,72 +98,73 @@ mod tests {
                 pending::<()>().await;
             }
         })
-        .await
-        .expect("Initial queue state not set");
+        .await?;
 
         let initial_index = queue_manager.get_queue().current_index;
-        assert_eq!(initial_index, Some(0), "Initial track index should be 0");
+        if initial_index != Some(0) {
+            bail!("Expected Some(0), got {initial_index:?}");
+        }
 
-        track_finished_tx.send(()).await.unwrap();
+        track_finished_tx.send(()).await?;
 
         timeout(Duration::from_millis(TEST_TIMEOUT_MS), async {
             while queue_manager.get_queue().current_index != Some(1) {
                 pending::<()>().await;
             }
         })
-        .await
-        .expect("Queue did not auto-advance after track completion");
+        .await?;
 
         let updated_index = queue_manager.get_queue().current_index;
-        assert_eq!(updated_index, Some(1), "Queue should advance to next track");
+        if updated_index != Some(1) {
+            bail!("Expected Some(1), got {updated_index:?}");
+        }
 
-        track_finished_tx.send(()).await.unwrap();
+        track_finished_tx.send(()).await?;
 
         timeout(Duration::from_millis(TEST_TIMEOUT_MS), async {
             while queue_manager.get_queue().current_index != Some(2) {
                 pending::<()>().await;
             }
         })
-        .await
-        .expect("Queue did not auto-advance to third track");
+        .await?;
 
         let final_index = queue_manager.get_queue().current_index;
-        assert_eq!(final_index, Some(2), "Queue should advance to third track");
+        if final_index != Some(2) {
+            bail!("Expected Some(2), got {final_index:?}");
+        }
 
-        track_finished_tx.send(()).await.unwrap();
+        track_finished_tx.send(()).await?;
 
         timeout(Duration::from_millis(TEST_TIMEOUT_MS), async {
             while queue_manager.get_queue().current_index == Some(2) {
                 pending::<()>().await;
             }
         })
-        .await
-        .expect("Queue state did not change after end of queue");
+        .await?;
 
         let end_index = queue_manager.get_queue().current_index;
-        assert_eq!(
-            end_index,
-            Some(2),
-            "Queue should not advance beyond last track"
-        );
+        if end_index != Some(2) {
+            bail!("Expected Some(2) at queue end, got {end_index:?}");
+        }
+        Ok(())
     }
 
     #[tokio::test]
     #[ignore = "Requires GTK display for UI testing"]
-    async fn test_queue_state_synchronization() {
+    async fn test_queue_state_synchronization() -> Result<()> {
         let tracks = create_test_tracks(3);
 
         let (_, track_finished_rx) = unbounded();
 
-        let engine = AudioEngine::new().unwrap();
+        let engine = AudioEngine::new()?;
         let engine_weak = Arc::downgrade(&Arc::new(engine));
-        let settings_manager = SettingsManager::new().unwrap();
+        let settings_manager = SettingsManager::new()?;
         let app_state = AppState::new(engine_weak, None, Arc::new(RwLock::new(settings_manager)));
 
         let state_rx = app_state.subscribe();
 
         let queue_manager = QueueManager::new(
-            Arc::new(AudioEngine::new().unwrap()),
+            Arc::new(AudioEngine::new()?),
             Arc::new(app_state.clone()),
             track_finished_rx,
         );
@@ -165,63 +173,66 @@ mod tests {
 
         timeout(Duration::from_millis(200), async {
             loop {
-                if let AppStateEvent::QueueChanged(queue) =
-                    state_rx.recv().await.expect("State receiver closed")
-                {
-                    assert_eq!(queue.tracks.len(), 3);
-                    assert_eq!(queue.current_index, Some(0));
+                if let AppStateEvent::QueueChanged(queue) = state_rx.recv().await? {
+                    if queue.tracks.len() != 3 {
+                        bail!("Expected 3 tracks, got {}", queue.tracks.len());
+                    }
+                    if queue.current_index != Some(0) {
+                        bail!("Expected Some(0), got {:?}", queue.current_index);
+                    }
                     break;
                 }
             }
+            Ok::<_, anyhow::Error>(())
         })
-        .await
-        .expect("Did not receive queue changed event");
+        .await??;
 
         queue_manager.next_track();
 
         timeout(Duration::from_millis(200), async {
             loop {
-                if let AppStateEvent::QueueChanged(queue) =
-                    state_rx.recv().await.expect("State receiver closed")
-                {
-                    assert_eq!(queue.current_index, Some(1));
+                if let AppStateEvent::QueueChanged(queue) = state_rx.recv().await? {
+                    if queue.current_index != Some(1) {
+                        bail!("Expected Some(1), got {:?}", queue.current_index);
+                    }
                     break;
                 }
             }
+            Ok::<_, anyhow::Error>(())
         })
-        .await
-        .expect("Did not receive next track queue change");
+        .await??;
 
         queue_manager.previous_track();
 
         timeout(Duration::from_millis(200), async {
             loop {
-                if let AppStateEvent::QueueChanged(queue) =
-                    state_rx.recv().await.expect("State receiver closed")
-                {
-                    assert_eq!(queue.current_index, Some(0));
+                if let AppStateEvent::QueueChanged(queue) = state_rx.recv().await? {
+                    if queue.current_index != Some(0) {
+                        bail!("Expected Some(0), got {:?}", queue.current_index);
+                    }
                     break;
                 }
             }
+            Ok::<_, anyhow::Error>(())
         })
-        .await
-        .expect("Did not receive previous track queue change");
+        .await??;
+        Ok(())
     }
 
     #[tokio::test]
     #[ignore = "Requires GTK display for UI testing"]
-    async fn test_next_previous_button_state_updates() {
+    async fn test_next_previous_button_state_updates() -> Result<()> {
         let tracks = create_test_tracks(3);
 
         let (_, track_finished_rx) = unbounded();
 
-        let engine = AudioEngine::new().unwrap();
+        let engine = AudioEngine::new()?;
         let engine_weak = Arc::downgrade(&Arc::new(engine));
-        let settings_manager = SettingsManager::new().unwrap();
+        let settings_manager = SettingsManager::new()?;
         let app_state = AppState::new(engine_weak, None, Arc::new(RwLock::new(settings_manager)));
 
         let queue_manager = QueueManager::new(
-            Arc::new(AudioEngine::new().unwrap()),
+            Arc::new(AudioEngine::new()?),
             Arc::new(app_state),
             track_finished_rx,
         );
@@ -233,12 +244,15 @@ mod tests {
                 pending::<()>().await;
             }
         })
-        .await
-        .expect("Initial queue state not set");
+        .await?;
 
         let initial_queue = queue_manager.get_queue();
-        assert_eq!(initial_queue.current_index, Some(0));
-        assert_eq!(initial_queue.tracks.len(), 3);
+        if initial_queue.current_index != Some(0) {
+            bail!("Expected Some(0), got {:?}", initial_queue.current_index);
+        }
+        if initial_queue.tracks.len() != 3 {
+            bail!("Expected 3 tracks, got {}", initial_queue.tracks.len());
+        }
 
         queue_manager.previous_track();
 
@@ -247,15 +261,12 @@ mod tests {
                 pending::<()>().await;
             }
         })
-        .await
-        .expect("Queue state did not stabilize");
+        .await?;
 
         let after_prev = queue_manager.get_queue();
-        assert_eq!(
-            after_prev.current_index,
-            Some(0),
-            "Previous track at start should not change index"
-        );
+        if after_prev.current_index != Some(0) {
+            bail!("Expected Some(0), got {:?}", after_prev.current_index);
+        }
 
         queue_manager.next_track();
 
@@ -264,11 +275,12 @@ mod tests {
                 pending::<()>().await;
             }
         })
-        .await
-        .expect("Queue did not advance to next track");
+        .await?;
 
         let after_next_1 = queue_manager.get_queue();
-        assert_eq!(after_next_1.current_index, Some(1));
+        if after_next_1.current_index != Some(1) {
+            bail!("Expected Some(1), got {:?}", after_next_1.current_index);
+        }
 
         queue_manager.next_track();
 
@@ -277,11 +289,12 @@ mod tests {
                 pending::<()>().await;
             }
         })
-        .await
-        .expect("Queue did not advance to last track");
+        .await?;
 
         let after_next_2 = queue_manager.get_queue();
-        assert_eq!(after_next_2.current_index, Some(2));
+        if after_next_2.current_index != Some(2) {
+            bail!("Expected Some(2), got {:?}", after_next_2.current_index);
+        }
 
         queue_manager.next_track();
 
@@ -290,15 +303,12 @@ mod tests {
                 pending::<()>().await;
             }
         })
-        .await
-        .expect("Queue state did not stabilize after end");
+        .await?;
 
         let at_end = queue_manager.get_queue();
-        assert_eq!(
-            at_end.current_index,
-            Some(2),
-            "Next track at end should not change index"
-        );
+        if at_end.current_index != Some(2) {
+            bail!("Expected Some(2), got {:?}", at_end.current_index);
+        }
 
         queue_manager.previous_track();
 
@@ -307,10 +317,12 @@ mod tests {
                 pending::<()>().await;
             }
         })
-        .await
-        .expect("Queue did not go back to previous track");
+        .await?;
 
         let final_queue = queue_manager.get_queue();
-        assert_eq!(final_queue.current_index, Some(1));
+        if final_queue.current_index != Some(1) {
+            bail!("Expected Some(1), got {:?}", final_queue.current_index);
+        }
+        Ok(())
     }
 }

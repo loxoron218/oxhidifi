@@ -8,6 +8,7 @@ mod view_integration_tests {
     use std::sync::Arc;
 
     use {
+        anyhow::{Result, bail},
         libadwaita::{
             gtk::AccessibleRole::{Grid, List},
             prelude::AccessibleExt,
@@ -34,10 +35,10 @@ mod view_integration_tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_view_transitions_and_navigation() {
-        let engine = AudioEngine::new().unwrap();
+    fn test_view_transitions_and_navigation() -> Result<()> {
+        let engine = AudioEngine::new()?;
         let engine_weak = Arc::downgrade(&Arc::new(engine));
-        let settings_manager = SettingsManager::new().unwrap();
+        let settings_manager = SettingsManager::new()?;
         let app_state = AppState::new(engine_weak, None, Arc::new(RwLock::new(settings_manager)));
 
         // Test album grid view creation
@@ -84,14 +85,15 @@ mod view_integration_tests {
             .detail_type(Some(DetailTypeArtist(artist)))
             .compact(false)
             .build();
+        Ok(())
     }
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_real_time_filtering_and_sorting() {
-        let engine = AudioEngine::new().unwrap();
+    fn test_real_time_filtering_and_sorting() -> Result<()> {
+        let engine = AudioEngine::new()?;
         let engine_weak = Arc::downgrade(&Arc::new(engine));
-        let settings_manager = SettingsManager::new().unwrap();
+        let settings_manager = SettingsManager::new()?;
         let app_state = AppState::new(engine_weak, None, Arc::new(RwLock::new(settings_manager)));
 
         let albums = vec![
@@ -128,14 +130,15 @@ mod view_integration_tests {
 
         // Test sorting by year
         album_grid.sort_albums(Year);
+        Ok(())
     }
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_keyboard_navigation_support() {
-        let engine = AudioEngine::new().unwrap();
+    fn test_keyboard_navigation_support() -> Result<()> {
+        let engine = AudioEngine::new()?;
         let engine_weak = Arc::downgrade(&Arc::new(engine));
-        let settings_manager = SettingsManager::new().unwrap();
+        let settings_manager = SettingsManager::new()?;
         let app_state = AppState::new(engine_weak, None, Arc::new(RwLock::new(settings_manager)));
 
         // Test that views support keyboard navigation
@@ -151,10 +154,21 @@ mod view_integration_tests {
         );
 
         let artist_grid = ArtistGridView::new(Some(Arc::new(app_state.clone())), Vec::new(), false);
-        assert_eq!(artist_grid.flow_box.accessible_role(), Grid);
+        if artist_grid.flow_box.accessible_role() != Grid {
+            bail!(
+                "Expected Grid, got {:?}",
+                artist_grid.flow_box.accessible_role()
+            );
+        }
 
         let album_list = ListView::new(Some(&app_state.into()), &Albums, false);
-        assert_eq!(album_list.list_box.accessible_role(), List);
+        if album_list.list_box.accessible_role() != List {
+            bail!(
+                "Expected List, got {:?}",
+                album_list.list_box.accessible_role()
+            );
+        }
+        Ok(())
     }
 
     #[test]

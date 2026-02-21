@@ -18,6 +18,7 @@ use {
         SampleFormat::{self, F32, F64, I8, I16, I24, I32, I64, U8, U16, U24, U32, U64},
         Stream, StreamConfig,
         StreamError::{self, BackendSpecific},
+        SupportedStreamConfig,
         platform::{
             HostId::{self, Alsa, Jack},
             available_hosts, host_from_id,
@@ -39,13 +40,13 @@ use crate::audio::{
     resampler::{ResamplingAudioConsumer, create_resampling_stream},
 };
 
-// Maximum i64 value as f64 for scaling
+/// Maximum i64 value as f64 for scaling.
 const I64_MAX_F64: f64 = 9_223_372_036_854_776_000.0;
 
-// Minimum i64 value as f64 for scaling
+/// Minimum i64 value as f64 for scaling.
 const I64_MIN_F64: f64 = -9_223_372_036_854_776_000.0;
 
-// Maximum u64 value as f64 for scaling
+/// Maximum u64 value as f64 for scaling.
 const U64_MAX_F64: f64 = 18_446_744_073_709_552_000_f64;
 
 /// Builds a sample output stream with format-specific conversion.
@@ -215,6 +216,11 @@ where
 /// * `$convert` - Closure expression to convert f32 samples to target type
 macro_rules! generate_stream_builders {
     ($name:ident, $type:ty, $silent:expr, $convert:expr) => {
+        /// Builds an audio stream for the sample format.
+        ///
+        /// # Errors
+        ///
+        /// Returns `OutputError::StreamBuildError` if the audio stream cannot be created.
         fn $name(mut ctx: Self) -> Result<Stream, OutputError> {
             build_sample_stream!(
                 ctx.device,
@@ -508,13 +514,17 @@ impl AudioOutput {
             }
 
             // Otherwise, find the best compatible configuration
-            if <u32 as From<u16>>::from(config_channels) >= source_channels
-                && (best_config.is_none()
-                    || config_sample_rate > best_config.as_ref().unwrap().sample_rate())
-            {
-                best_config = Some(config.with_max_sample_rate());
-                if config_sample_rate == source_sample_rate {
-                    rate_match = true;
+            if <u32 as From<u16>>::from(config_channels) >= source_channels {
+                let should_update = best_config.is_none()
+                    || config_sample_rate
+                        > best_config
+                            .as_ref()
+                            .map_or(0, SupportedStreamConfig::sample_rate);
+                if should_update {
+                    best_config = Some(config.with_max_sample_rate());
+                    if config_sample_rate == source_sample_rate {
+                        rate_match = true;
+                    }
                 }
             }
         }

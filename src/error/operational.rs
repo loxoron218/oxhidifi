@@ -93,10 +93,12 @@ mod tests {
         fmt::{Display, Formatter, Result as FmtResult},
     };
 
+    use anyhow::{Result, anyhow, bail};
+
     use crate::error::operational::ResultExt;
 
     #[test]
-    fn test_result_ext_with_context() {
+    fn test_result_ext_with_context() -> Result<()> {
         #[derive(Debug)]
         struct TestError;
         impl Display for TestError {
@@ -109,15 +111,21 @@ mod tests {
         let result: Result<i32, TestError> = Err(TestError);
         let with_context = result.add_context("Additional context");
 
-        assert!(with_context.is_err());
-        let error = with_context.unwrap_err();
+        if with_context.is_ok() {
+            bail!("Add_context should return Err for error input");
+        }
+        let error = with_context
+            .err()
+            .ok_or_else(|| anyhow!("Failed to extract error from Err variant"))?;
 
-        // The error should contain the context, not necessarily the original error message
-        assert!(error.to_string().contains("Additional context"));
+        if !error.to_string().contains("Additional context") {
+            bail!("Error should contain context, got: {error}");
+        }
+        Ok(())
     }
 
     #[test]
-    fn test_result_ext_with_contextf() {
+    fn test_result_ext_with_contextf() -> Result<()> {
         #[derive(Debug)]
         struct TestError;
         impl Display for TestError {
@@ -130,10 +138,16 @@ mod tests {
         let result: Result<i32, TestError> = Err(TestError);
         let with_context = result.add_contextf("Formatted context: test");
 
-        assert!(with_context.is_err());
-        let error = with_context.unwrap_err();
+        if with_context.is_ok() {
+            bail!("Add_contextf should return Err for error input");
+        }
+        let error = with_context
+            .err()
+            .ok_or_else(|| anyhow!("Failed to extract error from Err variant"))?;
 
-        // The error should contain the context, not necessarily the original error message
-        assert!(error.to_string().contains("Formatted context: test"));
+        if !error.to_string().contains("Formatted context: test") {
+            bail!("Error should contain formatted context, got: {error}");
+        }
+        Ok(())
     }
 }

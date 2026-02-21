@@ -36,7 +36,7 @@ use crate::audio::{
     metadata::{MetadataError, TagReader, TrackMetadata},
     output::{
         AudioConsumer, AudioOutput, OutputConfig,
-        OutputError::{self},
+        OutputError::{self, RingBufferError},
     },
     prebuffer::{Prebuffer, PrebufferError},
     producer::AudioProducer,
@@ -625,6 +625,11 @@ impl AudioEngine {
     /// # Returns
     ///
     /// A `Result` indicating success or failure of the control loop.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tokio runtime cannot be created or if any
+    /// playback operation fails.
     fn control_loop(&self) -> Result<(), AudioError> {
         let runtime = Builder::new_current_thread()
             .enable_all()
@@ -677,6 +682,11 @@ impl AudioEngine {
     /// # Returns
     ///
     /// A `Result` indicating success or failure.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no track is loaded, if the audio output cannot be
+    /// created, or if the decoder fails.
     async fn setup_playback_stream(
         &self,
         initial_position_ms: Option<u64>,
@@ -753,11 +763,20 @@ impl AudioEngine {
     }
 
     /// Handles the play command.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the playback stream cannot be set up.
     async fn handle_play(&self) -> Result<(), AudioError> {
         self.setup_playback_stream(None).await
     }
 
     /// Handles the resume command.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the playback stream cannot be set up at the
+    /// current position.
     async fn handle_resume(&self) -> Result<(), AudioError> {
         let position_ms = self.current_position.load(SeqCst);
         self.setup_playback_stream(Some(position_ms)).await
@@ -792,6 +811,11 @@ impl AudioEngine {
     /// # Returns
     ///
     /// A `Result` indicating success or failure.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the decoder cannot be created, if seeking fails,
+    /// or if the audio output cannot be created.
     async fn recreate_stream_at_position(
         &self,
         position_ms: u64,
@@ -861,6 +885,11 @@ impl AudioEngine {
     }
 
     /// Handles the seek command.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the playback stream cannot be recreated at the
+    /// specified position.
     async fn handle_seek(&self, position_ms: u64) -> Result<(), AudioError> {
         // For now, we'll stop and restart playback at the new position
         // A more sophisticated implementation would seek within the current stream
@@ -872,6 +901,11 @@ impl AudioEngine {
     }
 
     /// Handles the seek and play command (used for restart after config changes).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the playback stream cannot be recreated at the
+    /// specified position.
     async fn handle_seek_and_play(&self, position_ms: u64) -> Result<(), AudioError> {
         self.recreate_stream_at_position(position_ms, true).await
     }
@@ -970,7 +1004,11 @@ impl AudioEngine {
             *prebuffer_guard = Some(Arc::new(Prebuffer::new()));
         }
 
-        let prebuffer = prebuffer_guard.as_ref().unwrap().clone();
+        let Some(prebuffer) = prebuffer_guard.as_ref().cloned() else {
+            return Err(AudioError::OutputError(RingBufferError(
+                "Prebuffer initialization failed".to_string(),
+            )));
+        };
         drop(prebuffer_guard);
 
         // Preload the track
@@ -998,12 +1036,15 @@ impl AudioEngine {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::{from_str, to_string};
+    use {
+        anyhow::{Result, bail},
+        serde_json::{from_str, to_string},
+    };
 
     use crate::{audio::engine::PlaybackState, error::AudioError};
 
     #[test]
-    fn test_playback_state_serialization() {
+    fn test_playback_state_serialization() -> Result<()> {
         let states = vec![
             PlaybackState::Stopped,
             PlaybackState::Ready,
@@ -1013,23 +1054,28 @@ mod tests {
         ];
 
         for state in states {
-            let serialized = to_string(&state).unwrap();
-            let deserialized: PlaybackState = from_str(&serialized).unwrap();
-            assert_eq!(state, deserialized);
+            let serialized = to_string(&state)?;
+            let deserialized: PlaybackState = from_str(&serialized)?;
+            if state != deserialized {
+                bail!("Expected {state:?}, got {deserialized:?}");
+            }
         }
+        Ok(())
     }
 
     #[test]
-    fn test_audio_error_display() {
+    fn test_audio_error_display() -> Result<()> {
         let no_track_error = AudioError::NoTrackLoaded;
-        assert_eq!(no_track_error.to_string(), "No track loaded");
+        if no_track_error.to_string() != "No track loaded" {
+            bail!("Expected 'No track loaded', got '{no_track_error}'");
+        }
 
         let invalid_op_error = AudioError::InvalidOperation {
             reason: "test reason".to_string(),
         };
-        assert_eq!(
-            invalid_op_error.to_string(),
-            "Invalid operation: test reason"
-        );
+        if invalid_op_error.to_string() != "Invalid operation: test reason" {
+            bail!("Expected 'Invalid operation: test reason', got '{invalid_op_error}'");
+        }
+        Ok(())
     }
 }

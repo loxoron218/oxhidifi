@@ -30,12 +30,12 @@ pub fn handle_exclusive_mode_error(error: &AudioError, app_state: &AppState) -> 
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        error::Error,
-        sync::{Arc, Weak},
-    };
+    use std::sync::{Arc, Weak};
 
-    use parking_lot::RwLock;
+    use {
+        anyhow::{Result, bail},
+        parking_lot::RwLock,
+    };
 
     use crate::{
         audio::{
@@ -47,7 +47,7 @@ mod tests {
         state::AppState,
     };
 
-    fn create_test_app_state() -> Result<AppState, Box<dyn Error>> {
+    fn create_test_app_state() -> Result<AppState> {
         let settings_manager = SettingsManager::new()?;
         Ok(AppState::new(
             Weak::new(),
@@ -57,22 +57,28 @@ mod tests {
     }
 
     #[test]
-    fn test_handle_exclusive_mode_error_true() {
+    fn test_handle_exclusive_mode_error_true() -> Result<()> {
         let reason = "Device busy".to_string();
         let error = AudioError::OutputError(ExclusiveModeFailed { reason });
 
-        let app_state = create_test_app_state().unwrap();
+        let app_state = create_test_app_state()?;
         let result = handle_exclusive_mode_error(&error, &app_state);
-        assert!(result);
+        if !result {
+            bail!("Expected true");
+        }
+        Ok(())
     }
 
     #[test]
-    fn test_handle_exclusive_mode_error_false() {
+    fn test_handle_exclusive_mode_error_false() -> Result<()> {
         let decoder_error = NoAudioTrack;
         let error = AudioError::DecoderError(decoder_error);
 
-        let app_state = create_test_app_state().unwrap();
+        let app_state = create_test_app_state()?;
         let result = handle_exclusive_mode_error(&error, &app_state);
-        assert!(!result);
+        if result {
+            bail!("Expected false");
+        }
+        Ok(())
     }
 }

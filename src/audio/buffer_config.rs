@@ -70,53 +70,86 @@ fn is_power_of_two(n: usize) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::{from_str, to_string};
+    use {
+        anyhow::{Result, bail},
+        serde_json::{from_str, to_string},
+    };
 
     use crate::audio::buffer_config::BufferConfig;
 
     #[test]
-    fn test_default_config() {
+    fn test_default_config() -> Result<()> {
         let config = BufferConfig::default();
-        assert_eq!(config.main_buffer_size, 65536);
-        assert_eq!(config.resampler_buffer_size, 65536);
-        assert_eq!(config.input_buffer_size, 32768);
+        if config.main_buffer_size != 65536 {
+            bail!("Expected 65536, got {}", config.main_buffer_size);
+        }
+        if config.resampler_buffer_size != 65536 {
+            bail!("Expected 65536, got {}", config.resampler_buffer_size);
+        }
+        if config.input_buffer_size != 32768 {
+            bail!("Expected 32768, got {}", config.input_buffer_size);
+        }
+        Ok(())
     }
 
     #[test]
-    fn test_low_memory_config() {
+    fn test_low_memory_config() -> Result<()> {
         let config = BufferConfig::low_memory();
-        assert_eq!(config.main_buffer_size, 16384);
-        assert_eq!(config.resampler_buffer_size, 16384);
-        assert_eq!(config.input_buffer_size, 8192);
+        if config.main_buffer_size != 16384 {
+            bail!("Expected 16384, got {}", config.main_buffer_size);
+        }
+        if config.resampler_buffer_size != 16384 {
+            bail!("Expected 16384, got {}", config.resampler_buffer_size);
+        }
+        if config.input_buffer_size != 8192 {
+            bail!("Expected 8192, got {}", config.input_buffer_size);
+        }
+        Ok(())
     }
 
     #[test]
-    fn test_is_valid_default() {
+    fn test_is_valid_default() -> Result<()> {
         let config = BufferConfig::default();
-        assert!(config.is_valid());
+        if !config.is_valid() {
+            bail!("Expected config to be valid");
+        }
+        Ok(())
     }
 
     #[test]
-    fn test_is_valid_low_memory() {
+    fn test_is_valid_low_memory() -> Result<()> {
         let config = BufferConfig::low_memory();
-        assert!(config.is_valid());
+        if !config.is_valid() {
+            bail!("Expected config to be valid");
+        }
+        Ok(())
     }
 
     #[test]
-    fn test_is_valid_invalid_sizes() {
+    fn test_is_valid_invalid_sizes() -> Result<()> {
         let config = BufferConfig {
             main_buffer_size: 1000,
             resampler_buffer_size: 65536,
             input_buffer_size: 32768,
         };
-        assert!(!config.is_valid());
+        if config.is_valid() {
+            bail!("Expected config to be invalid");
+        }
+        Ok(())
     }
 
     #[test]
-    fn test_buffer_config_serialization() {
+    fn test_buffer_config_serialization() -> Result<()> {
         let config = BufferConfig::default();
-        let serialized = to_string(&config).unwrap();
-        let deserialized: BufferConfig = from_str(&serialized).unwrap();
-        assert_eq!(config.main_buffer_size, deserialized.main_buffer_size);
+        let serialized = to_string(&config)?;
+        let deserialized: BufferConfig = from_str(&serialized)?;
+        if config.main_buffer_size != deserialized.main_buffer_size {
+            bail!(
+                "Expected {}, got {}",
+                config.main_buffer_size,
+                deserialized.main_buffer_size
+            );
+        }
+        Ok(())
     }
 }

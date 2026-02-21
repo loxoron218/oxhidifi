@@ -6,6 +6,7 @@
 pub mod audio_reporting;
 pub mod domain;
 pub mod dr_error;
+pub mod numeric_conversion;
 pub mod operational;
 
 pub use {

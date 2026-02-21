@@ -7,13 +7,33 @@ use std::{
 
 use regex::Regex;
 
-use crate::error::dr_error::DrError;
+use crate::error::dr_error::DrError::{self, NoDrValueFound, RegexError};
 
 /// DR value validation regex pattern.
 const DR_VALUE_PATTERN: &str = r"^DR(\d{1,2})$";
 
 /// Supported text file extensions for DR value scanning.
 const TEXT_FILE_EXTENSIONS: &[&str] = &["txt", "log", "md", "csv"];
+
+/// Compiles a regex pattern, returning a `DrError::RegexError` on failure.
+///
+/// # Arguments
+///
+/// * `pattern` - The regex pattern string to compile.
+///
+/// # Returns
+///
+/// A `Result` containing the compiled `Regex` or a `DrError::RegexError`.
+///
+/// # Errors
+///
+/// Returns `DrError::RegexError` if the pattern is invalid.
+fn compile_regex(pattern: &str) -> Result<Regex, DrError> {
+    Regex::new(pattern).map_err(|e| RegexError {
+        pattern: pattern.to_string(),
+        error: e.to_string(),
+    })
+}
 
 /// Extracts and validates DR values from album directories.
 ///
@@ -27,41 +47,35 @@ pub struct DrExtractor {
     dr_validator: Regex,
 }
 
-impl Default for DrExtractor {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl DrExtractor {
     /// Creates a new DR extractor.
     ///
     /// # Returns
     ///
-    /// A new `DrExtractor` instance.
+    /// A `Result` containing the new `DrExtractor` instance or a `DrError`.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics if the regex patterns cannot be compiled (should never happen with valid patterns).
-    #[must_use]
-    pub fn new() -> Self {
+    /// Returns `DrError::RegexError` if any of the hardcoded regex patterns
+    /// fail to compile. This indicates a bug in the pattern definitions.
+    pub fn new() -> Result<Self, DrError> {
         // Add patterns for Official DR value formats only
         // All patterns should capture only the numeric part (group 1)
         // Per the specification, we only extract Official DR Values, not per-track DR values
         let dr_patterns = vec![
             // Official DR value patterns from spec (docs/0. dr-extraction.txt)
-            Regex::new(r"(?i)Official\s+DR\s+value[:\s]*DR(\d{1,2})").unwrap(),
-            Regex::new(r"(?i)Official\s+EP/Album\s+DR[:\s]*(\d{1,2})").unwrap(),
-            Regex::new(r"(?i)Official\s+DR\s+Value[:\s]*DR(\d{1,2})").unwrap(),
-            Regex::new(r"(?i)Реальные\s+значения\s+DR[:\s]*DR(\d{1,2})").unwrap(),
+            compile_regex(r"(?i)Official\s+DR\s+value[:\s]*DR(\d{1,2})")?,
+            compile_regex(r"(?i)Official\s+EP/Album\s+DR[:\s]*(\d{1,2})")?,
+            compile_regex(r"(?i)Official\s+DR\s+Value[:\s]*DR(\d{1,2})")?,
+            compile_regex(r"(?i)Реальные\s+значения\s+DR[:\s]*DR(\d{1,2})")?,
         ];
 
-        let dr_validator = Regex::new(DR_VALUE_PATTERN).unwrap();
+        let dr_validator = compile_regex(DR_VALUE_PATTERN)?;
 
-        Self {
+        Ok(Self {
             dr_patterns,
             dr_validator,
-        }
+        })
     }
 
     /// Extracts DR value from a DR file.
@@ -111,7 +125,7 @@ impl DrExtractor {
             }
         }
 
-        Err(DrError::NoDrValueFound)
+        Err(NoDrValueFound)
     }
 
     /// Validates a DR value against the expected format.
@@ -180,5 +194,45 @@ impl DrExtractor {
         }
 
         Ok(text_files)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use anyhow::{Result, anyhow, bail};
+
+    use crate::{
+        error::dr_error::DrError::RegexError, library::dr_parser::extractor::compile_regex,
+    };
+
+    #[test]
+    fn test_invalid_regex_pattern_error_message() -> Result<()> {
+        let result = compile_regex("(invalid[regex");
+
+        let error = result
+            .err()
+            .ok_or_else(|| anyhow!("Expected error but got Ok"))?;
+
+        if let RegexError {
+            pattern,
+            error: err_msg,
+        } = error
+        {
+            if pattern != "(invalid[regex" {
+                bail!("Expected pattern '(invalid[regex', got '{pattern}'");
+            }
+            if !err_msg.contains("regex") {
+                bail!("Error message should contain 'regex': {err_msg}");
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_valid_regex_pattern_compiles() -> Result<()> {
+        let result = compile_regex(r"^DR(\d{1,2})$")?;
+
+        drop(result);
+        Ok(())
     }
 }

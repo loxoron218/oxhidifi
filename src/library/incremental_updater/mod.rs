@@ -7,8 +7,9 @@ use std::sync::Arc;
 
 use {
     async_channel::Receiver,
+    parking_lot::RwLock,
     tokio::task::JoinHandle,
-    tracing::{debug, error},
+    tracing::{debug, error, warn},
 };
 
 use crate::{
@@ -57,15 +58,23 @@ impl IncrementalUpdater {
     /// Returns `LibraryError` if initialization fails.
     pub fn new(
         database: Arc<LibraryDatabase>,
-        settings: Arc<parking_lot::RwLock<UserSettings>>,
+        settings: Arc<RwLock<UserSettings>>,
         config: Option<IncrementalUpdaterConfig>,
     ) -> Result<Self, LibraryError> {
         let config = config.unwrap_or_default();
 
         // Create DR parser if enabled
-        let dr_parser = config
-            .enable_dr_parsing
-            .then(|| Arc::new(DrParser::new(database.clone())));
+        let dr_parser = if config.enable_dr_parsing {
+            match DrParser::new(database.clone()) {
+                Ok(parser) => Some(Arc::new(parser)),
+                Err(e) => {
+                    warn!("Failed to initialize DR parser: {}", e);
+                    None
+                }
+            }
+        } else {
+            None
+        };
 
         let tasks = Vec::new();
 

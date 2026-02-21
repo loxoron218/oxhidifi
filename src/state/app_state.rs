@@ -557,7 +557,10 @@ impl AppState {
 mod tests {
     use std::sync::Arc;
 
-    use parking_lot::RwLock;
+    use {
+        anyhow::{Result, bail},
+        parking_lot::RwLock,
+    };
 
     use crate::{
         audio::engine::{AudioEngine, PlaybackState::Stopped},
@@ -570,15 +573,22 @@ mod tests {
     };
 
     #[test]
-    fn test_app_state_creation() {
-        let engine = AudioEngine::new().unwrap();
+    fn test_app_state_creation() -> Result<()> {
+        let engine = AudioEngine::new()?;
         let engine_weak = Arc::downgrade(&Arc::new(engine));
-        let settings_manager = SettingsManager::new().unwrap();
+        let settings_manager = SettingsManager::new()?;
         let app_state = AppState::new(engine_weak, None, Arc::new(RwLock::new(settings_manager)));
 
-        assert_eq!(app_state.get_playback_state(), Stopped);
-        assert!(app_state.get_current_track().is_none());
-        assert_eq!(app_state.get_library_state().view_mode, Grid);
+        if app_state.get_playback_state() != Stopped {
+            bail!("Expected playback state to be Stopped");
+        }
+        if app_state.get_current_track().is_some() {
+            bail!("Expected current track to be None");
+        }
+        if app_state.get_library_state().view_mode != Grid {
+            bail!("Expected view mode to be Grid");
+        }
+        Ok(())
     }
 
     #[test]

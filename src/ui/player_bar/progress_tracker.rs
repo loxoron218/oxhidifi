@@ -5,10 +5,13 @@ use std::{
     time::Duration,
 };
 
-use libadwaita::{
-    glib::{ControlFlow::Continue, timeout_add_local},
-    gtk::{Label, Scale},
-    prelude::RangeExt,
+use {
+    libadwaita::{
+        glib::{ControlFlow::Continue, timeout_add_local},
+        gtk::{Label, Scale},
+        prelude::RangeExt,
+    },
+    tracing::warn,
 };
 
 use crate::{audio::engine::AudioEngine, ui::player_bar::shared_state::PlayerBarState};
@@ -50,8 +53,15 @@ pub fn start_position_updates(
                 && position_ms < u64::from(u32::MAX)
                 && duration_ms < u64::from(u32::MAX)
             {
-                let progress = f64::from(u32::try_from(position_ms).unwrap())
-                    / f64::from(u32::try_from(duration_ms).unwrap());
+                let Some(position_u32) = u32::try_from(position_ms).ok() else {
+                    warn!("Failed to convert position to u32");
+                    return Continue;
+                };
+                let Some(duration_u32) = u32::try_from(duration_ms).ok() else {
+                    warn!("Failed to convert duration to u32");
+                    return Continue;
+                };
+                let progress = f64::from(position_u32) / f64::from(duration_u32);
                 let progress_percent = progress * 100.0;
 
                 progress_scale.set_value(progress_percent);

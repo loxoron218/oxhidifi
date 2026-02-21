@@ -214,28 +214,33 @@ impl TagReader {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::{from_str, to_string};
+    use {
+        anyhow::{Result, bail},
+        serde_json::{from_str, to_string},
+    };
 
     use crate::audio::metadata::{
         MetadataError, StandardMetadata, TechnicalMetadata, TrackMetadata,
     };
 
     #[test]
-    fn test_metadata_error_display() {
+    fn test_metadata_error_display() -> Result<()> {
         let error = MetadataError::UnsupportedFormat;
-        assert_eq!(error.to_string(), "Unsupported file format");
+        if error.to_string() != "Unsupported file format" {
+            bail!("Expected 'Unsupported file format', got '{error}'");
+        }
 
         let missing_field_error = MetadataError::MissingField {
             field: "title".to_string(),
         };
-        assert_eq!(
-            missing_field_error.to_string(),
-            "Missing required metadata field: title"
-        );
+        if missing_field_error.to_string() != "Missing required metadata field: title" {
+            bail!("expected 'Missing required metadata field: title', got '{missing_field_error}'");
+        }
+        Ok(())
     }
 
     #[test]
-    fn test_standard_metadata_serialization() {
+    fn test_standard_metadata_serialization() -> Result<()> {
         let metadata = StandardMetadata {
             title: Some("Test Title".to_string()),
             artist: Some("Test Artist".to_string()),
@@ -250,13 +255,16 @@ mod tests {
             comment: Some("Test comment".to_string()),
         };
 
-        let serialized = to_string(&metadata).unwrap();
-        let deserialized: StandardMetadata = from_str(&serialized).unwrap();
-        assert_eq!(metadata, deserialized);
+        let serialized = to_string(&metadata)?;
+        let deserialized: StandardMetadata = from_str(&serialized)?;
+        if metadata != deserialized {
+            bail!("Expected {metadata:?}, got {deserialized:?}");
+        }
+        Ok(())
     }
 
     #[test]
-    fn test_technical_metadata_serialization() {
+    fn test_technical_metadata_serialization() -> Result<()> {
         let metadata = TechnicalMetadata {
             format: "FLAC".to_string(),
             codec: "FLAC".to_string(),
@@ -269,13 +277,16 @@ mod tests {
             is_high_resolution: true,
         };
 
-        let serialized = to_string(&metadata).unwrap();
-        let deserialized: TechnicalMetadata = from_str(&serialized).unwrap();
-        assert_eq!(metadata, deserialized);
+        let serialized = to_string(&metadata)?;
+        let deserialized: TechnicalMetadata = from_str(&serialized)?;
+        if metadata != deserialized {
+            bail!("Expected {metadata:?}, got {deserialized:?}");
+        }
+        Ok(())
     }
 
     #[test]
-    fn test_track_metadata_serialization() {
+    fn test_track_metadata_serialization() -> Result<()> {
         let metadata = TrackMetadata {
             standard: StandardMetadata {
                 title: Some("Test Title".to_string()),
@@ -304,8 +315,11 @@ mod tests {
             artwork: None,
         };
 
-        let serialized = to_string(&metadata).unwrap();
-        let deserialized: TrackMetadata = from_str(&serialized).unwrap();
-        assert_eq!(metadata, deserialized);
+        let serialized = to_string(&metadata)?;
+        let deserialized: TrackMetadata = from_str(&serialized)?;
+        if metadata != deserialized {
+            bail!("Expected {metadata:?}, got {deserialized:?}");
+        }
+        Ok(())
     }
 }
