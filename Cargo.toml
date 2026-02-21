@@ -7,7 +7,7 @@ version = "0.1.0"
 # Audio
 # crossbeam = "0.8.4"
 audioadapter-buffers = "2.0.0"
-cpal = { version = "0.17.1", features = ["jack"] }
+cpal = { version = "0.17.3", features = ["jack"] }
 lofty = "0.23.2"
 num-traits = "0.2.19"
 rtrb = "0.3.2"
@@ -22,16 +22,16 @@ parking_lot = "0.12.5"
 tokio = { version = "1.49.0", features = ["macros", "rt-multi-thread"] }
 
 # Error handling
-anyhow = "1.0.101"
+anyhow = "1.0.102"
 thiserror = "2.0.18"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
 
 # General
-libadwaita = { version = "0.8.1", features = [
+libadwaita = { version = "0.9.1", features = [
   "gio_v2_80",
-  "gtk_v4_20",
-  "v1_8",
+  "gtk_v4_22",
+  "v1_9",
 ] }
 notify = "8.2.0"
 regex = "1.12.3"
