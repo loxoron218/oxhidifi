@@ -370,7 +370,6 @@ impl ArtistGridView {
     /// # Returns
     ///
     /// The cover size in pixels.
-    #[must_use]
     fn get_cover_size(&self) -> i32 {
         self.app_state
             .as_ref()

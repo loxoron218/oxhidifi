@@ -191,7 +191,6 @@ impl CoverArt {
     /// # Returns
     ///
     /// A new `CoverArt` instance.
-    #[must_use]
     pub fn new(
         artwork_path: Option<&String>,
         icon_name: Option<&String>,

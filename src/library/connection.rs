@@ -17,7 +17,6 @@ use {
 /// # Returns
 ///
 /// The database connection string.
-#[must_use]
 pub fn get_database_url() -> String {
     let mut config_dir = get_xdg_config_home();
     config_dir.push("oxhidifi");

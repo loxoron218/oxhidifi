@@ -478,7 +478,6 @@ impl AudioEngine {
     ///
     /// An `async_channel::Receiver<PlaybackState>` that receives state updates,
     /// including the current state immediately upon subscription.
-    #[must_use]
     pub fn subscribe_to_state_changes(&self) -> Receiver<PlaybackState> {
         let (tx, rx) = unbounded();
 

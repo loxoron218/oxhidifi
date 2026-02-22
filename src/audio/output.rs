@@ -721,7 +721,6 @@ impl AudioOutput {
     /// # Returns
     ///
     /// A vector of device names.
-    #[must_use]
     pub fn get_available_devices(&self) -> Vec<String> {
         match self.host.output_devices() {
             Ok(devices) => devices

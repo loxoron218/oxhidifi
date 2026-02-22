@@ -72,7 +72,6 @@ impl Prebuffer {
     /// # Returns
     ///
     /// A new `Prebuffer` instance.
-    #[must_use]
     pub fn with_buffer_config(buffer_config: BufferConfig) -> Self {
         let prebuffered_track = Arc::new(Mutex::new(None));
 
