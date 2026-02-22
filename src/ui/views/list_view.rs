@@ -1004,7 +1004,7 @@ fn create_artist_row_with_zoom(
     };
 
     let cover_art = CoverArt::builder()
-        .artwork_path("")
+        .icon_name("avatar-default-symbolic")
         .show_dr_badge(false)
         .dimensions(size, size)
         .build();
