@@ -13,13 +13,3 @@ pub mod empty_state;
 pub mod hifi_metadata;
 pub mod play_overlay;
 pub mod search_empty_state;
-
-pub use {
-    album_card::AlbumCard,
-    cover_art::CoverArt,
-    dr_badge::DRBadge,
-    empty_state::EmptyState,
-    hifi_metadata::HiFiMetadata,
-    play_overlay::PlayOverlay,
-    search_empty_state::{SearchEmptyState, SearchEmptyStateBuilder, SearchEmptyStateConfig},
-};

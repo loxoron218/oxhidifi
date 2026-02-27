@@ -8,9 +8,3 @@ pub mod domain;
 pub mod dr_error;
 pub mod numeric_conversion;
 pub mod operational;
-
-pub use {
-    audio_reporting::handle_exclusive_mode_error,
-    domain::{AudioError, LibraryError, UiError},
-    operational::{ErrorReporter, ResultExt},
-};

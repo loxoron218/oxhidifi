@@ -14,7 +14,7 @@ use {
     tracing::{debug, error},
 };
 
-use crate::{config::SettingsManager, state::AppState};
+use crate::{config::settings::SettingsManager, state::app_state::AppState};
 
 /// General preferences page with theme, DR values, and view mode settings.
 pub struct GeneralPreferencesPage {

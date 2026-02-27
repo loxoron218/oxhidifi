@@ -26,7 +26,7 @@ use crate::{
         database::LibraryDatabase,
         models::{Album, Track},
     },
-    state::AppState,
+    state::app_state::AppState,
     ui::{
         components::{
             cover_art::CoverArt,

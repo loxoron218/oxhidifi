@@ -12,7 +12,7 @@ use libadwaita::{
     prelude::{Cast, ListItemExt, WidgetExt},
 };
 
-use crate::{label_column, library::Album, ui::views::column_view_types::ArtistNameCache};
+use crate::{label_column, library::models::Album, ui::views::column_view_types::ArtistNameCache};
 
 /// Sets up the album title column (column 2).
 ///

@@ -13,14 +13,3 @@ pub mod header_bar;
 pub mod player_bar;
 pub mod preferences;
 pub mod views;
-
-pub use {
-    application::OxhidifiApplication,
-    components::{CoverArt, DRBadge, HiFiMetadata, PlayOverlay},
-    header_bar::HeaderBar,
-    player_bar::PlayerBar,
-    preferences::{
-        AudioPreferencesPage, GeneralPreferencesPage, LibraryPreferencesPage, PreferencesDialog,
-    },
-    views::{AlbumGridView, ArtistGridView, ColumnListView, DetailView},
-};

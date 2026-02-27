@@ -29,16 +29,15 @@ use {
 
 use crate::{audio::format_detector::supported_audio_extensions, error::domain::LibraryError};
 
-mod config;
-mod debouncer;
-mod events;
+pub mod config;
+pub mod debouncer;
+pub mod events;
 
-pub use {
+use crate::library::file_watcher::{
     config::FileWatcherConfig,
-    debouncer::DebouncedEventProcessor,
     events::{
-        DebouncedEvent,
-        ProcessedEvent::{self, FileChanged, FileRemoved},
+        ProcessedEvent,
+        ProcessedEvent::{FileChanged, FileRemoved},
     },
 };
 

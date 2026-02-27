@@ -16,8 +16,8 @@ use crate::{
         metadata::TagReader,
     },
     error::audio_reporting::handle_exclusive_mode_error,
-    library::Track,
-    state::{AppState, PlaybackQueue},
+    library::models::Track,
+    state::app_state::{AppState, PlaybackQueue},
 };
 
 /// Internal queue control messages.

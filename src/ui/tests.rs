@@ -19,13 +19,18 @@ mod ui_compliance_tests {
 
     use crate::{
         audio::engine::AudioEngine,
-        config::SettingsManager,
+        config::settings::SettingsManager,
         library::{models::Album, scanner::LibraryScanner},
-        state::AppState,
+        state::app_state::AppState,
         ui::{
-            AlbumGridView, ArtistGridView, ColumnListView, CoverArt, DRBadge, DetailView,
-            HeaderBar, PlayOverlay, PlayerBar,
-            views::{DetailType, column_view_types::ColumnListViewType::Albums},
+            components::{cover_art::CoverArt, dr_badge::DRBadge, play_overlay::PlayOverlay},
+            header_bar::HeaderBar,
+            player_bar::PlayerBar,
+            views::{
+                album_grid::AlbumGridView, artist_grid::ArtistGridView,
+                column_view::ColumnListView, column_view_types::ColumnListViewType::Albums,
+                detail_types::DetailType, detail_view::DetailView,
+            },
         },
     };
 

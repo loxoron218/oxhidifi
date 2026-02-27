@@ -10,7 +10,7 @@ use crate::{
         database::LibraryDatabase,
         models::{Album, Artist, Track},
     },
-    state::AppState,
+    state::app_state::AppState,
     ui::views::detail_view::DetailView,
 };
 

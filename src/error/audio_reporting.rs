@@ -5,7 +5,7 @@
 
 use crate::{
     audio::{engine::AudioError, output::OutputError::ExclusiveModeFailed},
-    state::AppState,
+    state::app_state::AppState,
 };
 
 /// Checks if an audio error is an exclusive mode failure and reports it.
@@ -42,9 +42,9 @@ mod tests {
             decoder_types::DecoderError::NoAudioTrack, engine::AudioError,
             output::OutputError::ExclusiveModeFailed,
         },
-        config::SettingsManager,
+        config::settings::SettingsManager,
         error::audio_reporting::handle_exclusive_mode_error,
-        state::AppState,
+        state::app_state::AppState,
     };
 
     fn create_test_app_state() -> Result<AppState> {

@@ -23,19 +23,19 @@ use crate::{
         database::LibraryDatabase,
         dr_parser::DrParser,
         file_watcher::{
-            DebouncedEvent::{self, FilesChanged, FilesRemoved, FilesRenamed},
-            DebouncedEventProcessor, FileWatcher,
+            FileWatcher,
+            debouncer::DebouncedEventProcessor,
+            events::DebouncedEvent::{self, FilesChanged, FilesRemoved, FilesRenamed},
         },
-        scanner::event_processing::{
-            handle_files_changed, handle_files_removed, handle_files_renamed,
+        scanner::{
+            config::ScannerConfig,
+            event_processing::{handle_files_changed, handle_files_removed, handle_files_renamed},
         },
     },
 };
 
 mod config;
 pub mod event_processing;
-
-pub use config::ScannerConfig;
 
 /// Events emitted by the library scanner.
 #[derive(Debug, Clone)]

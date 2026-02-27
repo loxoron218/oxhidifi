@@ -24,19 +24,3 @@ pub mod detail_playback;
 pub mod detail_types;
 pub mod detail_view;
 pub mod filtering;
-
-pub use {
-    album_columns::setup_album_columns,
-    album_grid::AlbumGridView,
-    artist_columns::setup_artist_columns,
-    artist_grid::ArtistGridView,
-    column_view::ColumnListView,
-    column_view_builder::ColumnListViewBuilder,
-    column_view_types::{ColumnListViewConfig, ColumnListViewType},
-    detail_types::{
-        BuildResult, DetailType, DetailViewBuildError, DetailViewBuilder, DetailViewConfig,
-        TrackTechDetails,
-    },
-    detail_view::DetailView,
-    filtering::Filterable,
-};

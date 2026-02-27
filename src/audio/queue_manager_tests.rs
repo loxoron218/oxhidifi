@@ -16,9 +16,9 @@ mod tests {
 
     use crate::{
         audio::{engine::AudioEngine, queue_manager::QueueManager},
-        config::SettingsManager,
-        library::Track,
-        state::{AppState, AppStateEvent, PlaybackQueue},
+        config::settings::SettingsManager,
+        library::models::Track,
+        state::app_state::{AppState, AppStateEvent, PlaybackQueue},
     };
 
     // Default timeout in milliseconds for test async operations

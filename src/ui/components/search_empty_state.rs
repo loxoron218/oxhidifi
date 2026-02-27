@@ -146,7 +146,7 @@ impl SearchEmptyStateBuilder {
 
 #[cfg(test)]
 mod tests {
-    use crate::ui::components::{SearchEmptyState, SearchEmptyStateConfig};
+    use crate::ui::components::search_empty_state::{SearchEmptyState, SearchEmptyStateConfig};
 
     #[test]
     fn test_search_empty_state_config() {

@@ -15,7 +15,7 @@ use crate::{
         PlaybackState,
         PlaybackState::{Buffering, Paused, Playing, Ready, Stopped},
     },
-    state::PlaybackQueue,
+    state::app_state::PlaybackQueue,
 };
 
 /// Creates the center section containing progress bar, time labels, and playback buttons.

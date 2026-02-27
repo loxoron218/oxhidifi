@@ -12,7 +12,7 @@ use {
     tracing::debug,
 };
 
-use crate::config::SettingsManager;
+use crate::config::settings::SettingsManager;
 
 /// Zoom level change events.
 #[derive(Debug, Clone)]
@@ -261,7 +261,7 @@ mod tests {
         tracing::debug,
     };
 
-    use crate::{config::SettingsManager, state::zoom_manager::ZoomManager};
+    use crate::{config::settings::SettingsManager, state::zoom_manager::ZoomManager};
 
     #[test]
     fn test_zoom_manager_creation() -> Result<()> {

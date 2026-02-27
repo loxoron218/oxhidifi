@@ -10,7 +10,7 @@ use {
     tracing::warn,
 };
 
-use crate::config::{SettingsManager, UserSettings};
+use crate::config::settings::{SettingsManager, UserSettings};
 
 /// Creates a combo row from settings with automatic persistence.
 ///
@@ -92,7 +92,7 @@ mod tests {
     };
 
     use crate::{
-        config::SettingsManager, ui::preferences::widgets::create_combo_row_from_settings,
+        config::settings::SettingsManager, ui::preferences::widgets::create_combo_row_from_settings,
     };
 
     #[test]

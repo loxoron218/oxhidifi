@@ -9,11 +9,13 @@ use {
 
 use crate::{
     state::{
-        AppState,
-        ZoomEvent::ListZoomChanged,
-        app_state::AppStateEvent::{
-            CurrentTrackChanged, PlaybackStateChanged, QueueChanged, SettingsChanged,
+        app_state::{
+            AppState,
+            AppStateEvent::{
+                CurrentTrackChanged, PlaybackStateChanged, QueueChanged, SettingsChanged,
+            },
         },
+        zoom_manager::ZoomEvent::ListZoomChanged,
     },
     ui::views::column_view_types::{
         ColumnListViewConfig,

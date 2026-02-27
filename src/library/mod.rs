@@ -10,9 +10,3 @@ pub mod file_watcher;
 pub mod incremental_updater;
 pub mod models;
 pub mod scanner;
-
-pub use {
-    connection::{create_connection_pool, get_database_url},
-    database::LibraryDatabase,
-    models::{Album, Artist, SearchResults, Track},
-};

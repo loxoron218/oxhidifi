@@ -20,7 +20,7 @@ use crate::{
         database::LibraryDatabase,
         models::{Album, Artist},
     },
-    state::AppState,
+    state::app_state::AppState,
     ui::views::{
         album_detail_renderer::AlbumDetailRenderer,
         artist_detail_renderer::ArtistDetailRenderer,

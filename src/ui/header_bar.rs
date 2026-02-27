@@ -25,15 +25,15 @@ use {
 };
 
 use crate::{
-    config::SettingsManager,
-    state::{
+    config::settings::SettingsManager,
+    state::app_state::{
         AppState,
         AppStateEvent::ViewOptionsChanged,
+        LibraryTab::{Albums, Artists},
         NavigationState::Library,
         ViewMode::{self, Grid, List},
-        app_state::LibraryTab::{Albums, Artists},
     },
-    ui::preferences::PreferencesDialog,
+    ui::preferences::dialog::PreferencesDialog,
 };
 
 /// Type alias for search debounce timer handle.
@@ -782,8 +782,8 @@ mod tests {
     };
 
     use crate::{
-        config::SettingsManager, library::scanner::LibraryScanner, state::AppState,
-        ui::header_bar::HeaderBar,
+        config::settings::SettingsManager, library::scanner::LibraryScanner,
+        state::app_state::AppState, ui::header_bar::HeaderBar,
     };
 
     #[test]

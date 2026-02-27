@@ -30,14 +30,15 @@ use crate::{
         queue_manager::QueueManager,
     },
     error::{audio_reporting::handle_exclusive_mode_error, domain::UiError},
-    library::{LibraryDatabase, models::Album},
+    library::{database::LibraryDatabase, models::Album},
     state::{
-        AppState, LibraryState,
-        NavigationState::AlbumDetail,
-        ZoomEvent::GridZoomChanged,
-        app_state::AppStateEvent::{
-            MetadataOverlaysChanged, SettingsChanged, YearDisplayModeChanged,
+        app_state::{
+            AppState,
+            AppStateEvent::{MetadataOverlaysChanged, SettingsChanged, YearDisplayModeChanged},
+            LibraryState,
+            NavigationState::AlbumDetail,
         },
+        zoom_manager::ZoomEvent::GridZoomChanged,
     },
     ui::{
         components::{

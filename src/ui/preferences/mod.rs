@@ -8,8 +8,3 @@ pub mod dialog;
 pub mod general_page;
 pub mod library_page;
 pub mod widgets;
-
-pub use {
-    audio_page::AudioPreferencesPage, dialog::PreferencesDialog,
-    general_page::GeneralPreferencesPage, library_page::LibraryPreferencesPage,
-};

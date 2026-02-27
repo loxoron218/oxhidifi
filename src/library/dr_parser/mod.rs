@@ -7,12 +7,16 @@ use std::{collections::HashSet, path::Path, sync::Arc};
 
 use tracing::{debug, warn};
 
-use crate::{error::dr_error::DrError, library::database::LibraryDatabase};
+use crate::{
+    error::dr_error::DrError,
+    library::{
+        database::LibraryDatabase,
+        dr_parser::{cache::AlbumDrCache, extractor::DrExtractor},
+    },
+};
 
 mod cache;
 mod extractor;
-
-pub use {cache::AlbumDrCache, extractor::DrExtractor};
 
 /// Main DR parsing coordinator.
 ///
@@ -74,7 +78,7 @@ impl DrParser {
         let album_path = album_path.as_ref();
 
         // Look for DR files in the album directory
-        let dr_files = self.extractor.find_dr_files(album_path)?;
+        let dr_files = DrExtractor::find_dr_files(album_path)?;
 
         if dr_files.is_empty() {
             // No DR files found - clear cache and return None
@@ -301,8 +305,8 @@ mod tests {
         write(&dr_file3, "Some other content")?;
 
         // Test file finding - should find all text files (no database needed)
-        let extractor = DrExtractor::new()?;
-        let files = extractor.find_dr_files(album_dir)?;
+        let _extractor = DrExtractor::new()?;
+        let files = DrExtractor::find_dr_files(album_dir)?;
 
         if files.len() != 3 {
             bail!("Expected 3 files, got {}", files.len());

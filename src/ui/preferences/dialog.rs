@@ -16,9 +16,12 @@ use {
 };
 
 use crate::{
-    config::SettingsManager,
-    state::AppState,
-    ui::preferences::{AudioPreferencesPage, GeneralPreferencesPage, LibraryPreferencesPage},
+    config::settings::SettingsManager,
+    state::app_state::AppState,
+    ui::preferences::{
+        audio_page::AudioPreferencesPage, general_page::GeneralPreferencesPage,
+        library_page::LibraryPreferencesPage,
+    },
 };
 
 /// Main preferences dialog with three categorized tabs.

@@ -19,8 +19,11 @@ use crate::{
         PlaybackState::{self, Stopped},
         TrackInfo,
     },
-    config::SettingsManager,
-    library::{Album, Artist, Track, scanner::LibraryScanner},
+    config::settings::SettingsManager,
+    library::{
+        models::{Album, Artist, Track},
+        scanner::LibraryScanner,
+    },
     state::zoom_manager::ZoomManager,
 };
 
@@ -564,8 +567,8 @@ mod tests {
 
     use crate::{
         audio::engine::{AudioEngine, PlaybackState::Stopped},
-        config::SettingsManager,
-        state::{
+        config::settings::SettingsManager,
+        state::app_state::{
             AppState, LibraryState,
             LibraryTab::{Albums, Artists},
             ViewMode::{Grid, List},

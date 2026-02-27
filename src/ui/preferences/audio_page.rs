@@ -16,7 +16,7 @@ use {
     tracing::{debug, error, info},
 };
 
-use crate::config::SettingsManager;
+use crate::config::settings::SettingsManager;
 
 /// Audio preferences page with output configuration settings.
 pub struct AudioPreferencesPage {

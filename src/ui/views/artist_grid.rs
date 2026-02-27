@@ -29,7 +29,10 @@ use crate::{
         numeric_conversion::{safe_i32_to_u32, safe_u32_to_i32},
     },
     library::models::Artist,
-    state::{AppState, LibraryState, NavigationState::ArtistDetail, ZoomEvent::GridZoomChanged},
+    state::{
+        app_state::{AppState, LibraryState, NavigationState::ArtistDetail},
+        zoom_manager::ZoomEvent::GridZoomChanged,
+    },
     ui::{
         components::{
             cover_art::CoverArt,

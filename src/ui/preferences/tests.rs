@@ -14,9 +14,10 @@ use {
 use crate::{
     audio::engine::AudioEngine,
     config::{SettingsManager, UserSettings},
-    state::{AppState, app_state::LibraryTab},
+    state::app_state::{AppState, LibraryTab},
     ui::preferences::{
-        AudioPreferencesPage, GeneralPreferencesPage, LibraryPreferencesPage, PreferencesDialog,
+        audio_page::AudioPreferencesPage, dialog::PreferencesDialog,
+        general_page::GeneralPreferencesPage, library_page::LibraryPreferencesPage,
     },
 };
 

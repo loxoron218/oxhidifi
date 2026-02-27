@@ -18,17 +18,21 @@ mod view_integration_tests {
 
     use crate::{
         audio::engine::AudioEngine,
-        config::SettingsManager,
+        config::settings::SettingsManager,
         library::models::{Album, Artist},
-        state::AppState,
+        state::app_state::AppState,
         ui::{
             components::cover_art::CoverArt,
             views::{
-                AlbumGridView, ArtistGridView, ColumnListView,
-                DetailType::{Album as DetailTypeAlbum, Artist as DetailTypeArtist},
-                DetailView,
-                album_grid::AlbumSortCriteria::{Title, Year},
+                album_grid::{
+                    AlbumGridView,
+                    AlbumSortCriteria::{Title, Year},
+                },
+                artist_grid::ArtistGridView,
+                column_view::ColumnListView,
                 column_view_types::ColumnListViewType::{Albums, Artists},
+                detail_types::DetailType::{Album as DetailTypeAlbum, Artist as DetailTypeArtist},
+                detail_view::DetailView,
             },
         },
     };

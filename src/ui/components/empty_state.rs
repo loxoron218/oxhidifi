@@ -29,7 +29,7 @@ use {
 };
 
 use crate::{
-    config::{SettingsManager, UserSettings},
+    config::settings::{SettingsManager, UserSettings},
     library::{
         database::LibraryDatabase,
         dr_parser::DrParser,
@@ -37,7 +37,7 @@ use crate::{
             LibraryScanner, ScannerEvent::LibraryChanged, event_processing::handle_files_changed,
         },
     },
-    state::{AppState, LibraryState},
+    state::app_state::{AppState, LibraryState},
 };
 
 /// Configuration for `EmptyState` display options.
@@ -614,9 +614,9 @@ mod tests {
 
     use crate::{
         audio::engine::AudioEngine,
-        config::{SettingsManager, UserSettings},
+        config::settings::{SettingsManager, UserSettings},
         library::{database::LibraryDatabase, dr_parser::DrParser, scanner::LibraryScanner},
-        state::AppState,
+        state::app_state::AppState,
         ui::components::empty_state::{EmptyState, EmptyStateConfig},
     };
 

@@ -10,7 +10,7 @@ use {
     tracing_subscriber::{EnvFilter, fmt::Subscriber},
 };
 
-use oxhidifi::ui::OxhidifiApplication;
+use oxhidifi::ui::application::OxhidifiApplication;
 
 /// Main entry point for the Oxhidifi application.
 ///

@@ -12,7 +12,7 @@ use libadwaita::{
     prelude::{Cast, ListItemExt, WidgetExt},
 };
 
-use crate::{library::Artist, ui::views::column_view_types::ColumnListViewConfig};
+use crate::{library::models::Artist, ui::views::column_view_types::ColumnListViewConfig};
 
 /// Sets up all 3 artist columns for the column view.
 ///

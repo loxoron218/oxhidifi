@@ -26,7 +26,16 @@ use crate::{
         queue_manager::QueueManager,
     },
     error::audio_reporting::handle_exclusive_mode_error,
-    state::AppState,
+    state::app_state::AppState,
+    ui::player_bar::{
+        center_section::create_center_section,
+        left_section::create_left_section,
+        right_section::create_right_section,
+        seek_handler::connect_seek_handler,
+        shared_state::PlayerBarState,
+        state_subscription::{StateSubscriptionContext, subscribe_to_state_changes},
+        volume_popover::connect_volume_handlers,
+    },
 };
 
 #[cfg(test)]
@@ -42,16 +51,6 @@ pub mod seek_handler;
 pub mod shared_state;
 pub mod state_subscription;
 pub mod volume_popover;
-
-pub use {
-    center_section::create_center_section,
-    left_section::create_left_section,
-    right_section::create_right_section,
-    seek_handler::connect_seek_handler,
-    shared_state::PlayerBarState,
-    state_subscription::{StateSubscriptionContext, subscribe_to_state_changes},
-    volume_popover::connect_volume_handlers,
-};
 
 /// Handles playback action execution with error reporting and exclusive mode handling.
 ///

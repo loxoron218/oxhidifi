@@ -1,6 +1,6 @@
 //! Configuration for library scanning behavior.
 
-use crate::library::file_watcher::FileWatcherConfig;
+use crate::library::file_watcher::config::FileWatcherConfig;
 
 /// Configuration for library scanning behavior.
 #[derive(Debug, Clone)]

@@ -25,8 +25,8 @@ use crate::{
         metadata::TagReader,
         queue_manager::QueueManager,
     },
-    library::{Album, LibraryDatabase},
-    state::AppState,
+    library::{database::LibraryDatabase, models::Album},
+    state::app_state::AppState,
     ui::{
         components::dr_badge::{DRBadge, DRQuality},
         formatting::format_sample_rate,

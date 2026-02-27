@@ -15,13 +15,15 @@ use {
 use crate::{
     config::settings::UserSettings,
     error::domain::LibraryError,
-    library::{database::LibraryDatabase, dr_parser::DrParser, file_watcher::DebouncedEvent},
+    library::{
+        database::LibraryDatabase, dr_parser::DrParser, file_watcher::events::DebouncedEvent,
+    },
 };
 
 mod config;
 mod event_processing;
 
-pub use config::IncrementalUpdaterConfig;
+use crate::library::incremental_updater::config::IncrementalUpdaterConfig;
 
 /// Coordinates incremental library updates.
 ///

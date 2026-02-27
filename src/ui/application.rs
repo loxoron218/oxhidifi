@@ -35,34 +35,34 @@ use crate::{
         },
         queue_manager::QueueManager,
     },
-    config::SettingsManager,
+    config::settings::SettingsManager,
     error::domain::UiError::{self, InitializationError},
     library::{
-        LibraryDatabase,
+        database::LibraryDatabase,
         models::{Album, Artist},
         scanner::{LibraryScanner, ScannerEvent::LibraryChanged},
     },
-    state::{
+    state::app_state::{
         AppState,
         AppStateEvent::{
             ExclusiveModeFailed, LibraryDataChanged, NavigationChanged, PlaybackStateChanged,
             SearchFilterChanged, SettingsChanged, ViewOptionsChanged,
         },
+        LibraryState,
+        LibraryTab::{self, Albums as LibraryAlbums, Artists as LibraryArtists},
         NavigationState::{AlbumDetail, ArtistDetail, Library},
         ViewMode::{self, Grid, List},
-        app_state::{
-            LibraryState,
-            LibraryTab::{self, Albums as LibraryAlbums, Artists as LibraryArtists},
-        },
     },
     ui::{
         header_bar::HeaderBar,
         player_bar::PlayerBar,
         views::{
-            AlbumGridView, ArtistGridView, ColumnListView,
-            DetailType::{Album as DetailTypeAlbum, Artist as DetailTypeArtist},
-            DetailView,
+            album_grid::AlbumGridView,
+            artist_grid::ArtistGridView,
+            column_view::ColumnListView,
             column_view_types::ColumnListViewType::{Albums, Artists},
+            detail_types::DetailType::{Album as DetailTypeAlbum, Artist as DetailTypeArtist},
+            detail_view::DetailView,
         },
     },
 };

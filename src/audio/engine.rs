@@ -1038,7 +1038,7 @@ mod tests {
         serde_json::{from_str, to_string},
     };
 
-    use crate::{audio::engine::PlaybackState, error::AudioError};
+    use crate::{audio::engine::PlaybackState, error::domain::AudioError};
 
     #[test]
     fn test_playback_state_serialization() -> Result<()> {

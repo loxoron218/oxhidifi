@@ -167,7 +167,7 @@ impl DrExtractor {
     /// # Errors
     ///
     /// Returns `DrError` if the directory cannot be read.
-    pub fn find_dr_files<P: AsRef<Path>>(&self, album_path: P) -> Result<Vec<PathBuf>, DrError> {
+    pub fn find_dr_files<P: AsRef<Path>>(album_path: P) -> Result<Vec<PathBuf>, DrError> {
         let album_path = album_path.as_ref();
 
         if !album_path.exists() || !album_path.is_dir() {

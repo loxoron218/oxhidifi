@@ -20,7 +20,7 @@ use {
     tracing::{debug, error},
 };
 
-use crate::{config::SettingsManager, state::AppState};
+use crate::{config::settings::SettingsManager, state::app_state::AppState};
 
 /// Library preferences page with directory management.
 pub struct LibraryPreferencesPage {

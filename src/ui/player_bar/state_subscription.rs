@@ -20,7 +20,7 @@ use crate::{
         PlaybackState::{self, Playing, Stopped},
         TrackInfo,
     },
-    state::{
+    state::app_state::{
         AppState,
         AppStateEvent::{
             CurrentTrackChanged, ExclusiveModeChanged, PlaybackStateChanged, QueueChanged,
