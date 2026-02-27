@@ -65,6 +65,13 @@ pub struct Album {
     /// Timestamp when the album was last updated.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub updated_at: Option<String>,
+    /// Number of tracks in the album (computed from JOIN).
+    #[sqlx(default)]
+    pub track_count: i64,
+    /// Number of audio channels (representative, e.g., MAX).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[sqlx(default)]
+    pub channels: Option<i64>,
 }
 
 /// Represents a track in the library.
@@ -188,6 +195,8 @@ mod tests {
             artwork_path: Some("/path/to/album/folder.jpg".to_string()),
             created_at: Some("2023-01-01 00:00:00".to_string()),
             updated_at: Some("2023-01-02 00:00:00".to_string()),
+            track_count: 12,
+            channels: Some(2),
         };
 
         let serialized = to_string(&album)?;

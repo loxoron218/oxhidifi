@@ -22,5 +22,5 @@ pub use {
     preferences::{
         AudioPreferencesPage, GeneralPreferencesPage, LibraryPreferencesPage, PreferencesDialog,
     },
-    views::{AlbumGridView, ArtistGridView, DetailView, ListView},
+    views::{AlbumGridView, ArtistGridView, ColumnListView, DetailView},
 };

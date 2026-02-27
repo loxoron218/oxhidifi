@@ -7,24 +7,36 @@
 #[cfg(test)]
 mod tests;
 
+pub mod album_columns;
+pub mod album_columns_macro;
+pub mod album_columns_text;
 pub mod album_detail_renderer;
 pub mod album_grid;
+pub mod artist_columns;
 pub mod artist_detail_renderer;
 pub mod artist_grid;
+pub mod column_view;
+pub mod column_view_builder;
+pub mod column_view_subscriptions;
+pub mod column_view_types;
+pub mod column_view_updates;
 pub mod detail_playback;
 pub mod detail_types;
 pub mod detail_view;
 pub mod filtering;
-pub mod list_view;
 
 pub use {
+    album_columns::setup_album_columns,
     album_grid::AlbumGridView,
+    artist_columns::setup_artist_columns,
     artist_grid::ArtistGridView,
+    column_view::ColumnListView,
+    column_view_builder::ColumnListViewBuilder,
+    column_view_types::{ColumnListViewConfig, ColumnListViewType},
     detail_types::{
         BuildResult, DetailType, DetailViewBuildError, DetailViewBuilder, DetailViewConfig,
         TrackTechDetails,
     },
     detail_view::DetailView,
     filtering::Filterable,
-    list_view::ListView,
 };

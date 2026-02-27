@@ -186,11 +186,16 @@ impl LibraryDatabase {
                 let search_pattern = format!("%{filter_str}%");
                 query_as::<_, Album>(
                     "
-                    SELECT id, artist_id, title, year, genre, compilation, path, dr_value,
-                           artwork_path, format, bits_per_sample, sample_rate, created_at, updated_at
-                    FROM albums
-                    WHERE title LIKE ?
-                    ORDER BY title, year
+                    SELECT a.id, a.artist_id, a.title, a.year, a.genre, a.compilation,
+                           a.path, a.dr_value, a.artwork_path, a.format, a.bits_per_sample,
+                           a.sample_rate, a.created_at, a.updated_at,
+                           COUNT(t.id) as track_count,
+                           MAX(t.channels) as channels
+                    FROM albums a
+                    LEFT JOIN tracks t ON a.id = t.album_id
+                    WHERE a.title LIKE ?
+                    GROUP BY a.id
+                    ORDER BY a.title, a.year
                     ",
                 )
                 .bind(search_pattern)
@@ -200,10 +205,15 @@ impl LibraryDatabase {
             None => {
                 query_as::<_, Album>(
                     "
-                    SELECT id, artist_id, title, year, genre, compilation, path, dr_value,
-                           artwork_path, format, bits_per_sample, sample_rate, created_at, updated_at
-                    FROM albums
-                    ORDER BY title, year
+                    SELECT a.id, a.artist_id, a.title, a.year, a.genre, a.compilation,
+                           a.path, a.dr_value, a.artwork_path, a.format, a.bits_per_sample,
+                           a.sample_rate, a.created_at, a.updated_at,
+                           COUNT(t.id) as track_count,
+                           MAX(t.channels) as channels
+                    FROM albums a
+                    LEFT JOIN tracks t ON a.id = t.album_id
+                    GROUP BY a.id
+                    ORDER BY a.title, a.year
                     ",
                 )
                 .fetch_all(&self.pool)

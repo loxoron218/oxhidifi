@@ -201,3 +201,55 @@
     color: @light_5;
     background-color: transparent;
 }
+
+/* Column view base styling */
+columnview {
+    font-size: 0.95em;
+}
+
+/* Column header styling */
+columnview > header button {
+    padding: 6px 12px;
+    font-weight: 500;
+    font-size: 0.9em;
+}
+
+columnview > header button:hover {
+    background-color: alpha(@theme_hover_bg_color, 0.5);
+}
+
+/* Column view row/cell styling */
+.listitem {
+    padding: 6px 12px;
+}
+
+.listitem:hover {
+    background-color: alpha(@theme_hover_bg_color, 0.3);
+}
+
+/* Play button column styling */
+.play-button-column button {
+    opacity: 0;
+    transition: opacity 250ms ease;
+}
+
+.listitem:hover .play-button-column button {
+    opacity: 1;
+}
+
+/* DR badge inline variant for column view */
+.dr-badge-inline {
+    font-family: monospace;
+    font-weight: 600;
+    font-size: 11px;
+}
+
+/* Compact column cell padding */
+.column-cell {
+    padding: 6px 12px;
+}
+
+/* Cover art in column view */
+.column-cover-art {
+    background-color: @theme_bg_color;
+}

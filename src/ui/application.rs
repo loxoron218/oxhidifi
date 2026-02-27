@@ -59,10 +59,10 @@ use crate::{
         header_bar::HeaderBar,
         player_bar::PlayerBar,
         views::{
-            AlbumGridView, ArtistGridView,
+            AlbumGridView, ArtistGridView, ColumnListView,
             DetailType::{Album as DetailTypeAlbum, Artist as DetailTypeArtist},
-            DetailView, ListView,
-            list_view::ListViewType::{Albums, Artists},
+            DetailView,
+            column_view_types::ColumnListViewType::{Albums, Artists},
         },
     },
 };
@@ -94,11 +94,11 @@ struct ViewControllers {
     /// Album grid view controller.
     album_grid: AlbumGridView,
     /// Album list view controller.
-    album_list: ListView,
+    album_list: ColumnListView,
     /// Artist grid view controller.
     artist_grid: ArtistGridView,
     /// Artist list view controller.
-    artist_list: ListView,
+    artist_list: ColumnListView,
 }
 
 /// Context struct for view options handling.
@@ -816,22 +816,38 @@ fn create_album_grid_view(
 /// # Arguments
 ///
 /// * `app_state` - Application state reference
+/// * `library_db` - Library database reference
+/// * `audio_engine` - Audio engine reference
+/// * `queue_manager` - Queue manager reference
 /// * `library_state` - Current library state
 ///
 /// # Returns
 ///
-/// A tuple of the `ListView` and its wrapped `ScrolledWindow`.
+/// A tuple of the `ColumnListView` and its wrapped `ScrolledWindow`.
 fn create_album_list_view(
     app_state: &Arc<AppState>,
+    library_db: &Arc<LibraryDatabase>,
+    audio_engine: &Arc<AudioEngine>,
+    queue_manager: &Arc<QueueManager>,
     library_state: &LibraryState,
-) -> (ListView, ScrolledWindow) {
-    let mut album_list_view = ListView::builder()
+) -> (ColumnListView, ScrolledWindow) {
+    let show_dr_badges = app_state
+        .settings_manager
+        .read()
+        .get_settings()
+        .show_dr_values;
+
+    let mut album_list_view = ColumnListView::builder()
         .app_state(app_state.clone())
+        .library_db(library_db.clone())
+        .audio_engine(audio_engine.clone())
+        .queue_manager(queue_manager.clone())
         .view_type(Albums)
+        .show_dr_badges(show_dr_badges)
         .compact(false)
         .build();
 
-    // Populate list view with initial data
+    album_list_view.update_artist_cache(&library_state.artists);
     album_list_view.set_albums(library_state.albums.clone());
 
     let scrolled = create_scrolled_window(&album_list_view.widget);
@@ -882,18 +898,18 @@ fn create_artist_grid_view(
 ///
 /// # Returns
 ///
-/// A tuple of the `ListView` and its wrapped `ScrolledWindow`.
+/// A tuple of the `ColumnListView` and its wrapped `ScrolledWindow`.
 fn create_artist_list_view(
     app_state: &Arc<AppState>,
     library_state: &LibraryState,
-) -> (ListView, ScrolledWindow) {
-    let mut artist_list_view = ListView::builder()
+) -> (ColumnListView, ScrolledWindow) {
+    let mut artist_list_view = ColumnListView::builder()
         .app_state(app_state.clone())
         .view_type(Artists)
         .compact(false)
         .build();
 
-    // Populate list view with initial data
+    // Populate column list view with initial data
     artist_list_view.set_artists(library_state.artists.clone());
 
     let scrolled = create_scrolled_window(&artist_list_view.widget);
@@ -972,6 +988,7 @@ fn handle_library_data_changed(
     views.artist_grid.update_all_artists(artists.to_vec());
 
     // Update list views
+    views.album_list.update_artist_cache(artists);
     views.album_list.set_albums(albums.to_vec());
     views.artist_list.set_artists(artists.to_vec());
 
@@ -1136,8 +1153,7 @@ fn handle_settings_changed(show_dr_values: bool, views: &mut ViewControllers) {
 
     views.album_grid.set_show_dr_badges(show_dr_values);
 
-    // Note: ListView doesn't currently have a set_show_dr_badges method,
-    // but it should respect the setting when creating new album rows
+    views.album_list.set_show_dr_badges(show_dr_values);
 }
 
 /// Handles exclusive mode failed events.
@@ -1276,7 +1292,13 @@ fn create_main_content(
         window,
     );
 
-    let (album_list_view, album_list_scrolled) = create_album_list_view(app_state, &library_state);
+    let (album_list_view, album_list_scrolled) = create_album_list_view(
+        app_state,
+        library_db,
+        audio_engine,
+        queue_manager,
+        &library_state,
+    );
 
     let (artist_grid_view, artist_grid_scrolled) =
         create_artist_grid_view(app_state, &library_state, window);

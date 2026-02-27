@@ -227,9 +227,9 @@ pub struct AlbumGridView {
     /// References to album card instances for dynamic updates.
     pub album_cards: Rc<RefCell<Vec<AlbumCard>>>,
     /// Zoom subscription handle for cleanup.
-    _zoom_subscription_handle: Option<JoinHandle<()>>,
+    zoom_subscription_handle: Option<JoinHandle<()>>,
     /// Settings subscription handle for cleanup.
-    _settings_subscription_handle: Option<JoinHandle<()>>,
+    settings_subscription_handle: Option<JoinHandle<()>>,
 }
 
 /// Configuration for `AlbumGridView` display options.
@@ -303,8 +303,8 @@ impl AlbumGridView {
             search_empty_state,
             current_sort: AlbumSortCriteria::Title,
             album_cards,
-            _zoom_subscription_handle: zoom_subscription_handle,
-            _settings_subscription_handle: settings_subscription_handle,
+            zoom_subscription_handle,
+            settings_subscription_handle,
         };
 
         view.set_albums(albums);
@@ -950,6 +950,16 @@ impl Filterable<Album> for AlbumGridView {
 }
 
 impl AlbumGridView {
+    /// Cleans up subscription handles.
+    pub fn cleanup(&mut self) {
+        if let Some(handle) = self.zoom_subscription_handle.take() {
+            handle.abort();
+        }
+        if let Some(handle) = self.settings_subscription_handle.take() {
+            handle.abort();
+        }
+    }
+
     /// Sorts albums by the specified criteria.
     ///
     /// # Arguments
@@ -1047,6 +1057,12 @@ impl Default for AlbumGridView {
     }
 }
 
+impl Drop for AlbumGridView {
+    fn drop(&mut self) {
+        self.cleanup();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{library::models::Album, ui::views::album_grid::AlbumGridView};
@@ -1070,6 +1086,8 @@ mod tests {
                 artwork_path: None,
                 created_at: None,
                 updated_at: None,
+                track_count: 12,
+                channels: Some(2),
             },
             Album {
                 id: 2,
@@ -1086,6 +1104,8 @@ mod tests {
                 artwork_path: None,
                 created_at: None,
                 updated_at: None,
+                track_count: 8,
+                channels: Some(2),
             },
         ];
 

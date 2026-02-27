@@ -23,9 +23,9 @@ mod ui_compliance_tests {
         library::{models::Album, scanner::LibraryScanner},
         state::AppState,
         ui::{
-            AlbumGridView, ArtistGridView, CoverArt, DRBadge, DetailView, HeaderBar, ListView,
-            PlayOverlay, PlayerBar,
-            views::{DetailType, list_view::ListViewType::Albums},
+            AlbumGridView, ArtistGridView, ColumnListView, CoverArt, DRBadge, DetailView,
+            HeaderBar, PlayOverlay, PlayerBar,
+            views::{DetailType, column_view_types::ColumnListViewType::Albums},
         },
     };
 
@@ -101,8 +101,16 @@ mod ui_compliance_tests {
             bail!("Expected non-None accessible role, got None");
         }
 
-        let album_list = ListView::new(Some(&Arc::new(app_state)), &Albums, false);
-        if album_list.list_box.accessible_role() == AccessibleNone {
+        let album_list = ColumnListView::new(
+            Some(&Arc::new(app_state)),
+            None,
+            None,
+            None,
+            &Albums,
+            false,
+            false,
+        );
+        if album_list.column_view.accessible_role() == AccessibleNone {
             bail!("Expected non-None accessible role, got None");
         }
         Ok(())

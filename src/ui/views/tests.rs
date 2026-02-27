@@ -24,11 +24,11 @@ mod view_integration_tests {
         ui::{
             components::cover_art::CoverArt,
             views::{
-                AlbumGridView, ArtistGridView,
+                AlbumGridView, ArtistGridView, ColumnListView,
                 DetailType::{Album as DetailTypeAlbum, Artist as DetailTypeArtist},
-                DetailView, ListView,
+                DetailView,
                 album_grid::AlbumSortCriteria::{Title, Year},
-                list_view::ListViewType::{Albums, Artists},
+                column_view_types::ColumnListViewType::{Albums, Artists},
             },
         },
     };
@@ -57,14 +57,14 @@ mod view_integration_tests {
             .build();
 
         // Test list view creation for albums
-        let _album_list = ListView::builder()
+        let _album_list = ColumnListView::builder()
             .app_state(Arc::new(app_state.clone()))
             .view_type(Albums)
             .compact(false)
             .build();
 
         // Test list view creation for artists
-        let _artist_list = ListView::builder()
+        let _artist_list = ColumnListView::builder()
             .app_state(Arc::new(app_state.clone()))
             .view_type(Artists)
             .compact(false)
@@ -161,11 +161,15 @@ mod view_integration_tests {
             );
         }
 
-        let album_list = ListView::new(Some(&app_state.into()), &Albums, false);
-        if album_list.list_box.accessible_role() != List {
+        let album_list = ColumnListView::builder()
+            .app_state(Arc::new(app_state))
+            .view_type(Albums)
+            .compact(false)
+            .build();
+        if album_list.column_view.accessible_role() != List {
             bail!(
                 "Expected List, got {:?}",
-                album_list.list_box.accessible_role()
+                album_list.column_view.accessible_role()
             );
         }
         Ok(())

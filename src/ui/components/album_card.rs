@@ -834,6 +834,8 @@ impl AlbumCard {
             artwork_path: None,
             created_at: None,
             updated_at: None,
+            track_count: 0,
+            channels: None,
         };
 
         Self::new(AlbumCardConfig {
@@ -876,6 +878,8 @@ mod tests {
             artwork_path: None,
             created_at: None,
             updated_at: None,
+            track_count: 12,
+            channels: Some(2),
         };
 
         let card = AlbumCard::builder()
@@ -919,6 +923,8 @@ mod tests {
             artwork_path: None,
             created_at: None,
             updated_at: None,
+            track_count: 10,
+            channels: Some(2),
         };
 
         let card_441 = AlbumCard::builder()
