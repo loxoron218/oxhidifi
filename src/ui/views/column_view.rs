@@ -157,6 +157,7 @@ impl ColumnListView {
         };
 
         view.setup_columns(view_type, library_db, audio_engine, queue_manager);
+        view.setup_sorting();
 
         if let Some(state) = app_state {
             view.setup_subscriptions(state);
@@ -197,6 +198,12 @@ impl ColumnListView {
                 setup_artist_columns(&mut self.column_view, &self.config);
             }
         }
+    }
+
+    /// Sets up sorting by connecting the column view's sorter to the sort model.
+    fn setup_sorting(&self) {
+        let sorter = self.column_view.sorter();
+        self.sort_model.set_sorter(sorter.as_ref());
     }
 
     /// Sets up subscriptions for reactive updates.

@@ -6,6 +6,7 @@
 use {
     serde::{Deserialize, Serialize},
     sqlx::FromRow,
+    tracing::warn,
 };
 
 /// Represents a musical artist in the library.
@@ -123,6 +124,26 @@ pub struct SearchResults {
     pub albums: Vec<Album>,
     /// Matching artists.
     pub artists: Vec<Artist>,
+}
+
+impl Album {
+    /// Extracts the numeric DR value for sorting.
+    #[must_use]
+    pub fn dr_value_numeric(&self) -> Option<i64> {
+        let dr_str = self.dr_value.as_ref()?;
+        let numeric_part = dr_str.strip_prefix("DR")?;
+        numeric_part.parse().map_or_else(
+            |_| {
+                warn!(
+                    album_id = self.id,
+                    dr_value = %dr_str,
+                    "Failed to parse DR value, expected format DR<number>"
+                );
+                None
+            },
+            Some,
+        )
+    }
 }
 
 impl Default for Track {

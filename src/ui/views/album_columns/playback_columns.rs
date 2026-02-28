@@ -1,17 +1,15 @@
-//! Album column definitions for column view.
-//!
-//! This module provides factory functions for creating album columns
-//! in the column view, using GTK4's `SignalListItemFactory` pattern.
+//! Album playback-related column setup functions.
 
 use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
 
 use {
     libadwaita::{
-        gio::File,
-        glib::{BoxedAnyObject, MainContext},
+        glib::{BoxedAnyObject, MainContext, Object},
         gtk::{
-            Align::Center, Button, ColumnView, ColumnViewColumn, ContentFit::Cover, Label,
-            ListItem, ListItemFactory, Picture, SignalListItemFactory, pango::EllipsizeMode::End,
+            Align::Center,
+            Button, ColumnView, ColumnViewColumn, CustomSorter, ListItem, ListItemFactory,
+            Ordering::{self, Equal, Larger, Smaller},
+            SignalListItemFactory,
         },
         prelude::{ButtonExt, Cast, ListItemExt, ObjectType, WidgetExt},
     },
@@ -27,162 +25,17 @@ use crate::{
     },
     library::{database::LibraryDatabase, models::Album},
     state::app_state::AppState,
-    ui::{
-        components::dr_badge::{DRBadge, DRQuality},
-        formatting::format_sample_rate,
-        views::{
-            album_columns_text::{
-                setup_artist_column, setup_bit_depth_column, setup_channels_column,
-                setup_genre_column, setup_title_column, setup_track_count_column,
-                setup_year_column,
-            },
-            column_view_types::ArtistNameCache,
-        },
-    },
+    ui::components::dr_badge::{DRBadge, DRQuality},
 };
 
-/// Sets up all 11 album columns for the column view.
-///
-/// # Arguments
-///
-/// * `column_view` - Column view to add columns to
-/// * `artist_name_cache` - Cache of artist names for lookup
-/// * `library_db` - Optional library database for fetching tracks
-/// * `audio_engine` - Optional audio engine for playback
-/// * `queue_manager` - Optional queue manager for queue operations
-/// * `app_state` - Optional app state for updating UI
-/// * `show_dr_badges` - Whether to show DR badges
-pub fn setup_album_columns(
-    column_view: &mut ColumnView,
-    artist_name_cache: &ArtistNameCache,
-    library_db: Option<&Arc<LibraryDatabase>>,
-    audio_engine: Option<&Arc<AudioEngine>>,
-    queue_manager: Option<&Arc<QueueManager>>,
-    app_state: Option<&Arc<AppState>>,
-    show_dr_badges: bool,
-) {
-    setup_cover_art_column(column_view, 48);
-    setup_title_column(column_view);
-    setup_artist_column(column_view, artist_name_cache, 200);
-    setup_year_column(column_view, 60);
-    setup_genre_column(column_view, 120);
-    setup_track_count_column(column_view, 60);
-    setup_bit_depth_column(column_view, 60);
-    setup_sample_rate_column(column_view, 80);
-    setup_channels_column(column_view, 60);
-    setup_dr_column(column_view, 60, show_dr_badges);
-    setup_play_button_column(
-        column_view,
-        library_db,
-        audio_engine,
-        queue_manager,
-        app_state,
-        48,
-    );
-}
-
-/// Sets up the cover art column (column 1).
-///
-/// # Arguments
-///
-/// * `column_view` - Column view to add column to
-/// * `fixed_width` - Fixed width for the column
-fn setup_cover_art_column(column_view: &ColumnView, fixed_width: i32) {
-    let factory = SignalListItemFactory::new();
-
-    factory.connect_setup(move |_, list_item| {
-        let picture = Picture::builder()
-            .content_fit(Cover)
-            .width_request(fixed_width)
-            .height_request(fixed_width)
-            .build();
-
-        if let Some(list_item) = list_item.downcast_ref::<ListItem>() {
-            list_item.set_child(Some(&picture));
-        }
-    });
-
-    factory.connect_bind(|_, list_item| {
-        if let Some(list_item) = list_item.downcast_ref::<ListItem>() {
-            let Some(child) = list_item.child() else {
-                return;
-            };
-            let Some(picture) = child.downcast_ref::<Picture>() else {
-                return;
-            };
-            let Some(boxed) = list_item.item() else {
-                return;
-            };
-            let Ok(album_obj) = boxed.downcast::<BoxedAnyObject>() else {
-                return;
-            };
-            let album = album_obj.borrow::<Album>();
-            if let Some(path) = &album.artwork_path {
-                let file = File::for_path(path);
-                picture.set_file(Some(&file));
-            } else {
-                picture.set_file(None::<&File>);
-            }
-        }
-    });
-
-    let column = ColumnViewColumn::new(None::<&str>, Some(factory.upcast::<ListItemFactory>()));
-    column.set_fixed_width(fixed_width);
-    column.set_expand(false);
-    column.set_resizable(false);
-    column_view.append_column(&column);
-}
-
-/// Sets up the sample rate column (column 8).
-///
-/// # Arguments
-///
-/// * `column_view` - Column view to add column to
-/// * `fixed_width` - Fixed width for the column
-fn setup_sample_rate_column(column_view: &ColumnView, fixed_width: i32) {
-    let factory = SignalListItemFactory::new();
-
-    factory.connect_setup(|_, list_item| {
-        let label = Label::builder().ellipsize(End).xalign(0.0).build();
-        if let Some(list_item) = list_item.downcast_ref::<ListItem>() {
-            list_item.set_child(Some(&label));
-        }
-    });
-
-    factory.connect_bind(|_, list_item| {
-        if let Some(list_item) = list_item.downcast_ref::<ListItem>()
-            && let Some(child) = list_item.child()
-            && let Some(label) = child.downcast_ref::<Label>()
-            && let Some(boxed) = list_item.item()
-            && let Ok(album_obj) = boxed.downcast::<BoxedAnyObject>()
-        {
-            let album = album_obj.borrow::<Album>();
-            if let Some(sample_rate) = album.sample_rate {
-                label.set_text(&format_sample_rate(sample_rate));
-                label.set_visible(true);
-            } else {
-                label.set_visible(false);
-            }
-        }
-    });
-
-    let column = ColumnViewColumn::new(
-        Some("Sample Rate"),
-        Some(factory.upcast::<ListItemFactory>()),
-    );
-    column.set_fixed_width(fixed_width);
-    column.set_resizable(true);
-    column_view.append_column(&column);
-}
-
-/// Sets up the DR badge column (column 10).
+/// Sets up the DR badge column.
 ///
 /// # Arguments
 ///
 /// * `column_view` - Column view to add column to
 /// * `fixed_width` - Fixed width for the column
 /// * `show_dr_badges` - Whether to show DR badges
-fn setup_dr_column(column_view: &ColumnView, fixed_width: i32, show_dr_badges: bool) {
+pub fn setup_dr_column(column_view: &ColumnView, fixed_width: i32, show_dr_badges: bool) {
     let factory = SignalListItemFactory::new();
 
     let dr_badges: Rc<RefCell<HashMap<usize, DRBadge>>> = Rc::new(RefCell::new(HashMap::new()));
@@ -208,19 +61,12 @@ fn setup_dr_column(column_view: &ColumnView, fixed_width: i32, show_dr_badges: b
             let album = album_obj.borrow::<Album>();
             let widget_ptr = child.as_ptr() as usize;
             if let Some(dr_badge) = dr_badges_clone.borrow_mut().get_mut(&widget_ptr) {
-                let (display_text, css_class) = album.dr_value.as_deref().map_or_else(
+                let (display_text, css_class) = album.dr_value_numeric().map_or_else(
                     || ("N/A".to_string(), "dr-na".to_string()),
-                    |v| {
-                        let numeric = v
-                            .chars()
-                            .skip_while(|c| !c.is_ascii_digit())
-                            .collect::<String>();
-                        if numeric.is_empty() {
-                            ("N/A".to_string(), "dr-na".to_string())
-                        } else {
-                            let quality = DRQuality::from_dr_value(v);
-                            (format!("{numeric:0>2}"), quality.css_class().to_string())
-                        }
+                    |numeric| {
+                        let quality =
+                            DRQuality::from_dr_value(album.dr_value.as_deref().unwrap_or_default());
+                        (format!("{numeric:0>2}"), quality.css_class().to_string())
                     },
                 );
                 dr_badge.label.set_label(&display_text);
@@ -242,10 +88,27 @@ fn setup_dr_column(column_view: &ColumnView, fixed_width: i32, show_dr_badges: b
     let column = ColumnViewColumn::new(Some("DR"), Some(factory.upcast::<ListItemFactory>()));
     column.set_fixed_width(fixed_width);
     column.set_resizable(true);
+    let sorter = CustomSorter::new(|item1, item2| {
+        let extract_dr = |item: &Object| -> Option<i64> {
+            item.downcast_ref::<BoxedAnyObject>().and_then(|boxed| {
+                let album = boxed.borrow::<Album>();
+                album.dr_value_numeric()
+            })
+        };
+        let val1 = extract_dr(item1);
+        let val2 = extract_dr(item2);
+        match (val1, val2) {
+            (Some(n1), Some(n2)) => Ordering::from(n1.cmp(&n2)),
+            (Some(_), None) => Larger,
+            (None, Some(_)) => Smaller,
+            (None, None) => Equal,
+        }
+    });
+    column.set_sorter(Some(&sorter));
     column_view.append_column(&column);
 }
 
-/// Sets up the play button column (column 11).
+/// Sets up the play button column.
 ///
 /// # Arguments
 ///
@@ -259,7 +122,7 @@ fn setup_dr_column(column_view: &ColumnView, fixed_width: i32, show_dr_badges: b
 /// # Panics
 ///
 /// Panics if the widget name cannot be parsed as an album ID.
-fn setup_play_button_column(
+pub fn setup_play_button_column(
     column_view: &ColumnView,
     library_db: Option<&Arc<LibraryDatabase>>,
     audio_engine: Option<&Arc<AudioEngine>>,

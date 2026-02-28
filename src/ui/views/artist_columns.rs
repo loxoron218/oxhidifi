@@ -4,10 +4,13 @@
 //! in the column view, using GTK4's `SignalListItemFactory` pattern.
 
 use libadwaita::{
-    glib::BoxedAnyObject,
+    glib::{BoxedAnyObject, Object},
     gtk::{
-        Align::Center, ColumnView, ColumnViewColumn, Image, Label, ListItem, ListItemFactory,
-        SignalListItemFactory, pango::EllipsizeMode::End,
+        Align::Center,
+        ColumnView, ColumnViewColumn, CustomSorter, Image, Label, ListItem, ListItemFactory,
+        Ordering::{self, Equal, Larger, Smaller},
+        SignalListItemFactory,
+        pango::EllipsizeMode::End,
     },
     prelude::{Cast, ListItemExt, WidgetExt},
 };
@@ -86,6 +89,25 @@ fn setup_artist_name_column(column_view: &ColumnView) {
     let column = ColumnViewColumn::new(Some("Artist"), Some(factory.upcast::<ListItemFactory>()));
     column.set_resizable(true);
     column.set_expand(true);
+    let sorter = CustomSorter::new(|item1, item2| {
+        let get_name = |item: &Object| -> Option<String> {
+            item.downcast_ref::<BoxedAnyObject>().map(|boxed| {
+                let artist = boxed.borrow::<Artist>();
+                artist.name.clone()
+            })
+        };
+        let val1 = get_name(item1);
+        let val2 = get_name(item2);
+        match (val1, val2) {
+            (Some(s1), Some(s2)) => {
+                Ordering::from(s1.to_ascii_lowercase().cmp(&s2.to_ascii_lowercase()))
+            }
+            (Some(_), None) => Larger,
+            (None, Some(_)) => Smaller,
+            (None, None) => Equal,
+        }
+    });
+    column.set_sorter(Some(&sorter));
     column_view.append_column(&column);
 }
 
@@ -121,5 +143,22 @@ fn setup_album_count_column(column_view: &ColumnView, fixed_width: i32) {
     let column = ColumnViewColumn::new(Some("Albums"), Some(factory.upcast::<ListItemFactory>()));
     column.set_fixed_width(fixed_width);
     column.set_resizable(true);
+    let sorter = CustomSorter::new(|item1, item2| {
+        let get_count = |item: &Object| -> Option<i64> {
+            item.downcast_ref::<BoxedAnyObject>().map(|boxed| {
+                let artist = boxed.borrow::<Artist>();
+                artist.album_count
+            })
+        };
+        let val1 = get_count(item1);
+        let val2 = get_count(item2);
+        match (val1, val2) {
+            (Some(n1), Some(n2)) => Ordering::from(n1.cmp(&n2)),
+            (Some(_), None) => Larger,
+            (None, Some(_)) => Smaller,
+            (None, None) => Equal,
+        }
+    });
+    column.set_sorter(Some(&sorter));
     column_view.append_column(&column);
 }
