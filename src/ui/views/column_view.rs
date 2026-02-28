@@ -6,17 +6,25 @@
 
 use std::sync::Arc;
 
-use libadwaita::{
-    gio::ListStore,
-    glib::{BoxedAnyObject, JoinHandle, MainContext, Object},
-    gtk::{
-        Box, ColumnView, FilterListModel, NoSelection, Orientation::Vertical, SortListModel, Widget,
+use {
+    libadwaita::{
+        gio::ListStore,
+        glib::{BoxedAnyObject, JoinHandle, MainContext, Object},
+        gtk::{
+            Box, ColumnView, ColumnViewColumn, ColumnViewSorter, FilterListModel, NoSelection,
+            Orientation::Vertical,
+            SortListModel,
+            SortType::{Ascending, Descending},
+            Widget,
+        },
+        prelude::{BoxExt, Cast, ListModelExt, SorterExt},
     },
-    prelude::{BoxExt, Cast, ListModelExt},
+    tracing::{debug, error},
 };
 
 use crate::{
     audio::{engine::AudioEngine, queue_manager::QueueManager},
+    config::settings::{SettingsManager, SortOrder},
     library::{
         database::LibraryDatabase,
         models::{Album, Artist},
@@ -63,6 +71,8 @@ pub struct ColumnListView {
     pub sort_model: SortListModel,
     /// Application state reference.
     pub app_state: Option<Arc<AppState>>,
+    /// Settings manager reference for persistence.
+    settings_manager: Option<Arc<SettingsManager>>,
     /// Configuration options.
     pub config: ColumnListViewConfig,
     /// Search empty state component.
@@ -107,6 +117,10 @@ impl ColumnListView {
         show_dr_badges: bool,
         compact: bool,
     ) -> Self {
+        let settings_manager = app_state.map(|s| {
+            let sm = s.settings_manager.read().clone();
+            Arc::new(sm)
+        });
         let config = ColumnListViewConfig {
             view_type: view_type.clone(),
             show_dr_badges,
@@ -146,6 +160,7 @@ impl ColumnListView {
             filter_model,
             sort_model,
             app_state: app_state.cloned(),
+            settings_manager,
             config,
             search_empty_state,
             albums: Vec::new(),
@@ -158,6 +173,7 @@ impl ColumnListView {
 
         view.setup_columns(view_type, library_db, audio_engine, queue_manager);
         view.setup_sorting();
+        view.apply_saved_sort_state();
 
         if let Some(state) = app_state {
             view.setup_subscriptions(state);
@@ -204,6 +220,99 @@ impl ColumnListView {
     fn setup_sorting(&self) {
         let sorter = self.column_view.sorter();
         self.sort_model.set_sorter(sorter.as_ref());
+
+        if let Some(settings_manager) = &self.settings_manager {
+            let Some(base_sorter) = sorter else {
+                return;
+            };
+            let Some(cvs) = base_sorter.downcast_ref::<ColumnViewSorter>() else {
+                return;
+            };
+            let column_view = self.column_view.clone();
+            let settings_mgr = settings_manager.clone();
+            let view_type = self.config.view_type.clone();
+
+            cvs.connect_changed(move |_sorter, _change| {
+                let base_sorter = column_view.sorter();
+                let Some(base_sorter) = base_sorter else {
+                    return;
+                };
+                let Some(sorter) = base_sorter.downcast_ref::<ColumnViewSorter>() else {
+                    return;
+                };
+
+                if let Some(column) = sorter.primary_sort_column() {
+                    let column_name = column.title().unwrap_or_default().to_string();
+                    let sort_order = match sorter.primary_sort_order() {
+                        Ascending => SortOrder::Ascending,
+                        Descending => SortOrder::Descending,
+                        _ => return,
+                    };
+
+                    let mut settings = settings_mgr.get_settings().clone();
+                    match view_type {
+                        Albums => {
+                            settings.albums_sort_column = Some(column_name);
+                            settings.albums_sort_order = sort_order;
+                        }
+                        Artists => {
+                            settings.artists_sort_column = Some(column_name);
+                            settings.artists_sort_order = sort_order;
+                        }
+                    }
+
+                    if let Err(e) = settings_mgr.update_settings(settings) {
+                        error!(error = %e, "Failed to persist sort state");
+                    }
+                }
+            });
+        }
+    }
+
+    /// Applies the saved sort state from settings.
+    fn apply_saved_sort_state(&self) {
+        let Some(settings_manager) = &self.settings_manager else {
+            return;
+        };
+
+        let (sort_column, sort_order) = {
+            let settings = settings_manager.get_settings();
+            match self.config.view_type {
+                Albums => (
+                    settings.albums_sort_column.clone(),
+                    settings.albums_sort_order,
+                ),
+                Artists => (
+                    settings.artists_sort_column.clone(),
+                    settings.artists_sort_order,
+                ),
+            }
+        };
+
+        let Some(column_name) = sort_column else {
+            debug!("No saved sort state found");
+            return;
+        };
+
+        debug!(
+            "Applying saved sort state: column={:?}, order={:?}",
+            column_name, sort_order
+        );
+
+        let columns = self.column_view.columns();
+        for i in 0..columns.n_items() {
+            if let Some(column) = columns.item(i)
+                && let Some(col) = column.downcast_ref::<ColumnViewColumn>()
+                && col.title().as_deref() == Some(&column_name)
+            {
+                let gtk_order = match sort_order {
+                    SortOrder::Ascending => Ascending,
+                    SortOrder::Descending => Descending,
+                };
+                self.column_view.sort_by_column(Some(col), gtk_order);
+                break;
+            }
+        }
     }
 
     /// Sets up subscriptions for reactive updates.

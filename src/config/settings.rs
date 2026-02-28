@@ -35,6 +35,18 @@ pub enum VolumeMode {
     System,
 }
 
+/// Sort order for column view.
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+pub enum SortOrder {
+    /// Ascending sort order.
+    #[default]
+    #[serde(rename = "ascending")]
+    Ascending,
+    /// Descending sort order.
+    #[serde(rename = "descending")]
+    Descending,
+}
+
 /// Error type for settings operations.
 #[derive(Error, Debug)]
 pub enum SettingsError {
@@ -79,6 +91,18 @@ pub struct UserSettings {
     pub search_debounce_ms: u64,
     /// Volume control mode (application or system).
     pub volume_mode: VolumeMode,
+    /// Column sort state for albums view (column title).
+    #[serde(default)]
+    pub albums_sort_column: Option<String>,
+    /// Sort order for albums view.
+    #[serde(default)]
+    pub albums_sort_order: SortOrder,
+    /// Column sort state for artists view (column title).
+    #[serde(default)]
+    pub artists_sort_column: Option<String>,
+    /// Sort order for artists view.
+    #[serde(default)]
+    pub artists_sort_order: SortOrder,
 }
 
 impl Default for UserSettings {
@@ -97,6 +121,10 @@ impl Default for UserSettings {
             show_metadata_overlays: true,             // Default to showing metadata overlays
             search_debounce_ms: 150,                  // Default debounce timeout for search
             volume_mode: VolumeMode::App,             // Default to application volume control
+            albums_sort_column: None,                 // Default to no specific sort column
+            albums_sort_order: SortOrder::Ascending,  // Default ascending order
+            artists_sort_column: None,                // Default to no specific sort column
+            artists_sort_order: SortOrder::Ascending, // Default ascending order
         }
     }
 }
@@ -296,7 +324,9 @@ mod tests {
         serde_json::{from_str, to_string},
     };
 
-    use crate::config::settings::{SettingsError, UserSettings, VolumeMode::System};
+    use crate::config::settings::{
+        SettingsError, SortOrder::Descending, UserSettings, VolumeMode::System,
+    };
 
     #[test]
     fn test_user_settings_default() {
@@ -324,6 +354,10 @@ mod tests {
             show_metadata_overlays: false,
             search_debounce_ms: 150,
             volume_mode: System,
+            albums_sort_column: Some("Album".to_string()),
+            albums_sort_order: Descending,
+            artists_sort_column: Some("Artist".to_string()),
+            artists_sort_order: Descending,
         };
 
         let serialized = to_string(&settings)?;
