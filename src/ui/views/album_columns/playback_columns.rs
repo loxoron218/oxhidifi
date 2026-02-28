@@ -141,6 +141,7 @@ pub fn setup_play_button_column(
         let button = Button::builder()
             .icon_name("media-playback-start-symbolic")
             .css_classes(["play-button"])
+            .has_frame(false)
             .build();
         button.set_halign(Center);
         button.set_valign(Center);
