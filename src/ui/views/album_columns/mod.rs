@@ -6,7 +6,7 @@
 use std::sync::Arc;
 
 use libadwaita::{
-    glib::{BoxedAnyObject, Object},
+    glib::{BoxedAnyObject, JoinHandle, Object},
     gtk::{
         ColumnView, ColumnViewColumn, CustomSorter, Label, ListItem, ListItemFactory,
         Ordering::{self, Equal, Larger, Smaller},
@@ -69,6 +69,10 @@ pub fn setup_dr_column(column_view: &mut ColumnView, fixed_width: i32, show_dr_b
 /// * `queue_manager` - Optional queue manager
 /// * `app_state` - Optional app state for updating UI
 /// * `fixed_width` - Fixed width for the column
+///
+/// # Returns
+///
+/// An optional join handle for the state subscription.
 pub fn setup_play_button_column(
     column_view: &mut ColumnView,
     library_db: Option<&Arc<LibraryDatabase>>,
@@ -76,7 +80,7 @@ pub fn setup_play_button_column(
     queue_manager: Option<&Arc<QueueManager>>,
     app_state: Option<&Arc<AppState>>,
     fixed_width: i32,
-) {
+) -> Option<JoinHandle<()>> {
     playback_columns::setup_play_button_column(
         column_view,
         library_db,
@@ -84,7 +88,7 @@ pub fn setup_play_button_column(
         queue_manager,
         app_state,
         fixed_width,
-    );
+    )
 }
 
 /// Creates a string-based sorter for album columns.
@@ -299,6 +303,10 @@ pub fn setup_channels_column(column_view: &mut ColumnView, fixed_width: i32) {
 /// * `queue_manager` - Optional queue manager for queue operations
 /// * `app_state` - Optional app state for updating UI
 /// * `show_dr_badges` - Whether to show DR badges
+///
+/// # Returns
+///
+/// An optional join handle for the play button state subscription.
 pub fn setup_album_columns(
     column_view: &mut ColumnView,
     artist_name_cache: &ArtistNameCache,
@@ -307,7 +315,7 @@ pub fn setup_album_columns(
     queue_manager: Option<&Arc<QueueManager>>,
     app_state: Option<&Arc<AppState>>,
     show_dr_badges: bool,
-) {
+) -> Option<JoinHandle<()>> {
     setup_cover_art_column(column_view, 48);
     setup_title_column(column_view);
     setup_artist_column(column_view, artist_name_cache, 200);
@@ -325,5 +333,5 @@ pub fn setup_album_columns(
         queue_manager,
         app_state,
         48,
-    );
+    )
 }

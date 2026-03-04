@@ -10,12 +10,22 @@ use {
 
 use crate::{
     audio::{
+        constants::{DEFAULT_BIT_DEPTH, DEFAULT_CHANNELS, DEFAULT_SAMPLE_RATE},
         decoder_types::AudioFormat,
-        engine::{AudioEngine, AudioError as EngineAudioError, TrackInfo},
+        engine::{
+            AudioEngine, AudioError as EngineAudioError,
+            PlaybackState::{Paused, Playing},
+            TrackInfo,
+        },
         metadata::{MetadataError, TagReader},
         queue_manager::QueueManager,
     },
-    library::{database::LibraryError, models::Track},
+    error::audio_reporting::handle_exclusive_mode_error,
+    library::{
+        database::{LibraryDatabase, LibraryError},
+        models::Track,
+    },
+    state::app_state::AppState,
     ui::views::detail_types::TrackTechDetails,
 };
 
@@ -306,5 +316,102 @@ impl PlaybackHandler {
         };
 
         toast_overlay.add_toast(Toast::new(&toast_message));
+    }
+}
+
+/// Plays an album, handling pause/resume for the current album or playing a new album.
+///
+/// # Arguments
+///
+/// * `album_id` - Album ID to play
+/// * `library_db` - Library database reference
+/// * `audio_engine` - Audio engine reference
+/// * `queue_manager` - Queue manager reference
+/// * `app_state` - Application state reference
+pub async fn play_album(
+    album_id: i64,
+    library_db: Option<Arc<LibraryDatabase>>,
+    audio_engine: Option<Arc<AudioEngine>>,
+    queue_manager: Option<Arc<QueueManager>>,
+    app_state: Option<Arc<AppState>>,
+) {
+    if let (Some(db), Some(qm), Some(engine), Some(state)) =
+        (library_db, queue_manager, audio_engine, app_state)
+    {
+        let tracks = match db.get_tracks_by_album(album_id).await {
+            Ok(t) => t,
+            Err(e) => {
+                error!("Failed to fetch tracks for album {}: {}", album_id, e);
+                return;
+            }
+        };
+
+        if tracks.is_empty() {
+            warn!("No tracks found for album {}", album_id);
+            return;
+        }
+
+        let current_album_id = state.get_current_album_id();
+        let is_current_album = current_album_id == Some(album_id);
+        let is_playing = state.get_playback_state() == Playing;
+
+        if is_current_album && is_playing {
+            if let Err(e) = engine.pause().await {
+                if !handle_exclusive_mode_error(&e, &state) {
+                    error!(error = %e, "Failed to pause playback");
+                }
+            } else {
+                state.update_playback_state(Paused);
+            }
+            return;
+        }
+
+        if is_current_album && !is_playing {
+            if let Err(e) = engine.resume().await {
+                if !handle_exclusive_mode_error(&e, &state) {
+                    error!(error = %e, "Failed to resume playback");
+                }
+            } else {
+                state.update_playback_state(Playing);
+            }
+            return;
+        }
+
+        qm.set_queue(tracks.clone());
+
+        let first_track = &tracks[0];
+        let track_path = &first_track.path;
+
+        if let Err(e) = engine.load_track(track_path) {
+            error!(error = %e, "Failed to load track: {}", track_path);
+            return;
+        }
+
+        if let Err(e) = engine.play().await {
+            if !handle_exclusive_mode_error(&e, &state) {
+                error!("Failed to start playback: {}", e);
+            }
+            return;
+        }
+
+        state.update_playback_state(Playing);
+        state.update_current_album_id(Some(album_id));
+
+        if let Ok(metadata) = TagReader::read_metadata(track_path) {
+            let track_info = TrackInfo {
+                path: track_path.clone(),
+                metadata,
+                format: AudioFormat {
+                    sample_rate: u32::try_from(first_track.sample_rate)
+                        .unwrap_or(DEFAULT_SAMPLE_RATE),
+                    channels: u32::try_from(first_track.channels).unwrap_or(DEFAULT_CHANNELS),
+                    bits_per_sample: u32::try_from(first_track.bits_per_sample)
+                        .unwrap_or(DEFAULT_BIT_DEPTH),
+                    channel_mask: 0,
+                },
+                duration_ms: u64::try_from(first_track.duration_ms).unwrap_or(0),
+            };
+            state.update_current_track(Some(track_info));
+        }
     }
 }

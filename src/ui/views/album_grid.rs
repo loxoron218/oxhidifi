@@ -24,17 +24,18 @@ use {
 
 use crate::{
     audio::{
-        decoder_types::AudioFormat,
-        engine::{AudioEngine, PlaybackState::Playing, TrackInfo},
-        metadata::TagReader,
+        engine::{AudioEngine, PlaybackState::Playing},
         queue_manager::QueueManager,
     },
-    error::{audio_reporting::handle_exclusive_mode_error, domain::UiError},
+    error::domain::UiError,
     library::{database::LibraryDatabase, models::Album},
     state::{
         app_state::{
             AppState,
-            AppStateEvent::{MetadataOverlaysChanged, SettingsChanged, YearDisplayModeChanged},
+            AppStateEvent::{
+                CurrentTrackChanged, MetadataOverlaysChanged, PlaybackStateChanged, QueueChanged,
+                SettingsChanged, YearDisplayModeChanged,
+            },
             LibraryState,
             NavigationState::AlbumDetail,
         },
@@ -47,7 +48,7 @@ use crate::{
             search_empty_state::SearchEmptyState,
         },
         formatting::create_format_display,
-        views::filtering::Filterable,
+        views::{detail_playback::play_album, filtering::Filterable},
     },
 };
 
@@ -231,6 +232,8 @@ pub struct AlbumGridView {
     zoom_subscription_handle: Option<JoinHandle<()>>,
     /// Settings subscription handle for cleanup.
     settings_subscription_handle: Option<JoinHandle<()>>,
+    /// Playback subscription handle for cleanup.
+    playback_subscription_handle: Option<JoinHandle<()>>,
 }
 
 /// Configuration for `AlbumGridView` display options.
@@ -290,6 +293,9 @@ impl AlbumGridView {
         let settings_subscription_handle =
             Self::create_settings_subscription(app_state, &album_cards);
 
+        let playback_subscription_handle =
+            Self::create_playback_subscription(app_state, &album_cards);
+
         let mut view = Self {
             widget: main_container.upcast_ref::<Widget>().clone(),
             flow_box,
@@ -306,6 +312,7 @@ impl AlbumGridView {
             album_cards,
             zoom_subscription_handle,
             settings_subscription_handle,
+            playback_subscription_handle,
         };
 
         view.set_albums(albums);
@@ -538,6 +545,50 @@ impl AlbumGridView {
                             // In the future, when original_year is implemented, this will update
                             // the year labels to show either release or original year
                             debug!("Year display mode changed to: {}", mode);
+                        }
+                        _ => {}
+                    }
+                }
+            })
+        })
+    }
+
+    /// Creates the playback subscription handler.
+    ///
+    /// # Arguments
+    ///
+    /// * `app_state` - Optional application state reference
+    /// * `album_cards` - The album cards reference
+    ///
+    /// # Returns
+    ///
+    /// An optional join handle for the subscription.
+    fn create_playback_subscription(
+        app_state: Option<&Arc<AppState>>,
+        album_cards: &Rc<RefCell<Vec<AlbumCard>>>,
+    ) -> Option<JoinHandle<()>> {
+        app_state.map(|state| {
+            let state_clone = state.clone();
+            let album_cards_clone = album_cards.clone();
+            MainContext::default().spawn_local(async move {
+                let rx = state_clone.subscribe();
+                while let Ok(event) = rx.recv().await {
+                    match event {
+                        CurrentTrackChanged(_) | PlaybackStateChanged(_) | QueueChanged(_) => {
+                            let is_playing = state_clone.get_playback_state() == Playing;
+                            let album_id = state_clone.get_current_album_id();
+
+                            let mut cards = album_cards_clone.borrow_mut();
+                            if let Some(current_id) = album_id {
+                                for card in cards.iter_mut() {
+                                    let is_current_album = current_id == card.album_id;
+                                    card.set_playing(is_current_album && is_playing);
+                                }
+                            } else {
+                                for card in cards.iter_mut() {
+                                    card.set_playing(false);
+                                }
+                            }
                         }
                         _ => {}
                     }
@@ -780,45 +831,14 @@ impl AlbumGridView {
                 let queue_manager_clone = queue_manager.clone();
 
                 MainContext::default().spawn_local(async move {
-                    if let Ok(tracks) = library_db_clone.get_tracks_by_album(album_id).await
-                        && !tracks.is_empty()
-                    {
-                        queue_manager_clone.set_queue(tracks.clone());
-
-                        let first_track = &tracks[0];
-                        let track_path = &first_track.path;
-
-                        if matches!(audio_engine_clone.load_track(track_path), Ok(())) {
-                            if let Err(e) = audio_engine_clone.play().await {
-                                if !handle_exclusive_mode_error(&e, &app_state_clone) {
-                                    error!(error = %e, "Failed to play track after loading");
-                                }
-                            } else {
-                                app_state_clone.update_playback_state(Playing);
-
-                                if let Ok(metadata) = TagReader::read_metadata(track_path) {
-                                    let track_info = TrackInfo {
-                                        path: track_path.clone(),
-                                        metadata,
-                                        format: AudioFormat {
-                                            sample_rate: u32::try_from(first_track.sample_rate)
-                                                .unwrap_or(44100),
-                                            channels: u32::try_from(first_track.channels)
-                                                .unwrap_or(2),
-                                            bits_per_sample: u32::try_from(
-                                                first_track.bits_per_sample,
-                                            )
-                                            .unwrap_or(16),
-                                            channel_mask: 0,
-                                        },
-                                        duration_ms: u64::try_from(first_track.duration_ms)
-                                            .unwrap_or(0),
-                                    };
-                                    app_state_clone.update_current_track(Some(track_info));
-                                }
-                            }
-                        }
-                    }
+                    play_album(
+                        album_id,
+                        Some(library_db_clone),
+                        Some(audio_engine_clone),
+                        Some(queue_manager_clone),
+                        Some(app_state_clone),
+                    )
+                    .await;
                 });
             }
         }
@@ -959,6 +979,9 @@ impl AlbumGridView {
         if let Some(handle) = self.settings_subscription_handle.take() {
             handle.abort();
         }
+        if let Some(handle) = self.playback_subscription_handle.take() {
+            handle.abort();
+        }
     }
 
     /// Sorts albums by the specified criteria.
@@ -1066,7 +1089,11 @@ impl Drop for AlbumGridView {
 
 #[cfg(test)]
 mod tests {
-    use crate::{library::models::Album, ui::views::album_grid::AlbumGridView};
+    use crate::{
+        audio::constants::{DEFAULT_BIT_DEPTH, DEFAULT_CHANNELS, DEFAULT_SAMPLE_RATE},
+        library::models::Album,
+        ui::views::album_grid::AlbumGridView,
+    };
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
@@ -1088,7 +1115,7 @@ mod tests {
                 created_at: None,
                 updated_at: None,
                 track_count: 12,
-                channels: Some(2),
+                channels: Some(i64::from(DEFAULT_CHANNELS)),
             },
             Album {
                 id: 2,
@@ -1097,8 +1124,8 @@ mod tests {
                 year: Some(2022),
                 genre: Some("Jazz".to_string()),
                 format: Some("WAV".to_string()),
-                bits_per_sample: Some(16),
-                sample_rate: Some(44100),
+                bits_per_sample: Some(i64::from(DEFAULT_BIT_DEPTH)),
+                sample_rate: Some(i64::from(DEFAULT_SAMPLE_RATE)),
                 compilation: true,
                 path: "/path/to/album2".to_string(),
                 dr_value: Some("DR8".to_string()),
@@ -1106,7 +1133,7 @@ mod tests {
                 created_at: None,
                 updated_at: None,
                 track_count: 8,
-                channels: Some(2),
+                channels: Some(i64::from(DEFAULT_CHANNELS)),
             },
         ];
 

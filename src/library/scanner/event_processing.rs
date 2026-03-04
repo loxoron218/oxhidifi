@@ -15,6 +15,7 @@ use {
 use crate::{
     audio::{
         artwork::{extract_artwork, save_embedded_artwork},
+        constants::{DEFAULT_BIT_DEPTH, DEFAULT_SAMPLE_RATE},
         metadata::{TagReader, TrackMetadata},
     },
     config::settings::UserSettings,
@@ -562,7 +563,13 @@ async fn get_or_create_album(
                 ))
             }
         })
-        .unwrap_or_else(|| ("Unknown".to_string(), 16, 44100));
+        .unwrap_or_else(|| {
+            (
+                "Unknown".to_string(),
+                i64::from(DEFAULT_BIT_DEPTH),
+                i64::from(DEFAULT_SAMPLE_RATE),
+            )
+        });
 
     // Check if album exists
     let existing_album: Option<i64> =

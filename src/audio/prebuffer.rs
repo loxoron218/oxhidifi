@@ -13,6 +13,7 @@ use {
 
 use crate::audio::{
     buffer_config::BufferConfig,
+    constants::DEFAULT_CHANNELS,
     decoder::{AudioDecoder, MS_PER_SEC},
     decoder_types::{AudioFormat, DecoderError},
     metadata::{MetadataError, TagReader},
@@ -171,7 +172,7 @@ impl Prebuffer {
     #[must_use]
     pub fn calculate_buffer_size(&self, duration_ms: u64, format: &AudioFormat) -> usize {
         let sample_rate = u64::from(format.sample_rate);
-        let channels = usize::try_from(format.channels).unwrap_or(2);
+        let channels = usize::try_from(format.channels).unwrap_or(DEFAULT_CHANNELS as usize);
 
         // Calculate samples needed for pre-buffer duration
         let pre_buffer_samples = (duration_ms * sample_rate / MS_PER_SEC) * channels as u64;

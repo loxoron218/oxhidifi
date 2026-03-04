@@ -4,7 +4,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
 
 use {
     libadwaita::{
-        glib::{BoxedAnyObject, MainContext, Object},
+        glib::{BoxedAnyObject, JoinHandle, MainContext, Object},
         gtk::{
             Align::Center,
             Button, ColumnView, ColumnViewColumn, CustomSorter, ListItem, ListItemFactory,
@@ -18,14 +18,18 @@ use {
 
 use crate::{
     audio::{
-        decoder_types::AudioFormat,
-        engine::{AudioEngine, PlaybackState::Playing, TrackInfo},
-        metadata::TagReader,
+        engine::{AudioEngine, PlaybackState::Playing},
         queue_manager::QueueManager,
     },
     library::{database::LibraryDatabase, models::Album},
-    state::app_state::AppState,
-    ui::components::dr_badge::{DRBadge, DRQuality},
+    state::app_state::{
+        AppState,
+        AppStateEvent::{CurrentTrackChanged, PlaybackStateChanged, QueueChanged},
+    },
+    ui::{
+        components::dr_badge::{DRBadge, DRQuality},
+        views::detail_playback::play_album,
+    },
 };
 
 /// Sets up the DR badge column.
@@ -108,6 +112,100 @@ pub fn setup_dr_column(column_view: &ColumnView, fixed_width: i32, show_dr_badge
     column_view.append_column(&column);
 }
 
+/// Handles play button click to start/pause album playback.
+///
+/// # Arguments
+///
+/// * `album_id` - Album ID to play
+/// * `library_db` - Library database reference
+/// * `audio_engine` - Audio engine reference
+/// * `queue_manager` - Queue manager reference
+/// * `app_state` - Application state reference
+fn handle_play_button_click(
+    album_id: i64,
+    library_db: Option<Arc<LibraryDatabase>>,
+    audio_engine: Option<Arc<AudioEngine>>,
+    queue_manager: Option<Arc<QueueManager>>,
+    app_state: Option<Arc<AppState>>,
+) {
+    MainContext::default().spawn_local(async move {
+        play_album(album_id, library_db, audio_engine, queue_manager, app_state).await;
+    });
+}
+
+/// Updates play button icon and tooltip based on current playback state.
+///
+/// # Arguments
+///
+/// * `button` - Button widget to update
+/// * `album_id` - Album ID
+/// * `app_state` - Application state reference
+fn update_button_state(button: &Button, album_id: i64, app_state: Option<&Arc<AppState>>) {
+    if let Some(state) = app_state {
+        let playback_state = state.get_playback_state();
+        let current_album_id = state.get_current_album_id();
+        let is_current_album = current_album_id == Some(album_id);
+        let should_show_pause = is_current_album && playback_state == Playing;
+
+        if should_show_pause {
+            button.set_icon_name("media-playback-pause-symbolic");
+            button.set_tooltip_text(Some("Pause"));
+        } else {
+            button.set_icon_name("media-playback-start-symbolic");
+            button.set_tooltip_text(Some("Play"));
+        }
+    }
+}
+
+/// Spawns async task to subscribe to app state changes and update buttons.
+///
+/// # Arguments
+///
+/// * `app_state` - Application state to subscribe to
+/// * `buttons_map` - Map of album IDs to buttons
+///
+/// # Returns
+///
+/// A join handle for the subscription.
+fn spawn_state_subscription(
+    app_state: Arc<AppState>,
+    buttons_map: Rc<RefCell<HashMap<i64, Button>>>,
+) -> JoinHandle<()> {
+    let previous_album_id: Rc<RefCell<Option<i64>>> = Rc::new(RefCell::new(None));
+    MainContext::default().spawn_local(async move {
+        let rx = app_state.subscribe();
+        while let Ok(event) = rx.recv().await {
+            if matches!(
+                event,
+                CurrentTrackChanged(_) | PlaybackStateChanged(_) | QueueChanged(_)
+            ) {
+                let is_playing = app_state.get_playback_state() == Playing;
+                let current_album_id = app_state.get_current_album_id();
+
+                let mut buttons = buttons_map.borrow_mut();
+                if let Some(prev_id) = *previous_album_id.borrow()
+                    && let Some(prev_button) = buttons.get_mut(&prev_id)
+                {
+                    prev_button.set_icon_name("media-playback-start-symbolic");
+                    prev_button.set_tooltip_text(Some("Play"));
+                }
+                if let Some(album_id) = current_album_id
+                    && let Some(current_button) = buttons.get_mut(&album_id)
+                {
+                    if is_playing {
+                        current_button.set_icon_name("media-playback-pause-symbolic");
+                        current_button.set_tooltip_text(Some("Pause"));
+                    } else {
+                        current_button.set_icon_name("media-playback-start-symbolic");
+                        current_button.set_tooltip_text(Some("Play"));
+                    }
+                }
+                *previous_album_id.borrow_mut() = current_album_id;
+            }
+        }
+    })
+}
+
 /// Sets up the play button column.
 ///
 /// # Arguments
@@ -119,6 +217,10 @@ pub fn setup_dr_column(column_view: &ColumnView, fixed_width: i32, show_dr_badge
 /// * `app_state` - Optional app state for updating UI
 /// * `fixed_width` - Fixed width for the column
 ///
+/// # Returns
+///
+/// A join handle for the state subscription.
+///
 /// # Panics
 ///
 /// Panics if the widget name cannot be parsed as an album ID.
@@ -129,13 +231,15 @@ pub fn setup_play_button_column(
     queue_manager: Option<&Arc<QueueManager>>,
     app_state: Option<&Arc<AppState>>,
     fixed_width: i32,
-) {
+) -> Option<JoinHandle<()>> {
     let factory = SignalListItemFactory::new();
 
     let library_db_clone = library_db.cloned();
     let audio_engine_clone = audio_engine.cloned();
     let queue_manager_clone = queue_manager.cloned();
     let app_state_clone = app_state.cloned();
+
+    let buttons_map: Rc<RefCell<HashMap<i64, Button>>> = Rc::new(RefCell::new(HashMap::new()));
 
     factory.connect_setup(move |_, list_item| {
         let button = Button::builder()
@@ -157,68 +261,22 @@ pub fn setup_play_button_column(
                 return;
             };
 
-            let library_db = library_db_for_cb.clone();
-            let audio_engine = audio_engine_for_cb.clone();
-            let queue_manager = queue_manager_for_cb.clone();
-            let app_state = app_state_for_cb.clone();
-
-            MainContext::default().spawn_local(async move {
-                if let (Some(db), Some(qm), Some(engine), Some(state)) =
-                    (library_db, queue_manager, audio_engine, app_state)
-                {
-                    let tracks = match db.get_tracks_by_album(album_id).await {
-                        Ok(t) => t,
-                        Err(e) => {
-                            error!("Failed to fetch tracks for album {}: {}", album_id, e);
-                            return;
-                        }
-                    };
-
-                    if tracks.is_empty() {
-                        return;
-                    }
-
-                    qm.set_queue(tracks.clone());
-
-                    let first_track = &tracks[0];
-                    let track_path = &first_track.path;
-
-                    if let Err(e) = engine.load_track(track_path) {
-                        error!(error = %e, "Failed to load track: {}", track_path);
-                        return;
-                    }
-
-                    if let Err(e) = engine.play().await {
-                        error!("Failed to start playback: {}", e);
-                        return;
-                    }
-
-                    state.update_playback_state(Playing);
-
-                    if let Ok(metadata) = TagReader::read_metadata(track_path) {
-                        let track_info = TrackInfo {
-                            path: track_path.clone(),
-                            metadata,
-                            format: AudioFormat {
-                                sample_rate: u32::try_from(first_track.sample_rate)
-                                    .unwrap_or(44100),
-                                channels: u32::try_from(first_track.channels).unwrap_or(2),
-                                bits_per_sample: u32::try_from(first_track.bits_per_sample)
-                                    .unwrap_or(16),
-                                channel_mask: 0,
-                            },
-                            duration_ms: u64::try_from(first_track.duration_ms).unwrap_or(0),
-                        };
-                        state.update_current_track(Some(track_info));
-                    }
-                }
-            });
+            handle_play_button_click(
+                album_id,
+                library_db_for_cb.clone(),
+                audio_engine_for_cb.clone(),
+                queue_manager_for_cb.clone(),
+                app_state_for_cb.clone(),
+            );
         });
 
         if let Some(list_item) = list_item.downcast_ref::<ListItem>() {
             list_item.set_child(Some(&button));
         }
     });
+
+    let buttons_map_bind = buttons_map.clone();
+    let app_state_for_bind = app_state.cloned();
 
     factory.connect_bind(move |_, list_item| {
         if let Some(list_item) = list_item.downcast_ref::<ListItem>()
@@ -230,11 +288,33 @@ pub fn setup_play_button_column(
             let album = album_obj.borrow::<Album>();
             let album_id = album.id;
             button.set_widget_name(&album_id.to_string());
+
+            buttons_map_bind
+                .borrow_mut()
+                .insert(album_id, button.clone());
+
+            update_button_state(button, album_id, app_state_for_bind.as_ref());
         }
     });
+
+    let buttons_map_unbind = buttons_map.clone();
+    factory.connect_unbind(move |_, list_item| {
+        if let Some(list_item) = list_item.downcast_ref::<ListItem>()
+            && let Some(boxed) = list_item.item()
+            && let Ok(album_obj) = boxed.downcast::<BoxedAnyObject>()
+        {
+            let album = album_obj.borrow::<Album>();
+            buttons_map_unbind.borrow_mut().remove(&album.id);
+        }
+    });
+
+    let subscription_handle =
+        app_state.map(|state| spawn_state_subscription(state.clone(), buttons_map));
 
     let column = ColumnViewColumn::new(None::<&str>, Some(factory.upcast::<ListItemFactory>()));
     column.set_fixed_width(fixed_width);
     column.set_resizable(false);
     column_view.append_column(&column);
+
+    subscription_handle
 }

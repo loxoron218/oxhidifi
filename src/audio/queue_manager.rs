@@ -11,6 +11,7 @@ use {
 
 use crate::{
     audio::{
+        constants::{DEFAULT_BIT_DEPTH, DEFAULT_CHANNELS, DEFAULT_SAMPLE_RATE},
         decoder_types::AudioFormat,
         engine::{AudioEngine, PlaybackState::Playing, TrackInfo},
         metadata::TagReader,
@@ -281,9 +282,10 @@ impl QueueManager {
                 path: track.path.clone(),
                 metadata,
                 format: AudioFormat {
-                    sample_rate: u32::try_from(track.sample_rate).unwrap_or(44100),
-                    channels: u32::try_from(track.channels).unwrap_or(2),
-                    bits_per_sample: u32::try_from(track.bits_per_sample).unwrap_or(16),
+                    sample_rate: u32::try_from(track.sample_rate).unwrap_or(DEFAULT_SAMPLE_RATE),
+                    channels: u32::try_from(track.channels).unwrap_or(DEFAULT_CHANNELS),
+                    bits_per_sample: u32::try_from(track.bits_per_sample)
+                        .unwrap_or(DEFAULT_BIT_DEPTH),
                     channel_mask: 0,
                 },
                 duration_ms: u64::try_from(track.duration_ms).unwrap_or(0),

@@ -46,6 +46,8 @@ pub struct AppState {
     pub playback: Arc<RwLock<PlaybackState>>,
     /// Currently loaded track information.
     pub current_track: Arc<RwLock<Option<TrackInfo>>>,
+    /// Currently playing album ID (if any).
+    pub current_album_id: Arc<RwLock<Option<i64>>>,
     /// Current library view state.
     pub library: Arc<RwLock<LibraryState>>,
     /// Current navigation state.
@@ -173,6 +175,7 @@ impl AppState {
         let state = Self {
             playback: Arc::new(RwLock::new(Stopped)),
             current_track: Arc::new(RwLock::new(None)),
+            current_album_id: Arc::new(RwLock::new(None)),
             library: Arc::new(RwLock::new(LibraryState::default())),
             navigation: Arc::new(RwLock::new(NavigationState::default())),
             audio_engine,
@@ -190,10 +193,12 @@ impl AppState {
     fn listen_to_audio_engine(&self) {
         if let Some(audio_engine) = self.audio_engine.upgrade() {
             let subscribers = self.subscribers.clone();
+            let playback_state = self.playback.clone();
             let receiver = audio_engine.subscribe_to_state_changes();
 
             MainContext::default().spawn_local(async move {
                 while let Ok(state) = receiver.recv().await {
+                    *playback_state.write() = state.clone();
                     let current_subscribers = subscribers.read();
                     let event = AppStateEvent::PlaybackStateChanged(state);
                     for tx in current_subscribers.iter() {
@@ -398,6 +403,25 @@ impl AppState {
     #[must_use]
     pub fn get_current_track(&self) -> Option<TrackInfo> {
         self.current_track.read().clone()
+    }
+
+    /// Gets the current playing album ID.
+    ///
+    /// # Returns
+    ///
+    /// The current playing album ID as `Option<i64>`.
+    #[must_use]
+    pub fn get_current_album_id(&self) -> Option<i64> {
+        *self.current_album_id.read()
+    }
+
+    /// Updates the current playing album ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `album_id` - The album ID to set
+    pub fn update_current_album_id(&self, album_id: Option<i64>) {
+        *self.current_album_id.write() = album_id;
     }
 
     /// Gets the current library state.

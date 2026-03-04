@@ -10,7 +10,6 @@ use {
     serde::{Deserialize, Serialize},
     symphonia::{
         core::{
-            audio::Channels,
             codecs::{
                 CODEC_TYPE_AAC, CODEC_TYPE_ADPCM_IMA_QT, CODEC_TYPE_ADPCM_IMA_WAV,
                 CODEC_TYPE_ADPCM_MS, CODEC_TYPE_ALAC, CODEC_TYPE_FLAC, CODEC_TYPE_MP3,
@@ -28,6 +27,10 @@ use {
         default::get_probe,
     },
     thiserror::Error,
+};
+
+use crate::audio::constants::{
+    DEFAULT_BIT_DEPTH, DEFAULT_CHANNELS, DEFAULT_SAMPLE_RATE, HIGH_RES_SAMPLE_RATE_THRESHOLD,
 };
 
 /// Error type for format detection operations.
@@ -134,15 +137,20 @@ pub fn detect_audio_format<P: AsRef<Path>>(
     // Extract format and codec information
     let (format_name, codec_name) = extract_format_and_codec(&*format_reader, track);
 
-    let sample_rate = codec_params.sample_rate.unwrap_or(44100);
-    let bits_per_sample = codec_params.bits_per_coded_sample.unwrap_or(16);
-    let channels = u32::try_from(codec_params.channels.map_or(2, Channels::count)).unwrap_or(2);
+    let sample_rate = codec_params.sample_rate.unwrap_or(DEFAULT_SAMPLE_RATE);
+    let bits_per_sample = codec_params
+        .bits_per_coded_sample
+        .unwrap_or(DEFAULT_BIT_DEPTH);
+    let channels = codec_params.channels.map_or(DEFAULT_CHANNELS, |c| {
+        u32::try_from(c.count()).unwrap_or(DEFAULT_CHANNELS)
+    });
 
     // Determine if format is lossless
     let is_lossless = is_lossless_format(&codec_name);
 
     // Determine if format is high-resolution
-    let is_high_resolution = sample_rate > 48000 || bits_per_sample > 16;
+    let is_high_resolution =
+        sample_rate > HIGH_RES_SAMPLE_RATE_THRESHOLD || bits_per_sample > DEFAULT_BIT_DEPTH;
 
     Ok(AudioFormatInfo {
         format: format_name,

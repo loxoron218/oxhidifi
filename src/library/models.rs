@@ -9,6 +9,8 @@ use {
     tracing::warn,
 };
 
+use crate::audio::constants::{DEFAULT_BIT_DEPTH, DEFAULT_CHANNELS, DEFAULT_SAMPLE_RATE};
+
 /// Represents a musical artist in the library.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, FromRow, Default)]
 pub struct Artist {
@@ -159,9 +161,9 @@ impl Default for Track {
             file_size: 0,
             format: String::new(),
             codec: String::new(),
-            sample_rate: 44100,
-            bits_per_sample: 16,
-            channels: 2,
+            sample_rate: i64::from(DEFAULT_SAMPLE_RATE),
+            bits_per_sample: i64::from(DEFAULT_BIT_DEPTH),
+            channels: i64::from(DEFAULT_CHANNELS),
             is_lossless: false,
             is_high_resolution: false,
             created_at: None,
@@ -177,7 +179,10 @@ mod tests {
         serde_json::{from_str, to_string},
     };
 
-    use crate::library::models::{Album, Artist, Track};
+    use crate::{
+        audio::constants::DEFAULT_SAMPLE_RATE,
+        library::models::{Album, Artist, Track},
+    };
 
     #[test]
     fn test_artist_serialization() -> Result<()> {
@@ -264,8 +269,8 @@ mod tests {
         if track.disc_number != 1 {
             bail!("Expected disc_number to be 1");
         }
-        if track.sample_rate != 44100 {
-            bail!("Expected sample_rate to be 44100");
+        if track.sample_rate != i64::from(DEFAULT_SAMPLE_RATE) {
+            bail!("Expected sample_rate to be DEFAULT_SAMPLE_RATE");
         }
 
         let album = Album::default();

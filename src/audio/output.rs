@@ -36,6 +36,7 @@ use {
 
 use crate::audio::{
     buffer_config::BufferConfig,
+    constants::{DEFAULT_CHANNELS, DEFAULT_SAMPLE_RATE},
     decoder::MS_PER_SEC,
     decoder_types::AudioFormat,
     resampler::{ResamplingAudioConsumer, create_resampling_stream},
@@ -153,8 +154,8 @@ pub struct OutputConfig {
 impl Default for OutputConfig {
     fn default() -> Self {
         Self {
-            sample_rate: 44100,
-            channels: 2,
+            sample_rate: DEFAULT_SAMPLE_RATE,
+            channels: u16::try_from(DEFAULT_CHANNELS).unwrap_or(2),
             buffer_duration_ms: 500,
             exclusive_mode: true,
             device_name: None,

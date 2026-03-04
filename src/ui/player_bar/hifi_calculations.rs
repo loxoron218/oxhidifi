@@ -3,6 +3,7 @@
 use libadwaita::{gtk::Label, prelude::WidgetExt};
 
 use crate::audio::{
+    constants::{DEFAULT_BIT_DEPTH, HIGH_RES_SAMPLE_RATE_THRESHOLD},
     engine::{AudioEngine, TrackInfo},
     output::OutputConfig,
 };
@@ -11,10 +12,6 @@ use crate::audio::{
 /// Values above this threshold suggest the audio path is not optimized
 /// for bit-perfect playback (typical for Bluetooth or wireless devices).
 const LOSSY_BUFFER_THRESHOLD_MS: u32 = 200;
-
-/// Minimum bit depth for lossless CD-quality audio.
-/// Anything below this indicates a compressed or reduced-quality audio path.
-const CD_QUALITY_BITS: u32 = 16;
 
 /// Hi-Fi quality state information.
 #[derive(Clone, Copy)]
@@ -121,7 +118,7 @@ pub fn calculate_gapless(audio_engine: &AudioEngine) -> bool {
 /// True if track is Hi-Res (sample rate >= 48 kHz), false otherwise.
 #[must_use]
 pub fn calculate_hires(track_info: Option<&TrackInfo>) -> bool {
-    track_info.is_some_and(|track| track.format.sample_rate >= 48000)
+    track_info.is_some_and(|track| track.format.sample_rate >= HIGH_RES_SAMPLE_RATE_THRESHOLD)
 }
 
 /// Detects if the output device is lossy (Bluetooth, high latency, etc.).
@@ -149,7 +146,7 @@ pub fn is_lossy_device(output_config: &OutputConfig) -> bool {
         return true;
     }
 
-    if output_config.bits_per_sample < CD_QUALITY_BITS {
+    if output_config.bits_per_sample < DEFAULT_BIT_DEPTH {
         return true;
     }
 

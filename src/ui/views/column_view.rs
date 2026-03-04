@@ -89,6 +89,8 @@ pub struct ColumnListView {
     settings_subscription_handle: Option<JoinHandle<()>>,
     /// Playback state subscription handle for cleanup.
     playback_subscription_handle: Option<JoinHandle<()>>,
+    /// Play button column state subscription handle for cleanup.
+    play_button_column_subscription_handle: Option<JoinHandle<()>>,
 }
 
 impl ColumnListView {
@@ -169,6 +171,7 @@ impl ColumnListView {
             zoom_subscription_handle: None,
             settings_subscription_handle: None,
             playback_subscription_handle: None,
+            play_button_column_subscription_handle: None,
         };
 
         view.setup_columns(view_type, library_db, audio_engine, queue_manager);
@@ -200,7 +203,7 @@ impl ColumnListView {
     ) {
         match view_type {
             Albums => {
-                setup_album_columns(
+                self.play_button_column_subscription_handle = setup_album_columns(
                     &mut self.column_view,
                     &self.artist_name_cache,
                     library_db,
@@ -455,6 +458,9 @@ impl ColumnListView {
             handle.abort();
         }
         if let Some(handle) = self.playback_subscription_handle.take() {
+            handle.abort();
+        }
+        if let Some(handle) = self.play_button_column_subscription_handle.take() {
             handle.abort();
         }
     }

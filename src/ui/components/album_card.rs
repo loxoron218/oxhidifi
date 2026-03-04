@@ -763,6 +763,15 @@ impl AlbumCard {
         self.cover_art.set_show_dr_badge(show_dr_badge);
     }
 
+    /// Updates the playing state of the play overlay button.
+    ///
+    /// # Arguments
+    ///
+    /// * `is_playing` - Whether the album is currently being played
+    pub fn set_playing(&mut self, is_playing: bool) {
+        self.play_overlay.set_playing(is_playing);
+    }
+
     /// Updates the metadata overlay visibility for this album card.
     ///
     /// # Arguments

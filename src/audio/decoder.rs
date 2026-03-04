@@ -27,6 +27,7 @@ use symphonia::{
 };
 
 use crate::audio::{
+    constants::{DEFAULT_CHANNELS, DEFAULT_SAMPLE_RATE},
     decoder_types::{AudioFormat, DecoderError},
     metadata::{TagReader, TechnicalMetadata},
 };
@@ -121,13 +122,13 @@ impl AudioDecoder {
         let codec_params = &track.codec_params;
 
         let signal_spec = SignalSpec::new(
-            codec_params.sample_rate.unwrap_or(44100),
+            codec_params.sample_rate.unwrap_or(DEFAULT_SAMPLE_RATE),
             codec_params.channels.ok_or(DecoderError::NoAudioTrack)?,
         );
 
         let format = AudioFormat {
             sample_rate: signal_spec.rate,
-            channels: u32::try_from(signal_spec.channels.count()).unwrap_or(2),
+            channels: u32::try_from(signal_spec.channels.count()).unwrap_or(DEFAULT_CHANNELS),
             bits_per_sample: technical_metadata.bits_per_sample,
             channel_mask: 0,
         };
