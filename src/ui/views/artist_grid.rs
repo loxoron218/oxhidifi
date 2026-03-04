@@ -428,6 +428,12 @@ impl ArtistGridView {
     pub fn filter_artists(&mut self, query: &str) {
         let all_artists = self.all_artists.clone();
 
+        // Don't show search empty state if library is empty (main empty state should be shown)
+        if all_artists.is_empty() {
+            self.search_empty_state.hide();
+            return;
+        }
+
         // Call filter_items to update the grid and get result status
         let has_results = self.filter_items(query, &all_artists, |artist, q| {
             artist.name.to_lowercase().contains(q)

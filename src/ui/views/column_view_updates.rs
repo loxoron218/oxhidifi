@@ -112,6 +112,17 @@ pub fn filter_view_items(
         return;
     }
 
+    // Check if library is empty to avoid showing search empty state alongside main empty state
+    let is_library_empty = match config.view_type {
+        Albums => albums.is_empty(),
+        Artists => artists.is_empty(),
+    };
+
+    if is_library_empty {
+        search_empty_state.hide();
+        return;
+    }
+
     let filter_matches = match config.view_type {
         Albums => {
             let q = normalized_query.as_str();

@@ -898,6 +898,12 @@ impl AlbumGridView {
     pub fn filter_albums(&mut self, query: &str) {
         let all_albums = self.all_albums.clone();
 
+        // Don't show search empty state if library is empty (main empty state should be shown)
+        if all_albums.is_empty() {
+            self.search_empty_state.hide();
+            return;
+        }
+
         // Call filter_items to update the grid and get result status
         let has_results = self.filter_items(query, &all_albums, |album, q| {
             album.title.to_lowercase().contains(q)
