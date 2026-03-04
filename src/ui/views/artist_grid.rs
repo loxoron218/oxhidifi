@@ -46,13 +46,8 @@ use crate::{
 /// Maximum cover size in pixels to prevent UI rendering issues.
 const MAX_COVER_SIZE: u32 = 4096;
 
-/// Maximum cover size as i32 (same value, for convenience).
-const MAX_COVER_SIZE_I32: i32 = 4096;
-
-const _: () = assert!(
-    MAX_COVER_SIZE == MAX_COVER_SIZE_I32 as u32,
-    "const mismatch"
-);
+/// Maximum cover size as i32 (derived from MAX_COVER_SIZE).
+const MAX_COVER_SIZE_I32: i32 = MAX_COVER_SIZE.cast_signed();
 
 /// Builder pattern for configuring `ArtistGridView` components.
 #[derive(Debug, Default)]
