@@ -10,7 +10,7 @@ audioadapter-buffers = "2.0.0"
 cpal = { version = "0.17.3", features = ["jack"] }
 lofty = "0.23.2"
 num-traits = "0.2.19"
-rtrb = "0.3.2"
+rtrb = "0.3.3"
 rubato = "1.0.1"
 symphonia = { version = "0.5.5", features = ["all"] }
 
@@ -19,7 +19,7 @@ symphonia = { version = "0.5.5", features = ["all"] }
 # rayon = "1.11.0"
 async-channel = "2.5.0"
 parking_lot = "0.12.5"
-tokio = { version = "1.49.0", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.50.0", features = ["macros", "rt-multi-thread"] }
 
 # Error handling
 anyhow = "1.0.102"
@@ -42,7 +42,7 @@ sqlx = { version = "0.8.6", features = ["runtime-tokio", "sqlite"] }
 [dev-dependencies]
 # Tests and bechmarking
 criterion = "0.8.2"
-tempfile = "3.25.0"
+tempfile = "3.26.0"
 
 [[bench]]
 harness = false
