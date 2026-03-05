@@ -13,6 +13,7 @@ use {
         prelude::{ActionRowExt, PreferencesGroupExt, PreferencesPageExt},
     },
     num_traits::cast::ToPrimitive,
+    parking_lot::RwLock,
     tracing::{debug, error, info},
 };
 
@@ -23,7 +24,7 @@ pub struct AudioPreferencesPage {
     /// The underlying Libadwaita preferences page widget.
     pub widget: PreferencesPage,
     /// Settings manager reference for persistence.
-    settings_manager: Arc<SettingsManager>,
+    settings_manager: Arc<RwLock<SettingsManager>>,
 }
 
 impl AudioPreferencesPage {
@@ -36,7 +37,7 @@ impl AudioPreferencesPage {
     /// # Returns
     ///
     /// A new `AudioPreferencesPage` instance.
-    pub fn new(settings_manager: Arc<SettingsManager>) -> Self {
+    pub fn new(settings_manager: Arc<RwLock<SettingsManager>>) -> Self {
         let widget = PreferencesPage::builder()
             .title("Audio")
             .icon_name("audio-speakers-symbolic")
@@ -64,7 +65,12 @@ impl AudioPreferencesPage {
             .build();
 
         // Audio device selection (simplified - in practice would enumerate CPAL devices)
-        let current_device = self.settings_manager.get_settings().audio_device.clone();
+        let current_device = self
+            .settings_manager
+            .read()
+            .get_settings()
+            .audio_device
+            .clone();
 
         let device_row = ActionRow::builder()
             .title("Output Device")
@@ -95,7 +101,7 @@ impl AudioPreferencesPage {
 
     /// Sets up the sample rate preference spin row.
     fn setup_sample_rate_preference(&self, group: &PreferencesGroup) {
-        let current_sample_rate = self.settings_manager.get_settings().sample_rate;
+        let current_sample_rate = self.settings_manager.read().get_settings().sample_rate;
 
         // Create adjustment for sample rate (0 = auto, then common rates)
         let adjustment = Adjustment::new(
@@ -142,10 +148,14 @@ impl AudioPreferencesPage {
             }
 
             // Update settings
-            let mut current_settings = settings_manager_clone.get_settings().clone();
+            let settings_read = settings_manager_clone.read();
+            let mut current_settings = settings_read.get_settings().clone();
+            drop(settings_read);
+
             current_settings.sample_rate = new_value;
 
-            if let Err(e) = settings_manager_clone.update_settings(current_settings) {
+            let settings_write = settings_manager_clone.write();
+            if let Err(e) = settings_write.update_settings(current_settings) {
                 error!(error = %e, "Failed to update sample rate preference");
             }
         });
@@ -168,7 +178,11 @@ impl AudioPreferencesPage {
 
     /// Sets up the buffer duration preference spin row.
     fn setup_buffer_duration_preference(&self, group: &PreferencesGroup) {
-        let current_buffer_duration = self.settings_manager.get_settings().buffer_duration_ms;
+        let current_buffer_duration = self
+            .settings_manager
+            .read()
+            .get_settings()
+            .buffer_duration_ms;
 
         // Create adjustment for buffer duration (10ms to 500ms)
         let adjustment = Adjustment::new(
@@ -212,10 +226,14 @@ impl AudioPreferencesPage {
             }
 
             // Update settings
-            let mut current_settings = settings_manager_clone.get_settings().clone();
+            let settings_read = settings_manager_clone.read();
+            let mut current_settings = settings_read.get_settings().clone();
+            drop(settings_read);
+
             current_settings.buffer_duration_ms = new_value;
 
-            if let Err(e) = settings_manager_clone.update_settings(current_settings) {
+            let settings_write = settings_manager_clone.write();
+            if let Err(e) = settings_write.update_settings(current_settings) {
                 error!(error = %e, "Failed to update buffer duration preference");
             }
         });

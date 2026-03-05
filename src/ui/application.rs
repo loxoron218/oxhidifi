@@ -800,7 +800,7 @@ fn create_album_grid_view(
 
     // Inject settings manager and window reference into empty state
     if let Some(empty_state) = &mut album_grid_view.empty_state {
-        empty_state.settings_manager = Some(app_state.settings_manager.read().clone());
+        empty_state.settings_manager = Some(app_state.settings_manager.clone());
         empty_state.window = Some(window.clone());
         empty_state.connect_button_handlers();
     }
@@ -879,7 +879,7 @@ fn create_artist_grid_view(
 
     // Inject settings manager and window reference into empty state
     if let Some(empty_state) = &mut artist_grid_view.empty_state {
-        empty_state.settings_manager = Some(app_state.settings_manager.read().clone());
+        empty_state.settings_manager = Some(app_state.settings_manager.clone());
         empty_state.window = Some(window.clone());
         empty_state.connect_button_handlers();
     }

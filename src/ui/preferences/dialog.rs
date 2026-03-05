@@ -16,7 +16,6 @@ use {
 };
 
 use crate::{
-    config::settings::SettingsManager,
     state::app_state::AppState,
     ui::preferences::{
         audio_page::AudioPreferencesPage, general_page::GeneralPreferencesPage,
@@ -40,17 +39,19 @@ impl PreferencesDialog {
     /// # Arguments
     ///
     /// * `app_state` - Application state reference for reactive updates
-    /// * `settings_manager` - Settings manager reference for persistence
     ///
     /// # Returns
     ///
     /// A new `PreferencesDialog` instance.
-    pub fn new(app_state: &Arc<AppState>, settings_manager: &Arc<SettingsManager>) -> Self {
+    pub fn new(app_state: &Arc<AppState>) -> Self {
         let widget = LibadwaitaPreferencesDialog::builder().build();
 
         // Set fixed dialog dimensions for consistent layout across all form factors
         widget.set_content_width(900);
         widget.set_content_height(700);
+
+        // Get settings manager from app_state to ensure we share the same storage
+        let settings_manager = app_state.settings_manager.clone();
 
         // Create and add General preferences page
         let general_page = GeneralPreferencesPage::new(app_state.clone(), settings_manager.clone());

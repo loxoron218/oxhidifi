@@ -65,7 +65,7 @@ pub struct EmptyState {
     /// Application state reference.
     pub app_state: Option<Arc<AppState>>,
     /// Settings manager reference.
-    pub settings_manager: Option<SettingsManager>,
+    pub settings_manager: Option<Arc<RwLock<SettingsManager>>>,
     /// Current configuration.
     pub config: EmptyStateConfig,
     /// Reference to the main application window for file dialog parent.
@@ -89,7 +89,7 @@ impl EmptyState {
     #[must_use]
     pub fn new(
         app_state: Option<Arc<AppState>>,
-        settings_manager: Option<SettingsManager>,
+        settings_manager: Option<Arc<RwLock<SettingsManager>>>,
         config: EmptyStateConfig,
         window: Option<ApplicationWindow>,
     ) -> Self {
@@ -227,12 +227,12 @@ impl EmptyState {
                                 {
                                     let path_str: &str = path_str;
 
-                                    // Clone the settings manager to get mutable access
-                                    let settings_manager_clone = settings_manager.clone();
-
-                                    // Update settings with new library directory
-                                    let mut current_settings =
-                                        settings_manager_clone.get_settings().clone();
+                                    // Get current settings snapshot in a tight scope
+                                    let (mut current_settings, settings_arc_for_rescan) = {
+                                        let settings_read = settings_manager.read();
+                                        let settings = settings_read.get_settings().clone();
+                                        (settings, settings_manager.clone())
+                                    };
 
                                     // Only add if not already present
                                     let path_string = path_str.to_string();
@@ -242,22 +242,26 @@ impl EmptyState {
                                             .library_directories
                                             .push(path_str.to_string());
 
-                                        if let Err(e) =
-                                            settings_manager_clone.update_settings(current_settings)
-                                        {
+                                        // Get mutable reference to update settings in a tight scope
+                                        let update_result = {
+                                            let settings_write = settings_manager.write();
+                                            settings_write.update_settings(current_settings)
+                                        };
+
+                                        if let Err(e) = update_result {
                                             error!("Failed to update settings: {e}");
                                             return;
                                         }
 
                                         // Log successful addition
-                                        info!("Library directory added: {path_str}");
+                                        info!("Library directory added: {path_string}");
 
                                         // Trigger library rescan
                                         Self::trigger_library_rescan(
                                             path_str,
-                                            &settings_manager_clone,
-                                            app_state_clone2.as_ref(),
-                                            &cancel_token,
+                                            settings_arc_for_rescan,
+                                            app_state_clone2,
+                                            cancel_token,
                                         )
                                         .await;
                                     }
@@ -555,14 +559,19 @@ impl EmptyState {
     /// * `cancel_token` - Cancellation token for the event listener
     async fn trigger_library_rescan(
         new_directory: &str,
-        settings_manager: &SettingsManager,
-        app_state: Option<&Arc<AppState>>,
-        cancel_token: &Arc<AtomicBool>,
+        settings_manager: Arc<RwLock<SettingsManager>>,
+        app_state: Option<Arc<AppState>>,
+        cancel_token: Arc<AtomicBool>,
     ) {
+        // Get settings snapshot in a tight scope so the reference is dropped before async
+        let settings_snapshot = {
+            let settings_read = settings_manager.read();
+            settings_read.get_settings().clone()
+        };
+
         if let Some(app_state) = app_state {
             let app_state_clone = app_state.clone();
             let new_directory = new_directory.to_string();
-            let settings_snapshot = settings_manager.get_settings().clone();
 
             if let Some((library_db_arc, settings_arc, dr_parser)) =
                 Self::prepare_scan_resources(settings_snapshot).await
@@ -570,7 +579,7 @@ impl EmptyState {
                     &app_state_clone,
                     &library_db_arc,
                     &settings_arc,
-                    cancel_token,
+                    &cancel_token,
                 )
             {
                 Self::execute_background_scan(

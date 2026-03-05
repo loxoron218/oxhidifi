@@ -11,6 +11,7 @@ use {
         gtk::{AccessibleRole::Group, StringList},
         prelude::{ComboRowExt, PreferencesGroupExt, PreferencesPageExt},
     },
+    parking_lot::RwLock,
     tracing::{debug, error},
 };
 
@@ -23,7 +24,7 @@ pub struct GeneralPreferencesPage {
     /// Application state reference.
     app_state: Arc<AppState>,
     /// Settings manager reference for persistence.
-    settings_manager: Arc<SettingsManager>,
+    settings_manager: Arc<RwLock<SettingsManager>>,
 }
 
 impl GeneralPreferencesPage {
@@ -37,7 +38,7 @@ impl GeneralPreferencesPage {
     /// # Returns
     ///
     /// A new `GeneralPreferencesPage` instance.
-    pub fn new(app_state: Arc<AppState>, settings_manager: Arc<SettingsManager>) -> Self {
+    pub fn new(app_state: Arc<AppState>, settings_manager: Arc<RwLock<SettingsManager>>) -> Self {
         let widget = PreferencesPage::builder()
             .title("General")
             .icon_name("preferences-system-symbolic")
@@ -71,6 +72,7 @@ impl GeneralPreferencesPage {
         let themes = vec!["System", "Light", "Dark"];
         let current_theme = self
             .settings_manager
+            .read()
             .get_settings()
             .theme_preference
             .clone();
@@ -103,10 +105,14 @@ impl GeneralPreferencesPage {
             };
 
             // Update settings
-            let mut current_settings = settings_manager_clone.get_settings().clone();
+            let settings_read = settings_manager_clone.read();
+            let mut current_settings = settings_read.get_settings().clone();
+            drop(settings_read);
+
             current_settings.theme_preference = new_theme;
 
-            if let Err(e) = settings_manager_clone.update_settings(current_settings) {
+            let settings_write = settings_manager_clone.write();
+            if let Err(e) = settings_write.update_settings(current_settings) {
                 error!(error = %e, "Failed to update theme preference");
             }
         });
@@ -122,7 +128,7 @@ impl GeneralPreferencesPage {
             .description("Display DR (Dynamic Range) values on album covers")
             .build();
 
-        let current_show_dr = self.settings_manager.get_settings().show_dr_values;
+        let current_show_dr = self.settings_manager.read().get_settings().show_dr_values;
 
         let switch_row = SwitchRow::builder()
             .title("Show DR Values")
@@ -137,13 +143,18 @@ impl GeneralPreferencesPage {
             let new_value = row.is_active();
 
             // Update settings
-            let mut current_settings = settings_manager_clone.get_settings().clone();
+            let settings_read = settings_manager_clone.read();
+            let mut current_settings = settings_read.get_settings().clone();
+            drop(settings_read);
+
             current_settings.show_dr_values = new_value;
 
-            if let Err(e) = settings_manager_clone.update_settings(current_settings) {
+            let settings_write = settings_manager_clone.write();
+            if let Err(e) = settings_write.update_settings(current_settings) {
                 error!(error = %e, "Failed to update DR values preference");
                 return;
             }
+            drop(settings_write);
 
             // Notify app state of the change using the proper settings update method
             app_state_clone.update_show_dr_values_setting(new_value);
@@ -160,7 +171,11 @@ impl GeneralPreferencesPage {
             .description("Configure how metadata is displayed on album cards")
             .build();
 
-        let current_show_overlays = self.settings_manager.get_settings().show_metadata_overlays;
+        let current_show_overlays = self
+            .settings_manager
+            .read()
+            .get_settings()
+            .show_metadata_overlays;
 
         let switch_row = SwitchRow::builder()
             .title("Show Metadata Overlays")
@@ -175,13 +190,18 @@ impl GeneralPreferencesPage {
             let new_value = row.is_active();
 
             // Update settings
-            let mut current_settings = settings_manager_clone.get_settings().clone();
+            let settings_read = settings_manager_clone.read();
+            let mut current_settings = settings_read.get_settings().clone();
+            drop(settings_read);
+
             current_settings.show_metadata_overlays = new_value;
 
-            if let Err(e) = settings_manager_clone.update_settings(current_settings) {
+            let settings_write = settings_manager_clone.write();
+            if let Err(e) = settings_write.update_settings(current_settings) {
                 error!(error = %e, "Failed to update metadata overlays preference");
                 return;
             }
+            drop(settings_write);
 
             // Notify app state of the change using the proper settings update method
             app_state_clone.update_show_metadata_overlays_setting(new_value);
@@ -202,6 +222,7 @@ impl GeneralPreferencesPage {
         let year_modes = vec!["Release Year", "Original Year"];
         let current_mode = self
             .settings_manager
+            .read()
             .get_settings()
             .year_display_mode
             .clone();
@@ -233,13 +254,18 @@ impl GeneralPreferencesPage {
             };
 
             // Update settings
-            let mut current_settings = settings_manager_clone.get_settings().clone();
+            let settings_read = settings_manager_clone.read();
+            let mut current_settings = settings_read.get_settings().clone();
+            drop(settings_read);
+
             current_settings.year_display_mode.clone_from(&new_mode);
 
-            if let Err(e) = settings_manager_clone.update_settings(current_settings) {
+            let settings_write = settings_manager_clone.write();
+            if let Err(e) = settings_write.update_settings(current_settings) {
                 error!(error = %e, "Failed to update year display mode preference");
                 return;
             }
+            drop(settings_write);
 
             // Notify app state of the change using the proper settings update method
             app_state_clone.update_year_display_mode_setting(new_mode);

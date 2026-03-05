@@ -132,8 +132,7 @@ impl HeaderBar {
         Self::connect_zoom_button_handlers(app_state, &zoom_out_button, &zoom_in_button);
 
         let application_arc = application.map(Arc::new);
-        let settings_button =
-            Self::create_settings_button(app_state, application_arc.as_ref(), &settings_manager);
+        let settings_button = Self::create_settings_button(app_state, application_arc.as_ref());
         widget.pack_end(&settings_button);
         widget.pack_end(&view_split_button);
 
@@ -548,7 +547,6 @@ impl HeaderBar {
     fn create_settings_button(
         app_state: &Arc<AppState>,
         application: Option<&Arc<Application>>,
-        settings_manager: &Arc<SettingsManager>,
     ) -> Button {
         let settings_button = Button::builder()
             .icon_name("open-menu-symbolic")
@@ -558,13 +556,11 @@ impl HeaderBar {
 
         // Connect settings button to show preferences dialog
         let app_state_clone = app_state.clone();
-        let settings_manager_clone = settings_manager.clone();
         let application_clone = application.cloned();
 
         settings_button.connect_clicked(move |_| {
             if let Some(app) = &application_clone {
-                let preferences_dialog =
-                    PreferencesDialog::new(&app_state_clone, &settings_manager_clone);
+                let preferences_dialog = PreferencesDialog::new(&app_state_clone);
 
                 // Get the active window as parent
                 if let Some(window) = app.active_window() {

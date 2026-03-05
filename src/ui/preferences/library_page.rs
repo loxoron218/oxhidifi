@@ -7,17 +7,20 @@ use std::sync::Arc;
 
 use {
     libadwaita::{
-        PreferencesGroup, PreferencesPage,
+        ApplicationWindow, PreferencesGroup, PreferencesPage,
+        glib::MainContext,
         gtk::{
-            AccessibleRole::Group, Align::Center, Box, Button, Label, ListBox, ListBoxRow,
-            Orientation::Horizontal, ScrolledWindow, SelectionMode::None,
+            AccessibleRole::Group, Align::Center, Box, Button, FileDialog, Label, ListBox,
+            ListBoxRow, Orientation::Horizontal, ScrolledWindow, SelectionMode::None,
             pango::EllipsizeMode::End,
         },
         prelude::{
-            BoxExt, ButtonExt, ListBoxRowExt, PreferencesGroupExt, PreferencesPageExt, WidgetExt,
+            BoxExt, ButtonExt, Cast, FileExt, ListBoxRowExt, PreferencesGroupExt,
+            PreferencesPageExt, WidgetExt,
         },
     },
-    tracing::{debug, error},
+    parking_lot::RwLock,
+    tracing::{debug, error, info, warn},
 };
 
 use crate::{config::settings::SettingsManager, state::app_state::AppState};
@@ -27,7 +30,7 @@ pub struct LibraryPreferencesPage {
     /// The underlying Libadwaita preferences page widget.
     pub widget: PreferencesPage,
     /// Settings manager reference for persistence.
-    settings_manager: Arc<SettingsManager>,
+    settings_manager: Arc<RwLock<SettingsManager>>,
     /// List box for displaying library directories.
     directory_list_box: ListBox,
 }
@@ -43,7 +46,7 @@ impl LibraryPreferencesPage {
     /// # Returns
     ///
     /// A new `LibraryPreferencesPage` instance.
-    pub fn new(_app_state: Arc<AppState>, settings_manager: Arc<SettingsManager>) -> Self {
+    pub fn new(_app_state: Arc<AppState>, settings_manager: Arc<RwLock<SettingsManager>>) -> Self {
         let widget = PreferencesPage::builder()
             .title("Library")
             .icon_name("folder-music-symbolic")
@@ -80,8 +83,12 @@ impl LibraryPreferencesPage {
 
         let settings_manager_clone = self.settings_manager.clone();
         let directory_list_box_clone = self.directory_list_box.clone();
-        add_button.connect_clicked(move |_| {
-            Self::show_add_directory_dialog(&settings_manager_clone, &directory_list_box_clone);
+        add_button.connect_clicked(move |button| {
+            Self::show_add_directory_dialog(
+                button,
+                &settings_manager_clone,
+                &directory_list_box_clone,
+            );
         });
 
         group.set_header_suffix(Some(&add_button));
@@ -115,6 +122,7 @@ impl LibraryPreferencesPage {
         // Add rows for each directory
         let directories = self
             .settings_manager
+            .read()
             .get_settings()
             .library_directories
             .clone();
@@ -184,45 +192,95 @@ impl LibraryPreferencesPage {
 
     /// Shows a file chooser dialog to add a new directory.
     fn show_add_directory_dialog(
-        settings_manager: &Arc<SettingsManager>,
+        button: &Button,
+        settings_manager: &Arc<RwLock<SettingsManager>>,
         directory_list_box: &ListBox,
     ) {
-        // Note: In a real implementation, we would use GtkFileChooserDialog
-        // However, for simplicity in this example, we'll simulate the behavior
-        // In practice, you would need to integrate with the parent window
+        let dialog = FileDialog::builder()
+            .title("Select Music Folder")
+            .accept_label("Add Folder")
+            .modal(true)
+            .build();
 
-        debug!("LibraryPreferencesPage: Add directory dialog would be shown here");
+        let settings_manager_clone = settings_manager.clone();
+        let directory_list_box_clone = directory_list_box.clone();
 
-        // For now, we'll just refresh the list to reflect any changes
-        // In a complete implementation, this would be connected to the actual file chooser
-        Self::refresh_directory_list_from_settings(settings_manager, directory_list_box);
+        if let Some(root) = button.root()
+            && let Some(window) = root.downcast_ref::<ApplicationWindow>()
+        {
+            let window = window.clone();
+            MainContext::default().spawn_local(async move {
+                match dialog.select_folder_future(Some(&window)).await {
+                    Ok(folder) => {
+                        if let Some(path) = folder.path()
+                            && let Some(path_str) = path.to_str()
+                        {
+                            let path_string = path_str.to_string();
+
+                            let settings_read = settings_manager_clone.read();
+                            let mut current_settings = settings_read.get_settings().clone();
+                            drop(settings_read);
+
+                            if !current_settings.library_directories.contains(&path_string) {
+                                current_settings
+                                    .library_directories
+                                    .push(path_string.clone());
+
+                                let settings_write = settings_manager_clone.write();
+                                if let Err(e) = settings_write.update_settings(current_settings) {
+                                    error!("Failed to update settings: {e}");
+                                    return;
+                                }
+                                drop(settings_write);
+
+                                info!("Library directory added: {path_string}");
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Folder selection cancelled or failed: {e}");
+                    }
+                }
+
+                Self::refresh_directory_list_from_settings(
+                    &settings_manager_clone,
+                    &directory_list_box_clone,
+                );
+            });
+        } else {
+            debug!("No parent window available for file dialog");
+        }
     }
 
     /// Removes a directory from settings and refreshes the UI.
     fn remove_directory_from_settings(
-        settings_manager: &Arc<SettingsManager>,
+        settings_manager: &Arc<RwLock<SettingsManager>>,
         directory_list_box: &ListBox,
         directory_to_remove: &str,
     ) {
         debug!("Removing directory: {}", directory_to_remove);
 
-        let mut current_settings = settings_manager.get_settings().clone();
+        let settings_read = settings_manager.read();
+        let mut current_settings = settings_read.get_settings().clone();
+        drop(settings_read);
 
         current_settings
             .library_directories
             .retain(|dir| dir != directory_to_remove);
 
-        if let Err(e) = settings_manager.update_settings(current_settings) {
+        let settings_write = settings_manager.write();
+        if let Err(e) = settings_write.update_settings(current_settings) {
             error!(error = %e, "Failed to remove directory from settings");
             return;
         }
+        drop(settings_write);
 
         Self::refresh_directory_list_from_settings(settings_manager, directory_list_box);
     }
 
     /// Refreshes the directory list from current settings.
     fn refresh_directory_list_from_settings(
-        settings_manager: &Arc<SettingsManager>,
+        settings_manager: &Arc<RwLock<SettingsManager>>,
         directory_list_box: &ListBox,
     ) {
         // Clear existing rows
@@ -237,7 +295,10 @@ impl LibraryPreferencesPage {
         }
 
         // Add rows for each directory
-        let directories = settings_manager.get_settings().library_directories.clone();
+        let settings_read = settings_manager.read();
+        let directories = settings_read.get_settings().library_directories.clone();
+        drop(settings_read);
+
         for directory in &directories {
             let row = Self::create_standalone_directory_row(
                 directory,
@@ -264,7 +325,7 @@ impl LibraryPreferencesPage {
     /// Creates a standalone directory row (for static method usage).
     fn create_standalone_directory_row(
         directory: &str,
-        settings_manager: &Arc<SettingsManager>,
+        settings_manager: &Arc<RwLock<SettingsManager>>,
         directory_list_box: &ListBox,
     ) -> ListBoxRow {
         let row = ListBoxRow::builder().selectable(false).build();

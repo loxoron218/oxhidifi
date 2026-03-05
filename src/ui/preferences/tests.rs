@@ -38,7 +38,7 @@ fn test_preferences_dialog_creation() -> Result<()> {
     );
     let app_state_arc = Arc::new(app_state);
 
-    let dialog = PreferencesDialog::new(&app_state_arc, &settings_manager_arc);
+    let dialog = PreferencesDialog::new(&app_state_arc);
 
     assert!(dialog.widget.title().is_none());
     Ok(())
