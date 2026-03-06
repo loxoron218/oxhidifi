@@ -85,7 +85,6 @@ cargo bench         # Run benchmarks
 
 - **ONLY** write `.rs` files. NEVER use `.ui`, `.xml`, or `.blp` files
 - Maximum 400 lines per `.rs` file
-- Follow `rustfmt.toml` and `clippy.toml` strictly
 - NEVER commit with clippy warnings
 - NEVER use `#[allow(clippy::xyz)]` attributes
 - NEVER write unsafe code
@@ -166,18 +165,14 @@ pub async fn load_track<P: AsRef<Path>>(&self, track_path: P) -> Result<(), Audi
 ```
 
 ## GNOME Human Interface Guidelines
-- Follow GNOME HIG while pushing aesthetic boundaries and balancing platform integration with distinctive visual identity
-- Accessibility: `widget.accessible_update_property(AccessibleProperty::Label, value)` for labels, `widget.set_can_focus(true)` for keyboard navigation, `widget.set_tooltip_text("text")` for tooltips, `widget.set_use_underline(true)` for mnemonics, and `@media (prefers-contrast: more)` for high contrast
-- Responsiveness: `adw::Leaflet`, `adw::Breakpoint`, `@media (max-width: 600px)`
-- Theme: `adw::StyleManager`, CSS variables, `@media (prefers-color-scheme: dark)`
-- Typography: Cantarell, symbolic icons via `set_icon_name()`
-- Motion: 200ms ease transitions, staggered reveals, `@keyframes`
-- Spacing: 6px scale (6/12/18/24/30px)
-- Radii: semantic classes (`.card`, `.boxed-list`), NEVER hardcoded
-- Prioritize visual hierarchy with cards, subtle shadows, and primary buttons using accent colors
+- Navigation: Use `adw::ToolbarView` with top/bottom bars instead of manual GtkBox layouts with HeaderBar/ActionBar
+- Preferences: Use `adw::PreferencesDialog` with `adw::PreferencesPage`, `adw::PreferencesGroup`, and appropriate row types (`adw::ActionRow`, `adw::SwitchRow`, `adw::ComboRow`, `adw::EntryRow`, `adw::PasswordEntryRow`, `adw::SpinRow`)
+- Accessibility: `widget.accessible_update_property(AccessibleProperty::Label, value)` for labels, `widget.set_can_focus(true)` for keyboard navigation, `widget.set_tooltip_text("text")` for tooltips, `widget.set_use_underline(true)` for mnemonics
 - Feedback: `adw::Toast`, "suggested-action"/"destructive-action"
-- Match implementation complexity to aesthetic vision
-- Make interfaces unforgettable with bold aesthetic choices and clear conceptual direction
+- Responsiveness: `adw::Leaflet`, `adw::Breakpoint`
+- Motion: 200ms ease transitions
+- Spacing: 6px scale (6/12/18/24/30px)
+- Radii: NEVER hardcoded
 
 ## Mandatory Behaviors
 
