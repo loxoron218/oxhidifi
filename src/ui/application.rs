@@ -45,8 +45,8 @@ use crate::{
     state::app_state::{
         AppState,
         AppStateEvent::{
-            ExclusiveModeFailed, LibraryDataChanged, NavigationChanged, PlaybackStateChanged,
-            SearchFilterChanged, SettingsChanged, ViewOptionsChanged,
+            ExclusiveModeFailed, LibraryDataChanged, LibraryScanFailed, NavigationChanged,
+            PlaybackStateChanged, SearchFilterChanged, SettingsChanged, ViewOptionsChanged,
         },
         LibraryState,
         LibraryTab::{self, Albums as LibraryAlbums, Artists as LibraryArtists},
@@ -673,6 +673,7 @@ fn build_ui(
         app_state,
         app.clone(),
         settings_manager.clone(),
+        library_db.clone(),
     ));
 
     // Create main content area with responsive layout
@@ -847,8 +848,20 @@ fn create_album_list_view(
         .compact(false)
         .build();
 
-    album_list_view.update_artist_cache(&library_state.artists);
-    album_list_view.set_albums(library_state.albums.clone());
+    album_list_view.update_artist_cache(
+        &library_state
+            .artists
+            .iter()
+            .map(|a| Arc::new(a.clone()))
+            .collect::<Vec<_>>(),
+    );
+    album_list_view.set_albums(
+        library_state
+            .albums
+            .iter()
+            .map(|a| Arc::new(a.clone()))
+            .collect(),
+    );
 
     let scrolled = create_scrolled_window(&album_list_view.widget);
 
@@ -910,7 +923,13 @@ fn create_artist_list_view(
         .build();
 
     // Populate column list view with initial data
-    artist_list_view.set_artists(library_state.artists.clone());
+    artist_list_view.set_artists(
+        library_state
+            .artists
+            .iter()
+            .map(|a| Arc::new(a.clone()))
+            .collect(),
+    );
 
     let scrolled = create_scrolled_window(&artist_list_view.widget);
 
@@ -972,8 +991,8 @@ fn set_initial_visible_view(
 /// * `search_app_state` - `AppState` for retrieving search filter
 /// * `view_stack` - View stack for getting current child
 fn handle_library_data_changed(
-    albums: &[Album],
-    artists: &[Artist],
+    albums: Vec<Album>,
+    artists: Vec<Artist>,
     views: &mut ViewControllers,
     search_app_state: &Arc<AppState>,
     view_stack: &Stack,
@@ -983,14 +1002,16 @@ fn handle_library_data_changed(
     // Save current search filter
     let current_filter = search_app_state.get_library_state().search_filter;
 
-    // Update full lists
-    views.album_grid.update_all_albums(albums.to_vec());
-    views.artist_grid.update_all_artists(artists.to_vec());
+    // Update full lists (clone for grid views that take ownership)
+    views.album_grid.update_all_albums(albums.clone());
+    views.artist_grid.update_all_artists(artists.clone());
 
-    // Update list views
-    views.album_list.update_artist_cache(artists);
-    views.album_list.set_albums(albums.to_vec());
-    views.artist_list.set_artists(artists.to_vec());
+    // Update list views (convert to Arc-wrapped vectors once)
+    let artist_arcs: Vec<Arc<Artist>> = artists.into_iter().map(Arc::new).collect();
+    let album_arcs: Vec<Arc<Album>> = albums.into_iter().map(Arc::new).collect();
+    views.album_list.update_artist_cache(&artist_arcs);
+    views.album_list.set_albums(album_arcs);
+    views.artist_list.set_artists(artist_arcs);
 
     // Re-apply current search filter if active
     if let Some(filter) = &current_filter {
@@ -1169,6 +1190,19 @@ fn handle_exclusive_mode_failed(reason: &str, toast_overlay: &ToastOverlay) {
     toast_overlay.add_toast(toast);
 }
 
+/// Handles library scan failed events.
+///
+/// # Arguments
+///
+/// * `reason` - Reason for the failure
+/// * `toast_overlay` - Toast overlay for displaying errors
+fn handle_library_scan_failed(reason: &str, toast_overlay: &ToastOverlay) {
+    debug!("Handling LibraryScanFailed event: reason='{}'", reason);
+
+    let toast = Toast::new(&format!("Library scan failed: {reason}"));
+    toast_overlay.add_toast(toast);
+}
+
 /// Spawns async event handler for view stack state changes.
 ///
 /// # Arguments
@@ -1203,8 +1237,8 @@ fn spawn_view_stack_event_handler(
                 match event {
                     LibraryDataChanged { albums, artists } => {
                         handle_library_data_changed(
-                            &albums,
-                            &artists,
+                            albums,
+                            artists,
                             &mut views,
                             &search_app_state,
                             &view_stack,
@@ -1237,6 +1271,9 @@ fn spawn_view_stack_event_handler(
                     }
                     ExclusiveModeFailed { reason } => {
                         handle_exclusive_mode_failed(&reason, &toast_overlay);
+                    }
+                    LibraryScanFailed { reason } => {
+                        handle_library_scan_failed(&reason, &toast_overlay);
                     }
                     _ => {}
                 }

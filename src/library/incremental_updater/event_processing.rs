@@ -20,7 +20,9 @@ use crate::{
     config::settings::UserSettings,
     error::{domain::LibraryError, numeric_conversion::safe_u64_to_i64},
     library::{
-        database::LibraryDatabase, dr_parser::DrParser, file_watcher::FileWatcher,
+        database::{LibraryDatabase, escape_like_pattern},
+        dr_parser::DrParser,
+        file_watcher::FileWatcher,
         incremental_updater::config::IncrementalUpdaterConfig,
     },
 };
@@ -211,7 +213,8 @@ pub async fn handle_files_removed_incremental(
                 false // It's definitely a file
             } else {
                 // Check if there are any tracks under this path (directory)
-                let pattern = format!("{path_str}/%");
+                let escaped_path = escape_like_pattern(&path_str);
+                let pattern = format!("{escaped_path}/%");
 
                 query_scalar::<_, i64>("SELECT COUNT(*) FROM tracks WHERE path LIKE ?")
                     .bind(&pattern)

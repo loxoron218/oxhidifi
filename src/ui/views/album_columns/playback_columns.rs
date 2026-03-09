@@ -62,7 +62,7 @@ pub fn setup_dr_column(column_view: &ColumnView, fixed_width: i32, show_dr_badge
             && let Some(boxed) = list_item.item()
             && let Ok(album_obj) = boxed.downcast::<BoxedAnyObject>()
         {
-            let album = album_obj.borrow::<Album>();
+            let album = album_obj.borrow::<Arc<Album>>();
             let widget_ptr = child.as_ptr() as usize;
             if let Some(dr_badge) = dr_badges_clone.borrow_mut().get_mut(&widget_ptr) {
                 let (display_text, css_class) = album.dr_value_numeric().map_or_else(
@@ -95,7 +95,7 @@ pub fn setup_dr_column(column_view: &ColumnView, fixed_width: i32, show_dr_badge
     let sorter = CustomSorter::new(|item1, item2| {
         let extract_dr = |item: &Object| -> Option<i64> {
             item.downcast_ref::<BoxedAnyObject>().and_then(|boxed| {
-                let album = boxed.borrow::<Album>();
+                let album = boxed.borrow::<Arc<Album>>();
                 album.dr_value_numeric()
             })
         };
@@ -285,7 +285,7 @@ pub fn setup_play_button_column(
             && let Some(boxed) = list_item.item()
             && let Ok(album_obj) = boxed.downcast::<BoxedAnyObject>()
         {
-            let album = album_obj.borrow::<Album>();
+            let album = album_obj.borrow::<Arc<Album>>();
             let album_id = album.id;
             button.set_widget_name(&album_id.to_string());
 
@@ -303,7 +303,7 @@ pub fn setup_play_button_column(
             && let Some(boxed) = list_item.item()
             && let Ok(album_obj) = boxed.downcast::<BoxedAnyObject>()
         {
-            let album = album_obj.borrow::<Album>();
+            let album = album_obj.borrow::<Arc<Album>>();
             buttons_map_unbind.borrow_mut().remove(&album.id);
         }
     });

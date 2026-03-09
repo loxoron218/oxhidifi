@@ -14,6 +14,7 @@ use {
 use crate::{
     audio::engine::AudioEngine,
     config::{SettingsManager, UserSettings},
+    library::database::LibraryDatabase,
     state::app_state::{AppState, LibraryTab},
     ui::preferences::{
         audio_page::AudioPreferencesPage, dialog::PreferencesDialog,
@@ -84,7 +85,9 @@ fn test_library_preferences_page_creation() -> Result<()> {
     );
     let app_state_arc = Arc::new(app_state);
 
-    let page = LibraryPreferencesPage::new(app_state_arc, settings_manager_arc);
+    let library_db = LibraryDatabase::new()?;
+    let page =
+        LibraryPreferencesPage::new(app_state_arc, Arc::new(library_db), settings_manager_arc);
 
     assert_eq!(page.widget.title(), "Library");
     Ok(())
@@ -147,8 +150,12 @@ fn test_settings_persistence_across_sessions() -> Result<()> {
     let current_show_dr = settings_manager_arc.get_settings().show_dr_values;
     assert!(!current_show_dr);
 
-    let _library_page =
-        LibraryPreferencesPage::new(app_state_arc.clone(), settings_manager_arc.clone());
+    let library_db2 = LibraryDatabase::new()?;
+    let _library_page = LibraryPreferencesPage::new(
+        app_state_arc.clone(),
+        Arc::new(library_db2),
+        settings_manager_arc.clone(),
+    );
     let current_directories = settings_manager_arc
         .get_settings()
         .library_directories

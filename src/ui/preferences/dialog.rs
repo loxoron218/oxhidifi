@@ -16,6 +16,7 @@ use {
 };
 
 use crate::{
+    library::database::LibraryDatabase,
     state::app_state::AppState,
     ui::preferences::{
         audio_page::AudioPreferencesPage, general_page::GeneralPreferencesPage,
@@ -39,11 +40,12 @@ impl PreferencesDialog {
     /// # Arguments
     ///
     /// * `app_state` - Application state reference for reactive updates
+    /// * `library_db` - Library database reference for library operations
     ///
     /// # Returns
     ///
     /// A new `PreferencesDialog` instance.
-    pub fn new(app_state: &Arc<AppState>) -> Self {
+    pub fn new(app_state: &Arc<AppState>, library_db: Arc<LibraryDatabase>) -> Self {
         let widget = LibadwaitaPreferencesDialog::builder().build();
 
         // Set fixed dialog dimensions for consistent layout across all form factors
@@ -58,11 +60,12 @@ impl PreferencesDialog {
         widget.add(&general_page.widget);
 
         // Create and add Library preferences page
-        let library_page = LibraryPreferencesPage::new(app_state.clone(), settings_manager.clone());
+        let library_page =
+            LibraryPreferencesPage::new(app_state.clone(), library_db, settings_manager.clone());
         widget.add(&library_page.widget);
 
         // Create and add Audio preferences page
-        let audio_page = AudioPreferencesPage::new(settings_manager.clone());
+        let audio_page = AudioPreferencesPage::new(settings_manager);
         widget.add(&audio_page.widget);
 
         debug!("PreferencesDialog: Created with three tabs");

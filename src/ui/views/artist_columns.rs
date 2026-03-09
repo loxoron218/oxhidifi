@@ -3,6 +3,8 @@
 //! This module provides factory functions for creating the 3 artist columns
 //! in the column view, using GTK4's `SignalListItemFactory` pattern.
 
+use std::sync::Arc;
+
 use libadwaita::{
     glib::{BoxedAnyObject, Object},
     gtk::{
@@ -80,7 +82,7 @@ fn setup_artist_name_column(column_view: &ColumnView) {
             && let Some(boxed) = list_item.item()
             && let Ok(artist_obj) = boxed.downcast::<BoxedAnyObject>()
         {
-            let artist = artist_obj.borrow::<Artist>();
+            let artist = artist_obj.borrow::<Arc<Artist>>();
             label.set_text(&artist.name);
             label.set_visible(true);
         }
@@ -90,14 +92,22 @@ fn setup_artist_name_column(column_view: &ColumnView) {
     column.set_resizable(true);
     column.set_expand(true);
     let sorter = CustomSorter::new(|item1, item2| {
-        let get_name = |item: &Object| -> Option<String> {
+        let extract_artist = |item: &Object| -> Option<Arc<Artist>> {
             item.downcast_ref::<BoxedAnyObject>().map(|boxed| {
-                let artist = boxed.borrow::<Artist>();
-                artist.name.clone()
+                let artist_ref = boxed.borrow::<Arc<Artist>>();
+                Arc::clone(&artist_ref)
             })
         };
-        let val1 = get_name(item1);
-        let val2 = get_name(item2);
+
+        let Some(arc_artist1) = extract_artist(item1) else {
+            return Equal;
+        };
+        let Some(arc_artist2) = extract_artist(item2) else {
+            return Equal;
+        };
+
+        let val1 = Some(&arc_artist1.name);
+        let val2 = Some(&arc_artist2.name);
         match (val1, val2) {
             (Some(s1), Some(s2)) => {
                 Ordering::from(s1.to_ascii_lowercase().cmp(&s2.to_ascii_lowercase()))
@@ -134,7 +144,7 @@ fn setup_album_count_column(column_view: &ColumnView, fixed_width: i32) {
             && let Some(boxed) = list_item.item()
             && let Ok(artist_obj) = boxed.downcast::<BoxedAnyObject>()
         {
-            let artist = artist_obj.borrow::<Artist>();
+            let artist = artist_obj.borrow::<Arc<Artist>>();
             label.set_text(&artist.album_count.to_string());
             label.set_visible(true);
         }
@@ -146,7 +156,7 @@ fn setup_album_count_column(column_view: &ColumnView, fixed_width: i32) {
     let sorter = CustomSorter::new(|item1, item2| {
         let get_count = |item: &Object| -> Option<i64> {
             item.downcast_ref::<BoxedAnyObject>().map(|boxed| {
-                let artist = boxed.borrow::<Artist>();
+                let artist = boxed.borrow::<Arc<Artist>>();
                 artist.album_count
             })
         };

@@ -78,9 +78,9 @@ pub struct ColumnListView {
     /// Search empty state component.
     pub search_empty_state: SearchEmptyState,
     /// Current albums being displayed.
-    pub albums: Vec<Album>,
+    pub albums: Vec<Arc<Album>>,
     /// Current artists being displayed.
-    pub artists: Vec<Artist>,
+    pub artists: Vec<Arc<Artist>>,
     /// Artist name cache for album columns.
     artist_name_cache: ArtistNameCache,
     /// Zoom subscription handle for cleanup.
@@ -349,16 +349,16 @@ impl ColumnListView {
                 if let Some(boxed) = item {
                     match view_type {
                         Albums => {
-                            let album = boxed.borrow::<Album>();
-                            let album_clone = (*album).clone();
+                            let album = boxed.borrow::<Arc<Album>>();
+                            let album_clone = (**album).clone();
                             let state_clone2 = state_clone.clone();
                             MainContext::default().spawn_local(async move {
                                 state_clone2.update_navigation(AlbumDetail(album_clone));
                             });
                         }
                         Artists => {
-                            let artist = boxed.borrow::<Artist>();
-                            let artist_clone = (*artist).clone();
+                            let artist = boxed.borrow::<Arc<Artist>>();
+                            let artist_clone = (**artist).clone();
                             let state_clone2 = state_clone.clone();
                             MainContext::default().spawn_local(async move {
                                 state_clone2.update_navigation(ArtistDetail(artist_clone));
@@ -384,7 +384,7 @@ impl ColumnListView {
     /// # Arguments
     ///
     /// * `albums` - New vector of albums to display
-    pub fn set_albums(&mut self, albums: Vec<Album>) {
+    pub fn set_albums(&mut self, albums: Vec<Arc<Album>>) {
         self.albums = update_albums(
             &self.list_store,
             albums,
@@ -398,7 +398,7 @@ impl ColumnListView {
     /// # Arguments
     ///
     /// * `artists` - New vector of artists to display
-    pub fn set_artists(&mut self, artists: Vec<Artist>) {
+    pub fn set_artists(&mut self, artists: Vec<Arc<Artist>>) {
         self.artists = update_artists(
             &self.list_store,
             artists,
@@ -436,7 +436,7 @@ impl ColumnListView {
     /// # Arguments
     ///
     /// * `artists` - Artists to cache
-    pub fn update_artist_cache(&mut self, artists: &[Artist]) {
+    pub fn update_artist_cache(&mut self, artists: &[Arc<Artist>]) {
         cache_artist_names(&self.artist_name_cache, artists);
     }
 

@@ -20,7 +20,7 @@ mod ui_compliance_tests {
     use crate::{
         audio::engine::AudioEngine,
         config::settings::SettingsManager,
-        library::{models::Album, scanner::LibraryScanner},
+        library::{database::LibraryDatabase, models::Album, scanner::LibraryScanner},
         state::app_state::AppState,
         ui::{
             components::{cover_art::CoverArt, dr_badge::DRBadge, play_overlay::PlayOverlay},
@@ -121,9 +121,9 @@ mod ui_compliance_tests {
         Ok(())
     }
 
-    #[test]
+    #[tokio::test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_keyboard_navigation_compliance() -> Result<()> {
+    async fn test_keyboard_navigation_compliance() -> Result<()> {
         let engine = AudioEngine::new()?;
         let engine_weak = Arc::downgrade(&Arc::new(engine));
         let settings_manager = SettingsManager::new()?;
@@ -138,10 +138,12 @@ mod ui_compliance_tests {
             .application_id("com.example.oxhidifi")
             .build();
         let settings_manager = SettingsManager::new()?;
+        let library_db = LibraryDatabase::new().await?;
         let header_bar = HeaderBar::default_with_state(
             &Arc::new(app_state.clone()),
             application,
             Arc::new(settings_manager),
+            Arc::new(library_db),
         );
         if !header_bar.search_button.can_focus() {
             bail!("Expected true, got false");
@@ -224,9 +226,9 @@ mod ui_compliance_tests {
         Ok(())
     }
 
-    #[test]
+    #[tokio::test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_memory_leak_detection() -> Result<()> {
+    async fn test_memory_leak_detection() -> Result<()> {
         let engine = AudioEngine::new()?;
         let engine_weak = Arc::downgrade(&Arc::new(engine.clone()));
         let settings_manager = SettingsManager::new()?;
@@ -246,10 +248,12 @@ mod ui_compliance_tests {
                 .application_id("com.example.oxhidifi")
                 .build();
             let settings_manager = SettingsManager::new()?;
+            let library_db = LibraryDatabase::new().await?;
             let _header_bar = HeaderBar::default_with_state(
                 &app_state_arc,
                 application,
                 Arc::new(settings_manager),
+                Arc::new(library_db),
             );
             let _player_bar = PlayerBar::new(&app_state_arc, &Arc::new(engine), None);
             let _album_grid = AlbumGridView::new(

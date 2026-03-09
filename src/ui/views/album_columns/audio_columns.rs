@@ -1,5 +1,7 @@
 //! Album audio-related column setup functions.
 
+use std::sync::Arc;
+
 use libadwaita::{
     gio::File,
     glib::{BoxedAnyObject, Object},
@@ -51,7 +53,7 @@ pub fn setup_cover_art_column(column_view: &ColumnView, fixed_width: i32) {
             let Ok(album_obj) = boxed.downcast::<BoxedAnyObject>() else {
                 return;
             };
-            let album = album_obj.borrow::<Album>();
+            let album = album_obj.borrow::<Arc<Album>>();
             if let Some(path) = &album.artwork_path {
                 let file = File::for_path(path);
                 picture.set_file(Some(&file));
@@ -91,7 +93,7 @@ pub fn setup_sample_rate_column(column_view: &ColumnView, fixed_width: i32) {
             && let Some(boxed) = list_item.item()
             && let Ok(album_obj) = boxed.downcast::<BoxedAnyObject>()
         {
-            let album = album_obj.borrow::<Album>();
+            let album = album_obj.borrow::<Arc<Album>>();
             if let Some(sample_rate) = album.sample_rate {
                 label.set_text(&format_sample_rate(sample_rate));
                 label.set_visible(true);
@@ -110,7 +112,7 @@ pub fn setup_sample_rate_column(column_view: &ColumnView, fixed_width: i32) {
     let sorter = CustomSorter::new(|item1, item2| {
         let extract_sample_rate = |item: &Object| -> Option<i64> {
             item.downcast_ref::<BoxedAnyObject>().and_then(|boxed| {
-                let album = boxed.borrow::<Album>();
+                let album = boxed.borrow::<Arc<Album>>();
                 album.sample_rate
             })
         };

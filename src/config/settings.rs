@@ -5,7 +5,7 @@
 
 use std::{
     env::var,
-    fs::{create_dir_all, read_to_string, write},
+    fs::{canonicalize, create_dir_all, read_to_string, write},
     io::Error as StdError,
     path::PathBuf,
 };
@@ -59,6 +59,9 @@ pub enum SettingsError {
     /// Invalid settings value.
     #[error("Invalid settings value: {reason}")]
     InvalidValue { reason: String },
+    /// Directory does not exist or is not accessible.
+    #[error("Directory not found: {0}: {1}")]
+    DirectoryNotFound(String, #[source] StdError),
 }
 
 /// Serializable user settings structure with default values.
@@ -211,6 +214,88 @@ impl SettingsManager {
     /// A reference to the configuration file path.
     pub fn get_config_path(&self) -> &PathBuf {
         &self.config_path
+    }
+
+    /// Gets only the `library_directories` field.
+    ///
+    /// # Returns
+    ///
+    /// A clone of the `library_directories` vector.
+    pub fn get_library_directories(&self) -> Vec<String> {
+        self.settings.read().library_directories.clone()
+    }
+
+    /// Gets settings needed for library scanning.
+    ///
+    /// # Returns
+    ///
+    /// A tuple of (`library_directories`, `show_dr_values`).
+    pub fn get_scanner_settings(&self) -> (Vec<String>, bool) {
+        let settings = self.settings.read();
+        (
+            settings.library_directories.clone(),
+            settings.show_dr_values,
+        )
+    }
+
+    /// Adds a library directory to settings.
+    ///
+    /// # Arguments
+    ///
+    /// * `directory` - The directory path to add.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` indicating success or failure.
+    ///
+    /// # Errors
+    ///
+    /// Returns `SettingsError` if settings cannot be saved to disk.
+    pub fn add_library_directory(&self, directory: &str) -> Result<(), SettingsError> {
+        let canonical_dir = canonicalize(directory)
+            .map_err(|e| SettingsError::DirectoryNotFound(directory.to_string(), e))?;
+        let canonical_dir_string = canonical_dir.to_string_lossy().to_string();
+
+        let settings = self.settings.read().clone();
+        let is_duplicate = settings.library_directories.iter().any(|dir| {
+            canonicalize(dir)
+                .is_ok_and(|canonical| canonical.to_string_lossy() == canonical_dir_string)
+        });
+
+        if !is_duplicate {
+            drop(settings);
+            let mut settings = self.settings.read().clone();
+            settings.library_directories.push(canonical_dir_string);
+            *self.settings.write() = settings;
+            return self.save_settings();
+        }
+        Ok(())
+    }
+
+    /// Removes a library directory from settings.
+    ///
+    /// # Arguments
+    ///
+    /// * `directory` - The directory path to remove.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` indicating success or failure.
+    ///
+    /// # Errors
+    ///
+    /// Returns `SettingsError` if settings cannot be saved to disk.
+    pub fn remove_library_directory(&self, directory: &str) -> Result<(), SettingsError> {
+        let canonical_dir = canonicalize(directory)
+            .map_err(|e| SettingsError::DirectoryNotFound(directory.to_string(), e))?;
+        let canonical_dir_string = canonical_dir.to_string_lossy().to_string();
+
+        let mut settings = self.settings.read().clone();
+        settings
+            .library_directories
+            .retain(|dir| *dir != canonical_dir_string);
+        *self.settings.write() = settings;
+        self.save_settings()
     }
 
     /// Updates the settings and saves them to disk.

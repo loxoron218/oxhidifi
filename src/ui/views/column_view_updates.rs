@@ -1,10 +1,12 @@
 //! Column view update methods for managing displayed items.
 
+use std::sync::Arc;
+
 use libadwaita::{
     gio::ListStore,
     glib::{BoxedAnyObject, Object},
     gtk::{CustomFilter, FilterListModel},
-    prelude::Cast,
+    prelude::{Cast, ListModelExt},
 };
 
 use crate::{
@@ -29,19 +31,17 @@ use crate::{
 #[must_use]
 pub fn set_albums(
     list_store: &ListStore,
-    albums: Vec<Album>,
+    albums: Vec<Arc<Album>>,
     config: &ColumnListViewConfig,
     search_empty_state: &SearchEmptyState,
-) -> Vec<Album> {
+) -> Vec<Arc<Album>> {
     if !matches!(config.view_type, Albums) {
         return albums;
     }
 
-    let albums_unchanged = albums.is_empty();
+    list_store.remove_all();
 
-    if !albums_unchanged {
-        list_store.remove_all();
-
+    if !albums.is_empty() {
         for album in &albums {
             let boxed = BoxedAnyObject::new(album.clone());
             list_store.append(&boxed);
@@ -63,19 +63,17 @@ pub fn set_albums(
 #[must_use]
 pub fn set_artists(
     list_store: &ListStore,
-    artists: Vec<Artist>,
+    artists: Vec<Arc<Artist>>,
     config: &ColumnListViewConfig,
     search_empty_state: &SearchEmptyState,
-) -> Vec<Artist> {
+) -> Vec<Arc<Artist>> {
     if !matches!(config.view_type, Artists) {
         return artists;
     }
 
-    let artists_unchanged = artists.is_empty();
+    list_store.remove_all();
 
-    if !artists_unchanged {
-        list_store.remove_all();
-
+    if !artists.is_empty() {
         for artist in &artists {
             let boxed = BoxedAnyObject::new(artist.clone());
             list_store.append(&boxed);
@@ -101,16 +99,16 @@ pub fn filter_view_items(
     filter_model: &FilterListModel,
     search_empty_state: &SearchEmptyState,
     config: &ColumnListViewConfig,
-    albums: &[Album],
-    artists: &[Artist],
+    albums: &[Arc<Album>],
+    artists: &[Arc<Artist>],
 ) {
-    let normalized_query = query.to_lowercase();
-
-    if normalized_query.is_empty() {
+    if query.is_empty() {
         filter_model.set_filter(None::<&CustomFilter>);
         search_empty_state.hide();
         return;
     }
+
+    let normalized_query = query.to_lowercase();
 
     // Check if library is empty to avoid showing search empty state alongside main empty state
     let is_library_empty = match config.view_type {
@@ -123,46 +121,32 @@ pub fn filter_view_items(
         return;
     }
 
-    let filter_matches = match config.view_type {
+    let filter = match config.view_type {
         Albums => {
-            let q = normalized_query.as_str();
-            albums
-                .iter()
-                .any(|album| album.title.to_lowercase().contains(q))
+            let q = normalized_query;
+            CustomFilter::new(move |item: &Object| -> bool {
+                if let Some(boxed) = item.downcast_ref::<BoxedAnyObject>() {
+                    let album = boxed.borrow::<Arc<Album>>();
+                    return album.title.to_lowercase().contains(&q);
+                }
+                false
+            })
         }
         Artists => {
-            let q = normalized_query.as_str();
-            artists
-                .iter()
-                .any(|artist| artist.name.to_lowercase().contains(q))
+            let q = normalized_query;
+            CustomFilter::new(move |item: &Object| -> bool {
+                if let Some(boxed) = item.downcast_ref::<BoxedAnyObject>() {
+                    let artist = boxed.borrow::<Arc<Artist>>();
+                    return artist.name.to_lowercase().contains(&q);
+                }
+                false
+            })
         }
     };
 
-    if filter_matches {
-        let filter = match config.view_type {
-            Albums => {
-                let q = normalized_query;
-                CustomFilter::new(move |item: &Object| -> bool {
-                    if let Some(boxed) = item.downcast_ref::<BoxedAnyObject>() {
-                        let album = boxed.borrow::<Album>();
-                        return album.title.to_lowercase().contains(&q);
-                    }
-                    false
-                })
-            }
-            Artists => {
-                let q = normalized_query;
-                CustomFilter::new(move |item: &Object| -> bool {
-                    if let Some(boxed) = item.downcast_ref::<BoxedAnyObject>() {
-                        let artist = boxed.borrow::<Artist>();
-                        return artist.name.to_lowercase().contains(&q);
-                    }
-                    false
-                })
-            }
-        };
+    filter_model.set_filter(Some(&filter));
 
-        filter_model.set_filter(Some(&filter));
+    if filter_model.n_items() > 0 {
         search_empty_state.hide();
     } else {
         search_empty_state.update_search_query(query);
@@ -189,7 +173,7 @@ pub fn clear_view(filter_model: &FilterListModel) {
 ///
 /// * `artist_name_cache` - Cache to update
 /// * `artists` - Artists to cache
-pub fn update_artist_cache(artist_name_cache: &ArtistNameCache, artists: &[Artist]) {
+pub fn update_artist_cache(artist_name_cache: &ArtistNameCache, artists: &[Arc<Artist>]) {
     let mut cache = artist_name_cache.borrow_mut();
     cache.clear();
 

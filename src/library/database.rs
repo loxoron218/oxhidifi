@@ -4,7 +4,7 @@
 //! all database operations for the music library, including querying,
 //! searching, and DR value management.
 
-use std::path::Path;
+use std::{collections::HashMap, path::Path};
 
 use {
     sqlx::{Error, SqlitePool, query, query_as, query_scalar},
@@ -16,6 +16,32 @@ use crate::library::{
     connection::create_connection_pool,
     models::{Album, Artist, SearchResults, Track},
 };
+
+/// Escapes special characters in a string for use in SQL LIKE patterns.
+///
+/// This prevents SQL LIKE injection by escaping `%`, `_`, and `\` characters
+/// which have special meaning in LIKE patterns.
+///
+/// # Arguments
+///
+/// * `s` - The string to escape.
+///
+/// # Returns
+///
+/// A new string with special characters escaped.
+#[must_use]
+pub fn escape_like_pattern(s: &str) -> String {
+    let mut result = String::with_capacity(s.len() * 2);
+    for c in s.chars() {
+        match c {
+            '\\' => result.push_str("\\\\"),
+            '%' => result.push_str("\\%"),
+            '_' => result.push_str("\\_"),
+            _ => result.push(c),
+        }
+    }
+    result
+}
 
 /// Error type for library database operations.
 #[derive(Error, Debug)]
@@ -193,7 +219,7 @@ impl LibraryDatabase {
                            MAX(t.channels) as channels
                     FROM albums a
                     LEFT JOIN tracks t ON a.id = t.album_id
-                    WHERE a.title LIKE ?
+                    WHERE a.title LIKE ? ESCAPE '\\'
                     GROUP BY a.id
                     ORDER BY a.title, a.year
                     ",
@@ -246,7 +272,7 @@ impl LibraryDatabase {
                     SELECT a.id, a.name, COUNT(a2.id) as album_count, a.created_at, a.updated_at
                     FROM artists a
                     LEFT JOIN albums a2 ON a.id = a2.artist_id
-                    WHERE a.name LIKE ?
+                    WHERE a.name LIKE ? ESCAPE '\\'
                     GROUP BY a.id, a.name, a.created_at, a.updated_at
                     ORDER BY a.name
                     ",
@@ -271,6 +297,314 @@ impl LibraryDatabase {
         };
 
         Ok(artists)
+    }
+
+    /// Gets albums in a specific directory.
+    ///
+    /// # Arguments
+    ///
+    /// * `directory_path` - Path to the directory containing albums.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing a vector of `Album` or a `LibraryError`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `LibraryError` if the query fails.
+    pub async fn get_albums_by_directory<P: AsRef<Path>>(
+        &self,
+        directory_path: P,
+    ) -> Result<Vec<Album>, LibraryError> {
+        let escaped_path = escape_like_pattern(&directory_path.as_ref().to_string_lossy());
+        let path_pattern = format!("{escaped_path}/%");
+
+        let albums = query_as::<_, Album>(
+            "
+            SELECT a.id, a.artist_id, a.title, a.year, a.genre, a.compilation,
+                   a.path, a.dr_value, a.artwork_path, a.format, a.bits_per_sample,
+                   a.sample_rate, a.created_at, a.updated_at,
+                   COUNT(t.id) as track_count,
+                   MAX(t.channels) as channels
+            FROM albums a
+            LEFT JOIN tracks t ON a.id = t.album_id
+            WHERE a.path LIKE ? ESCAPE '\\'
+            GROUP BY a.id
+            ORDER BY a.title, a.year
+            ",
+        )
+        .bind(path_pattern)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(albums)
+    }
+
+    /// Gets artists that have albums in a specific directory.
+    ///
+    /// # Arguments
+    ///
+    /// * `directory_path` - Path to the directory containing albums.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing a vector of `Artist` or a `LibraryError`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `LibraryError` if the query fails.
+    pub async fn get_artists_by_directory<P: AsRef<Path>>(
+        &self,
+        directory_path: P,
+    ) -> Result<Vec<Artist>, LibraryError> {
+        let escaped_path = escape_like_pattern(&directory_path.as_ref().to_string_lossy());
+        let path_pattern = format!("{escaped_path}/%");
+
+        let artists = query_as::<_, Artist>(
+            "
+            SELECT a.id, a.name, COUNT(a2.id) as album_count, a.created_at, a.updated_at
+            FROM artists a
+            LEFT JOIN albums a2 ON a.id = a2.artist_id
+            WHERE a2.id IN (SELECT id FROM albums WHERE path LIKE ? ESCAPE '\\')
+            GROUP BY a.id, a.name, a.created_at, a.updated_at
+            ORDER BY a.name
+            ",
+        )
+        .bind(path_pattern)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(artists)
+    }
+
+    /// Gets all albums with their current track counts (for incremental updates).
+    ///
+    /// This is more efficient than `get_albums(None)` when we need to update
+    /// specific albums' track counts after operations.
+    ///
+    /// # Arguments
+    ///
+    /// * `album_ids` - List of album IDs to fetch.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing a vector of `Album` or a `LibraryError`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `LibraryError` if the query fails.
+    pub async fn get_albums_by_ids(&self, album_ids: &[i64]) -> Result<Vec<Album>, LibraryError> {
+        if album_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let placeholders: Vec<String> = album_ids.iter().map(|_| "?".to_string()).collect();
+        let query_str = format!(
+            "
+            SELECT a.id, a.artist_id, a.title, a.year, a.genre, a.compilation,
+                   a.path, a.dr_value, a.artwork_path, a.format, a.bits_per_sample,
+                   a.sample_rate, a.created_at, a.updated_at,
+                   COUNT(t.id) as track_count,
+                   MAX(t.channels) as channels
+            FROM albums a
+            LEFT JOIN tracks t ON a.id = t.album_id
+            WHERE a.id IN ({})
+            GROUP BY a.id
+            ORDER BY a.title, a.year
+            ",
+            placeholders.join(",")
+        );
+
+        let mut query = query_as::<_, Album>(&query_str);
+        for id in album_ids {
+            query = query.bind(id);
+        }
+
+        let albums = query.fetch_all(&self.pool).await?;
+
+        Ok(albums)
+    }
+
+    /// Gets all artists with their current album counts (for incremental updates).
+    ///
+    /// This is more efficient than `get_artists(None)` when we need to update
+    /// specific artists' album counts after operations.
+    ///
+    /// # Arguments
+    ///
+    /// * `artist_ids` - List of artist IDs to fetch.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing a vector of `Artist` or a `LibraryError`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `LibraryError` if the query fails.
+    pub async fn get_artists_by_ids(
+        &self,
+        artist_ids: &[i64],
+    ) -> Result<Vec<Artist>, LibraryError> {
+        if artist_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let placeholders: Vec<String> = artist_ids.iter().map(|_| "?".to_string()).collect();
+        let query_str = format!(
+            "
+            SELECT a.id, a.name, COUNT(a2.id) as album_count, a.created_at, a.updated_at
+            FROM artists a
+            LEFT JOIN albums a2 ON a.id = a2.artist_id
+            WHERE a.id IN ({})
+            GROUP BY a.id, a.name, a.created_at, a.updated_at
+            ORDER BY a.name
+            ",
+            placeholders.join(",")
+        );
+
+        let mut query = query_as::<_, Artist>(&query_str);
+        for id in artist_ids {
+            query = query.bind(id);
+        }
+
+        let artists = query.fetch_all(&self.pool).await?;
+
+        Ok(artists)
+    }
+
+    /// Gets track counts for all albums in the library (lightweight count only).
+    ///
+    /// This is used for efficient UI updates where we just need to know
+    /// which albums had track count changes.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing a `HashMap` of `album_id` to `track_count`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `LibraryError` if the query fails.
+    pub async fn get_album_track_counts(&self) -> Result<HashMap<i64, i64>, LibraryError> {
+        let counts: Vec<(i64, i64)> =
+            query_as("SELECT album_id, COUNT(*) as count FROM tracks GROUP BY album_id")
+                .fetch_all(&self.pool)
+                .await?;
+
+        Ok(counts.into_iter().collect())
+    }
+
+    /// Gets album counts for all artists in the library (lightweight count only).
+    ///
+    /// This is used for efficient UI updates where we just need to know
+    /// which artists had album count changes.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing a `HashMap` of `artist_id` to `album_count`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `LibraryError` if the query fails.
+    pub async fn get_artist_album_counts(&self) -> Result<HashMap<i64, i64>, LibraryError> {
+        let counts: Vec<(i64, i64)> = query_as(
+            "SELECT artist_id, COUNT(*) as count FROM albums WHERE artist_id IS NOT NULL GROUP BY artist_id",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(counts.into_iter().collect())
+    }
+
+    /// Gets all album IDs in a specific directory.
+    ///
+    /// # Arguments
+    ///
+    /// * `directory_path` - Path to the directory containing albums.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing a vector of album IDs.
+    ///
+    /// # Errors
+    ///
+    /// Returns `LibraryError` if the query fails.
+    pub async fn get_album_ids_by_directory<P: AsRef<Path>>(
+        &self,
+        directory_path: P,
+    ) -> Result<Vec<i64>, LibraryError> {
+        let escaped_path = escape_like_pattern(&directory_path.as_ref().to_string_lossy());
+        let path_pattern = format!("{escaped_path}/%");
+
+        let ids: Vec<i64> = query_scalar("SELECT id FROM albums WHERE path LIKE ? ESCAPE '\\'")
+            .bind(path_pattern)
+            .fetch_all(&self.pool)
+            .await?;
+
+        Ok(ids)
+    }
+
+    /// Gets all artist IDs that have albums in a specific directory.
+    ///
+    /// # Arguments
+    ///
+    /// * `directory_path` - Path to the directory containing albums.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing a vector of artist IDs.
+    ///
+    /// # Errors
+    ///
+    /// Returns `LibraryError` if the query fails.
+    pub async fn get_artist_ids_by_directory<P: AsRef<Path>>(
+        &self,
+        directory_path: P,
+    ) -> Result<Vec<i64>, LibraryError> {
+        let escaped_path = escape_like_pattern(&directory_path.as_ref().to_string_lossy());
+        let path_pattern = format!("{escaped_path}/%");
+
+        let ids: Vec<i64> = query_scalar(
+            "SELECT DISTINCT artist_id FROM albums WHERE path LIKE ? ESCAPE '\\' AND artist_id IS NOT NULL",
+        )
+        .bind(path_pattern)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(ids)
+    }
+
+    /// Gets all remaining album IDs in the library.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing a vector of album IDs.
+    ///
+    /// # Errors
+    ///
+    /// Returns `LibraryError` if the query fails.
+    pub async fn get_all_album_ids(&self) -> Result<Vec<i64>, LibraryError> {
+        let ids: Vec<i64> = query_scalar("SELECT id FROM albums")
+            .fetch_all(&self.pool)
+            .await?;
+
+        Ok(ids)
+    }
+
+    /// Gets all remaining artist IDs in the library.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing a vector of artist IDs.
+    ///
+    /// # Errors
+    ///
+    /// Returns `LibraryError` if the query fails.
+    pub async fn get_all_artist_ids(&self) -> Result<Vec<i64>, LibraryError> {
+        let ids: Vec<i64> = query_scalar("SELECT id FROM artists")
+            .fetch_all(&self.pool)
+            .await?;
+
+        Ok(ids)
     }
 
     /// Gets all tracks for a specific album.
@@ -381,7 +715,7 @@ impl LibraryDatabase {
             SELECT id, artist_id, title, year, genre, compilation, path, dr_value,
                    artwork_path, format, bits_per_sample, sample_rate, created_at, updated_at
             FROM albums
-            WHERE title LIKE ?
+            WHERE title LIKE ? ESCAPE '\\'
             ORDER BY title, year
             ",
         )
@@ -393,7 +727,7 @@ impl LibraryDatabase {
             "
             SELECT id, name, created_at, updated_at
             FROM artists
-            WHERE name LIKE ?
+            WHERE name LIKE ? ESCAPE '\\'
             ORDER BY name
             ",
         )
@@ -478,55 +812,41 @@ impl LibraryDatabase {
         let mut tx = self.pool.begin().await?;
 
         for track in tracks {
-            // Check if track exists
-            let existing_track: Option<i64> = query_scalar("SELECT id FROM tracks WHERE path = ?")
-                .bind(&track.path)
-                .fetch_optional(&mut *tx)
-                .await?;
-
-            if let Some(track_id) = existing_track {
-                // Update existing track
-                query(
-                    "UPDATE tracks SET album_id = ?, title = ?, track_number = ?, disc_number = ?, duration_ms = ?, file_size = ?, format = ?, codec = ?, sample_rate = ?, bits_per_sample = ?, channels = ?, is_lossless = ?, is_high_resolution = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
-                )
-                .bind(track.album_id)
-                .bind(track.title)
-                .bind(track.track_number)
-                .bind(track.disc_number)
-                .bind(track.duration_ms)
-                .bind(track.file_size)
-                .bind(track.format)
-                .bind(track.codec)
-                .bind(track.sample_rate)
-                .bind(track.bits_per_sample)
-                .bind(track.channels)
-                .bind(track.is_lossless)
-                .bind(track.is_high_resolution)
-                .bind(track_id)
-                .execute(&mut *tx)
-                .await?;
-            } else {
-                // Insert new track
-                query(
-                    "INSERT INTO tracks (album_id, title, track_number, disc_number, duration_ms, path, file_size, format, codec, sample_rate, bits_per_sample, channels, is_lossless, is_high_resolution) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-                )
-                .bind(track.album_id)
-                .bind(track.title)
-                .bind(track.track_number)
-                .bind(track.disc_number)
-                .bind(track.duration_ms)
-                .bind(track.path)
-                .bind(track.file_size)
-                .bind(track.format)
-                .bind(track.codec)
-                .bind(track.sample_rate)
-                .bind(track.bits_per_sample)
-                .bind(track.channels)
-                .bind(track.is_lossless)
-                .bind(track.is_high_resolution)
-                .execute(&mut *tx)
-                .await?;
-            }
+            query(
+                "INSERT INTO tracks (album_id, title, track_number, disc_number, duration_ms, path, file_size, format, codec, sample_rate, bits_per_sample, channels, is_lossless, is_high_resolution)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 ON CONFLICT(path) DO UPDATE SET
+                    album_id = excluded.album_id,
+                    title = excluded.title,
+                    track_number = excluded.track_number,
+                    disc_number = excluded.disc_number,
+                    duration_ms = excluded.duration_ms,
+                    file_size = excluded.file_size,
+                    format = excluded.format,
+                    codec = excluded.codec,
+                    sample_rate = excluded.sample_rate,
+                    bits_per_sample = excluded.bits_per_sample,
+                    channels = excluded.channels,
+                    is_lossless = excluded.is_lossless,
+                    is_high_resolution = excluded.is_high_resolution,
+                    updated_at = CURRENT_TIMESTAMP",
+            )
+            .bind(track.album_id)
+            .bind(track.title)
+            .bind(track.track_number)
+            .bind(track.disc_number)
+            .bind(track.duration_ms)
+            .bind(track.path)
+            .bind(track.file_size)
+            .bind(track.format)
+            .bind(track.codec)
+            .bind(track.sample_rate)
+            .bind(track.bits_per_sample)
+            .bind(track.channels)
+            .bind(track.is_lossless)
+            .bind(track.is_high_resolution)
+            .execute(&mut *tx)
+            .await?;
         }
 
         tx.commit().await?;
@@ -550,51 +870,35 @@ impl LibraryDatabase {
         let mut tx = self.pool.begin().await?;
 
         for album in albums {
-            // Check if album exists
-            let existing_album: Option<i64> = query_scalar(
-                "SELECT id FROM albums WHERE artist_id = ? AND title = ? AND year IS ?",
+            // Update existing album
+            query(
+                "INSERT INTO albums (artist_id, title, year, genre, compilation, path, dr_value, artwork_path, format, bits_per_sample, sample_rate)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 ON CONFLICT(artist_id, title, year) DO UPDATE SET
+                    genre = excluded.genre,
+                    compilation = excluded.compilation,
+                    path = excluded.path,
+                    dr_value = excluded.dr_value,
+                    artwork_path = excluded.artwork_path,
+                    format = excluded.format,
+                    bits_per_sample = excluded.bits_per_sample,
+                    sample_rate = excluded.sample_rate,
+                    updated_at = CURRENT_TIMESTAMP",
             )
+            // Insert new album
             .bind(album.artist_id)
-            .bind(&album.title)
+            .bind(album.title)
             .bind(album.year)
-            .fetch_optional(&mut *tx)
+            .bind(album.genre)
+            .bind(album.compilation)
+            .bind(album.path)
+            .bind(album.dr_value)
+            .bind(album.artwork_path)
+            .bind(album.format)
+            .bind(album.bits_per_sample)
+            .bind(album.sample_rate)
+            .execute(&mut *tx)
             .await?;
-
-            if let Some(album_id) = existing_album {
-                // Update existing album
-                query(
-                    "UPDATE albums SET genre = ?, compilation = ?, path = ?, dr_value = ?, artwork_path = ?, format = ?, bits_per_sample = ?, sample_rate = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
-                )
-                .bind(album.genre)
-                .bind(album.compilation)
-                .bind(album.path)
-                .bind(album.dr_value)
-                .bind(album.artwork_path)
-                .bind(album.format)
-                .bind(album.bits_per_sample)
-                .bind(album.sample_rate)
-                .bind(album_id)
-                .execute(&mut *tx)
-                .await?;
-            } else {
-                // Insert new album
-                query(
-                    "INSERT INTO albums (artist_id, title, year, genre, compilation, path, dr_value, artwork_path, format, bits_per_sample, sample_rate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-                )
-                .bind(album.artist_id)
-                .bind(album.title)
-                .bind(album.year)
-                .bind(album.genre)
-                .bind(album.compilation)
-                .bind(album.path)
-                .bind(album.dr_value)
-                .bind(album.artwork_path)
-                .bind(album.format)
-                .bind(album.bits_per_sample)
-                .bind(album.sample_rate)
-                .execute(&mut *tx)
-                .await?;
-            }
         }
 
         tx.commit().await?;
@@ -615,15 +919,23 @@ impl LibraryDatabase {
     ///
     /// Returns `LibraryError` if the batch removal fails.
     pub async fn batch_remove_tracks(&self, track_paths: Vec<String>) -> Result<(), LibraryError> {
+        if track_paths.is_empty() {
+            return Ok(());
+        }
+
         let mut tx = self.pool.begin().await?;
 
-        // Remove tracks
-        for path in track_paths {
-            query("DELETE FROM tracks WHERE path = ?")
-                .bind(path)
-                .execute(&mut *tx)
-                .await?;
+        let placeholders: Vec<&str> = track_paths.iter().map(|_| "?").collect();
+        let query_string = format!(
+            "DELETE FROM tracks WHERE path IN ({})",
+            placeholders.join(", ")
+        );
+
+        let mut delete_query = query(&query_string);
+        for path in &track_paths {
+            delete_query = delete_query.bind(path);
         }
+        delete_query.execute(&mut *tx).await?;
 
         // Clean up empty albums
         query("DELETE FROM albums WHERE id NOT IN (SELECT DISTINCT album_id FROM tracks)")
@@ -657,12 +969,13 @@ impl LibraryDatabase {
         directory_path: P,
     ) -> Result<(), LibraryError> {
         let directory_path_str = directory_path.as_ref().to_string_lossy().to_string();
-        let path_pattern = format!("{directory_path_str}/%");
+        let escaped_path = escape_like_pattern(&directory_path_str);
+        let path_pattern = format!("{escaped_path}/%");
 
         let mut tx = self.pool.begin().await?;
 
         // Remove tracks in the directory
-        let result = query("DELETE FROM tracks WHERE path LIKE ?")
+        let result = query("DELETE FROM tracks WHERE path LIKE ? ESCAPE '\\'")
             .bind(&path_pattern)
             .execute(&mut *tx)
             .await?;
@@ -715,36 +1028,31 @@ impl LibraryDatabase {
             .fetch_all(&mut *tx)
             .await?;
 
-        let mut albums_to_delete = Vec::new();
-
-        for album_path in orphaned_albums {
-            if !Path::new(&album_path).exists() {
-                albums_to_delete.push(album_path);
-            }
-        }
+        let albums_to_delete: Vec<String> = orphaned_albums
+            .into_iter()
+            .filter(|album_path| !Path::new(album_path).exists())
+            .collect();
 
         if !albums_to_delete.is_empty() {
             debug!("Found {} orphaned albums to delete", albums_to_delete.len());
 
             // Delete orphaned albums (this will cascade to tracks)
-            for album_path in &albums_to_delete {
-                // Clear DR value first (though deletion will remove it anyway)
-                query("UPDATE albums SET dr_value = NULL WHERE path = ?")
-                    .bind(album_path)
-                    .execute(&mut *tx)
-                    .await?;
-
-                let result = query("DELETE FROM albums WHERE path = ?")
-                    .bind(album_path)
-                    .execute(&mut *tx)
-                    .await?;
-
-                debug!(
-                    "Deleted orphaned album: {} ({} rows)",
-                    album_path,
-                    result.rows_affected()
-                );
+            let placeholders: Vec<&str> = albums_to_delete.iter().map(|_| "?").collect();
+            let query_str = format!(
+                "DELETE FROM albums WHERE path IN ({})",
+                placeholders.join(",")
+            );
+            let mut delete_query = query(&query_str);
+            for path in &albums_to_delete {
+                delete_query = delete_query.bind(path);
             }
+            let album_result = delete_query.execute(&mut *tx).await?;
+
+            debug!(
+                "Deleted {} orphaned albums ({} rows)",
+                albums_to_delete.len(),
+                album_result.rows_affected()
+            );
 
             // Clean up empty artists
             let artist_result = query(
@@ -764,29 +1072,30 @@ impl LibraryDatabase {
             .fetch_all(&mut *tx)
             .await?;
 
-        let mut tracks_to_delete = Vec::new();
-
-        for track_path in orphaned_tracks {
-            if !Path::new(&track_path).exists() {
-                tracks_to_delete.push(track_path);
-            }
-        }
+        let tracks_to_delete: Vec<String> = orphaned_tracks
+            .into_iter()
+            .filter(|track_path| !Path::new(track_path).exists())
+            .collect();
 
         if !tracks_to_delete.is_empty() {
             debug!("Found {} orphaned tracks to delete", tracks_to_delete.len());
 
-            for track_path in &tracks_to_delete {
-                let result = query("DELETE FROM tracks WHERE path = ?")
-                    .bind(track_path)
-                    .execute(&mut *tx)
-                    .await?;
-
-                debug!(
-                    "Deleted orphaned track: {} ({} rows)",
-                    track_path,
-                    result.rows_affected()
-                );
+            let placeholders: Vec<&str> = tracks_to_delete.iter().map(|_| "?").collect();
+            let query_str = format!(
+                "DELETE FROM tracks WHERE path IN ({})",
+                placeholders.join(",")
+            );
+            let mut delete_query = query(&query_str);
+            for path in &tracks_to_delete {
+                delete_query = delete_query.bind(path);
             }
+            let track_result = delete_query.execute(&mut *tx).await?;
+
+            debug!(
+                "Deleted {} orphaned tracks ({} rows)",
+                tracks_to_delete.len(),
+                track_result.rows_affected()
+            );
 
             // Clean up empty albums and artists again
             let album_result =

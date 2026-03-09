@@ -227,44 +227,31 @@ impl EmptyState {
                                 {
                                     let path_str: &str = path_str;
 
-                                    // Get current settings snapshot in a tight scope
-                                    let (mut current_settings, settings_arc_for_rescan) = {
-                                        let settings_read = settings_manager.read();
-                                        let settings = settings_read.get_settings().clone();
-                                        (settings, settings_manager.clone())
-                                    };
-
                                     // Only add if not already present
                                     let path_string = path_str.to_string();
-                                    if !current_settings.library_directories.contains(&path_string)
-                                    {
-                                        current_settings
-                                            .library_directories
-                                            .push(path_str.to_string());
 
-                                        // Get mutable reference to update settings in a tight scope
-                                        let update_result = {
-                                            let settings_write = settings_manager.write();
-                                            settings_write.update_settings(current_settings)
-                                        };
+                                    // Get mutable reference to update settings in a tight scope
+                                    let add_result = {
+                                        let settings_write = settings_manager.write();
+                                        settings_write.add_library_directory(&path_string)
+                                    };
 
-                                        if let Err(e) = update_result {
-                                            error!("Failed to update settings: {e}");
-                                            return;
-                                        }
-
-                                        // Log successful addition
-                                        info!("Library directory added: {path_string}");
-
-                                        // Trigger library rescan
-                                        Self::trigger_library_rescan(
-                                            path_str,
-                                            settings_arc_for_rescan,
-                                            app_state_clone2,
-                                            cancel_token,
-                                        )
-                                        .await;
+                                    if let Err(e) = add_result {
+                                        error!("Failed to add library directory: {e}");
+                                        return;
                                     }
+
+                                    // Log successful addition
+                                    info!("Library directory added: {path_string}");
+
+                                    // Trigger library rescan
+                                    Self::trigger_library_rescan(
+                                        path_str,
+                                        settings_manager.clone(),
+                                        app_state_clone2,
+                                        cancel_token,
+                                    )
+                                    .await;
                                 }
                             }
                         }
@@ -498,6 +485,13 @@ impl EmptyState {
 
                 for dir in library_dirs {
                     let dir_path = Path::new(&dir);
+
+                    // Paths are already canonicalized when added to settings, just validate they exist
+                    if !dir_path.is_dir() {
+                        warn!(path = %dir, "Library path is not a valid directory");
+                        continue;
+                    }
+
                     if let Ok(audio_files) =
                         LibraryScanner::collect_audio_files_from_directory(dir_path)
                     {

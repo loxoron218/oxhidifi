@@ -151,6 +151,8 @@ pub enum AppStateEvent {
     ExclusiveModeChanged { enabled: bool },
     /// Exclusive mode playback failed.
     ExclusiveModeFailed { reason: String },
+    /// Library scan failed.
+    LibraryScanFailed { reason: String },
 }
 
 impl AppState {
@@ -366,6 +368,16 @@ impl AppState {
     pub fn report_exclusive_mode_failure(&self, reason: String) {
         debug!("AppState: Reporting exclusive mode failure: {}", reason);
         self.broadcast_event(&AppStateEvent::ExclusiveModeFailed { reason });
+    }
+
+    /// Reports library scan failure and notifies subscribers.
+    ///
+    /// # Arguments
+    ///
+    /// * `reason` - Reason for the failure
+    pub fn report_library_scan_failure(&self, reason: String) {
+        debug!("AppState: Reporting library scan failure: {}", reason);
+        self.broadcast_event(&AppStateEvent::LibraryScanFailed { reason });
     }
 
     /// Subscribes to application state changes.

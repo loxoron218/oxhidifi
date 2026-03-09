@@ -20,7 +20,7 @@ macro_rules! label_column {
                     if let Some(label) = child.downcast_ref::<Label>() {
                         if let Some(boxed) = list_item.item() {
                             if let Ok(album_obj) = boxed.downcast::<BoxedAnyObject>() {
-                                let album = album_obj.borrow::<Album>();
+                                let album = album_obj.borrow::<Arc<Album>>();
                                 if let Some(text) = (extractor_fn)(&album) {
                                     label.set_text(&text);
                                     label.set_visible(true);

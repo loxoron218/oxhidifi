@@ -3,6 +3,8 @@
 //! This module provides factory functions for creating simple text-based album columns
 //! in the column view, using GTK4's `SignalListItemFactory` pattern.
 
+use std::sync::Arc;
+
 use libadwaita::{
     glib::BoxedAnyObject,
     gtk::{
@@ -58,7 +60,7 @@ pub fn setup_artist_column(
             && let Some(boxed) = list_item.item()
             && let Ok(album_obj) = boxed.downcast::<BoxedAnyObject>()
         {
-            let album = album_obj.borrow::<Album>();
+            let album = album_obj.borrow::<Arc<Album>>();
             let cache = cache_clone.borrow();
             let artist_name = cache.get(&album.artist_id).cloned();
             if let Some(name) = artist_name {

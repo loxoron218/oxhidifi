@@ -26,6 +26,7 @@ use {
 
 use crate::{
     config::settings::SettingsManager,
+    library::database::LibraryDatabase,
     state::app_state::{
         AppState,
         AppStateEvent::ViewOptionsChanged,
@@ -71,6 +72,8 @@ pub struct HeaderBar {
     pub settings_manager: Arc<SettingsManager>,
     /// Current view mode.
     pub current_view_mode: ViewMode,
+    /// Library database reference for preferences dialog.
+    pub library_db: Option<Arc<LibraryDatabase>>,
     /// Back button for detail views.
     pub back_button: Button,
     /// Zoom out button for popover.
@@ -93,8 +96,9 @@ impl HeaderBar {
     /// # Arguments
     ///
     /// * `app_state` - Application state reference
-    /// * `application` - Optional application reference for preferences dialog
+    /// * `application` - Optional application reference for dialog parent
     /// * `settings_manager` - Settings manager reference
+    /// * `library_db` - Optional library database reference for preferences dialog
     ///
     /// # Returns
     ///
@@ -103,6 +107,7 @@ impl HeaderBar {
         app_state: &Arc<AppState>,
         application: Option<Application>,
         settings_manager: Arc<SettingsManager>,
+        library_db: Option<Arc<LibraryDatabase>>,
     ) -> Self {
         let widget = LibadwaitaHeaderBar::builder().build();
 
@@ -132,7 +137,8 @@ impl HeaderBar {
         Self::connect_zoom_button_handlers(app_state, &zoom_out_button, &zoom_in_button);
 
         let application_arc = application.map(Arc::new);
-        let settings_button = Self::create_settings_button(app_state, application_arc.as_ref());
+        let settings_button =
+            Self::create_settings_button(app_state, application_arc.as_ref(), library_db.as_ref());
         widget.pack_end(&settings_button);
         widget.pack_end(&view_split_button);
 
@@ -158,6 +164,7 @@ impl HeaderBar {
             settings_manager,
             application: application_arc,
             current_view_mode,
+            library_db,
             _search_debounce_handle: debounce_handle,
             clearing_search,
             _subscription_handle: subscription_handle,
@@ -539,7 +546,7 @@ impl HeaderBar {
     ///
     /// * `app_state` - Application state reference
     /// * `application` - Optional application reference for dialog parent
-    /// * `settings_manager` - Settings manager reference
+    /// * `library_db` - Optional library database reference for preferences dialog
     ///
     /// # Returns
     ///
@@ -547,6 +554,7 @@ impl HeaderBar {
     fn create_settings_button(
         app_state: &Arc<AppState>,
         application: Option<&Arc<Application>>,
+        library_db: Option<&Arc<LibraryDatabase>>,
     ) -> Button {
         let settings_button = Button::builder()
             .icon_name("open-menu-symbolic")
@@ -557,10 +565,13 @@ impl HeaderBar {
         // Connect settings button to show preferences dialog
         let app_state_clone = app_state.clone();
         let application_clone = application.cloned();
+        let library_db_clone = library_db.cloned();
 
         settings_button.connect_clicked(move |_| {
-            if let Some(app) = &application_clone {
-                let preferences_dialog = PreferencesDialog::new(&app_state_clone);
+            if let Some(app) = &application_clone
+                && let Some(db) = &library_db_clone
+            {
+                let preferences_dialog = PreferencesDialog::new(&app_state_clone, db.clone());
 
                 // Get the active window as parent
                 if let Some(window) = app.active_window() {
@@ -737,6 +748,7 @@ impl HeaderBar {
     /// * `app_state` - Application state reference for library state access
     /// * `application` - Application instance for preferences dialog parent
     /// * `settings_manager` - Settings manager reference for configuration
+    /// * `library_db` - Library database reference for preferences dialog
     ///
     /// # Returns
     ///
@@ -745,8 +757,14 @@ impl HeaderBar {
         app_state: &Arc<AppState>,
         application: Application,
         settings_manager: Arc<SettingsManager>,
+        library_db: Arc<LibraryDatabase>,
     ) -> Self {
-        Self::new(app_state, Some(application), settings_manager)
+        Self::new(
+            app_state,
+            Some(application),
+            settings_manager,
+            Some(library_db),
+        )
     }
 
     /// Clears the search entry without triggering search debounce.
@@ -775,16 +793,19 @@ mod tests {
         anyhow::{Result, bail},
         libadwaita::{Application, prelude::ButtonExt},
         parking_lot::RwLock,
+        tokio::test,
     };
 
     use crate::{
-        config::settings::SettingsManager, library::scanner::LibraryScanner,
-        state::app_state::AppState, ui::header_bar::HeaderBar,
+        config::settings::SettingsManager,
+        library::{database::LibraryDatabase, scanner::LibraryScanner},
+        state::app_state::AppState,
+        ui::header_bar::HeaderBar,
     };
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_header_bar_creation() -> Result<()> {
+    async fn test_header_bar_creation() -> Result<()> {
         let app_state = AppState::new(
             Weak::new(),
             None::<Arc<RwLock<LibraryScanner>>>,
@@ -796,7 +817,13 @@ mod tests {
                 .build(),
         );
         let settings_manager = Arc::new(SettingsManager::new()?);
-        let header_bar = HeaderBar::new(&Arc::new(app_state), application, settings_manager);
+        let library_db = LibraryDatabase::new().await?;
+        let header_bar = HeaderBar::new(
+            &Arc::new(app_state),
+            application,
+            settings_manager,
+            Some(Arc::new(library_db)),
+        );
 
         // Check icon names without requiring widget realization
         if header_bar.search_button.icon_name().as_deref() != Some("system-search-symbolic") {

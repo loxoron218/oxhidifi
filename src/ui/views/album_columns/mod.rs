@@ -100,7 +100,7 @@ pub fn setup_play_button_column(
 /// # Returns
 ///
 /// A `CustomSorter` for sorting albums by string values
-fn create_string_sorter(get_value: fn(&Album) -> Option<String>) -> CustomSorter {
+fn create_string_sorter(get_value: fn(&Album) -> Option<&String>) -> CustomSorter {
     sorters::create_string_sorter(get_value)
 }
 
@@ -129,7 +129,7 @@ pub fn setup_title_column(column_view: &mut ColumnView) {
         true,
         None::<i32>
     );
-    let sorter = create_string_sorter(|album| Some(album.title.clone()));
+    let sorter = create_string_sorter(|album| Some(&album.title));
     column.set_sorter(Some(&sorter));
     column_view.append_column(&column);
 }
@@ -163,7 +163,7 @@ pub fn setup_artist_column(
             && let Some(boxed) = list_item.item()
             && let Ok(album_obj) = boxed.downcast::<BoxedAnyObject>()
         {
-            let album = album_obj.borrow::<Album>();
+            let album = album_obj.borrow::<Arc<Album>>();
             let cache = cache_clone.borrow();
             let artist_name = cache.get(&album.artist_id).cloned();
             if let Some(name) = artist_name {
@@ -180,15 +180,23 @@ pub fn setup_artist_column(
     column.set_resizable(true);
     let cache_for_sort = artist_name_cache.clone();
     let sorter = CustomSorter::new(move |item1, item2| {
-        let get_artist_name = |item: &Object| -> Option<String> {
-            item.downcast_ref::<BoxedAnyObject>().and_then(|boxed| {
-                let album = boxed.borrow::<Album>();
-                let cache = cache_for_sort.borrow();
-                cache.get(&album.artist_id).cloned()
+        let extract_album = |item: &Object| -> Option<Arc<Album>> {
+            item.downcast_ref::<BoxedAnyObject>().map(|boxed| {
+                let album_ref = boxed.borrow::<Arc<Album>>();
+                Arc::clone(&album_ref)
             })
         };
-        let val1 = get_artist_name(item1);
-        let val2 = get_artist_name(item2);
+
+        let Some(arc_album1) = extract_album(item1) else {
+            return Equal;
+        };
+        let Some(arc_album2) = extract_album(item2) else {
+            return Equal;
+        };
+
+        let cache = cache_for_sort.borrow();
+        let val1 = cache.get(&arc_album1.artist_id);
+        let val2 = cache.get(&arc_album2.artist_id);
         match (val1, val2) {
             (Some(s1), Some(s2)) => {
                 Ordering::from(s1.to_ascii_lowercase().cmp(&s2.to_ascii_lowercase()))
@@ -233,7 +241,7 @@ pub fn setup_genre_column(column_view: &mut ColumnView, fixed_width: i32) {
         true,
         Some(fixed_width)
     );
-    let sorter = create_string_sorter(|album| album.genre.clone());
+    let sorter = create_string_sorter(|album| album.genre.as_ref());
     column.set_sorter(Some(&sorter));
     column_view.append_column(&column);
 }
