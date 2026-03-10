@@ -96,9 +96,9 @@ impl LibraryPreferencesPage {
 
         // Add button to add new directory
         let add_button = Button::builder()
-            .label("Add Directory")
-            .css_classes(["suggested-action"])
-            .use_underline(true)
+            .icon_name("list-add-symbolic")
+            .tooltip_text("Add Directory")
+            .has_frame(false)
             .build();
 
         let app_state_clone = self.app_state.clone();
