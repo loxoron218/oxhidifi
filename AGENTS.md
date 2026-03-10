@@ -165,11 +165,11 @@ pub async fn load_track<P: AsRef<Path>>(&self, track_path: P) -> Result<(), Audi
 ```
 
 ## GNOME Human Interface Guidelines
-- Navigation: Use `adw::ToolbarView` with top/bottom bars instead of manual GtkBox layouts with HeaderBar/ActionBar
-- Preferences: Use `adw::PreferencesDialog` with `adw::PreferencesPage`, `adw::PreferencesGroup`, and appropriate row types (`adw::ActionRow`, `adw::SwitchRow`, `adw::ComboRow`, `adw::EntryRow`, `adw::PasswordEntryRow`, `adw::SpinRow`)
+- Navigation: Use `ToolbarView` with top/bottom bars instead of manual GtkBox layouts with HeaderBar/ActionBar
+- Preferences: Use `PreferencesDialog` with `PreferencesPage`, `PreferencesGroup`, and appropriate row types (`ActionRow`, `SwitchRow`, `ComboRow`, `EntryRow`, `PasswordEntryRow`, `SpinRow`)
 - Accessibility: `widget.accessible_update_property(AccessibleProperty::Label, value)` for labels, `widget.set_can_focus(true)` for keyboard navigation, `widget.set_tooltip_text("text")` for tooltips, `widget.set_use_underline(true)` for mnemonics
-- Feedback: `adw::Toast`, "suggested-action"/"destructive-action"
-- Responsiveness: `adw::Leaflet`, `adw::Breakpoint`
+- Feedback: `Toast`, "suggested-action"/"destructive-action"
+- Responsiveness: `Leaflet`, `Breakpoint`
 - Motion: 200ms ease transitions
 - Spacing: 6px scale (6/12/18/24/30px)
 - Radii: NEVER hardcoded
