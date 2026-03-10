@@ -16,6 +16,14 @@ use oxhidifi::ui::application::OxhidifiApplication;
 ///
 /// This function initializes the GTK and Libadwaita libraries,
 /// creates the main application instance, and starts the event loop.
+///
+/// # Panics
+///
+/// This function panics if GTK/Libadwaita initialization fails.
+///
+/// # Errors
+///
+/// This function returns an error if application initialization fails.
 #[main]
 async fn main() -> Result<()> {
     // Initialize tracing for observability

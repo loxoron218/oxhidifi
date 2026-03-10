@@ -7,6 +7,7 @@ use {
     rtrb::RingBuffer,
 };
 
+/// Benchmark write performance with empty buffer (no throttling).
 fn benchmark_write_with_buffer_empty(c: &mut Criterion) {
     c.bench_function("write_samples_buffer_empty", |b| {
         let buffer_capacity: usize = 65536;
@@ -26,6 +27,7 @@ fn benchmark_write_with_buffer_empty(c: &mut Criterion) {
     });
 }
 
+/// Benchmark write performance with moderately full buffer (60% - triggers moderate throttling).
 fn benchmark_write_with_buffer_moderately_full(c: &mut Criterion) {
     c.bench_function("write_samples_buffer_moderately_full", |b| {
         let buffer_capacity: usize = 65536;
@@ -57,6 +59,7 @@ fn benchmark_write_with_buffer_moderately_full(c: &mut Criterion) {
     });
 }
 
+/// Benchmark write performance with very full buffer (85% - triggers severe throttling).
 fn benchmark_write_with_buffer_very_full(c: &mut Criterion) {
     c.bench_function("write_samples_buffer_very_full", |b| {
         let buffer_capacity: usize = 65536;
@@ -88,6 +91,7 @@ fn benchmark_write_with_buffer_very_full(c: &mut Criterion) {
     });
 }
 
+/// Benchmark throttle calculation overhead with different buffer fill ratios.
 fn benchmark_throttle_calculation(c: &mut Criterion) {
     c.bench_function("throttle_calculation", |b| {
         let buffer_capacity: usize = 65536;
