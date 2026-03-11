@@ -79,11 +79,8 @@ macro_rules! spawn_forwarding_task {
     }};
 }
 
-/// Type alias for the error callback function.
-type ErrorCallbackFn = Box<dyn Fn(String) + Send + Sync>;
-
 /// Type alias for the thread-safe error callback wrapper.
-type ErrorCallback = Arc<RwLock<Option<ErrorCallbackFn>>>;
+type ErrorCallback = Arc<RwLock<Option<Box<dyn Fn(String) + Send + Sync>>>>;
 
 /// Current playback state.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -260,7 +257,7 @@ impl AudioEngine {
             track_completion_shutdown_tx: Arc::new(Mutex::new(Some(track_completion_shutdown_tx))),
             state_change_shutdown_tx: Arc::new(Mutex::new(Some(state_change_shutdown_tx))),
             prebuffer: Arc::new(RwLock::new(None)),
-            error_callback: ErrorCallback::new(RwLock::new(None)),
+            error_callback: Arc::new(RwLock::new(None)),
         };
 
         // Start the control loop in a background thread

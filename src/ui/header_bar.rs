@@ -231,10 +231,10 @@ impl HeaderBar {
             .build();
 
         // Debounce timer handle for search
-        let debounce_handle: SearchDebounceHandle = Arc::new(Mutex::new(None));
+        let debounce_handle: Arc<Mutex<Option<SourceId>>> = Arc::new(Mutex::new(None));
 
         // Flag to prevent debounce during programmatic text clearing
-        let clearing_search: SearchClearingFlag = Arc::new(Mutex::new(false));
+        let clearing_search: Arc<Mutex<bool>> = Arc::new(Mutex::new(false));
 
         // Connect search button to toggle entry visibility and focus
         let search_entry_clone = search_entry.clone();
