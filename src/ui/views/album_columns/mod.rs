@@ -3,6 +3,10 @@
 //! This module provides factory functions for creating album columns
 //! in the column view, using GTK4's `SignalListItemFactory` pattern.
 
+mod audio_columns;
+mod playback_columns;
+mod sorters;
+
 use std::sync::Arc;
 
 use libadwaita::{
@@ -23,10 +27,6 @@ use crate::{
     state::app_state::AppState,
     ui::views::column_view_types::ArtistNameCache,
 };
-
-mod audio_columns;
-mod playback_columns;
-mod sorters;
 
 /// Sets up the cover art column.
 ///

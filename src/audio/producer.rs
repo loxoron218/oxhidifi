@@ -22,15 +22,6 @@ use crate::audio::{
     decoder_types::DecoderError::{self, NoAudioTrack},
 };
 
-/// Sleep duration when producer buffer is full.
-const PRODUCER_SLEEP_DURATION: Duration = Duration::from_micros(100);
-
-/// Minimum representable f32 value as f64.
-const F32_MIN: f64 = f32::MIN as f64;
-
-/// Maximum representable f32 value as f64.
-const F32_MAX: f64 = f32::MAX as f64;
-
 /// Generates audio format conversion functions to eliminate code duplication.
 ///
 /// This macro generates standalone functions that convert audio buffers from various
@@ -78,6 +69,15 @@ macro_rules! impl_convert {
         }
     };
 }
+
+/// Sleep duration when producer buffer is full.
+const PRODUCER_SLEEP_DURATION: Duration = Duration::from_micros(100);
+
+/// Minimum representable f32 value as f64.
+const F32_MIN: f64 = f32::MIN as f64;
+
+/// Maximum representable f32 value as f64.
+const F32_MAX: f64 = f32::MAX as f64;
 
 /// Audio producer that feeds decoded samples into a ring buffer.
 ///

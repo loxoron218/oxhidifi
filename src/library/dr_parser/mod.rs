@@ -3,6 +3,9 @@
 //! This module implements robust DR value extraction from various text file formats
 //! according to official DR meter specifications, with caching for performance.
 
+mod cache;
+mod extractor;
+
 use std::{collections::HashSet, path::Path, sync::Arc};
 
 use tracing::{debug, warn};
@@ -14,9 +17,6 @@ use crate::{
         dr_parser::{cache::AlbumDrCache, extractor::DrExtractor},
     },
 };
-
-mod cache;
-mod extractor;
 
 /// Main DR parsing coordinator.
 ///

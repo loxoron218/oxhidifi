@@ -39,6 +39,22 @@ use crate::audio::{
     },
 };
 
+/// Checks if a ring buffer producer has been abandoned and returns early if so.
+///
+/// This macro ensures the resampling thread exits promptly when the stream is stopped,
+/// preventing it from blocking indefinitely on abandoned ring buffers.
+///
+/// # Arguments
+///
+/// * `$producer` - A `Producer<T>` from the `rtrb` crate
+macro_rules! check_abandonment {
+    ($producer:expr) => {
+        if $producer.is_abandoned() {
+            return;
+        }
+    };
+}
+
 /// Sleep duration when target buffer is full.
 const RESAMPLER_SLEEP_DURATION: Duration = Duration::from_micros(50);
 
@@ -84,6 +100,19 @@ pub struct AudioResampler {
     input_buffer: Vec<f32>,
     /// Output buffer for resampled data.
     output_buffer: Vec<f32>,
+}
+
+/// Resampling audio consumer that handles real-time sample rate conversion.
+///
+/// This consumer reads from a source ring buffer, resamples the audio data,
+/// and writes to a target ring buffer that feeds the audio output.
+pub struct ResamplingAudioConsumer {
+    /// Running flag for the resampling thread.
+    running: Arc<AtomicBool>,
+    /// Resampling thread handle.
+    thread_handle: Option<JoinHandle<()>>,
+    /// Target stream configuration.
+    target_config: StreamConfig,
 }
 
 impl AudioResampler {
@@ -214,38 +243,6 @@ impl AudioResampler {
     }
 }
 
-/// Calculates an appropriate chunk size for resampling based on sample rates.
-fn calculate_chunk_size(source_rate: u32, target_rate: u32) -> usize {
-    // Find GCD to get a reasonable chunk size
-    let gcd = gcd(source_rate, target_rate);
-    let lcm = (u64::from(source_rate) * u64::from(target_rate)) / u64::from(gcd);
-
-    // Use a chunk size that's a multiple of both rates' relationship
-    // but keep it reasonable for real-time processing
-    let base_chunk = (lcm / u64::from(source_rate)).min(4096) as usize;
-
-    // Ensure it's at least 256 samples for efficiency
-    base_chunk.clamp(256, 8192)
-}
-
-/// Calculates the greatest common divisor of two numbers.
-fn gcd(a: u32, b: u32) -> u32 {
-    if b == 0 { a } else { gcd(b, a % b) }
-}
-
-/// Resampling audio consumer that handles real-time sample rate conversion.
-///
-/// This consumer reads from a source ring buffer, resamples the audio data,
-/// and writes to a target ring buffer that feeds the audio output.
-pub struct ResamplingAudioConsumer {
-    /// Running flag for the resampling thread.
-    running: Arc<AtomicBool>,
-    /// Resampling thread handle.
-    thread_handle: Option<JoinHandle<()>>,
-    /// Target stream configuration.
-    target_config: StreamConfig,
-}
-
 impl ResamplingAudioConsumer {
     /// Creates a new resampling audio consumer.
     ///
@@ -323,20 +320,23 @@ impl Drop for ResamplingAudioConsumer {
     }
 }
 
-/// Checks if a ring buffer producer has been abandoned and returns early if so.
-///
-/// This macro ensures the resampling thread exits promptly when the stream is stopped,
-/// preventing it from blocking indefinitely on abandoned ring buffers.
-///
-/// # Arguments
-///
-/// * `$producer` - A `Producer<T>` from the `rtrb` crate
-macro_rules! check_abandonment {
-    ($producer:expr) => {
-        if $producer.is_abandoned() {
-            return;
-        }
-    };
+/// Calculates an appropriate chunk size for resampling based on sample rates.
+fn calculate_chunk_size(source_rate: u32, target_rate: u32) -> usize {
+    // Find GCD to get a reasonable chunk size
+    let gcd = gcd(source_rate, target_rate);
+    let lcm = (u64::from(source_rate) * u64::from(target_rate)) / u64::from(gcd);
+
+    // Use a chunk size that's a multiple of both rates' relationship
+    // but keep it reasonable for real-time processing
+    let base_chunk = (lcm / u64::from(source_rate)).min(4096) as usize;
+
+    // Ensure it's at least 256 samples for efficiency
+    base_chunk.clamp(256, 8192)
+}
+
+/// Calculates the greatest common divisor of two numbers.
+fn gcd(a: u32, b: u32) -> u32 {
+    if b == 0 { a } else { gcd(b, a % b) }
 }
 
 /// Main resampling loop that runs in a dedicated thread.

@@ -3,6 +3,9 @@
 //! This module implements efficient incremental database updates that avoid
 //! full library rescans while maintaining data consistency and referential integrity.
 
+mod config;
+mod event_processing;
+
 use std::sync::Arc;
 
 use {
@@ -17,13 +20,9 @@ use crate::{
     error::domain::LibraryError,
     library::{
         database::LibraryDatabase, dr_parser::DrParser, file_watcher::events::DebouncedEvent,
+        incremental_updater::config::IncrementalUpdaterConfig,
     },
 };
-
-mod config;
-mod event_processing;
-
-use crate::library::incremental_updater::config::IncrementalUpdaterConfig;
 
 /// Coordinates incremental library updates.
 ///

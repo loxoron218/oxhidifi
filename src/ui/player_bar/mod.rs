@@ -3,6 +3,20 @@
 //! This module provides the player bar component that displays track information,
 //! playback controls, volume control, and Hi-Fi audio quality indicators.
 
+#[cfg(test)]
+pub mod hifi_calculations_tests;
+
+pub mod center_section;
+pub mod hifi_calculations;
+pub mod hifi_popover;
+pub mod left_section;
+pub mod progress_tracker;
+pub mod right_section;
+pub mod seek_handler;
+pub mod shared_state;
+pub mod state_subscription;
+pub mod volume_popover;
+
 use std::{boxed::Box, pin::Pin, sync::Arc};
 
 use {
@@ -37,48 +51,6 @@ use crate::{
         volume_popover::connect_volume_handlers,
     },
 };
-
-#[cfg(test)]
-pub mod hifi_calculations_tests;
-
-pub mod center_section;
-pub mod hifi_calculations;
-pub mod hifi_popover;
-pub mod left_section;
-pub mod progress_tracker;
-pub mod right_section;
-pub mod seek_handler;
-pub mod shared_state;
-pub mod state_subscription;
-pub mod volume_popover;
-
-/// Handles playback action execution with error reporting and exclusive mode handling.
-///
-/// Executes the provided async action on the audio engine, logs any errors,
-/// and handles exclusive mode conflicts through the app state.
-///
-/// # Arguments
-///
-/// * `audio_engine` - Reference to the audio engine for action execution
-/// * `app_state` - Reference to application state for error handling
-/// * `action` - Async closure returning a playback action result
-/// * `action_name` - Descriptive name for logging purposes
-async fn handle_playback_action(
-    audio_engine: &AudioEngine,
-    app_state: &AppState,
-    action: impl FnOnce(&AudioEngine) -> Pin<Box<dyn Future<Output = Result<(), AudioError>> + '_>>,
-    action_name: &str,
-) {
-    match action(audio_engine).await {
-        Ok(()) => {}
-        Err(e) => {
-            error!(error = %e, action = %action_name, "Playback action failed");
-
-            // Handle exclusive mode conflicts (e.g., device in use by another application)
-            if handle_exclusive_mode_error(&e, app_state) {}
-        }
-    }
-}
 
 /// Comprehensive Hi-Fi player control center with metadata display.
 ///
@@ -485,5 +457,33 @@ impl PlayerBar {
         );
 
         self
+    }
+}
+
+/// Handles playback action execution with error reporting and exclusive mode handling.
+///
+/// Executes the provided async action on the audio engine, logs any errors,
+/// and handles exclusive mode conflicts through the app state.
+///
+/// # Arguments
+///
+/// * `audio_engine` - Reference to the audio engine for action execution
+/// * `app_state` - Reference to application state for error handling
+/// * `action` - Async closure returning a playback action result
+/// * `action_name` - Descriptive name for logging purposes
+async fn handle_playback_action(
+    audio_engine: &AudioEngine,
+    app_state: &AppState,
+    action: impl FnOnce(&AudioEngine) -> Pin<Box<dyn Future<Output = Result<(), AudioError>> + '_>>,
+    action_name: &str,
+) {
+    match action(audio_engine).await {
+        Ok(()) => {}
+        Err(e) => {
+            error!(error = %e, action = %action_name, "Playback action failed");
+
+            // Handle exclusive mode conflicts (e.g., device in use by another application)
+            if handle_exclusive_mode_error(&e, app_state) {}
+        }
     }
 }

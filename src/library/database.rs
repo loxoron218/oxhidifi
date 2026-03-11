@@ -17,32 +17,6 @@ use crate::library::{
     models::{Album, Artist, SearchResults, Track},
 };
 
-/// Escapes special characters in a string for use in SQL LIKE patterns.
-///
-/// This prevents SQL LIKE injection by escaping `%`, `_`, and `\` characters
-/// which have special meaning in LIKE patterns.
-///
-/// # Arguments
-///
-/// * `s` - The string to escape.
-///
-/// # Returns
-///
-/// A new string with special characters escaped.
-#[must_use]
-pub fn escape_like_pattern(s: &str) -> String {
-    let mut result = String::with_capacity(s.len() * 2);
-    for c in s.chars() {
-        match c {
-            '\\' => result.push_str("\\\\"),
-            '%' => result.push_str("\\%"),
-            '_' => result.push_str("\\_"),
-            _ => result.push(c),
-        }
-    }
-    result
-}
-
 /// Error type for library database operations.
 #[derive(Error, Debug)]
 pub enum LibraryError {
@@ -1134,6 +1108,32 @@ impl LibraryDatabase {
     pub fn pool(&self) -> &SqlitePool {
         &self.pool
     }
+}
+
+/// Escapes special characters in a string for use in SQL LIKE patterns.
+///
+/// This prevents SQL LIKE injection by escaping `%`, `_`, and `\` characters
+/// which have special meaning in LIKE patterns.
+///
+/// # Arguments
+///
+/// * `s` - The string to escape.
+///
+/// # Returns
+///
+/// A new string with special characters escaped.
+#[must_use]
+pub fn escape_like_pattern(s: &str) -> String {
+    let mut result = String::with_capacity(s.len() * 2);
+    for c in s.chars() {
+        match c {
+            '\\' => result.push_str("\\\\"),
+            '%' => result.push_str("\\%"),
+            '_' => result.push_str("\\_"),
+            _ => result.push(c),
+        }
+    }
+    result
 }
 
 #[cfg(test)]

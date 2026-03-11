@@ -4,6 +4,10 @@
 //! for music library directories, with support for debouncing and
 //! event filtering for supported audio formats.
 
+pub mod config;
+pub mod debouncer;
+pub mod events;
+
 use std::{
     collections::HashSet,
     fs::read_dir,
@@ -27,17 +31,15 @@ use {
     tracing::{debug, error},
 };
 
-use crate::{audio::format_detector::supported_audio_extensions, error::domain::LibraryError};
-
-pub mod config;
-pub mod debouncer;
-pub mod events;
-
-use crate::library::file_watcher::{
-    config::FileWatcherConfig,
-    events::{
-        ProcessedEvent,
-        ProcessedEvent::{FileChanged, FileRemoved},
+use crate::{
+    audio::format_detector::supported_audio_extensions,
+    error::domain::LibraryError,
+    library::file_watcher::{
+        config::FileWatcherConfig,
+        events::{
+            ProcessedEvent,
+            ProcessedEvent::{FileChanged, FileRemoved},
+        },
     },
 };
 

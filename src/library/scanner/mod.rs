@@ -3,6 +3,9 @@
 //! This module coordinates file system monitoring, metadata extraction,
 //! and database updates to maintain a real-time synchronized music library.
 
+mod config;
+pub mod event_processing;
+
 use std::{
     fs::read_dir,
     path::{Path, PathBuf},
@@ -33,9 +36,6 @@ use crate::{
         },
     },
 };
-
-mod config;
-pub mod event_processing;
 
 /// Events emitted by the library scanner.
 #[derive(Debug, Clone)]

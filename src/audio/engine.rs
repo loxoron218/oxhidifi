@@ -42,6 +42,43 @@ use crate::audio::{
     resampler::ResamplingAudioConsumer,
 };
 
+/// Macro to spawn forwarding tasks for notification channels.
+///
+/// This macro eliminates boilerplate for spawning async tasks that:
+/// 1. Receive messages from a source channel
+/// 2. Forward them to all subscribers
+/// 3. Handle shutdown signals gracefully
+macro_rules! spawn_forwarding_task {
+    ($subscribers:expr, $rx:expr, $shutdown_rx:expr, $task_name:expr) => {{
+        let subscribers_clone = Arc::clone(&$subscribers);
+        MainContext::default().spawn_local(async move {
+            loop {
+                select! {
+                    result = $rx.recv() => {
+                        match result {
+                            Ok(msg) => {
+                                for tx in subscribers_clone.lock().iter() {
+                                    if let Err(e) = tx.try_send(msg.clone()) {
+                                        error!(task_name = %$task_name, error = %e, "Failed to send message to subscriber");
+                                    }
+                                }
+                            }
+                            Err(_) => {
+                                debug!("{} channel closed, exiting forwarding task", $task_name);
+                                break;
+                            }
+                        }
+                    }
+                    _ = $shutdown_rx.recv() => {
+                        debug!("{} forwarding task received shutdown signal", $task_name);
+                        break;
+                    }
+                }
+            }
+        });
+    }};
+}
+
 /// Type alias for the error callback function.
 type ErrorCallbackFn = Box<dyn Fn(String) + Send + Sync>;
 
@@ -165,43 +202,6 @@ struct StreamHandle {
     decoder_handle: Option<JoinHandle<Result<(), DecoderError>>>,
     /// Resampling consumer for graceful shutdown.
     resampling_consumer: Option<ResamplingAudioConsumer>,
-}
-
-/// Macro to spawn forwarding tasks for notification channels.
-///
-/// This macro eliminates boilerplate for spawning async tasks that:
-/// 1. Receive messages from a source channel
-/// 2. Forward them to all subscribers
-/// 3. Handle shutdown signals gracefully
-macro_rules! spawn_forwarding_task {
-    ($subscribers:expr, $rx:expr, $shutdown_rx:expr, $task_name:expr) => {{
-        let subscribers_clone = Arc::clone(&$subscribers);
-        MainContext::default().spawn_local(async move {
-            loop {
-                select! {
-                    result = $rx.recv() => {
-                        match result {
-                            Ok(msg) => {
-                                for tx in subscribers_clone.lock().iter() {
-                                    if let Err(e) = tx.try_send(msg.clone()) {
-                                        error!(task_name = %$task_name, error = %e, "Failed to send message to subscriber");
-                                    }
-                                }
-                            }
-                            Err(_) => {
-                                debug!("{} channel closed, exiting forwarding task", $task_name);
-                                break;
-                            }
-                        }
-                    }
-                    _ = $shutdown_rx.recv() => {
-                        debug!("{} forwarding task received shutdown signal", $task_name);
-                        break;
-                    }
-                }
-            }
-        });
-    }};
 }
 
 impl AudioEngine {

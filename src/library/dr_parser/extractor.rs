@@ -15,26 +15,6 @@ const DR_VALUE_PATTERN: &str = r"^DR(\d{1,2})$";
 /// Supported text file extensions for DR value scanning.
 const TEXT_FILE_EXTENSIONS: &[&str] = &["txt", "log", "md", "csv"];
 
-/// Compiles a regex pattern, returning a `DrError::RegexError` on failure.
-///
-/// # Arguments
-///
-/// * `pattern` - The regex pattern string to compile.
-///
-/// # Returns
-///
-/// A `Result` containing the compiled `Regex` or a `DrError::RegexError`.
-///
-/// # Errors
-///
-/// Returns `DrError::RegexError` if the pattern is invalid.
-fn compile_regex(pattern: &str) -> Result<Regex, DrError> {
-    Regex::new(pattern).map_err(|e| RegexError {
-        pattern: pattern.to_string(),
-        error: e.to_string(),
-    })
-}
-
 /// Extracts and validates DR values from album directories.
 ///
 /// The `DrExtractor` parses various DR meter log formats and extracts
@@ -195,6 +175,26 @@ impl DrExtractor {
 
         Ok(text_files)
     }
+}
+
+/// Compiles a regex pattern, returning a `DrError::RegexError` on failure.
+///
+/// # Arguments
+///
+/// * `pattern` - The regex pattern string to compile.
+///
+/// # Returns
+///
+/// A `Result` containing the compiled `Regex` or a `DrError::RegexError`.
+///
+/// # Errors
+///
+/// Returns `DrError::RegexError` if the pattern is invalid.
+fn compile_regex(pattern: &str) -> Result<Regex, DrError> {
+    Regex::new(pattern).map_err(|e| RegexError {
+        pattern: pattern.to_string(),
+        error: e.to_string(),
+    })
 }
 
 #[cfg(test)]

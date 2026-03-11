@@ -18,11 +18,6 @@ use {
     tracing::debug,
 };
 
-/// Default debounce timeout for search input (150ms).
-const fn default_search_debounce_ms() -> u64 {
-    150
-}
-
 /// Volume control mode - application or system volume.
 #[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 pub enum VolumeMode {
@@ -108,6 +103,15 @@ pub struct UserSettings {
     pub artists_sort_order: SortOrder,
 }
 
+/// Handles loading, saving, and validation of user preferences.
+#[derive(Debug)]
+pub struct SettingsManager {
+    /// Thread-safe user settings storage.
+    settings: RwLock<UserSettings>,
+    /// Path to the configuration file on disk.
+    config_path: PathBuf,
+}
+
 impl Default for UserSettings {
     fn default() -> Self {
         Self {
@@ -130,15 +134,6 @@ impl Default for UserSettings {
             artists_sort_order: SortOrder::Ascending, // Default ascending order
         }
     }
-}
-
-/// Handles loading, saving, and validation of user preferences.
-#[derive(Debug)]
-pub struct SettingsManager {
-    /// Thread-safe user settings storage.
-    settings: RwLock<UserSettings>,
-    /// Path to the configuration file on disk.
-    config_path: PathBuf,
 }
 
 impl Clone for SettingsManager {
@@ -333,6 +328,11 @@ impl SettingsManager {
         write(&self.config_path, contents)?;
         Ok(())
     }
+}
+
+/// Default debounce timeout for search input (150ms).
+const fn default_search_debounce_ms() -> u64 {
+    150
 }
 
 /// Ensures proper XDG directory usage for config and cache files.

@@ -42,15 +42,6 @@ use crate::audio::{
     resampler::{ResamplingAudioConsumer, create_resampling_stream},
 };
 
-/// Maximum i64 value as f64 for scaling.
-const I64_MAX_F64: f64 = 9_223_372_036_854_776_000.0;
-
-/// Minimum i64 value as f64 for scaling.
-const I64_MIN_F64: f64 = -9_223_372_036_854_776_000.0;
-
-/// Maximum u64 value as f64 for scaling.
-const U64_MAX_F64: f64 = 18_446_744_073_709_552_000_f64;
-
 /// Builds a sample output stream with format-specific conversion.
 ///
 /// # Macro Parameters
@@ -100,6 +91,48 @@ macro_rules! build_sample_stream {
             .map_err(|e| OutputError::CpalError(e))
     }};
 }
+
+/// Generates stream builder methods for each sample format.
+///
+/// # Macro Parameters
+///
+/// * `$name` - Function name to generate (e.g., `build_stream_f32`)
+/// * `$type` - Sample type for the stream (e.g., `f32`, `i16`)
+/// * `$silent` - Silence value for buffer underruns
+/// * `$convert` - Closure expression to convert f32 samples to target type
+macro_rules! generate_stream_builders {
+    ($name:ident, $type:ty, $silent:expr, $convert:expr) => {
+        /// Builds an audio stream for the sample format.
+        ///
+        /// # Errors
+        ///
+        /// Returns `OutputError::StreamBuildError` if the audio stream cannot be created.
+        fn $name(mut ctx: Self) -> Result<Stream, OutputError> {
+            build_sample_stream!(
+                ctx.device,
+                ctx.stream_config,
+                ctx.consumer,
+                ctx.err_fn,
+                ctx.timeout,
+                $type,
+                $convert,
+                $silent,
+                ctx.current_position,
+                ctx.channels,
+                ctx.sample_rate
+            )
+        }
+    };
+}
+
+/// Maximum i64 value as f64 for scaling.
+const I64_MAX_F64: f64 = 9_223_372_036_854_776_000.0;
+
+/// Minimum i64 value as f64 for scaling.
+const I64_MIN_F64: f64 = -9_223_372_036_854_776_000.0;
+
+/// Maximum u64 value as f64 for scaling.
+const U64_MAX_F64: f64 = 18_446_744_073_709_552_000_f64;
 
 /// Error type for audio output operations.
 #[derive(Error, Debug)]
@@ -206,39 +239,6 @@ where
     channels: ChannelCount,
     /// Sample rate for position calculation.
     sample_rate: cpal::SampleRate,
-}
-
-/// Generates stream builder methods for each sample format.
-///
-/// # Macro Parameters
-///
-/// * `$name` - Function name to generate (e.g., `build_stream_f32`)
-/// * `$type` - Sample type for the stream (e.g., `f32`, `i16`)
-/// * `$silent` - Silence value for buffer underruns
-/// * `$convert` - Closure expression to convert f32 samples to target type
-macro_rules! generate_stream_builders {
-    ($name:ident, $type:ty, $silent:expr, $convert:expr) => {
-        /// Builds an audio stream for the sample format.
-        ///
-        /// # Errors
-        ///
-        /// Returns `OutputError::StreamBuildError` if the audio stream cannot be created.
-        fn $name(mut ctx: Self) -> Result<Stream, OutputError> {
-            build_sample_stream!(
-                ctx.device,
-                ctx.stream_config,
-                ctx.consumer,
-                ctx.err_fn,
-                ctx.timeout,
-                $type,
-                $convert,
-                $silent,
-                ctx.current_position,
-                ctx.channels,
-                ctx.sample_rate
-            )
-        }
-    };
 }
 
 /// Associated functions for building audio streams.
