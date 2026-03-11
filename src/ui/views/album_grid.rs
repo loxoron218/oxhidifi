@@ -11,8 +11,8 @@ use {
         glib::{JoinHandle, MainContext},
         gtk::{
             AccessibleRole::Grid,
-            Align::{Fill, Start},
-            Box, FlowBox,
+            Align::{Center, Fill, Start},
+            Box, FlowBox, Label,
             Orientation::Vertical,
             SelectionMode::None as SelectionNone,
             Widget,
@@ -206,6 +206,8 @@ pub struct AlbumGridView {
     pub widget: Widget,
     /// The flow box container.
     pub flow_box: FlowBox,
+    /// The count label showing album/song count.
+    pub count_label: Label,
     /// Current application state reference.
     pub app_state: Option<Arc<AppState>>,
     /// Library database reference for fetching tracks.
@@ -282,7 +284,7 @@ impl AlbumGridView {
 
         let flow_box = Self::create_flow_box();
 
-        let (main_container, empty_state, search_empty_state) =
+        let (main_container, empty_state, search_empty_state, count_label) =
             Self::create_main_container(&flow_box, app_state);
 
         let album_cards = Rc::new(RefCell::new(Vec::new()));
@@ -299,6 +301,7 @@ impl AlbumGridView {
         let mut view = Self {
             widget: main_container.upcast_ref::<Widget>().clone(),
             flow_box,
+            count_label,
             app_state: app_state.cloned(),
             library_db: library_db.cloned(),
             audio_engine: audio_engine.cloned(),
@@ -358,9 +361,19 @@ impl AlbumGridView {
     fn create_main_container(
         flow_box: &FlowBox,
         app_state: Option<&Arc<AppState>>,
-    ) -> (Box, Option<EmptyState>, SearchEmptyState) {
+    ) -> (Box, Option<EmptyState>, SearchEmptyState, Label) {
         let main_container = Box::builder().orientation(Vertical).build();
 
+        let count_label = Label::builder()
+            .label("0 Albums")
+            .halign(Center)
+            .margin_start(24)
+            .margin_top(12)
+            .margin_bottom(6)
+            .css_classes(["album-artist-label"])
+            .build();
+
+        main_container.append(&count_label.clone().upcast::<Widget>());
         main_container.append(&flow_box.clone().upcast::<Widget>());
 
         // Set ARIA attributes for accessibility
@@ -388,7 +401,7 @@ impl AlbumGridView {
         main_container.append(search_empty_state.widget());
         search_empty_state.hide();
 
-        (main_container, empty_state, search_empty_state)
+        (main_container, empty_state, search_empty_state, count_label)
     }
 
     /// Creates the zoom subscription handler.
@@ -662,8 +675,29 @@ impl AlbumGridView {
             }
         }
 
+        // Update count label
+        self.update_count_label();
+
         // Hide search empty state when showing albums
         self.search_empty_state.hide();
+    }
+
+    /// Updates the count label with the current album and song count.
+    fn update_count_label(&self) {
+        let album_count = self.albums.len();
+        let song_count: i64 = self.albums.iter().map(|a| a.track_count).sum();
+
+        let label_text = if song_count > 0 {
+            let album_word = if album_count == 1 { "Album" } else { "Albums" };
+            let song_word = if song_count == 1 { "Song" } else { "Songs" };
+            format!("{album_count} {album_word} ({song_count} {song_word})")
+        } else if album_count == 1 {
+            "1 Album".to_string()
+        } else {
+            format!("{album_count} Albums")
+        };
+
+        self.count_label.set_text(&label_text);
     }
 
     /// Updates the full unfiltered albums list.

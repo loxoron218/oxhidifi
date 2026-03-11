@@ -11,7 +11,7 @@ use {
         glib::{JoinHandle, MainContext},
         gtk::{
             AccessibleRole::{Grid, Group},
-            Align::{Fill, Start},
+            Align::{Center, Fill, Start},
             Box, FlowBox, FlowBoxChild, GestureClick, Label,
             Orientation::Vertical,
             SelectionMode::None as SelectionNone,
@@ -127,6 +127,8 @@ pub struct ArtistGridView {
     pub widget: Widget,
     /// The flow box container.
     pub flow_box: FlowBox,
+    /// The count label showing artist count.
+    pub count_label: Label,
     /// Current application state reference.
     pub app_state: Option<Arc<AppState>>,
     /// Current artists being displayed.
@@ -191,6 +193,16 @@ impl ArtistGridView {
         // Create main container that can hold both flow box and empty state
         let main_container = Box::builder().orientation(Vertical).build();
 
+        let count_label = Label::builder()
+            .label("0 Artists")
+            .halign(Center)
+            .margin_start(24)
+            .margin_top(12)
+            .margin_bottom(6)
+            .css_classes(["album-artist-label"])
+            .build();
+
+        main_container.append(&count_label.clone().upcast::<Widget>());
         main_container.append(&flow_box.clone().upcast::<Widget>());
 
         // Set ARIA attributes for accessibility
@@ -225,6 +237,7 @@ impl ArtistGridView {
         let mut view = Self {
             widget: main_container.upcast_ref::<Widget>().clone(),
             flow_box: flow_box.clone(),
+            count_label,
             app_state: app_state.clone(),
             artists: Vec::new(),
             all_artists: artists.clone(),
@@ -338,8 +351,31 @@ impl ArtistGridView {
             self.artist_cards_ref.borrow_mut().push(card_arc);
         }
 
+        // Update count label
+        self.update_count_label();
+
         // Hide search empty state when showing artists
         self.search_empty_state.hide();
+    }
+
+    /// Updates the count label with the current artist count.
+    fn update_count_label(&self) {
+        let artist_count = self.artists.len();
+        let song_count: i64 = self.artists.iter().map(|a| a.album_count).sum();
+
+        let label_text = if song_count > 0 {
+            if song_count == 1 {
+                format!("{artist_count} Artist (1 Album)")
+            } else {
+                format!("{artist_count} Artists ({song_count} Albums)")
+            }
+        } else if artist_count == 1 {
+            "1 Artist".to_string()
+        } else {
+            format!("{artist_count} Artists")
+        };
+
+        self.count_label.set_text(&label_text);
     }
 
     /// Updates the full unfiltered artists list.

@@ -11,7 +11,9 @@ use {
         gio::ListStore,
         glib::{BoxedAnyObject, JoinHandle, MainContext, Object},
         gtk::{
-            Box, ColumnView, ColumnViewColumn, ColumnViewSorter, FilterListModel, NoSelection,
+            Align::Center,
+            Box, ColumnView, ColumnViewColumn, ColumnViewSorter, FilterListModel, Label,
+            NoSelection,
             Orientation::Vertical,
             SortListModel,
             SortType::{Ascending, Descending},
@@ -69,6 +71,8 @@ pub struct ColumnListView {
     pub filter_model: FilterListModel,
     /// The sort model for column header sorting.
     pub sort_model: SortListModel,
+    /// The count label showing item count.
+    pub count_label: Label,
     /// Application state reference.
     pub app_state: Option<Arc<AppState>>,
     /// Settings manager reference for persistence.
@@ -151,6 +155,16 @@ impl ColumnListView {
         let is_album_view = matches!(config.view_type, Albums);
         let search_empty_state = SearchEmptyState::new(SearchEmptyStateConfig { is_album_view });
 
+        let count_label = Label::builder()
+            .label("0 Items")
+            .halign(Center)
+            .margin_start(12)
+            .margin_top(12)
+            .margin_bottom(6)
+            .css_classes(["album-artist-label"])
+            .build();
+
+        main_container.append(&count_label.clone().upcast::<Widget>());
         main_container.append(&column_view);
         main_container.append(search_empty_state.widget());
         search_empty_state.hide();
@@ -161,6 +175,7 @@ impl ColumnListView {
             list_store,
             filter_model,
             sort_model,
+            count_label,
             app_state: app_state.cloned(),
             settings_manager,
             config,
@@ -379,6 +394,14 @@ impl ColumnListView {
         ColumnListViewBuilder::default()
     }
 
+    /// Updates the count label based on the current view type.
+    pub fn update_count_label(&self) {
+        match &self.config.view_type {
+            Albums => self.update_album_count_label(),
+            Artists => self.update_artist_count_label(),
+        }
+    }
+
     /// Replaces albums in the list store.
     ///
     /// # Arguments
@@ -391,6 +414,27 @@ impl ColumnListView {
             &self.config,
             &self.search_empty_state,
         );
+        self.update_count_label();
+    }
+
+    /// Updates the count label for album view.
+    fn update_album_count_label(&self) {
+        let album_count = self.albums.len();
+        let song_count: i64 = self.albums.iter().map(|a| a.track_count).sum();
+
+        let label_text = if song_count > 0 {
+            if song_count == 1 {
+                format!("{album_count} Album (1 Song)")
+            } else {
+                format!("{album_count} Albums ({song_count} Songs)")
+            }
+        } else if album_count == 1 {
+            "1 Album".to_string()
+        } else {
+            format!("{album_count} Albums")
+        };
+
+        self.count_label.set_text(&label_text);
     }
 
     /// Replaces artists in the list store.
@@ -405,6 +449,27 @@ impl ColumnListView {
             &self.config,
             &self.search_empty_state,
         );
+        self.update_count_label();
+    }
+
+    /// Updates the count label for artist view.
+    fn update_artist_count_label(&self) {
+        let artist_count = self.artists.len();
+        let album_count: i64 = self.artists.iter().map(|a| a.album_count).sum();
+
+        let label_text = if album_count > 0 {
+            if album_count == 1 {
+                format!("{artist_count} Artist (1 Album)")
+            } else {
+                format!("{artist_count} Artists ({album_count} Albums)")
+            }
+        } else if artist_count == 1 {
+            "1 Artist".to_string()
+        } else {
+            format!("{artist_count} Artists")
+        };
+
+        self.count_label.set_text(&label_text);
     }
 
     /// Filters items based on a search query.
