@@ -1,8 +1,8 @@
 //! Audio playback system.
 //!
 //! Provides bit-perfect audio playback with gapless support using cpal, symphonia, and rtrb.
-//! Includes components for decoding, output, metadata extraction, artwork handling, format detection,
-//! and resampling.
+//! Includes components for decoding, output, metadata extraction, artwork handling, format
+//! detection, and resampling.
 
 #[cfg(test)]
 pub mod producer_tests;

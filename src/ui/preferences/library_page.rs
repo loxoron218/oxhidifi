@@ -552,7 +552,8 @@ impl LibraryPreferencesPage {
                 for dir in library_dirs {
                     let dir_path = Path::new(&dir);
 
-                    // Paths are already canonicalized when added to settings, just validate they exist
+                    // Paths are already canonicalized when added to settings, just validate they
+                    // exist
                     if !dir_path.is_dir() {
                         warn!(path = %dir, "Library path is not a valid directory");
                         continue;

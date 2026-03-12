@@ -52,7 +52,8 @@ const MAX_FILE_SIZE_BYTES: u64 = 100 * 1024 * 1024 * 1024;
 ///
 /// # Panics
 ///
-/// Panics if DR parser is provided as `Some` but contains `None` (should never happen with valid initialization).
+/// Panics if DR parser is provided as `Some` but contains `None` (should never happen with valid
+/// initialization).
 pub async fn handle_files_changed(
     paths: Vec<PathBuf>,
     database: &LibraryDatabase,
@@ -197,7 +198,8 @@ pub async fn handle_files_changed(
 ///
 /// # Panics
 ///
-/// Panics if DR parser is provided as `Some` but contains `None` (should never happen with valid initialization).
+/// Panics if DR parser is provided as `Some` but contains `None` (should never happen with valid
+/// initialization).
 pub async fn handle_files_removed(
     paths: Vec<PathBuf>,
     database: &LibraryDatabase,
@@ -588,7 +590,8 @@ async fn get_or_create_album(
     if let Some(id) = existing_album {
         // Update existing album
         query(
-            "UPDATE albums SET path = ?, compilation = ?, artwork_path = ?, format = ?, bits_per_sample = ?, sample_rate = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+            "UPDATE albums SET path = ?, compilation = ?, artwork_path = ?, format = ?, \
+             bits_per_sample = ?, sample_rate = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
         )
         .bind(album_dir.to_string_lossy().to_string())
         .bind(is_compilation)
@@ -603,7 +606,9 @@ async fn get_or_create_album(
     } else {
         // Create new album
         let id: i64 = query_scalar(
-            "INSERT INTO albums (artist_id, title, year, genre, compilation, path, artwork_path, format, bits_per_sample, sample_rate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id"
+            "INSERT INTO albums (artist_id, title, year, genre, compilation, path, artwork_path, \
+             format, bits_per_sample, sample_rate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) \
+             RETURNING id",
         )
         .bind(artist_id)
         .bind(album_title)
@@ -677,7 +682,10 @@ async fn update_track_in_transaction(
     if let Some(track_id) = existing_track {
         // Update existing track
         query(
-            "UPDATE tracks SET album_id = ?, title = ?, track_number = ?, disc_number = ?, duration_ms = ?, file_size = ?, format = ?, codec = ?, sample_rate = ?, bits_per_sample = ?, channels = ?, is_lossless = ?, is_high_resolution = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+            "UPDATE tracks SET album_id = ?, title = ?, track_number = ?, disc_number = ?, \
+             duration_ms = ?, file_size = ?, format = ?, codec = ?, sample_rate = ?, \
+             bits_per_sample = ?, channels = ?, is_lossless = ?, is_high_resolution = ?, \
+             updated_at = CURRENT_TIMESTAMP WHERE id = ?",
         )
         .bind(album_id)
         .bind(track_title)
@@ -698,7 +706,9 @@ async fn update_track_in_transaction(
     } else {
         // Create new track
         query(
-            "INSERT INTO tracks (album_id, title, track_number, disc_number, duration_ms, path, file_size, format, codec, sample_rate, bits_per_sample, channels, is_lossless, is_high_resolution) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            "INSERT INTO tracks (album_id, title, track_number, disc_number, duration_ms, path, \
+             file_size, format, codec, sample_rate, bits_per_sample, channels, is_lossless, \
+             is_high_resolution) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(album_id)
         .bind(track_title)

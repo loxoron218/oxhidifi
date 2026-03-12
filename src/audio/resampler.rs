@@ -633,7 +633,8 @@ fn process_samples_u16(
 ///
 /// # Errors
 ///
-/// Returns `OutputError` if the device configuration cannot be queried or the stream cannot be created.
+/// Returns `OutputError` if the device configuration cannot be queried or the stream cannot be
+/// created.
 pub fn create_resampling_stream(
     output: &AudioOutput,
     mut resampled_consumer: Consumer<f32>,

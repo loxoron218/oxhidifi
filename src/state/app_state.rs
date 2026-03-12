@@ -223,8 +223,8 @@ impl AppState {
         for tx in subscribers.iter() {
             // We use try_send to avoid blocking. Since these are unbounded channels,
             // try_send should only fail if the channel is closed.
-            // If it were bounded and full, this would return an error, effectively dropping the event.
-            // But for UI events, unbounded is preferable to ensure delivery.
+            // If it were bounded and full, this would return an error, effectively dropping the
+            // event. But for UI events, unbounded is preferable to ensure delivery.
             if matches!(tx.try_send(event.clone()), Ok(())) {
                 active.push(tx.clone());
                 count += 1;

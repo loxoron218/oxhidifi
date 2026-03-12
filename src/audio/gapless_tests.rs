@@ -20,7 +20,8 @@ mod tests {
         let err_msg = err.to_string();
         if !err_msg.contains("Metadata error") && !err_msg.contains("Failed to read audio file") {
             bail!(
-                "Expected error containing 'Metadata error' or 'Failed to read audio file', got '{err_msg}'"
+                "Expected error containing 'Metadata error' or 'Failed to read audio file', got \
+                 '{err_msg}'"
             );
         }
         Ok(())

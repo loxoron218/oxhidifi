@@ -481,7 +481,8 @@ impl LibraryDatabase {
     /// Returns `LibraryError` if the query fails.
     pub async fn get_artist_album_counts(&self) -> Result<HashMap<i64, i64>, LibraryError> {
         let counts: Vec<(i64, i64)> = query_as(
-            "SELECT artist_id, COUNT(*) as count FROM albums WHERE artist_id IS NOT NULL GROUP BY artist_id",
+            "SELECT artist_id, COUNT(*) as count FROM albums WHERE artist_id IS NOT NULL GROUP BY \
+             artist_id",
         )
         .fetch_all(&self.pool)
         .await?;
@@ -538,7 +539,8 @@ impl LibraryDatabase {
         let path_pattern = format!("{escaped_path}/%");
 
         let ids: Vec<i64> = query_scalar(
-            "SELECT DISTINCT artist_id FROM albums WHERE path LIKE ? ESCAPE '\\' AND artist_id IS NOT NULL",
+            "SELECT DISTINCT artist_id FROM albums WHERE path LIKE ? ESCAPE '\\' AND artist_id IS \
+             NOT NULL",
         )
         .bind(path_pattern)
         .fetch_all(&self.pool)
@@ -611,7 +613,8 @@ impl LibraryDatabase {
         let tracks = query_as::<_, Track>(
             "
             SELECT id, album_id, title, track_number, disc_number, duration_ms, path,
-                   file_size, format, codec, sample_rate, bits_per_sample, channels, is_lossless, is_high_resolution, created_at, updated_at
+                   file_size, format, codec, sample_rate, bits_per_sample, channels, is_lossless, \
+             is_high_resolution, created_at, updated_at
             FROM tracks
             WHERE album_id = ?
             ORDER BY disc_number, track_number, title
@@ -654,12 +657,13 @@ impl LibraryDatabase {
         let tracks = query_as::<_, Track>(
             "
             SELECT t.id, t.album_id, t.title, t.track_number, t.disc_number, t.duration_ms, t.path,
-                   t.file_size, t.format, t.codec, t.sample_rate, t.bits_per_sample, t.channels, t.is_lossless, t.is_high_resolution, t.created_at, t.updated_at
+                   t.file_size, t.format, t.codec, t.sample_rate, t.bits_per_sample, t.channels, \
+             t.is_lossless, t.is_high_resolution, t.created_at, t.updated_at
             FROM tracks t
             JOIN albums a ON t.album_id = a.id
             WHERE a.artist_id = ?
             ORDER BY a.title, t.disc_number, t.track_number, t.title
-            "
+            ",
         )
         .bind(artist_id)
         .fetch_all(&self.pool)
@@ -787,7 +791,9 @@ impl LibraryDatabase {
 
         for track in tracks {
             query(
-                "INSERT INTO tracks (album_id, title, track_number, disc_number, duration_ms, path, file_size, format, codec, sample_rate, bits_per_sample, channels, is_lossless, is_high_resolution)
+                "INSERT INTO tracks (album_id, title, track_number, disc_number, duration_ms, \
+                 path, file_size, format, codec, sample_rate, bits_per_sample, channels, \
+                 is_lossless, is_high_resolution)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                  ON CONFLICT(path) DO UPDATE SET
                     album_id = excluded.album_id,
@@ -846,7 +852,8 @@ impl LibraryDatabase {
         for album in albums {
             // Update existing album
             query(
-                "INSERT INTO albums (artist_id, title, year, genre, compilation, path, dr_value, artwork_path, format, bits_per_sample, sample_rate)
+                "INSERT INTO albums (artist_id, title, year, genre, compilation, path, dr_value, \
+                 artwork_path, format, bits_per_sample, sample_rate)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                  ON CONFLICT(artist_id, title, year) DO UPDATE SET
                     genre = excluded.genre,

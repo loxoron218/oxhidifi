@@ -196,7 +196,10 @@ impl AudioPreferencesPage {
 
         let spin_row = SpinRow::builder()
             .title("Buffer Duration")
-            .subtitle("Audio buffer duration in milliseconds (lower = less latency, higher = more stable)")
+            .subtitle(
+                "Audio buffer duration in milliseconds (lower = less latency, higher = more \
+                 stable)",
+            )
             .adjustment(&adjustment)
             .numeric(true)
             .build();

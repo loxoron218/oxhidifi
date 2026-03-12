@@ -70,7 +70,8 @@ impl DrParser {
     ///
     /// # Panics
     ///
-    /// Panics if no DR values are found but valid DR files exist (should not happen with valid data).
+    /// Panics if no DR values are found but valid DR files exist (should not happen with valid
+    /// data).
     pub async fn parse_dr_for_album<P: AsRef<Path>>(
         &self,
         album_path: P,

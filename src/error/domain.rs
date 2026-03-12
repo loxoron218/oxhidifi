@@ -70,7 +70,8 @@ pub enum UiError {
     BuilderError(String),
     /// Artist not found in library state for an album.
     #[error(
-        "Artist {artist_id} not found in library state for album {album_id} (album title: {album_title:?})"
+        "Artist {artist_id} not found in library state for album {album_id} (album title: \
+         {album_title:?})"
     )]
     ArtistNotFound {
         artist_id: i64,

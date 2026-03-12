@@ -181,8 +181,10 @@ impl CoverArt {
     ///
     /// # Arguments
     ///
-    /// * `artwork_path` - Optional path to the artwork image file (highest priority; used if file exists)
-    /// * `icon_name` - Optional GTK icon name to display when no artwork is provided (used if `artwork_path` is None or file doesn't exist)
+    /// * `artwork_path` - Optional path to the artwork image file (highest priority; used if file
+    ///   exists)
+    /// * `icon_name` - Optional GTK icon name to display when no artwork is provided (used if
+    ///   `artwork_path` is None or file doesn't exist)
     /// * `dr_value` - Optional DR value for the badge overlay
     /// * `show_dr_badge` - Whether to show the DR badge overlay
     /// * `width` - Width of the cover art display
@@ -319,7 +321,8 @@ impl CoverArt {
     ///
     /// # Panics
     ///
-    /// Panics if the `CoverArt` widget is not an Overlay (should never happen with proper widget construction).
+    /// Panics if the `CoverArt` widget is not an Overlay (should never happen with proper widget
+    /// construction).
     pub fn update_artwork(&mut self, artwork_path: Option<String>) {
         if let Some(path) = artwork_path {
             if Path::new(&path).exists() {
@@ -414,7 +417,8 @@ impl CoverArt {
     ///
     /// # Panics
     ///
-    /// Panics if the `CoverArt` widget is not an Overlay (should never happen with proper widget construction).
+    /// Panics if the `CoverArt` widget is not an Overlay (should never happen with proper widget
+    /// construction).
     pub fn set_show_dr_badge(&mut self, show: bool) {
         let Some(overlay) = self.widget.downcast_ref::<Overlay>() else {
             warn!("CoverArt widget is not an Overlay");
@@ -454,7 +458,8 @@ impl CoverArt {
     ///
     /// # Panics
     ///
-    /// Panics if the `CoverArt` widget is not an Overlay (should never happen with proper widget construction).
+    /// Panics if the `CoverArt` widget is not an Overlay (should never happen with proper widget
+    /// construction).
     pub fn update_dimensions(&self, width: i32, height: i32) {
         let Some(overlay) = self.widget.downcast_ref::<Overlay>() else {
             warn!("CoverArt widget is not an Overlay");

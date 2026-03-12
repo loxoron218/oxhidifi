@@ -266,7 +266,8 @@ impl AlbumGridView {
     ///
     /// # Panics
     ///
-    /// Panics if cover size or audio format metadata (sample rate, channels, bits per sample) are negative.
+    /// Panics if cover size or audio format metadata (sample rate, channels, bits per sample) are
+    /// negative.
     #[must_use]
     pub fn new(
         app_state: Option<&Arc<AppState>>,

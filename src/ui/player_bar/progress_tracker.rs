@@ -27,7 +27,8 @@ use crate::{audio::engine::AudioEngine, ui::player_bar::shared_state::PlayerBarS
 ///
 /// # Panics
 ///
-/// Panics if `position_ms` or `duration_ms` exceed `u32::MAX`, which should never occur in practice.
+/// Panics if `position_ms` or `duration_ms` exceed `u32::MAX`, which should never occur in
+/// practice.
 pub fn start_position_updates(
     audio_engine: Arc<AudioEngine>,
     progress_scale: Scale,

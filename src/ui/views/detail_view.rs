@@ -290,11 +290,15 @@ mod tests {
 
         assert_eq!(
             format!("{:?}", DetailType::Album(album)),
-            "Album(Album { id: 0, artist_id: 0, title: \"\", year: None, genre: None, format: None, bits_per_sample: None, sample_rate: None, compilation: false, path: \"\", dr_value: None, artwork_path: None, created_at: None, updated_at: None, track_count: 0, channels: None })"
+            "Album(Album { id: 0, artist_id: 0, title: \"\", year: None, genre: None, format: \
+             None, bits_per_sample: None, sample_rate: None, compilation: false, path: \"\", \
+             dr_value: None, artwork_path: None, created_at: None, updated_at: None, track_count: \
+             0, channels: None })"
         );
         assert_eq!(
             format!("{:?}", DetailType::Artist(artist)),
-            "Artist(Artist { id: 0, name: \"\", album_count: 0, created_at: None, updated_at: None })"
+            "Artist(Artist { id: 0, name: \"\", album_count: 0, created_at: None, updated_at: \
+             None })"
         );
     }
 }

@@ -465,7 +465,8 @@ impl AudioOutput {
     ///
     /// # Errors
     ///
-    /// Returns `OutputError` if device capabilities cannot be queried or exclusive mode requires unsupported format.
+    /// Returns `OutputError` if device capabilities cannot be queried or exclusive mode requires
+    /// unsupported format.
     ///
     /// # Panics
     ///
@@ -535,7 +536,8 @@ impl AudioOutput {
         // In exclusive mode, reject playback if no exact match is found
         if exclusive_mode && !rate_match {
             let reason = format!(
-                "Device doesn't support {source_sample_rate} Hz / {source_channels} ch / {source_bits}-bit audio"
+                "Device doesn't support {source_sample_rate} Hz / {source_channels} ch / \
+                 {source_bits}-bit audio"
             );
             warn!("Exclusive mode requires bit-perfect playback: {}", reason);
             return Err(OutputError::ExclusiveModeFailed { reason });
@@ -558,7 +560,8 @@ impl AudioOutput {
         };
 
         info!(
-            "Target config: {} Hz, {} channels, {:?} format, resampling needed: {}, exclusive_mode: {}",
+            "Target config: {} Hz, {} channels, {:?} format, resampling needed: {}, \
+             exclusive_mode: {}",
             target_sample_rate,
             target_channels,
             target_sample_format,
@@ -853,7 +856,8 @@ impl AudioConsumer {
 
         let consumer = if needs_resampling {
             // Create ring buffers for resampling
-            // Use very large buffer to handle resampling expansion, rate mismatches, and playback buffer management
+            // Use very large buffer to handle resampling expansion, rate mismatches, and playback
+            // buffer management
             let buffer_size = output.config.buffer_config.resampler_buffer_size;
             let (resampled_producer, resampled_consumer) = RingBuffer::<f32>::new(buffer_size);
 

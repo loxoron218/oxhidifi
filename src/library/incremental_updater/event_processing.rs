@@ -440,7 +440,8 @@ async fn get_or_create_album(
 
     if let Some(id) = existing_album {
         query(
-            "UPDATE albums SET path = ?, compilation = ?, artwork_path = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+            "UPDATE albums SET path = ?, compilation = ?, artwork_path = ?, updated_at = \
+             CURRENT_TIMESTAMP WHERE id = ?",
         )
         .bind(album_dir.to_string_lossy().to_string())
         .bind(is_compilation)
@@ -451,7 +452,8 @@ async fn get_or_create_album(
         Ok(id)
     } else {
         let id: i64 = query_scalar(
-            "INSERT INTO albums (artist_id, title, year, genre, compilation, path, artwork_path) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id"
+            "INSERT INTO albums (artist_id, title, year, genre, compilation, path, artwork_path) \
+             VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id",
         )
         .bind(artist_id)
         .bind(album_title)
@@ -542,7 +544,9 @@ async fn update_track_in_transaction(
 
     if let Some(track_id) = existing_track {
         query(
-            "UPDATE tracks SET album_id = ?, title = ?, track_number = ?, disc_number = ?, duration_ms = ?, file_size = ?, format = ?, sample_rate = ?, bits_per_sample = ?, channels = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+            "UPDATE tracks SET album_id = ?, title = ?, track_number = ?, disc_number = ?, \
+             duration_ms = ?, file_size = ?, format = ?, sample_rate = ?, bits_per_sample = ?, \
+             channels = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
         )
         .bind(album_id)
         .bind(track_title)
@@ -559,7 +563,9 @@ async fn update_track_in_transaction(
         .await?;
     } else {
         query(
-            "INSERT INTO tracks (album_id, title, track_number, disc_number, duration_ms, path, file_size, format, sample_rate, bits_per_sample, channels) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            "INSERT INTO tracks (album_id, title, track_number, disc_number, duration_ms, path, \
+             file_size, format, sample_rate, bits_per_sample, channels) VALUES (?, ?, ?, ?, ?, ?, \
+             ?, ?, ?, ?, ?)",
         )
         .bind(album_id)
         .bind(track_title)
