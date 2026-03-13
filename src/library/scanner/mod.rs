@@ -116,7 +116,7 @@ impl LibraryScanner {
 
         // Initialize DR parser if enabled in settings
         let dr_parser = if settings.read().show_dr_values {
-            match DrParser::new(database.clone()) {
+            match DrParser::new(Arc::clone(database)) {
                 Ok(parser) => Some(Arc::new(parser)),
                 Err(e) => {
                     warn!("Failed to initialize DR parser: {}", e);
@@ -136,9 +136,9 @@ impl LibraryScanner {
         }));
 
         // Spawn debounced event handler task
-        let database_clone = database.clone();
-        let settings_clone = settings.clone();
-        let subscribers_clone = subscribers.clone();
+        let database_clone = Arc::clone(database);
+        let settings_clone = Arc::clone(settings);
+        let subscribers_clone = Arc::clone(&subscribers);
         let dr_parser_clone = dr_parser.clone();
         tasks.push(spawn(async move {
             Self::handle_debounced_events(

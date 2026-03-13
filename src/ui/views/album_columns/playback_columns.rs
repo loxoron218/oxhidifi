@@ -44,7 +44,7 @@ pub fn setup_dr_column(column_view: &ColumnView, fixed_width: i32, show_dr_badge
 
     let dr_badges: Rc<RefCell<HashMap<usize, DRBadge>>> = Rc::new(RefCell::new(HashMap::new()));
 
-    let dr_badges_clone = dr_badges.clone();
+    let dr_badges_clone = Rc::clone(&dr_badges);
     factory.connect_setup(move |_, list_item| {
         let dr_badge = DRBadge::new(None, false);
         let widget_clone = dr_badge.widget.clone();
@@ -275,7 +275,7 @@ pub fn setup_play_button_column(
         }
     });
 
-    let buttons_map_bind = buttons_map.clone();
+    let buttons_map_bind = Rc::clone(&buttons_map);
     let app_state_for_bind = app_state.cloned();
 
     factory.connect_bind(move |_, list_item| {
@@ -297,7 +297,7 @@ pub fn setup_play_button_column(
         }
     });
 
-    let buttons_map_unbind = buttons_map.clone();
+    let buttons_map_unbind = Rc::clone(&buttons_map);
     factory.connect_unbind(move |_, list_item| {
         if let Some(list_item) = list_item.downcast_ref::<ListItem>()
             && let Some(boxed) = list_item.item()
@@ -309,7 +309,7 @@ pub fn setup_play_button_column(
     });
 
     let subscription_handle =
-        app_state.map(|state| spawn_state_subscription(state.clone(), buttons_map));
+        app_state.map(|state| spawn_state_subscription(Arc::clone(state), buttons_map));
 
     let column = ColumnViewColumn::new(None::<&str>, Some(factory.upcast::<ListItemFactory>()));
     column.set_fixed_width(fixed_width);

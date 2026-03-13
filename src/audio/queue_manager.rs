@@ -127,9 +127,9 @@ impl QueueManager {
 
     /// Starts the control loop processing queue commands.
     fn start_control_loop(&self, control_rx: Receiver<QueueControlMessage>) {
-        let queue = self.queue.clone();
-        let app_state = self.app_state.clone();
-        let audio_engine = self.audio_engine.clone();
+        let queue = Arc::clone(&self.queue);
+        let app_state = Arc::clone(&self.app_state);
+        let audio_engine = Arc::clone(&self.audio_engine);
 
         MainContext::default().spawn_local(async move {
             while let Ok(msg) = control_rx.recv().await {
@@ -185,9 +185,9 @@ impl QueueManager {
         let track_finished_rx = self.track_finished_rx.clone();
         debug!("QueueManager: Set up track finished receiver for auto-advance");
 
-        let queue = self.queue.clone();
-        let app_state = self.app_state.clone();
-        let audio_engine = self.audio_engine.clone();
+        let queue = Arc::clone(&self.queue);
+        let app_state = Arc::clone(&self.app_state);
+        let audio_engine = Arc::clone(&self.audio_engine);
 
         MainContext::default().spawn_local(async move {
             while track_finished_rx.recv().await == Ok(()) {

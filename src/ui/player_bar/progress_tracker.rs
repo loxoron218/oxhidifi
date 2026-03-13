@@ -1,6 +1,7 @@
 //! Position update timer for progress tracking.
 
 use std::{
+    rc::Rc,
     sync::{Arc, atomic::Ordering::SeqCst},
     time::Duration,
 };
@@ -39,10 +40,10 @@ pub fn start_position_updates(
         return;
     }
 
-    let is_seeking = state.is_seeking.clone();
-    let track_duration_ms = state.track_duration_ms.clone();
-    let position_update_source = state.position_update_source.clone();
-    let position_updates_running = state.position_updates_running.clone();
+    let is_seeking = Arc::clone(&state.is_seeking);
+    let track_duration_ms = Arc::clone(&state.track_duration_ms);
+    let position_update_source = Rc::clone(&state.position_update_source);
+    let position_updates_running = Rc::clone(&state.position_updates_running);
 
     let source_id = timeout_add_local(Duration::from_millis(100), move || {
         if !is_seeking.load(SeqCst)

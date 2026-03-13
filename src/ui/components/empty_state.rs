@@ -184,15 +184,15 @@ impl EmptyState {
     ///
     /// Panics if the cancellation token is None after being initialized.
     pub fn connect_button_handlers(&mut self) {
-        let settings_manager_clone = self.settings_manager.clone();
+        let settings_manager_clone = self.settings_manager.as_ref().map(Arc::clone);
         let window_clone = self.window.clone();
-        let app_state_clone = self.app_state.clone();
+        let app_state_clone = self.app_state.as_ref().map(Arc::clone);
 
         // Create cancellation token if it doesn't exist
         if self.scanner_cancel_token.is_none() {
             self.scanner_cancel_token = Some(Arc::new(AtomicBool::new(false)));
         }
-        let Some(cancel_token_clone) = self.scanner_cancel_token.clone() else {
+        let Some(cancel_token_clone) = self.scanner_cancel_token.as_ref().map(Arc::clone) else {
             warn!("Scanner cancellation token is None");
             return;
         };
@@ -210,9 +210,9 @@ impl EmptyState {
                 // Open folder selection dialog asynchronously
                 let dialog_clone = dialog;
                 let window_clone2 = window.clone();
-                let settings_manager_clone2 = settings_manager_clone.clone();
-                let app_state_clone2 = app_state_clone.clone();
-                let cancel_token = cancel_token_clone.clone();
+                let settings_manager_clone2 = settings_manager_clone.as_ref().map(Arc::clone);
+                let app_state_clone2 = app_state_clone.as_ref().map(Arc::clone);
+                let cancel_token = Arc::clone(&cancel_token_clone);
 
                 MainContext::default().spawn_local(async move {
                     match dialog_clone
@@ -247,7 +247,7 @@ impl EmptyState {
                                     // Trigger library rescan
                                     Self::trigger_library_rescan(
                                         path_str,
-                                        settings_manager.clone(),
+                                        Arc::clone(settings_manager),
                                         app_state_clone2,
                                         cancel_token,
                                     )
@@ -309,7 +309,7 @@ impl EmptyState {
 
                 // Initialize DR parser if enabled
                 let dr_parser = if settings_snapshot.show_dr_values {
-                    match DrParser::new(library_db_arc.clone()) {
+                    match DrParser::new(Arc::clone(&library_db_arc)) {
                         Ok(parser) => Some(Arc::new(parser)),
                         Err(e) => {
                             error!("Failed to initialize DR parser: {}", e);
@@ -346,9 +346,9 @@ impl EmptyState {
         // Start the event listener loop for the new scanner
         // This mirrors the logic in OxhidifiApplication::run
         let rx = scanner_arc.read().subscribe();
-        let app_state_refresh = app_state.clone();
-        let db_refresh = library_db.clone();
-        let cancel_token_clone = cancel_token.clone();
+        let app_state_refresh = Arc::clone(app_state);
+        let db_refresh = Arc::clone(library_db);
+        let cancel_token_clone = Arc::clone(cancel_token);
 
         MainContext::default().spawn_local(async move {
             while !cancel_token_clone.load(Relaxed) {
@@ -418,7 +418,7 @@ impl EmptyState {
                         let scanner_arc = Arc::new(RwLock::new(scanner));
 
                         // IMPORTANT: Store the scanner in AppState to prevent it from being dropped
-                        *app_state.library_scanner.write() = Some(scanner_arc.clone());
+                        *app_state.library_scanner.write() = Some(Arc::clone(&scanner_arc));
 
                         // Start the event listener loop for the new scanner
                         // This mirrors the logic in OxhidifiApplication::run
@@ -458,9 +458,9 @@ impl EmptyState {
         new_directory: String,
     ) {
         // Offload heavy scanning work to a background task
-        let scanner_for_task = scanner.clone();
-        let db_for_task = db.clone();
-        let settings_for_task = settings.clone();
+        let scanner_for_task = Arc::clone(&scanner);
+        let db_for_task = Arc::clone(&db);
+        let settings_for_task = Arc::clone(&settings);
         let dr_parser_for_task = dr_parser.clone();
         let dir_for_task = new_directory.clone();
 
@@ -565,7 +565,7 @@ impl EmptyState {
         };
 
         if let Some(app_state) = app_state {
-            let app_state_clone = app_state.clone();
+            let app_state_clone = Arc::clone(&app_state);
             let new_directory = new_directory.to_string();
 
             if let Some((library_db_arc, settings_arc, dr_parser)) =
@@ -579,8 +579,8 @@ impl EmptyState {
             {
                 Self::execute_background_scan(
                     scanner_arc,
-                    library_db_arc.clone(),
-                    settings_arc.clone(),
+                    Arc::clone(&library_db_arc),
+                    Arc::clone(&settings_arc),
                     dr_parser,
                     new_directory,
                 )
@@ -721,7 +721,7 @@ mod tests {
         let settings_manager = SettingsManager::new()?;
         let app_state = Arc::new(AppState::new(
             engine_weak,
-            Some(existing_scanner_arc.clone()),
+            Some(Arc::clone(&existing_scanner_arc)),
             Arc::new(RwLock::new(settings_manager)),
         ));
 
@@ -819,9 +819,9 @@ mod tests {
         let test_path = music_dir.to_string_lossy().to_string();
 
         EmptyState::execute_background_scan(
-            scanner_arc.clone(),
+            Arc::clone(&scanner_arc),
             library_db_arc,
-            settings_arc.clone(),
+            Arc::clone(&settings_arc),
             None,
             test_path,
         )
@@ -853,9 +853,9 @@ mod tests {
         let test_path = music_dir.to_string_lossy().to_string();
 
         EmptyState::execute_background_scan(
-            scanner_arc.clone(),
-            library_db_arc.clone(),
-            settings_arc.clone(),
+            Arc::clone(&scanner_arc),
+            Arc::clone(&library_db_arc),
+            Arc::clone(&settings_arc),
             None,
             test_path,
         )
@@ -892,16 +892,16 @@ mod tests {
         let scanner_arc = Arc::new(RwLock::new(scanner));
 
         let dr_parser = {
-            let parser = DrParser::new(library_db_arc.clone())?;
+            let parser = DrParser::new(Arc::clone(&library_db_arc))?;
             Some(Arc::new(parser))
         };
 
         let test_path = music_dir.to_string_lossy().to_string();
 
         EmptyState::execute_background_scan(
-            scanner_arc.clone(),
-            library_db_arc.clone(),
-            settings_arc.clone(),
+            Arc::clone(&scanner_arc),
+            Arc::clone(&library_db_arc),
+            Arc::clone(&settings_arc),
             dr_parser,
             test_path,
         )
@@ -927,9 +927,9 @@ mod tests {
         let test_path = temp_dir.path().to_string_lossy().to_string();
 
         EmptyState::execute_background_scan(
-            scanner_arc.clone(),
-            library_db_arc.clone(),
-            settings_arc.clone(),
+            Arc::clone(&scanner_arc),
+            Arc::clone(&library_db_arc),
+            Arc::clone(&settings_arc),
             None,
             test_path,
         )

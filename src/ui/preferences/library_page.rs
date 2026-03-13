@@ -101,9 +101,9 @@ impl LibraryPreferencesPage {
             .has_frame(false)
             .build();
 
-        let app_state_clone = self.app_state.clone();
-        let library_db_clone = self.library_db.clone();
-        let settings_manager_clone = self.settings_manager.clone();
+        let app_state_clone = Arc::clone(&self.app_state);
+        let library_db_clone = Arc::clone(&self.library_db);
+        let settings_manager_clone = Arc::clone(&self.settings_manager);
         let directory_list_box_clone = self.directory_list_box.clone();
         add_button.connect_clicked(move |button| {
             Self::show_add_directory_dialog(
@@ -196,9 +196,9 @@ impl LibraryPreferencesPage {
             .use_underline(true)
             .build();
 
-        let app_state_clone = self.app_state.clone();
-        let library_db_clone = self.library_db.clone();
-        let settings_manager_clone = self.settings_manager.clone();
+        let app_state_clone = Arc::clone(&self.app_state);
+        let library_db_clone = Arc::clone(&self.library_db);
+        let settings_manager_clone = Arc::clone(&self.settings_manager);
         let directory_list_box_clone = self.directory_list_box.clone();
         let directory_string = directory.to_string();
         remove_button.connect_clicked(move |_| {
@@ -232,10 +232,10 @@ impl LibraryPreferencesPage {
             .modal(true)
             .build();
 
-        let settings_manager_clone = settings_manager.clone();
+        let settings_manager_clone = Arc::clone(settings_manager);
         let directory_list_box_clone = directory_list_box.clone();
-        let app_state_clone = app_state.clone();
-        let library_db_clone = library_db.clone();
+        let app_state_clone = Arc::clone(app_state);
+        let library_db_clone = Arc::clone(library_db);
 
         if let Some(root) = button.root()
             && let Some(window) = root.downcast_ref::<ApplicationWindow>()
@@ -322,10 +322,10 @@ impl LibraryPreferencesPage {
         directory_to_remove: &str,
     ) {
         let directory_to_remove = directory_to_remove.to_string();
-        let settings_manager_clone = settings_manager.clone();
+        let settings_manager_clone = Arc::clone(settings_manager);
         let directory_list_box_clone = directory_list_box.clone();
-        let app_state_clone = app_state.clone();
-        let library_db_clone = library_db.clone();
+        let app_state_clone = Arc::clone(app_state);
+        let library_db_clone = Arc::clone(library_db);
 
         debug!("Removing directory: {}", directory_to_remove);
 
@@ -461,9 +461,9 @@ impl LibraryPreferencesPage {
             .use_underline(true)
             .build();
 
-        let app_state_clone = app_state.clone();
-        let library_db_clone = library_db.clone();
-        let settings_manager_clone = settings_manager.clone();
+        let app_state_clone = Arc::clone(app_state);
+        let library_db_clone = Arc::clone(library_db);
+        let settings_manager_clone = Arc::clone(settings_manager);
         let directory_list_box_clone = directory_list_box.clone();
         let directory_string = directory.to_string();
         remove_button.connect_clicked(move |_| {
@@ -495,8 +495,8 @@ impl LibraryPreferencesPage {
         library_db: &Arc<LibraryDatabase>,
         settings_manager: Arc<RwLock<SettingsManager>>,
     ) {
-        let app_state_clone = app_state.clone();
-        let library_db_clone = library_db.clone();
+        let app_state_clone = Arc::clone(app_state);
+        let library_db_clone = Arc::clone(library_db);
 
         spawn(async move {
             let (library_dirs, show_dr) = {
@@ -533,7 +533,7 @@ impl LibraryPreferencesPage {
 
             // Create DR parser if enabled in settings
             let dr_parser = if settings_arc.read().show_dr_values {
-                match DrParser::new(library_db_clone.clone()) {
+                match DrParser::new(Arc::clone(&library_db_clone)) {
                     Ok(parser) => Some(Arc::new(parser)),
                     Err(e) => {
                         error!(error = %e, "Failed to create DR parser");

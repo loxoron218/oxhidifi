@@ -53,15 +53,19 @@ impl PreferencesDialog {
         widget.set_content_height(700);
 
         // Get settings manager from app_state to ensure we share the same storage
-        let settings_manager = app_state.settings_manager.clone();
+        let settings_manager = Arc::clone(&app_state.settings_manager);
 
         // Create and add General preferences page
-        let general_page = GeneralPreferencesPage::new(app_state.clone(), settings_manager.clone());
+        let general_page =
+            GeneralPreferencesPage::new(Arc::clone(app_state), Arc::clone(&settings_manager));
         widget.add(&general_page.widget);
 
         // Create and add Library preferences page
-        let library_page =
-            LibraryPreferencesPage::new(app_state.clone(), library_db, settings_manager.clone());
+        let library_page = LibraryPreferencesPage::new(
+            Arc::clone(app_state),
+            library_db,
+            Arc::clone(&settings_manager),
+        );
         widget.add(&library_page.widget);
 
         // Create and add Audio preferences page

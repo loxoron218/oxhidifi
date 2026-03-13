@@ -172,7 +172,7 @@ impl AppState {
         library_scanner: Option<Arc<RwLock<LibraryScanner>>>,
         settings_manager: Arc<RwLock<SettingsManager>>,
     ) -> Self {
-        let zoom_manager = Arc::new(ZoomManager::new(settings_manager.clone()));
+        let zoom_manager = Arc::new(ZoomManager::new(Arc::clone(&settings_manager)));
 
         let state = Self {
             playback: Arc::new(RwLock::new(Stopped)),
@@ -194,8 +194,8 @@ impl AppState {
     /// Listens to audio engine state changes and forwards them to subscribers.
     fn listen_to_audio_engine(&self) {
         if let Some(audio_engine) = self.audio_engine.upgrade() {
-            let subscribers = self.subscribers.clone();
-            let playback_state = self.playback.clone();
+            let subscribers = Arc::clone(&self.subscribers);
+            let playback_state = Arc::clone(&self.playback);
             let receiver = audio_engine.subscribe_to_state_changes();
 
             MainContext::default().spawn_local(async move {
@@ -525,7 +525,7 @@ impl AppState {
     /// A reference to the settings manager.
     #[must_use]
     pub fn get_settings_manager(&self) -> Arc<RwLock<SettingsManager>> {
-        self.settings_manager.clone()
+        Arc::clone(&self.settings_manager)
     }
 
     /// Updates the `show_metadata_overlays` setting and notifies subscribers.

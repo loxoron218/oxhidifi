@@ -213,7 +213,7 @@ impl ArtistGridView {
         // Create empty state component
         let empty_state = app_state.as_ref().map(|state| {
             EmptyState::new(
-                Some(state.clone()),
+                Some(Arc::clone(state)),
                 None, // Will be set later when we have access to settings
                 EmptyStateConfig {
                     is_album_view: false,
@@ -245,7 +245,7 @@ impl ArtistGridView {
             empty_state,
             search_empty_state,
             current_sort: ArtistSortCriteria::Name,
-            artist_cards_ref: artist_cards_ref.clone(),
+            artist_cards_ref: Rc::clone(&artist_cards_ref),
             zoom_subscription_handle: app_state.map_or_else(
                 || None,
                 |state| {
@@ -696,8 +696,8 @@ impl ArtistCard {
         let click_controller = GestureClick::new();
 
         if let Some(callback) = on_card_clicked {
-            let callback_for_click = callback.clone();
-            let callback_for_activate = callback.clone();
+            let callback_for_click = Rc::clone(&callback);
+            let callback_for_activate = Rc::clone(&callback);
 
             click_controller.connect_released(move |_gesture, _n_press, _x, _y| {
                 callback_for_click();

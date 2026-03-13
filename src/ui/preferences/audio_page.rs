@@ -84,7 +84,7 @@ impl AudioPreferencesPage {
 
         // In a complete implementation, this would open a device selection dialog
         // For now, we'll just show the current device
-        let _settings_manager_clone = self.settings_manager.clone();
+        let _settings_manager_clone = Arc::clone(&self.settings_manager);
         device_row.connect_activated(move |_| {
             debug!("AudioPreferencesPage: Device selection dialog would be shown here");
 
@@ -121,7 +121,7 @@ impl AudioPreferencesPage {
             .build();
 
         // Connect change handler
-        let settings_manager_clone = self.settings_manager.clone();
+        let settings_manager_clone = Arc::clone(&self.settings_manager);
         spin_row.connect_value_notify(move |row: &SpinRow| {
             let clamped_value = row.value().clamp(0.0_f64, f64::MAX);
             let Some(i64_value) = clamped_value.to_i64() else {
@@ -205,7 +205,7 @@ impl AudioPreferencesPage {
             .build();
 
         // Connect change handler
-        let settings_manager_clone = self.settings_manager.clone();
+        let settings_manager_clone = Arc::clone(&self.settings_manager);
         spin_row.connect_value_notify(move |row: &SpinRow| {
             let clamped_value = row.value().clamp(0.0_f64, f64::MAX);
             let Some(i64_value) = clamped_value.to_i64() else {

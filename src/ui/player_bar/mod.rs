@@ -204,8 +204,8 @@ impl PlayerBar {
             gapless_badge: right_section_widgets.gapless_badge,
             hires_badge: right_section_widgets.hires_badge,
             exclusive_mode_button: right_section_widgets.exclusive_mode_button,
-            app_state: app_state.clone(),
-            audio_engine: audio_engine.clone(),
+            app_state: Arc::clone(app_state),
+            audio_engine: Arc::clone(audio_engine),
             queue_manager: queue_manager.cloned(),
         }
         .connect_controls(&state)
@@ -229,7 +229,7 @@ impl PlayerBar {
         connect_seek_handler(
             &self.progress_scale,
             &self.current_time_label,
-            self.audio_engine.clone(),
+            Arc::clone(&self.audio_engine),
             state,
         );
 
@@ -263,12 +263,12 @@ impl PlayerBar {
         audio_engine: &Arc<AudioEngine>,
         app_state: &Arc<AppState>,
     ) {
-        let audio_engine_clone = audio_engine.clone();
-        let app_state_report = app_state.clone();
+        let audio_engine_clone = Arc::clone(audio_engine);
+        let app_state_report = Arc::clone(app_state);
 
         play_button.connect_clicked(move |_| {
-            let audio_engine_clone = audio_engine_clone.clone();
-            let app_state_report = app_state_report.clone();
+            let audio_engine_clone = Arc::clone(&audio_engine_clone);
+            let app_state_report = Arc::clone(&app_state_report);
 
             MainContext::default().spawn_local(async move {
                 let playback_state = audio_engine_clone.current_playback_state();
@@ -377,8 +377,8 @@ impl PlayerBar {
         app_state: &Arc<AppState>,
         audio_engine: &Arc<AudioEngine>,
     ) {
-        let app_state_clone = app_state.clone();
-        let audio_engine_clone = audio_engine.clone();
+        let app_state_clone = Arc::clone(app_state);
+        let audio_engine_clone = Arc::clone(audio_engine);
 
         exclusive_mode_button.connect_clicked(move |_| {
             let settings_manager = app_state_clone.get_settings_manager();
@@ -403,7 +403,7 @@ impl PlayerBar {
                 new_config.exclusive_mode = new_value;
                 audio_engine.update_output_config(new_config);
 
-                let audio_engine_for_restart = audio_engine_clone.clone();
+                let audio_engine_for_restart = Arc::clone(&audio_engine_clone);
                 MainContext::default().spawn_local(async move {
                     if let Err(e) = audio_engine_for_restart.restart_playback().await {
                         error!(error = %e, "Failed to restart playback for exclusive mode");
@@ -435,7 +435,7 @@ impl PlayerBar {
             next_button: self.next_button.clone(),
             progress_scale: self.progress_scale.clone(),
             current_time_label: self.current_time_label.clone(),
-            track_duration_ms: state.track_duration_ms.clone(),
+            track_duration_ms: Arc::clone(&state.track_duration_ms),
             hifi_button: self.hifi_button.clone(),
             popover_source_format: self.popover_source_format.clone(),
             popover_source_rate: self.popover_source_rate.clone(),
@@ -450,8 +450,8 @@ impl PlayerBar {
         };
 
         subscribe_to_state_changes(
-            self.app_state.clone(),
-            self.audio_engine.clone(),
+            Arc::clone(&self.app_state),
+            Arc::clone(&self.audio_engine),
             context,
             state,
         );

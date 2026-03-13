@@ -424,10 +424,10 @@ impl AlbumGridView {
         album_cards: &Rc<RefCell<Vec<AlbumCard>>>,
     ) -> Option<JoinHandle<()>> {
         app_state.map(|state| {
-            let state_clone = state.clone();
+            let state_clone = Arc::clone(state);
             let flow_box_clone = flow_box.clone();
             let config_clone = config.clone();
-            let album_cards_clone = album_cards.clone();
+            let album_cards_clone = Rc::clone(album_cards);
             MainContext::default().spawn_local(async move {
                 let rx = state_clone.zoom_manager.subscribe();
                 while let Ok(event) = rx.recv().await {
@@ -492,7 +492,7 @@ impl AlbumGridView {
                                     .compact(config_clone.compact)
                                     .cover_size(Self::cover_size_to_u32(cover_size_i32))
                                     .on_card_clicked({
-                                        let app_state_inner = state_clone.clone();
+                                        let app_state_inner = Arc::clone(&state_clone);
                                         let album_clone = album.clone();
                                         move || {
                                             app_state_inner.update_navigation(AlbumDetail(
@@ -533,8 +533,8 @@ impl AlbumGridView {
         album_cards: &Rc<RefCell<Vec<AlbumCard>>>,
     ) -> Option<JoinHandle<()>> {
         app_state.map(|state| {
-            let state_clone = state.clone();
-            let album_cards_clone = album_cards.clone();
+            let state_clone = Arc::clone(state);
+            let album_cards_clone = Rc::clone(album_cards);
             MainContext::default().spawn_local(async move {
                 let rx = state_clone.subscribe();
                 while let Ok(event) = rx.recv().await {
@@ -582,8 +582,8 @@ impl AlbumGridView {
         album_cards: &Rc<RefCell<Vec<AlbumCard>>>,
     ) -> Option<JoinHandle<()>> {
         app_state.map(|state| {
-            let state_clone = state.clone();
-            let album_cards_clone = album_cards.clone();
+            let state_clone = Arc::clone(state);
+            let album_cards_clone = Rc::clone(album_cards);
             MainContext::default().spawn_local(async move {
                 let rx = state_clone.subscribe();
                 while let Ok(event) = rx.recv().await {
@@ -860,10 +860,10 @@ impl AlbumGridView {
                 audio_engine.as_ref(),
                 queue_manager.as_ref(),
             ) {
-                let app_state_clone = app_state.clone();
-                let library_db_clone = library_db.clone();
-                let audio_engine_clone = audio_engine.clone();
-                let queue_manager_clone = queue_manager.clone();
+                let app_state_clone = Arc::clone(app_state);
+                let library_db_clone = Arc::clone(library_db);
+                let audio_engine_clone = Arc::clone(audio_engine);
+                let queue_manager_clone = Arc::clone(queue_manager);
 
                 MainContext::default().spawn_local(async move {
                     play_album(

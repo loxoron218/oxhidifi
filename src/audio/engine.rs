@@ -728,7 +728,7 @@ impl AudioEngine {
             consumer,
             &track_info.format,
             &signal_spec,
-            self.current_position.clone(),
+            Arc::clone(&self.current_position),
         )?;
 
         *self.output_config.write() = target_output_config;
@@ -843,7 +843,7 @@ impl AudioEngine {
                 consumer,
                 &track_info.format,
                 &signal_spec,
-                self.current_position.clone(),
+                Arc::clone(&self.current_position),
             )?;
 
             *self.output_config.write() = target_output_config;

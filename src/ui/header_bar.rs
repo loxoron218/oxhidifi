@@ -306,7 +306,7 @@ impl HeaderBar {
             zoom_out_button,
             zoom_in_button,
             zoom_popover,
-            app_state: app_state.clone(),
+            app_state: Arc::clone(app_state),
             settings_manager,
             application: application_arc,
             current_view_mode,
@@ -338,7 +338,7 @@ impl HeaderBar {
             .build();
 
         // Connect back button to app state
-        let state_clone = app_state.clone();
+        let state_clone = Arc::clone(app_state);
         back_button.connect_clicked(move |_| {
             // Navigate back to library root
             state_clone.update_navigation(Library);
@@ -373,7 +373,7 @@ impl HeaderBar {
             debounce_handle_entry: Arc::new(Mutex::new(None)),
             debounce_handle_bar: Arc::new(Mutex::new(None)),
             clearing_search: Arc::new(AtomicBool::new(false)),
-            search_display_mode: search_display_mode.clone(),
+            search_display_mode: Arc::clone(search_display_mode),
         };
 
         Self::connect_search_button_toggle(
@@ -497,11 +497,11 @@ impl HeaderBar {
             search_entry_container: Rc::new(search_entry_container.clone()),
             search_entry: Rc::new(search_entry.clone()),
             search_bar: Rc::new(search_bar.clone()),
-            debounce_handle_entry: search_state.debounce_handle_entry.clone(),
-            debounce_handle_bar: search_state.debounce_handle_bar.clone(),
-            clearing_search: search_state.clearing_search.clone(),
-            search_display_mode: search_state.search_display_mode.clone(),
-            app_state: app_state.clone(),
+            debounce_handle_entry: Arc::clone(&search_state.debounce_handle_entry),
+            debounce_handle_bar: Arc::clone(&search_state.debounce_handle_bar),
+            clearing_search: Arc::clone(&search_state.clearing_search),
+            search_display_mode: Arc::clone(&search_state.search_display_mode),
+            app_state: Arc::clone(app_state),
         };
 
         search_button.connect_toggled(move |button: &ToggleButton| {
@@ -551,10 +551,10 @@ impl HeaderBar {
             search_button: Rc::new(search_button.clone()),
             search_entry: Rc::new(search_entry.clone()),
             search_bar: Rc::new(search_bar.clone()),
-            debounce_handle_entry: search_state.debounce_handle_entry.clone(),
-            debounce_handle_bar: search_state.debounce_handle_bar.clone(),
-            clearing_search: search_state.clearing_search.clone(),
-            app_state: app_state.clone(),
+            debounce_handle_entry: Arc::clone(&search_state.debounce_handle_entry),
+            debounce_handle_bar: Arc::clone(&search_state.debounce_handle_bar),
+            clearing_search: Arc::clone(&search_state.clearing_search),
+            app_state: Arc::clone(app_state),
         };
 
         search_entry.connect_stop_search(move |_| {
@@ -597,10 +597,10 @@ impl HeaderBar {
         clearing_flag: SearchClearingFlag,
         settings_manager: &Arc<SettingsManager>,
     ) {
-        let state_clone = app_state.clone();
+        let state_clone = Arc::clone(app_state);
         let debounce_search = debounce_handle;
         let clearing_ch = clearing_flag;
-        let settings_manager_search = settings_manager.clone();
+        let settings_manager_search = Arc::clone(settings_manager);
 
         search_entry.connect_search_changed(move |entry| {
             let text = entry.text();
@@ -615,15 +615,15 @@ impl HeaderBar {
                 return;
             }
 
-            let state = state_clone.clone();
+            let state = Arc::clone(&state_clone);
 
             // Update immediately if empty, otherwise debounce
             if text.is_empty() {
                 state.update_search_filter(None);
             } else {
                 let text = String::from(text);
-                let handle_clone = debounce_search.clone();
-                let handle_clone_for_id = debounce_search.clone();
+                let handle_clone = Arc::clone(&debounce_search);
+                let handle_clone_for_id = Arc::clone(&debounce_search);
 
                 let debounce_ms = settings_manager_search.get_settings().search_debounce_ms;
 
@@ -655,8 +655,8 @@ impl HeaderBar {
         Self::connect_debounced_search(
             search_entry,
             app_state,
-            search_state.debounce_handle_entry.clone(),
-            search_state.clearing_search.clone(),
+            Arc::clone(&search_state.debounce_handle_entry),
+            Arc::clone(&search_state.clearing_search),
             settings_manager,
         );
     }
@@ -682,8 +682,8 @@ impl HeaderBar {
         Self::connect_debounced_search(
             search_entry_for_bar,
             app_state,
-            search_state.debounce_handle_bar.clone(),
-            search_state.clearing_search.clone(),
+            Arc::clone(&search_state.debounce_handle_bar),
+            Arc::clone(&search_state.clearing_search),
             settings_manager,
         );
 
@@ -692,9 +692,9 @@ impl HeaderBar {
             search_button: Rc::new(search_button.clone()),
             search_entry: Rc::new(search_entry_for_bar.clone()),
             search_bar: Rc::new(search_bar.clone()),
-            debounce_handle: search_state.debounce_handle_bar.clone(),
-            clearing_search: search_state.clearing_search.clone(),
-            app_state: app_state.clone(),
+            debounce_handle: Arc::clone(&search_state.debounce_handle_bar),
+            clearing_search: Arc::clone(&search_state.clearing_search),
+            app_state: Arc::clone(app_state),
         };
 
         search_entry_for_bar.connect_stop_search(move |_| {
@@ -807,7 +807,7 @@ impl HeaderBar {
     /// * `view_split_button` - View split button widget
     fn connect_view_button_handlers(app_state: &Arc<AppState>, view_split_button: &SplitButton) {
         // Connect main button click to toggle view mode
-        let state_clone_main = app_state.clone();
+        let state_clone_main = Arc::clone(app_state);
         let view_split_button_clone_main = view_split_button.clone();
 
         // Main button click handler - toggles between current mode and the other mode
@@ -837,7 +837,7 @@ impl HeaderBar {
 
         // Connect menu actions to app state
         let set_mode_action = SimpleAction::new("view.set-mode", Some(VariantTy::INT32));
-        let state_clone_set = app_state.clone();
+        let state_clone_set = Arc::clone(app_state);
         let view_split_button_clone_set = view_split_button.clone();
 
         set_mode_action.connect_activate(move |_action, parameter: Option<&Variant>| {
@@ -895,8 +895,8 @@ impl HeaderBar {
         zoom_out_button: &Button,
         zoom_in_button: &Button,
     ) {
-        let state_clone_zoom_out = app_state.clone();
-        let state_clone_zoom_in = app_state.clone();
+        let state_clone_zoom_out = Arc::clone(app_state);
+        let state_clone_zoom_in = Arc::clone(app_state);
 
         // Zoom out handler
         zoom_out_button.connect_clicked(move |_| {
@@ -948,7 +948,7 @@ impl HeaderBar {
             .build();
 
         // Connect settings button to show preferences dialog
-        let app_state_clone = app_state.clone();
+        let app_state_clone = Arc::clone(app_state);
         let application_clone = application.cloned();
         let library_db_clone = library_db.cloned();
 
@@ -956,7 +956,7 @@ impl HeaderBar {
             if let Some(app) = &application_clone
                 && let Some(db) = &library_db_clone
             {
-                let preferences_dialog = PreferencesDialog::new(&app_state_clone, db.clone());
+                let preferences_dialog = PreferencesDialog::new(&app_state_clone, Arc::clone(db));
 
                 // Get the active window as parent
                 if let Some(window) = app.active_window() {
@@ -1009,7 +1009,7 @@ impl HeaderBar {
         menu.append_item(&view_item);
 
         let set_mode_action = SimpleAction::new("view.set-mode-mobile", Some(VariantTy::INT32));
-        let state_for_view = app_state.clone();
+        let state_for_view = Arc::clone(app_state);
         let view_icon_for_action = view_split_button
             .icon_name()
             .as_deref()
@@ -1061,7 +1061,7 @@ impl HeaderBar {
 
         let popover = Popover::builder().child(&menu_box).has_arrow(true).build();
 
-        let zoom_timer_handle_closed = zoom_timer_handle.clone();
+        let zoom_timer_handle_closed = Arc::clone(zoom_timer_handle);
         popover.connect_closed(move |_| {
             if let Some(timer_id) = zoom_timer_handle_closed.lock().take() {
                 let () = timer_id.remove();
@@ -1104,7 +1104,7 @@ impl HeaderBar {
             .hexpand(true)
             .build();
 
-        let state_for_view_btn = app_state.clone();
+        let state_for_view_btn = Arc::clone(app_state);
         let view_icon_clone = view_icon;
         view_toggle_button.connect_clicked(move |_| {
             let current_state = state_for_view_btn.get_library_state();
@@ -1194,7 +1194,7 @@ impl HeaderBar {
         zoom_box.append(&zoom_icon);
         zoom_box.append(&zoom_label);
 
-        let state_clone = app_state.clone();
+        let state_clone = Arc::clone(app_state);
         let zoom_btn = Button::builder()
             .child(&zoom_box)
             .tooltip_text(tooltip_text)
@@ -1250,7 +1250,7 @@ impl HeaderBar {
         zoom_out_btn.set_sensitive(current > min_zoom);
         zoom_in_btn.set_sensitive(current < max_zoom);
 
-        let app_state_clone = app_state.clone();
+        let app_state_clone = Arc::clone(app_state);
         let zoom_out_btn_clone = zoom_out_btn.clone();
         let zoom_in_btn_clone = zoom_in_btn.clone();
 
@@ -1330,14 +1330,15 @@ impl HeaderBar {
             .hexpand(true)
             .build();
 
-        let app_state_settings = app_state.clone();
+        let app_state_settings = Arc::clone(app_state);
         let application_settings = application.cloned();
         let library_db_settings = library_db.cloned();
         settings_button_merged.connect_clicked(move |_| {
             if let Some(app) = &application_settings
                 && let Some(db) = &library_db_settings
             {
-                let preferences_dialog = PreferencesDialog::new(&app_state_settings, db.clone());
+                let preferences_dialog =
+                    PreferencesDialog::new(&app_state_settings, Arc::clone(db));
 
                 if let Some(window) = app.active_window() {
                     if let Some(app_window) = window.downcast_ref::<ApplicationWindow>() {
@@ -1404,8 +1405,8 @@ impl HeaderBar {
         artist_tab.set_group(Some(&album_tab));
 
         // Connect tab buttons to app state
-        let state_clone_album = app_state.clone();
-        let state_clone_artist = app_state.clone();
+        let state_clone_album = Arc::clone(app_state);
+        let state_clone_artist = Arc::clone(app_state);
         let artist_tab_clone = artist_tab.clone();
         let album_tab_clone = album_tab.clone();
 
@@ -1471,7 +1472,7 @@ impl HeaderBar {
         app_state: &Arc<AppState>,
         view_split_button: &SplitButton,
     ) -> JoinHandle<()> {
-        let state_clone = app_state.clone();
+        let state_clone = Arc::clone(app_state);
         let view_split_button_clone = view_split_button.clone();
         MainContext::default().spawn_local(async move {
             let rx = state_clone.subscribe();

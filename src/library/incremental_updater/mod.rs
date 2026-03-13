@@ -66,7 +66,7 @@ impl IncrementalUpdater {
 
         // Create DR parser if enabled
         let dr_parser = if config.enable_dr_parsing {
-            match DrParser::new(database.clone()) {
+            match DrParser::new(Arc::clone(&database)) {
                 Ok(parser) => Some(Arc::new(parser)),
                 Err(e) => {
                     warn!("Failed to initialize DR parser: {}", e);
@@ -99,9 +99,9 @@ impl IncrementalUpdater {
     /// A task handle for the processing loop.
     #[must_use]
     pub fn start_processing(&self, receiver: Receiver<DebouncedEvent>) -> JoinHandle<()> {
-        let database = self.database.clone();
+        let database = Arc::clone(&self.database);
         let dr_parser = self.dr_parser.clone();
-        let settings = self.settings.clone();
+        let settings = Arc::clone(&self.settings);
         let config = self.config.clone();
 
         tokio::spawn(async move {

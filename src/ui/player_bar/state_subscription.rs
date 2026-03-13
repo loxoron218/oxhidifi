@@ -223,14 +223,14 @@ pub fn subscribe_to_state_changes(
         let state_clone = state.clone();
 
         let start_position_updates = {
-            let audio_engine = audio_engine.clone();
+            let audio_engine = Arc::clone(&audio_engine);
             let progress_scale = context.progress_scale.clone();
             let current_time_label = context.current_time_label.clone();
             let state = state_clone.clone();
 
             move || {
                 start_position_updates(
-                    audio_engine.clone(),
+                    Arc::clone(&audio_engine),
                     progress_scale.clone(),
                     current_time_label.clone(),
                     &state,

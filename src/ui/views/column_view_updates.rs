@@ -43,7 +43,7 @@ pub fn set_albums(
 
     if !albums.is_empty() {
         for album in &albums {
-            let boxed = BoxedAnyObject::new(album.clone());
+            let boxed = BoxedAnyObject::new(Arc::clone(album));
             list_store.append(&boxed);
         }
     }
@@ -75,7 +75,7 @@ pub fn set_artists(
 
     if !artists.is_empty() {
         for artist in &artists {
-            let boxed = BoxedAnyObject::new(artist.clone());
+            let boxed = BoxedAnyObject::new(Arc::clone(artist));
             list_store.append(&boxed);
         }
     }

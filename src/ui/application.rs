@@ -196,7 +196,7 @@ impl OxhidifiApplication {
 
         // Initialize queue manager
         let queue_manager = QueueManager::new(
-            audio_engine_arc.clone(),
+            Arc::clone(&audio_engine_arc),
             Arc::new(app_state.clone()),
             track_finished_rx,
         );
@@ -240,7 +240,7 @@ impl OxhidifiApplication {
             library_scanner,
             app_state: Arc::new(app_state),
             queue_manager,
-            settings: settings_manager_shared.clone(),
+            settings: Arc::clone(&settings_manager_shared),
         })
     }
 
@@ -250,11 +250,11 @@ impl OxhidifiApplication {
     pub fn run(&self) {
         self.app.connect_activate({
             let app_clone = self.app.clone();
-            let audio_engine_clone = self.audio_engine.clone();
-            let library_db_clone = self.library_db.clone();
-            let app_state_clone = self.app_state.clone();
-            let settings_manager_clone = self.settings.clone();
-            let queue_manager_clone = self.queue_manager.clone();
+            let audio_engine_clone = Arc::clone(&self.audio_engine);
+            let library_db_clone = Arc::clone(&self.library_db);
+            let app_state_clone = Arc::clone(&self.app_state);
+            let settings_manager_clone = Arc::clone(&self.settings);
+            let queue_manager_clone = Arc::clone(&self.queue_manager);
 
             move |_| {
                 build_ui(
@@ -269,8 +269,8 @@ impl OxhidifiApplication {
                 // Subscribe to library scanner events if active
                 if let Some(scanner_lock) = &app_state_clone.library_scanner.read().clone() {
                     let rx = scanner_lock.read().subscribe();
-                    let app_state_refresh = app_state_clone.clone();
-                    let db_refresh = library_db_clone.clone();
+                    let app_state_refresh = Arc::clone(&app_state_clone);
+                    let db_refresh = Arc::clone(&library_db_clone);
 
                     MainContext::default().spawn_local(async move {
                         loop {
@@ -342,7 +342,7 @@ fn create_main_window(app: &Application, header_bar: &Rc<HeaderBar>) -> Applicat
             let view_split_button = &header_bar.view_split_button;
             let merged_menu_button = &header_bar.merged_menu_button;
             let search_bar = header_bar.get_search_bar();
-            let header_bar_arc = header_bar.clone();
+            let header_bar_arc = Rc::clone(header_bar);
 
             let false_value = Value::from(false);
             let true_value = Value::from(true);
@@ -352,7 +352,7 @@ fn create_main_window(app: &Application, header_bar: &Rc<HeaderBar>) -> Applicat
             breakpoint.add_setter(merged_menu_button, "visible", Some(&true_value));
             breakpoint.add_setter(search_bar, "visible", Some(&true_value));
 
-            let header_bar_arc_apply = header_bar_arc.clone();
+            let header_bar_arc_apply = Rc::clone(&header_bar_arc);
             breakpoint.connect_apply(move |_bp| {
                 header_bar_arc_apply.set_adaptive_mode(true);
             });
@@ -397,10 +397,10 @@ fn push_album_detail_page(
     album: &Album,
 ) {
     let detail_view = match DetailView::builder()
-        .app_state(app_state.clone())
-        .library_db(library_db.clone())
-        .audio_engine(audio_engine.clone())
-        .queue_manager(queue_manager.clone())
+        .app_state(Arc::clone(app_state))
+        .library_db(Arc::clone(library_db))
+        .audio_engine(Arc::clone(audio_engine))
+        .queue_manager(Arc::clone(queue_manager))
         .detail_type(Some(DetailTypeAlbum(album.clone())))
         .compact(false)
         .build()
@@ -443,10 +443,10 @@ fn push_artist_detail_page(
     artist: &Artist,
 ) {
     let detail_view = match DetailView::builder()
-        .app_state(app_state.clone())
-        .library_db(library_db.clone())
-        .audio_engine(audio_engine.clone())
-        .queue_manager(queue_manager.clone())
+        .app_state(Arc::clone(app_state))
+        .library_db(Arc::clone(library_db))
+        .audio_engine(Arc::clone(audio_engine))
+        .queue_manager(Arc::clone(queue_manager))
         .detail_type(Some(DetailTypeArtist(artist.clone())))
         .compact(false)
         .build()
@@ -646,7 +646,7 @@ fn spawn_player_bar_visibility_handler(
 /// * `app_state` - Application state reference
 /// * `window` - The application window
 fn setup_esc_key_controller(app_state: &Arc<AppState>, window: &ApplicationWindow) {
-    let app_state_esc = app_state.clone();
+    let app_state_esc = Arc::clone(app_state);
     let esc_controller = EventControllerKey::new();
 
     esc_controller.connect_key_pressed(move |_, key, _, _| {
@@ -717,8 +717,8 @@ fn build_ui(
     let header_bar = Rc::new(HeaderBar::default_with_state(
         app_state,
         app.clone(),
-        settings_manager.clone(),
-        library_db.clone(),
+        Arc::clone(settings_manager),
+        Arc::clone(library_db),
     ));
 
     let window = create_main_window(app, &header_bar);
@@ -747,13 +747,13 @@ fn build_ui(
     toast_overlay.set_child(Some(&navigation_view));
 
     spawn_navigation_handler(
-        app_state.clone(),
+        Arc::clone(app_state),
         navigation_view.clone(),
         toast_overlay.clone(),
-        library_db.clone(),
-        audio_engine.clone(),
-        queue_manager.clone(),
-        header_bar.clone(),
+        Arc::clone(library_db),
+        Arc::clone(audio_engine),
+        Arc::clone(queue_manager),
+        Rc::clone(&header_bar),
     );
 
     main_page.set_tag(Some("root"));
@@ -763,7 +763,11 @@ fn build_ui(
     let (player_bar_widget, player_bar) = create_player_bar(app_state, audio_engine, queue_manager);
     let player_bar = Rc::new(player_bar);
 
-    spawn_player_bar_visibility_handler(app_state.clone(), player_bar_widget.clone(), player_bar);
+    spawn_player_bar_visibility_handler(
+        Arc::clone(app_state),
+        player_bar_widget.clone(),
+        player_bar,
+    );
 
     let search_bar_widget = header_bar.get_search_bar();
 
@@ -844,10 +848,10 @@ fn create_album_grid_view(
 ) -> (AlbumGridView, ScrolledWindow) {
     // Create all possible views upfront with individual scrolled windows
     let mut album_grid_view = AlbumGridView::builder()
-        .app_state(app_state.clone())
-        .library_db(library_db.clone())
-        .audio_engine(audio_engine.clone())
-        .queue_manager(queue_manager.clone())
+        .app_state(Arc::clone(app_state))
+        .library_db(Arc::clone(library_db))
+        .audio_engine(Arc::clone(audio_engine))
+        .queue_manager(Arc::clone(queue_manager))
         .albums(library_state.albums.clone())
         .show_dr_badges(show_dr_badges)
         .compact(false)
@@ -855,7 +859,7 @@ fn create_album_grid_view(
 
     // Inject settings manager and window reference into empty state
     if let Some(empty_state) = &mut album_grid_view.empty_state {
-        empty_state.settings_manager = Some(app_state.settings_manager.clone());
+        empty_state.settings_manager = Some(Arc::clone(&app_state.settings_manager));
         empty_state.window = Some(window.clone());
         empty_state.connect_button_handlers();
     }
@@ -893,10 +897,10 @@ fn create_album_list_view(
         .show_dr_values;
 
     let mut album_list_view = ColumnListView::builder()
-        .app_state(app_state.clone())
-        .library_db(library_db.clone())
-        .audio_engine(audio_engine.clone())
-        .queue_manager(queue_manager.clone())
+        .app_state(Arc::clone(app_state))
+        .library_db(Arc::clone(library_db))
+        .audio_engine(Arc::clone(audio_engine))
+        .queue_manager(Arc::clone(queue_manager))
         .view_type(Albums)
         .show_dr_badges(show_dr_badges)
         .compact(false)
@@ -939,14 +943,14 @@ fn create_artist_grid_view(
     window: &ApplicationWindow,
 ) -> (ArtistGridView, ScrolledWindow) {
     let mut artist_grid_view = ArtistGridView::builder()
-        .app_state(app_state.clone())
+        .app_state(Arc::clone(app_state))
         .artists(library_state.artists.clone())
         .compact(false)
         .build();
 
     // Inject settings manager and window reference into empty state
     if let Some(empty_state) = &mut artist_grid_view.empty_state {
-        empty_state.settings_manager = Some(app_state.settings_manager.clone());
+        empty_state.settings_manager = Some(Arc::clone(&app_state.settings_manager));
         empty_state.window = Some(window.clone());
         empty_state.connect_button_handlers();
     }
@@ -971,7 +975,7 @@ fn create_artist_list_view(
     library_state: &LibraryState,
 ) -> (ColumnListView, ScrolledWindow) {
     let mut artist_list_view = ColumnListView::builder()
-        .app_state(app_state.clone())
+        .app_state(Arc::clone(app_state))
         .view_type(Artists)
         .compact(false)
         .build();
@@ -1282,7 +1286,7 @@ fn spawn_view_stack_event_handler(
         let mut switch_count = 0;
         let mut previous_tab = Some(initial_tab);
         let mut views = views;
-        let search_app_state = app_state.clone();
+        let search_app_state = Arc::clone(&app_state);
 
         loop {
             if let Ok(event) = receiver.recv().await {

@@ -95,7 +95,7 @@ impl GeneralPreferencesPage {
         combo_row.set_selected(current_index);
 
         // Connect change handler
-        let settings_manager_clone = self.settings_manager.clone();
+        let settings_manager_clone = Arc::clone(&self.settings_manager);
         combo_row.connect_selected_notify(move |row| {
             let selected_index = row.selected() as usize;
             let new_theme = match selected_index {
@@ -137,8 +137,8 @@ impl GeneralPreferencesPage {
             .build();
 
         // Connect change handler
-        let settings_manager_clone = self.settings_manager.clone();
-        let app_state_clone = self.app_state.clone();
+        let settings_manager_clone = Arc::clone(&self.settings_manager);
+        let app_state_clone = Arc::clone(&self.app_state);
         switch_row.connect_active_notify(move |row| {
             let new_value = row.is_active();
 
@@ -184,8 +184,8 @@ impl GeneralPreferencesPage {
             .build();
 
         // Connect change handler
-        let settings_manager_clone = self.settings_manager.clone();
-        let app_state_clone = self.app_state.clone();
+        let settings_manager_clone = Arc::clone(&self.settings_manager);
+        let app_state_clone = Arc::clone(&self.app_state);
         switch_row.connect_active_notify(move |row| {
             let new_value = row.is_active();
 
@@ -244,8 +244,8 @@ impl GeneralPreferencesPage {
         combo_row.set_selected(current_index);
 
         // Connect change handler
-        let settings_manager_clone = self.settings_manager.clone();
-        let app_state_clone = self.app_state.clone();
+        let settings_manager_clone = Arc::clone(&self.settings_manager);
+        let app_state_clone = Arc::clone(&self.app_state);
         combo_row.connect_selected_notify(move |row| {
             let selected_index = row.selected() as usize;
             let new_mode = match selected_index {

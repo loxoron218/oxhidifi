@@ -31,19 +31,19 @@ pub fn connect_seek_handler(
     audio_engine: Arc<AudioEngine>,
     state: &PlayerBarState,
 ) {
-    let is_seeking = state.is_seeking.clone();
-    let track_duration_ms = state.track_duration_ms.clone();
+    let is_seeking = Arc::clone(&state.is_seeking);
+    let track_duration_ms = Arc::clone(&state.track_duration_ms);
     let current_time_label_seek = current_time_label.clone();
-    let pending_seek_position = state.pending_seek_position.clone();
-    let pending_seek_sequence = state.pending_seek_sequence.clone();
+    let pending_seek_position = Arc::clone(&state.pending_seek_position);
+    let pending_seek_sequence = Arc::clone(&state.pending_seek_sequence);
 
     progress_scale.connect_change_value(move |_scale, _scroll_type, value: f64| {
-        let is_seeking = is_seeking.clone();
-        let audio_engine = audio_engine.clone();
-        let track_duration_ms = track_duration_ms.clone();
+        let is_seeking = Arc::clone(&is_seeking);
+        let audio_engine = Arc::clone(&audio_engine);
+        let track_duration_ms = Arc::clone(&track_duration_ms);
         let current_time_label = current_time_label_seek.clone();
-        let pending_seek_position = pending_seek_position.clone();
-        let pending_seek_sequence = pending_seek_sequence.clone();
+        let pending_seek_position = Arc::clone(&pending_seek_position);
+        let pending_seek_sequence = Arc::clone(&pending_seek_sequence);
 
         is_seeking.store(true, SeqCst);
 
@@ -71,8 +71,8 @@ pub fn connect_seek_handler(
 
             if current_sequence >= latest_sequence {
                 let position = pending_seek_position.load(SeqCst);
-                let audio_engine = audio_engine.clone();
-                let is_seeking = is_seeking.clone();
+                let audio_engine = Arc::clone(&audio_engine);
+                let is_seeking = Arc::clone(&is_seeking);
 
                 MainContext::default().spawn_local(async move {
                     if let Err(e) = audio_engine.seek(position).await {

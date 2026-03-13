@@ -247,7 +247,7 @@ impl ColumnListView {
                 return;
             };
             let column_view = self.column_view.clone();
-            let settings_mgr = settings_manager.clone();
+            let settings_mgr = Arc::clone(settings_manager);
             let view_type = self.config.view_type.clone();
 
             cvs.connect_changed(move |_sorter, _change| {
@@ -351,7 +351,7 @@ impl ColumnListView {
     ///
     /// * `state` - Application state reference
     fn connect_row_activation(&self, state: &Arc<AppState>) {
-        let state_clone = state.clone();
+        let state_clone = Arc::clone(state);
         let view_type = self.config.view_type.clone();
         self.column_view
             .connect_activate(move |column_view, position| {
@@ -366,7 +366,7 @@ impl ColumnListView {
                         Albums => {
                             let album = boxed.borrow::<Arc<Album>>();
                             let album_clone = (**album).clone();
-                            let state_clone2 = state_clone.clone();
+                            let state_clone2 = Arc::clone(&state_clone);
                             MainContext::default().spawn_local(async move {
                                 state_clone2.update_navigation(AlbumDetail(album_clone));
                             });
@@ -374,7 +374,7 @@ impl ColumnListView {
                         Artists => {
                             let artist = boxed.borrow::<Arc<Artist>>();
                             let artist_clone = (**artist).clone();
-                            let state_clone2 = state_clone.clone();
+                            let state_clone2 = Arc::clone(&state_clone);
                             MainContext::default().spawn_local(async move {
                                 state_clone2.update_navigation(ArtistDetail(artist_clone));
                             });

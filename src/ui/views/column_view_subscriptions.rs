@@ -35,7 +35,7 @@ use crate::{
 /// A join handle for the subscription task
 #[must_use]
 pub fn create_zoom_subscription(state: &Arc<AppState>) -> JoinHandle<()> {
-    let state_clone = state.clone();
+    let state_clone = Arc::clone(state);
     MainContext::default().spawn_local(async move {
         let rx = state_clone.zoom_manager.subscribe();
         while let Ok(event) = rx.recv().await {
@@ -61,7 +61,7 @@ pub fn create_settings_subscription(
     state: &Arc<AppState>,
     view_type: ColumnListViewType,
 ) -> JoinHandle<()> {
-    let state_clone = state.clone();
+    let state_clone = Arc::clone(state);
     MainContext::default().spawn_local(async move {
         let rx = state_clone.subscribe();
         while let Ok(event) = rx.recv().await {
@@ -87,7 +87,7 @@ pub fn create_settings_subscription(
 /// A join handle for the subscription task
 #[must_use]
 pub fn create_playback_subscription(state: &Arc<AppState>) -> JoinHandle<()> {
-    let state_clone = state.clone();
+    let state_clone = Arc::clone(state);
     MainContext::default().spawn_local(async move {
         let rx = state_clone.subscribe();
         while let Ok(event) = rx.recv().await {
