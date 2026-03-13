@@ -1254,15 +1254,24 @@ impl HeaderBar {
         let zoom_out_btn_clone = zoom_out_btn.clone();
         let zoom_in_btn_clone = zoom_in_btn.clone();
 
-        let receiver = app_state_clone.zoom_manager.subscribe();
+        let zoom_receiver = app_state_clone.zoom_manager.subscribe();
+        let state_receiver = app_state_clone.subscribe();
 
         let timer_id = timeout_add_local(Duration::from_millis(100), move || {
-            while let Ok(event) = receiver.try_recv() {
+            while let Ok(event) = state_receiver.try_recv() {
+                if let ViewOptionsChanged { .. } = event {
+                    let (min_zoom, max_zoom, current) = Self::get_zoom_bounds(&app_state_clone);
+                    zoom_out_btn_clone.set_sensitive(current > min_zoom);
+                    zoom_in_btn_clone.set_sensitive(current < max_zoom);
+                }
+            }
+
+            while let Ok(event) = zoom_receiver.try_recv() {
                 match event {
-                    GridZoomChanged(level) | ListZoomChanged(level) => {
-                        let (min_zoom, max_zoom, _) = Self::get_zoom_bounds(&app_state_clone);
-                        zoom_out_btn_clone.set_sensitive(level > min_zoom);
-                        zoom_in_btn_clone.set_sensitive(level < max_zoom);
+                    GridZoomChanged(_) | ListZoomChanged(_) => {
+                        let (min_zoom, max_zoom, current) = Self::get_zoom_bounds(&app_state_clone);
+                        zoom_out_btn_clone.set_sensitive(current > min_zoom);
+                        zoom_in_btn_clone.set_sensitive(current < max_zoom);
                     }
                 }
             }
