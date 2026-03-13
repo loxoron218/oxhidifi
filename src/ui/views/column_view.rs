@@ -158,7 +158,6 @@ impl ColumnListView {
         let count_label = Label::builder()
             .label("0 Items")
             .halign(Center)
-            .margin_start(12)
             .margin_top(12)
             .margin_bottom(6)
             .css_classes(["album-artist-label"])
