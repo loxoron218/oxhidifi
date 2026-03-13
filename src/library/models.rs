@@ -130,7 +130,6 @@ pub struct SearchResults {
 
 impl Album {
     /// Extracts the numeric DR value for sorting.
-    #[must_use]
     pub fn dr_value_numeric(&self) -> Option<i64> {
         let dr_str = self.dr_value.as_ref()?;
         let numeric_part = dr_str.strip_prefix("DR")?;

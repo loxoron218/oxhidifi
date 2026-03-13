@@ -117,7 +117,6 @@ impl DrExtractor {
     /// # Returns
     ///
     /// `true` if the DR value is valid, `false` otherwise.
-    #[must_use]
     pub fn validate_dr_value(&self, dr_value: &str) -> bool {
         // Only validate the canonical format (DR12)
         // Per specification, we only accept Official DR Values in canonical format
