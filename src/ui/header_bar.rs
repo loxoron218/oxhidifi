@@ -2,22 +2,34 @@
 //!
 //! This module implements the header bar component that provides
 //! essential controls for navigation, search, and application settings.
+//! It supports adaptive layouts for different screen sizes.
 
-use std::{sync::Arc, time::Duration};
+use std::{
+    rc::Rc,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering::SeqCst},
+    },
+    time::Duration,
+};
 
 use {
     libadwaita::{
         Application, ApplicationWindow, HeaderBar as LibadwaitaHeaderBar, SplitButton,
         gio::{Icon, Menu, MenuItem, SimpleAction, SimpleActionGroup},
-        glib::{JoinHandle, MainContext, SourceId, Variant, VariantTy, timeout_add_local_once},
+        glib::{
+            ControlFlow::Continue, JoinHandle, MainContext, SourceId, Variant, VariantTy,
+            timeout_add_local, timeout_add_local_once,
+        },
         gtk::{
-            Box, Button, Image, Label,
+            Align::Start,
+            Box, Button, Image, Label, MenuButton,
             Orientation::{Horizontal, Vertical},
-            Popover, SearchEntry, Separator, ToggleButton,
+            Popover, SearchBar, SearchEntry, Separator, ToggleButton,
         },
         prelude::{
-            ActionMapExt, BoxExt, ButtonExt, Cast, EditableExt, GtkApplicationExt, ToggleButtonExt,
-            WidgetExt,
+            ActionMapExt, BoxExt, ButtonExt, Cast, EditableExt, GtkApplicationExt, PopoverExt,
+            ToggleButtonExt, WidgetExt,
         },
     },
     parking_lot::Mutex,
@@ -27,26 +39,118 @@ use {
 use crate::{
     config::settings::SettingsManager,
     library::database::LibraryDatabase,
-    state::app_state::{
-        AppState,
-        AppStateEvent::ViewOptionsChanged,
-        LibraryTab::{Albums, Artists},
-        NavigationState::Library,
-        ViewMode::{self, Grid, List},
+    state::{
+        app_state::{
+            AppState,
+            AppStateEvent::ViewOptionsChanged,
+            LibraryTab::{Albums, Artists},
+            NavigationState::Library,
+            ViewMode::{self, Grid, List},
+        },
+        zoom_manager::ZoomEvent::{GridZoomChanged, ListZoomChanged},
     },
     ui::preferences::dialog::PreferencesDialog,
 };
+
+/// Search display mode for the header bar.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SearchDisplayMode {
+    /// Inline search entry (desktop/tablet).
+    Inline,
+    /// Search bar below header (mobile/smallest screens).
+    Bar,
+}
 
 /// Type alias for search debounce timer handle.
 type SearchDebounceHandle = Arc<Mutex<Option<SourceId>>>;
 
 /// Type alias for search clearing flag.
-type SearchClearingFlag = Arc<Mutex<bool>>;
+type SearchClearingFlag = Arc<AtomicBool>;
+
+/// Type alias for `setup_search_functionality` return tuple.
+type SearchSetupResult = (
+    ToggleButton,
+    Box,
+    SearchEntry,
+    SearchEntry,
+    SearchBar,
+    SearchDebounceHandle,
+    SearchDebounceHandle,
+    SearchClearingFlag,
+);
+
+/// Search state containing debounce handles and clearing flag.
+struct SearchState {
+    /// Debounce timer handle for inline search entry.
+    debounce_handle_entry: Arc<Mutex<Option<SourceId>>>,
+    /// Debounce timer handle for mobile search bar entry.
+    debounce_handle_bar: Arc<Mutex<Option<SourceId>>>,
+    /// Flag to prevent search debounce during programmatic text clearing.
+    clearing_search: Arc<AtomicBool>,
+    /// Current search display mode.
+    search_display_mode: Arc<Mutex<SearchDisplayMode>>,
+}
+
+/// Grouped state for search button toggle callback.
+/// Groups related Rc references to reduce cloning overhead.
+struct SearchToggleState {
+    /// Search entry container box.
+    search_entry_container: Rc<Box>,
+    /// Search entry widget.
+    search_entry: Rc<SearchEntry>,
+    /// Search bar widget.
+    search_bar: Rc<SearchBar>,
+    /// Debounce handle for inline search entry.
+    debounce_handle_entry: Arc<Mutex<Option<SourceId>>>,
+    /// Debounce handle for mobile search bar.
+    debounce_handle_bar: Arc<Mutex<Option<SourceId>>>,
+    /// Flag to prevent debounce during programmatic clearing.
+    clearing_search: Arc<AtomicBool>,
+    /// Current search display mode.
+    search_display_mode: Arc<Mutex<SearchDisplayMode>>,
+    /// Application state reference.
+    app_state: Arc<AppState>,
+}
+
+/// Grouped state for search stop (ESC) callback.
+struct SearchStopState {
+    /// Search toggle button.
+    search_button: Rc<ToggleButton>,
+    /// Search entry widget.
+    search_entry: Rc<SearchEntry>,
+    /// Search bar widget.
+    search_bar: Rc<SearchBar>,
+    /// Debounce handle for inline search entry.
+    debounce_handle_entry: Arc<Mutex<Option<SourceId>>>,
+    /// Debounce handle for mobile search bar.
+    debounce_handle_bar: Arc<Mutex<Option<SourceId>>>,
+    /// Flag to prevent debounce during programmatic clearing.
+    clearing_search: Arc<AtomicBool>,
+    /// Application state reference.
+    app_state: Arc<AppState>,
+}
+
+/// Grouped state for mobile search bar ESC callback.
+struct MobileSearchStopState {
+    /// Search toggle button.
+    search_button: Rc<ToggleButton>,
+    /// Search entry widget.
+    search_entry: Rc<SearchEntry>,
+    /// Search bar widget.
+    search_bar: Rc<SearchBar>,
+    /// Debounce handle for mobile search bar.
+    debounce_handle: Arc<Mutex<Option<SourceId>>>,
+    /// Flag to prevent debounce during programmatic clearing.
+    clearing_search: Arc<AtomicBool>,
+    /// Application state reference.
+    app_state: Arc<AppState>,
+}
 
 /// Adaptive header bar with search, navigation, and action controls.
 ///
 /// The `HeaderBar` provides a consistent interface for application
 /// navigation, search functionality, settings access, and album/artist tab navigation.
+/// It adapts to different screen sizes using breakpoints.
 pub struct HeaderBar {
     /// The underlying Libadwaita header bar widget.
     pub widget: LibadwaitaHeaderBar,
@@ -54,12 +158,20 @@ pub struct HeaderBar {
     pub search_button: ToggleButton,
     /// View split button.
     pub view_split_button: SplitButton,
-    /// Settings button.
+    /// Settings button (hidden on smallest screens).
     pub settings_button: Button,
+    /// Merged menu button for smallest screens (view toggle + settings in popover).
+    pub merged_menu_button: MenuButton,
     /// Application reference for preferences dialog.
     pub application: Option<Arc<Application>>,
-    /// Search entry for inline search.
+    /// Search entry container for inline search (desktop/tablet).
+    pub search_entry_container: Box,
+    /// Search entry for inline search (desktop/tablet).
     pub search_entry: SearchEntry,
+    /// Search bar for mobile/smallest screens.
+    pub search_bar: SearchBar,
+    /// Search entry for mobile search bar (smallest screens).
+    pub search_entry_for_bar: SearchEntry,
     /// Album tab button.
     pub album_tab: ToggleButton,
     /// Artist tab button.
@@ -84,10 +196,16 @@ pub struct HeaderBar {
     pub zoom_popover: Popover,
     /// Subscription handle for state changes (to ensure proper cleanup)
     _subscription_handle: JoinHandle<()>,
-    /// Debounce timer handle for search input.
-    _search_debounce_handle: Arc<Mutex<Option<SourceId>>>,
+    /// Debounce timer handle for inline search entry.
+    search_debounce_handle_entry: Arc<Mutex<Option<SourceId>>>,
+    /// Debounce timer handle for mobile search bar entry.
+    search_debounce_handle_bar: Arc<Mutex<Option<SourceId>>>,
+    /// Timer handle for zoom button sensitivity updates.
+    zoom_timer_handle: Arc<Mutex<Option<SourceId>>>,
     /// Flag to prevent search debounce during programmatic text clearing.
-    clearing_search: Arc<Mutex<bool>>,
+    pub clearing_search: Arc<AtomicBool>,
+    /// Current search display mode.
+    search_display_mode: Arc<Mutex<SearchDisplayMode>>,
 }
 
 impl HeaderBar {
@@ -115,11 +233,21 @@ impl HeaderBar {
         widget.pack_start(&back_button);
 
         let current_view_mode = app_state.get_library_state().view_mode;
-        let (search_button, search_entry, debounce_handle, clearing_search) =
-            Self::setup_search_functionality(app_state, &settings_manager);
+        let search_display_mode = Arc::new(Mutex::new(SearchDisplayMode::Inline));
+
+        let (
+            search_button,
+            search_entry_container,
+            search_entry,
+            search_entry_for_bar,
+            search_bar,
+            debounce_handle_entry,
+            debounce_handle_bar,
+            clearing_search,
+        ) = Self::setup_search_functionality(app_state, &settings_manager, &search_display_mode);
 
         widget.pack_start(&search_button);
-        widget.pack_start(&search_entry);
+        widget.pack_start(&search_entry_container);
 
         let menu = Self::create_view_menu();
 
@@ -142,17 +270,35 @@ impl HeaderBar {
         widget.pack_end(&settings_button);
         widget.pack_end(&view_split_button);
 
+        let zoom_timer_handle = Arc::new(Mutex::new(None));
+
+        let merged_menu_button = Self::create_merged_menu_button(
+            app_state,
+            application_arc.as_ref(),
+            library_db.as_ref(),
+            &view_split_button,
+            &zoom_timer_handle,
+        );
+        widget.pack_end(&merged_menu_button);
+        merged_menu_button.set_visible(false);
+
         let (album_tab, artist_tab, tab_box) = Self::create_tab_buttons(app_state);
         widget.set_title_widget(Some(&tab_box));
 
         let subscription_handle = Self::subscribe_to_view_options(app_state, &view_split_button);
+
+        let zoom_timer_handle = Arc::new(Mutex::new(None));
 
         Self {
             widget,
             search_button,
             view_split_button,
             settings_button,
+            merged_menu_button,
+            search_entry_container,
             search_entry,
+            search_entry_for_bar,
+            search_bar,
             album_tab,
             artist_tab,
             tab_box,
@@ -165,9 +311,12 @@ impl HeaderBar {
             application: application_arc,
             current_view_mode,
             library_db,
-            _search_debounce_handle: debounce_handle,
+            search_debounce_handle_entry: debounce_handle_entry,
+            search_debounce_handle_bar: debounce_handle_bar,
+            zoom_timer_handle,
             clearing_search,
             _subscription_handle: subscription_handle,
+            search_display_mode,
         }
     }
 
@@ -207,94 +356,263 @@ impl HeaderBar {
     ///
     /// # Returns
     ///
-    /// Tuple of (`search_button`, `search_entry`, `debounce_handle`, `clearing_search_flag`).
+    /// Tuple of (`search_button`, `search_entry_container`, `search_entry`,
+    /// `search_entry_for_bar`, `search_bar`, `debounce_handle_entry`, `debounce_handle_bar`,
+    /// `clearing_search_flag`).
     fn setup_search_functionality(
         app_state: &Arc<AppState>,
         settings_manager: &Arc<SettingsManager>,
-    ) -> (
-        ToggleButton,
-        SearchEntry,
-        SearchDebounceHandle,
-        SearchClearingFlag,
-    ) {
+        search_display_mode: &Arc<Mutex<SearchDisplayMode>>,
+    ) -> SearchSetupResult {
+        let (search_entry, search_entry_container, search_entry_for_bar, search_bar) =
+            Self::create_search_widgets();
+
+        let search_button = Self::create_search_button();
+
+        let search_state = SearchState {
+            debounce_handle_entry: Arc::new(Mutex::new(None)),
+            debounce_handle_bar: Arc::new(Mutex::new(None)),
+            clearing_search: Arc::new(AtomicBool::new(false)),
+            search_display_mode: search_display_mode.clone(),
+        };
+
+        Self::connect_search_button_toggle(
+            &search_button,
+            app_state,
+            &search_entry_container,
+            &search_entry,
+            &search_bar,
+            &search_state,
+        );
+
+        Self::connect_search_entry_handlers(
+            &search_entry,
+            app_state,
+            &search_state,
+            settings_manager,
+        );
+
+        Self::connect_search_bar_handlers(
+            &search_entry_for_bar,
+            app_state,
+            &search_button,
+            &search_state,
+            settings_manager,
+            &search_bar,
+        );
+
+        (
+            search_button,
+            search_entry_container,
+            search_entry,
+            search_entry_for_bar,
+            search_bar,
+            search_state.debounce_handle_entry,
+            search_state.debounce_handle_bar,
+            search_state.clearing_search,
+        )
+    }
+
+    /// Creates search entry widgets for both inline and mobile search modes.
+    ///
+    /// This function creates:
+    /// - An inline search entry for desktop/tablet layouts
+    /// - A container box for the inline search entry
+    /// - A separate search entry for the mobile search bar
+    /// - A search bar widget that wraps the mobile search entry
+    ///
+    /// # Returns
+    ///
+    /// Tuple of (`search_entry`, `search_entry_container`, `search_entry_for_bar`, `search_bar`).
+    fn create_search_widgets() -> (SearchEntry, Box, SearchEntry, SearchBar) {
         let search_entry = SearchEntry::builder()
             .placeholder_text("Search albums and artists...")
-            .width_request(200)
-            .visible(false)
+            .hexpand(true)
+            .margin_start(12)
+            .margin_end(12)
+            .visible(true)
             .build();
 
-        // Search button
-        let search_button = ToggleButton::builder()
+        // Wrap in a box to ensure visibility
+        let search_entry_container = Box::builder()
+            .orientation(Horizontal)
+            .visible(false)
+            .hexpand(true)
+            .build();
+        search_entry_container.append(&search_entry);
+
+        // Create a separate search entry for the search bar (mobile/small screens)
+        let search_entry_for_bar = SearchEntry::builder()
+            .placeholder_text("Search albums and artists...")
+            .hexpand(true)
+            .margin_start(12)
+            .margin_end(12)
+            .build();
+
+        let search_bar = SearchBar::new();
+        search_bar.set_search_mode(false);
+        search_bar.set_visible(false);
+        search_bar.set_child(Some(&search_entry_for_bar));
+
+        (
+            search_entry,
+            search_entry_container,
+            search_entry_for_bar,
+            search_bar,
+        )
+    }
+
+    /// Creates the search toggle button.
+    ///
+    /// # Returns
+    ///
+    /// A configured `ToggleButton` for search activation.
+    fn create_search_button() -> ToggleButton {
+        ToggleButton::builder()
             .icon_name("system-search-symbolic")
             .tooltip_text("Search")
             .use_underline(true)
-            .build();
+            .build()
+    }
 
-        // Debounce timer handle for search
-        let debounce_handle: Arc<Mutex<Option<SourceId>>> = Arc::new(Mutex::new(None));
+    /// Connects handlers for the search button toggle behavior.
+    ///
+    /// # Arguments
+    ///
+    /// * `search_button` - The search toggle button
+    /// * `app_state` - Application state for filter updates
+    /// * `search_entry_container` - Container for inline search entry
+    /// * `search_entry` - The inline search entry widget
+    /// * `search_bar` - The mobile search bar widget
+    /// * `search_state` - Search state containing debounce and clearing flags
+    fn connect_search_button_toggle(
+        search_button: &ToggleButton,
+        app_state: &Arc<AppState>,
+        search_entry_container: &Box,
+        search_entry: &SearchEntry,
+        search_bar: &SearchBar,
+        search_state: &SearchState,
+    ) {
+        let toggle_state = SearchToggleState {
+            search_entry_container: Rc::new(search_entry_container.clone()),
+            search_entry: Rc::new(search_entry.clone()),
+            search_bar: Rc::new(search_bar.clone()),
+            debounce_handle_entry: search_state.debounce_handle_entry.clone(),
+            debounce_handle_bar: search_state.debounce_handle_bar.clone(),
+            clearing_search: search_state.clearing_search.clone(),
+            search_display_mode: search_state.search_display_mode.clone(),
+            app_state: app_state.clone(),
+        };
 
-        // Flag to prevent debounce during programmatic text clearing
-        let clearing_search: Arc<Mutex<bool>> = Arc::new(Mutex::new(false));
-
-        // Connect search button to toggle entry visibility and focus
-        let search_entry_clone = search_entry.clone();
-        let debounce_btn = debounce_handle.clone();
-        let clearing_btn = clearing_search.clone();
         search_button.connect_toggled(move |button: &ToggleButton| {
-            search_entry_clone.set_visible(button.is_active());
-            if button.is_active() {
-                search_entry_clone.grab_focus();
-            } else {
-                *clearing_btn.lock() = true;
-                search_entry_clone.set_text("");
-                *clearing_btn.lock() = false;
+            let is_active = button.is_active();
+            let display_mode = *toggle_state.search_display_mode.lock();
 
-                // Cancel any pending debounce timer
-                if let Some(timer_id) = debounce_btn.lock().take() {
+            if display_mode == SearchDisplayMode::Bar {
+                // Small screen: toggle search bar below header
+                toggle_state.search_bar.set_search_mode(is_active);
+
+                // Focus on the search entry inside the search bar
+                if is_active
+                    && let Some(child) = toggle_state.search_bar.child()
+                    && let Some(entry) = child.downcast_ref::<SearchEntry>()
+                {
+                    entry.grab_focus();
+                }
+            } else {
+                // Large screen: toggle inline search entry
+                toggle_state.search_entry_container.set_visible(is_active);
+
+                if is_active {
+                    toggle_state.search_entry.grab_focus();
+                }
+            }
+
+            if !is_active {
+                toggle_state.clearing_search.store(true, SeqCst);
+                toggle_state.search_entry.set_text("");
+                toggle_state.clearing_search.store(false, SeqCst);
+
+                // Cancel any pending debounce timers for both search entries
+                if let Some(timer_id) = toggle_state.debounce_handle_entry.lock().take() {
                     let () = timer_id.remove();
                 }
+                if let Some(timer_id) = toggle_state.debounce_handle_bar.lock().take() {
+                    let () = timer_id.remove();
+                }
+
+                // Reset search filter when closing search
+                toggle_state.app_state.update_search_filter(None);
             }
         });
 
         // Handle Escape to hide search entry
-        let search_button_clone = search_button.clone();
-        let debounce_esc = debounce_handle.clone();
-        let search_entry_clone_escape = search_entry.clone();
-        let state_esc = app_state.clone();
-        let clearing_esc = clearing_search.clone();
+        let stop_state = SearchStopState {
+            search_button: Rc::new(search_button.clone()),
+            search_entry: Rc::new(search_entry.clone()),
+            search_bar: Rc::new(search_bar.clone()),
+            debounce_handle_entry: search_state.debounce_handle_entry.clone(),
+            debounce_handle_bar: search_state.debounce_handle_bar.clone(),
+            clearing_search: search_state.clearing_search.clone(),
+            app_state: app_state.clone(),
+        };
+
         search_entry.connect_stop_search(move |_| {
-            search_button_clone.set_active(false);
+            stop_state.search_button.set_active(false);
+            stop_state.search_bar.set_search_mode(false);
+
+            // Set flag first to block any in-flight timers before cancelling
+            stop_state.clearing_search.store(true, SeqCst);
+
+            // Cancel any pending debounce timers for both search entries
+            if let Some(timer_id) = stop_state.debounce_handle_entry.lock().take() {
+                let () = timer_id.remove();
+            }
+            if let Some(timer_id) = stop_state.debounce_handle_bar.lock().take() {
+                let () = timer_id.remove();
+            }
 
             // Clear search text and filter when ESC is pressed
-            *clearing_esc.lock() = true;
-            search_entry_clone_escape.set_text("");
-            *clearing_esc.lock() = false;
-
-            // Cancel any pending debounce timer
-            if let Some(timer_id) = debounce_esc.lock().take() {
-                let () = timer_id.remove();
-            }
+            stop_state.search_entry.set_text("");
+            stop_state.clearing_search.store(false, SeqCst);
 
             // Reset search filter
-            state_esc.update_search_filter(None);
+            stop_state.app_state.update_search_filter(None);
         });
+    }
 
-        // Connect search entry to app state with debouncing
+    /// Connects debounced search handler to a search entry.
+    ///
+    /// # Arguments
+    ///
+    /// * `search_entry` - The search entry widget
+    /// * `app_state` - Application state for filter updates
+    /// * `debounce_handle` - Shared debounce timer handle
+    /// * `clearing_flag` - Flag to prevent debounce during programmatic clearing
+    /// * `settings_manager` - Settings manager for debounce duration configuration
+    fn connect_debounced_search(
+        search_entry: &SearchEntry,
+        app_state: &Arc<AppState>,
+        debounce_handle: SearchDebounceHandle,
+        clearing_flag: SearchClearingFlag,
+        settings_manager: &Arc<SettingsManager>,
+    ) {
         let state_clone = app_state.clone();
-        let debounce_search = debounce_handle.clone();
-        let clearing_ch = clearing_search.clone();
+        let debounce_search = debounce_handle;
+        let clearing_ch = clearing_flag;
         let settings_manager_search = settings_manager.clone();
+
         search_entry.connect_search_changed(move |entry| {
-            // Skip debounce during programmatic text clearing
-            if *clearing_ch.lock() {
-                return;
-            }
+            let text = entry.text();
 
-            let text = entry.text().to_string();
-
-            // Cancel any pending debounce timer
+            // Cancel any pending debounce timer first
             if let Some(timer_id) = debounce_search.lock().take() {
                 let () = timer_id.remove();
+            }
+
+            // Skip everything during programmatic text clearing
+            if clearing_ch.load(SeqCst) {
+                return;
             }
 
             let state = state_clone.clone();
@@ -303,6 +621,7 @@ impl HeaderBar {
             if text.is_empty() {
                 state.update_search_filter(None);
             } else {
+                let text = String::from(text);
                 let handle_clone = debounce_search.clone();
                 let handle_clone_for_id = debounce_search.clone();
 
@@ -311,21 +630,87 @@ impl HeaderBar {
                 let timer_id =
                     timeout_add_local_once(Duration::from_millis(debounce_ms), move || {
                         state.update_search_filter(Some(text));
-
-                        // Clear timer ID after execution since it's already been removed by glib
                         *handle_clone.lock() = None;
                     });
 
                 *handle_clone_for_id.lock() = Some(timer_id);
             }
         });
+    }
 
-        (
-            search_button,
+    /// Connects search handlers for the inline search entry.
+    ///
+    /// # Arguments
+    ///
+    /// * `search_entry` - The inline search entry widget
+    /// * `app_state` - Application state for filter updates
+    /// * `search_state` - Search state containing debounce and clearing flags
+    /// * `settings_manager` - Settings manager for debounce duration configuration
+    fn connect_search_entry_handlers(
+        search_entry: &SearchEntry,
+        app_state: &Arc<AppState>,
+        search_state: &SearchState,
+        settings_manager: &Arc<SettingsManager>,
+    ) {
+        Self::connect_debounced_search(
             search_entry,
-            debounce_handle,
-            clearing_search,
-        )
+            app_state,
+            search_state.debounce_handle_entry.clone(),
+            search_state.clearing_search.clone(),
+            settings_manager,
+        );
+    }
+
+    /// Connects search handlers for the mobile search bar.
+    ///
+    /// # Arguments
+    ///
+    /// * `search_entry_for_bar` - The search entry within the mobile search bar
+    /// * `app_state` - Application state for filter updates
+    /// * `search_button` - The search toggle button to sync state with
+    /// * `search_state` - Search state containing debounce and clearing flags
+    /// * `settings_manager` - Settings manager for debounce duration configuration
+    /// * `search_bar` - The search bar widget to close on ESC
+    fn connect_search_bar_handlers(
+        search_entry_for_bar: &SearchEntry,
+        app_state: &Arc<AppState>,
+        search_button: &ToggleButton,
+        search_state: &SearchState,
+        settings_manager: &Arc<SettingsManager>,
+        search_bar: &SearchBar,
+    ) {
+        Self::connect_debounced_search(
+            search_entry_for_bar,
+            app_state,
+            search_state.debounce_handle_bar.clone(),
+            search_state.clearing_search.clone(),
+            settings_manager,
+        );
+
+        // Handle ESC on search bar entry
+        let esc_state = MobileSearchStopState {
+            search_button: Rc::new(search_button.clone()),
+            search_entry: Rc::new(search_entry_for_bar.clone()),
+            search_bar: Rc::new(search_bar.clone()),
+            debounce_handle: search_state.debounce_handle_bar.clone(),
+            clearing_search: search_state.clearing_search.clone(),
+            app_state: app_state.clone(),
+        };
+
+        search_entry_for_bar.connect_stop_search(move |_| {
+            esc_state.search_button.set_active(false);
+            esc_state.search_bar.set_search_mode(false);
+
+            if let Some(timer_id) = esc_state.debounce_handle.lock().take() {
+                let () = timer_id.remove();
+            }
+
+            esc_state.clearing_search.store(true, SeqCst);
+            esc_state.search_entry.set_text("");
+            esc_state.clearing_search.store(false, SeqCst);
+
+            esc_state.app_state.update_search_filter(None);
+        });
     }
 
     /// Creates the view mode menu with Grid and List options.
@@ -579,16 +964,396 @@ impl HeaderBar {
                         preferences_dialog.show(app_window);
                     } else {
                         // Fallback: show without parent
+                        warn!("Active window is not ApplicationWindow, showing without parent");
                         preferences_dialog.show_without_parent();
                     }
                 } else {
                     // Fallback: show without parent
+                    warn!("No active window found, showing dialog without parent");
                     preferences_dialog.show_without_parent();
                 }
             }
         });
 
         settings_button
+    }
+
+    /// Creates the merged menu button for smallest screens.
+    ///
+    /// This combines view toggle, zoom controls, and settings into a single popover.
+    ///
+    /// # Arguments
+    ///
+    /// * `app_state` - Application state reference
+    /// * `application` - Optional application reference for dialog parent
+    /// * `library_db` - Optional library database reference for preferences dialog
+    /// * `view_split_button` - Reference to sync view icon with
+    /// * `zoom_timer_handle` - Timer handle for the periodic zoom update timer
+    ///
+    /// # Returns
+    ///
+    /// A `MenuButton` for smallest screens with popover menu.
+    fn create_merged_menu_button(
+        app_state: &Arc<AppState>,
+        application: Option<&Arc<Application>>,
+        library_db: Option<&Arc<LibraryDatabase>>,
+        view_split_button: &SplitButton,
+        zoom_timer_handle: &Arc<Mutex<Option<SourceId>>>,
+    ) -> MenuButton {
+        let menu = Menu::new();
+
+        let view_item = MenuItem::new(Some("Toggle View"), None);
+        if let Ok(icon) = Icon::for_string("view-grid-symbolic") {
+            view_item.set_icon(&icon);
+        }
+        menu.append_item(&view_item);
+
+        let set_mode_action = SimpleAction::new("view.set-mode-mobile", Some(VariantTy::INT32));
+        let state_for_view = app_state.clone();
+        let view_icon_for_action = view_split_button
+            .icon_name()
+            .as_deref()
+            .unwrap_or("view-grid-symbolic")
+            .to_string();
+
+        set_mode_action.connect_activate(move |_action, parameter: Option<&Variant>| {
+            let Some(param) = parameter else {
+                return;
+            };
+            let Some(mode_value) = param.get::<i32>() else {
+                return;
+            };
+            let new_mode = match mode_value {
+                0 => Grid,
+                1 => List,
+                _ => return,
+            };
+            let current_state = state_for_view.get_library_state();
+            if current_state.view_mode != new_mode {
+                state_for_view.update_view_options(current_state.current_tab, new_mode);
+            }
+        });
+
+        let menu_box = Box::builder()
+            .orientation(Vertical)
+            .spacing(6)
+            .margin_start(6)
+            .margin_end(6)
+            .margin_top(6)
+            .margin_bottom(6)
+            .build();
+
+        let view_toggle_button = Self::create_view_toggle_button(app_state, view_icon_for_action);
+        menu_box.append(&view_toggle_button);
+
+        let separator = Separator::new(Horizontal);
+        menu_box.append(&separator);
+
+        let zoom_controls_box = Self::create_zoom_controls_box(app_state, zoom_timer_handle);
+        menu_box.append(&zoom_controls_box);
+
+        let settings_separator = Separator::new(Horizontal);
+        menu_box.append(&settings_separator);
+
+        let settings_button =
+            Self::create_merged_settings_button(app_state, application, library_db);
+        menu_box.append(&settings_button);
+
+        let popover = Popover::builder().child(&menu_box).has_arrow(true).build();
+
+        let zoom_timer_handle_closed = zoom_timer_handle.clone();
+        popover.connect_closed(move |_| {
+            if let Some(timer_id) = zoom_timer_handle_closed.lock().take() {
+                let () = timer_id.remove();
+            }
+        });
+
+        MenuButton::builder()
+            .icon_name("open-menu-symbolic")
+            .tooltip_text("Menu")
+            .popover(&popover)
+            .use_underline(true)
+            .build()
+    }
+
+    /// Creates a button to toggle between grid and list view modes.
+    ///
+    /// # Arguments
+    ///
+    /// * `app_state` - Application state reference
+    /// * `icon_name` - Initial icon name for the view mode
+    ///
+    /// # Returns
+    ///
+    /// A `Button` that toggles the view mode when clicked.
+    fn create_view_toggle_button(app_state: &Arc<AppState>, icon_name: String) -> Button {
+        let view_toggle_box = Box::builder()
+            .orientation(Horizontal)
+            .spacing(6)
+            .hexpand(true)
+            .build();
+
+        let view_icon = Image::builder().icon_name(icon_name).build();
+        let view_label = Label::builder().label("Toggle View").build();
+        view_toggle_box.append(&view_icon);
+        view_toggle_box.append(&view_label);
+
+        let view_toggle_button = Button::builder()
+            .child(&view_toggle_box)
+            .css_classes(["flat"])
+            .hexpand(true)
+            .build();
+
+        let state_for_view_btn = app_state.clone();
+        let view_icon_clone = view_icon;
+        view_toggle_button.connect_clicked(move |_| {
+            let current_state = state_for_view_btn.get_library_state();
+            let new_mode = if current_state.view_mode == Grid {
+                List
+            } else {
+                Grid
+            };
+
+            if current_state.view_mode != new_mode {
+                let icon_name = match new_mode {
+                    List => "view-list-symbolic",
+                    Grid => "view-grid-symbolic",
+                };
+                view_icon_clone.set_icon_name(Some(icon_name));
+                state_for_view_btn.update_view_options(current_state.current_tab, new_mode);
+            }
+        });
+
+        view_toggle_button
+    }
+
+    /// Creates zoom in/out controls for the merged menu button.
+    ///
+    /// # Arguments
+    ///
+    /// * `app_state` - Application state reference
+    /// * `zoom_timer_handle` - Timer handle to store the periodic timer ID
+    ///
+    /// # Returns
+    ///
+    /// A `Box` containing zoom out label, zoom in label, and icon size label.
+    fn create_zoom_controls_box(
+        app_state: &Arc<AppState>,
+        zoom_timer_handle: &Arc<Mutex<Option<SourceId>>>,
+    ) -> Box {
+        let zoom_controls_box = Box::builder()
+            .orientation(Vertical)
+            .spacing(6)
+            .hexpand(true)
+            .build();
+
+        let zoom_out_btn =
+            Self::create_zoom_button(app_state, "list-remove-symbolic", "Zoom Out", true);
+        let zoom_in_btn =
+            Self::create_zoom_button(app_state, "list-add-symbolic", "Zoom In", false);
+
+        zoom_controls_box.append(&zoom_out_btn);
+        zoom_controls_box.append(&zoom_in_btn);
+
+        Self::setup_zoom_buttons(app_state, &zoom_out_btn, &zoom_in_btn, zoom_timer_handle);
+
+        zoom_controls_box
+    }
+
+    /// Creates a zoom button with icon and label.
+    ///
+    /// # Arguments
+    ///
+    /// * `app_state` - Application state reference
+    /// * `icon_name` - Icon name for the button
+    /// * `tooltip_text` - Tooltip text for the button
+    /// * `is_zoom_out` - Whether this is a zoom out button
+    ///
+    /// # Returns
+    ///
+    /// Configured zoom button widget.
+    fn create_zoom_button(
+        app_state: &Arc<AppState>,
+        icon_name: &str,
+        tooltip_text: &str,
+        is_zoom_out: bool,
+    ) -> Button {
+        let zoom_box = Box::builder()
+            .orientation(Horizontal)
+            .spacing(6)
+            .hexpand(true)
+            .build();
+
+        let zoom_icon = Image::builder().icon_name(icon_name).build();
+        let zoom_label = Label::builder()
+            .label(if is_zoom_out { "Zoom Out" } else { "Zoom In" })
+            .halign(Start)
+            .hexpand(true)
+            .build();
+
+        zoom_box.append(&zoom_icon);
+        zoom_box.append(&zoom_label);
+
+        let state_clone = app_state.clone();
+        let zoom_btn = Button::builder()
+            .child(&zoom_box)
+            .tooltip_text(tooltip_text)
+            .css_classes(["flat"])
+            .hexpand(true)
+            .build();
+
+        if is_zoom_out {
+            zoom_btn.connect_clicked(move |_| {
+                let current_view_mode = state_clone.get_library_state().view_mode;
+                match current_view_mode {
+                    Grid => {
+                        state_clone.decrease_grid_zoom_level();
+                    }
+                    List => {
+                        state_clone.decrease_list_zoom_level();
+                    }
+                }
+            });
+        } else {
+            zoom_btn.connect_clicked(move |_| {
+                let current_view_mode = state_clone.get_library_state().view_mode;
+                match current_view_mode {
+                    Grid => {
+                        state_clone.increase_grid_zoom_level();
+                    }
+                    List => {
+                        state_clone.increase_list_zoom_level();
+                    }
+                }
+            });
+        }
+
+        zoom_btn
+    }
+
+    /// Sets up zoom button sensitivity and periodic updates.
+    ///
+    /// # Arguments
+    ///
+    /// * `app_state` - Application state reference
+    /// * `zoom_out_btn` - Zoom out button widget
+    /// * `zoom_in_btn` - Zoom in button widget
+    /// * `zoom_timer_handle` - Timer handle to store the periodic timer ID
+    fn setup_zoom_buttons(
+        app_state: &Arc<AppState>,
+        zoom_out_btn: &Button,
+        zoom_in_btn: &Button,
+        zoom_timer_handle: &Arc<Mutex<Option<SourceId>>>,
+    ) {
+        let (min_zoom, max_zoom, current) = Self::get_zoom_bounds(app_state);
+
+        zoom_out_btn.set_sensitive(current > min_zoom);
+        zoom_in_btn.set_sensitive(current < max_zoom);
+
+        let app_state_clone = app_state.clone();
+        let zoom_out_btn_clone = zoom_out_btn.clone();
+        let zoom_in_btn_clone = zoom_in_btn.clone();
+
+        let receiver = app_state_clone.zoom_manager.subscribe();
+
+        let timer_id = timeout_add_local(Duration::from_millis(100), move || {
+            while let Ok(event) = receiver.try_recv() {
+                match event {
+                    GridZoomChanged(level) | ListZoomChanged(level) => {
+                        let (min_zoom, max_zoom, _) = Self::get_zoom_bounds(&app_state_clone);
+                        zoom_out_btn_clone.set_sensitive(level > min_zoom);
+                        zoom_in_btn_clone.set_sensitive(level < max_zoom);
+                    }
+                }
+            }
+
+            Continue
+        });
+
+        *zoom_timer_handle.lock() = Some(timer_id);
+    }
+
+    /// Gets zoom bounds and current level for the active view mode.
+    ///
+    /// # Arguments
+    ///
+    /// * `app_state` - Application state reference
+    ///
+    /// # Returns
+    ///
+    /// Tuple of (`min_zoom`, `max_zoom`, `current_zoom_level`).
+    fn get_zoom_bounds(app_state: &Arc<AppState>) -> (u8, u8, u8) {
+        let view_mode = app_state.get_library_state().view_mode;
+        let (grid_level, list_level) = {
+            let zm = app_state.zoom_manager.as_ref();
+            (zm.get_grid_zoom_level(), zm.get_list_zoom_level())
+        };
+
+        match view_mode {
+            Grid => (0u8, 4u8, grid_level),
+            List => (0u8, 2u8, list_level),
+        }
+    }
+
+    /// Creates a settings button for the merged menu button.
+    ///
+    /// # Arguments
+    ///
+    /// * `app_state` - Application state reference
+    /// * `application` - Optional application reference for dialog parent
+    /// * `library_db` - Optional library database reference for preferences dialog
+    ///
+    /// # Returns
+    ///
+    /// A `Button` that opens the preferences dialog when clicked.
+    fn create_merged_settings_button(
+        app_state: &Arc<AppState>,
+        application: Option<&Arc<Application>>,
+        library_db: Option<&Arc<LibraryDatabase>>,
+    ) -> Button {
+        let settings_row_box = Box::builder()
+            .orientation(Horizontal)
+            .spacing(6)
+            .hexpand(true)
+            .build();
+
+        let settings_icon = Image::builder()
+            .icon_name("preferences-system-symbolic")
+            .build();
+        let settings_label = Label::builder().label("Settings").build();
+        settings_row_box.append(&settings_icon);
+        settings_row_box.append(&settings_label);
+
+        let settings_button_merged = Button::builder()
+            .child(&settings_row_box)
+            .css_classes(["flat"])
+            .hexpand(true)
+            .build();
+
+        let app_state_settings = app_state.clone();
+        let application_settings = application.cloned();
+        let library_db_settings = library_db.cloned();
+        settings_button_merged.connect_clicked(move |_| {
+            if let Some(app) = &application_settings
+                && let Some(db) = &library_db_settings
+            {
+                let preferences_dialog = PreferencesDialog::new(&app_state_settings, db.clone());
+
+                if let Some(window) = app.active_window() {
+                    if let Some(app_window) = window.downcast_ref::<ApplicationWindow>() {
+                        preferences_dialog.show(app_window);
+                    } else {
+                        warn!("Active window is not ApplicationWindow, showing without parent");
+                        preferences_dialog.show_without_parent();
+                    }
+                } else {
+                    warn!("No active window found, showing dialog without parent");
+                    preferences_dialog.show_without_parent();
+                }
+            }
+        });
+
+        settings_button_merged
     }
 
     /// Creates tab navigation buttons for Albums/Artists.
@@ -737,6 +1502,20 @@ impl HeaderBar {
     }
 }
 
+impl Drop for HeaderBar {
+    fn drop(&mut self) {
+        if let Some(timer_id) = self.zoom_timer_handle.lock().take() {
+            let () = timer_id.remove();
+        }
+        if let Some(timer_id) = self.search_debounce_handle_entry.lock().take() {
+            let () = timer_id.remove();
+        }
+        if let Some(timer_id) = self.search_debounce_handle_bar.lock().take() {
+            let () = timer_id.remove();
+        }
+    }
+}
+
 impl HeaderBar {
     /// Creates a header bar with default configuration.
     ///
@@ -772,9 +1551,10 @@ impl HeaderBar {
     /// This method sets a flag to prevent the search debounce from firing
     /// while the text is cleared programmatically.
     pub fn clear_search(&self) {
-        *self.clearing_search.lock() = true;
+        self.clearing_search.store(true, SeqCst);
         self.search_entry.set_text("");
-        *self.clearing_search.lock() = false;
+        self.search_entry_for_bar.set_text("");
+        self.clearing_search.store(false, SeqCst);
     }
 
     /// Closes the search entry by deactivating the search button.
@@ -782,6 +1562,116 @@ impl HeaderBar {
     /// This method hides the search entry and clears the search text.
     pub fn close_search(&self) {
         self.search_button.set_active(false);
+    }
+
+    /// Sets the header bar to adaptive/narrow mode for smallest screens.
+    ///
+    /// When enabled:
+    /// - Settings and View buttons are hidden
+    /// - Merged menu button is shown
+    /// - Search bar mode is enabled (inline search entry hidden)
+    ///
+    /// Search text and active state are transferred between the inline
+    /// entry and the mobile search bar so the user's search persists
+    /// across breakpoint transitions.
+    pub fn set_adaptive_mode(&self, adaptive: bool) {
+        let search_was_active = self.search_button.is_active();
+
+        // Capture text from the outgoing search entry before switching (only if active)
+        let current_text = if search_was_active {
+            if adaptive {
+                Some(self.search_entry.text().to_string())
+            } else {
+                Some(self.search_entry_for_bar.text().to_string())
+            }
+        } else {
+            None
+        };
+
+        let new_mode = if adaptive {
+            SearchDisplayMode::Bar
+        } else {
+            SearchDisplayMode::Inline
+        };
+        *self.search_display_mode.lock() = new_mode;
+
+        // Set flag to block any in-flight timers before cancelling
+        self.clearing_search.store(true, SeqCst);
+        if let Some(timer_id) = self.search_debounce_handle_entry.lock().take() {
+            // SourceId::remove() returns (), no error handling needed
+            // The timer is guaranteed to be valid when removed
+            let () = timer_id.remove();
+        }
+        if let Some(timer_id) = self.search_debounce_handle_bar.lock().take() {
+            // SourceId::remove() returns (), no error handling needed
+            // The timer is guaranteed to be valid when removed
+            let () = timer_id.remove();
+        }
+
+        if adaptive {
+            self.settings_button.set_visible(false);
+            self.view_split_button.set_visible(false);
+            self.merged_menu_button.set_visible(true);
+
+            // Hide the inline entry, show the search bar
+            self.search_entry_container.set_visible(false);
+            self.search_bar.set_visible(true);
+
+            // Transfer text and active state to the mobile search bar
+            if search_was_active {
+                self.clearing_search.store(true, SeqCst);
+                self.search_entry_for_bar
+                    .set_text(current_text.as_deref().unwrap_or(""));
+                self.search_entry_for_bar.set_position(-1);
+
+                self.search_bar.set_search_mode(true);
+                self.clearing_search.store(false, SeqCst);
+            }
+        } else {
+            self.settings_button.set_visible(true);
+            self.view_split_button.set_visible(true);
+            self.merged_menu_button.set_visible(false);
+
+            // Wrap the UI state updates in clearing_search to prevent synchronous
+            // search-changed signals from clearing the AppState filter.
+            self.clearing_search.store(true, SeqCst);
+
+            // Hide the search bar, conditionally show the inline entry
+            self.search_bar.set_search_mode(false);
+            self.search_bar.set_visible(false);
+
+            // Transfer text and active state to the inline entry
+            if search_was_active {
+                self.search_entry
+                    .set_text(current_text.as_deref().unwrap_or(""));
+                self.search_entry.set_position(-1);
+
+                self.search_entry_container.set_visible(true);
+
+                let search_entry_clone = self.search_entry.clone();
+                timeout_add_local_once(Duration::from_millis(50), move || {
+                    search_entry_clone.grab_focus();
+                    search_entry_clone.set_position(-1);
+                });
+            } else {
+                self.search_entry_container.set_visible(false);
+            }
+
+            self.clearing_search.store(false, SeqCst);
+        }
+    }
+
+    /// Returns whether the header bar is in adaptive mode.
+    pub fn is_adaptive(&self) -> bool {
+        *self.search_display_mode.lock() == SearchDisplayMode::Bar
+    }
+
+    /// Gets the search bar widget for placement below the header bar.
+    ///
+    /// This should be used in adaptive mode where the search bar
+    /// appears below the header bar instead of inline.
+    pub fn get_search_bar(&self) -> &SearchBar {
+        &self.search_bar
     }
 }
 

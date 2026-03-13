@@ -7,12 +7,13 @@ use std::{fs::read_to_string, path::Path, rc::Rc, sync::Arc};
 
 use {
     libadwaita::{
-        Application, ApplicationWindow, NavigationPage, NavigationView, Toast, ToastOverlay,
-        ToolbarView,
+        Application, ApplicationWindow, Breakpoint, BreakpointCondition, NavigationPage,
+        NavigationView, Toast, ToastOverlay, ToolbarView,
         gdk::{Display, Key},
         glib::{
             MainContext,
             Propagation::{Proceed, Stop},
+            Value,
         },
         gtk::{
             CssProvider, EventControllerKey, STYLE_PROVIDER_PRIORITY_APPLICATION, ScrolledWindow,
@@ -24,7 +25,7 @@ use {
         },
     },
     parking_lot::RwLock,
-    tracing::{debug, error},
+    tracing::{debug, error, warn},
 };
 
 use crate::{
@@ -314,22 +315,65 @@ impl OxhidifiApplication {
     }
 }
 
-/// Creates the main application window with default dimensions.
+/// Creates the main application window with breakpoints for adaptive layouts.
 ///
 /// # Arguments
 ///
 /// * `app` - The application instance
+/// * `header_bar` - Header bar reference for breakpoint setters
 ///
 /// # Returns
 ///
 /// A configured `ApplicationWindow`.
-fn create_main_window(app: &Application) -> ApplicationWindow {
-    ApplicationWindow::builder()
+fn create_main_window(app: &Application, header_bar: &Rc<HeaderBar>) -> ApplicationWindow {
+    let window = ApplicationWindow::builder()
         .application(app)
         .title("Oxhidifi")
         .default_width(1200)
         .default_height(800)
-        .build()
+        .build();
+
+    // Breakpoint for small screens
+    match BreakpointCondition::parse("max-width: 600px") {
+        Ok(breakpoint_condition) => {
+            let breakpoint = Breakpoint::new(breakpoint_condition);
+
+            let settings_button = &header_bar.settings_button;
+            let view_split_button = &header_bar.view_split_button;
+            let merged_menu_button = &header_bar.merged_menu_button;
+            let search_bar = header_bar.get_search_bar();
+            let header_bar_arc = header_bar.clone();
+
+            let false_value = Value::from(false);
+            let true_value = Value::from(true);
+
+            breakpoint.add_setter(settings_button, "visible", Some(&false_value));
+            breakpoint.add_setter(view_split_button, "visible", Some(&false_value));
+            breakpoint.add_setter(merged_menu_button, "visible", Some(&true_value));
+            breakpoint.add_setter(search_bar, "visible", Some(&true_value));
+
+            let header_bar_arc_apply = header_bar_arc.clone();
+            breakpoint.connect_apply(move |_bp| {
+                header_bar_arc_apply.set_adaptive_mode(true);
+            });
+
+            let header_bar_arc_unapply = header_bar_arc;
+            breakpoint.connect_unapply(move |_bp| {
+                header_bar_arc_unapply.set_adaptive_mode(false);
+            });
+
+            window.add_breakpoint(breakpoint);
+        }
+        Err(e) => {
+            warn!(
+                error = %e,
+                "Failed to parse breakpoint condition 'max-width: 600px', \
+                adaptive layout will be disabled for small screens"
+            );
+        }
+    }
+
+    window
 }
 
 /// Builds and pushes an album detail page to the navigation view.
@@ -625,6 +669,7 @@ fn setup_esc_key_controller(app_state: &Arc<AppState>, window: &ApplicationWindo
 /// # Arguments
 ///
 /// * `header_bar_widget` - Header bar widget
+/// * `search_bar_widget` - Search bar widget (below header on small screens)
 /// * `toast_overlay` - Toast overlay widget
 /// * `player_bar_widget` - Player bar widget
 ///
@@ -633,12 +678,18 @@ fn setup_esc_key_controller(app_state: &Arc<AppState>, window: &ApplicationWindo
 /// A `ToolbarView` widget containing all main layout elements.
 fn assemble_main_layout(
     header_bar_widget: &Widget,
+    search_bar_widget: Option<&Widget>,
     toast_overlay: &ToastOverlay,
     player_bar_widget: &Widget,
 ) -> ToolbarView {
     let toolbar_view = ToolbarView::builder().build();
 
     toolbar_view.add_top_bar(header_bar_widget);
+
+    if let Some(search_bar) = search_bar_widget {
+        toolbar_view.add_top_bar(search_bar);
+    }
+
     toolbar_view.set_content(Some(toast_overlay));
     toolbar_view.add_bottom_bar(player_bar_widget);
 
@@ -663,18 +714,18 @@ fn build_ui(
     settings_manager: &Arc<SettingsManager>,
     queue_manager: &Arc<QueueManager>,
 ) {
-    let window = create_main_window(app);
-
-    let navigation_view = NavigationView::builder().build();
-
-    let toast_overlay = ToastOverlay::new();
-
     let header_bar = Rc::new(HeaderBar::default_with_state(
         app_state,
         app.clone(),
         settings_manager.clone(),
         library_db.clone(),
     ));
+
+    let window = create_main_window(app, &header_bar);
+
+    let navigation_view = NavigationView::builder().build();
+
+    let toast_overlay = ToastOverlay::new();
 
     // Create main content area with responsive layout
     let main_content = create_main_content(
@@ -714,8 +765,11 @@ fn build_ui(
 
     spawn_player_bar_visibility_handler(app_state.clone(), player_bar_widget.clone(), player_bar);
 
+    let search_bar_widget = header_bar.get_search_bar();
+
     let main_box = assemble_main_layout(
         &header_bar.widget.clone().upcast::<Widget>(),
+        Some(search_bar_widget.as_ref()),
         &toast_overlay,
         &player_bar_widget,
     );
