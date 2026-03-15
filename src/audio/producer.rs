@@ -307,7 +307,7 @@ impl AudioProducer {
         if let Some(tx) = track_finished_tx
             && let Err(e) = tx.try_send(())
         {
-            warn!("AudioProducer: Failed to send track finished notification: {e}");
+            warn!(error = %e, "AudioProducer: Failed to send track finished notification");
         }
     }
 }

@@ -56,11 +56,17 @@ pub fn start_position_updates(
                 && duration_ms < u64::from(u32::MAX)
             {
                 let Some(position_u32) = u32::try_from(position_ms).ok() else {
-                    warn!("Failed to convert position to u32");
+                    warn!(
+                        position_ms = position_ms,
+                        "Failed to convert position to u32"
+                    );
                     return Continue;
                 };
                 let Some(duration_u32) = u32::try_from(duration_ms).ok() else {
-                    warn!("Failed to convert duration to u32");
+                    warn!(
+                        duration_ms = duration_ms,
+                        "Failed to convert duration to u32"
+                    );
                     return Continue;
                 };
                 let progress = f64::from(position_u32) / f64::from(duration_u32);

@@ -216,7 +216,7 @@ impl CoverArt {
                 pic.set_tooltip_text(Some(&format!("Album artwork for {path}")));
                 (None, Some(pic))
             } else {
-                warn!("Failed to load artwork from {path}: file path not accessible");
+                warn!(path = %path, "Failed to load artwork: file path not accessible");
                 (None, None)
             }
         } else if let Some(icon) = &icon_name {
@@ -333,10 +333,14 @@ impl CoverArt {
                         pic.set_file(Some(&file));
                         pic.set_tooltip_text(Some(&format!("Album artwork for {path}")));
                     } else if self.image.is_some() {
-                        warn!("Transitioning CoverArt from icon to picture mode");
+                        warn!(
+                            from = "icon",
+                            to = "picture",
+                            "Transitioning CoverArt from icon to picture mode"
+                        );
 
                         let Some(overlay) = self.widget.downcast_ref::<Overlay>() else {
-                            warn!("CoverArt widget is not an Overlay");
+                            warn!(widget = "CoverArt", "CoverArt widget is not an Overlay");
                             return;
                         };
 
@@ -375,7 +379,7 @@ impl CoverArt {
                         // No image or picture widget available
                     }
                 } else {
-                    warn!("Failed to load artwork from {path}: file path not accessible");
+                    warn!(path = %path, "Failed to load artwork: file path not accessible");
                     if let Some(pic) = &self.picture {
                         pic.set_file(None::<&File>);
                         pic.set_tooltip_text(Some("Default album artwork"));
@@ -421,7 +425,7 @@ impl CoverArt {
     /// construction).
     pub fn set_show_dr_badge(&mut self, show: bool) {
         let Some(overlay) = self.widget.downcast_ref::<Overlay>() else {
-            warn!("CoverArt widget is not an Overlay");
+            warn!(widget = "CoverArt", "CoverArt widget is not an Overlay");
             return;
         };
 
@@ -462,7 +466,7 @@ impl CoverArt {
     /// construction).
     pub fn update_dimensions(&self, width: i32, height: i32) {
         let Some(overlay) = self.widget.downcast_ref::<Overlay>() else {
-            warn!("CoverArt widget is not an Overlay");
+            warn!(widget = "CoverArt", "CoverArt widget is not an Overlay");
             return;
         };
 

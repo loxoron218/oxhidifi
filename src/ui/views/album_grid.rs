@@ -453,7 +453,7 @@ impl AlbumGridView {
                                     );
                                     card.update_dr_badge_visibility(show_dr_badge);
                                     if let Err(e) = card.update_label_max_width_chars(size) {
-                                        error!(error = %e, "Failed to update label max width chars for album {}", album.title);
+                                        error!(error = %e, album_title = %album.title, "Failed to update label max width chars for album");
                                     }
                                 }
                             }

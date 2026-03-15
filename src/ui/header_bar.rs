@@ -847,12 +847,12 @@ impl HeaderBar {
 
         set_mode_action.connect_activate(move |_action, parameter: Option<&Variant>| {
             let Some(param) = parameter else {
-                error!("view.set-mode action called without parameter");
+                error!(action = "view.set-mode", "Action called without parameter");
                 return;
             };
 
             let Some(mode_value) = param.get::<i32>() else {
-                error!("view.set-mode action parameter is not an i32");
+                error!(action = "view.set-mode", "Action parameter is not an i32");
                 return;
             };
 
@@ -860,7 +860,7 @@ impl HeaderBar {
                 0 => Grid,
                 1 => List,
                 _ => {
-                    warn!("Invalid view mode value: {}", mode_value);
+                    warn!(mode_value = mode_value, "Invalid view mode value");
                     return;
                 }
             };
@@ -969,12 +969,15 @@ impl HeaderBar {
                         preferences_dialog.show(app_window);
                     } else {
                         // Fallback: show without parent
-                        warn!("Active window is not ApplicationWindow, showing without parent");
+                        warn!(
+                            widget_type = "ApplicationWindow",
+                            "Active window is not ApplicationWindow, showing without parent"
+                        );
                         preferences_dialog.show_without_parent();
                     }
                 } else {
                     // Fallback: show without parent
-                    warn!("No active window found, showing dialog without parent");
+                    warn!(window_type = "ApplicationWindow", "No active window found, showing dialog without parent");
                     preferences_dialog.show_without_parent();
                 }
             }
@@ -1358,11 +1361,14 @@ impl HeaderBar {
                     if let Some(app_window) = window.downcast_ref::<ApplicationWindow>() {
                         preferences_dialog.show(app_window);
                     } else {
-                        warn!("Active window is not ApplicationWindow, showing without parent");
+                        warn!(
+                            widget_type = "ApplicationWindow",
+                            "Active window is not ApplicationWindow, showing without parent"
+                        );
                         preferences_dialog.show_without_parent();
                     }
                 } else {
-                    warn!("No active window found, showing dialog without parent");
+                    warn!(window_type = "ApplicationWindow", "No active window found, showing dialog without parent");
                     preferences_dialog.show_without_parent();
                 }
             }

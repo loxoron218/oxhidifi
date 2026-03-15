@@ -109,7 +109,6 @@ impl PlaybackHandler {
 
         move |track: Track| {
             if audio_engine.is_none() || queue_manager.is_none() {
-                warn!("Missing dependencies for track playback");
                 let missing_deps = if audio_engine.is_none() && queue_manager.is_none() {
                     "audio engine and queue manager"
                 } else if audio_engine.is_none() {
@@ -117,6 +116,7 @@ impl PlaybackHandler {
                 } else {
                     "queue manager"
                 };
+                warn!(missing_deps = %missing_deps, "Missing dependencies for track playback");
                 let toast = Toast::new(&format!("Playback not available - missing {missing_deps}"));
                 toast_overlay.add_toast(toast);
                 return;
@@ -297,7 +297,7 @@ impl PlaybackHandler {
     /// * `error` - The playback error that occurred
     /// * `track_path` - Path to the track for error logging
     fn show_playback_error(toast_overlay: &ToastOverlay, error: &PlaybackError, track_path: &str) {
-        error!("Playback error for track {}: {}", track_path, error);
+        error!(track_path = %track_path, error = %error, "Playback error for track");
 
         let toast_message = match error {
             PlaybackError::NoTracks(_) => format!("No tracks found in album: {track_path}"),
@@ -341,13 +341,13 @@ pub async fn play_album(
         let tracks = match db.get_tracks_by_album(album_id).await {
             Ok(t) => t,
             Err(e) => {
-                error!("Failed to fetch tracks for album {}: {}", album_id, e);
+                error!(album_id = album_id, error = %e, "Failed to fetch tracks for album");
                 return;
             }
         };
 
         if tracks.is_empty() {
-            warn!("No tracks found for album {}", album_id);
+            warn!(album_id = album_id, "No tracks found for album");
             return;
         }
 
@@ -383,13 +383,13 @@ pub async fn play_album(
         let track_path = &first_track.path;
 
         if let Err(e) = engine.load_track(track_path) {
-            error!(error = %e, "Failed to load track: {}", track_path);
+            error!(track_path = %track_path, error = %e, "Failed to load track");
             return;
         }
 
         if let Err(e) = engine.play().await {
             if !handle_exclusive_mode_error(&e, &state) {
-                error!("Failed to start playback: {}", e);
+                error!(error = %e, "Failed to start playback");
             }
             return;
         }

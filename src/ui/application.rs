@@ -220,7 +220,7 @@ impl OxhidifiApplication {
         // Always load existing library data from database on startup
         // This ensures library is displayed even if no directories are currently configured
         if let Err(e) = library_db.cleanup_orphaned_records().await {
-            error!("Failed to cleanup orphaned records: {e}");
+            error!(error = %e, "Failed to cleanup orphaned records");
         }
 
         let (albums, artists) = try_join!(
@@ -399,7 +399,7 @@ impl Drop for OxhidifiApplication {
 
         if let Some(handle) = self.scan_thread.lock().take() {
             if handle.join().is_err() {
-                error!("Background scan thread panicked");
+                error!(task = "background_scan", "Background scan thread panicked");
             } else {
                 debug!("Background scan thread joined");
             }
@@ -499,7 +499,7 @@ fn push_album_detail_page(
     {
         Ok(view) => view,
         Err(e) => {
-            error!("Failed to build album detail view: {e}");
+            error!(error = %e, "Failed to build album detail view");
             let toast = Toast::new(&format!("Failed to load album: {}", album.title));
             toast_overlay.add_toast(toast);
             return;
@@ -545,7 +545,7 @@ fn push_artist_detail_page(
     {
         Ok(view) => view,
         Err(e) => {
-            error!("Failed to build artist detail view: {e}");
+            error!(error = %e, "Failed to build artist detail view");
             let toast = Toast::new(&format!("Failed to load artist: {}", artist.name));
             toast_overlay.add_toast(toast);
             return;
@@ -872,7 +872,7 @@ fn build_ui(
 
     // Load custom CSS for consistent styling
     if let Err(e) = load_custom_css() {
-        error!("Failed to load custom CSS: {e}");
+        error!(error = %e, "Failed to load custom CSS");
     }
 
     setup_esc_key_controller(app_state, &window);

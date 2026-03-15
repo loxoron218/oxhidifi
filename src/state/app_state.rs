@@ -225,7 +225,10 @@ impl AppState {
                 false
             } else {
                 if tx.try_send(Arc::clone(&event)).is_err() {
-                    warn!("Failed to send event to subscriber, but retaining channel");
+                    warn!(
+                        channel = "event_subscriber",
+                        "Failed to send event to subscriber, but retaining channel"
+                    );
                 }
                 true
             }

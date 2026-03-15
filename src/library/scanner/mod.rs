@@ -122,7 +122,7 @@ impl LibraryScanner {
             match DrParser::new(Arc::clone(database)) {
                 Ok(parser) => Some(Arc::new(parser)),
                 Err(e) => {
-                    warn!("Failed to initialize DR parser: {}", e);
+                    warn!(error = %e, "Failed to initialize DR parser");
                     None
                 }
             }

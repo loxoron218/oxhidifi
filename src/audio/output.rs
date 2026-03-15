@@ -398,7 +398,7 @@ impl AudioOutput {
             }
         }
 
-        error!("Failed to initialize any audio host");
+        error!(host_count = 0, "Failed to initialize any audio host");
         Err(OutputError::NoDeviceFound)
     }
 
@@ -437,7 +437,7 @@ impl AudioOutput {
         }
 
         let device = host.default_output_device().ok_or_else(|| {
-            warn!("No default output device found for host: {:?}", host_id);
+            warn!(host_id = ?host_id, "No default output device found for host");
             OutputError::NoDeviceFound
         })?;
 
@@ -539,7 +539,7 @@ impl AudioOutput {
                 "Device doesn't support {source_sample_rate} Hz / {source_channels} ch / \
                  {source_bits}-bit audio"
             );
-            warn!("Exclusive mode requires bit-perfect playback: {}", reason);
+            warn!(reason = %reason, "Exclusive mode requires bit-perfect playback");
             return Err(OutputError::ExclusiveModeFailed { reason });
         }
 

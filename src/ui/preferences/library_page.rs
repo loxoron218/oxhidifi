@@ -289,7 +289,7 @@ impl LibraryPreferencesPage {
 
                             let settings_write = settings_manager_clone.write();
                             if let Err(e) = settings_write.add_library_directory(&canonical_path_string) {
-                                error!("Failed to add library directory: {e}");
+                                error!(error = %e, "Failed to add library directory");
                                 return;
                             }
                             drop(settings_write);
@@ -299,7 +299,7 @@ impl LibraryPreferencesPage {
                         }
                     }
                     Err(e) => {
-                        warn!("Folder selection cancelled or failed: {e}");
+                        warn!(error = %e, "Folder selection cancelled or failed");
                     }
                 }
 

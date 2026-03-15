@@ -149,10 +149,10 @@ impl AlbumDetailRenderer {
                         }
                     }
                     Ok(_) => {
-                        warn!("No tracks found for album {}", album_id);
+                        warn!(album_id = album_id, "No tracks found for album");
                     }
                     Err(e) => {
-                        error!("Failed to load tracks for album {}: {}", album_id, e);
+                        error!(album_id = album_id, error = %e, "Failed to load tracks for album");
                     }
                 }
             });

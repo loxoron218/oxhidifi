@@ -193,7 +193,10 @@ impl EmptyState {
             self.scanner_cancel_token = Some(Arc::new(AtomicBool::new(false)));
         }
         let Some(cancel_token_clone) = self.scanner_cancel_token.as_ref().map(Arc::clone) else {
-            warn!("Scanner cancellation token is None");
+            warn!(
+                token_type = "scanner_cancellation",
+                "Scanner cancellation token is None"
+            );
             return;
         };
 
@@ -237,7 +240,7 @@ impl EmptyState {
                                     };
 
                                     if let Err(e) = add_result {
-                                        error!("Failed to add library directory: {e}");
+                                        error!(error = %e, "Failed to add library directory");
                                         return;
                                     }
 
@@ -256,7 +259,7 @@ impl EmptyState {
                             }
                         }
                         Err(e) => {
-                            warn!("Folder selection cancelled or failed: {e}");
+                            warn!(error = %e, "Folder selection cancelled or failed");
                         }
                     }
                 });
@@ -299,7 +302,7 @@ impl EmptyState {
                     match DrParser::new(Arc::clone(&library_db_arc)) {
                         Ok(parser) => Some(Arc::new(parser)),
                         Err(e) => {
-                            error!("Failed to initialize DR parser: {}", e);
+                            error!(error = %e, "Failed to initialize DR parser");
                             None
                         }
                     }

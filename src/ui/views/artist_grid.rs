@@ -261,7 +261,7 @@ impl ArtistGridView {
                                 let cards = artist_cards_ref_clone.borrow();
                                 for card in cards.iter() {
                                     if let Err(e) = card.update_cover_size(cover_size_u32) {
-                                        error!("Failed to update cover size: {e}");
+                                        error!(error = %e, "Failed to update cover size");
                                     }
                                 }
 

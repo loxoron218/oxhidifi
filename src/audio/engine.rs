@@ -934,12 +934,15 @@ impl AudioEngine {
                 {
                     Ok(Ok(Ok(Ok(())))) => debug!("Decoder thread stopped successfully"),
                     Ok(Ok(Ok(Err(DecoderError::IoError(e))))) => {
-                        error!("Decoder thread stopped with IO error: {:?}", e);
+                        error!(error = %e, "Decoder thread stopped with IO error");
                     }
-                    Ok(Ok(Ok(Err(e)))) => error!("Decoder thread stopped with error: {:?}", e),
-                    Ok(Ok(Err(e))) => error!("Decoder thread panicked: {:?}", e),
-                    Ok(Err(e)) => error!("Failed to spawn blocking task: {:?}", e),
-                    Err(_) => error!("Timeout waiting for decoder thread to stop"),
+                    Ok(Ok(Ok(Err(e)))) => error!(error = ?e, "Decoder thread stopped with error"),
+                    Ok(Ok(Err(e))) => error!(error = ?e, "Decoder thread panicked"),
+                    Ok(Err(e)) => error!(error = ?e, "Failed to spawn blocking task"),
+                    Err(_) => error!(
+                        timeout_secs = 2,
+                        "Timeout waiting for decoder thread to stop"
+                    ),
                 }
             }
         }
@@ -949,7 +952,7 @@ impl AudioEngine {
     fn notify_state_change(&self) {
         let state = self.state.read().clone();
         if let Err(e) = self.state_tx.try_send(state) {
-            warn!("AudioEngine: Failed to send state change notification: {e}");
+            warn!(error = %e, "AudioEngine: Failed to send state change notification");
         }
     }
 

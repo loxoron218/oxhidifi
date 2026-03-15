@@ -257,7 +257,7 @@ pub fn setup_play_button_column(
 
         button.connect_clicked(move |button| {
             let Ok(album_id) = button.widget_name().parse::<i64>() else {
-                error!("Failed to parse album-id from widget name");
+                error!(widget_name = %button.widget_name(), "Failed to parse album-id from widget name");
                 return;
             };
 
