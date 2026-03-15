@@ -253,7 +253,7 @@ impl ArtistGridView {
                     let handle = MainContext::default().spawn_local(async move {
                         let rx = state_clone.zoom_manager.subscribe();
                         while let Ok(event) = rx.recv().await {
-                            if let GridZoomChanged(_) = event {
+                            if let GridZoomChanged(_) = &*event {
                                 let cover_size =
                                     state_clone.zoom_manager.get_grid_cover_dimensions().0;
                                 let cover_size_u32 = safe_i32_to_u32(cover_size, 180, "cover_size");

@@ -39,7 +39,7 @@ pub fn create_zoom_subscription(state: &Arc<AppState>) -> JoinHandle<()> {
     MainContext::default().spawn_local(async move {
         let rx = state_clone.zoom_manager.subscribe();
         while let Ok(event) = rx.recv().await {
-            if let ListZoomChanged(_) = event {
+            if let ListZoomChanged(_) = &*event {
                 debug!("ColumnListView: Zoom level changed, updating cover art dimensions");
             }
         }
@@ -67,7 +67,7 @@ pub fn create_settings_subscription(
         while let Ok(event) = rx.recv().await {
             if let SettingsChanged {
                 show_dr_values: _, ..
-            } = event
+            } = &*event
                 && view_type == Albums
             {
                 debug!("ColumnListView: Settings changed, updating DR badge visibility");
@@ -92,7 +92,7 @@ pub fn create_playback_subscription(state: &Arc<AppState>) -> JoinHandle<()> {
         let rx = state_clone.subscribe();
         while let Ok(event) = rx.recv().await {
             if matches!(
-                event,
+                &*event,
                 CurrentTrackChanged(_) | QueueChanged(_) | PlaybackStateChanged(_)
             ) {
                 debug!("ColumnListView: Playback state changed, updating play button icons");

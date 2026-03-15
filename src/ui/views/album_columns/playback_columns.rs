@@ -176,7 +176,7 @@ fn spawn_state_subscription(
         let rx = app_state.subscribe();
         while let Ok(event) = rx.recv().await {
             if matches!(
-                event,
+                &*event,
                 CurrentTrackChanged(_) | PlaybackStateChanged(_) | QueueChanged(_)
             ) {
                 let is_playing = app_state.get_playback_state() == Playing;

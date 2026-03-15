@@ -266,19 +266,17 @@ impl ColumnListView {
                         _ => return,
                     };
 
-                    let mut settings = settings_mgr.get_settings().clone();
-                    match view_type {
+                    let column_name_clone = column_name;
+                    if let Err(e) = settings_mgr.update_settings_with(|settings| match view_type {
                         Albums => {
-                            settings.albums_sort_column = Some(column_name);
+                            settings.albums_sort_column = Some(column_name_clone);
                             settings.albums_sort_order = sort_order;
                         }
                         Artists => {
-                            settings.artists_sort_column = Some(column_name);
+                            settings.artists_sort_column = Some(column_name_clone);
                             settings.artists_sort_order = sort_order;
                         }
-                    }
-
-                    if let Err(e) = settings_mgr.update_settings(settings) {
+                    }) {
                         error!(error = %e, "Failed to persist sort state");
                     }
                 }

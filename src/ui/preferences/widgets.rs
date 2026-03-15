@@ -69,10 +69,9 @@ where
             let new_value = options[selected_index].clone();
 
             // Update settings
-            let mut current_settings = settings_manager.get_settings().clone();
-            setter(&mut current_settings, new_value);
-
-            if let Err(e) = settings_manager.update_settings(current_settings) {
+            if let Err(e) = settings_manager.update_settings_with(|settings| {
+                setter(settings, new_value);
+            }) {
                 warn!(error = %e, "Failed to update settings");
             }
         }

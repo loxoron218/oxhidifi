@@ -8,6 +8,7 @@ use std::{
     fs::{canonicalize, create_dir_all, read_to_string, write},
     io::Error as StdError,
     path::PathBuf,
+    sync::Arc,
 };
 
 use {
@@ -107,7 +108,7 @@ pub struct UserSettings {
 #[derive(Debug)]
 pub struct SettingsManager {
     /// Thread-safe user settings storage.
-    settings: RwLock<UserSettings>,
+    settings: Arc<RwLock<UserSettings>>,
     /// Path to the configuration file on disk.
     config_path: PathBuf,
 }
@@ -139,7 +140,7 @@ impl Default for UserSettings {
 impl Clone for SettingsManager {
     fn clone(&self) -> Self {
         Self {
-            settings: RwLock::new(self.settings.read().clone()),
+            settings: Arc::clone(&self.settings),
             config_path: self.config_path.clone(),
         }
     }
@@ -188,7 +189,7 @@ impl SettingsManager {
         };
 
         Ok(Self {
-            settings: RwLock::new(settings),
+            settings: Arc::new(RwLock::new(settings)),
             config_path,
         })
     }
@@ -202,11 +203,22 @@ impl SettingsManager {
         self.settings.read()
     }
 
+    /// Gets a reference to the thread-safe settings Arc.
+    ///
+    /// # Returns
+    ///
+    /// A clone of the `Arc<RwLock<UserSettings>>` for sharing across threads.
+    #[must_use]
+    pub fn get_settings_arc(&self) -> Arc<RwLock<UserSettings>> {
+        Arc::clone(&self.settings)
+    }
+
     /// Gets the configuration file path.
     ///
     /// # Returns
     ///
     /// A reference to the configuration file path.
+    #[must_use]
     pub fn get_config_path(&self) -> &PathBuf {
         &self.config_path
     }
@@ -216,6 +228,7 @@ impl SettingsManager {
     /// # Returns
     ///
     /// A clone of the `library_directories` vector.
+    #[must_use]
     pub fn get_library_directories(&self) -> Vec<String> {
         self.settings.read().library_directories.clone()
     }
@@ -225,6 +238,7 @@ impl SettingsManager {
     /// # Returns
     ///
     /// A tuple of (`library_directories`, `show_dr_values`).
+    #[must_use]
     pub fn get_scanner_settings(&self) -> (Vec<String>, bool) {
         let settings = self.settings.read();
         (
@@ -311,6 +325,38 @@ impl SettingsManager {
         *settings_write = new_settings;
         drop(settings_write);
         self.save_settings()
+    }
+
+    /// Updates settings using a closure and saves only if the settings actually changed.
+    ///
+    /// This is more efficient than cloning the entire settings struct when only
+    /// a single field needs to be updated.
+    ///
+    /// # Arguments
+    ///
+    /// * `f` - A closure that modifies the settings in place
+    ///
+    /// # Returns
+    ///
+    /// A `Result` indicating success or failure.
+    ///
+    /// # Errors
+    ///
+    /// Returns `SettingsError` if settings cannot be saved to disk.
+    pub fn update_settings_with<F>(&self, f: F) -> Result<(), SettingsError>
+    where
+        F: FnOnce(&mut UserSettings),
+    {
+        let mut settings_write = self.settings.write();
+        let old_settings = (*settings_write).clone();
+        f(&mut settings_write);
+
+        if old_settings == *settings_write {
+            Ok(())
+        } else {
+            drop(settings_write);
+            self.save_settings()
+        }
     }
 
     /// Saves the current settings to disk.

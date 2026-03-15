@@ -15,6 +15,7 @@ mod ui_compliance_tests {
             prelude::{AccessibleExt, WidgetExt},
         },
         parking_lot::RwLock,
+        tokio::sync::RwLock as TokioRwLock,
     };
 
     use crate::{
@@ -59,7 +60,7 @@ mod ui_compliance_tests {
         let settings_manager = SettingsManager::new()?;
         let app_state = AppState::new(
             engine_weak,
-            None::<Arc<RwLock<LibraryScanner>>>,
+            None::<Arc<TokioRwLock<LibraryScanner>>>,
             Arc::new(RwLock::new(settings_manager)),
         );
 
@@ -129,7 +130,7 @@ mod ui_compliance_tests {
         let settings_manager = SettingsManager::new()?;
         let app_state = AppState::new(
             engine_weak,
-            None::<Arc<RwLock<LibraryScanner>>>,
+            None::<Arc<TokioRwLock<LibraryScanner>>>,
             Arc::new(RwLock::new(settings_manager)),
         );
 
@@ -191,7 +192,7 @@ mod ui_compliance_tests {
         let settings_manager = SettingsManager::new()?;
         let app_state = AppState::new(
             engine_weak,
-            None::<Arc<RwLock<LibraryScanner>>>,
+            None::<Arc<TokioRwLock<LibraryScanner>>>,
             Arc::new(RwLock::new(settings_manager)),
         );
 
@@ -234,7 +235,7 @@ mod ui_compliance_tests {
         let settings_manager = SettingsManager::new()?;
         let app_state = AppState::new(
             engine_weak,
-            None::<Arc<RwLock<LibraryScanner>>>,
+            None::<Arc<TokioRwLock<LibraryScanner>>>,
             Arc::new(RwLock::new(settings_manager)),
         );
 
@@ -292,7 +293,7 @@ mod ui_compliance_tests {
         let settings_manager = SettingsManager::new()?;
         let app_state = AppState::new(
             engine_weak,
-            None::<Arc<RwLock<LibraryScanner>>>,
+            None::<Arc<TokioRwLock<LibraryScanner>>>,
             Arc::new(RwLock::new(settings_manager)),
         );
 

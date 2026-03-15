@@ -385,15 +385,12 @@ impl PlayerBar {
             let old_value = settings_manager.read().get_settings().exclusive_mode;
             let new_value = !old_value;
 
-            let settings_manager_write = settings_manager.write();
-            let mut current_settings = settings_manager_write.get_settings().clone();
-            current_settings.exclusive_mode = new_value;
-
-            if let Err(e) = settings_manager_write.update_settings(current_settings) {
+            if let Err(e) = settings_manager.read().update_settings_with(|settings| {
+                settings.exclusive_mode = new_value;
+            }) {
                 error!(error = %e, "Failed to update exclusive mode");
                 return;
             }
-            drop(settings_manager_write);
 
             app_state_clone.update_exclusive_mode(new_value);
 

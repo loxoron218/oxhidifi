@@ -9,7 +9,10 @@ pub mod event_processing;
 use std::{
     fs::read_dir,
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering::SeqCst},
+    },
 };
 
 use {
@@ -300,6 +303,7 @@ impl LibraryScanner {
     ///
     /// * `database` - Database interface for storing metadata.
     /// * `settings` - User settings containing library directories.
+    /// * `cancelled` - Cancellation token to allow early termination.
     ///
     /// # Returns
     ///
@@ -312,19 +316,34 @@ impl LibraryScanner {
         &self,
         database: &Arc<LibraryDatabase>,
         settings: &Arc<RwLock<UserSettings>>,
+        cancelled: &Arc<AtomicBool>,
     ) -> Result<(), LibraryError> {
         let library_dirs = settings.read().library_directories.clone();
         let mut all_audio_files = Vec::new();
 
-        // Walk through all library directories and collect audio files
         for dir in library_dirs {
+            if cancelled.load(SeqCst) {
+                debug!("Library scan cancelled during directory iteration");
+                return Ok(());
+            }
+
             let dir_path = Path::new(&dir);
-            let audio_files = Self::collect_audio_files_from_directory(dir_path)?;
+            let audio_files = Self::collect_audio_files_from_directory(dir_path, cancelled)?;
+
+            if cancelled.load(SeqCst) {
+                debug!("Library scan cancelled during file collection");
+                return Ok(());
+            }
+
             all_audio_files.extend(audio_files);
         }
 
-        // Process all collected audio files
         if !all_audio_files.is_empty() {
+            if cancelled.load(SeqCst) {
+                debug!("Library scan cancelled before processing files");
+                return Ok(());
+            }
+
             handle_files_changed(all_audio_files, database, settings, &self.dr_parser).await?;
         }
 
@@ -336,6 +355,7 @@ impl LibraryScanner {
     /// # Arguments
     ///
     /// * `dir_path` - Path to the directory to scan.
+    /// * `cancelled` - Cancellation token to allow early termination.
     ///
     /// # Returns
     ///
@@ -346,11 +366,17 @@ impl LibraryScanner {
     /// Returns `LibraryError` if the directory cannot be read.
     pub fn collect_audio_files_from_directory(
         dir_path: &Path,
+        cancelled: &Arc<AtomicBool>,
     ) -> Result<Vec<PathBuf>, LibraryError> {
         let mut audio_files = Vec::new();
 
         if let Ok(entries) = read_dir(dir_path) {
             for entry in entries.flatten() {
+                if cancelled.load(SeqCst) {
+                    debug!("File collection cancelled in directory: {:?}", dir_path);
+                    return Ok(audio_files);
+                }
+
                 let path = entry.path();
 
                 if path.is_file() {
@@ -360,15 +386,94 @@ impl LibraryScanner {
                     }
                 } else if path.is_dir() {
                     // Recursively process subdirectories
-                    let sub_audio_files = Self::collect_audio_files_from_directory(&path)?;
+                    let sub_audio_files =
+                        Self::collect_audio_files_from_directory(&path, cancelled)?;
                     audio_files.extend(sub_audio_files);
+
+                    if cancelled.load(SeqCst) {
+                        debug!("File collection cancelled after subdirectory scan");
+                        return Ok(audio_files);
+                    }
                 } else {
-                    // Ignore other file types (symlinks, etc.)
+                    // Ignore non-file, non-directory entries (symlinks, special files, etc.)
                 }
             }
         }
 
         Ok(audio_files)
+    }
+
+    /// Scans a single directory for audio files (non-recursive).
+    ///
+    /// # Arguments
+    ///
+    /// * `dir_path` - Path to the directory to scan.
+    /// * `cancelled` - Cancellation token to allow early termination.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing a vector of audio file paths or a `LibraryError`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `LibraryError` if the directory cannot be read.
+    pub fn scan_directory(
+        dir_path: &Path,
+        cancelled: &Arc<AtomicBool>,
+    ) -> Result<Vec<PathBuf>, LibraryError> {
+        if cancelled.load(SeqCst) {
+            debug!("Directory scan cancelled");
+            return Ok(Vec::new());
+        }
+
+        let mut audio_files = Vec::new();
+
+        if let Ok(entries) = read_dir(dir_path) {
+            for entry in entries.flatten() {
+                if cancelled.load(SeqCst) {
+                    debug!("Directory scan cancelled in: {:?}", dir_path);
+                    return Ok(audio_files);
+                }
+
+                let path = entry.path();
+
+                if path.is_file() && FileWatcher::is_supported_audio_file(&path) {
+                    audio_files.push(path);
+                }
+            }
+        }
+
+        Ok(audio_files)
+    }
+
+    /// Scans a single audio file.
+    ///
+    /// # Arguments
+    ///
+    /// * `file_path` - Path to the file to scan.
+    /// * `cancelled` - Cancellation token to allow early termination.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing the path if it's a supported audio file, or `None`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `LibraryError` if checking the file fails.
+    pub fn scan_single_file(
+        file_path: &Path,
+        cancelled: &Arc<AtomicBool>,
+    ) -> Result<Option<PathBuf>, LibraryError> {
+        if cancelled.load(SeqCst) {
+            debug!("Single file scan cancelled");
+            return Ok(None);
+        }
+
+        if file_path.is_file() && FileWatcher::is_supported_audio_file(file_path) {
+            Ok(Some(file_path.to_path_buf()))
+        } else {
+            Ok(None)
+        }
     }
 }
 

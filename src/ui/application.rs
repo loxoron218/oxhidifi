@@ -3,7 +3,16 @@
 //! This module implements the `OxhidifiApplication` which serves as the
 //! main entry point for the Libadwaita-based user interface.
 
-use std::{fs::read_to_string, path::Path, rc::Rc, sync::Arc};
+use std::{
+    fs::read_to_string,
+    path::Path,
+    rc::Rc,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering::SeqCst},
+    },
+    thread::{JoinHandle, spawn},
+};
 
 use {
     libadwaita::{
@@ -25,6 +34,11 @@ use {
         },
     },
     parking_lot::RwLock,
+    tokio::{
+        runtime::{Builder, Runtime},
+        sync::RwLock as TokioRwLock,
+        try_join,
+    },
     tracing::{debug, error, warn},
 };
 
@@ -81,13 +95,19 @@ pub struct OxhidifiApplication {
     /// Library database for music library operations.
     pub library_db: Arc<LibraryDatabase>,
     /// Library scanner for real-time monitoring.
-    pub library_scanner: Option<Arc<RwLock<LibraryScanner>>>,
+    pub library_scanner: Option<Arc<TokioRwLock<LibraryScanner>>>,
     /// Application state manager.
     pub app_state: Arc<AppState>,
     /// Queue manager for playback queue operations.
     pub queue_manager: Arc<QueueManager>,
     /// User settings manager.
     pub settings: Arc<SettingsManager>,
+    /// Long-lived Tokio runtime for background operations.
+    tokio_runtime: Arc<Runtime>,
+    /// Flag to signal cancellation of background scan thread.
+    scan_cancelled: Arc<AtomicBool>,
+    /// Join handle for the background scan thread.
+    scan_thread: Arc<parking_lot::Mutex<Option<JoinHandle<()>>>>,
 }
 
 /// Context struct holding all view controllers.
@@ -126,6 +146,10 @@ impl OxhidifiApplication {
     /// # Errors
     ///
     /// Returns an error if audio engine, library database, or settings initialization fails.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal Tokio runtime cannot be created for background operations.
     pub async fn new() -> Result<Self, UiError> {
         // Initialize settings
         let settings_manager = SettingsManager::new()
@@ -133,8 +157,7 @@ impl OxhidifiApplication {
         let settings_manager_shared = Arc::new(settings_manager);
 
         // Extract UserSettings for components that need direct access
-        let user_settings = settings_manager_shared.get_settings().clone();
-        let user_settings_shared = Arc::new(RwLock::new(user_settings));
+        let user_settings_shared = settings_manager_shared.get_settings_arc();
 
         // Initialize audio engine
         let audio_engine = AudioEngine::new()
@@ -170,15 +193,7 @@ impl OxhidifiApplication {
                     InitializationError(format!("Failed to initialize library scanner: {e}"))
                 })?;
 
-            // Perform initial scan of existing directories
-            if let Err(e) = scanner
-                .scan_initial_directories(&library_db, &user_settings_shared)
-                .await
-            {
-                error!("Failed to perform initial library scan: {e}");
-            }
-
-            Some(Arc::new(RwLock::new(scanner)))
+            Some(Arc::new(TokioRwLock::new(scanner)))
         };
 
         // Create application state
@@ -208,26 +223,31 @@ impl OxhidifiApplication {
             error!("Failed to cleanup orphaned records: {e}");
         }
 
-        let albums = library_db
-            .get_albums(None)
-            .await
-            .map_err(|e| {
-                error!(error = %e, "Failed to get albums from database");
-                e
-            })
-            .unwrap_or_default();
-
-        let artists = library_db
-            .get_artists(None)
-            .await
-            .map_err(|e| {
-                error!(error = %e, "Failed to get artists from database");
-                e
-            })
-            .unwrap_or_default();
+        let (albums, artists) = try_join!(
+            async {
+                library_db.get_albums(None).await.map_err(|e| {
+                    error!(error = %e, "Failed to get albums from database");
+                    e
+                })
+            },
+            async {
+                library_db.get_artists(None).await.map_err(|e| {
+                    error!(error = %e, "Failed to get artists from database");
+                    e
+                })
+            }
+        )
+        .map_or_else(|_| (Vec::new(), Vec::new()), |results| results);
 
         // Update AppState with library data
         app_state.update_library_data(albums, artists);
+
+        let tokio_runtime = Arc::new(
+            Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .map_err(|e| InitializationError(format!("Failed to create Tokio runtime: {e}")))?,
+        );
 
         let app = Application::builder()
             .application_id("com.example.oxhidifi")
@@ -241,6 +261,9 @@ impl OxhidifiApplication {
             app_state: Arc::new(app_state),
             queue_manager,
             settings: Arc::clone(&settings_manager_shared),
+            tokio_runtime,
+            scan_cancelled: Arc::new(AtomicBool::new(false)),
+            scan_thread: Arc::new(parking_lot::Mutex::new(None)),
         })
     }
 
@@ -255,6 +278,9 @@ impl OxhidifiApplication {
             let app_state_clone = Arc::clone(&self.app_state);
             let settings_manager_clone = Arc::clone(&self.settings);
             let queue_manager_clone = Arc::clone(&self.queue_manager);
+            let tokio_runtime_clone = Arc::clone(&self.tokio_runtime);
+            let scan_cancelled_clone = Arc::clone(&self.scan_cancelled);
+            let scan_thread_clone = Arc::clone(&self.scan_thread);
 
             move |_| {
                 build_ui(
@@ -267,34 +293,39 @@ impl OxhidifiApplication {
                 );
 
                 // Subscribe to library scanner events if active
-                if let Some(scanner_lock) = &app_state_clone.library_scanner.read().clone() {
-                    let rx = scanner_lock.read().subscribe();
+                let scanner_for_sub = {
+                    let guard = app_state_clone.library_scanner.read();
+                    guard.as_ref().map(Arc::clone)
+                };
+
+                if let Some(scanner_lock) = scanner_for_sub {
                     let app_state_refresh = Arc::clone(&app_state_clone);
                     let db_refresh = Arc::clone(&library_db_clone);
 
                     MainContext::default().spawn_local(async move {
+                        let rx = scanner_lock.read().await.subscribe();
                         loop {
                             match rx.recv().await {
                                 Ok(LibraryChanged) => {
                                     debug!("LibraryChanged event received, refreshing app state");
 
-                                    // Refresh albums
-                                    let albums = db_refresh
-                                        .get_albums(None)
-                                        .await
-                                        .map_err(|e| {
-                                            error!(error = %e, "Failed to refresh albums");
-                                            e
-                                        })
-                                        .unwrap_or_default();
-
-                                    // Refresh artists
-                                    let artists = match db_refresh.get_artists(None).await {
-                                        Ok(artists) => artists,
-                                        Err(e) => {
-                                            error!("Failed to refresh artists: {e}");
-                                            Vec::new()
+                                    // Refresh albums and artists in parallel
+                                    let (albums, artists) = match try_join!(
+                                        async {
+                                            db_refresh.get_albums(None).await.map_err(|e| {
+                                                error!(error = %e, "Failed to refresh albums");
+                                                e
+                                            })
+                                        },
+                                        async {
+                                            db_refresh.get_artists(None).await.map_err(|e| {
+                                                error!(error = %e, "Failed to refresh artists");
+                                                e
+                                            })
                                         }
+                                    ) {
+                                        Ok((albums, artists)) => (albums, artists),
+                                        Err(_) => (Vec::new(), Vec::new()),
                                     };
 
                                     // Update state
@@ -308,10 +339,71 @@ impl OxhidifiApplication {
                         }
                     });
                 }
+
+                // Start background library scan after window is shown
+                let scanner = {
+                    let guard = app_state_clone.library_scanner.read();
+                    guard.as_ref().map(Arc::clone)
+                };
+
+                if let Some(scanner) = scanner {
+                    let db_for_scan = Arc::clone(&library_db_clone);
+                    let settings_for_scan = Arc::clone(&settings_manager_clone);
+                    let rt = Arc::clone(&tokio_runtime_clone);
+                    let cancelled = Arc::clone(&scan_cancelled_clone);
+                    let thread_storage = Arc::clone(&scan_thread_clone);
+
+                    let handle = spawn(move || {
+                        rt.block_on(async move {
+                            if cancelled.load(SeqCst) {
+                                debug!("Library scan cancelled before start");
+                                return;
+                            }
+
+                            let user_settings_arc = settings_for_scan.get_settings_arc();
+
+                            if let Err(e) = scanner
+                                .read()
+                                .await
+                                .scan_initial_directories(
+                                    &db_for_scan,
+                                    &user_settings_arc,
+                                    &cancelled,
+                                )
+                                .await
+                            {
+                                if cancelled.load(SeqCst) {
+                                    debug!("Library scan cancelled during execution");
+                                } else {
+                                    error!(error = %e, "Failed to perform initial library scan");
+                                }
+                            }
+                        });
+                    });
+
+                    let mut guard = thread_storage.lock();
+                    *guard = Some(handle);
+                }
             }
         });
 
         self.app.run();
+    }
+}
+
+impl Drop for OxhidifiApplication {
+    fn drop(&mut self) {
+        debug!("OxhidifiApplication dropped, cancelling background scan thread");
+
+        self.scan_cancelled.store(true, SeqCst);
+
+        if let Some(handle) = self.scan_thread.lock().take() {
+            if handle.join().is_err() {
+                error!("Background scan thread panicked");
+            } else {
+                debug!("Background scan thread joined");
+            }
+        }
     }
 }
 
@@ -567,7 +659,7 @@ fn spawn_navigation_handler(
         let receiver = app_state.subscribe();
 
         while let Ok(event) = receiver.recv().await {
-            if let NavigationChanged(_nav_state) = event {
+            if let NavigationChanged(_nav_state) = &*event {
                 handle_navigation_state_change(
                     &navigation_view,
                     &toast_overlay,
@@ -624,7 +716,7 @@ fn spawn_player_bar_visibility_handler(
         let receiver = app_state.subscribe();
 
         while let Ok(event) = receiver.recv().await {
-            if let PlaybackStateChanged(state) = event {
+            if let PlaybackStateChanged(state) = &*event {
                 // Show player bar when a track is loaded, hide only when stopped
                 match state {
                     Playing | Paused | Buffering | Ready => {
@@ -1292,11 +1384,11 @@ fn spawn_view_stack_event_handler(
             if let Ok(event) = receiver.recv().await {
                 switch_count += 1;
 
-                match event {
+                match event.as_ref() {
                     LibraryDataChanged { albums, artists } => {
                         handle_library_data_changed(
-                            albums,
-                            artists,
+                            albums.clone(),
+                            artists.clone(),
                             &mut views,
                             &search_app_state,
                             &view_stack,
@@ -1319,19 +1411,19 @@ fn spawn_view_stack_event_handler(
                             previous_tab: &mut previous_tab,
                         };
 
-                        handle_view_options_changed(&current_tab, &view_mode, &mut ctx);
+                        handle_view_options_changed(current_tab, view_mode, &mut ctx);
                     }
                     SearchFilterChanged(filter) => {
                         handle_search_filter_changed(filter.as_deref(), &mut views);
                     }
                     SettingsChanged { show_dr_values } => {
-                        handle_settings_changed(show_dr_values, &mut views);
+                        handle_settings_changed(*show_dr_values, &mut views);
                     }
                     ExclusiveModeFailed { reason } => {
-                        handle_exclusive_mode_failed(&reason, &toast_overlay);
+                        handle_exclusive_mode_failed(reason, &toast_overlay);
                     }
                     LibraryScanFailed { reason } => {
-                        handle_library_scan_failed(&reason, &toast_overlay);
+                        handle_library_scan_failed(reason, &toast_overlay);
                     }
                     _ => {}
                 }

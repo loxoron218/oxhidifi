@@ -249,10 +249,10 @@ pub fn subscribe_to_state_changes(
         let receiver = app_state.subscribe();
         loop {
             if let Ok(event) = receiver.recv().await {
-                match event {
+                match event.as_ref() {
                     CurrentTrackChanged(track_info) => {
                         handle_current_track_changed(
-                            (*track_info).as_ref(),
+                            (**track_info).as_ref(),
                             &audio_engine,
                             &context,
                             &start_position_updates,
@@ -261,7 +261,7 @@ pub fn subscribe_to_state_changes(
                     }
                     PlaybackStateChanged(playback_state) => {
                         handle_playback_state_changed(
-                            &playback_state,
+                            playback_state,
                             &audio_engine,
                             &context,
                             &start_position_updates,
@@ -269,10 +269,10 @@ pub fn subscribe_to_state_changes(
                         );
                     }
                     QueueChanged(queue) => {
-                        handle_queue_changed(&queue, &audio_engine, &context);
+                        handle_queue_changed(queue, &audio_engine, &context);
                     }
                     ExclusiveModeChanged { enabled } => {
-                        handle_exclusive_mode_changed(enabled, &context);
+                        handle_exclusive_mode_changed(*enabled, &context);
                     }
                     _ => {}
                 }

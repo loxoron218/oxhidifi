@@ -24,7 +24,7 @@ use {
         prelude::{BoxExt, ButtonExt, Cast, FileExt, WidgetExt},
     },
     parking_lot::RwLock,
-    tokio::spawn,
+    tokio::{spawn, sync::RwLock as TokioRwLock, try_join},
     tracing::{debug, error, info, warn},
 };
 
@@ -283,32 +283,19 @@ impl EmptyState {
     ///
     /// # Arguments
     ///
-    /// * `settings_snapshot` - Current settings snapshot
+    /// * `settings_arc` - Reference to the thread-safe settings Arc
     ///
     /// # Returns
     ///
-    /// A tuple containing the database arc, settings arc, and optional DR parser
+    /// A tuple containing the database arc and optional DR parser
     async fn prepare_scan_resources(
-        settings_snapshot: UserSettings,
-    ) -> Option<(
-        Arc<LibraryDatabase>,
-        Arc<RwLock<UserSettings>>,
-        Option<Arc<DrParser>>,
-    )> {
-        // NOTE: This creates a snapshot of the settings at the time of the scan.
-        // If global settings (e.g., from a settings UI) are updated later,
-        // this `settings_arc` and the one held by the `LibraryScanner`'s
-        // background tasks will not reflect those changes.
-        // A more robust solution would involve `SettingsManager` exposing
-        // an `Arc<RwLock<UserSettings>>` directly, or the scanner
-        // subscribing to settings changes.
+        settings_arc: &Arc<RwLock<UserSettings>>,
+    ) -> Option<(Arc<LibraryDatabase>, (), Option<Arc<DrParser>>)> {
         match LibraryDatabase::new().await {
             Ok(library_db) => {
                 let library_db_arc = Arc::new(library_db);
-                let settings_arc = Arc::new(RwLock::new(settings_snapshot.clone()));
-
                 // Initialize DR parser if enabled
-                let dr_parser = if settings_snapshot.show_dr_values {
+                let dr_parser = if settings_arc.read().show_dr_values {
                     match DrParser::new(Arc::clone(&library_db_arc)) {
                         Ok(parser) => Some(Arc::new(parser)),
                         Err(e) => {
@@ -320,7 +307,7 @@ impl EmptyState {
                     None
                 };
 
-                Some((library_db_arc, settings_arc, dr_parser))
+                Some((library_db_arc, (), dr_parser))
             }
             Err(e) => {
                 error!(error = %e, "Failed to create library database");
@@ -337,15 +324,15 @@ impl EmptyState {
     /// * `app_state` - Application state to update when library changes
     /// * `library_db` - Database connection for refreshing data
     /// * `cancel_token` - Cancellation token for explicitly stopping the listener
-    fn start_scanner_event_listener(
-        scanner_arc: &Arc<RwLock<LibraryScanner>>,
+    async fn start_scanner_event_listener(
+        scanner_arc: &Arc<TokioRwLock<LibraryScanner>>,
         app_state: &Arc<AppState>,
         library_db: &Arc<LibraryDatabase>,
         cancel_token: &Arc<AtomicBool>,
     ) {
         // Start the event listener loop for the new scanner
         // This mirrors the logic in OxhidifiApplication::run
-        let rx = scanner_arc.read().subscribe();
+        let rx = scanner_arc.read().await.subscribe();
         let app_state_refresh = Arc::clone(app_state);
         let db_refresh = Arc::clone(library_db);
         let cancel_token_clone = Arc::clone(cancel_token);
@@ -358,22 +345,23 @@ impl EmptyState {
                             "LibraryChanged event received (dynamic scanner), refreshing app state"
                         );
 
-                        // Refresh albums
-                        let albums = match db_refresh.get_albums(None).await {
-                            Ok(albums) => albums,
-                            Err(e) => {
-                                error!(error = %e, "Failed to refresh albums");
-                                Vec::new()
+                        // Refresh albums and artists in parallel
+                        let (albums, artists) = match try_join!(
+                            async {
+                                db_refresh.get_albums(None).await.map_err(|e| {
+                                    error!(error = %e, "Failed to refresh albums");
+                                    e
+                                })
+                            },
+                            async {
+                                db_refresh.get_artists(None).await.map_err(|e| {
+                                    error!(error = %e, "Failed to refresh artists");
+                                    e
+                                })
                             }
-                        };
-
-                        // Refresh artists
-                        let artists = match db_refresh.get_artists(None).await {
-                            Ok(artists) => artists,
-                            Err(e) => {
-                                error!(error = %e, "Failed to refresh artists");
-                                Vec::new()
-                            }
+                        ) {
+                            Ok((albums, artists)) => (albums, artists),
+                            Err(_) => (Vec::new(), Vec::new()),
                         };
 
                         // Update state
@@ -401,44 +389,43 @@ impl EmptyState {
     /// # Returns
     ///
     /// The scanner arc, or None if creation failed
-    fn get_or_create_scanner(
+    async fn get_or_create_scanner(
         app_state: &Arc<AppState>,
         library_db: &Arc<LibraryDatabase>,
         settings_arc: &Arc<RwLock<UserSettings>>,
         cancel_token: &Arc<AtomicBool>,
-    ) -> Option<Arc<RwLock<LibraryScanner>>> {
+    ) -> Option<Arc<TokioRwLock<LibraryScanner>>> {
         let existing_scanner = app_state.library_scanner.read().clone();
 
-        existing_scanner.map_or_else(
-            || {
-                // Create new scanner
+        if let Some(scanner) = existing_scanner {
+            return Some(scanner);
+        }
 
-                match LibraryScanner::new(library_db, settings_arc, None) {
-                    Ok(scanner) => {
-                        let scanner_arc = Arc::new(RwLock::new(scanner));
+        // Create new scanner
+        match LibraryScanner::new(library_db, settings_arc, None) {
+            Ok(scanner) => {
+                let scanner_arc = Arc::new(TokioRwLock::new(scanner));
 
-                        // IMPORTANT: Store the scanner in AppState to prevent it from being dropped
-                        *app_state.library_scanner.write() = Some(Arc::clone(&scanner_arc));
+                // IMPORTANT: Store the scanner in AppState to prevent it from being dropped
+                *app_state.library_scanner.write() = Some(Arc::clone(&scanner_arc));
 
-                        // Start the event listener loop for the new scanner
-                        // This mirrors the logic in OxhidifiApplication::run
-                        Self::start_scanner_event_listener(
-                            &scanner_arc,
-                            app_state,
-                            library_db,
-                            cancel_token,
-                        );
+                // Start the event listener loop for the new scanner
+                // This mirrors the logic in OxhidifiApplication::run
+                Self::start_scanner_event_listener(
+                    &scanner_arc,
+                    app_state,
+                    library_db,
+                    cancel_token,
+                )
+                .await;
 
-                        Some(scanner_arc)
-                    }
-                    Err(e) => {
-                        error!(error = %e, "Failed to create library scanner");
-                        None
-                    }
-                }
-            },
-            Some,
-        )
+                Some(scanner_arc)
+            }
+            Err(e) => {
+                error!(error = %e, "Failed to create library scanner");
+                None
+            }
+        }
     }
 
     /// Executes the background scanning task for library directories.
@@ -450,12 +437,14 @@ impl EmptyState {
     /// * `settings` - Settings containing library directories
     /// * `dr_parser` - Optional DR parser for metadata
     /// * `new_directory` - New directory to add
+    /// * `cancelled` - Cancellation token for stopping the scan
     async fn execute_background_scan(
-        scanner: Arc<RwLock<LibraryScanner>>,
+        scanner: Arc<TokioRwLock<LibraryScanner>>,
         db: Arc<LibraryDatabase>,
         settings: Arc<RwLock<UserSettings>>,
         dr_parser: Option<Arc<DrParser>>,
         new_directory: String,
+        cancelled: Arc<AtomicBool>,
     ) {
         // Offload heavy scanning work to a background task
         let scanner_for_task = Arc::clone(&scanner);
@@ -463,11 +452,12 @@ impl EmptyState {
         let settings_for_task = Arc::clone(&settings);
         let dr_parser_for_task = dr_parser.clone();
         let dir_for_task = new_directory.clone();
+        let cancelled_for_task = Arc::clone(&cancelled);
 
         let scan_handle = spawn(async move {
             // 1. Add directory to scanner (fast, takes write lock)
             {
-                let mut scanner_write = scanner_for_task.write();
+                let mut scanner_write = scanner_for_task.write().await;
                 if let Err(e) = scanner_write.add_library_directory(&dir_for_task) {
                     error!(error = %e, "Failed to add directory to scanner");
                 }
@@ -493,9 +483,10 @@ impl EmptyState {
                         continue;
                     }
 
-                    if let Ok(audio_files) =
-                        LibraryScanner::collect_audio_files_from_directory(dir_path)
-                    {
+                    if let Ok(audio_files) = LibraryScanner::collect_audio_files_from_directory(
+                        dir_path,
+                        &cancelled_for_task,
+                    ) {
                         all_files.extend(audio_files);
                     }
                 }
@@ -558,24 +549,21 @@ impl EmptyState {
         app_state: Option<Arc<AppState>>,
         cancel_token: Arc<AtomicBool>,
     ) {
-        // Get settings snapshot in a tight scope so the reference is dropped before async
-        let settings_snapshot = {
-            let settings_read = settings_manager.read();
-            settings_read.get_settings().clone()
-        };
+        let settings_arc = settings_manager.read().get_settings_arc();
 
         if let Some(app_state) = app_state {
             let app_state_clone = Arc::clone(&app_state);
             let new_directory = new_directory.to_string();
 
-            if let Some((library_db_arc, settings_arc, dr_parser)) =
-                Self::prepare_scan_resources(settings_snapshot).await
+            if let Some((library_db_arc, (), dr_parser)) =
+                Self::prepare_scan_resources(&settings_arc).await
                 && let Some(scanner_arc) = Self::get_or_create_scanner(
                     &app_state_clone,
                     &library_db_arc,
                     &settings_arc,
                     &cancel_token,
                 )
+                .await
             {
                 Self::execute_background_scan(
                     scanner_arc,
@@ -583,6 +571,7 @@ impl EmptyState {
                     Arc::clone(&settings_arc),
                     dr_parser,
                     new_directory,
+                    Arc::clone(&cancel_token),
                 )
                 .await;
 
@@ -612,9 +601,12 @@ mod tests {
         sync::{Arc, atomic::AtomicBool},
     };
 
-    use anyhow::{Result, anyhow, bail};
-
-    use {parking_lot::RwLock, tempfile::TempDir};
+    use {
+        anyhow::{Result, anyhow, bail},
+        parking_lot::RwLock,
+        tempfile::TempDir,
+        tokio::sync::RwLock as TokioRwLock,
+    };
 
     use crate::{
         audio::engine::AudioEngine,
@@ -644,9 +636,10 @@ mod tests {
             ..Default::default()
         };
 
-        let result = EmptyState::prepare_scan_resources(settings).await;
+        let settings_arc = Arc::new(RwLock::new(settings));
+        let result = EmptyState::prepare_scan_resources(&settings_arc).await;
 
-        let (_, _, dr_parser) = result.ok_or_else(|| anyhow!("result should be Some"))?;
+        let (_, (), dr_parser) = result.ok_or_else(|| anyhow!("result should be Some"))?;
         if dr_parser.is_none() {
             bail!("DR parser should be Some");
         }
@@ -660,9 +653,10 @@ mod tests {
             ..Default::default()
         };
 
-        let result = EmptyState::prepare_scan_resources(settings).await;
+        let settings_arc = Arc::new(RwLock::new(settings));
+        let result = EmptyState::prepare_scan_resources(&settings_arc).await;
 
-        let (_library_db, settings_arc, dr_parser) =
+        let (_library_db, (), dr_parser) =
             result.ok_or_else(|| anyhow!("result should be Some"))?;
 
         if dr_parser.is_some() {
@@ -686,9 +680,10 @@ mod tests {
             ..Default::default()
         };
 
-        let result = EmptyState::prepare_scan_resources(settings).await;
+        let settings_arc = Arc::new(RwLock::new(settings));
+        let result = EmptyState::prepare_scan_resources(&settings_arc).await;
 
-        let (_library_db, settings_arc, dr_parser) =
+        let (_library_db, (), dr_parser) =
             result.ok_or_else(|| anyhow!("result should be Some"))?;
 
         let settings_read = settings_arc.read();
@@ -714,7 +709,7 @@ mod tests {
         let settings_arc = Arc::new(RwLock::new(settings));
 
         let existing_scanner = LibraryScanner::new(&library_db_arc, &settings_arc, None)?;
-        let existing_scanner_arc = Arc::new(RwLock::new(existing_scanner));
+        let existing_scanner_arc = Arc::new(TokioRwLock::new(existing_scanner));
 
         let engine = AudioEngine::new()?;
         let engine_weak = Arc::downgrade(&Arc::new(engine));
@@ -732,7 +727,8 @@ mod tests {
             &library_db_arc,
             &settings_arc,
             &cancel_token,
-        );
+        )
+        .await;
 
         let scanner_arc = result.ok_or_else(|| anyhow!("result should be Some"))?;
         if !Arc::ptr_eq(&scanner_arc, &existing_scanner_arc) {
@@ -786,7 +782,8 @@ mod tests {
             &library_db_arc,
             &settings_arc,
             &cancel_token,
-        );
+        )
+        .await;
         if result.is_none() {
             bail!("Result should be Some");
         }
@@ -814,7 +811,7 @@ mod tests {
         let settings_arc = Arc::new(RwLock::new(settings));
 
         let scanner = LibraryScanner::new(&library_db_arc, &settings_arc, None)?;
-        let scanner_arc = Arc::new(RwLock::new(scanner));
+        let scanner_arc = Arc::new(TokioRwLock::new(scanner));
 
         let test_path = music_dir.to_string_lossy().to_string();
 
@@ -824,6 +821,7 @@ mod tests {
             Arc::clone(&settings_arc),
             None,
             test_path,
+            Arc::new(AtomicBool::new(false)),
         )
         .await;
         Ok(())
@@ -848,7 +846,7 @@ mod tests {
         let settings_arc = Arc::new(RwLock::new(settings));
 
         let scanner = LibraryScanner::new(&library_db_arc, &settings_arc, None)?;
-        let scanner_arc = Arc::new(RwLock::new(scanner));
+        let scanner_arc = Arc::new(TokioRwLock::new(scanner));
 
         let test_path = music_dir.to_string_lossy().to_string();
 
@@ -858,6 +856,7 @@ mod tests {
             Arc::clone(&settings_arc),
             None,
             test_path,
+            Arc::new(AtomicBool::new(false)),
         )
         .await;
 
@@ -889,7 +888,7 @@ mod tests {
         let settings_arc = Arc::new(RwLock::new(settings));
 
         let scanner = LibraryScanner::new(&library_db_arc, &settings_arc, None)?;
-        let scanner_arc = Arc::new(RwLock::new(scanner));
+        let scanner_arc = Arc::new(TokioRwLock::new(scanner));
 
         let dr_parser = {
             let parser = DrParser::new(Arc::clone(&library_db_arc))?;
@@ -904,6 +903,7 @@ mod tests {
             Arc::clone(&settings_arc),
             dr_parser,
             test_path,
+            Arc::new(AtomicBool::new(false)),
         )
         .await;
         Ok(())
@@ -921,7 +921,7 @@ mod tests {
         let settings_arc = Arc::new(RwLock::new(settings));
 
         let scanner = LibraryScanner::new(&library_db_arc, &settings_arc, None)?;
-        let scanner_arc = Arc::new(RwLock::new(scanner));
+        let scanner_arc = Arc::new(TokioRwLock::new(scanner));
 
         let temp_dir = TempDir::new()?;
         let test_path = temp_dir.path().to_string_lossy().to_string();
@@ -932,6 +932,7 @@ mod tests {
             Arc::clone(&settings_arc),
             None,
             test_path,
+            Arc::new(AtomicBool::new(false)),
         )
         .await;
         Ok(())

@@ -9,7 +9,7 @@ use std::sync::Arc;
 use {
     async_channel::{Receiver, Sender, unbounded},
     parking_lot::RwLock,
-    tracing::debug,
+    tracing::{debug, warn},
 };
 
 use crate::config::settings::SettingsManager;
@@ -36,7 +36,7 @@ pub struct ZoomManager {
     /// Settings manager reference for persistence.
     pub settings_manager: Arc<RwLock<SettingsManager>>,
     /// List of active subscribers for manual broadcast fan-out.
-    subscribers: Arc<RwLock<Vec<Sender<ZoomEvent>>>>,
+    subscribers: Arc<RwLock<Vec<Sender<Arc<ZoomEvent>>>>>,
 }
 
 impl ZoomManager {
@@ -76,18 +76,20 @@ impl ZoomManager {
     /// Cleans up closed channels.
     fn broadcast_event(&self, event: &ZoomEvent) -> usize {
         let mut subscribers = self.subscribers.write();
-        let mut active = Vec::with_capacity(subscribers.len());
-        let mut count = 0;
+        let event = Arc::new(event.clone());
 
-        for tx in subscribers.iter() {
-            if matches!(tx.try_send(event.clone()), Ok(())) {
-                active.push(tx.clone());
-                count += 1;
+        subscribers.retain(|tx| {
+            if tx.is_closed() {
+                false
+            } else {
+                if tx.try_send(Arc::clone(&event)).is_err() {
+                    warn!("Failed to send event to subscriber, but retaining channel");
+                }
+                true
             }
-        }
+        });
 
-        *subscribers = active;
-        count
+        subscribers.len()
     }
 
     /// Gets the current grid view zoom level.
@@ -122,19 +124,21 @@ impl ZoomManager {
             debug!("ZoomManager: Setting grid zoom level to {}", clamped_level);
             *self.grid_zoom_level.write() = clamped_level;
 
-            // Persist to settings
-            let settings_manager_write = self.settings_manager.write();
-            let mut current_settings = settings_manager_write.get_settings().clone();
-            current_settings.grid_zoom_level = clamped_level;
-            let config_path = settings_manager_write.get_config_path();
-            debug!(
-                "Persisting grid zoom level {} to config file: {:?}",
-                clamped_level, config_path
-            );
-            if let Err(e) = settings_manager_write.update_settings(current_settings) {
+            if let Err(e) = self
+                .settings_manager
+                .read()
+                .update_settings_with(|settings| {
+                    settings.grid_zoom_level = clamped_level;
+                })
+            {
                 debug!("Failed to persist grid zoom level {}: {}", clamped_level, e);
+            } else {
+                debug!(
+                    "Persisted grid zoom level {} to config file: {:?}",
+                    clamped_level,
+                    self.settings_manager.read().get_config_path()
+                );
             }
-            drop(settings_manager_write);
 
             self.broadcast_event(&ZoomEvent::GridZoomChanged(clamped_level));
         }
@@ -152,19 +156,21 @@ impl ZoomManager {
             debug!("ZoomManager: Setting list zoom level to {}", clamped_level);
             *self.list_zoom_level.write() = clamped_level;
 
-            // Persist to settings
-            let settings_manager_write = self.settings_manager.write();
-            let mut current_settings = settings_manager_write.get_settings().clone();
-            current_settings.list_zoom_level = clamped_level;
-            let config_path = settings_manager_write.get_config_path();
-            debug!(
-                "Persisting list zoom level {} to config file: {:?}",
-                clamped_level, config_path
-            );
-            if let Err(e) = settings_manager_write.update_settings(current_settings) {
+            if let Err(e) = self
+                .settings_manager
+                .read()
+                .update_settings_with(|settings| {
+                    settings.list_zoom_level = clamped_level;
+                })
+            {
                 debug!("Failed to persist list zoom level {}: {}", clamped_level, e);
+            } else {
+                debug!(
+                    "Persisted list zoom level {} to config file: {:?}",
+                    clamped_level,
+                    self.settings_manager.read().get_config_path()
+                );
             }
-            drop(settings_manager_write);
 
             self.broadcast_event(&ZoomEvent::ListZoomChanged(clamped_level));
         }
@@ -175,7 +181,7 @@ impl ZoomManager {
     /// # Returns
     ///
     /// A receiver for zoom change events.
-    pub fn subscribe(&self) -> Receiver<ZoomEvent> {
+    pub fn subscribe(&self) -> Receiver<Arc<ZoomEvent>> {
         debug!("ZoomManager: New subscription created");
 
         let (tx, rx) = unbounded();
@@ -390,10 +396,10 @@ mod tests {
         let initial_list_level = 0;
 
         let settings_manager = SettingsManager::with_config_path(settings_path.clone())?;
-        let mut current_settings = settings_manager.get_settings().clone();
-        current_settings.grid_zoom_level = initial_grid_level;
-        current_settings.list_zoom_level = initial_list_level;
-        settings_manager.update_settings(current_settings)?;
+        settings_manager.update_settings_with(|settings| {
+            settings.grid_zoom_level = initial_grid_level;
+            settings.list_zoom_level = initial_list_level;
+        })?;
 
         // Create zoom manager and verify initial zoom levels
         let settings_manager_arc = Arc::new(RwLock::new(settings_manager));

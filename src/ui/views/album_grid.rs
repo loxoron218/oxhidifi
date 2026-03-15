@@ -429,7 +429,7 @@ impl AlbumGridView {
             MainContext::default().spawn_local(async move {
                 let rx = state_clone.zoom_manager.subscribe();
                 while let Ok(event) = rx.recv().await {
-                    if let GridZoomChanged(_) = event {
+                    if let GridZoomChanged(_) = &*event {
                         // Rebuild all album items with new zoom level
                         // Get current library state
                         let library_state = state_clone.get_library_state();
@@ -536,19 +536,19 @@ impl AlbumGridView {
             MainContext::default().spawn_local(async move {
                 let rx = state_clone.subscribe();
                 while let Ok(event) = rx.recv().await {
-                    match event {
+                    match event.as_ref() {
                         SettingsChanged { show_dr_values } => {
                             // Update all album cards with new DR badge visibility
                             let mut cards = album_cards_clone.borrow_mut();
                             for card in cards.iter_mut() {
-                                card.update_dr_badge_visibility(show_dr_values);
+                                card.update_dr_badge_visibility(*show_dr_values);
                             }
                         }
                         MetadataOverlaysChanged { show_overlays } => {
                             // Update all album cards with new metadata overlay visibility
                             let mut cards = album_cards_clone.borrow_mut();
                             for card in cards.iter_mut() {
-                                card.update_metadata_overlay_visibility(show_overlays);
+                                card.update_metadata_overlay_visibility(*show_overlays);
                             }
                         }
                         YearDisplayModeChanged { mode } => {
@@ -585,7 +585,7 @@ impl AlbumGridView {
             MainContext::default().spawn_local(async move {
                 let rx = state_clone.subscribe();
                 while let Ok(event) = rx.recv().await {
-                    match event {
+                    match event.as_ref() {
                         CurrentTrackChanged(_) | PlaybackStateChanged(_) | QueueChanged(_) => {
                             let is_playing = state_clone.get_playback_state() == Playing;
                             let album_id = state_clone.get_current_album_id();

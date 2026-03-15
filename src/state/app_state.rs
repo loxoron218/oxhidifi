@@ -10,7 +10,8 @@ use {
     async_channel::{Receiver, Sender, unbounded},
     libadwaita::glib::MainContext,
     parking_lot::RwLock,
-    tracing::{debug, error},
+    tokio::sync::RwLock as TokioRwLock,
+    tracing::{debug, error, warn},
 };
 
 use crate::{
@@ -55,10 +56,10 @@ pub struct AppState {
     /// Audio engine reference.
     pub audio_engine: Weak<AudioEngine>,
     /// Library scanner reference (optional).
-    pub library_scanner: Arc<RwLock<Option<Arc<RwLock<LibraryScanner>>>>>,
+    pub library_scanner: Arc<RwLock<Option<Arc<TokioRwLock<LibraryScanner>>>>>,
     /// List of active subscribers for manual broadcast fan-out.
     /// We use `async_channel` to avoid Tokio runtime dependencies in the waker logic.
-    subscribers: Arc<RwLock<Vec<Sender<AppStateEvent>>>>,
+    subscribers: Arc<RwLock<Vec<Sender<Arc<AppStateEvent>>>>>,
     /// Zoom manager for handling view zoom levels.
     pub zoom_manager: Arc<ZoomManager>,
     /// Settings manager reference for persistence (wrapped in `RwLock` for mutability).
@@ -169,7 +170,7 @@ impl AppState {
     /// A new `AppState` instance.
     pub fn new(
         audio_engine: Weak<AudioEngine>,
-        library_scanner: Option<Arc<RwLock<LibraryScanner>>>,
+        library_scanner: Option<Arc<TokioRwLock<LibraryScanner>>>,
         settings_manager: Arc<RwLock<SettingsManager>>,
     ) -> Self {
         let zoom_manager = Arc::new(ZoomManager::new(Arc::clone(&settings_manager)));
@@ -202,9 +203,9 @@ impl AppState {
                 while let Ok(state) = receiver.recv().await {
                     *playback_state.write() = state.clone();
                     let current_subscribers = subscribers.read();
-                    let event = AppStateEvent::PlaybackStateChanged(state);
+                    let event = Arc::new(AppStateEvent::PlaybackStateChanged(state));
                     for tx in current_subscribers.iter() {
-                        if let Err(e) = tx.try_send(event.clone()) {
+                        if let Err(e) = tx.try_send(Arc::clone(&event)) {
                             error!(error = %e, "Failed to send playback state event to subscriber");
                         }
                     }
@@ -217,22 +218,20 @@ impl AppState {
     /// Cleans up closed channels.
     fn broadcast_event(&self, event: &AppStateEvent) -> usize {
         let mut subscribers = self.subscribers.write();
-        let mut active = Vec::with_capacity(subscribers.len());
-        let mut count = 0;
+        let event = Arc::new(event.clone());
 
-        for tx in subscribers.iter() {
-            // We use try_send to avoid blocking. Since these are unbounded channels,
-            // try_send should only fail if the channel is closed.
-            // If it were bounded and full, this would return an error, effectively dropping the
-            // event. But for UI events, unbounded is preferable to ensure delivery.
-            if matches!(tx.try_send(event.clone()), Ok(())) {
-                active.push(tx.clone());
-                count += 1;
+        subscribers.retain(|tx| {
+            if tx.is_closed() {
+                false
+            } else {
+                if tx.try_send(Arc::clone(&event)).is_err() {
+                    warn!("Failed to send event to subscriber, but retaining channel");
+                }
+                true
             }
-        }
+        });
 
-        *subscribers = active;
-        count
+        subscribers.len()
     }
 
     /// Updates the playback state and notifies subscribers.
@@ -385,7 +384,7 @@ impl AppState {
     /// # Returns
     ///
     /// A receiver for state change events.
-    pub fn subscribe(&self) -> Receiver<AppStateEvent> {
+    pub fn subscribe(&self) -> Receiver<Arc<AppStateEvent>> {
         debug!("AppState: New subscription created");
 
         // Create a new unbounded channel for this subscriber
@@ -504,15 +503,16 @@ impl AppState {
         );
 
         // Update settings in settings manager
-        let settings_write = self.settings_manager.write();
-        let mut current_settings = settings_write.get_settings().clone();
-        current_settings.show_dr_values = show_dr_values;
-
-        if let Err(e) = settings_write.update_settings(current_settings) {
+        if let Err(e) = self
+            .settings_manager
+            .write()
+            .update_settings_with(|settings| {
+                settings.show_dr_values = show_dr_values;
+            })
+        {
             debug!("Failed to update show_dr_values setting: {}", e);
             return;
         }
-        drop(settings_write);
 
         // Broadcast settings change event
         self.broadcast_event(&AppStateEvent::SettingsChanged { show_dr_values });
@@ -540,15 +540,16 @@ impl AppState {
         );
 
         // Update settings in settings manager
-        let settings_write = self.settings_manager.write();
-        let mut current_settings = settings_write.get_settings().clone();
-        current_settings.show_metadata_overlays = show_overlays;
-
-        if let Err(e) = settings_write.update_settings(current_settings) {
+        if let Err(e) = self
+            .settings_manager
+            .write()
+            .update_settings_with(|settings| {
+                settings.show_metadata_overlays = show_overlays;
+            })
+        {
             debug!("Failed to update show_metadata_overlays setting: {}", e);
             return;
         }
-        drop(settings_write);
 
         // Broadcast settings change event
         self.broadcast_event(&AppStateEvent::MetadataOverlaysChanged { show_overlays });
@@ -563,15 +564,16 @@ impl AppState {
         debug!("AppState: Updating year_display_mode setting to {}", mode);
 
         // Update settings in settings manager
-        let settings_write = self.settings_manager.write();
-        let mut current_settings = settings_write.get_settings().clone();
-        current_settings.year_display_mode.clone_from(&mode);
-
-        if let Err(e) = settings_write.update_settings(current_settings) {
+        if let Err(e) = self
+            .settings_manager
+            .write()
+            .update_settings_with(|settings| {
+                settings.year_display_mode.clone_from(&mode);
+            })
+        {
             debug!("Failed to update year_display_mode setting: {}", e);
             return;
         }
-        drop(settings_write);
 
         // Broadcast settings change event
         self.broadcast_event(&AppStateEvent::YearDisplayModeChanged { mode });

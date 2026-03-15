@@ -3,7 +3,10 @@
 //! This module implements the Library preferences tab which handles
 //! music library directory management and configuration.
 
-use std::{path::Path, sync::Arc};
+use std::{
+    path::Path,
+    sync::{Arc, atomic::AtomicBool},
+};
 
 use {
     libadwaita::{
@@ -20,7 +23,7 @@ use {
         },
     },
     parking_lot::RwLock,
-    tokio::{spawn, try_join},
+    tokio::{spawn, sync::RwLock as TokioRwLock, try_join},
     tracing::{debug, error, info, warn},
 };
 
@@ -46,6 +49,8 @@ pub struct LibraryPreferencesPage {
     settings_manager: Arc<RwLock<SettingsManager>>,
     /// List box for displaying library directories.
     directory_list_box: ListBox,
+    /// Cancellation flag for library scans.
+    scan_cancelled: Arc<AtomicBool>,
 }
 
 impl LibraryPreferencesPage {
@@ -77,6 +82,7 @@ impl LibraryPreferencesPage {
             library_db,
             settings_manager,
             directory_list_box: ListBox::new(),
+            scan_cancelled: Arc::new(AtomicBool::new(false)),
         };
 
         page.setup_library_directories_group();
@@ -105,6 +111,7 @@ impl LibraryPreferencesPage {
         let library_db_clone = Arc::clone(&self.library_db);
         let settings_manager_clone = Arc::clone(&self.settings_manager);
         let directory_list_box_clone = self.directory_list_box.clone();
+        let scan_cancelled_clone = Arc::clone(&self.scan_cancelled);
         add_button.connect_clicked(move |button| {
             Self::show_add_directory_dialog(
                 button,
@@ -112,6 +119,7 @@ impl LibraryPreferencesPage {
                 &library_db_clone,
                 &settings_manager_clone,
                 &directory_list_box_clone,
+                &scan_cancelled_clone,
             );
         });
 
@@ -225,6 +233,7 @@ impl LibraryPreferencesPage {
         library_db: &Arc<LibraryDatabase>,
         settings_manager: &Arc<RwLock<SettingsManager>>,
         directory_list_box: &ListBox,
+        scan_cancelled: &Arc<AtomicBool>,
     ) {
         let dialog = FileDialog::builder()
             .title("Select Music Folder")
@@ -236,6 +245,7 @@ impl LibraryPreferencesPage {
         let directory_list_box_clone = directory_list_box.clone();
         let app_state_clone = Arc::clone(app_state);
         let library_db_clone = Arc::clone(library_db);
+        let scan_cancelled_clone = Arc::clone(scan_cancelled);
 
         if let Some(root) = button.root()
             && let Some(window) = root.downcast_ref::<ApplicationWindow>()
@@ -305,6 +315,7 @@ impl LibraryPreferencesPage {
                         &app_state_clone,
                         &library_db_clone,
                         settings_manager_clone,
+                        &scan_cancelled_clone,
                     );
                 }
             });
@@ -490,13 +501,16 @@ impl LibraryPreferencesPage {
     /// * `app_state` - Application state containing the library scanner reference
     /// * `library_db` - Database instance for accessing music library
     /// * `settings_manager` - Settings manager for scanner configuration
+    /// * `cancel_token` - Cancellation token for stopping the scan
     fn trigger_library_rescan(
         app_state: &Arc<AppState>,
         library_db: &Arc<LibraryDatabase>,
         settings_manager: Arc<RwLock<SettingsManager>>,
+        cancel_token: &Arc<AtomicBool>,
     ) {
         let app_state_clone = Arc::clone(app_state);
         let library_db_clone = Arc::clone(library_db);
+        let cancel_token = Arc::clone(cancel_token);
 
         spawn(async move {
             let (library_dirs, show_dr) = {
@@ -518,7 +532,7 @@ impl LibraryPreferencesPage {
                     // Create new scanner if none exists
                     match LibraryScanner::new(&library_db_clone, &settings_arc, None) {
                         Ok(scanner) => {
-                            let new_scanner = Arc::new(RwLock::new(scanner));
+                            let new_scanner = Arc::new(TokioRwLock::new(scanner));
                             *scanner_guard = Some(new_scanner);
                             drop(scanner_guard);
                         }
@@ -560,7 +574,7 @@ impl LibraryPreferencesPage {
                     }
 
                     if let Ok(audio_files) =
-                        LibraryScanner::collect_audio_files_from_directory(dir_path)
+                        LibraryScanner::collect_audio_files_from_directory(dir_path, &cancel_token)
                     {
                         all_files.extend(audio_files);
                     }

@@ -148,14 +148,12 @@ impl AudioPreferencesPage {
             }
 
             // Update settings
-            let settings_read = settings_manager_clone.read();
-            let mut current_settings = settings_read.get_settings().clone();
-            drop(settings_read);
-
-            current_settings.sample_rate = new_value;
-
-            let settings_write = settings_manager_clone.write();
-            if let Err(e) = settings_write.update_settings(current_settings) {
+            if let Err(e) = settings_manager_clone
+                .read()
+                .update_settings_with(|settings| {
+                    settings.sample_rate = new_value;
+                })
+            {
                 error!(error = %e, "Failed to update sample rate preference");
             }
         });
@@ -229,14 +227,12 @@ impl AudioPreferencesPage {
             }
 
             // Update settings
-            let settings_read = settings_manager_clone.read();
-            let mut current_settings = settings_read.get_settings().clone();
-            drop(settings_read);
-
-            current_settings.buffer_duration_ms = new_value;
-
-            let settings_write = settings_manager_clone.write();
-            if let Err(e) = settings_write.update_settings(current_settings) {
+            if let Err(e) = settings_manager_clone
+                .read()
+                .update_settings_with(|settings| {
+                    settings.buffer_duration_ms = new_value;
+                })
+            {
                 error!(error = %e, "Failed to update buffer duration preference");
             }
         });

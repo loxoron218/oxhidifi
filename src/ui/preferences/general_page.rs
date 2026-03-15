@@ -105,14 +105,12 @@ impl GeneralPreferencesPage {
             };
 
             // Update settings
-            let settings_read = settings_manager_clone.read();
-            let mut current_settings = settings_read.get_settings().clone();
-            drop(settings_read);
-
-            current_settings.theme_preference = new_theme;
-
-            let settings_write = settings_manager_clone.write();
-            if let Err(e) = settings_write.update_settings(current_settings) {
+            if let Err(e) = settings_manager_clone
+                .read()
+                .update_settings_with(|settings| {
+                    settings.theme_preference = new_theme;
+                })
+            {
                 error!(error = %e, "Failed to update theme preference");
             }
         });
@@ -143,18 +141,15 @@ impl GeneralPreferencesPage {
             let new_value = row.is_active();
 
             // Update settings
-            let settings_read = settings_manager_clone.read();
-            let mut current_settings = settings_read.get_settings().clone();
-            drop(settings_read);
-
-            current_settings.show_dr_values = new_value;
-
-            let settings_write = settings_manager_clone.write();
-            if let Err(e) = settings_write.update_settings(current_settings) {
+            if let Err(e) = settings_manager_clone
+                .read()
+                .update_settings_with(|settings| {
+                    settings.show_dr_values = new_value;
+                })
+            {
                 error!(error = %e, "Failed to update DR values preference");
                 return;
             }
-            drop(settings_write);
 
             // Notify app state of the change using the proper settings update method
             app_state_clone.update_show_dr_values_setting(new_value);
@@ -190,18 +185,15 @@ impl GeneralPreferencesPage {
             let new_value = row.is_active();
 
             // Update settings
-            let settings_read = settings_manager_clone.read();
-            let mut current_settings = settings_read.get_settings().clone();
-            drop(settings_read);
-
-            current_settings.show_metadata_overlays = new_value;
-
-            let settings_write = settings_manager_clone.write();
-            if let Err(e) = settings_write.update_settings(current_settings) {
+            if let Err(e) = settings_manager_clone
+                .read()
+                .update_settings_with(|settings| {
+                    settings.show_metadata_overlays = new_value;
+                })
+            {
                 error!(error = %e, "Failed to update metadata overlays preference");
                 return;
             }
-            drop(settings_write);
 
             // Notify app state of the change using the proper settings update method
             app_state_clone.update_show_metadata_overlays_setting(new_value);
@@ -254,18 +246,15 @@ impl GeneralPreferencesPage {
             };
 
             // Update settings
-            let settings_read = settings_manager_clone.read();
-            let mut current_settings = settings_read.get_settings().clone();
-            drop(settings_read);
-
-            current_settings.year_display_mode.clone_from(&new_mode);
-
-            let settings_write = settings_manager_clone.write();
-            if let Err(e) = settings_write.update_settings(current_settings) {
+            if let Err(e) = settings_manager_clone
+                .read()
+                .update_settings_with(|settings| {
+                    settings.year_display_mode.clone_from(&new_mode);
+                })
+            {
                 error!(error = %e, "Failed to update year display mode preference");
                 return;
             }
-            drop(settings_write);
 
             // Notify app state of the change using the proper settings update method
             app_state_clone.update_year_display_mode_setting(new_mode);

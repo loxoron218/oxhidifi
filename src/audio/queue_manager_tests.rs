@@ -173,7 +173,7 @@ mod tests {
 
         timeout(Duration::from_millis(200), async {
             loop {
-                if let AppStateEvent::QueueChanged(queue) = state_rx.recv().await? {
+                if let AppStateEvent::QueueChanged(queue) = &*state_rx.recv().await? {
                     if queue.tracks.len() != 3 {
                         bail!("Expected 3 tracks, got {}", queue.tracks.len());
                     }
@@ -191,7 +191,7 @@ mod tests {
 
         timeout(Duration::from_millis(200), async {
             loop {
-                if let AppStateEvent::QueueChanged(queue) = state_rx.recv().await? {
+                if let AppStateEvent::QueueChanged(queue) = &*state_rx.recv().await? {
                     if queue.current_index != Some(1) {
                         bail!("Expected Some(1), got {:?}", queue.current_index);
                     }
@@ -206,7 +206,7 @@ mod tests {
 
         timeout(Duration::from_millis(200), async {
             loop {
-                if let AppStateEvent::QueueChanged(queue) = state_rx.recv().await? {
+                if let AppStateEvent::QueueChanged(queue) = &*state_rx.recv().await? {
                     if queue.current_index != Some(0) {
                         bail!("Expected Some(0), got {:?}", queue.current_index);
                     }

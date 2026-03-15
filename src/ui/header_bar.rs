@@ -1259,7 +1259,7 @@ impl HeaderBar {
 
         let timer_id = timeout_add_local(Duration::from_millis(100), move || {
             while let Ok(event) = state_receiver.try_recv() {
-                if let ViewOptionsChanged { .. } = event {
+                if let ViewOptionsChanged { .. } = &*event {
                     let (min_zoom, max_zoom, current) = Self::get_zoom_bounds(&app_state_clone);
                     zoom_out_btn_clone.set_sensitive(current > min_zoom);
                     zoom_in_btn_clone.set_sensitive(current < max_zoom);
@@ -1267,7 +1267,7 @@ impl HeaderBar {
             }
 
             while let Ok(event) = zoom_receiver.try_recv() {
-                match event {
+                match event.as_ref() {
                     GridZoomChanged(_) | ListZoomChanged(_) => {
                         let (min_zoom, max_zoom, current) = Self::get_zoom_bounds(&app_state_clone);
                         zoom_out_btn_clone.set_sensitive(current > min_zoom);
@@ -1486,9 +1486,9 @@ impl HeaderBar {
         MainContext::default().spawn_local(async move {
             let rx = state_clone.subscribe();
             while let Ok(event) = rx.recv().await {
-                if let ViewOptionsChanged { view_mode, .. } = event {
+                if let ViewOptionsChanged { view_mode, .. } = &*event {
                     // Update icon based on new view mode
-                    let icon_name = Self::get_view_icon_name(&view_mode);
+                    let icon_name = Self::get_view_icon_name(view_mode);
                     view_split_button_clone.set_icon_name(icon_name);
                 }
             }
@@ -1542,6 +1542,7 @@ impl HeaderBar {
     /// # Returns
     ///
     /// A new `HeaderBar` instance with the application reference set.
+    #[must_use]
     pub fn default_with_state(
         app_state: &Arc<AppState>,
         application: Application,
@@ -1693,7 +1694,7 @@ mod tests {
         anyhow::{Result, bail},
         libadwaita::{Application, prelude::ButtonExt},
         parking_lot::RwLock,
-        tokio::test,
+        tokio::{sync::RwLock as TokioRwLock, test},
     };
 
     use crate::{
@@ -1708,7 +1709,7 @@ mod tests {
     async fn test_header_bar_creation() -> Result<()> {
         let app_state = AppState::new(
             Weak::new(),
-            None::<Arc<RwLock<LibraryScanner>>>,
+            None::<Arc<TokioRwLock<LibraryScanner>>>,
             Arc::new(RwLock::new(SettingsManager::new()?)),
         );
         let application = Some(
