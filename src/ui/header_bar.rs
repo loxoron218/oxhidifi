@@ -260,17 +260,24 @@ impl HeaderBar {
         let (zoom_popover, zoom_out_button, zoom_in_button) = Self::create_zoom_popover();
         view_split_button.set_popover(Some(&zoom_popover));
 
+        let zoom_timer_handle = Arc::new(Mutex::new(None));
+
         Self::connect_view_button_handlers(app_state, &view_split_button);
 
         Self::connect_zoom_button_handlers(app_state, &zoom_out_button, &zoom_in_button);
+
+        Self::setup_zoom_buttons(
+            app_state,
+            &zoom_out_button,
+            &zoom_in_button,
+            &zoom_timer_handle,
+        );
 
         let application_arc = application.map(Arc::new);
         let settings_button =
             Self::create_settings_button(app_state, application_arc.as_ref(), library_db.as_ref());
         widget.pack_end(&settings_button);
         widget.pack_end(&view_split_button);
-
-        let zoom_timer_handle = Arc::new(Mutex::new(None));
 
         let merged_menu_button = Self::create_merged_menu_button(
             app_state,
@@ -286,8 +293,6 @@ impl HeaderBar {
         widget.set_title_widget(Some(&tab_box));
 
         let subscription_handle = Self::subscribe_to_view_options(app_state, &view_split_button);
-
-        let zoom_timer_handle = Arc::new(Mutex::new(None));
 
         Self {
             widget,
