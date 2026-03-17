@@ -297,6 +297,7 @@ impl EmptyState {
         match LibraryDatabase::new().await {
             Ok(library_db) => {
                 let library_db_arc = Arc::new(library_db);
+
                 // Initialize DR parser if enabled
                 let dr_parser = if settings_arc.read().show_dr_values {
                     match DrParser::new(Arc::clone(&library_db_arc)) {

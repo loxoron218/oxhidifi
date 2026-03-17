@@ -977,7 +977,10 @@ impl HeaderBar {
                     }
                 } else {
                     // Fallback: show without parent
-                    warn!(window_type = "ApplicationWindow", "No active window found, showing dialog without parent");
+                    warn!(
+                        window_type = "ApplicationWindow",
+                        "No active window found, showing dialog without parent"
+                    );
                     preferences_dialog.show_without_parent();
                 }
             }
@@ -1368,7 +1371,10 @@ impl HeaderBar {
                         preferences_dialog.show_without_parent();
                     }
                 } else {
-                    warn!(window_type = "ApplicationWindow", "No active window found, showing dialog without parent");
+                    warn!(
+                        window_type = "ApplicationWindow",
+                        "No active window found, showing dialog without parent"
+                    );
                     preferences_dialog.show_without_parent();
                 }
             }
