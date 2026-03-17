@@ -290,14 +290,14 @@ impl AlbumGridView {
 
         let album_cards = Rc::new(RefCell::new(Vec::new()));
 
-        let zoom_subscription_handle =
-            Self::create_zoom_subscription(app_state, &flow_box, &config, &album_cards);
+        let zoom_subscription_handle = app_state
+            .map(|state| Self::create_zoom_subscription(state, &flow_box, &config, &album_cards));
 
         let settings_subscription_handle =
-            Self::create_settings_subscription(app_state, &album_cards);
+            app_state.map(|state| Self::create_settings_subscription(state, &album_cards));
 
         let playback_subscription_handle =
-            Self::create_playback_subscription(app_state, &album_cards);
+            app_state.map(|state| Self::create_playback_subscription(state, &album_cards));
 
         let mut view = Self {
             widget: main_container.upcast_ref::<Widget>().clone(),
@@ -416,17 +416,16 @@ impl AlbumGridView {
     ///
     /// An optional join handle for the subscription.
     fn create_zoom_subscription(
-        app_state: Option<&Arc<AppState>>,
+        app_state: &Arc<AppState>,
         flow_box: &FlowBox,
         config: &AlbumGridViewConfig,
         album_cards: &Rc<RefCell<Vec<AlbumCard>>>,
-    ) -> Option<JoinHandle<()>> {
-        app_state.map(|state| {
-            let state_clone = Arc::clone(state);
-            let flow_box_clone = flow_box.clone();
-            let config_clone = config.clone();
-            let album_cards_clone = Rc::clone(album_cards);
-            MainContext::default().spawn_local(async move {
+    ) -> JoinHandle<()> {
+        let state_clone = Arc::clone(app_state);
+        let flow_box_clone = flow_box.clone();
+        let config_clone = config.clone();
+        let album_cards_clone = Rc::clone(album_cards);
+        MainContext::default().spawn_local(async move {
                 let rx = state_clone.zoom_manager.subscribe();
                 while let Ok(event) = rx.recv().await {
                     if let GridZoomChanged(_) = &*event {
@@ -513,55 +512,52 @@ impl AlbumGridView {
                     }
                 }
             })
-        })
     }
 
     /// Creates the settings subscription handler.
     ///
     /// # Arguments
     ///
-    /// * `app_state` - Optional application state reference
+    /// * `app_state` - Application state reference
     /// * `album_cards` - The album cards reference
     ///
     /// # Returns
     ///
-    /// An optional join handle for the subscription.
+    /// A join handle for the subscription.
     fn create_settings_subscription(
-        app_state: Option<&Arc<AppState>>,
+        app_state: &Arc<AppState>,
         album_cards: &Rc<RefCell<Vec<AlbumCard>>>,
-    ) -> Option<JoinHandle<()>> {
-        app_state.map(|state| {
-            let state_clone = Arc::clone(state);
-            let album_cards_clone = Rc::clone(album_cards);
-            MainContext::default().spawn_local(async move {
-                let rx = state_clone.subscribe();
-                while let Ok(event) = rx.recv().await {
-                    match event.as_ref() {
-                        SettingsChanged { show_dr_values } => {
-                            // Update all album cards with new DR badge visibility
-                            let mut cards = album_cards_clone.borrow_mut();
-                            for card in cards.iter_mut() {
-                                card.update_dr_badge_visibility(*show_dr_values);
-                            }
+    ) -> JoinHandle<()> {
+        let state_clone = Arc::clone(app_state);
+        let album_cards_clone = Rc::clone(album_cards);
+        MainContext::default().spawn_local(async move {
+            let rx = state_clone.subscribe();
+            while let Ok(event) = rx.recv().await {
+                match event.as_ref() {
+                    SettingsChanged { show_dr_values } => {
+                        // Update all album cards with new DR badge visibility
+                        let mut cards = album_cards_clone.borrow_mut();
+                        for card in cards.iter_mut() {
+                            card.update_dr_badge_visibility(*show_dr_values);
                         }
-                        MetadataOverlaysChanged { show_overlays } => {
-                            // Update all album cards with new metadata overlay visibility
-                            let mut cards = album_cards_clone.borrow_mut();
-                            for card in cards.iter_mut() {
-                                card.update_metadata_overlay_visibility(*show_overlays);
-                            }
-                        }
-                        YearDisplayModeChanged { mode } => {
-                            // Update all album cards with new year display mode
-                            // For now, this doesn't change anything since we only have release year
-                            // In the future, when original_year is implemented, this will update
-                            // the year labels to show either release or original year
-                            debug!("Year display mode changed to: {}", mode);
-                        }
-                        _ => {}
                     }
+                    MetadataOverlaysChanged { show_overlays } => {
+                        // Update all album cards with new metadata overlay visibility
+                        let mut cards = album_cards_clone.borrow_mut();
+                        for card in cards.iter_mut() {
+                            card.update_metadata_overlay_visibility(*show_overlays);
+                        }
+                    }
+                    YearDisplayModeChanged { mode } => {
+                        // Update all album cards with new year display mode
+                        // For now, this doesn't change anything since we only have release year
+                        // In the future, when original_year is implemented, this will update
+                        // the year labels to show either release or original year
+                        debug!("Year display mode changed to: {}", mode);
+                    }
+                    _ => {}
                 }
-            })
+            }
         })
     }
 
@@ -569,43 +565,41 @@ impl AlbumGridView {
     ///
     /// # Arguments
     ///
-    /// * `app_state` - Optional application state reference
+    /// * `app_state` - Application state reference
     /// * `album_cards` - The album cards reference
     ///
     /// # Returns
     ///
-    /// An optional join handle for the subscription.
+    /// A join handle for the subscription.
     fn create_playback_subscription(
-        app_state: Option<&Arc<AppState>>,
+        app_state: &Arc<AppState>,
         album_cards: &Rc<RefCell<Vec<AlbumCard>>>,
-    ) -> Option<JoinHandle<()>> {
-        app_state.map(|state| {
-            let state_clone = Arc::clone(state);
-            let album_cards_clone = Rc::clone(album_cards);
-            MainContext::default().spawn_local(async move {
-                let rx = state_clone.subscribe();
-                while let Ok(event) = rx.recv().await {
-                    match event.as_ref() {
-                        CurrentTrackChanged(_) | PlaybackStateChanged(_) | QueueChanged(_) => {
-                            let is_playing = state_clone.get_playback_state() == Playing;
-                            let album_id = state_clone.get_current_album_id();
+    ) -> JoinHandle<()> {
+        let state_clone = Arc::clone(app_state);
+        let album_cards_clone = Rc::clone(album_cards);
+        MainContext::default().spawn_local(async move {
+            let rx = state_clone.subscribe();
+            while let Ok(event) = rx.recv().await {
+                match event.as_ref() {
+                    CurrentTrackChanged(_) | PlaybackStateChanged(_) | QueueChanged(_) => {
+                        let is_playing = state_clone.get_playback_state() == Playing;
+                        let album_id = state_clone.get_current_album_id();
 
-                            let mut cards = album_cards_clone.borrow_mut();
-                            if let Some(current_id) = album_id {
-                                for card in cards.iter_mut() {
-                                    let is_current_album = current_id == card.album_id;
-                                    card.set_playing(is_current_album && is_playing);
-                                }
-                            } else {
-                                for card in cards.iter_mut() {
-                                    card.set_playing(false);
-                                }
+                        let mut cards = album_cards_clone.borrow_mut();
+                        if let Some(current_id) = album_id {
+                            for card in cards.iter_mut() {
+                                let is_current_album = current_id == card.album_id;
+                                card.set_playing(is_current_album && is_playing);
+                            }
+                        } else {
+                            for card in cards.iter_mut() {
+                                card.set_playing(false);
                             }
                         }
-                        _ => {}
                     }
+                    _ => {}
                 }
-            })
+            }
         })
     }
 
