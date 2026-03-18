@@ -157,7 +157,8 @@ mod view_integration_tests {
             false,
         );
 
-        let artist_grid = ArtistGridView::new(Some(Arc::new(app_state.clone())), Vec::new(), false);
+        let artist_grid =
+            ArtistGridView::new(Some(&Arc::new(app_state.clone())), Vec::new(), false);
         if artist_grid.flow_box.accessible_role() != Grid {
             bail!(
                 "Expected Grid, got {:?}",

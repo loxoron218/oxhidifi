@@ -4,18 +4,18 @@
 //! with cover art, DR badges, play overlays, and metadata following the
 //! exact specification from docs/4.\ album-cards.md.
 
-use std::{convert::TryFrom, rc::Rc};
+use std::{cell::Cell, convert::TryFrom, rc::Rc};
 
 use libadwaita::{
     gtk::{
         AccessibleRole::Group,
         Align::{End, Fill, Start},
-        Box, FlowBoxChild, GestureClick, Label,
+        Box, CheckButton, EventControllerMotion, FlowBoxChild, GestureClick, Label,
         Orientation::{Horizontal, Vertical},
         Overlay, Widget,
         pango::EllipsizeMode::End as EllipsizeEnd,
     },
-    prelude::{AccessibleExt, BoxExt, ButtonExt, Cast, FlowBoxChildExt, WidgetExt},
+    prelude::{AccessibleExt, BoxExt, ButtonExt, Cast, CheckButtonExt, FlowBoxChildExt, WidgetExt},
 };
 
 use crate::{
@@ -46,6 +46,10 @@ pub struct AlbumCardBuilder {
     on_play_clicked: Option<Rc<dyn Fn()>>,
     /// Optional callback invoked when the card (outside play button) is clicked.
     on_card_clicked: Option<Rc<dyn Fn()>>,
+    /// Callback invoked when the selection checkbox is toggled.
+    on_selection_toggled: Option<Rc<dyn Fn(bool)>>,
+    /// Whether the card is initially selected.
+    selected: bool,
 }
 
 impl AlbumCardBuilder {
@@ -175,6 +179,39 @@ impl AlbumCardBuilder {
         self
     }
 
+    /// Sets the callback for when the selection checkbox is toggled.
+    ///
+    /// # Arguments
+    ///
+    /// * `callback` - Function to call with the new selection state (true = selected)
+    ///
+    /// # Returns
+    ///
+    /// The builder instance for method chaining.
+    #[must_use]
+    pub fn on_selection_toggled<F>(mut self, callback: F) -> Self
+    where
+        F: Fn(bool) + 'static,
+    {
+        self.on_selection_toggled = Some(Rc::new(callback));
+        self
+    }
+
+    /// Sets whether the card is initially selected.
+    ///
+    /// # Arguments
+    ///
+    /// * `selected` - Whether the card is selected
+    ///
+    /// # Returns
+    ///
+    /// The builder instance for method chaining.
+    #[must_use]
+    pub fn selected(mut self, selected: bool) -> Self {
+        self.selected = selected;
+        self
+    }
+
     /// Builds the `AlbumCard` component.
     ///
     /// # Returns
@@ -198,6 +235,8 @@ impl AlbumCardBuilder {
             cover_size: self.cover_size,
             on_play_clicked: self.on_play_clicked,
             on_card_clicked: self.on_card_clicked,
+            on_selection_toggled: self.on_selection_toggled,
+            selected: self.selected,
         })
     }
 }
@@ -220,6 +259,10 @@ pub struct AlbumCardConfig {
     pub on_play_clicked: Option<Rc<dyn Fn()>>,
     /// Optional callback for card clicks (outside play button)
     pub on_card_clicked: Option<Rc<dyn Fn()>>,
+    /// Callback for selection checkbox toggled
+    pub on_selection_toggled: Option<Rc<dyn Fn(bool)>>,
+    /// Whether the card is initially selected
+    pub selected: bool,
 }
 
 /// Album card component with proper widget hierarchy and styling.
@@ -254,6 +297,10 @@ pub struct AlbumCard {
     pub metadata_container: Box,
     /// Album ID for tracking during filtering.
     pub album_id: i64,
+    /// Selection checkbox button.
+    pub selection_checkbox: CheckButton,
+    /// Flag to prevent callback during programmatic updates.
+    updating_checkbox: Cell<bool>,
 }
 
 impl AlbumCard {
@@ -280,6 +327,8 @@ impl AlbumCard {
             cover_size,
             on_play_clicked,
             on_card_clicked,
+            on_selection_toggled,
+            selected,
         } = config;
 
         let (cover_width, cover_height) = Self::calculate_cover_dimensions(compact, cover_size)?;
@@ -287,6 +336,32 @@ impl AlbumCard {
         let cover_art = Self::create_cover_art(&album, show_dr_badge, cover_width, cover_height);
 
         let play_overlay = Self::create_play_overlay(&cover_art)?;
+
+        let selection_checkbox = CheckButton::builder()
+            .tooltip_text("Select for batch operations")
+            .halign(Start)
+            .valign(Start)
+            .visible(false)
+            .build();
+        selection_checkbox.set_can_target(false);
+        selection_checkbox.set_active(selected);
+
+        let updating_flag = Cell::new(false);
+        if let Some(callback) = &on_selection_toggled {
+            let callback_clone = Rc::clone(callback);
+            let flag_clone = updating_flag.clone();
+            selection_checkbox.connect_toggled(move |checkbox| {
+                if !flag_clone.get() {
+                    callback_clone(checkbox.is_active());
+                }
+            });
+        }
+
+        let cover_art_overlay = cover_art
+            .widget
+            .downcast_ref::<Overlay>()
+            .ok_or_else(|| WidgetError("CoverArt widget should be an Overlay".to_string()))?;
+        cover_art_overlay.add_overlay(&selection_checkbox);
 
         let (title_label, title_area) = Self::create_title_section(&album.title, cover_width);
 
@@ -310,6 +385,7 @@ impl AlbumCard {
             on_play_clicked,
             on_card_clicked,
             &play_overlay,
+            &selection_checkbox,
         );
 
         Ok(Self {
@@ -326,7 +402,20 @@ impl AlbumCard {
             title_area,
             metadata_container,
             album_id: album.id,
+            selection_checkbox,
+            updating_checkbox: updating_flag,
         })
+    }
+
+    /// Sets the checkbox state without triggering the selection callback.
+    ///
+    /// # Arguments
+    ///
+    /// * `selected` - Whether the checkbox should be selected
+    pub fn set_selection_state(&self, selected: bool) {
+        self.updating_checkbox.set(true);
+        self.selection_checkbox.set_active(selected);
+        self.updating_checkbox.set(false);
     }
 
     /// Calculates cover dimensions based on configuration.
@@ -565,6 +654,7 @@ impl AlbumCard {
     /// # Arguments
     ///
     /// * `cover_container` - The cover art widget
+    /// * `selection_checkbox` - The selection checkbox button
     /// * `title_area` - The title area container
     /// * `artist_label` - The artist label
     /// * `metadata_container` - The metadata container
@@ -618,6 +708,8 @@ impl AlbumCard {
     /// * `on_play_clicked` - Optional play button callback
     /// * `on_card_clicked` - Optional card click callback
     /// * `play_overlay` - The play overlay component
+    /// * `selection_checkbox` - The selection checkbox
+    /// * `selection_mode_active` - Cell tracking if selection mode is active
     ///
     /// # Returns
     ///
@@ -627,6 +719,7 @@ impl AlbumCard {
         on_play_clicked: Option<Rc<dyn Fn()>>,
         on_card_clicked: Option<Rc<dyn Fn()>>,
         play_overlay: &PlayOverlay,
+        selection_checkbox: &CheckButton,
     ) -> FlowBoxChild {
         let child = FlowBoxChild::new();
         child.set_child(Some(album_tile));
@@ -639,6 +732,23 @@ impl AlbumCard {
             on_card_clicked,
             play_overlay,
         );
+
+        let motion_controller = EventControllerMotion::new();
+        let checkbox_clone = selection_checkbox.clone();
+        motion_controller.connect_enter(move |_controller, _x, _y| {
+            checkbox_clone.set_can_target(true);
+            checkbox_clone.set_visible(true);
+        });
+
+        let checkbox_clone2 = selection_checkbox.clone();
+        motion_controller.connect_leave(move |_controller| {
+            if !checkbox_clone2.is_active() {
+                checkbox_clone2.set_can_target(false);
+                checkbox_clone2.set_visible(false);
+            }
+        });
+
+        child.add_controller(motion_controller);
 
         child
     }
@@ -660,15 +770,15 @@ impl AlbumCard {
         play_overlay: &PlayOverlay,
     ) {
         // Handle click events
-        // Note: FlowBoxChild handles selection/activation, but we want custom behavior
-        // We use a GestureClick controller on the child widget to capture clicks
         let click_controller = GestureClick::new();
 
         // Clone for closures
         let card_callback_clone = on_card_clicked.clone();
-        click_controller.connect_released(move |_gesture, _n_press, _x, _y| {
+        click_controller.connect_released(move |_gesture, n_press, _x, _y| {
             // If we have a card callback, trigger it
-            if let Some(callback) = &card_callback_clone {
+            if n_press == 2
+                && let Some(callback) = &card_callback_clone
+            {
                 callback();
             }
         });
@@ -856,6 +966,8 @@ impl AlbumCard {
             cover_size: None,
             on_play_clicked: None,
             on_card_clicked: None,
+            on_selection_toggled: None,
+            selected: false,
         })
     }
 }
@@ -964,6 +1076,8 @@ mod tests {
             cover_size: None,
             on_play_clicked: None,
             on_card_clicked: None,
+            on_selection_toggled: None,
+            selected: false,
         })?;
 
         let format_text_882 = card_882.format_label.text().to_string();
@@ -986,6 +1100,8 @@ mod tests {
             cover_size: None,
             on_play_clicked: None,
             on_card_clicked: None,
+            on_selection_toggled: None,
+            selected: false,
         })?;
 
         let format_text_96 = card_96.format_label.text().to_string();

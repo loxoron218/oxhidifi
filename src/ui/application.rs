@@ -30,7 +30,7 @@ use {
         },
         prelude::{
             AdjustmentExt, AdwApplicationWindowExt, ApplicationExt, ApplicationExtManual, Cast,
-            GtkWindowExt, NavigationPageExt, WidgetExt,
+            GtkWindowExt, NavigationPageExt, ToggleButtonExt, WidgetExt,
         },
     },
     parking_lot::RwLock,
@@ -61,10 +61,11 @@ use crate::{
         AppState,
         AppStateEvent::{
             ExclusiveModeFailed, LibraryDataChanged, LibraryScanFailed, NavigationChanged,
-            PlaybackStateChanged, SearchFilterChanged, SettingsChanged, ViewOptionsChanged,
+            PlaybackStateChanged, SearchFilterChanged, SelectionChanged, SettingsChanged,
+            ViewOptionsChanged,
         },
         LibraryState,
-        LibraryTab::{self, Albums as LibraryAlbums, Artists as LibraryArtists},
+        LibraryTab::{self, Albums, Artists},
         NavigationState::{AlbumDetail, ArtistDetail, Library},
         ViewMode::{self, Grid, List},
     },
@@ -75,7 +76,9 @@ use crate::{
             album_grid::AlbumGridView,
             artist_grid::ArtistGridView,
             column_view::ColumnListView,
-            column_view_types::ColumnListViewType::{Albums, Artists},
+            column_view_types::ColumnListViewType::{
+                Albums as ColumnAlbums, Artists as ColumnArtists,
+            },
             detail_types::DetailType::{Album as DetailTypeAlbum, Artist as DetailTypeArtist},
             detail_view::DetailView,
         },
@@ -468,6 +471,47 @@ fn create_main_window(app: &Application, header_bar: &Rc<HeaderBar>) -> Applicat
     window
 }
 
+/// Updates the bulk action button popover content based on current selection.
+///
+/// # Arguments
+///
+/// * `header_bar` - The header bar reference
+/// * `app_state` - Application state reference
+fn update_bulk_action_button(header_bar: &HeaderBar, app_state: &Arc<AppState>) {
+    let state = app_state.get_library_state();
+
+    let (selected_count, total_count, item_type) = state.current_selection();
+
+    let all_selected = total_count > 0 && selected_count == total_count;
+
+    header_bar.selection_toggle.set_active(all_selected);
+    header_bar
+        .merged_menu_selection_toggle
+        .set_active(all_selected);
+
+    let counter_text = if selected_count == 1 {
+        format!("1 {item_type} selected")
+    } else {
+        format!("{selected_count} {item_type}s selected")
+    };
+    header_bar.selection_counter.set_label(&counter_text);
+    header_bar
+        .merged_menu_selection_counter
+        .set_label(&counter_text);
+
+    if all_selected {
+        header_bar
+            .selection_icon
+            .set_icon_name(Some("edit-delete-symbolic"));
+        header_bar.selection_label.set_label("Deselect All");
+    } else {
+        header_bar
+            .selection_icon
+            .set_icon_name(Some("edit-select-all-symbolic"));
+        header_bar.selection_label.set_label("Select All");
+    }
+}
+
 /// Builds and pushes an album detail page to the navigation view.
 ///
 /// # Arguments
@@ -591,6 +635,10 @@ fn handle_navigation_state_change(
                 navigation_view.pop_to_tag("root");
             }
 
+            // Clear selection when returning to library
+            app_state.clear_album_selection();
+            app_state.clear_artist_selection();
+
             header_bar.back_button.set_visible(false);
             header_bar.search_button.set_visible(true);
             header_bar.view_split_button.set_visible(true);
@@ -599,8 +647,21 @@ fn handle_navigation_state_change(
                 .set_title_widget(Some(&header_bar.tab_box));
             header_bar.widget.set_show_start_title_buttons(true);
             header_bar.widget.set_show_end_title_buttons(true);
+
+            if header_bar.is_adaptive() {
+                header_bar.bulk_action_button.set_visible(false);
+                header_bar.merged_menu_bulk_action_box.set_visible(true);
+            } else {
+                header_bar.bulk_action_button.set_visible(true);
+                header_bar.merged_menu_bulk_action_box.set_visible(false);
+            }
+            update_bulk_action_button(header_bar, app_state);
         }
         AlbumDetail(album) => {
+            // Clear selection when navigating to detail page
+            app_state.clear_album_selection();
+            app_state.clear_artist_selection();
+
             push_album_detail_page(
                 navigation_view,
                 toast_overlay,
@@ -614,9 +675,15 @@ fn handle_navigation_state_change(
             header_bar.back_button.set_visible(true);
             header_bar.search_button.set_visible(false);
             header_bar.view_split_button.set_visible(false);
+            header_bar.bulk_action_button.set_visible(false);
+            header_bar.merged_menu_bulk_action_box.set_visible(false);
             header_bar.widget.set_title_widget(Option::<&Widget>::None);
         }
         ArtistDetail(artist) => {
+            // Clear selection when navigating to detail page
+            app_state.clear_album_selection();
+            app_state.clear_artist_selection();
+
             push_artist_detail_page(
                 navigation_view,
                 toast_overlay,
@@ -630,6 +697,8 @@ fn handle_navigation_state_change(
             header_bar.back_button.set_visible(true);
             header_bar.search_button.set_visible(false);
             header_bar.view_split_button.set_visible(false);
+            header_bar.bulk_action_button.set_visible(false);
+            header_bar.merged_menu_bulk_action_box.set_visible(false);
             header_bar.widget.set_title_widget(Option::<&Widget>::None);
         }
     }
@@ -850,6 +919,16 @@ fn build_ui(
 
     main_page.set_tag(Some("root"));
 
+    handle_navigation_state_change(
+        &navigation_view,
+        &toast_overlay,
+        app_state,
+        library_db,
+        audio_engine,
+        queue_manager,
+        &header_bar,
+    );
+
     setup_navigation_pop_callback(app_state, &navigation_view);
 
     let (player_bar_widget, player_bar) = create_player_bar(app_state, audio_engine, queue_manager);
@@ -993,7 +1072,7 @@ fn create_album_list_view(
         .library_db(Arc::clone(library_db))
         .audio_engine(Arc::clone(audio_engine))
         .queue_manager(Arc::clone(queue_manager))
-        .view_type(Albums)
+        .view_type(ColumnAlbums)
         .show_dr_badges(show_dr_badges)
         .compact(false)
         .build();
@@ -1068,7 +1147,7 @@ fn create_artist_list_view(
 ) -> (ColumnListView, ScrolledWindow) {
     let mut artist_list_view = ColumnListView::builder()
         .app_state(Arc::clone(app_state))
-        .view_type(Artists)
+        .view_type(ColumnArtists)
         .compact(false)
         .build();
 
@@ -1122,10 +1201,10 @@ fn set_initial_visible_view(
     current_view_mode: &ViewMode,
 ) {
     let child_name = match (current_tab, current_view_mode) {
-        (LibraryAlbums, Grid) => "album_grid",
-        (LibraryAlbums, List) => "album_list",
-        (LibraryArtists, Grid) => "artist_grid",
-        (LibraryArtists, List) => "artist_list",
+        (Albums, Grid) => "album_grid",
+        (Albums, List) => "album_list",
+        (Artists, Grid) => "artist_grid",
+        (Artists, List) => "artist_list",
     };
 
     view_stack.set_visible_child_name(child_name);
@@ -1199,10 +1278,10 @@ fn handle_view_options_changed(
     *ctx.previous_tab = Some(current_tab.clone());
 
     let child_name = match (current_tab, view_mode) {
-        (LibraryAlbums, Grid) => "album_grid",
-        (LibraryAlbums, List) => "album_list",
-        (LibraryArtists, Grid) => "artist_grid",
-        (LibraryArtists, List) => "artist_list",
+        (Albums, Grid) => "album_grid",
+        (Albums, List) => "album_list",
+        (Artists, Grid) => "artist_grid",
+        (Artists, List) => "artist_list",
     };
 
     // Check if there's an active search filter
@@ -1424,6 +1503,9 @@ fn spawn_view_stack_event_handler(
                     }
                     LibraryScanFailed { reason } => {
                         handle_library_scan_failed(reason, &toast_overlay);
+                    }
+                    SelectionChanged { .. } => {
+                        update_bulk_action_button(&header_bar, &app_state);
                     }
                     _ => {}
                 }

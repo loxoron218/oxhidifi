@@ -4,7 +4,7 @@
 //! in a column view using the GTK4 model/factory pattern with `gio::ListStore`,
 //! `gtk::ColumnView`, and `gtk::NoSelection`.
 
-use std::sync::Arc;
+use std::{cell::Cell, collections::HashSet, rc::Rc, sync::Arc};
 
 use {
     libadwaita::{
@@ -12,14 +12,14 @@ use {
         glib::{BoxedAnyObject, JoinHandle, MainContext, Object},
         gtk::{
             Align::Center,
-            Box, ColumnView, ColumnViewColumn, ColumnViewSorter, FilterListModel, Label,
-            NoSelection,
+            BitsetIter, Box, ColumnView, ColumnViewColumn, ColumnViewSorter, FilterListModel,
+            Label, MultiSelection,
             Orientation::Vertical,
             SortListModel,
             SortType::{Ascending, Descending},
             Widget,
         },
-        prelude::{BoxExt, Cast, ListModelExt, SorterExt},
+        prelude::{BoxExt, Cast, ListModelExt, SelectionModelExt, SorterExt},
     },
     tracing::{debug, error},
 };
@@ -38,7 +38,7 @@ use crate::{
     ui::{
         components::search_empty_state::{SearchEmptyState, SearchEmptyStateConfig},
         views::{
-            album_columns::setup_album_columns,
+            album_columns::{PlaybackContext, setup_album_columns},
             artist_columns::setup_artist_columns,
             column_view_builder::ColumnListViewBuilder,
             column_view_subscriptions::setup_subscriptions,
@@ -65,6 +65,8 @@ pub struct ColumnListView {
     pub widget: Widget,
     /// The column view widget.
     pub column_view: ColumnView,
+    /// The selection model for row selection.
+    pub multi_selection: MultiSelection,
     /// The `gio::ListStore` containing BoxedAnyObject-wrapped items.
     pub list_store: ListStore,
     /// The filter model for search filtering.
@@ -87,6 +89,8 @@ pub struct ColumnListView {
     pub artists: Vec<Arc<Artist>>,
     /// Artist name cache for album columns.
     artist_name_cache: ArtistNameCache,
+    /// Flag to prevent feedback loops during selection sync.
+    pub is_syncing_selection: Rc<Cell<bool>>,
     /// Zoom subscription handle for cleanup.
     zoom_subscription_handle: Option<JoinHandle<()>>,
     /// Settings subscription handle for cleanup.
@@ -95,6 +99,8 @@ pub struct ColumnListView {
     playback_subscription_handle: Option<JoinHandle<()>>,
     /// Play button column state subscription handle for cleanup.
     play_button_column_subscription_handle: Option<JoinHandle<()>>,
+    /// Selection subscription handle for cleanup.
+    selection_subscription_handle: Option<JoinHandle<()>>,
 }
 
 impl ColumnListView {
@@ -138,10 +144,10 @@ impl ColumnListView {
 
         let sort_model = SortListModel::builder().model(&filter_model).build();
 
-        let no_selection = NoSelection::new(Some(sort_model.clone()));
+        let multi_selection = MultiSelection::new(Some(sort_model.clone()));
 
         let column_view = ColumnView::builder()
-            .model(&no_selection)
+            .model(&multi_selection)
             .hexpand(true)
             .vexpand(true)
             .build();
@@ -171,6 +177,7 @@ impl ColumnListView {
         let mut view = Self {
             widget: main_container.upcast_ref::<Widget>().clone(),
             column_view,
+            multi_selection,
             list_store,
             filter_model,
             sort_model,
@@ -182,10 +189,12 @@ impl ColumnListView {
             albums: Vec::new(),
             artists: Vec::new(),
             artist_name_cache: ArtistNameCache::new(),
+            is_syncing_selection: Rc::new(Cell::new(false)),
             zoom_subscription_handle: None,
             settings_subscription_handle: None,
             playback_subscription_handle: None,
             play_button_column_subscription_handle: None,
+            selection_subscription_handle: None,
         };
 
         view.setup_columns(view_type, library_db, audio_engine, queue_manager);
@@ -195,6 +204,8 @@ impl ColumnListView {
         if let Some(state) = app_state {
             view.setup_subscriptions(state);
             view.connect_row_activation(state);
+            view.connect_selection_sync(state);
+            view.sync_selection_from_state(state);
         }
 
         view
@@ -217,18 +228,22 @@ impl ColumnListView {
     ) {
         match view_type {
             Albums => {
-                self.play_button_column_subscription_handle = setup_album_columns(
-                    &mut self.column_view,
-                    &self.artist_name_cache,
+                let playback_context = PlaybackContext {
                     library_db,
                     audio_engine,
                     queue_manager,
-                    self.app_state.as_ref(),
+                    app_state: self.app_state.as_ref(),
+                };
+                self.play_button_column_subscription_handle = setup_album_columns(
+                    &mut self.column_view,
+                    &self.multi_selection,
+                    &self.artist_name_cache,
+                    &playback_context,
                     self.config.show_dr_badges,
                 );
             }
             Artists => {
-                setup_artist_columns(&mut self.column_view, &self.config);
+                setup_artist_columns(&mut self.column_view, &self.multi_selection, &self.config);
             }
         }
     }
@@ -336,10 +351,16 @@ impl ColumnListView {
     ///
     /// * `state` - Application state reference
     fn setup_subscriptions(&mut self, state: &Arc<AppState>) {
-        let handles = setup_subscriptions(state, &self.config);
+        let handles = setup_subscriptions(
+            state,
+            &self.config,
+            &self.multi_selection,
+            &self.is_syncing_selection,
+        );
         self.zoom_subscription_handle = handles.zoom_handle;
         self.settings_subscription_handle = handles.settings_handle;
         self.playback_subscription_handle = handles.playback_handle;
+        self.selection_subscription_handle = handles.selection_handle;
     }
 
     /// Connects row activation to navigate to detail views.
@@ -412,6 +433,9 @@ impl ColumnListView {
             &self.search_empty_state,
         );
         self.update_count_label();
+        if let Some(state) = &self.app_state {
+            self.sync_selection_from_state(state);
+        }
     }
 
     /// Updates the count label for album view.
@@ -447,6 +471,9 @@ impl ColumnListView {
             &self.search_empty_state,
         );
         self.update_count_label();
+        if let Some(state) = &self.app_state {
+            self.sync_selection_from_state(state);
+        }
     }
 
     /// Updates the count label for artist view.
@@ -483,6 +510,91 @@ impl ColumnListView {
             &self.albums,
             &self.artists,
         );
+    }
+
+    /// Connects selection sync to update `AppState` when selection changes in the UI.
+    fn connect_selection_sync(&self, state: &Arc<AppState>) {
+        let state_clone = Arc::clone(state);
+        let view_type = self.config.view_type.clone();
+        let is_syncing = Rc::clone(&self.is_syncing_selection);
+
+        self.multi_selection
+            .connect_selection_changed(move |selection_model, _, _| {
+                if is_syncing.get() {
+                    return;
+                }
+
+                let mut selected_ids = HashSet::new();
+                let selection = selection_model.selection();
+                if let Some((mut iter, mut position)) = BitsetIter::init_first(&selection) {
+                    loop {
+                        if let Some(obj) = selection_model.item(position)
+                            && let Ok(boxed) = obj.downcast::<BoxedAnyObject>()
+                        {
+                            match view_type {
+                                Albums => {
+                                    let album = boxed.borrow::<Arc<Album>>();
+                                    selected_ids.insert(album.id);
+                                }
+                                Artists => {
+                                    let artist = boxed.borrow::<Arc<Artist>>();
+                                    selected_ids.insert(artist.id);
+                                }
+                            }
+                        }
+
+                        if let Some(next_pos) = iter.next() {
+                            position = next_pos;
+                        } else {
+                            break;
+                        }
+                    }
+                }
+
+                match view_type {
+                    Albums => state_clone.update_album_selection(selected_ids),
+                    Artists => state_clone.update_artist_selection(selected_ids),
+                }
+            });
+    }
+
+    /// Synchronizes the selection state from `AppState` to the UI.
+    pub fn sync_selection_from_state(&self, state: &Arc<AppState>) {
+        self.is_syncing_selection.set(true);
+
+        let library_state = state.get_library_state();
+        let selected_ids = match self.config.view_type {
+            Albums => &library_state.selected_album_ids,
+            Artists => &library_state.selected_artist_ids,
+        };
+
+        let selection_model = &self.multi_selection;
+        let n_items = selection_model.n_items();
+
+        // Synchronize selection state without manual signal blocking
+        // AppState checks will break potential feedback loops.
+
+        for i in 0..n_items {
+            if let Some(obj) = selection_model.item(i)
+                && let Ok(boxed) = obj.downcast::<BoxedAnyObject>()
+            {
+                let id = match self.config.view_type {
+                    Albums => boxed.borrow::<Arc<Album>>().id,
+                    Artists => boxed.borrow::<Arc<Artist>>().id,
+                };
+
+                let should_be_selected = selected_ids.contains(&id);
+                if selection_model.is_selected(i) != should_be_selected {
+                    if should_be_selected {
+                        selection_model.select_item(i, false);
+                    } else {
+                        selection_model.unselect_item(i);
+                    }
+                }
+            }
+        }
+
+        self.is_syncing_selection.set(false);
     }
 
     /// Clears the view by hiding all items.
@@ -523,6 +635,9 @@ impl ColumnListView {
             handle.abort();
         }
         if let Some(handle) = self.play_button_column_subscription_handle.take() {
+            handle.abort();
+        }
+        if let Some(handle) = self.selection_subscription_handle.take() {
             handle.abort();
         }
     }

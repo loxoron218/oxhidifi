@@ -48,6 +48,8 @@ pub struct SubscriptionHandles {
     pub settings_handle: Option<JoinHandle<()>>,
     /// Handle for playback state subscription.
     pub playback_handle: Option<JoinHandle<()>>,
+    /// Handle for selection change subscription.
+    pub selection_handle: Option<JoinHandle<()>>,
 }
 
 /// Cache for artist names keyed by artist ID.

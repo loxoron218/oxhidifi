@@ -4,7 +4,10 @@
 //! shared state across the application with thread-safe access and
 //! reactive update notifications.
 
-use std::sync::{Arc, Weak};
+use std::{
+    collections::HashSet,
+    sync::{Arc, Weak},
+};
 
 use {
     async_channel::{Receiver, Sender, unbounded},
@@ -85,6 +88,25 @@ pub struct LibraryState {
     pub view_mode: ViewMode,
     /// Currently selected tab (albums or artists).
     pub current_tab: LibraryTab,
+    /// Set of selected album IDs (for multi-selection).
+    pub selected_album_ids: HashSet<i64>,
+    /// Set of selected artist IDs (for multi-selection).
+    pub selected_artist_ids: HashSet<i64>,
+}
+
+impl LibraryState {
+    /// Returns selection info for the current tab.
+    ///
+    /// # Returns
+    ///
+    /// A tuple of (`selected_count`, `total_count`, `item_type`)
+    #[must_use]
+    pub fn current_selection(&self) -> (usize, usize, &'static str) {
+        match self.current_tab {
+            LibraryTab::Albums => (self.selected_album_ids.len(), self.albums.len(), "album"),
+            LibraryTab::Artists => (self.selected_artist_ids.len(), self.artists.len(), "artist"),
+        }
+    }
 }
 
 /// Navigation state tracking.
@@ -140,6 +162,11 @@ pub enum AppStateEvent {
     },
     /// Search filter changed.
     SearchFilterChanged(Option<String>),
+    /// Selection changed (albums or artists).
+    SelectionChanged {
+        tab: LibraryTab,
+        selected_ids: HashSet<i64>,
+    },
     /// User settings changed that affect UI display.
     SettingsChanged { show_dr_values: bool },
     /// Metadata overlays visibility setting changed.
@@ -237,6 +264,15 @@ impl AppState {
         subscribers.len()
     }
 
+    /// Helper to broadcast selection change event.
+    fn broadcast_selection_change(&self, tab: LibraryTab) {
+        let selected_ids = match tab {
+            LibraryTab::Albums => self.library.read().selected_album_ids.clone(),
+            LibraryTab::Artists => self.library.read().selected_artist_ids.clone(),
+        };
+        self.broadcast_event(&AppStateEvent::SelectionChanged { tab, selected_ids });
+    }
+
     /// Updates the playback state and notifies subscribers.
     ///
     /// # Arguments
@@ -329,6 +365,226 @@ impl AppState {
                 current_tab,
                 view_mode,
             });
+        }
+    }
+
+    /// Toggles album selection by ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `album_id` - Album ID to toggle
+    ///
+    /// # Returns
+    ///
+    /// `true` if the album is now selected, `false` if deselected
+    #[must_use]
+    pub fn toggle_album_selection(&self, album_id: i64) -> bool {
+        let mut library = self.library.write();
+        if library.selected_album_ids.contains(&album_id) {
+            library.selected_album_ids.remove(&album_id);
+            false
+        } else {
+            library.selected_album_ids.insert(album_id);
+            true
+        }
+    }
+
+    /// Selects an album by ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `album_id` - Album ID to select
+    pub fn select_album(&self, album_id: i64) {
+        self.library.write().selected_album_ids.insert(album_id);
+        self.broadcast_selection_change(LibraryTab::Albums);
+    }
+
+    /// Deselects an album by ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `album_id` - Album ID to deselect
+    pub fn deselect_album(&self, album_id: i64) {
+        self.library.write().selected_album_ids.remove(&album_id);
+        self.broadcast_selection_change(LibraryTab::Albums);
+    }
+
+    /// Clears all album selections.
+    pub fn clear_album_selection(&self) {
+        self.library.write().selected_album_ids.clear();
+        self.broadcast_selection_change(LibraryTab::Albums);
+    }
+
+    /// Gets all selected album IDs.
+    ///
+    /// # Returns
+    ///
+    /// A cloned set of selected album IDs
+    #[must_use]
+    pub fn get_selected_album_ids(&self) -> HashSet<i64> {
+        self.library.read().selected_album_ids.clone()
+    }
+
+    /// Checks if any albums are selected.
+    ///
+    /// # Returns
+    ///
+    /// `true` if any albums are selected, `false` otherwise
+    #[must_use]
+    pub fn has_selected_albums(&self) -> bool {
+        !self.library.read().selected_album_ids.is_empty()
+    }
+
+    /// Checks if an album is selected.
+    ///
+    /// # Arguments
+    ///
+    /// * `album_id` - Album ID to check
+    ///
+    /// # Returns
+    ///
+    /// `true` if selected, `false` otherwise
+    #[must_use]
+    pub fn is_album_selected(&self, album_id: i64) -> bool {
+        self.library.read().selected_album_ids.contains(&album_id)
+    }
+
+    /// Selects all albums.
+    pub fn select_all_albums(&self) {
+        let mut library = self.library.write();
+        library.selected_album_ids = library.albums.iter().map(|a| a.id).collect();
+        drop(library);
+        self.broadcast_selection_change(LibraryTab::Albums);
+    }
+
+    /// Updates the album selection with a new set of IDs.
+    ///
+    /// # Arguments
+    ///
+    /// * `selected_ids` - New set of selected album IDs
+    pub fn update_album_selection(&self, selected_ids: HashSet<i64>) {
+        let changed = {
+            let mut library = self.library.write();
+            if library.selected_album_ids == selected_ids {
+                false
+            } else {
+                library.selected_album_ids = selected_ids;
+                true
+            }
+        };
+
+        if changed {
+            self.broadcast_selection_change(LibraryTab::Albums);
+        }
+    }
+
+    /// Toggles artist selection by ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `artist_id` - Artist ID to toggle
+    ///
+    /// # Returns
+    ///
+    /// `true` if the artist is now selected, `false` if deselected
+    #[must_use]
+    pub fn toggle_artist_selection(&self, artist_id: i64) -> bool {
+        let mut library = self.library.write();
+        if library.selected_artist_ids.contains(&artist_id) {
+            library.selected_artist_ids.remove(&artist_id);
+            false
+        } else {
+            library.selected_artist_ids.insert(artist_id);
+            true
+        }
+    }
+
+    /// Selects an artist by ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `artist_id` - Artist ID to select
+    pub fn select_artist(&self, artist_id: i64) {
+        self.library.write().selected_artist_ids.insert(artist_id);
+        self.broadcast_selection_change(LibraryTab::Artists);
+    }
+
+    /// Deselects an artist by ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `artist_id` - Artist ID to deselect
+    pub fn deselect_artist(&self, artist_id: i64) {
+        self.library.write().selected_artist_ids.remove(&artist_id);
+        self.broadcast_selection_change(LibraryTab::Artists);
+    }
+
+    /// Clears all artist selections.
+    pub fn clear_artist_selection(&self) {
+        self.library.write().selected_artist_ids.clear();
+        self.broadcast_selection_change(LibraryTab::Artists);
+    }
+
+    /// Gets all selected artist IDs.
+    ///
+    /// # Returns
+    ///
+    /// A cloned set of selected artist IDs
+    #[must_use]
+    pub fn get_selected_artist_ids(&self) -> HashSet<i64> {
+        self.library.read().selected_artist_ids.clone()
+    }
+
+    /// Checks if any artists are selected.
+    ///
+    /// # Returns
+    ///
+    /// `true` if any artists are selected, `false` otherwise
+    #[must_use]
+    pub fn has_selected_artists(&self) -> bool {
+        !self.library.read().selected_artist_ids.is_empty()
+    }
+
+    /// Checks if an artist is selected.
+    ///
+    /// # Arguments
+    ///
+    /// * `artist_id` - Artist ID to check
+    ///
+    /// # Returns
+    ///
+    /// `true` if selected, `false` otherwise
+    #[must_use]
+    pub fn is_artist_selected(&self, artist_id: i64) -> bool {
+        self.library.read().selected_artist_ids.contains(&artist_id)
+    }
+
+    /// Selects all artists.
+    pub fn select_all_artists(&self) {
+        let mut library = self.library.write();
+        library.selected_artist_ids = library.artists.iter().map(|a| a.id).collect();
+        drop(library);
+        self.broadcast_selection_change(LibraryTab::Artists);
+    }
+
+    /// Updates the artist selection with a new set of IDs.
+    ///
+    /// # Arguments
+    ///
+    /// * `selected_ids` - New set of selected artist IDs
+    pub fn update_artist_selection(&self, selected_ids: HashSet<i64>) {
+        let changed = {
+            let mut library = self.library.write();
+            if library.selected_artist_ids == selected_ids {
+                false
+            } else {
+                library.selected_artist_ids = selected_ids;
+                true
+            }
+        };
+
+        if changed {
+            self.broadcast_selection_change(LibraryTab::Artists);
         }
     }
 

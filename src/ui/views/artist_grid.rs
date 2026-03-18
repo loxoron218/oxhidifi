@@ -4,7 +4,12 @@
 //! in a responsive grid layout with artist images, names, and album counts,
 //! supporting virtual scrolling for large datasets and real-time filtering.
 
-use std::{cell::RefCell, collections::HashSet, rc::Rc, sync::Arc};
+use std::{
+    cell::{Cell, RefCell},
+    collections::HashSet,
+    rc::Rc,
+    sync::Arc,
+};
 
 use {
     libadwaita::{
@@ -12,13 +17,16 @@ use {
         gtk::{
             AccessibleRole::{Grid, Group},
             Align::{Center, Fill, Start},
-            Box, FlowBox, FlowBoxChild, GestureClick, Label,
+            Box, CheckButton, EventControllerMotion, FlowBox, FlowBoxChild, GestureClick, Label,
             Orientation::Vertical,
+            Overlay,
             SelectionMode::None as SelectionNone,
             Widget,
             pango::EllipsizeMode::End,
         },
-        prelude::{AccessibleExt, BoxExt, Cast, FlowBoxChildExt, ObjectExt, WidgetExt},
+        prelude::{
+            AccessibleExt, BoxExt, Cast, CheckButtonExt, FlowBoxChildExt, ObjectExt, WidgetExt,
+        },
     },
     tracing::error,
 };
@@ -30,7 +38,10 @@ use crate::{
     },
     library::models::Artist,
     state::{
-        app_state::{AppState, LibraryState, NavigationState::ArtistDetail},
+        app_state::{
+            AppState, AppStateEvent::SelectionChanged, LibraryState, LibraryTab::Artists,
+            NavigationState::ArtistDetail,
+        },
         zoom_manager::ZoomEvent::GridZoomChanged,
     },
     ui::{
@@ -113,7 +124,7 @@ impl ArtistGridViewBuilder {
     /// A new `ArtistGridView` instance.
     #[must_use]
     pub fn build(self) -> ArtistGridView {
-        ArtistGridView::new(self.app_state, self.artists, self.compact)
+        ArtistGridView::new(self.app_state.as_ref(), self.artists, self.compact)
     }
 }
 
@@ -144,9 +155,13 @@ pub struct ArtistGridView {
     /// Current sort criteria.
     pub current_sort: ArtistSortCriteria,
     /// Shared reference to artist cards for zoom updates.
-    artist_cards_ref: Rc<RefCell<Vec<Rc<ArtistCard>>>>,
+    pub artist_cards_ref: Rc<RefCell<Vec<Rc<ArtistCard>>>>,
+    /// Flag to prevent feedback loops during selection sync.
+    pub is_syncing_selection: Rc<Cell<bool>>,
     /// Zoom subscription handle for cleanup.
     zoom_subscription_handle: Option<JoinHandle<()>>,
+    /// Selection subscription handle for cleanup.
+    selection_subscription_handle: Option<JoinHandle<()>>,
 }
 
 /// Configuration for `ArtistGridView` display options.
@@ -169,28 +184,12 @@ impl ArtistGridView {
     ///
     /// A new `ArtistGridView` instance.
     #[must_use]
-    pub fn new(app_state: Option<Arc<AppState>>, artists: Vec<Artist>, compact: bool) -> Self {
+    pub fn new(app_state: Option<&Arc<AppState>>, artists: Vec<Artist>, compact: bool) -> Self {
         let config = ArtistGridViewConfig { compact };
 
-        let flow_box = FlowBox::builder()
-            .halign(Fill)
-            .valign(Start)
-            .homogeneous(true)
-            .max_children_per_line(100)
-            .selection_mode(SelectionNone)
-            .row_spacing(6)
-            .column_spacing(6)
-            .margin_top(24)
-            .margin_bottom(24)
-            .margin_start(12)
-            .margin_end(12)
-            .hexpand(true)
-            .vexpand(false)
-            .css_classes(["artist-grid"])
-            .build();
+        let flow_box = Self::create_flow_box();
 
-        // Create main container that can hold both flow box and empty state
-        let main_container = Box::builder().orientation(Vertical).build();
+        let main_container = Self::create_main_container();
 
         let count_label = Label::builder()
             .label("0 Artists")
@@ -206,19 +205,8 @@ impl ArtistGridView {
         // Set ARIA attributes for accessibility
         flow_box.set_accessible_role(Grid);
 
-        // set_accessible_description doesn't exist in GTK4, remove this line
-
         // Create empty state component
-        let empty_state = app_state.as_ref().map(|state| {
-            EmptyState::new(
-                Some(Arc::clone(state)),
-                None, // Will be set later when we have access to settings
-                EmptyStateConfig {
-                    is_album_view: false,
-                },
-                None, // Will be set later when we have access to window
-            )
-        });
+        let empty_state = Self::create_empty_state(app_state);
 
         // Add empty state to main container if it exists
         if let Some(empty_state) = &empty_state {
@@ -231,12 +219,19 @@ impl ArtistGridView {
         search_empty_state.hide();
 
         let artist_cards_ref = Rc::new(RefCell::new(Vec::new()));
+        let is_syncing_selection = Rc::new(Cell::new(false));
+
+        let zoom_subscription_handle =
+            Self::setup_zoom_subscription(app_state, &flow_box, &artist_cards_ref);
+
+        let selection_subscription_handle =
+            Self::setup_selection_subscription(app_state, &artist_cards_ref, &is_syncing_selection);
 
         let mut view = Self {
             widget: main_container.upcast_ref::<Widget>().clone(),
-            flow_box: flow_box.clone(),
+            flow_box,
             count_label,
-            app_state: app_state.clone(),
+            app_state: app_state.cloned(),
             artists: Vec::new(),
             all_artists: artists.clone(),
             config,
@@ -244,39 +239,150 @@ impl ArtistGridView {
             search_empty_state,
             current_sort: ArtistSortCriteria::Name,
             artist_cards_ref: Rc::clone(&artist_cards_ref),
-            zoom_subscription_handle: app_state.map_or_else(
-                || None,
-                |state| {
-                    let state_clone = state;
-                    let flow_box_clone = flow_box;
-                    let artist_cards_ref_clone = artist_cards_ref;
-                    let handle = MainContext::default().spawn_local(async move {
-                        let rx = state_clone.zoom_manager.subscribe();
-                        while let Ok(event) = rx.recv().await {
-                            if let GridZoomChanged(_) = &*event {
-                                let cover_size =
-                                    state_clone.zoom_manager.get_grid_cover_dimensions().0;
-                                let cover_size_u32 = safe_i32_to_u32(cover_size, 180, "cover_size");
-
-                                let cards = artist_cards_ref_clone.borrow();
-                                for card in cards.iter() {
-                                    if let Err(e) = card.update_cover_size(cover_size_u32) {
-                                        error!(error = %e, "Failed to update cover size");
-                                    }
-                                }
-
-                                flow_box_clone.queue_draw();
-                            }
-                        }
-                    });
-                    Some(handle)
-                },
-            ),
+            is_syncing_selection,
+            zoom_subscription_handle,
+            selection_subscription_handle,
         };
 
         view.set_artists(artists);
 
         view
+    }
+
+    /// Creates and configures the `FlowBox` widget.
+    ///
+    /// # Returns
+    ///
+    /// Configured `FlowBox` widget.
+    fn create_flow_box() -> FlowBox {
+        FlowBox::builder()
+            .halign(Fill)
+            .valign(Start)
+            .homogeneous(true)
+            .max_children_per_line(100)
+            .selection_mode(SelectionNone)
+            .row_spacing(6)
+            .column_spacing(6)
+            .margin_top(24)
+            .margin_bottom(24)
+            .margin_start(12)
+            .margin_end(12)
+            .hexpand(true)
+            .vexpand(false)
+            .css_classes(["artist-grid"])
+            .build()
+    }
+
+    /// Creates the main container box.
+    ///
+    /// # Returns
+    ///
+    /// Main container Box widget.
+    fn create_main_container() -> Box {
+        Box::builder().orientation(Vertical).build()
+    }
+
+    /// Creates the empty state component.
+    ///
+    /// # Arguments
+    ///
+    /// * `app_state` - Optional application state reference
+    ///
+    /// # Returns
+    ///
+    /// Option containing `EmptyState` if `app_state` is provided.
+    fn create_empty_state(app_state: Option<&Arc<AppState>>) -> Option<EmptyState> {
+        let state = app_state?;
+        Some(EmptyState::new(
+            Some(Arc::clone(state)),
+            None,
+            EmptyStateConfig {
+                is_album_view: false,
+            },
+            None,
+        ))
+    }
+
+    /// Sets up zoom subscription for real-time cover size updates.
+    ///
+    /// # Arguments
+    ///
+    /// * `app_state` - Optional application state reference
+    /// * `flow_box` - `FlowBox` widget to queue redraws
+    /// * `artist_cards_ref` - Reference to artist cards for size updates
+    ///
+    /// # Returns
+    ///
+    /// Option containing subscription handle.
+    fn setup_zoom_subscription(
+        app_state: Option<&Arc<AppState>>,
+        flow_box: &FlowBox,
+        artist_cards_ref: &Rc<RefCell<Vec<Rc<ArtistCard>>>>,
+    ) -> Option<JoinHandle<()>> {
+        let state = app_state?;
+        let state_clone = Arc::clone(state);
+        let flow_box_clone = flow_box.clone();
+        let artist_cards_ref_clone = Rc::clone(artist_cards_ref);
+        Some(MainContext::default().spawn_local(async move {
+            let rx = state_clone.zoom_manager.subscribe();
+            while let Ok(event) = rx.recv().await {
+                if let GridZoomChanged(_) = &*event {
+                    let cover_size = state_clone.zoom_manager.get_grid_cover_dimensions().0;
+                    let cover_size_u32 = safe_i32_to_u32(cover_size, 180, "cover_size");
+
+                    let cards = artist_cards_ref_clone.borrow();
+                    for card in cards.iter() {
+                        if let Err(e) = card.update_cover_size(cover_size_u32) {
+                            error!(error = %e, "Failed to update cover size");
+                        }
+                    }
+
+                    flow_box_clone.queue_draw();
+                }
+            }
+        }))
+    }
+
+    /// Sets up selection subscription for real-time selection updates.
+    ///
+    /// # Arguments
+    ///
+    /// * `app_state` - Optional application state reference
+    /// * `artist_cards_ref` - Reference to artist cards for selection updates
+    ///
+    /// # Returns
+    ///
+    /// Option containing subscription handle.
+    fn setup_selection_subscription(
+        app_state: Option<&Arc<AppState>>,
+        artist_cards_ref: &Rc<RefCell<Vec<Rc<ArtistCard>>>>,
+        is_syncing: &Rc<Cell<bool>>,
+    ) -> Option<JoinHandle<()>> {
+        let state = app_state?;
+        let state_clone = Arc::clone(state);
+        let artist_cards_ref_clone = Rc::clone(artist_cards_ref);
+        let is_syncing_clone = Rc::clone(is_syncing);
+        Some(MainContext::default().spawn_local(async move {
+            let rx = state_clone.subscribe();
+            while let Ok(event) = rx.recv().await {
+                if let SelectionChanged { tab, selected_ids } = event.as_ref()
+                    && matches!(tab, Artists)
+                {
+                    is_syncing_clone.set(true);
+                    let has_selection = !selected_ids.is_empty();
+                    let cards = artist_cards_ref_clone.borrow();
+                    for card in cards.iter() {
+                        let is_selected = selected_ids.contains(&card.artist_id);
+                        card.selection_checkbox.set_visible(has_selection);
+                        card.selection_checkbox.set_can_target(has_selection);
+                        if card.selection_checkbox.is_active() != is_selected {
+                            card.set_selection_state(is_selected);
+                        }
+                    }
+                    is_syncing_clone.set(false);
+                }
+            }
+        }))
     }
 
     /// Creates an `ArtistGridView` builder for configuration.
@@ -429,17 +535,56 @@ impl ArtistGridView {
     fn create_artist_card(&self, artist: &Artist, cover_size: i32) -> Result<ArtistCard, UiError> {
         let artist_clone = artist.clone();
         let app_state = self.app_state.clone();
+        let artist_id = artist.id;
+
+        let is_selected = app_state
+            .as_ref()
+            .is_some_and(|state| state.is_artist_selected(artist_id));
+
+        let any_selected = app_state
+            .as_ref()
+            .is_some_and(|state| state.has_selected_artists());
 
         let cover_size_u32 = safe_i32_to_u32(cover_size, 180, "cover_size");
-        ArtistCard::builder()
+        let app_state_for_click = app_state.clone();
+        let app_state_for_selection = app_state;
+        let artist_cards_clone = Rc::clone(&self.artist_cards_ref);
+        let is_syncing_for_toggle = Rc::clone(&self.is_syncing_selection);
+        let artist_card = ArtistCard::builder()
             .artist(artist.clone())
             .cover_size(cover_size_u32)
+            .selected(is_selected)
             .on_card_clicked(move || {
-                if let Some(state) = &app_state {
+                if let Some(state) = &app_state_for_click {
                     state.update_navigation(ArtistDetail(artist_clone.clone()));
                 }
             })
-            .build()
+            .on_selection_toggled(move |selected| {
+                if is_syncing_for_toggle.get() {
+                    return;
+                }
+
+                if let Some(state) = &app_state_for_selection {
+                    if selected {
+                        state.select_artist(artist_id);
+                    } else {
+                        state.deselect_artist(artist_id);
+                    }
+                    let has_selection = state.has_selected_artists();
+                    for card in artist_cards_clone.borrow().iter() {
+                        card.selection_checkbox.set_visible(has_selection);
+                        card.selection_checkbox.set_can_target(has_selection);
+                    }
+                }
+            })
+            .build()?;
+
+        if any_selected {
+            artist_card.selection_checkbox.set_visible(true);
+            artist_card.selection_checkbox.set_can_target(true);
+        }
+
+        Ok(artist_card)
     }
 
     /// Updates the display configuration.
@@ -574,6 +719,9 @@ impl ArtistGridView {
         if let Some(handle) = self.zoom_subscription_handle.take() {
             handle.abort();
         }
+        if let Some(handle) = self.selection_subscription_handle.take() {
+            handle.abort();
+        }
     }
 }
 
@@ -601,6 +749,10 @@ pub struct ArtistCard {
     pub album_count_label: Label,
     /// Artist ID for tracking during filtering.
     pub artist_id: i64,
+    /// Selection checkbox button.
+    pub selection_checkbox: CheckButton,
+    /// Flag to prevent callback during programmatic updates.
+    updating_checkbox: Cell<bool>,
 }
 
 impl ArtistCard {
@@ -611,6 +763,8 @@ impl ArtistCard {
     /// * `artist` - The artist to display
     /// * `cover_size` - The size of the cover art in pixels
     /// * `on_card_clicked` - Optional callback for card clicks
+    /// * `on_selection_toggled` - Optional callback for selection toggled
+    /// * `selected` - Whether the card is initially selected
     ///
     /// # Returns
     ///
@@ -622,7 +776,13 @@ impl ArtistCard {
     /// cannot be converted to i32. This indicates a programming error as
     /// the calculation logic should always produce valid values.
     #[must_use]
-    pub fn new(artist: &Artist, cover_size: u32, on_card_clicked: Option<Rc<dyn Fn()>>) -> Self {
+    pub fn new(
+        artist: &Artist,
+        cover_size: u32,
+        on_card_clicked: Option<Rc<dyn Fn()>>,
+        on_selection_toggled: Option<&Rc<dyn Fn(bool)>>,
+        selected: bool,
+    ) -> Self {
         let clamped_cover_size = cover_size.min(MAX_COVER_SIZE);
         let cover_size_i32 = safe_u32_to_i32(
             clamped_cover_size,
@@ -638,6 +798,86 @@ impl ArtistCard {
             .dimensions(cover_width, cover_height)
             .build();
 
+        let (selection_checkbox, updating_flag) =
+            Self::create_selection_checkbox(selected, on_selection_toggled);
+
+        if let Some(cover_overlay) = cover_art.widget.downcast_ref::<Overlay>() {
+            cover_overlay.add_overlay(&selection_checkbox);
+        }
+
+        let (name_label, album_count_label) =
+            Self::create_artist_labels(artist, clamped_cover_size);
+
+        let artist_tile =
+            Self::create_artist_tile(&cover_art, &name_label, &album_count_label, artist);
+
+        let child = FlowBoxChild::new();
+        child.set_child(Some(&artist_tile));
+        child.set_focusable(true);
+
+        Self::setup_motion_controller(&child, &selection_checkbox);
+        Self::setup_click_controller(&child, on_card_clicked);
+
+        Self {
+            widget: child.upcast_ref::<Widget>().clone(),
+            artist_tile,
+            cover_art,
+            name_label,
+            album_count_label,
+            artist_id: artist.id,
+            selection_checkbox,
+            updating_checkbox: updating_flag,
+        }
+    }
+
+    /// Creates and configures the selection checkbox.
+    ///
+    /// # Arguments
+    ///
+    /// * `selected` - Whether the checkbox should be initially selected
+    /// * `on_selection_toggled` - Optional callback for selection changes
+    ///
+    /// # Returns
+    ///
+    /// Tuple of (checkbox, `updating_flag`).
+    fn create_selection_checkbox(
+        selected: bool,
+        on_selection_toggled: Option<&Rc<dyn Fn(bool)>>,
+    ) -> (CheckButton, Cell<bool>) {
+        let selection_checkbox = CheckButton::builder()
+            .tooltip_text("Select for batch operations")
+            .halign(Start)
+            .valign(Start)
+            .visible(false)
+            .build();
+        selection_checkbox.set_can_target(false);
+        selection_checkbox.set_active(selected);
+
+        let updating_flag = Cell::new(false);
+        if let Some(callback) = on_selection_toggled {
+            let callback_clone = Rc::clone(callback);
+            let flag_clone = updating_flag.clone();
+            selection_checkbox.connect_toggled(move |checkbox| {
+                if !flag_clone.get() {
+                    callback_clone(checkbox.is_active());
+                }
+            });
+        }
+
+        (selection_checkbox, updating_flag)
+    }
+
+    /// Creates the name and album count labels.
+    ///
+    /// # Arguments
+    ///
+    /// * `artist` - Artist data for label content
+    /// * `clamped_cover_size` - Cover size for label width calculation
+    ///
+    /// # Returns
+    ///
+    /// Tuple of (`name_label`, `album_count_label`).
+    fn create_artist_labels(artist: &Artist, clamped_cover_size: u32) -> (Label, Label) {
         let name_max_width = ((clamped_cover_size - 16) / 10).max(8);
         let name_max_width_i32 = safe_u32_to_i32(name_max_width, 408, 408, "name_max_width");
         let name_label = Label::builder()
@@ -670,6 +910,27 @@ impl ArtistCard {
             .css_classes(["album-artist-label"])
             .build();
 
+        (name_label, album_count_label)
+    }
+
+    /// Creates the artist tile box with cover, name, and album count.
+    ///
+    /// # Arguments
+    ///
+    /// * `cover_art` - Cover art widget
+    /// * `name_label` - Artist name label
+    /// * `album_count_label` - Album count label
+    /// * `artist` - Artist data
+    ///
+    /// # Returns
+    ///
+    /// Configured artist tile Box widget.
+    fn create_artist_tile(
+        cover_art: &CoverArt,
+        name_label: &Label,
+        album_count_label: &Label,
+        artist: &Artist,
+    ) -> Box {
         let artist_tile = Box::builder()
             .orientation(Vertical)
             .halign(Start)
@@ -687,18 +948,51 @@ impl ArtistCard {
         artist_tile.set_accessible_role(Group);
         artist_tile.set_tooltip_text(Some(&artist.name));
 
-        let child = FlowBoxChild::new();
-        child.set_child(Some(&artist_tile));
-        child.set_focusable(true);
+        artist_tile
+    }
 
+    /// Sets up motion controller for hover effects.
+    ///
+    /// # Arguments
+    ///
+    /// * `child` - `FlowBoxChild` to add controller to
+    /// * `selection_checkbox` - Checkbox to show/hide on hover
+    fn setup_motion_controller(child: &FlowBoxChild, selection_checkbox: &CheckButton) {
+        let motion_controller = EventControllerMotion::new();
+        let checkbox_clone = selection_checkbox.clone();
+        motion_controller.connect_enter(move |_controller, _x, _y| {
+            checkbox_clone.set_can_target(true);
+            checkbox_clone.set_visible(true);
+        });
+
+        let checkbox_clone2 = selection_checkbox.clone();
+        motion_controller.connect_leave(move |_controller| {
+            if !checkbox_clone2.is_active() {
+                checkbox_clone2.set_can_target(false);
+                checkbox_clone2.set_visible(false);
+            }
+        });
+
+        child.add_controller(motion_controller);
+    }
+
+    /// Sets up click controller for double-click and activation.
+    ///
+    /// # Arguments
+    ///
+    /// * `child` - `FlowBoxChild` to add controller to
+    /// * `on_card_clicked` - Optional callback for card activation
+    fn setup_click_controller(child: &FlowBoxChild, on_card_clicked: Option<Rc<dyn Fn()>>) {
         let click_controller = GestureClick::new();
 
         if let Some(callback) = on_card_clicked {
             let callback_for_click = Rc::clone(&callback);
             let callback_for_activate = Rc::clone(&callback);
 
-            click_controller.connect_released(move |_gesture, _n_press, _x, _y| {
-                callback_for_click();
+            click_controller.connect_released(move |_gesture, n_press, _x, _y| {
+                if n_press == 2 {
+                    callback_for_click();
+                }
             });
 
             child.connect_activate(move |_| {
@@ -706,15 +1000,10 @@ impl ArtistCard {
             });
         }
 
-        artist_tile.add_controller(click_controller);
-
-        Self {
-            widget: child.upcast_ref::<Widget>().clone(),
-            artist_tile,
-            cover_art,
-            name_label,
-            album_count_label,
-            artist_id: artist.id,
+        if let Some(child_widget) = child.child()
+            && let Some(artist_tile) = child_widget.downcast_ref::<Box>()
+        {
+            artist_tile.add_controller(click_controller);
         }
     }
 
@@ -722,6 +1011,17 @@ impl ArtistCard {
     #[must_use]
     pub fn builder() -> ArtistCardBuilder {
         ArtistCardBuilder::default()
+    }
+
+    /// Sets the checkbox state without triggering the selection callback.
+    ///
+    /// # Arguments
+    ///
+    /// * `selected` - Whether the checkbox should be selected
+    pub fn set_selection_state(&self, selected: bool) {
+        self.updating_checkbox.set(true);
+        self.selection_checkbox.set_active(selected);
+        self.updating_checkbox.set(false);
     }
 
     /// Updates the cover size for this artist card.
@@ -764,6 +1064,10 @@ pub struct ArtistCardBuilder {
     cover_size: Option<u32>,
     /// Optional callback invoked when the card is clicked.
     on_card_clicked: Option<Rc<dyn Fn()>>,
+    /// Callback invoked when the selection checkbox is toggled.
+    on_selection_toggled: Option<Rc<dyn Fn(bool)>>,
+    /// Whether the card is initially selected.
+    selected: bool,
 }
 
 impl ArtistCardBuilder {
@@ -815,6 +1119,39 @@ impl ArtistCardBuilder {
         self
     }
 
+    /// Sets the callback for when the selection checkbox is toggled.
+    ///
+    /// # Arguments
+    ///
+    /// * `callback` - Function to call with the new selection state (true = selected)
+    ///
+    /// # Returns
+    ///
+    /// The builder instance for method chaining.
+    #[must_use]
+    pub fn on_selection_toggled<F>(mut self, callback: F) -> Self
+    where
+        F: Fn(bool) + 'static,
+    {
+        self.on_selection_toggled = Some(Rc::new(callback));
+        self
+    }
+
+    /// Sets whether the card is initially selected.
+    ///
+    /// # Arguments
+    ///
+    /// * `selected` - Whether the card is selected
+    ///
+    /// # Returns
+    ///
+    /// The builder instance for method chaining.
+    #[must_use]
+    pub fn selected(mut self, selected: bool) -> Self {
+        self.selected = selected;
+        self
+    }
+
     /// Builds the `ArtistCard` component.
     ///
     /// # Returns
@@ -830,7 +1167,13 @@ impl ArtistCardBuilder {
             .artist
             .ok_or_else(|| BuilderError("Artist must be set".to_string()))?;
         let cover_size = self.cover_size.unwrap_or(180);
-        Ok(ArtistCard::new(&artist, cover_size, self.on_card_clicked))
+        Ok(ArtistCard::new(
+            &artist,
+            cover_size,
+            self.on_card_clicked,
+            self.on_selection_toggled.as_ref(),
+            self.selected,
+        ))
     }
 }
 
@@ -875,7 +1218,7 @@ mod tests {
             updated_at: None,
         };
 
-        let card = ArtistCard::new(&artist, 180, None);
+        let card = ArtistCard::new(&artist, 180, None, None, false);
 
         assert_eq!(card.name_label.label(), "Test Artist");
         assert_eq!(card.album_count_label.label(), "5 Albums");
@@ -951,7 +1294,7 @@ mod tests {
             ..Artist::default()
         };
 
-        let card = ArtistCard::new(&artist, 180, None);
+        let card = ArtistCard::new(&artist, 180, None, None, false);
 
         card.update_cover_size(250)?;
 
@@ -974,7 +1317,7 @@ mod tests {
             ..Artist::default()
         };
 
-        let card = ArtistCard::new(&artist, 120, None);
+        let card = ArtistCard::new(&artist, 120, None, None, false);
 
         assert_eq!(card.name_label.label(), "Test Artist");
         assert_eq!(card.album_count_label.label(), "2 Albums");
@@ -990,7 +1333,7 @@ mod tests {
             ..Artist::default()
         };
 
-        let card = ArtistCard::new(&artist, 400, None);
+        let card = ArtistCard::new(&artist, 400, None, None, false);
 
         assert_eq!(card.name_label.label(), "Test Artist");
         assert_eq!(card.album_count_label.label(), "10 Albums");
@@ -1006,7 +1349,7 @@ mod tests {
             ..Artist::default()
         };
 
-        let card = ArtistCard::new(&artist, 180, None);
+        let card = ArtistCard::new(&artist, 180, None, None, false);
 
         assert_eq!(
             card.name_label.label(),

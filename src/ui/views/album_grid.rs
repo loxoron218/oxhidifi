@@ -4,7 +4,12 @@
 //! in a responsive grid layout with cover art, DR badges, and metadata,
 //! supporting virtual scrolling for large datasets and real-time filtering.
 
-use std::{cell::RefCell, collections::HashSet, rc::Rc, sync::Arc};
+use std::{
+    cell::{Cell, RefCell},
+    collections::HashSet,
+    rc::Rc,
+    sync::Arc,
+};
 
 use {
     libadwaita::{
@@ -17,7 +22,7 @@ use {
             SelectionMode::None as SelectionNone,
             Widget,
         },
-        prelude::{AccessibleExt, BoxExt, Cast, ObjectExt, WidgetExt},
+        prelude::{AccessibleExt, BoxExt, Cast, CheckButtonExt, ObjectExt, WidgetExt},
     },
     tracing::{debug, error, warn},
 };
@@ -34,9 +39,10 @@ use crate::{
             AppState,
             AppStateEvent::{
                 CurrentTrackChanged, MetadataOverlaysChanged, PlaybackStateChanged, QueueChanged,
-                SettingsChanged, YearDisplayModeChanged,
+                SelectionChanged, SettingsChanged, YearDisplayModeChanged,
             },
             LibraryState,
+            LibraryTab::Albums,
             NavigationState::AlbumDetail,
         },
         zoom_manager::ZoomEvent::GridZoomChanged,
@@ -230,12 +236,16 @@ pub struct AlbumGridView {
     pub current_sort: AlbumSortCriteria,
     /// References to album card instances for dynamic updates.
     pub album_cards: Rc<RefCell<Vec<AlbumCard>>>,
+    /// Flag to prevent feedback loops during selection sync.
+    pub is_syncing_selection: Rc<Cell<bool>>,
     /// Zoom subscription handle for cleanup.
     zoom_subscription_handle: Option<JoinHandle<()>>,
     /// Settings subscription handle for cleanup.
     settings_subscription_handle: Option<JoinHandle<()>>,
     /// Playback subscription handle for cleanup.
     playback_subscription_handle: Option<JoinHandle<()>>,
+    /// Selection subscription handle for cleanup.
+    selection_subscription_handle: Option<JoinHandle<()>>,
 }
 
 /// Configuration for `AlbumGridView` display options.
@@ -289,6 +299,7 @@ impl AlbumGridView {
             Self::create_main_container(&flow_box, app_state);
 
         let album_cards = Rc::new(RefCell::new(Vec::new()));
+        let is_syncing_selection = Rc::new(Cell::new(false));
 
         let zoom_subscription_handle = app_state
             .map(|state| Self::create_zoom_subscription(state, &flow_box, &config, &album_cards));
@@ -298,6 +309,10 @@ impl AlbumGridView {
 
         let playback_subscription_handle =
             app_state.map(|state| Self::create_playback_subscription(state, &album_cards));
+
+        let selection_subscription_handle = app_state.map(|state| {
+            Self::create_selection_subscription(state, &album_cards, &is_syncing_selection)
+        });
 
         let mut view = Self {
             widget: main_container.upcast_ref::<Widget>().clone(),
@@ -314,9 +329,11 @@ impl AlbumGridView {
             search_empty_state,
             current_sort: AlbumSortCriteria::Title,
             album_cards,
+            is_syncing_selection,
             zoom_subscription_handle,
             settings_subscription_handle,
             playback_subscription_handle,
+            selection_subscription_handle,
         };
 
         view.set_albums(albums);
@@ -561,6 +578,47 @@ impl AlbumGridView {
         })
     }
 
+    /// Creates the selection subscription handler.
+    ///
+    /// # Arguments
+    ///
+    /// * `app_state` - Application state reference
+    /// * `album_cards` - The album cards reference
+    ///
+    /// # Returns
+    ///
+    /// A join handle for the subscription.
+    fn create_selection_subscription(
+        app_state: &Arc<AppState>,
+        album_cards: &Rc<RefCell<Vec<AlbumCard>>>,
+        is_syncing: &Rc<Cell<bool>>,
+    ) -> JoinHandle<()> {
+        let state_clone = Arc::clone(app_state);
+        let album_cards_clone = Rc::clone(album_cards);
+        let is_syncing_clone = Rc::clone(is_syncing);
+        MainContext::default().spawn_local(async move {
+            let rx = state_clone.subscribe();
+            while let Ok(event) = rx.recv().await {
+                if let SelectionChanged { tab, selected_ids } = event.as_ref()
+                    && matches!(tab, Albums)
+                {
+                    is_syncing_clone.set(true);
+                    let has_selection = !selected_ids.is_empty();
+                    let cards = album_cards_clone.borrow();
+                    for card in cards.iter() {
+                        let is_selected = selected_ids.contains(&card.album_id);
+                        card.selection_checkbox.set_visible(has_selection);
+                        card.selection_checkbox.set_can_target(has_selection);
+                        if card.selection_checkbox.is_active() != is_selected {
+                            card.set_selection_state(is_selected);
+                        }
+                    }
+                    is_syncing_clone.set(false);
+                }
+            }
+        })
+    }
+
     /// Creates the playback subscription handler.
     ///
     /// # Arguments
@@ -736,6 +794,19 @@ impl AlbumGridView {
 
         let (show_dr_badge, show_metadata_overlays) = self.get_visibility_settings();
 
+        let album_id = album.id;
+        let app_state_clone = self.app_state.clone();
+        let album_cards_clone = Rc::clone(&self.album_cards);
+        let is_selected = app_state_clone
+            .as_ref()
+            .is_some_and(|state| state.is_album_selected(album_id));
+
+        let any_selected = app_state_clone
+            .as_ref()
+            .is_some_and(|state| state.has_selected_albums());
+
+        let is_syncing_for_toggle = Rc::clone(&self.is_syncing_selection);
+
         let mut album_card = AlbumCard::builder()
             .album(album.clone())
             .artist_name(artist_name)
@@ -745,7 +816,31 @@ impl AlbumGridView {
             .cover_size(Self::cover_size_to_u32(cover_size_i32))
             .on_play_clicked(self.create_play_callback(album))
             .on_card_clicked(self.create_card_click_callback(album))
+            .selected(is_selected)
+            .on_selection_toggled(move |selected| {
+                if is_syncing_for_toggle.get() {
+                    return;
+                }
+
+                if let Some(state) = &app_state_clone {
+                    if selected {
+                        state.select_album(album_id);
+                    } else {
+                        state.deselect_album(album_id);
+                    }
+                    let has_selection = state.has_selected_albums();
+                    for card in album_cards_clone.borrow().iter() {
+                        card.selection_checkbox.set_visible(has_selection);
+                        card.selection_checkbox.set_can_target(has_selection);
+                    }
+                }
+            })
             .build()?;
+
+        if any_selected {
+            album_card.selection_checkbox.set_visible(true);
+            album_card.selection_checkbox.set_can_target(true);
+        }
 
         // Apply metadata overlay visibility setting
         album_card.update_metadata_overlay_visibility(show_metadata_overlays);
@@ -1013,6 +1108,9 @@ impl AlbumGridView {
             handle.abort();
         }
         if let Some(handle) = self.playback_subscription_handle.take() {
+            handle.abort();
+        }
+        if let Some(handle) = self.selection_subscription_handle.take() {
             handle.abort();
         }
     }

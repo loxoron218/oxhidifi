@@ -12,12 +12,14 @@ use std::sync::Arc;
 use libadwaita::{
     glib::{BoxedAnyObject, JoinHandle, Object},
     gtk::{
-        ColumnView, ColumnViewColumn, CustomSorter, Label, ListItem, ListItemFactory,
+        Align::Center,
+        CheckButton, ColumnView, ColumnViewColumn, CustomSorter, Label, ListItem, ListItemFactory,
+        MultiSelection,
         Ordering::{self, Equal, Larger, Smaller},
         SignalListItemFactory,
         pango::EllipsizeMode::End,
     },
-    prelude::{Cast, ListItemExt, WidgetExt},
+    prelude::{Cast, CheckButtonExt, ListItemExt, ObjectExt, SelectionModelExt, WidgetExt},
 };
 
 use crate::{
@@ -27,6 +29,89 @@ use crate::{
     state::app_state::AppState,
     ui::views::column_view_types::ArtistNameCache,
 };
+
+/// Context for playback-related operations.
+pub struct PlaybackContext<'a> {
+    /// Library database for track lookups.
+    pub library_db: Option<&'a Arc<LibraryDatabase>>,
+    /// Audio engine for playback operations.
+    pub audio_engine: Option<&'a Arc<AudioEngine>>,
+    /// Queue manager for queue management.
+    pub queue_manager: Option<&'a Arc<QueueManager>>,
+    /// Application state for UI updates.
+    pub app_state: Option<&'a Arc<AppState>>,
+}
+
+/// Sets up the selection column with checkboxes.
+///
+/// # Arguments
+///
+/// * `column_view` - Column view to add column to
+/// * `selection_model` - Selection model for the column view
+/// * `fixed_width` - Fixed width for the column
+pub fn setup_selection_column(
+    column_view: &mut ColumnView,
+    selection_model: &MultiSelection,
+    fixed_width: i32,
+) {
+    let factory = SignalListItemFactory::new();
+    let selection_model = selection_model.clone();
+
+    let selection_model_setup = selection_model;
+    factory.connect_setup(move |_, list_item_obj| {
+        let check_button = CheckButton::builder().halign(Center).valign(Center).build();
+
+        let selection_model_clone = selection_model_setup.clone();
+        let list_item_weak = list_item_obj.downgrade();
+
+        check_button.connect_toggled(move |cb| {
+            if let Some(list_item) = list_item_weak.upgrade() {
+                let position = list_item.property::<u32>("position");
+                let is_active = cb.is_active();
+
+                if selection_model_clone.is_selected(position) != is_active {
+                    if is_active {
+                        selection_model_clone.select_item(position, false);
+                    } else {
+                        selection_model_clone.unselect_item(position);
+                    }
+                }
+            }
+        });
+
+        // Manually track changes to the "selected" property if it exists.
+        // We use connect_notify_local to avoid Send/Sync requirements for the closure.
+        let checkbox_weak = check_button.downgrade();
+        list_item_obj.connect_notify_local(Some("selected"), move |obj, _| {
+            if let Some(checkbox) = checkbox_weak.upgrade()
+                && let Ok(selected) = obj.property_value("selected").get::<bool>()
+                && checkbox.is_active() != selected
+            {
+                checkbox.set_active(selected);
+            }
+        });
+
+        // Use property access instead of downcast to ListItem to be safe with ColumnViewCell
+        list_item_obj.set_property("child", Some(&check_button));
+    });
+
+    factory.connect_bind(move |_, list_item_obj| {
+        if let Some(checkbox) = list_item_obj.property::<Option<CheckButton>>("child")
+            && let Ok(selected) = list_item_obj.property_value("selected").get::<bool>()
+        {
+            checkbox.set_active(selected);
+        }
+    });
+
+    let column = ColumnViewColumn::builder()
+        .title("")
+        .fixed_width(fixed_width)
+        .resizable(false)
+        .factory(&factory)
+        .build();
+
+    column_view.insert_column(0, &column);
+}
 
 /// Sets up the cover art column.
 ///
@@ -64,10 +149,7 @@ pub fn setup_dr_column(column_view: &mut ColumnView, fixed_width: i32, show_dr_b
 /// # Arguments
 ///
 /// * `column_view` - Column view to add column to
-/// * `library_db` - Optional library database
-/// * `audio_engine` - Optional audio engine
-/// * `queue_manager` - Optional queue manager
-/// * `app_state` - Optional app state for updating UI
+/// * `playback_context` - Playback context with optional dependencies
 /// * `fixed_width` - Fixed width for the column
 ///
 /// # Returns
@@ -75,18 +157,15 @@ pub fn setup_dr_column(column_view: &mut ColumnView, fixed_width: i32, show_dr_b
 /// An optional join handle for the state subscription.
 pub fn setup_play_button_column(
     column_view: &mut ColumnView,
-    library_db: Option<&Arc<LibraryDatabase>>,
-    audio_engine: Option<&Arc<AudioEngine>>,
-    queue_manager: Option<&Arc<QueueManager>>,
-    app_state: Option<&Arc<AppState>>,
+    playback_context: &PlaybackContext<'_>,
     fixed_width: i32,
 ) -> Option<JoinHandle<()>> {
     playback_columns::setup_play_button_column(
         column_view,
-        library_db,
-        audio_engine,
-        queue_manager,
-        app_state,
+        playback_context.library_db,
+        playback_context.audio_engine,
+        playback_context.queue_manager,
+        playback_context.app_state,
         fixed_width,
     )
 }
@@ -305,11 +384,9 @@ pub fn setup_channels_column(column_view: &mut ColumnView, fixed_width: i32) {
 /// # Arguments
 ///
 /// * `column_view` - Column view to add columns to
+/// * `selection_model` - Selection model for the column view
 /// * `artist_name_cache` - Cache of artist names for lookup
-/// * `library_db` - Optional library database for fetching tracks
-/// * `audio_engine` - Optional audio engine for playback
-/// * `queue_manager` - Optional queue manager for queue operations
-/// * `app_state` - Optional app state for updating UI
+/// * `playback_context` - Playback context with optional dependencies
 /// * `show_dr_badges` - Whether to show DR badges
 ///
 /// # Returns
@@ -317,13 +394,12 @@ pub fn setup_channels_column(column_view: &mut ColumnView, fixed_width: i32) {
 /// An optional join handle for the play button state subscription.
 pub fn setup_album_columns(
     column_view: &mut ColumnView,
+    selection_model: &MultiSelection,
     artist_name_cache: &ArtistNameCache,
-    library_db: Option<&Arc<LibraryDatabase>>,
-    audio_engine: Option<&Arc<AudioEngine>>,
-    queue_manager: Option<&Arc<QueueManager>>,
-    app_state: Option<&Arc<AppState>>,
+    playback_context: &PlaybackContext<'_>,
     show_dr_badges: bool,
 ) -> Option<JoinHandle<()>> {
+    setup_selection_column(column_view, selection_model, 40);
     setup_cover_art_column(column_view, 48);
     setup_title_column(column_view);
     setup_artist_column(column_view, artist_name_cache, 200);
@@ -334,12 +410,5 @@ pub fn setup_album_columns(
     setup_sample_rate_column(column_view, 100);
     setup_channels_column(column_view, 80);
     setup_dr_column(column_view, 60, show_dr_badges);
-    setup_play_button_column(
-        column_view,
-        library_db,
-        audio_engine,
-        queue_manager,
-        app_state,
-        48,
-    )
+    setup_play_button_column(column_view, playback_context, 48)
 }

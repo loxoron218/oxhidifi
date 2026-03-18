@@ -206,6 +206,24 @@ pub struct HeaderBar {
     pub clearing_search: Arc<AtomicBool>,
     /// Current search display mode.
     search_display_mode: Arc<Mutex<SearchDisplayMode>>,
+    /// Bulk action button for selection operations.
+    pub bulk_action_button: Button,
+    /// Popover for bulk selection actions.
+    pub bulk_action_popover: Popover,
+    /// Selection toggle in bulk action popover.
+    pub selection_toggle: ToggleButton,
+    /// Selection icon in bulk action popover.
+    pub selection_icon: Image,
+    /// Selection label in bulk action popover.
+    pub selection_label: Label,
+    /// Counter label showing number of selected items.
+    pub selection_counter: Label,
+    /// Bulk action controls box in merged menu (visible in adaptive mode).
+    pub merged_menu_bulk_action_box: Box,
+    /// Selection toggle in merged menu bulk action.
+    pub merged_menu_selection_toggle: ToggleButton,
+    /// Selection counter in merged menu bulk action.
+    pub merged_menu_selection_counter: Label,
 }
 
 impl HeaderBar {
@@ -229,11 +247,10 @@ impl HeaderBar {
     ) -> Self {
         let widget = LibadwaitaHeaderBar::builder().build();
 
-        let back_button = Self::create_back_button(app_state);
-        widget.pack_start(&back_button);
+        let (back_button, search_display_mode) =
+            Self::init_widget_and_back_button(&widget, app_state);
 
         let current_view_mode = app_state.get_library_state().view_mode;
-        let search_display_mode = Arc::new(Mutex::new(SearchDisplayMode::Inline));
 
         let (
             search_button,
@@ -249,29 +266,17 @@ impl HeaderBar {
         widget.pack_start(&search_button);
         widget.pack_start(&search_entry_container);
 
-        let menu = Self::create_view_menu();
+        let (
+            bulk_action_button,
+            bulk_action_popover,
+            selection_toggle,
+            selection_icon,
+            selection_label,
+            selection_counter,
+        ) = Self::init_bulk_action(app_state, &widget);
 
-        let view_split_button = SplitButton::builder()
-            .icon_name(Self::get_view_icon_name(&current_view_mode))
-            .tooltip_text("Toggle View")
-            .menu_model(&menu)
-            .build();
-
-        let (zoom_popover, zoom_out_button, zoom_in_button) = Self::create_zoom_popover();
-        view_split_button.set_popover(Some(&zoom_popover));
-
-        let zoom_timer_handle = Arc::new(Mutex::new(None));
-
-        Self::connect_view_button_handlers(app_state, &view_split_button);
-
-        Self::connect_zoom_button_handlers(app_state, &zoom_out_button, &zoom_in_button);
-
-        Self::setup_zoom_buttons(
-            app_state,
-            &zoom_out_button,
-            &zoom_in_button,
-            &zoom_timer_handle,
-        );
+        let (view_split_button, zoom_popover, zoom_out_button, zoom_in_button, zoom_timer_handle) =
+            Self::init_view_controls(app_state, &current_view_mode);
 
         let application_arc = application.map(Arc::new);
         let settings_button =
@@ -279,7 +284,12 @@ impl HeaderBar {
         widget.pack_end(&settings_button);
         widget.pack_end(&view_split_button);
 
-        let merged_menu_button = Self::create_merged_menu_button(
+        let (
+            merged_menu_button,
+            merged_menu_bulk_action_box,
+            merged_menu_selection_toggle,
+            merged_menu_selection_counter,
+        ) = Self::create_merged_menu_button(
             app_state,
             application_arc.as_ref(),
             library_db.as_ref(),
@@ -322,7 +332,128 @@ impl HeaderBar {
             clearing_search,
             _subscription_handle: subscription_handle,
             search_display_mode,
+            bulk_action_button,
+            bulk_action_popover,
+            selection_toggle,
+            selection_icon,
+            selection_label,
+            selection_counter,
+            merged_menu_bulk_action_box,
+            merged_menu_selection_toggle,
+            merged_menu_selection_counter,
         }
+    }
+
+    /// Initializes the header bar widget and back button.
+    ///
+    /// # Arguments
+    ///
+    /// * `widget` - The header bar widget to pack the back button into
+    /// * `app_state` - Application state reference
+    ///
+    /// # Returns
+    ///
+    /// Tuple of (`back_button`, `search_display_mode`).
+    fn init_widget_and_back_button(
+        widget: &LibadwaitaHeaderBar,
+        app_state: &Arc<AppState>,
+    ) -> (Button, Arc<Mutex<SearchDisplayMode>>) {
+        let back_button = Self::create_back_button(app_state);
+        widget.pack_start(&back_button);
+        let search_display_mode = Arc::new(Mutex::new(SearchDisplayMode::Inline));
+        (back_button, search_display_mode)
+    }
+
+    /// Initializes bulk action components (popover, button, and selection controls).
+    ///
+    /// # Arguments
+    ///
+    /// * `app_state` - Application state reference
+    /// * `widget` - The header bar widget to pack the button into
+    ///
+    /// # Returns
+    ///
+    /// Tuple of (`bulk_action_button`, `bulk_action_popover`, `selection_toggle`,
+    /// `selection_icon`, `selection_label`, `selection_counter`).
+    fn init_bulk_action(
+        app_state: &Arc<AppState>,
+        widget: &LibadwaitaHeaderBar,
+    ) -> (Button, Popover, ToggleButton, Image, Label, Label) {
+        let (
+            bulk_action_popover,
+            selection_toggle,
+            selection_icon,
+            selection_label,
+            selection_counter,
+        ) = Self::create_bulk_action_popover(app_state);
+
+        let bulk_action_button = Self::create_bulk_action_button(&bulk_action_popover);
+
+        bulk_action_popover.set_parent(&bulk_action_button);
+        widget.pack_start(&bulk_action_button);
+
+        (
+            bulk_action_button,
+            bulk_action_popover,
+            selection_toggle,
+            selection_icon,
+            selection_label,
+            selection_counter,
+        )
+    }
+
+    /// Initializes view controls (split button with menu, zoom popover, and zoom buttons).
+    ///
+    /// # Arguments
+    ///
+    /// * `app_state` - Application state reference
+    /// * `current_view_mode` - Current view mode for icon initialization
+    ///
+    /// # Returns
+    ///
+    /// Tuple of (`view_split_button`, `zoom_popover`, `zoom_out_button`,
+    /// `zoom_in_button`, `zoom_timer_handle`).
+    fn init_view_controls(
+        app_state: &Arc<AppState>,
+        current_view_mode: &ViewMode,
+    ) -> (
+        SplitButton,
+        Popover,
+        Button,
+        Button,
+        Arc<Mutex<Option<SourceId>>>,
+    ) {
+        let menu = Self::create_view_menu();
+
+        let view_split_button = SplitButton::builder()
+            .icon_name(Self::get_view_icon_name(current_view_mode))
+            .tooltip_text("Toggle View")
+            .menu_model(&menu)
+            .build();
+
+        let (zoom_popover, zoom_out_button, zoom_in_button) = Self::create_zoom_popover();
+        view_split_button.set_popover(Some(&zoom_popover));
+
+        let zoom_timer_handle = Arc::new(Mutex::new(None));
+
+        Self::connect_view_button_handlers(app_state, &view_split_button);
+
+        Self::connect_zoom_button_handlers(app_state, &zoom_out_button, &zoom_in_button);
+
+        Self::setup_zoom_buttons(
+            app_state,
+            &zoom_out_button,
+            &zoom_in_button,
+            &zoom_timer_handle,
+        );
+
+        (
+            view_split_button,
+            zoom_popover,
+            zoom_out_button,
+            zoom_in_button,
+            zoom_timer_handle,
+        )
     }
 
     /// Creates and configures the back button.
@@ -350,6 +481,30 @@ impl HeaderBar {
         });
 
         back_button
+    }
+
+    /// Creates and configures the selection toggle button.
+    ///
+    /// # Arguments
+    ///
+    /// * `popover` - The popover to display when clicked
+    ///
+    /// # Returns
+    ///
+    /// Configured bulk action button widget.
+    fn create_bulk_action_button(popover: &Popover) -> Button {
+        let bulk_action_button = Button::builder()
+            .icon_name("applications-utilities-symbolic")
+            .tooltip_text("Bulk Actions")
+            .visible(false)
+            .build();
+
+        let popover_clone = popover.clone();
+        bulk_action_button.connect_clicked(move |_button| {
+            popover_clone.popup();
+        });
+
+        bulk_action_button
     }
 
     /// Creates search entry, button, and connects debounced search functionality.
@@ -751,17 +906,17 @@ impl HeaderBar {
     ///
     /// Tuple of (`zoom_popover`, `zoom_out_button`, `zoom_in_button`).
     fn create_zoom_popover() -> (Popover, Button, Button) {
-        let zoom_box = Box::builder().orientation(Vertical).spacing(6).build();
-
-        // Create main horizontal container for label and zoom buttons
-        let zoom_controls_box = Box::builder()
-            .orientation(Horizontal)
+        let zoom_box = Box::builder()
+            .orientation(Vertical)
             .spacing(6)
             .margin_start(6)
             .margin_end(6)
             .margin_top(6)
             .margin_bottom(6)
             .build();
+
+        // Create main horizontal container for label and zoom buttons
+        let zoom_controls_box = Box::builder().orientation(Horizontal).spacing(6).build();
 
         // Add "Icon Size" label
         let icon_size_label = Label::builder().label("Icon Size").build();
@@ -804,7 +959,100 @@ impl HeaderBar {
         (zoom_popover, zoom_out_button, zoom_in_button)
     }
 
-    /// Connects view button handlers for mode toggling and zoom controls.
+    /// Creates the bulk action popover with selection toggle.
+    ///
+    /// # Arguments
+    ///
+    /// * `app_state` - Application state reference for selection operations
+    ///
+    /// # Returns
+    ///
+    /// Tuple of (`bulk_action_popover`, `selection_toggle`, `selection_icon`, `selection_label`,
+    /// `selection_counter`).
+    fn create_bulk_action_popover(
+        app_state: &Arc<AppState>,
+    ) -> (Popover, ToggleButton, Image, Label, Label) {
+        let selection_label = Label::builder().label("Select All").build();
+        let selection_counter = Label::builder().label("0 selected").build();
+
+        let popover_container = Box::builder()
+            .orientation(Vertical)
+            .spacing(6)
+            .hexpand(true)
+            .margin_start(6)
+            .margin_end(6)
+            .margin_top(6)
+            .margin_bottom(6)
+            .build();
+
+        popover_container.append(&selection_counter);
+
+        let horizontal_box = Box::builder()
+            .orientation(Horizontal)
+            .spacing(6)
+            .hexpand(true)
+            .build();
+
+        let icon = Image::builder()
+            .icon_name("edit-select-all-symbolic")
+            .build();
+        horizontal_box.append(&icon);
+        horizontal_box.append(&selection_label);
+
+        let selection_toggle = ToggleButton::builder()
+            .child(&horizontal_box)
+            .css_classes(["flat"])
+            .hexpand(true)
+            .build();
+
+        popover_container.append(&selection_toggle);
+
+        let popover = Popover::builder()
+            .child(&popover_container)
+            .has_arrow(true)
+            .autohide(true)
+            .build();
+
+        let state_for_toggle = Arc::clone(app_state);
+        let icon_for_toggle = icon.clone();
+        selection_toggle.connect_clicked(move |_toggle| {
+            let state = state_for_toggle.as_ref().get_library_state();
+
+            let all_selected = match state.current_tab {
+                Albums => {
+                    !state.albums.is_empty() && state.selected_album_ids.len() == state.albums.len()
+                }
+                Artists => {
+                    !state.artists.is_empty()
+                        && state.selected_artist_ids.len() == state.artists.len()
+                }
+            };
+
+            if all_selected {
+                icon_for_toggle.set_icon_name(Some("edit-select-all-symbolic"));
+                match state.current_tab {
+                    Albums => state_for_toggle.clear_album_selection(),
+                    Artists => state_for_toggle.clear_artist_selection(),
+                }
+            } else {
+                icon_for_toggle.set_icon_name(Some("edit-delete-symbolic"));
+                match state.current_tab {
+                    Albums => state_for_toggle.select_all_albums(),
+                    Artists => state_for_toggle.select_all_artists(),
+                }
+            }
+        });
+
+        (
+            popover,
+            selection_toggle,
+            icon,
+            selection_label,
+            selection_counter,
+        )
+    }
+
+    /// Creates and configures the bulk action button.
     ///
     /// # Arguments
     ///
@@ -1003,14 +1251,14 @@ impl HeaderBar {
     ///
     /// # Returns
     ///
-    /// A `MenuButton` for smallest screens with popover menu.
+    /// Tuple of (`MenuButton`, `bulk_action_box`, `selection_toggle`, `selection_counter`).
     fn create_merged_menu_button(
         app_state: &Arc<AppState>,
         application: Option<&Arc<Application>>,
         library_db: Option<&Arc<LibraryDatabase>>,
         view_split_button: &SplitButton,
         zoom_timer_handle: &Arc<Mutex<Option<SourceId>>>,
-    ) -> MenuButton {
+    ) -> (MenuButton, Box, ToggleButton, Label) {
         let menu = Menu::new();
 
         let view_item = MenuItem::new(Some("Toggle View"), None);
@@ -1018,32 +1266,6 @@ impl HeaderBar {
             view_item.set_icon(&icon);
         }
         menu.append_item(&view_item);
-
-        let set_mode_action = SimpleAction::new("view.set-mode-mobile", Some(VariantTy::INT32));
-        let state_for_view = Arc::clone(app_state);
-        let view_icon_for_action = view_split_button
-            .icon_name()
-            .as_deref()
-            .unwrap_or("view-grid-symbolic")
-            .to_string();
-
-        set_mode_action.connect_activate(move |_action, parameter: Option<&Variant>| {
-            let Some(param) = parameter else {
-                return;
-            };
-            let Some(mode_value) = param.get::<i32>() else {
-                return;
-            };
-            let new_mode = match mode_value {
-                0 => Grid,
-                1 => List,
-                _ => return,
-            };
-            let current_state = state_for_view.get_library_state();
-            if current_state.view_mode != new_mode {
-                state_for_view.update_view_options(current_state.current_tab, new_mode);
-            }
-        });
 
         let menu_box = Box::builder()
             .orientation(Vertical)
@@ -1054,8 +1276,22 @@ impl HeaderBar {
             .margin_bottom(6)
             .build();
 
+        let view_icon_for_action = view_split_button
+            .icon_name()
+            .as_deref()
+            .unwrap_or("view-grid-symbolic")
+            .to_string();
+
         let view_toggle_button = Self::create_view_toggle_button(app_state, view_icon_for_action);
         menu_box.append(&view_toggle_button);
+
+        let bulk_action_separator = Separator::new(Horizontal);
+        menu_box.append(&bulk_action_separator);
+
+        let (bulk_action_box, merged_menu_selection_toggle, merged_menu_selection_counter) =
+            Self::create_merged_menu_bulk_action(app_state);
+
+        menu_box.append(&bulk_action_box);
 
         let separator = Separator::new(Horizontal);
         menu_box.append(&separator);
@@ -1079,12 +1315,103 @@ impl HeaderBar {
             }
         });
 
-        MenuButton::builder()
+        let menu_button = MenuButton::builder()
             .icon_name("open-menu-symbolic")
             .tooltip_text("Menu")
             .popover(&popover)
             .use_underline(true)
-            .build()
+            .build();
+
+        (
+            menu_button,
+            bulk_action_box,
+            merged_menu_selection_toggle,
+            merged_menu_selection_counter,
+        )
+    }
+
+    /// Creates the bulk action controls for the merged menu.
+    ///
+    /// # Arguments
+    ///
+    /// * `app_state` - Application state reference
+    ///
+    /// # Returns
+    ///
+    /// Tuple of (`bulk_action_box`, `selection_toggle`, `selection_counter`).
+    fn create_merged_menu_bulk_action(app_state: &Arc<AppState>) -> (Box, ToggleButton, Label) {
+        let bulk_action_box = Box::builder()
+            .orientation(Vertical)
+            .spacing(6)
+            .hexpand(true)
+            .margin_top(6)
+            .visible(false)
+            .build();
+
+        let merged_menu_selection_counter = Label::builder()
+            .label("0 selected")
+            .halign(Start)
+            .hexpand(true)
+            .build();
+        bulk_action_box.append(&merged_menu_selection_counter);
+
+        let horizontal_box = Box::builder()
+            .orientation(Horizontal)
+            .spacing(6)
+            .hexpand(true)
+            .build();
+
+        let icon = Image::builder()
+            .icon_name("edit-select-all-symbolic")
+            .build();
+        horizontal_box.append(&icon);
+
+        let selection_label = Label::builder().label("Select All").build();
+        horizontal_box.append(&selection_label);
+
+        let merged_menu_selection_toggle = ToggleButton::builder()
+            .child(&horizontal_box)
+            .css_classes(["flat"])
+            .hexpand(true)
+            .build();
+
+        let state_for_toggle = Arc::clone(app_state);
+        let icon_for_toggle = icon;
+        merged_menu_selection_toggle.connect_clicked(move |_toggle| {
+            let state = state_for_toggle.as_ref().get_library_state();
+
+            let all_selected = match state.current_tab {
+                Albums => {
+                    !state.albums.is_empty() && state.selected_album_ids.len() == state.albums.len()
+                }
+                Artists => {
+                    !state.artists.is_empty()
+                        && state.selected_artist_ids.len() == state.artists.len()
+                }
+            };
+
+            if all_selected {
+                icon_for_toggle.set_icon_name(Some("edit-delete-symbolic"));
+                match state.current_tab {
+                    Albums => state_for_toggle.clear_album_selection(),
+                    Artists => state_for_toggle.clear_artist_selection(),
+                }
+            } else {
+                icon_for_toggle.set_icon_name(Some("edit-select-all-symbolic"));
+                match state.current_tab {
+                    Albums => state_for_toggle.select_all_albums(),
+                    Artists => state_for_toggle.select_all_artists(),
+                }
+            }
+        });
+
+        bulk_action_box.append(&merged_menu_selection_toggle);
+
+        (
+            bulk_action_box,
+            merged_menu_selection_toggle,
+            merged_menu_selection_counter,
+        )
     }
 
     /// Creates a button to toggle between grid and list view modes.
@@ -1448,6 +1775,9 @@ impl HeaderBar {
 
                 debug!("Switching to Albums tab");
 
+                // Clear artist selection when switching tabs
+                state_clone_album.clear_artist_selection();
+
                 // Update app state using lightweight navigation update
                 state_clone_album.update_view_options(Albums, current_state.view_mode);
 
@@ -1467,6 +1797,9 @@ impl HeaderBar {
                 }
 
                 debug!("Switching to Artists tab");
+
+                // Clear album selection when switching tabs
+                state_clone_artist.clear_album_selection();
 
                 // Update app state using lightweight navigation update
                 state_clone_artist.update_view_options(Artists, current_state.view_mode);
@@ -1640,6 +1973,10 @@ impl HeaderBar {
             self.settings_button.set_visible(false);
             self.view_split_button.set_visible(false);
             self.merged_menu_button.set_visible(true);
+            self.bulk_action_button.set_visible(false);
+
+            let is_on_library = matches!(self.app_state.get_navigation_state(), Library);
+            self.merged_menu_bulk_action_box.set_visible(is_on_library);
 
             // Hide the inline entry, show the search bar
             self.search_entry_container.set_visible(false);
@@ -1659,6 +1996,8 @@ impl HeaderBar {
             self.settings_button.set_visible(true);
             self.view_split_button.set_visible(true);
             self.merged_menu_button.set_visible(false);
+            self.bulk_action_button.set_visible(true);
+            self.merged_menu_bulk_action_box.set_visible(false);
 
             // Wrap the UI state updates in clearing_search to prevent synchronous
             // search-changed signals from clearing the AppState filter.

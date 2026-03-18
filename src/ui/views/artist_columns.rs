@@ -9,12 +9,13 @@ use libadwaita::{
     glib::{BoxedAnyObject, Object},
     gtk::{
         Align::Center,
-        ColumnView, ColumnViewColumn, CustomSorter, Image, Label, ListItem, ListItemFactory,
+        CheckButton, ColumnView, ColumnViewColumn, CustomSorter, Image, Label, ListItem,
+        ListItemFactory, MultiSelection,
         Ordering::{self, Equal, Larger, Smaller},
         SignalListItemFactory,
         pango::EllipsizeMode::End,
     },
-    prelude::{Cast, ListItemExt, WidgetExt},
+    prelude::{Cast, CheckButtonExt, ListItemExt, ObjectExt, SelectionModelExt, WidgetExt},
 };
 
 use crate::{library::models::Artist, ui::views::column_view_types::ColumnListViewConfig};
@@ -24,11 +25,88 @@ use crate::{library::models::Artist, ui::views::column_view_types::ColumnListVie
 /// # Arguments
 ///
 /// * `column_view` - Column view to add columns to
+/// * `selection_model` - Selection model for the column view
 /// * `_config` - Configuration options for the column view
-pub fn setup_artist_columns(column_view: &mut ColumnView, _config: &ColumnListViewConfig) {
+pub fn setup_artist_columns(
+    column_view: &mut ColumnView,
+    selection_model: &MultiSelection,
+    _config: &ColumnListViewConfig,
+) {
+    setup_artist_selection_column(column_view, selection_model, 40);
     setup_artist_cover_art_column(column_view, 48);
     setup_artist_name_column(column_view);
     setup_album_count_column(column_view, 100);
+}
+
+/// Sets up the selection column with checkboxes for artists.
+///
+/// # Arguments
+///
+/// * `column_view` - Column view to add column to
+/// * `selection_model` - Selection model for the column view
+/// * `fixed_width` - Fixed width for the column
+fn setup_artist_selection_column(
+    column_view: &ColumnView,
+    selection_model: &MultiSelection,
+    fixed_width: i32,
+) {
+    let factory = SignalListItemFactory::new();
+    let selection_model = selection_model.clone();
+
+    let selection_model_setup = selection_model;
+    factory.connect_setup(move |_, list_item_obj| {
+        let check_button = CheckButton::builder().halign(Center).valign(Center).build();
+
+        let selection_model_clone = selection_model_setup.clone();
+        let list_item_weak = list_item_obj.downgrade();
+
+        check_button.connect_toggled(move |cb| {
+            if let Some(list_item) = list_item_weak.upgrade() {
+                let position = list_item.property::<u32>("position");
+                let is_active = cb.is_active();
+
+                if selection_model_clone.is_selected(position) != is_active {
+                    if is_active {
+                        selection_model_clone.select_item(position, false);
+                    } else {
+                        selection_model_clone.unselect_item(position);
+                    }
+                }
+            }
+        });
+
+        // Manually track changes to the "selected" property if it exists.
+        // We use connect_notify_local to avoid Send/Sync requirements for the closure.
+        let checkbox_weak = check_button.downgrade();
+        list_item_obj.connect_notify_local(Some("selected"), move |obj, _| {
+            if let Some(checkbox) = checkbox_weak.upgrade()
+                && let Ok(selected) = obj.property_value("selected").get::<bool>()
+                && checkbox.is_active() != selected
+            {
+                checkbox.set_active(selected);
+            }
+        });
+
+        // Use property access instead of downcast to ListItem to be safe with ColumnViewCell
+        list_item_obj.set_property("child", Some(&check_button));
+    });
+
+    factory.connect_bind(move |_, list_item_obj| {
+        if let Some(checkbox) = list_item_obj.property::<Option<CheckButton>>("child")
+            && let Ok(selected) = list_item_obj.property_value("selected").get::<bool>()
+        {
+            checkbox.set_active(selected);
+        }
+    });
+
+    let column = ColumnViewColumn::builder()
+        .title("")
+        .fixed_width(fixed_width)
+        .resizable(false)
+        .factory(&factory)
+        .build();
+
+    column_view.insert_column(0, &column);
 }
 
 /// Sets up the artist cover art column (column 1).

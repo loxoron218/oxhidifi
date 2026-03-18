@@ -102,7 +102,7 @@ mod ui_compliance_tests {
             bail!("Expected non-None accessible role, got None");
         }
 
-        let artist_grid = ArtistGridView::new(Some(app_state_arc), Vec::new(), false);
+        let artist_grid = ArtistGridView::new(Some(&app_state_arc), Vec::new(), false);
         if artist_grid.flow_box.accessible_role() == AccessibleNone {
             bail!("Expected non-None accessible role, got None");
         }
