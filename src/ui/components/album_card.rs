@@ -682,7 +682,7 @@ impl AlbumCard {
             .vexpand(false)
             .width_request(64)
             .spacing(6)
-            .css_classes(["album-tile", "card"])
+            .css_classes(["album-tile"])
             .build();
 
         album_tile.append(cover_container);

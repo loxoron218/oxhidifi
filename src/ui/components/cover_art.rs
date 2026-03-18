@@ -166,7 +166,7 @@ impl CoverArt {
             .vexpand(false)
             .width_request(width)
             .height_request(height)
-            .css_classes(["cover-art-container", "card"]);
+            .css_classes(["cover-art-container"]);
 
         if let Some(c) = child {
             builder = builder.child(c);
