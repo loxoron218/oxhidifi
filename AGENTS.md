@@ -65,7 +65,7 @@ src/
 
 **Lint & Format:**
 ```bash
-cargo fmt && cargo clippy --fix --allow-dirty --all-targets -- -W clippy::pedantic
+cargo clippy --fix --allow-dirty --all-targets -- -W clippy::pedantic && cargo fmt
 ```
 
 **Add blank lines before single-line comments after braces/semicolons:**
@@ -104,6 +104,10 @@ cargo bench         # Run benchmarks
 **Tests:** Return `anyhow::Result` with `bail!` for assertions, or `()` for simple tests
 
 **Rules:**
+- Prefer `?` over `match` chains
+- In async code (Tokio), errors MUST be `Send + Sync + 'static` in tasks
+- NEVER use `Box<dyn std::error::Error>` in libraries unless truly needed
+- For simple recovery, use `if let Ok(..) else { ... }`
 - NEVER leak `anyhow::Error` across library boundaries
 - NEVER use `let _`, `.unwrap()`, `.expect()` or `.ok()`, return errors with context instead
 - NEVER use `println!`, `eprintln!`, or `dbg!` for output
