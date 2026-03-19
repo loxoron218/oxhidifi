@@ -65,12 +65,12 @@
 .play-overlay {
     background-color: rgba(0, 0, 0, 0.6);
     opacity: 0;
-    transition: opacity 250ms ease;
+    transition: opacity 200ms ease;
 }
 
 .cover-play-button {
     opacity: 0;
-    transition: opacity 250ms ease;
+    transition: opacity 200ms ease;
 }
 
 /* Show play button when hovering over cover art container */
@@ -84,7 +84,7 @@
 
 /* Base Hi-Fi button styling */
 .hifi-button {
-    transition: all 250ms ease;
+    transition: all 200ms ease;
     padding: 6px;
 }
 
@@ -137,7 +137,7 @@
 
 /* Exclusive mode button styling */
 .exclusive-mode {
-    transition: all 250ms ease;
+    transition: all 200ms ease;
     padding: 6px;
 }
 
@@ -192,7 +192,7 @@
 
 /* Volume button styling */
 .volume-button {
-    transition: all 250ms ease;
+    transition: all 200ms ease;
     padding: 6px;
 }
 
@@ -229,7 +229,7 @@ columnview > header button:hover {
 /* Play button column styling */
 .play-button-column button {
     opacity: 0;
-    transition: opacity 250ms ease;
+    transition: opacity 200ms ease;
 }
 
 .listitem:hover .play-button-column button {
