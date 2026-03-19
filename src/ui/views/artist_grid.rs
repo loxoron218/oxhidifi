@@ -707,8 +707,8 @@ impl ArtistGridView {
                 self.artists.sort_by(|a, b| a.name.cmp(&b.name));
             }
             ArtistSortCriteria::AlbumCount => {
-                // For now, we can't sort by album count without additional data
-                // This would require querying the database or having album counts in state
+                // TODO: Implement album count sorting - requires querying database or having album
+                // counts in state
                 self.artists.sort_by(|a, b| a.name.cmp(&b.name));
             }
         }

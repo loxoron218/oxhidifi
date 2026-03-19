@@ -779,8 +779,7 @@ impl AudioEngine {
 
     /// Handles the pause command.
     async fn handle_pause(&self) {
-        // For now, we'll just stop the stream and keep the track loaded
-        // In a more sophisticated implementation, we'd actually pause the stream
+        // TODO: Implement actual stream pause instead of stopping and restarting
         self.stop_stream().await;
 
         *self.state.write() = PlaybackState::Paused;
@@ -886,8 +885,7 @@ impl AudioEngine {
     /// Returns an error if the playback stream cannot be recreated at the
     /// specified position.
     async fn handle_seek(&self, position_ms: u64) -> Result<(), AudioError> {
-        // For now, we'll stop and restart playback at the new position
-        // A more sophisticated implementation would seek within the current stream
+        // TODO: Implement in-stream seeking instead of stopping and restarting
         let current_state = self.state.read().clone();
         let was_playing = matches!(current_state, PlaybackState::Playing);
 

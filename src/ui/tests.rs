@@ -42,7 +42,7 @@ mod ui_compliance_tests {
         let _album_grid = AlbumGridView::default();
 
         // The margin values should follow GNOME spacing guidelines
-        // This is verified by visual inspection in real implementation
+        // TODO: Verify margin values by visual inspection in real implementation
 
         let _detail_view = DetailView::builder()
             .detail_type(Some(DetailType::Album(Album::default())))
@@ -220,7 +220,7 @@ mod ui_compliance_tests {
         let duration = start_time.elapsed();
 
         // Should be able to create grid with 1000 albums in reasonable time
-        // In real implementation, this would use virtual scrolling for better performance
+        // TODO: Use virtual scrolling for better performance with large datasets
         if duration.as_millis() >= 5000 {
             bail!("Expected <5000ms, got {duration:?}");
         }
@@ -277,7 +277,7 @@ mod ui_compliance_tests {
         }
 
         // After dropping all components, ref count should be back to initial
-        // Note: This may not work perfectly due to GTK's internal references
+        // TODO: Fix GTK internal references issue causing ref count test to be unreliable
         let final_count = Arc::strong_count(&Arc::new(app_state));
         if final_count > initial_ref_count + 2 {
             bail!("Expected <= {}, got {final_count}", initial_ref_count + 2);
@@ -342,7 +342,6 @@ mod ui_compliance_tests {
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
     fn test_smooth_animations_and_transitions() {
-        // Test that views support smooth 60fps animations
-        // This would require actual rendering tests in real implementation
+        // TODO: Implement actual rendering tests for smooth 60fps animations
     }
 }

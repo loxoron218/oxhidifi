@@ -165,9 +165,7 @@ pub fn detect_audio_format<P: AsRef<Path>>(
 
 /// Extracts format and codec names from the probed format reader and track.
 fn extract_format_and_codec(_format_reader: &dyn FormatReader, track: &Track) -> (String, String) {
-    // Determine format based on file extension as a fallback
-    // In a real implementation, we would need to access the actual format reader type
-    // but since it's boxed, we can't easily determine the exact format.
+    // TODO: Determine format from actual format reader type - currently can't access boxed type
     // For now, we'll rely primarily on the codec information.
 
     // Get codec name

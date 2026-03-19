@@ -82,7 +82,7 @@ impl AudioPreferencesPage {
             .map_or_else(|| "System Default".to_string(), Clone::clone);
         device_row.set_subtitle(&device_subtitle);
 
-        // In a complete implementation, this would open a device selection dialog
+        // TODO: Open device selection dialog
         // For now, we'll just show the current device
         let _settings_manager_clone = Arc::clone(&self.settings_manager);
         device_row.connect_activated(move |_| {

@@ -127,7 +127,7 @@ mod view_integration_tests {
         // Test filtering
         album_grid.filter_albums("A");
 
-        // In real implementation, this would verify the filtered results
+        // TODO: Verify the filtered results in actual implementation
 
         // Test sorting by title
         album_grid.sort_albums(Title);

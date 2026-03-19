@@ -566,10 +566,8 @@ impl AlbumGridView {
                         }
                     }
                     YearDisplayModeChanged { mode } => {
-                        // Update all album cards with new year display mode
-                        // For now, this doesn't change anything since we only have release year
-                        // In the future, when original_year is implemented, this will update
-                        // the year labels to show either release or original year
+                        // TODO: Implement year display mode - when original_year is added, update
+                        // year labels to show either release or original year
                         debug!("Year display mode changed to: {}", mode);
                     }
                     _ => {}
