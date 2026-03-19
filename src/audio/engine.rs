@@ -35,7 +35,7 @@ use crate::audio::{
     metadata::{MetadataError, TagReader, TrackMetadata},
     output::{
         AudioConsumer, AudioOutput, OutputConfig,
-        OutputError::{self, RingBufferError},
+        OutputError::{self, RingBufferError, StreamControlError},
     },
     prebuffer::{Prebuffer, PrebufferError},
     producer::AudioProducer,
@@ -649,7 +649,7 @@ impl AudioEngine {
                         self.handle_pause().await;
                     }
                     ControlMessage::Resume => {
-                        if let Err(e) = self.handle_resume().await {
+                        if let Err(e) = self.handle_resume() {
                             error!(error = %e, "Failed to handle resume command");
                         }
                     }
@@ -770,17 +770,32 @@ impl AudioEngine {
     ///
     /// # Errors
     ///
-    /// Returns an error if the playback stream cannot be set up at the
-    /// current position.
-    async fn handle_resume(&self) -> Result<(), AudioError> {
-        let position_ms = self.current_position.load(SeqCst);
-        self.setup_playback_stream(Some(position_ms)).await
+    /// Returns an error if the playback stream cannot be resumed.
+    fn handle_resume(&self) -> Result<(), AudioError> {
+        if let Some(handle) = &*self.stream_handle.read() {
+            handle
+                .stream
+                .play()
+                .map_err(|e| AudioError::OutputError(StreamControlError(e.to_string())))?;
+        }
+
+        *self.state.write() = PlaybackState::Playing;
+        self.notify_state_change();
+
+        Ok(())
     }
 
     /// Handles the pause command.
     async fn handle_pause(&self) {
-        // TODO: Implement actual stream pause instead of stopping and restarting
-        self.stop_stream().await;
+        let pause_result = {
+            let guard = self.stream_handle.read();
+            guard.as_ref().map(|h| h.stream.pause())
+        };
+
+        if let Some(Err(e)) = pause_result {
+            error!(error = %e, "Failed to pause audio stream");
+            self.stop_stream().await;
+        }
 
         *self.state.write() = PlaybackState::Paused;
         self.notify_state_change();

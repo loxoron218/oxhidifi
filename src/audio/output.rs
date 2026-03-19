@@ -15,7 +15,8 @@ use std::{
 use {
     cpal::{
         BufferSize::Default as CpalDefault,
-        BuildStreamError, ChannelCount, Device, Host, OutputCallbackInfo, PlayStreamError,
+        BuildStreamError, ChannelCount, Device, Host, OutputCallbackInfo, PauseStreamError,
+        PlayStreamError,
         SampleFormat::{self, F32, F64, I8, I16, I24, I32, I64, U8, U16, U24, U32, U64},
         Stream, StreamConfig,
         StreamError::{self, BackendSpecific},
@@ -143,6 +144,12 @@ pub enum OutputError {
     /// Failed to start audio stream.
     #[error("Failed to start audio stream: {0}")]
     StreamStartError(#[from] PlayStreamError),
+    /// Failed to pause audio stream.
+    #[error("Failed to pause audio stream: {0}")]
+    StreamPauseError(#[from] PauseStreamError),
+    /// Failed to control audio stream.
+    #[error("Stream control error: {0}")]
+    StreamControlError(String),
     /// No suitable audio device found.
     #[error("No suitable audio device found")]
     NoDeviceFound,
