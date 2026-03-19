@@ -149,7 +149,7 @@ mod tests {
     use crate::ui::components::search_empty_state::{SearchEmptyState, SearchEmptyStateConfig};
 
     #[test]
-    fn test_search_empty_state_config() {
+    fn search_empty_state_config() {
         let album_config = SearchEmptyStateConfig {
             is_album_view: true,
         };
@@ -163,14 +163,14 @@ mod tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_search_empty_state_default() {
+    fn search_empty_state_default() {
         let empty_state = SearchEmptyState::default();
         assert!(empty_state.config.is_album_view);
     }
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_search_empty_state_builder() {
+    fn search_empty_state_builder() {
         let empty_state = SearchEmptyState::builder().is_album_view(false).build();
 
         assert!(!empty_state.config.is_album_view);

@@ -873,7 +873,7 @@ mod tests {
     };
 
     #[test]
-    fn test_app_state_creation() -> Result<()> {
+    fn app_state_creation() -> Result<()> {
         let engine = AudioEngine::new()?;
         let engine_weak = Arc::downgrade(&Arc::new(engine));
         let settings_manager = SettingsManager::new()?;
@@ -892,7 +892,7 @@ mod tests {
     }
 
     #[test]
-    fn test_library_state_default() {
+    fn library_state_default() {
         let library_state = LibraryState::default();
         assert!(library_state.albums.is_empty());
         assert!(library_state.artists.is_empty());
@@ -905,13 +905,13 @@ mod tests {
     }
 
     #[test]
-    fn test_view_mode_display() {
+    fn view_mode_display() {
         assert_eq!(format!("{Grid:?}"), "Grid");
         assert_eq!(format!("{List:?}"), "List");
     }
 
     #[test]
-    fn test_library_tab_display() {
+    fn library_tab_display() {
         assert_eq!(format!("{Albums:?}"), "Albums");
         assert_eq!(format!("{Artists:?}"), "Artists");
     }

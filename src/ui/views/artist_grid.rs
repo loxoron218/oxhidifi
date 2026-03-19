@@ -1209,7 +1209,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_artist_card_creation() {
+    fn artist_card_creation() {
         let artist = Artist {
             id: 1,
             name: "Test Artist".to_string(),
@@ -1226,7 +1226,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_artist_card_builder() -> Result<()> {
+    fn artist_card_builder() -> Result<()> {
         let artist = Artist {
             id: 1,
             name: "Test Artist".to_string(),
@@ -1258,14 +1258,14 @@ mod tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_artist_card_builder_missing_artist() {
+    fn artist_card_builder_missing_artist() {
         let result = ArtistCard::builder().cover_size(200).build();
         assert!(matches!(result, Err(BuilderError(_))));
     }
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_artist_card_default_cover_size() -> Result<()> {
+    fn artist_card_default_cover_size() -> Result<()> {
         let artist = Artist {
             id: 1,
             name: "Test Artist".to_string(),
@@ -1286,7 +1286,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_artist_card_update_cover_size() -> Result<()> {
+    fn artist_card_update_cover_size() -> Result<()> {
         let artist = Artist {
             id: 1,
             name: "Test Artist".to_string(),
@@ -1309,7 +1309,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_artist_card_small_cover_size() {
+    fn artist_card_small_cover_size() {
         let artist = Artist {
             id: 1,
             name: "Test Artist".to_string(),
@@ -1325,7 +1325,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_artist_card_large_cover_size() {
+    fn artist_card_large_cover_size() {
         let artist = Artist {
             id: 1,
             name: "Test Artist".to_string(),
@@ -1341,7 +1341,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_artist_card_long_name() {
+    fn artist_card_long_name() {
         let artist = Artist {
             id: 1,
             name: "A Very Long Artist Name That Should Be Elided".to_string(),
@@ -1360,7 +1360,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_artist_grid_view_builder() {
+    fn artist_grid_view_builder() {
         let artists = vec![
             Artist {
                 id: 1,
@@ -1389,14 +1389,14 @@ mod tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_artist_grid_view_default() {
+    fn artist_grid_view_default() {
         let grid_view = ArtistGridView::default();
         assert_eq!(grid_view.artists.len(), 0);
         assert!(!grid_view.config.compact);
     }
 
     #[test]
-    fn test_artist_sort_criteria() {
+    fn artist_sort_criteria() {
         // This test doesn't require GTK, so no skip needed
         let mut artists = [
             Artist {

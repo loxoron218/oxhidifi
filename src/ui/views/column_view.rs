@@ -654,7 +654,7 @@ mod tests {
     use crate::ui::views::column_view::ColumnListViewType::{self, Albums};
 
     #[test]
-    fn test_column_view_type_default() {
+    fn column_view_type_default() {
         let view_type = ColumnListViewType::default();
         assert_eq!(view_type, Albums);
     }

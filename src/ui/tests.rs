@@ -37,7 +37,7 @@ mod ui_compliance_tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_gnome_hig_compliance() -> Result<()> {
+    fn gnome_hig_compliance() -> Result<()> {
         // Test spacing guidelines (6px, 12px, 18px, 24px increments)
         let _album_grid = AlbumGridView::default();
 
@@ -54,7 +54,7 @@ mod ui_compliance_tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_accessibility_compliance() -> Result<()> {
+    fn accessibility_compliance() -> Result<()> {
         let engine = AudioEngine::new()?;
         let engine_weak = Arc::downgrade(&Arc::new(engine));
         let settings_manager = SettingsManager::new()?;
@@ -124,7 +124,7 @@ mod ui_compliance_tests {
 
     #[tokio::test]
     #[ignore = "Requires GTK display for UI testing"]
-    async fn test_keyboard_navigation_compliance() -> Result<()> {
+    async fn keyboard_navigation_compliance() -> Result<()> {
         let engine = AudioEngine::new()?;
         let engine_weak = Arc::downgrade(&Arc::new(engine));
         let settings_manager = SettingsManager::new()?;
@@ -186,7 +186,7 @@ mod ui_compliance_tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_performance_validation() -> Result<()> {
+    fn performance_validation() -> Result<()> {
         let engine = AudioEngine::new()?;
         let engine_weak = Arc::downgrade(&Arc::new(engine));
         let settings_manager = SettingsManager::new()?;
@@ -229,7 +229,7 @@ mod ui_compliance_tests {
 
     #[tokio::test]
     #[ignore = "Requires GTK display for UI testing"]
-    async fn test_memory_leak_detection() -> Result<()> {
+    async fn memory_leak_detection() -> Result<()> {
         let engine = AudioEngine::new()?;
         let engine_weak = Arc::downgrade(&Arc::new(engine.clone()));
         let settings_manager = SettingsManager::new()?;
@@ -287,7 +287,7 @@ mod ui_compliance_tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_responsive_layout_adaptation() -> Result<()> {
+    fn responsive_layout_adaptation() -> Result<()> {
         let engine = AudioEngine::new()?;
         let engine_weak = Arc::downgrade(&Arc::new(engine));
         let settings_manager = SettingsManager::new()?;
@@ -341,7 +341,7 @@ mod ui_compliance_tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_smooth_animations_and_transitions() {
+    fn smooth_animations_and_transitions() {
         // TODO: Implement actual rendering tests for smooth 60fps animations
     }
 }

@@ -184,7 +184,7 @@ mod tests {
     };
 
     #[test]
-    fn test_artist_serialization() -> Result<()> {
+    fn artist_serialization() -> Result<()> {
         let artist = Artist {
             id: 1,
             name: "Test Artist".to_string(),
@@ -204,7 +204,7 @@ mod tests {
     }
 
     #[test]
-    fn test_album_serialization() -> Result<()> {
+    fn album_serialization() -> Result<()> {
         let album = Album {
             id: 1,
             artist_id: 1,
@@ -233,7 +233,7 @@ mod tests {
     }
 
     #[test]
-    fn test_track_serialization() -> Result<()> {
+    fn track_serialization() -> Result<()> {
         let track = Track {
             id: 1,
             album_id: 1,
@@ -263,7 +263,7 @@ mod tests {
     }
 
     #[test]
-    fn test_default_implementations() -> Result<()> {
+    fn default_implementations() -> Result<()> {
         let track = Track::default();
         if track.disc_number != 1 {
             bail!("Expected disc_number to be 1");

@@ -621,7 +621,7 @@ mod tests {
     };
 
     #[test]
-    fn test_empty_state_config() {
+    fn empty_state_config() {
         let album_config = EmptyStateConfig {
             is_album_view: true,
         };
@@ -634,7 +634,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_prepare_scan_resources_with_dr_parser() -> Result<()> {
+    async fn prepare_scan_resources_with_dr_parser() -> Result<()> {
         let settings = UserSettings {
             show_dr_values: true,
             ..Default::default()
@@ -651,7 +651,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_prepare_scan_resources_without_dr_parser() -> Result<()> {
+    async fn prepare_scan_resources_without_dr_parser() -> Result<()> {
         let settings = UserSettings {
             show_dr_values: false,
             ..Default::default()
@@ -676,7 +676,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_prepare_scan_resources_settings_arc_content() -> Result<()> {
+    async fn prepare_scan_resources_settings_arc_content() -> Result<()> {
         let test_dirs = vec!["/music/test".to_string(), "/another/path".to_string()];
         let settings = UserSettings {
             library_directories: test_dirs.clone(),
@@ -705,7 +705,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_or_create_scanner_returns_existing() -> Result<()> {
+    async fn get_or_create_scanner_returns_existing() -> Result<()> {
         let library_db = LibraryDatabase::new().await?;
         let library_db_arc = Arc::new(library_db);
 
@@ -742,7 +742,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_or_create_scanner_creates_new() -> Result<()> {
+    async fn get_or_create_scanner_creates_new() -> Result<()> {
         let library_db = LibraryDatabase::new().await?;
         let library_db_arc = Arc::new(library_db);
 
@@ -758,7 +758,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_or_create_scanner_stores_in_app_state() -> Result<()> {
+    async fn get_or_create_scanner_stores_in_app_state() -> Result<()> {
         let library_db = LibraryDatabase::new().await?;
         let library_db_arc = Arc::new(library_db);
 
@@ -800,7 +800,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_execute_background_scan_adds_directory() -> Result<()> {
+    async fn execute_background_scan_adds_directory() -> Result<()> {
         let temp_dir = TempDir::new()?;
         let music_dir = temp_dir.path().join("music");
         create_dir_all(&music_dir)?;
@@ -832,7 +832,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_execute_background_scan_with_files() -> Result<()> {
+    async fn execute_background_scan_with_files() -> Result<()> {
         let temp_dir = TempDir::new()?;
         let music_dir = temp_dir.path().join("music");
         create_dir_all(&music_dir)?;
@@ -873,7 +873,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_execute_background_scan_with_dr_parser() -> Result<()> {
+    async fn execute_background_scan_with_dr_parser() -> Result<()> {
         let temp_dir = TempDir::new()?;
         let music_dir = temp_dir.path().join("music");
         create_dir_all(&music_dir)?;
@@ -914,7 +914,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_execute_background_scan_empty_library_directories() -> Result<()> {
+    async fn execute_background_scan_empty_library_directories() -> Result<()> {
         let library_db = LibraryDatabase::new().await?;
         let library_db_arc = Arc::new(library_db);
 

@@ -98,7 +98,7 @@ mod tests {
     use crate::error::operational::ResultExt;
 
     #[test]
-    fn test_result_ext_with_context() -> Result<()> {
+    fn result_ext_with_context() -> Result<()> {
         #[derive(Debug)]
         struct TestError;
         impl Display for TestError {
@@ -125,7 +125,7 @@ mod tests {
     }
 
     #[test]
-    fn test_result_ext_with_contextf() -> Result<()> {
+    fn result_ext_with_contextf() -> Result<()> {
         #[derive(Debug)]
         struct TestError;
         impl Display for TestError {

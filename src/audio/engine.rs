@@ -1054,7 +1054,7 @@ mod tests {
     use crate::{audio::engine::PlaybackState, error::domain::AudioError};
 
     #[test]
-    fn test_playback_state_serialization() -> Result<()> {
+    fn playback_state_serialization() -> Result<()> {
         let states = vec![
             PlaybackState::Stopped,
             PlaybackState::Ready,
@@ -1074,7 +1074,7 @@ mod tests {
     }
 
     #[test]
-    fn test_audio_error_display() -> Result<()> {
+    fn audio_error_display() -> Result<()> {
         let no_track_error = AudioError::NoTrackLoaded;
         if no_track_error.to_string() != "No track loaded" {
             bail!("Expected 'No track loaded', got '{no_track_error}'");

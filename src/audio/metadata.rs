@@ -230,7 +230,7 @@ mod tests {
     };
 
     #[test]
-    fn test_metadata_error_display() -> Result<()> {
+    fn metadata_error_display() -> Result<()> {
         let error = MetadataError::UnsupportedFormat;
         if error.to_string() != "Unsupported file format" {
             bail!("Expected 'Unsupported file format', got '{error}'");
@@ -246,7 +246,7 @@ mod tests {
     }
 
     #[test]
-    fn test_standard_metadata_serialization() -> Result<()> {
+    fn standard_metadata_serialization() -> Result<()> {
         let metadata = StandardMetadata {
             title: Some("Test Title".to_string()),
             artist: Some("Test Artist".to_string()),
@@ -270,7 +270,7 @@ mod tests {
     }
 
     #[test]
-    fn test_technical_metadata_serialization() -> Result<()> {
+    fn technical_metadata_serialization() -> Result<()> {
         let metadata = TechnicalMetadata {
             format: "FLAC".to_string(),
             codec: "FLAC".to_string(),
@@ -292,7 +292,7 @@ mod tests {
     }
 
     #[test]
-    fn test_track_metadata_serialization() -> Result<()> {
+    fn track_metadata_serialization() -> Result<()> {
         let metadata = TrackMetadata {
             standard: StandardMetadata {
                 title: Some("Test Title".to_string()),

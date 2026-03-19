@@ -1226,7 +1226,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_album_grid_view_builder() {
+    fn album_grid_view_builder() {
         let albums = vec![
             Album {
                 id: 1,
@@ -1279,7 +1279,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_album_grid_view_default() {
+    fn album_grid_view_default() {
         let grid_view = AlbumGridView::default();
         assert_eq!(grid_view.albums.len(), 0);
         assert!(grid_view.config.show_dr_badges);
@@ -1287,7 +1287,7 @@ mod tests {
     }
 
     #[test]
-    fn test_album_sort_criteria() {
+    fn album_sort_criteria() {
         // This test doesn't require GTK, so no skip needed
         let mut albums = [
             Album {

@@ -124,7 +124,7 @@ mod tests {
     use crate::ui::formatting::{Album, create_format_display, format_sample_rate};
 
     #[test]
-    fn test_format_sample_rate_common_rates() {
+    fn format_sample_rate_common_rates() {
         // Test common decimal sample rates
         assert_eq!(format_sample_rate(44100), "44.1");
         assert_eq!(format_sample_rate(88200), "88.2");
@@ -146,7 +146,7 @@ mod tests {
     }
 
     #[test]
-    fn test_format_sample_rate_uncommon_rates() {
+    fn format_sample_rate_uncommon_rates() {
         // Test uncommon sample rates that require floating point formatting
         assert_eq!(format_sample_rate(44000), "44");
         assert_eq!(format_sample_rate(44123), "44.123");
@@ -157,7 +157,7 @@ mod tests {
     }
 
     #[test]
-    fn test_complete_format_metadata() {
+    fn complete_format_metadata() {
         let album = Album {
             format: Some("FLAC".to_string()),
             bits_per_sample: Some(24),
@@ -172,7 +172,7 @@ mod tests {
     }
 
     #[test]
-    fn test_complete_format_metadata_whole_number() {
+    fn complete_format_metadata_whole_number() {
         let album = Album {
             format: Some("FLAC".to_string()),
             bits_per_sample: Some(24),
@@ -187,7 +187,7 @@ mod tests {
     }
 
     #[test]
-    fn test_format_only_metadata() {
+    fn format_only_metadata() {
         let album = Album {
             format: Some("MP3".to_string()),
             bits_per_sample: None,
@@ -199,7 +199,7 @@ mod tests {
     }
 
     #[test]
-    fn test_file_extension_fallback() {
+    fn file_extension_fallback() {
         let album = Album {
             format: None,
             bits_per_sample: None,
@@ -211,7 +211,7 @@ mod tests {
     }
 
     #[test]
-    fn test_unknown_format_returns_none() {
+    fn unknown_format_returns_none() {
         let album = Album {
             format: None,
             bits_per_sample: None,
@@ -223,7 +223,7 @@ mod tests {
     }
 
     #[test]
-    fn test_dsd_formats() {
+    fn dsd_formats() {
         let mut album = Album {
             format: None,
             bits_per_sample: None,

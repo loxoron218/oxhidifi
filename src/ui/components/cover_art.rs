@@ -508,7 +508,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_cover_art_builder() -> Result<()> {
+    fn cover_art_builder() -> Result<()> {
         let cover_art = CoverArt::builder()
             .artwork_path("/path/to/artwork.jpg")
             .dr_value("DR12")
@@ -534,7 +534,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_cover_art_default() -> Result<()> {
+    fn cover_art_default() -> Result<()> {
         let cover_art = CoverArt::default();
         if cover_art.dr_badge.is_some() {
             bail!("DR badge should be None");
@@ -554,7 +554,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_cover_art_update_artwork() {
+    fn cover_art_update_artwork() {
         let mut cover_art = CoverArt::new(None, None, None, false, 100, 100);
 
         // Test with non-existent path

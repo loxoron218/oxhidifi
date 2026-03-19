@@ -66,7 +66,7 @@ mod tests {
     use crate::error::dr_error::DrError::{self, NoDrValueFound, ReadError, RegexError};
 
     #[test]
-    fn test_dr_error_display() {
+    fn dr_error_display() {
         let read_error = Error::new(NotFound, "File not found");
         let dr_error = ReadError(read_error);
         assert!(dr_error.to_string().contains("Failed to read DR file"));

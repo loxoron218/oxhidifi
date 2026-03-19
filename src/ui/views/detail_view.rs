@@ -259,7 +259,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_detail_view_builder() -> Result<()> {
+    fn detail_view_builder() -> Result<()> {
         let artist = Artist {
             id: 1,
             name: "Test Artist".to_string(),
@@ -277,14 +277,14 @@ mod tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_detail_view_builder_missing_detail_type() {
+    fn detail_view_builder_missing_detail_type() {
         let result = DetailView::builder().compact(true).build();
 
         assert!(matches!(result, Err(MissingDetailType)));
     }
 
     #[test]
-    fn test_detail_types() {
+    fn detail_types() {
         let album = Album::default();
         let artist = Artist::default();
 

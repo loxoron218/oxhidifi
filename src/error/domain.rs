@@ -98,7 +98,7 @@ mod tests {
     };
 
     #[test]
-    fn test_audio_error_display() {
+    fn audio_error_display() {
         let no_track_error = NoTrackLoaded;
         assert_eq!(no_track_error.to_string(), "No track loaded");
 
@@ -112,7 +112,7 @@ mod tests {
     }
 
     #[test]
-    fn test_library_error_display() {
+    fn library_error_display() {
         let not_found_error = NotFound {
             entity: "album".to_string(),
             id: 123,
@@ -129,7 +129,7 @@ mod tests {
     }
 
     #[test]
-    fn test_ui_error_display() {
+    fn ui_error_display() {
         let init_error = InitializationError("Failed to init GTK".to_string());
         assert_eq!(
             init_error.to_string(),

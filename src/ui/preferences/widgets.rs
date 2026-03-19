@@ -96,7 +96,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_create_combo_row_from_settings() -> Result<()> {
+    fn create_combo_row_from_settings_works() -> Result<()> {
         // Create temporary settings file
         let temp_file = PathBuf::from("/tmp/oxhidifi_test_combo_row.json");
         if let Err(e) = remove_file(&temp_file) {

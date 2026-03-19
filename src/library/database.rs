@@ -1148,7 +1148,7 @@ mod tests {
     use crate::library::database::LibraryError::{InvalidData, NotFound};
 
     #[test]
-    fn test_library_error_display() {
+    fn library_error_display() {
         let not_found_error = NotFound {
             entity: "album".to_string(),
             id: 123,

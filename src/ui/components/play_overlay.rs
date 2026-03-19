@@ -214,7 +214,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_play_overlay_builder() {
+    fn play_overlay_builder() {
         let overlay = PlayOverlay::builder()
             .is_playing(true)
             .show_on_hover(false)
@@ -230,7 +230,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_play_overlay_default() {
+    fn play_overlay_default() {
         let overlay = PlayOverlay::default();
         assert!(!overlay.is_playing);
         assert!(overlay.show_on_hover);
@@ -242,7 +242,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_play_overlay_set_playing() {
+    fn play_overlay_set_playing() {
         let mut overlay = PlayOverlay::new(false, false);
         assert!(!overlay.is_playing);
         assert_eq!(

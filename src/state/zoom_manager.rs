@@ -273,7 +273,7 @@ mod tests {
     use crate::{config::settings::SettingsManager, state::zoom_manager::ZoomManager};
 
     #[test]
-    fn test_zoom_manager_creation() -> Result<()> {
+    fn zoom_manager_creation() -> Result<()> {
         // Use a non-existent file path to ensure default settings are used
         let temp_file = PathBuf::from("/tmp/oxhidifi_test_settings_1.json");
 
@@ -300,7 +300,7 @@ mod tests {
     }
 
     #[test]
-    fn test_grid_zoom_levels() -> Result<()> {
+    fn grid_zoom_levels() -> Result<()> {
         // Use a non-existent file path to ensure default settings are used
         let temp_file = PathBuf::from("/tmp/oxhidifi_test_settings_2.json");
 
@@ -342,7 +342,7 @@ mod tests {
     }
 
     #[test]
-    fn test_list_zoom_levels() -> Result<()> {
+    fn list_zoom_levels() -> Result<()> {
         // Use a non-existent file path to ensure default settings are used
         let temp_file = PathBuf::from("/tmp/oxhidifi_test_settings_3.json");
 
@@ -389,7 +389,7 @@ mod tests {
     }
 
     #[TokioTest]
-    async fn test_zoom_persistence_across_sessions() -> Result<()> {
+    async fn zoom_persistence_across_sessions() -> Result<()> {
         // Create a temporary directory for our test
         let temp_dir = TempDir::new()?;
         let settings_path = temp_dir.path().join("settings.json");

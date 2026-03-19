@@ -119,7 +119,7 @@ mod tests {
     use crate::audio::artwork::detect_mime_type;
 
     #[test]
-    fn test_detect_mime_type() {
+    fn detect_mime_type_works() {
         // Test JPEG
         let jpeg_data = vec![0xFF, 0xD8, 0xFF, 0xE0];
         assert_eq!(detect_mime_type(&jpeg_data), Some(Jpeg));

@@ -474,7 +474,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_hifi_metadata_builder() {
+    fn hifi_metadata_builder() {
         let track = Track {
             id: 1,
             album_id: 1,
@@ -511,7 +511,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_hifi_metadata_default() {
+    fn hifi_metadata_default() {
         let metadata = HiFiMetadata::default();
         assert!(metadata.track.is_none());
         assert_eq!(metadata.labels.len(), 0);
@@ -520,7 +520,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_hifi_metadata_update_track() {
+    fn hifi_metadata_update_track() {
         let mut metadata = HiFiMetadata::new(None, HiFiMetadataConfig::default());
         assert!(metadata.track.is_none());
         assert_eq!(metadata.labels.len(), 0);
@@ -551,7 +551,7 @@ mod tests {
     }
 
     #[test]
-    fn test_channels_display() {
+    fn channels_display() {
         let mono_track = Track {
             channels: 1,
             ..Track::default()

@@ -54,7 +54,7 @@ mod tests {
     };
 
     #[test]
-    fn test_decoder_error_display() {
+    fn decoder_error_display() {
         let io_error = Error::new(NotFound, "File not found");
         let decoder_error = IoError(io_error);
         assert!(decoder_error.to_string().contains("IO error"));
@@ -64,7 +64,7 @@ mod tests {
     }
 
     #[test]
-    fn test_audio_format_creation() {
+    fn audio_format_creation() {
         let format = AudioFormat {
             sample_rate: 96000,
             channels: 2,

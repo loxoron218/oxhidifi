@@ -39,7 +39,7 @@ mod view_integration_tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_view_transitions_and_navigation() -> Result<()> {
+    fn view_transitions_and_navigation() -> Result<()> {
         let engine = AudioEngine::new()?;
         let engine_weak = Arc::downgrade(&Arc::new(engine));
         let settings_manager = SettingsManager::new()?;
@@ -94,7 +94,7 @@ mod view_integration_tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_real_time_filtering_and_sorting() -> Result<()> {
+    fn real_time_filtering_and_sorting() -> Result<()> {
         let engine = AudioEngine::new()?;
         let engine_weak = Arc::downgrade(&Arc::new(engine));
         let settings_manager = SettingsManager::new()?;
@@ -139,7 +139,7 @@ mod view_integration_tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_keyboard_navigation_support() -> Result<()> {
+    fn keyboard_navigation_support() -> Result<()> {
         let engine = AudioEngine::new()?;
         let engine_weak = Arc::downgrade(&Arc::new(engine));
         let settings_manager = SettingsManager::new()?;
@@ -182,7 +182,7 @@ mod view_integration_tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_cover_art_dr_badge_methods() {
+    fn cover_art_dr_badge_methods() {
         // Create a CoverArt instance
         let mut cover_art = CoverArt::new(
             Some(&"/path/to/artwork.jpg".to_string()),
@@ -200,7 +200,7 @@ mod view_integration_tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_cover_art_edge_cases() {
+    fn cover_art_edge_cases() {
         // Test with no DR value
         let mut cover_art = CoverArt::new(None, None, None, false, 100, 100);
 

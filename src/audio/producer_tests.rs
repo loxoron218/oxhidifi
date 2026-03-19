@@ -28,7 +28,7 @@ macro_rules! assert_float_eq {
 }
 
 #[test]
-fn test_decoder_error_display() {
+fn decoder_error_display() {
     let io_error = Error::new(NotFound, "File not found");
     let decoder_error = IoError(io_error);
     assert!(decoder_error.to_string().contains("IO error"));
@@ -38,7 +38,7 @@ fn test_decoder_error_display() {
 }
 
 #[test]
-fn test_audio_format_creation() {
+fn audio_format_creation() {
     let format = AudioFormat {
         sample_rate: 96000,
         channels: 2,
@@ -50,7 +50,7 @@ fn test_audio_format_creation() {
 }
 
 #[test]
-fn test_convert_f32_to_interleaved() {
+fn convert_f32_to_interleaved() {
     let spec = SignalSpec::new(44100, Channels::FRONT_LEFT | Channels::FRONT_RIGHT);
     let mut buf = AudioBuffer::<f32>::new(Duration::from(2u64), spec);
 
@@ -71,7 +71,7 @@ fn test_convert_f32_to_interleaved() {
 }
 
 #[test]
-fn test_convert_f32_to_interleaved_zero_samples() {
+fn convert_f32_to_interleaved_zero_samples() {
     let spec = SignalSpec::new(44100, Channels::FRONT_LEFT);
     let buf = AudioBuffer::<f32>::new(Duration::from(0u64), spec);
 
@@ -81,7 +81,7 @@ fn test_convert_f32_to_interleaved_zero_samples() {
 }
 
 #[test]
-fn test_convert_f64_to_interleaved() {
+fn convert_f64_to_interleaved() {
     let spec = SignalSpec::new(48000, Channels::FRONT_LEFT | Channels::FRONT_RIGHT);
     let mut buf = AudioBuffer::<f64>::new(Duration::from(2u64), spec);
 
@@ -102,7 +102,7 @@ fn test_convert_f64_to_interleaved() {
 }
 
 #[test]
-fn test_convert_f64_to_interleaved_clamping() {
+fn convert_f64_to_interleaved_clamping() {
     let spec = SignalSpec::new(44100, Channels::FRONT_LEFT);
     let mut buf = AudioBuffer::<f64>::new(Duration::from(2u64), spec);
 
@@ -119,7 +119,7 @@ fn test_convert_f64_to_interleaved_clamping() {
 }
 
 #[test]
-fn test_convert_u8_to_interleaved() {
+fn convert_u8_to_interleaved() {
     let spec = SignalSpec::new(44100, Channels::FRONT_LEFT | Channels::FRONT_RIGHT);
     let mut buf = AudioBuffer::<u8>::new(Duration::from(2u64), spec);
 
@@ -140,7 +140,7 @@ fn test_convert_u8_to_interleaved() {
 }
 
 #[test]
-fn test_convert_s8_to_interleaved() {
+fn convert_s8_to_interleaved() {
     let spec = SignalSpec::new(44100, Channels::FRONT_LEFT);
     let mut buf = AudioBuffer::<i8>::new(Duration::from(3u64), spec);
 
@@ -159,7 +159,7 @@ fn test_convert_s8_to_interleaved() {
 }
 
 #[test]
-fn test_convert_u16_to_interleaved() {
+fn convert_u16_to_interleaved() {
     let spec = SignalSpec::new(48000, Channels::FRONT_LEFT | Channels::FRONT_RIGHT);
     let mut buf = AudioBuffer::<u16>::new(Duration::from(2u64), spec);
 
@@ -180,7 +180,7 @@ fn test_convert_u16_to_interleaved() {
 }
 
 #[test]
-fn test_convert_s16_to_interleaved_edge_cases() {
+fn convert_s16_to_interleaved_edge_cases() {
     let spec = SignalSpec::new(44100, Channels::FRONT_LEFT);
     let mut buf = AudioBuffer::<i16>::new(Duration::from(4u64), spec);
 
@@ -201,7 +201,7 @@ fn test_convert_s16_to_interleaved_edge_cases() {
 }
 
 #[test]
-fn test_convert_s16_to_interleaved_stereo() {
+fn convert_s16_to_interleaved_stereo() {
     let spec = SignalSpec::new(48000, Channels::FRONT_LEFT | Channels::FRONT_RIGHT);
     let mut buf = AudioBuffer::<i16>::new(Duration::from(2u64), spec);
 
@@ -222,7 +222,7 @@ fn test_convert_s16_to_interleaved_stereo() {
 }
 
 #[test]
-fn test_convert_u24_to_interleaved() {
+fn convert_u24_to_interleaved() {
     let spec = SignalSpec::new(44100, Channels::FRONT_LEFT);
     let mut buf = AudioBuffer::<u24>::new(Duration::from(3u64), spec);
 
@@ -241,7 +241,7 @@ fn test_convert_u24_to_interleaved() {
 }
 
 #[test]
-fn test_convert_s24_to_interleaved() {
+fn convert_s24_to_interleaved() {
     let spec = SignalSpec::new(44100, Channels::FRONT_LEFT);
     let mut buf = AudioBuffer::<i24>::new(Duration::from(3u64), spec);
 
@@ -260,7 +260,7 @@ fn test_convert_s24_to_interleaved() {
 }
 
 #[test]
-fn test_convert_u32_to_interleaved() {
+fn convert_u32_to_interleaved() {
     let spec = SignalSpec::new(44100, Channels::FRONT_LEFT);
     let mut buf = AudioBuffer::<u32>::new(Duration::from(3u64), spec);
 
@@ -279,7 +279,7 @@ fn test_convert_u32_to_interleaved() {
 }
 
 #[test]
-fn test_convert_s32_to_interleaved_edge_cases() {
+fn convert_s32_to_interleaved_edge_cases() {
     let spec = SignalSpec::new(44100, Channels::FRONT_LEFT);
     let mut buf = AudioBuffer::<i32>::new(Duration::from(4u64), spec);
 
@@ -300,7 +300,7 @@ fn test_convert_s32_to_interleaved_edge_cases() {
 }
 
 #[test]
-fn test_convert_s32_to_interleaved_stereo() {
+fn convert_s32_to_interleaved_stereo() {
     let spec = SignalSpec::new(48000, Channels::FRONT_LEFT | Channels::FRONT_RIGHT);
     let mut buf = AudioBuffer::<i32>::new(Duration::from(2u64), spec);
 
@@ -321,7 +321,7 @@ fn test_convert_s32_to_interleaved_stereo() {
 }
 
 #[test]
-fn test_convert_all_formats_interleaved_ordering() {
+fn convert_all_formats_interleaved_ordering() {
     let spec = SignalSpec::new(
         44100,
         Channels::FRONT_LEFT | Channels::FRONT_RIGHT | Channels::FRONT_CENTRE,
@@ -344,7 +344,7 @@ fn test_convert_all_formats_interleaved_ordering() {
 }
 
 #[test]
-fn test_convert_multichannel_interleaving() {
+fn convert_multichannel_interleaving() {
     let spec = SignalSpec::new(48000, Channels::FRONT_LEFT | Channels::FRONT_RIGHT);
     let mut buf = AudioBuffer::<f32>::new(Duration::from(3u64), spec);
 

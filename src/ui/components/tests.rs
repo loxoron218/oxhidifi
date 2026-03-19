@@ -33,7 +33,7 @@ mod component_tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_dr_badge_creation_and_properties() {
+    fn dr_badge_creation_and_properties() {
         let badge = DRBadge::new(Some("DR12".to_string()), true);
         assert_eq!(badge.label.text().as_str(), "DR12");
         assert_eq!(badge.quality.css_class(), "dr-badge-good");
@@ -46,7 +46,7 @@ mod component_tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_cover_art_creation_and_properties() -> Result<()> {
+    fn cover_art_creation_and_properties() -> Result<()> {
         let cover_art = CoverArt::builder()
             .artwork_path("/path/to/artwork.jpg")
             .dr_value("DR14")
@@ -72,7 +72,7 @@ mod component_tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_play_overlay_creation_and_properties() {
+    fn play_overlay_creation_and_properties() {
         let overlay = PlayOverlay::builder()
             .is_playing(true)
             .show_on_hover(false)
@@ -88,7 +88,7 @@ mod component_tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_hifi_metadata_creation_and_properties() {
+    fn hifi_metadata_creation_and_properties() {
         let track = Track {
             id: 1,
             album_id: 1,
@@ -124,7 +124,7 @@ mod component_tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_hifi_metadata_sample_rate_decimal_formatting() {
+    fn hifi_metadata_sample_rate_decimal_formatting() {
         // Test 44.1 kHz sample rate
         let track_441 = Track {
             id: 1,
@@ -209,7 +209,7 @@ mod component_tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_component_accessibility_attributes() -> Result<()> {
+    fn component_accessibility_attributes() -> Result<()> {
         // Test DRBadge accessibility
         let badge = DRBadge::new(Some("DR12".to_string()), true);
         if badge.label.accessible_role() == AccessibleNone {

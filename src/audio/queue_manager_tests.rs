@@ -55,14 +55,14 @@ mod tests {
     }
 
     #[test]
-    fn test_playback_queue_default() {
+    fn playback_queue_default() {
         let queue = PlaybackQueue::default();
         assert!(queue.tracks.is_empty());
         assert!(queue.current_index.is_none());
     }
 
     #[test]
-    fn test_playback_queue_cloned() {
+    fn playback_queue_cloned() {
         let tracks = vec![Track::default(), Track::default()];
         let queue = PlaybackQueue {
             tracks,
@@ -75,7 +75,7 @@ mod tests {
 
     #[tokio::test]
     #[ignore = "Requires GTK display for UI testing"]
-    async fn test_auto_advance_on_track_completion() -> Result<()> {
+    async fn auto_advance_on_track_completion() -> Result<()> {
         let tracks = create_test_tracks(3);
 
         let (track_finished_tx, track_finished_rx) = unbounded();
@@ -151,7 +151,7 @@ mod tests {
 
     #[tokio::test]
     #[ignore = "Requires GTK display for UI testing"]
-    async fn test_queue_state_synchronization() -> Result<()> {
+    async fn queue_state_synchronization() -> Result<()> {
         let tracks = create_test_tracks(3);
 
         let (_, track_finished_rx) = unbounded();
@@ -221,7 +221,7 @@ mod tests {
 
     #[tokio::test]
     #[ignore = "Requires GTK display for UI testing"]
-    async fn test_next_previous_button_state_updates() -> Result<()> {
+    async fn next_previous_button_state_updates() -> Result<()> {
         let tracks = create_test_tracks(3);
 
         let (_, track_finished_rx) = unbounded();

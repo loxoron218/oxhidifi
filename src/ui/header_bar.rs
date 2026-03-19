@@ -2062,7 +2062,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    async fn test_header_bar_creation() -> Result<()> {
+    async fn header_bar_creation() -> Result<()> {
         let app_state = AppState::new(
             Weak::new(),
             None::<Arc<TokioRwLock<LibraryScanner>>>,

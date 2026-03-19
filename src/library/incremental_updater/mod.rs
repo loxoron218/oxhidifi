@@ -175,7 +175,7 @@ mod tests {
     use crate::library::incremental_updater::IncrementalUpdaterConfig;
 
     #[test]
-    fn test_incremental_updater_config_default() {
+    fn incremental_updater_config_default() {
         let config = IncrementalUpdaterConfig::default();
         assert_eq!(config.max_batch_size, 50);
         assert!(config.enable_dr_parsing);

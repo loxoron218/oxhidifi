@@ -199,7 +199,7 @@ mod tests {
     };
 
     #[test]
-    fn test_dr_extractor_patterns() -> Result<()> {
+    fn dr_extractor_patterns() -> Result<()> {
         let extractor = DrExtractor::new()?;
 
         let test_cases = vec![
@@ -224,7 +224,7 @@ mod tests {
     }
 
     #[test]
-    fn test_dr_extraction_from_content() -> Result<()> {
+    fn dr_extraction_from_content() -> Result<()> {
         let extractor = DrExtractor::new()?;
 
         // Test cases that should return DR12 (Official DR Value format only)
@@ -270,7 +270,7 @@ mod tests {
     }
 
     #[test]
-    fn test_per_track_dr_values_rejected() -> Result<()> {
+    fn per_track_dr_values_rejected() -> Result<()> {
         let extractor = DrExtractor::new()?;
 
         // These should all fail to extract since they're per-track values, not Official DR Values
@@ -292,7 +292,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_dr_parser_with_files() -> Result<()> {
+    async fn dr_parser_with_files() -> Result<()> {
         let temp_dir = TempDir::new()?;
         let album_dir = temp_dir.path();
 
@@ -325,7 +325,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_dr_parser_extraction_from_irregular_files() -> Result<()> {
+    async fn dr_parser_extraction_from_irregular_files() -> Result<()> {
         let temp_dir = TempDir::new()?;
         let album_dir = temp_dir.path();
 
@@ -345,7 +345,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_dr_parser_multiple_values_conflict_resolution() -> Result<()> {
+    async fn dr_parser_multiple_values_conflict_resolution() -> Result<()> {
         let temp_dir = TempDir::new()?;
         let album_dir = temp_dir.path();
 
@@ -367,7 +367,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_dr_parser_duplicate_values() -> Result<()> {
+    async fn dr_parser_duplicate_values() -> Result<()> {
         let temp_dir = TempDir::new()?;
         let album_dir = temp_dir.path();
 
@@ -389,7 +389,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_dr_parser_file_removal_clears_value() -> Result<()> {
+    async fn dr_parser_file_removal_clears_value() -> Result<()> {
         let temp_dir = TempDir::new()?;
         let album_dir = temp_dir.path();
 

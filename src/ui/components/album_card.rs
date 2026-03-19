@@ -983,7 +983,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_album_card_with_dr_badge() -> Result<()> {
+    fn album_card_with_dr_badge() -> Result<()> {
         let dummy_album = Album {
             id: 1,
             artist_id: 1,
@@ -1017,7 +1017,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_album_card_create_default() -> Result<()> {
+    fn album_card_create_default() -> Result<()> {
         let card = AlbumCard::create_default()?;
         if card.dr_badge.is_none() {
             bail!("AlbumCard dr_badge should exist");
@@ -1027,7 +1027,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_album_card_sample_rate_decimal_formatting() -> Result<()> {
+    fn album_card_sample_rate_decimal_formatting() -> Result<()> {
         // Test 44.1 kHz sample rate in album card
         let album_441 = Album {
             id: 1,

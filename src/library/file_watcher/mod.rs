@@ -544,7 +544,7 @@ mod tests {
     use crate::library::file_watcher::FileWatcher;
 
     #[test]
-    fn test_supported_audio_extensions() {
+    fn supported_audio_extensions() {
         let test_cases = vec![
             // Supported extensions (should return true)
             ("test.flac", true),
@@ -577,7 +577,7 @@ mod tests {
     }
 
     #[test]
-    fn test_supported_text_extensions() {
+    fn supported_text_extensions() {
         let test_cases = vec![
             ("test.txt", true),
             ("test.log", true),

@@ -322,7 +322,7 @@ mod tests {
     };
 
     #[test]
-    fn test_lossless_format_detection() {
+    fn lossless_format_detection() {
         assert!(is_lossless_format("FLAC"));
         assert!(is_lossless_format("ALAC"));
         assert!(is_lossless_format("PCM S24"));
@@ -331,7 +331,7 @@ mod tests {
     }
 
     #[test]
-    fn test_format_display_strings() {
+    fn format_display_strings() {
         let flac_info = AudioFormatInfo {
             format: "FLAC".to_string(),
             codec: "FLAC".to_string(),

@@ -57,7 +57,7 @@ mod tests {
     }
 
     #[test]
-    fn test_handle_exclusive_mode_error_true() -> Result<()> {
+    fn handle_exclusive_mode_error_true() -> Result<()> {
         let reason = "Device busy".to_string();
         let error = AudioError::OutputError(ExclusiveModeFailed { reason });
 
@@ -70,7 +70,7 @@ mod tests {
     }
 
     #[test]
-    fn test_handle_exclusive_mode_error_false() -> Result<()> {
+    fn handle_exclusive_mode_error_false() -> Result<()> {
         let decoder_error = NoAudioTrack;
         let error = AudioError::DecoderError(decoder_error);
 

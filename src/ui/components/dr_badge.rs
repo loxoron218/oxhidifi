@@ -315,7 +315,7 @@ mod tests {
     use crate::ui::components::dr_badge::{DRBadge, DRQuality};
 
     #[test]
-    fn test_dr_quality_from_value() {
+    fn dr_quality_from_value() {
         assert_eq!(DRQuality::from_dr_value("DR15"), DRQuality::Excellent);
         assert_eq!(DRQuality::from_dr_value("DR13"), DRQuality::Good);
         assert_eq!(DRQuality::from_dr_value("DR11"), DRQuality::Fair);
@@ -326,7 +326,7 @@ mod tests {
     }
 
     #[test]
-    fn test_dr_quality_css_classes() {
+    fn dr_quality_css_classes() {
         assert_eq!(DRQuality::Excellent.css_class(), "dr-14");
         assert_eq!(DRQuality::Good.css_class(), "dr-12");
         assert_eq!(DRQuality::Fair.css_class(), "dr-10");
@@ -337,7 +337,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_dr_badge_builder() {
+    fn dr_badge_builder() {
         let badge = DRBadge::builder()
             .dr_value("DR12")
             .show_label(false)
@@ -349,7 +349,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires GTK display for UI testing"]
-    fn test_dr_badge_update() {
+    fn dr_badge_update() {
         let mut badge = DRBadge::new(Some("DR8".to_string()), true);
         assert_eq!(badge.quality, DRQuality::Poor);
 

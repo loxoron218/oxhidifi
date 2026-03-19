@@ -205,7 +205,7 @@ mod tests {
     };
 
     #[test]
-    fn test_invalid_regex_pattern_error_message() -> Result<()> {
+    fn invalid_regex_pattern_error_message() -> Result<()> {
         let result = compile_regex("(invalid[regex");
 
         let error = result
@@ -228,7 +228,7 @@ mod tests {
     }
 
     #[test]
-    fn test_valid_regex_pattern_compiles() -> Result<()> {
+    fn valid_regex_pattern_compiles() -> Result<()> {
         let result = compile_regex(r"^DR(\d{1,2})$")?;
 
         drop(result);

@@ -460,7 +460,7 @@ mod tests {
     };
 
     #[test]
-    fn test_user_settings_default() {
+    fn user_settings_default() {
         let settings = UserSettings::default();
         assert_eq!(settings.sample_rate, 0);
         assert!(settings.exclusive_mode);
@@ -470,7 +470,7 @@ mod tests {
     }
 
     #[test]
-    fn test_user_settings_serialization() -> Result<()> {
+    fn user_settings_serialization() -> Result<()> {
         let settings = UserSettings {
             audio_device: Some("Test Device".to_string()),
             sample_rate: 96000,
@@ -500,7 +500,7 @@ mod tests {
     }
 
     #[test]
-    fn test_settings_error_display() -> Result<()> {
+    fn settings_error_display() -> Result<()> {
         let io_error = IoError::new(NotFound, "File not found");
         let settings_error = SettingsError::IoError(io_error);
         if !settings_error.to_string().contains("IO error") {

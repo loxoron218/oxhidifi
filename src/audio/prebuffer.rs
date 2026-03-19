@@ -206,19 +206,19 @@ mod tests {
     };
 
     #[test]
-    fn test_prebuffer_creation() {
+    fn prebuffer_creation() {
         let prebuffer = Prebuffer::new();
         assert!(!prebuffer.is_ready());
     }
 
     #[test]
-    fn test_prebuffer_ready_check() {
+    fn prebuffer_ready_check() {
         let prebuffer = Prebuffer::new();
         assert!(!prebuffer.is_ready());
     }
 
     #[test]
-    fn test_calculate_buffer_size() {
+    fn calculate_buffer_size() {
         let prebuffer = Prebuffer::new();
         let format = AudioFormat {
             sample_rate: 44100,
@@ -237,7 +237,7 @@ mod tests {
     }
 
     #[test]
-    fn test_calculate_buffer_size_short_duration() {
+    fn calculate_buffer_size_short_duration() {
         let prebuffer = Prebuffer::new();
         let format = AudioFormat {
             sample_rate: 48000,
@@ -252,7 +252,7 @@ mod tests {
     }
 
     #[test]
-    fn test_calculate_buffer_size_high_sample_rate() {
+    fn calculate_buffer_size_high_sample_rate() {
         let prebuffer = Prebuffer::new();
         let format = AudioFormat {
             sample_rate: 192_000,
@@ -267,7 +267,7 @@ mod tests {
     }
 
     #[test]
-    fn test_calculate_buffer_size_mono() {
+    fn calculate_buffer_size_mono() {
         let prebuffer = Prebuffer::new();
         let format = AudioFormat {
             sample_rate: 44100,
@@ -282,7 +282,7 @@ mod tests {
     }
 
     #[test]
-    fn test_take_prebuffered_track() {
+    fn take_prebuffered_track() {
         let prebuffer = Prebuffer::new();
         let track = prebuffer.take_prebuffered_track();
         assert!(track.is_none());

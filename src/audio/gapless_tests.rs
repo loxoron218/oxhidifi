@@ -9,7 +9,7 @@ mod tests {
     };
 
     #[test]
-    fn test_prebuffer_preload_nonexistent_file() -> Result<()> {
+    fn prebuffer_preload_nonexistent_file() -> Result<()> {
         let prebuffer = Prebuffer::new();
 
         let result = prebuffer.preload_track("/nonexistent/file.flac");
@@ -28,7 +28,7 @@ mod tests {
     }
 
     #[test]
-    fn test_prebuffer_take_empty() -> Result<()> {
+    fn prebuffer_take_empty() -> Result<()> {
         let prebuffer = Prebuffer::new();
         let track = prebuffer.take_prebuffered_track();
         if track.is_some() {
@@ -38,7 +38,7 @@ mod tests {
     }
 
     #[test]
-    fn test_prebuffer_calculate_buffer_size() -> Result<()> {
+    fn prebuffer_calculate_buffer_size() -> Result<()> {
         let prebuffer = Prebuffer::new();
         let format = AudioFormat {
             sample_rate: 44100,
@@ -59,7 +59,7 @@ mod tests {
     }
 
     #[test]
-    fn test_prebuffer_calculate_buffer_size_short() -> Result<()> {
+    fn prebuffer_calculate_buffer_size_short() -> Result<()> {
         let prebuffer = Prebuffer::new();
         let format = AudioFormat {
             sample_rate: 48000,
@@ -80,7 +80,7 @@ mod tests {
     }
 
     #[test]
-    fn test_prebuffer_calculate_buffer_size_high_sample_rate() -> Result<()> {
+    fn prebuffer_calculate_buffer_size_high_sample_rate() -> Result<()> {
         let prebuffer = Prebuffer::new();
         let format = AudioFormat {
             sample_rate: 192_000,
@@ -98,7 +98,7 @@ mod tests {
     }
 
     #[test]
-    fn test_prebuffer_calculate_buffer_size_mono() -> Result<()> {
+    fn prebuffer_calculate_buffer_size_mono() -> Result<()> {
         let prebuffer = Prebuffer::new();
         let format = AudioFormat {
             sample_rate: 44100,
@@ -119,7 +119,7 @@ mod tests {
     }
 
     #[test]
-    fn test_prebuffer_stop() -> Result<()> {
+    fn prebuffer_stop() -> Result<()> {
         let mut prebuffer = Prebuffer::new();
         prebuffer.stop();
         if prebuffer.is_ready() {
@@ -129,7 +129,7 @@ mod tests {
     }
 
     #[test]
-    fn test_prebuffer_default() -> Result<()> {
+    fn prebuffer_default() -> Result<()> {
         let prebuffer = Prebuffer::default();
         if prebuffer.is_ready() {
             bail!("Expected false, got true");
@@ -138,7 +138,7 @@ mod tests {
     }
 
     #[test]
-    fn test_prebuffer_clone() {
+    fn prebuffer_clone() {
         let prebuffer = Prebuffer::new();
         let _cloned = prebuffer;
     }

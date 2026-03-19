@@ -78,7 +78,7 @@ mod tests {
     use crate::audio::buffer_config::BufferConfig;
 
     #[test]
-    fn test_default_config() -> Result<()> {
+    fn default_config() -> Result<()> {
         let config = BufferConfig::default();
         if config.main_buffer_size != 65536 {
             bail!("Expected 65536, got {}", config.main_buffer_size);
@@ -93,7 +93,7 @@ mod tests {
     }
 
     #[test]
-    fn test_low_memory_config() -> Result<()> {
+    fn low_memory_config() -> Result<()> {
         let config = BufferConfig::low_memory();
         if config.main_buffer_size != 16384 {
             bail!("Expected 16384, got {}", config.main_buffer_size);
@@ -108,7 +108,7 @@ mod tests {
     }
 
     #[test]
-    fn test_is_valid_default() -> Result<()> {
+    fn is_valid_default() -> Result<()> {
         let config = BufferConfig::default();
         if !config.is_valid() {
             bail!("Expected config to be valid");
@@ -117,7 +117,7 @@ mod tests {
     }
 
     #[test]
-    fn test_is_valid_low_memory() -> Result<()> {
+    fn is_valid_low_memory() -> Result<()> {
         let config = BufferConfig::low_memory();
         if !config.is_valid() {
             bail!("Expected config to be valid");
@@ -126,7 +126,7 @@ mod tests {
     }
 
     #[test]
-    fn test_is_valid_invalid_sizes() -> Result<()> {
+    fn is_valid_invalid_sizes() -> Result<()> {
         let config = BufferConfig {
             main_buffer_size: 1000,
             resampler_buffer_size: 65536,
@@ -139,7 +139,7 @@ mod tests {
     }
 
     #[test]
-    fn test_buffer_config_serialization() -> Result<()> {
+    fn buffer_config_serialization() -> Result<()> {
         let config = BufferConfig::default();
         let serialized = to_string(&config)?;
         let deserialized: BufferConfig = from_str(&serialized)?;

@@ -708,14 +708,14 @@ mod tests {
     };
 
     #[test]
-    fn test_gcd_calculation() {
+    fn gcd_calculation() {
         assert_eq!(gcd(44100, 48000), 300);
         assert_eq!(gcd(96000, 48000), 48000);
         assert_eq!(gcd(192_000, 48000), 48000);
     }
 
     #[test]
-    fn test_chunk_size_calculation() {
+    fn chunk_size_calculation() {
         let chunk_size = calculate_chunk_size(44100, 48000);
         assert!((256..=8192).contains(&chunk_size));
 
@@ -724,7 +724,7 @@ mod tests {
     }
 
     #[test]
-    fn test_invalid_resampler_creation() {
+    fn invalid_resampler_creation() {
         let result = AudioResampler::new(0, 48000, 2);
         assert!(matches!(result, Err(InvalidConfiguration(_))));
 

@@ -131,7 +131,7 @@ mod tests {
     use crate::error::numeric_conversion::{safe_i32_to_u32, safe_u32_to_i32, safe_u64_to_i64};
 
     #[test]
-    fn test_safe_u64_to_i64_within_range() -> Result<()> {
+    fn safe_u64_to_i64_within_range() -> Result<()> {
         let result = safe_u64_to_i64(1000, 5000, "test");
         if result != 1000 {
             bail!("Expected 1000, got {result}");
@@ -140,7 +140,7 @@ mod tests {
     }
 
     #[test]
-    fn test_safe_u64_to_i64_clamped() -> Result<()> {
+    fn safe_u64_to_i64_clamped() -> Result<()> {
         let result = safe_u64_to_i64(8000, 5000, "test");
         if result != 5000 {
             bail!("Expected 5000, got {result}");
@@ -149,7 +149,7 @@ mod tests {
     }
 
     #[test]
-    fn test_safe_u64_to_i64_max_exceeds_i64() -> Result<()> {
+    fn safe_u64_to_i64_max_exceeds_i64() -> Result<()> {
         // When max exceeds i64::MAX, fallback should be max converted to i64
         let max_exceeding_i64 = u64::MAX;
         let result = safe_u64_to_i64(u64::MAX, max_exceeding_i64, "test");
@@ -161,7 +161,7 @@ mod tests {
     }
 
     #[test]
-    fn test_safe_u64_to_i64_reasonable_max_preserved() -> Result<()> {
+    fn safe_u64_to_i64_reasonable_max_preserved() -> Result<()> {
         // With a reasonable max, values should be clamped to that max
         let reasonable_max: u64 = 10 * 1024 * 1024 * 1024; // 10 GB
         let result = safe_u64_to_i64(u64::MAX, reasonable_max, "test");
@@ -174,7 +174,7 @@ mod tests {
     }
 
     #[test]
-    fn test_safe_u32_to_i32_within_range() -> Result<()> {
+    fn safe_u32_to_i32_within_range() -> Result<()> {
         let result = safe_u32_to_i32(100, 500, 50, "test");
         if result != 100 {
             bail!("Expected 100, got {result}");
@@ -183,7 +183,7 @@ mod tests {
     }
 
     #[test]
-    fn test_safe_u32_to_i32_clamped() -> Result<()> {
+    fn safe_u32_to_i32_clamped() -> Result<()> {
         let result = safe_u32_to_i32(800, 500, 50, "test");
         if result != 500 {
             bail!("Expected 500, got {result}");
@@ -192,7 +192,7 @@ mod tests {
     }
 
     #[test]
-    fn test_safe_i32_to_u32_positive() -> Result<()> {
+    fn safe_i32_to_u32_positive() -> Result<()> {
         let result = safe_i32_to_u32(100, 50, "test");
         if result != 100 {
             bail!("Expected 100, got {result}");
@@ -201,7 +201,7 @@ mod tests {
     }
 
     #[test]
-    fn test_safe_i32_to_u32_negative_uses_default() -> Result<()> {
+    fn safe_i32_to_u32_negative_uses_default() -> Result<()> {
         let result = safe_i32_to_u32(-1, 180, "test");
         if result != 180 {
             bail!("Expected 180, got {result}");

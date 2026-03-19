@@ -953,7 +953,7 @@ mod tests {
     use crate::audio::output::{OutputConfig, OutputError::NoDeviceFound};
 
     #[test]
-    fn test_output_config_default() {
+    fn output_config_default() {
         let config = OutputConfig::default();
         assert_eq!(config.sample_rate, 44100);
         assert_eq!(config.channels, 2);
@@ -962,7 +962,7 @@ mod tests {
     }
 
     #[test]
-    fn test_output_error_display() {
+    fn output_error_display() {
         let no_device_error = NoDeviceFound;
         assert_eq!(
             no_device_error.to_string(),

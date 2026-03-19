@@ -482,7 +482,7 @@ mod tests {
     use crate::library::scanner::ScannerConfig;
 
     #[test]
-    fn test_scanner_config_default() {
+    fn scanner_config_default() {
         let config = ScannerConfig::default();
         assert_eq!(config.max_concurrent_metadata_tasks, 4);
         assert_eq!(config.file_watcher_config.debounce_delay_ms, 500);

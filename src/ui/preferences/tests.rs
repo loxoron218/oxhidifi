@@ -23,7 +23,7 @@ use crate::{
 };
 
 #[test]
-fn test_preferences_dialog_creation() -> Result<()> {
+fn preferences_dialog_creation() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let settings_path = temp_dir.path().join("settings.json");
 
@@ -46,7 +46,7 @@ fn test_preferences_dialog_creation() -> Result<()> {
 }
 
 #[test]
-fn test_general_preferences_page_creation() -> Result<()> {
+fn general_preferences_page_creation() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let settings_path = temp_dir.path().join("settings.json");
 
@@ -69,7 +69,7 @@ fn test_general_preferences_page_creation() -> Result<()> {
 }
 
 #[test]
-fn test_library_preferences_page_creation() -> Result<()> {
+fn library_preferences_page_creation() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let settings_path = temp_dir.path().join("settings.json");
 
@@ -94,7 +94,7 @@ fn test_library_preferences_page_creation() -> Result<()> {
 }
 
 #[test]
-fn test_audio_preferences_page_creation() -> Result<()> {
+fn audio_preferences_page_creation() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let settings_path = temp_dir.path().join("settings.json");
 
@@ -117,7 +117,7 @@ fn test_audio_preferences_page_creation() -> Result<()> {
 }
 
 #[test]
-fn test_settings_persistence_across_sessions() -> Result<()> {
+fn settings_persistence_across_sessions() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let settings_path = temp_dir.path().join("settings.json");
 
