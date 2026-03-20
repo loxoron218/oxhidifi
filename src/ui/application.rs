@@ -995,6 +995,15 @@ fn build_ui(
 
     setup_keyboard_shortcuts(app_state, &window);
 
+    let toggle_search_action = SimpleAction::new("toggle-search", None);
+    let header_bar_for_action = Rc::clone(&header_bar);
+    toggle_search_action.connect_activate(move |_, _| {
+        debug!("toggle-search action triggered");
+        header_bar_for_action.toggle_search();
+    });
+    app.add_action(&toggle_search_action);
+    app.set_accels_for_action("app.toggle-search", &["<Ctrl>F"]);
+
     window.set_content(Some(&main_box));
     main_box.set_can_focus(true);
 

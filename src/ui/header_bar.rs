@@ -2025,6 +2025,16 @@ impl HeaderBar {
         self.search_button.set_active(false);
     }
 
+    /// Toggles the search entry visibility.
+    ///
+    /// This method toggles the search button's active state, which
+    /// triggers the existing toggle handler to show/hide the search
+    /// entry and manage focus appropriately.
+    pub fn toggle_search(&self) {
+        let is_active = self.search_button.is_active();
+        self.search_button.set_active(!is_active);
+    }
+
     /// Sets the header bar to adaptive/narrow mode for smallest screens.
     ///
     /// When enabled:
