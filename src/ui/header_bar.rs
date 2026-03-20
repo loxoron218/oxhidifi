@@ -1018,7 +1018,11 @@ impl HeaderBar {
         app_state: &Arc<AppState>,
     ) -> (Popover, ToggleButton, Image, Label, Label) {
         let selection_label = Label::builder().label("Select All").build();
-        let selection_counter = Label::builder().label("0 selected").build();
+        let selection_counter = Label::builder()
+            .label("0 selected")
+            .halign(Center)
+            .css_classes(["subtitle"])
+            .build();
 
         let popover_container = Box::builder()
             .orientation(Vertical)

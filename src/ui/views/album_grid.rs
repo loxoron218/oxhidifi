@@ -398,7 +398,7 @@ impl AlbumGridView {
             .halign(Center)
             .margin_top(12)
             .margin_bottom(6)
-            .css_classes(["album-artist-label"])
+            .css_classes(["dim-label"])
             .build();
 
         main_container.append(&count_label.clone().upcast::<Widget>());
