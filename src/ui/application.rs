@@ -60,9 +60,9 @@ use crate::{
     state::app_state::{
         AppState,
         AppStateEvent::{
-            ExclusiveModeFailed, LibraryDataChanged, LibraryScanFailed, NavigationChanged,
-            PlaybackStateChanged, SearchFilterChanged, SelectionChanged, SettingsChanged,
-            ViewOptionsChanged,
+            ExclusiveModeFailed, GridSortChanged, LibraryDataChanged, LibraryScanFailed,
+            NavigationChanged, PlaybackStateChanged, SearchFilterChanged, SelectionChanged,
+            SettingsChanged, ViewOptionsChanged,
         },
         LibraryState,
         LibraryTab::{self, Albums, Artists},
@@ -1472,6 +1472,21 @@ fn spawn_view_stack_event_handler(
                             &search_app_state,
                             &view_stack,
                         );
+                    }
+                    GridSortChanged(tab) => {
+                        let (albums_sort, artists_sort) = {
+                            let sm = search_app_state.get_settings_manager();
+                            let settings = sm.read().get_settings().clone();
+                            (settings.albums_grid_sort, settings.artists_grid_sort)
+                        };
+                        match tab {
+                            Albums => {
+                                views.album_grid.sort_albums(albums_sort);
+                            }
+                            Artists => {
+                                views.artist_grid.sort_artists(artists_sort);
+                            }
+                        }
                     }
                     ViewOptionsChanged {
                         current_tab,

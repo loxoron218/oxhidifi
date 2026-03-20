@@ -18,16 +18,17 @@ mod view_integration_tests {
 
     use crate::{
         audio::engine::AudioEngine,
-        config::settings::SettingsManager,
+        config::settings::{
+            AlbumGridSortCriteria::{Title, Year},
+            AlbumGridSortItem, SettingsManager,
+            SortOrder::Ascending,
+        },
         library::models::{Album, Artist},
         state::app_state::AppState,
         ui::{
             components::cover_art::CoverArt,
             views::{
-                album_grid::{
-                    AlbumGridView,
-                    AlbumSortCriteria::{Title, Year},
-                },
+                album_grid::AlbumGridView,
                 artist_grid::ArtistGridView,
                 column_view::ColumnListView,
                 column_view_types::ColumnListViewType::{Albums, Artists},
@@ -130,10 +131,16 @@ mod view_integration_tests {
         // TODO: Verify the filtered results in actual implementation
 
         // Test sorting by title
-        album_grid.sort_albums(Title);
+        album_grid.sort_albums(vec![AlbumGridSortItem {
+            criteria: Title,
+            order: Ascending,
+        }]);
 
         // Test sorting by year
-        album_grid.sort_albums(Year);
+        album_grid.sort_albums(vec![AlbumGridSortItem {
+            criteria: Year,
+            order: Ascending,
+        }]);
         Ok(())
     }
 

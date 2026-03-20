@@ -6,7 +6,8 @@
 
 use std::{
     cell::{Cell, RefCell},
-    collections::HashSet,
+    cmp::Ordering::Equal,
+    collections::{HashMap, HashSet},
     rc::Rc,
     sync::Arc,
 };
@@ -31,6 +32,11 @@ use crate::{
     audio::{
         engine::{AudioEngine, PlaybackState::Playing},
         queue_manager::QueueManager,
+    },
+    config::settings::{
+        AlbumGridSortCriteria::{Artist, BitDepth, DRValue, Format, SampleRate, Title, Year},
+        AlbumGridSortItem,
+        SortOrder::Descending,
     },
     error::domain::UiError,
     library::{database::LibraryDatabase, models::Album},
@@ -233,7 +239,7 @@ pub struct AlbumGridView {
     /// Search empty state component for when search returns no results.
     pub search_empty_state: SearchEmptyState,
     /// Current sort criteria.
-    pub current_sort: AlbumSortCriteria,
+    pub current_sort: Vec<AlbumGridSortItem>,
     /// References to album card instances for dynamic updates.
     pub album_cards: Rc<RefCell<Vec<AlbumCard>>>,
     /// Flag to prevent feedback loops during selection sync.
@@ -327,7 +333,13 @@ impl AlbumGridView {
             config,
             empty_state,
             search_empty_state,
-            current_sort: AlbumSortCriteria::Title,
+            current_sort: app_state.map_or_else(Vec::new, |s| {
+                s.get_settings_manager()
+                    .read()
+                    .get_settings()
+                    .albums_grid_sort
+                    .clone()
+            }),
             album_cards,
             is_syncing_selection,
             zoom_subscription_handle,
@@ -460,17 +472,15 @@ impl AlbumGridView {
 
                         if cards.len() == library_state.albums.len() {
                             // Album list unchanged, just update existing cards
-                            for (album, card) in library_state.albums.iter().zip(cards.iter_mut()) {
-                                if album.id == card.album_id {
-                                    let size = Self::cover_size_to_u32(cover_size_i32);
-                                    card.cover_art.update_dimensions(
-                                        i32::try_from(size).unwrap_or(cover_size_i32),
-                                        i32::try_from(size).unwrap_or(cover_size_i32),
-                                    );
-                                    card.update_dr_badge_visibility(show_dr_badge);
-                                    if let Err(e) = card.update_label_max_width_chars(size) {
-                                        error!(error = %e, album_title = %album.title, "Failed to update label max width chars for album");
-                                    }
+                            let size = Self::cover_size_to_u32(cover_size_i32);
+                            for card in cards.iter_mut() {
+                                card.cover_art.update_dimensions(
+                                    i32::try_from(size).unwrap_or(cover_size_i32),
+                                    i32::try_from(size).unwrap_or(cover_size_i32),
+                                );
+                                card.update_dr_badge_visibility(show_dr_badge);
+                                if let Err(e) = card.update_label_max_width_chars(size) {
+                                    error!(error = %e, album_id = card.album_id, "Failed to update label max width chars for album");
                                 }
                             }
                         } else {
@@ -1118,7 +1128,7 @@ impl AlbumGridView {
     /// # Arguments
     ///
     /// * `sort_by` - Sorting criteria
-    pub fn sort_albums(&mut self, sort_by: AlbumSortCriteria) {
+    pub fn sort_albums(&mut self, sort_by: Vec<AlbumGridSortItem>) {
         self.current_sort = sort_by;
 
         // Apply sort to current albums and refresh display
@@ -1156,52 +1166,69 @@ impl AlbumGridView {
 
     /// Applies the current sort criteria to the albums vector.
     fn apply_sort(&mut self) {
-        match self.current_sort {
-            AlbumSortCriteria::Title => {
-                self.albums.sort_by(|a, b| a.title.cmp(&b.title));
-            }
-            AlbumSortCriteria::Artist => {
-                self.albums.sort_by_key(|a| a.artist_id);
-            }
-            AlbumSortCriteria::Year => {
-                self.albums.sort_by_key(|a| a.year.unwrap_or(0));
-            }
-            AlbumSortCriteria::DRValue => {
-                self.albums.sort_by(|a, b| {
-                    let a_dr = a.dr_value.as_deref().unwrap_or("DR0");
-                    let b_dr = b.dr_value.as_deref().unwrap_or("DR0");
-
-                    // Extract numeric part for comparison
-                    let a_num = a_dr
-                        .chars()
-                        .skip_while(|c| !c.is_ascii_digit())
-                        .collect::<String>()
-                        .parse::<i32>()
-                        .unwrap_or(0);
-                    let b_num = b_dr
-                        .chars()
-                        .skip_while(|c| !c.is_ascii_digit())
-                        .collect::<String>()
-                        .parse::<i32>()
-                        .unwrap_or(0);
-                    b_num.cmp(&a_num) // Higher DR values first
-                });
+        // Build artist map for resolving artist names
+        let mut artist_map = HashMap::new();
+        if let Some(state) = &self.app_state {
+            for artist in &state.get_library_state().artists {
+                artist_map.insert(artist.id, artist.name.clone());
             }
         }
-    }
-}
 
-/// Sorting criteria for albums.
-#[derive(Debug, Clone, PartialEq)]
-pub enum AlbumSortCriteria {
-    /// Sort by album title
-    Title,
-    /// Sort by artist
-    Artist,
-    /// Sort by release year
-    Year,
-    /// Sort by DR value (highest first)
-    DRValue,
+        let sort_criteria = &self.current_sort;
+
+        // Perform unstable sort with chained comparators
+        self.albums.sort_unstable_by(|a, b| {
+            for item in sort_criteria {
+                let cmp = match item.criteria {
+                    Title => a.title.cmp(&b.title),
+                    Artist => {
+                        let a_name = artist_map.get(&a.artist_id).map_or("", String::as_str);
+                        let b_name = artist_map.get(&b.artist_id).map_or("", String::as_str);
+                        a_name.cmp(b_name)
+                    }
+                    Year => a.year.unwrap_or(0).cmp(&b.year.unwrap_or(0)),
+                    DRValue => {
+                        let a_dr = a.dr_value.as_deref().unwrap_or("DR0");
+                        let b_dr = b.dr_value.as_deref().unwrap_or("DR0");
+
+                        let a_num = a_dr
+                            .chars()
+                            .skip_while(|c| !c.is_ascii_digit())
+                            .collect::<String>()
+                            .parse::<i32>()
+                            .unwrap_or(0);
+                        let b_num = b_dr
+                            .chars()
+                            .skip_while(|c| !c.is_ascii_digit())
+                            .collect::<String>()
+                            .parse::<i32>()
+                            .unwrap_or(0);
+                        a_num.cmp(&b_num)
+                    }
+                    Format => {
+                        let a_fmt = a.format.as_deref().unwrap_or("");
+                        let b_fmt = b.format.as_deref().unwrap_or("");
+                        a_fmt.cmp(b_fmt)
+                    }
+                    BitDepth => a
+                        .bits_per_sample
+                        .unwrap_or(0)
+                        .cmp(&b.bits_per_sample.unwrap_or(0)),
+                    SampleRate => a.sample_rate.unwrap_or(0).cmp(&b.sample_rate.unwrap_or(0)),
+                };
+
+                let final_cmp = if item.order == Descending {
+                    cmp.reverse()
+                } else {
+                    cmp
+                };
+                if final_cmp != Equal {
+                    return final_cmp;
+                }
+            }
+            Equal
+        });
+    }
 }
 
 impl Default for AlbumGridView {

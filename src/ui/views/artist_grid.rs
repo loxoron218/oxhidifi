@@ -6,6 +6,7 @@
 
 use std::{
     cell::{Cell, RefCell},
+    cmp::Ordering::Equal,
     collections::HashSet,
     rc::Rc,
     sync::Arc,
@@ -32,6 +33,11 @@ use {
 };
 
 use crate::{
+    config::settings::{
+        ArtistGridSortCriteria::{AlbumCount, Name},
+        ArtistGridSortItem,
+        SortOrder::Descending,
+    },
     error::{
         domain::UiError::{self, BuilderError},
         numeric_conversion::{safe_i32_to_u32, safe_u32_to_i32},
@@ -153,7 +159,7 @@ pub struct ArtistGridView {
     /// Search empty state component for when search returns no results.
     pub search_empty_state: SearchEmptyState,
     /// Current sort criteria.
-    pub current_sort: ArtistSortCriteria,
+    pub current_sort: Vec<ArtistGridSortItem>,
     /// Shared reference to artist cards for zoom updates.
     pub artist_cards_ref: Rc<RefCell<Vec<Rc<ArtistCard>>>>,
     /// Flag to prevent feedback loops during selection sync.
@@ -237,7 +243,13 @@ impl ArtistGridView {
             config,
             empty_state,
             search_empty_state,
-            current_sort: ArtistSortCriteria::Name,
+            current_sort: app_state.map_or_else(Vec::new, |s| {
+                s.get_settings_manager()
+                    .read()
+                    .get_settings()
+                    .artists_grid_sort
+                    .clone()
+            }),
             artist_cards_ref: Rc::clone(&artist_cards_ref),
             is_syncing_selection,
             zoom_subscription_handle,
@@ -690,7 +702,7 @@ impl ArtistGridView {
     /// # Arguments
     ///
     /// * `sort_by` - Sorting criteria
-    pub fn sort_artists(&mut self, sort_by: ArtistSortCriteria) {
+    pub fn sort_artists(&mut self, sort_by: Vec<ArtistGridSortItem>) {
         self.current_sort = sort_by;
 
         // Apply sort to current artists and refresh display
@@ -702,16 +714,27 @@ impl ArtistGridView {
 
     /// Applies the current sort criteria to the artists vector.
     fn apply_sort(&mut self) {
-        match self.current_sort {
-            ArtistSortCriteria::Name => {
-                self.artists.sort_by(|a, b| a.name.cmp(&b.name));
+        let sort_criteria = &self.current_sort;
+
+        // Perform unstable sort with chained comparators
+        self.artists.sort_unstable_by(|a, b| {
+            for item in sort_criteria {
+                let cmp = match item.criteria {
+                    Name => a.name.cmp(&b.name),
+                    AlbumCount => a.album_count.cmp(&b.album_count),
+                };
+
+                let final_cmp = if item.order == Descending {
+                    cmp.reverse()
+                } else {
+                    cmp
+                };
+                if final_cmp != Equal {
+                    return final_cmp;
+                }
             }
-            ArtistSortCriteria::AlbumCount => {
-                // TODO: Implement album count sorting - requires querying database or having album
-                // counts in state
-                self.artists.sort_by(|a, b| a.name.cmp(&b.name));
-            }
-        }
+            Equal
+        });
     }
 
     /// Stops the zoom subscription and cleans up resources.

@@ -23,7 +23,7 @@ use crate::{
         PlaybackState::{self, Stopped},
         TrackInfo,
     },
-    config::settings::SettingsManager,
+    config::settings::{AlbumGridSortItem, ArtistGridSortItem, SettingsManager},
     library::{
         models::{Album, Artist, Track},
         scanner::LibraryScanner,
@@ -167,6 +167,8 @@ pub enum AppStateEvent {
         tab: LibraryTab,
         selected_ids: HashSet<i64>,
     },
+    /// Grid sort configuration changed.
+    GridSortChanged(LibraryTab),
     /// User settings changed that affect UI display.
     SettingsChanged { show_dr_values: bool },
     /// Metadata overlays visibility setting changed.
@@ -850,6 +852,29 @@ impl AppState {
             queue.current_index
         );
         self.broadcast_event(&AppStateEvent::QueueChanged(queue));
+    }
+    /// Updates the grid sort configuration for albums and broadcasts the change.
+    pub fn update_albums_grid_sort(&self, sort_items: Vec<AlbumGridSortItem>) {
+        if let Err(e) = self
+            .settings_manager
+            .write()
+            .update_settings_with(|s| s.albums_grid_sort = sort_items)
+        {
+            error!(error = %e, "Failed to update albums grid sort");
+        }
+        self.broadcast_event(&AppStateEvent::GridSortChanged(LibraryTab::Albums));
+    }
+
+    /// Updates the grid sort configuration for artists and broadcasts the change.
+    pub fn update_artists_grid_sort(&self, sort_items: Vec<ArtistGridSortItem>) {
+        if let Err(e) = self
+            .settings_manager
+            .write()
+            .update_settings_with(|s| s.artists_grid_sort = sort_items)
+        {
+            error!(error = %e, "Failed to update artists grid sort");
+        }
+        self.broadcast_event(&AppStateEvent::GridSortChanged(LibraryTab::Artists));
     }
 }
 

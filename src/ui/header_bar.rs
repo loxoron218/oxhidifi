@@ -22,7 +22,7 @@ use {
             timeout_add_local, timeout_add_local_once,
         },
         gtk::{
-            Align::Start,
+            Align::{Center, End, Start},
             Box, Button, Image, Label, MenuButton,
             Orientation::{Horizontal, Vertical},
             Popover, SearchBar, SearchEntry, Separator, ToggleButton,
@@ -49,7 +49,10 @@ use crate::{
         },
         zoom_manager::ZoomEvent::{GridZoomChanged, ListZoomChanged},
     },
-    ui::preferences::dialog::PreferencesDialog,
+    ui::{
+        components::sort_list::{build_albums_sort_list, build_artists_sort_list},
+        preferences::dialog::PreferencesDialog,
+    },
 };
 
 /// Search display mode for the header bar.
@@ -224,6 +227,8 @@ pub struct HeaderBar {
     pub merged_menu_selection_toggle: ToggleButton,
     /// Selection counter in merged menu bulk action.
     pub merged_menu_selection_counter: Label,
+    /// Sort list box in merged menu for showing sort options on small screens.
+    pub merged_menu_sort_box: Box,
 }
 
 impl HeaderBar {
@@ -275,8 +280,14 @@ impl HeaderBar {
             selection_counter,
         ) = Self::init_bulk_action(app_state, &widget);
 
-        let (view_split_button, zoom_popover, zoom_out_button, zoom_in_button, zoom_timer_handle) =
-            Self::init_view_controls(app_state, &current_view_mode);
+        let (
+            view_split_button,
+            zoom_popover,
+            zoom_out_button,
+            zoom_in_button,
+            zoom_timer_handle,
+            sort_box,
+        ) = Self::init_view_controls(app_state, &current_view_mode);
 
         let application_arc = application.map(Arc::new);
         let settings_button =
@@ -289,6 +300,7 @@ impl HeaderBar {
             merged_menu_bulk_action_box,
             merged_menu_selection_toggle,
             merged_menu_selection_counter,
+            merged_menu_sort_box,
         ) = Self::create_merged_menu_button(
             app_state,
             application_arc.as_ref(),
@@ -302,7 +314,12 @@ impl HeaderBar {
         let (album_tab, artist_tab, tab_box) = Self::create_tab_buttons(app_state);
         widget.set_title_widget(Some(&tab_box));
 
-        let subscription_handle = Self::subscribe_to_view_options(app_state, &view_split_button);
+        let subscription_handle = Self::subscribe_to_view_options(
+            app_state,
+            &view_split_button,
+            &sort_box,
+            &merged_menu_sort_box,
+        );
 
         Self {
             widget,
@@ -341,6 +358,7 @@ impl HeaderBar {
             merged_menu_bulk_action_box,
             merged_menu_selection_toggle,
             merged_menu_selection_counter,
+            merged_menu_sort_box,
         }
     }
 
@@ -412,7 +430,7 @@ impl HeaderBar {
     /// # Returns
     ///
     /// Tuple of (`view_split_button`, `zoom_popover`, `zoom_out_button`,
-    /// `zoom_in_button`, `zoom_timer_handle`).
+    /// `zoom_in_button`, `zoom_timer_handle`, `sort_box`).
     fn init_view_controls(
         app_state: &Arc<AppState>,
         current_view_mode: &ViewMode,
@@ -422,6 +440,7 @@ impl HeaderBar {
         Button,
         Button,
         Arc<Mutex<Option<SourceId>>>,
+        Box,
     ) {
         let menu = Self::create_view_menu();
 
@@ -431,7 +450,8 @@ impl HeaderBar {
             .menu_model(&menu)
             .build();
 
-        let (zoom_popover, zoom_out_button, zoom_in_button) = Self::create_zoom_popover();
+        let (zoom_popover, zoom_out_button, zoom_in_button, sort_box) =
+            Self::create_view_options_popover(app_state);
         view_split_button.set_popover(Some(&zoom_popover));
 
         let zoom_timer_handle = Arc::new(Mutex::new(None));
@@ -453,6 +473,7 @@ impl HeaderBar {
             zoom_out_button,
             zoom_in_button,
             zoom_timer_handle,
+            sort_box,
         )
     }
 
@@ -904,8 +925,8 @@ impl HeaderBar {
     ///
     /// # Returns
     ///
-    /// Tuple of (`zoom_popover`, `zoom_out_button`, `zoom_in_button`).
-    fn create_zoom_popover() -> (Popover, Button, Button) {
+    /// Tuple of (`zoom_popover`, `zoom_out_button`, `zoom_in_button`, `sort_box`).
+    fn create_view_options_popover(app_state: &Arc<AppState>) -> (Popover, Button, Button, Box) {
         let zoom_box = Box::builder()
             .orientation(Vertical)
             .spacing(6)
@@ -922,10 +943,12 @@ impl HeaderBar {
         let icon_size_label = Label::builder().label("Icon Size").build();
         zoom_controls_box.append(&icon_size_label);
 
-        // Create zoom buttons container (horizontal pill)
+        // Create zoom buttons container (horizontal pill) - expands to fill space
         let zoom_buttons_box = Box::builder()
             .orientation(Horizontal)
             .css_classes(["linked", "flat"])
+            .hexpand(true)
+            .halign(End)
             .build();
 
         // Create zoom buttons
@@ -934,6 +957,7 @@ impl HeaderBar {
             .tooltip_text("Zoom Out")
             .use_underline(true)
             .css_classes(["flat"])
+            .hexpand(true)
             .build();
 
         let zoom_in_button = Button::builder()
@@ -941,6 +965,7 @@ impl HeaderBar {
             .tooltip_text("Zoom In")
             .use_underline(true)
             .css_classes(["flat"])
+            .hexpand(true)
             .build();
 
         zoom_buttons_box.append(&zoom_out_button);
@@ -953,10 +978,30 @@ impl HeaderBar {
         let separator = Separator::new(Horizontal);
         zoom_box.append(&separator);
 
+        // Add "Sort by" label
+        let sort_label = Label::builder()
+            .label("Sort by")
+            .halign(Center)
+            .css_classes(["subtitle"])
+            .build();
+        zoom_box.append(&sort_label);
+
+        // Add the sort list stack
+        let sort_box = Box::builder().build();
+        let albums_sort = build_albums_sort_list(app_state);
+        let artists_sort = build_artists_sort_list(app_state);
+
+        albums_sort.set_visible(true);
+        artists_sort.set_visible(false);
+
+        sort_box.append(&albums_sort);
+        sort_box.append(&artists_sort);
+        zoom_box.append(&sort_box);
+
         // Create popover
         let zoom_popover = Popover::builder().child(&zoom_box).has_arrow(true).build();
 
-        (zoom_popover, zoom_out_button, zoom_in_button)
+        (zoom_popover, zoom_out_button, zoom_in_button, sort_box)
     }
 
     /// Creates the bulk action popover with selection toggle.
@@ -1251,14 +1296,15 @@ impl HeaderBar {
     ///
     /// # Returns
     ///
-    /// Tuple of (`MenuButton`, `bulk_action_box`, `selection_toggle`, `selection_counter`).
+    /// Tuple of (`MenuButton`, `bulk_action_box`, `selection_toggle`, `selection_counter`,
+    /// `sort_box`).
     fn create_merged_menu_button(
         app_state: &Arc<AppState>,
         application: Option<&Arc<Application>>,
         library_db: Option<&Arc<LibraryDatabase>>,
         view_split_button: &SplitButton,
         zoom_timer_handle: &Arc<Mutex<Option<SourceId>>>,
-    ) -> (MenuButton, Box, ToggleButton, Label) {
+    ) -> (MenuButton, Box, ToggleButton, Label, Box) {
         let menu = Menu::new();
 
         let view_item = MenuItem::new(Some("Toggle View"), None);
@@ -1299,6 +1345,27 @@ impl HeaderBar {
         let zoom_controls_box = Self::create_zoom_controls_box(app_state, zoom_timer_handle);
         menu_box.append(&zoom_controls_box);
 
+        let sort_separator = Separator::new(Horizontal);
+        menu_box.append(&sort_separator);
+
+        let sort_label = Label::builder()
+            .label("Sort by")
+            .halign(Center)
+            .css_classes(["subtitle"])
+            .build();
+        menu_box.append(&sort_label);
+
+        let sort_box = Box::builder().build();
+        let albums_sort = build_albums_sort_list(app_state);
+        let artists_sort = build_artists_sort_list(app_state);
+
+        albums_sort.set_visible(true);
+        artists_sort.set_visible(false);
+
+        sort_box.append(&albums_sort);
+        sort_box.append(&artists_sort);
+        menu_box.append(&sort_box);
+
         let settings_separator = Separator::new(Horizontal);
         menu_box.append(&settings_separator);
 
@@ -1327,6 +1394,7 @@ impl HeaderBar {
             bulk_action_box,
             merged_menu_selection_toggle,
             merged_menu_selection_counter,
+            sort_box,
         )
     }
 
@@ -1350,8 +1418,8 @@ impl HeaderBar {
 
         let merged_menu_selection_counter = Label::builder()
             .label("0 selected")
-            .halign(Start)
-            .hexpand(true)
+            .halign(Center)
+            .css_classes(["subtitle"])
             .build();
         bulk_action_box.append(&merged_menu_selection_counter);
 
@@ -1823,6 +1891,8 @@ impl HeaderBar {
     ///
     /// * `app_state` - Application state reference
     /// * `view_split_button` - View split button to update
+    /// * `sort_box` - Sort box from view options popover
+    /// * `merged_menu_sort_box` - Sort box from merged menu
     ///
     /// # Returns
     ///
@@ -1830,16 +1900,42 @@ impl HeaderBar {
     fn subscribe_to_view_options(
         app_state: &Arc<AppState>,
         view_split_button: &SplitButton,
+        sort_box: &Box,
+        merged_menu_sort_box: &Box,
     ) -> JoinHandle<()> {
         let state_clone = Arc::clone(app_state);
         let view_split_button_clone = view_split_button.clone();
+        let sort_box_clone = sort_box.clone();
+        let merged_menu_sort_box_clone = merged_menu_sort_box.clone();
         MainContext::default().spawn_local(async move {
             let rx = state_clone.subscribe();
             while let Ok(event) = rx.recv().await {
-                if let ViewOptionsChanged { view_mode, .. } = &*event {
+                if let ViewOptionsChanged {
+                    view_mode,
+                    current_tab,
+                } = &*event
+                {
                     // Update icon based on new view mode
                     let icon_name = Self::get_view_icon_name(view_mode);
                     view_split_button_clone.set_icon_name(icon_name);
+
+                    let show_albums_sort = matches!(current_tab, Albums);
+
+                    // Switch sort list visibility in view options popover
+                    if let Some(albums_sort) = sort_box_clone.first_child() {
+                        albums_sort.set_visible(show_albums_sort);
+                    }
+                    if let Some(artists_sort) = sort_box_clone.last_child() {
+                        artists_sort.set_visible(!show_albums_sort);
+                    }
+
+                    // Switch sort list visibility in merged menu
+                    if let Some(albums_sort) = merged_menu_sort_box_clone.first_child() {
+                        albums_sort.set_visible(show_albums_sort);
+                    }
+                    if let Some(artists_sort) = merged_menu_sort_box_clone.last_child() {
+                        artists_sort.set_visible(!show_albums_sort);
+                    }
                 }
             }
         })

@@ -5,6 +5,7 @@
 
 use std::{
     env::var,
+    fmt::{Display, Formatter, Result as FmtResult},
     fs::{canonicalize, create_dir_all, read_to_string, write},
     io::Error as StdError,
     path::PathBuf,
@@ -32,7 +33,7 @@ pub enum VolumeMode {
 }
 
 /// Sort order for column view.
-#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum SortOrder {
     /// Ascending sort order.
     #[default]
@@ -41,6 +42,51 @@ pub enum SortOrder {
     /// Descending sort order.
     #[serde(rename = "descending")]
     Descending,
+}
+
+/// Criteria for sorting the albums grid.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AlbumGridSortCriteria {
+    /// Sort by album title
+    Title,
+    /// Sort by artist name
+    Artist,
+    /// Sort by release year
+    Year,
+    /// Sort by DR value
+    DRValue,
+    /// Sort by audio format
+    Format,
+    /// Sort by bits per sample
+    BitDepth,
+    /// Sort by sample rate
+    SampleRate,
+}
+
+impl Display for AlbumGridSortCriteria {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        let s = match self {
+            Self::Title => "Title",
+            Self::Artist => "Artist",
+            Self::Year => "Year",
+            Self::DRValue => "DR",
+            Self::Format => "Format",
+            Self::BitDepth => "Bit Depth",
+            Self::SampleRate => "Sample Rate",
+        };
+        write!(f, "{s}")
+    }
+}
+
+/// Criteria for sorting the artists grid.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ArtistGridSortCriteria {
+    /// Sort by artist name
+    Name,
+    /// Sort by number of albums
+    AlbumCount,
 }
 
 /// Error type for settings operations.
@@ -58,6 +104,34 @@ pub enum SettingsError {
     /// Directory does not exist or is not accessible.
     #[error("Directory not found: {0}: {1}")]
     DirectoryNotFound(String, #[source] StdError),
+}
+
+impl Display for ArtistGridSortCriteria {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        let s = match self {
+            Self::Name => "Name",
+            Self::AlbumCount => "Album Count",
+        };
+        write!(f, "{s}")
+    }
+}
+
+/// A complete sorting rule for the albums grid.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AlbumGridSortItem {
+    /// The sorting criteria.
+    pub criteria: AlbumGridSortCriteria,
+    /// The sorting order.
+    pub order: SortOrder,
+}
+
+/// A complete sorting rule for the artists grid.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ArtistGridSortItem {
+    /// The sorting criteria.
+    pub criteria: ArtistGridSortCriteria,
+    /// The sorting order.
+    pub order: SortOrder,
 }
 
 /// Serializable user settings structure with default values.
@@ -102,6 +176,12 @@ pub struct UserSettings {
     /// Sort order for artists view.
     #[serde(default)]
     pub artists_sort_order: SortOrder,
+    /// Sort criteria list for albums grid view.
+    #[serde(default = "default_albums_grid_sort")]
+    pub albums_grid_sort: Vec<AlbumGridSortItem>,
+    /// Sort criteria list for artists grid view.
+    #[serde(default = "default_artists_grid_sort")]
+    pub artists_grid_sort: Vec<ArtistGridSortItem>,
 }
 
 /// Handles loading, saving, and validation of user preferences.
@@ -133,6 +213,8 @@ impl Default for UserSettings {
             albums_sort_order: SortOrder::Ascending,  // Default ascending order
             artists_sort_column: None,                // Default to no specific sort column
             artists_sort_order: SortOrder::Ascending, // Default ascending order
+            albums_grid_sort: default_albums_grid_sort(),
+            artists_grid_sort: default_artists_grid_sort(),
         }
     }
 }
@@ -376,6 +458,54 @@ impl SettingsManager {
     }
 }
 
+/// Default albums grid sort configuration.
+fn default_albums_grid_sort() -> Vec<AlbumGridSortItem> {
+    vec![
+        AlbumGridSortItem {
+            criteria: AlbumGridSortCriteria::Artist,
+            order: SortOrder::Ascending,
+        },
+        AlbumGridSortItem {
+            criteria: AlbumGridSortCriteria::Year,
+            order: SortOrder::Ascending,
+        },
+        AlbumGridSortItem {
+            criteria: AlbumGridSortCriteria::Title,
+            order: SortOrder::Ascending,
+        },
+        AlbumGridSortItem {
+            criteria: AlbumGridSortCriteria::DRValue,
+            order: SortOrder::Descending,
+        },
+        AlbumGridSortItem {
+            criteria: AlbumGridSortCriteria::Format,
+            order: SortOrder::Ascending,
+        },
+        AlbumGridSortItem {
+            criteria: AlbumGridSortCriteria::BitDepth,
+            order: SortOrder::Descending,
+        },
+        AlbumGridSortItem {
+            criteria: AlbumGridSortCriteria::SampleRate,
+            order: SortOrder::Descending,
+        },
+    ]
+}
+
+/// Default artists grid sort configuration.
+fn default_artists_grid_sort() -> Vec<ArtistGridSortItem> {
+    vec![
+        ArtistGridSortItem {
+            criteria: ArtistGridSortCriteria::Name,
+            order: SortOrder::Ascending,
+        },
+        ArtistGridSortItem {
+            criteria: ArtistGridSortCriteria::AlbumCount,
+            order: SortOrder::Descending,
+        },
+    ]
+}
+
 /// Default debounce timeout for search input (150ms).
 const fn default_search_debounce_ms() -> u64 {
     150
@@ -489,6 +619,8 @@ mod tests {
             albums_sort_order: Descending,
             artists_sort_column: Some("Artist".to_string()),
             artists_sort_order: Descending,
+            albums_grid_sort: vec![],
+            artists_grid_sort: vec![],
         };
 
         let serialized = to_string(&settings)?;

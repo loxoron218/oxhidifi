@@ -13,3 +13,4 @@ pub mod empty_state;
 pub mod hifi_metadata;
 pub mod play_overlay;
 pub mod search_empty_state;
+pub mod sort_list;
