@@ -451,12 +451,53 @@ impl AppState {
         self.library.read().selected_album_ids.contains(&album_id)
     }
 
+    /// Toggles select all/deselect all for the current library tab.
+    ///
+    /// If all items in the current tab are already selected, deselects all.
+    /// Otherwise, selects all items in the current tab.
+    ///
+    /// This is context-aware: operates on albums if on Albums tab, artists if on Artists tab.
+    pub fn toggle_select_all(&self) {
+        let library = self.library.read();
+        match library.current_tab {
+            LibraryTab::Albums => {
+                let all_selected = self.are_all_albums_selected();
+                drop(library);
+                if all_selected {
+                    self.clear_album_selection();
+                } else {
+                    self.select_all_albums();
+                }
+            }
+            LibraryTab::Artists => {
+                let all_selected = self.are_all_artists_selected();
+                drop(library);
+                if all_selected {
+                    self.clear_artist_selection();
+                } else {
+                    self.select_all_artists();
+                }
+            }
+        }
+    }
+
     /// Selects all albums.
     pub fn select_all_albums(&self) {
         let mut library = self.library.write();
         library.selected_album_ids = library.albums.iter().map(|a| a.id).collect();
         drop(library);
         self.broadcast_selection_change(LibraryTab::Albums);
+    }
+
+    /// Checks if all albums are selected.
+    ///
+    /// # Returns
+    ///
+    /// `true` if all albums are selected, `false` otherwise
+    #[must_use]
+    pub fn are_all_albums_selected(&self) -> bool {
+        let library = self.library.read();
+        !library.albums.is_empty() && library.selected_album_ids.len() == library.albums.len()
     }
 
     /// Updates the album selection with a new set of IDs.
@@ -567,6 +608,17 @@ impl AppState {
         library.selected_artist_ids = library.artists.iter().map(|a| a.id).collect();
         drop(library);
         self.broadcast_selection_change(LibraryTab::Artists);
+    }
+
+    /// Checks if all artists are selected.
+    ///
+    /// # Returns
+    ///
+    /// `true` if all artists are selected, `false` otherwise
+    #[must_use]
+    pub fn are_all_artists_selected(&self) -> bool {
+        let library = self.library.read();
+        !library.artists.is_empty() && library.selected_artist_ids.len() == library.artists.len()
     }
 
     /// Updates the artist selection with a new set of IDs.

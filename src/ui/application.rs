@@ -19,18 +19,21 @@ use {
         Application, ApplicationWindow, Breakpoint, BreakpointCondition, NavigationPage,
         NavigationView, Toast, ToastOverlay, ToolbarView,
         gdk::{Display, Key},
+        gio::SimpleAction,
         glib::{
             MainContext,
             Propagation::{Proceed, Stop},
             Value,
         },
         gtk::{
-            CssProvider, EventControllerKey, STYLE_PROVIDER_PRIORITY_APPLICATION, ScrolledWindow,
-            Stack, StackTransitionType::Crossfade, Widget, style_context_add_provider_for_display,
+            CssProvider, EventControllerKey, PropagationPhase::Capture,
+            STYLE_PROVIDER_PRIORITY_APPLICATION, ScrolledWindow, Stack,
+            StackTransitionType::Crossfade, Widget, style_context_add_provider_for_display,
         },
         prelude::{
-            AdjustmentExt, AdwApplicationWindowExt, ApplicationExt, ApplicationExtManual, Cast,
-            GtkWindowExt, NavigationPageExt, ToggleButtonExt, WidgetExt,
+            ActionMapExt, AdjustmentExt, AdwApplicationWindowExt, ApplicationExt,
+            ApplicationExtManual, Cast, EventControllerExt, GtkApplicationExt, GtkWindowExt,
+            NavigationPageExt, ToggleButtonExt, WidgetExt,
         },
     },
     parking_lot::RwLock,
@@ -272,125 +275,158 @@ impl OxhidifiApplication {
 
     /// Runs the application.
     ///
-    /// This method starts the GTK main loop and displays the main window.
+    /// This method starts the GTK main loop, sets up actions and keyboard shortcuts,
+    /// subscribes to library scanner events, and initiates the background library scan.
     pub fn run(&self) {
-        self.app.connect_activate({
-            let app_clone = self.app.clone();
-            let audio_engine_clone = Arc::clone(&self.audio_engine);
-            let library_db_clone = Arc::clone(&self.library_db);
-            let app_state_clone = Arc::clone(&self.app_state);
-            let settings_manager_clone = Arc::clone(&self.settings);
-            let queue_manager_clone = Arc::clone(&self.queue_manager);
-            let tokio_runtime_clone = Arc::clone(&self.tokio_runtime);
-            let scan_cancelled_clone = Arc::clone(&self.scan_cancelled);
-            let scan_thread_clone = Arc::clone(&self.scan_thread);
-
-            move |_| {
-                build_ui(
-                    &app_clone,
-                    &audio_engine_clone,
-                    &library_db_clone,
-                    &app_state_clone,
-                    &settings_manager_clone,
-                    &queue_manager_clone,
-                );
-
-                // Subscribe to library scanner events if active
-                let scanner_for_sub = {
-                    let guard = app_state_clone.library_scanner.read();
-                    guard.as_ref().map(Arc::clone)
-                };
-
-                if let Some(scanner_lock) = scanner_for_sub {
-                    let app_state_refresh = Arc::clone(&app_state_clone);
-                    let db_refresh = Arc::clone(&library_db_clone);
-
-                    MainContext::default().spawn_local(async move {
-                        let rx = scanner_lock.read().await.subscribe();
-                        loop {
-                            match rx.recv().await {
-                                Ok(LibraryChanged) => {
-                                    debug!("LibraryChanged event received, refreshing app state");
-
-                                    // Refresh albums and artists in parallel
-                                    let (albums, artists) = match try_join!(
-                                        async {
-                                            db_refresh.get_albums(None).await.map_err(|e| {
-                                                error!(error = %e, "Failed to refresh albums");
-                                                e
-                                            })
-                                        },
-                                        async {
-                                            db_refresh.get_artists(None).await.map_err(|e| {
-                                                error!(error = %e, "Failed to refresh artists");
-                                                e
-                                            })
-                                        }
-                                    ) {
-                                        Ok((albums, artists)) => (albums, artists),
-                                        Err(_) => (Vec::new(), Vec::new()),
-                                    };
-
-                                    // Update state
-                                    app_state_refresh.update_library_data(albums, artists);
-                                }
-                                Err(_) => {
-                                    debug!("Scanner event channel closed");
-                                    break;
-                                }
-                            }
-                        }
-                    });
-                }
-
-                // Start background library scan after window is shown
-                let scanner = {
-                    let guard = app_state_clone.library_scanner.read();
-                    guard.as_ref().map(Arc::clone)
-                };
-
-                if let Some(scanner) = scanner {
-                    let db_for_scan = Arc::clone(&library_db_clone);
-                    let settings_for_scan = Arc::clone(&settings_manager_clone);
-                    let rt = Arc::clone(&tokio_runtime_clone);
-                    let cancelled = Arc::clone(&scan_cancelled_clone);
-                    let thread_storage = Arc::clone(&scan_thread_clone);
-
-                    let handle = spawn(move || {
-                        rt.block_on(async move {
-                            if cancelled.load(SeqCst) {
-                                debug!("Library scan cancelled before start");
-                                return;
-                            }
-
-                            let user_settings_arc = settings_for_scan.get_settings_arc();
-
-                            if let Err(e) = scanner
-                                .read()
-                                .await
-                                .scan_initial_directories(
-                                    &db_for_scan,
-                                    &user_settings_arc,
-                                    &cancelled,
-                                )
-                                .await
-                            {
-                                if cancelled.load(SeqCst) {
-                                    debug!("Library scan cancelled during execution");
-                                } else {
-                                    error!(error = %e, "Failed to perform initial library scan");
-                                }
-                            }
-                        });
-                    });
-
-                    let mut guard = thread_storage.lock();
-                    *guard = Some(handle);
-                }
-            }
-        });
-
+        self.setup_actions();
+        self.setup_activate_handler();
         self.app.run();
+    }
+
+    /// Sets up application actions and keyboard shortcuts.
+    fn setup_actions(&self) {
+        let app_state_for_action = Arc::clone(&self.app_state);
+
+        let select_all_action = SimpleAction::new("select-all", None);
+        select_all_action.connect_activate(move |_, _| {
+            debug!("select-all action triggered");
+            app_state_for_action.toggle_select_all();
+        });
+        self.app.add_action(&select_all_action);
+        self.app
+            .set_accels_for_action("app.select-all", &["<Ctrl>A"]);
+    }
+
+    /// Sets up the activate handler for the application.
+    fn setup_activate_handler(&self) {
+        let app_clone = self.app.clone();
+        let audio_engine_clone = Arc::clone(&self.audio_engine);
+        let library_db_clone = Arc::clone(&self.library_db);
+        let app_state_clone = Arc::clone(&self.app_state);
+        let settings_manager_clone = Arc::clone(&self.settings);
+        let queue_manager_clone = Arc::clone(&self.queue_manager);
+        let tokio_runtime_clone = Arc::clone(&self.tokio_runtime);
+        let scan_cancelled_clone = Arc::clone(&self.scan_cancelled);
+        let scan_thread_clone = Arc::clone(&self.scan_thread);
+
+        self.app.connect_activate(move |_| {
+            build_ui(
+                &app_clone,
+                &audio_engine_clone,
+                &library_db_clone,
+                &app_state_clone,
+                &settings_manager_clone,
+                &queue_manager_clone,
+            );
+
+            Self::subscribe_to_scanner_events(&app_state_clone, &library_db_clone);
+            Self::start_background_scan(
+                &app_state_clone,
+                &library_db_clone,
+                &settings_manager_clone,
+                &tokio_runtime_clone,
+                &scan_cancelled_clone,
+                &scan_thread_clone,
+            );
+        });
+    }
+
+    /// Subscribes to library scanner events to refresh UI when library changes.
+    fn subscribe_to_scanner_events(app_state: &Arc<AppState>, library_db: &Arc<LibraryDatabase>) {
+        let scanner_for_sub = {
+            let guard = app_state.library_scanner.read();
+            guard.as_ref().map(Arc::clone)
+        };
+
+        if let Some(scanner_lock) = scanner_for_sub {
+            let app_state_refresh = Arc::clone(app_state);
+            let db_refresh = Arc::clone(library_db);
+
+            MainContext::default().spawn_local(async move {
+                let rx = scanner_lock.read().await.subscribe();
+                loop {
+                    match rx.recv().await {
+                        Ok(LibraryChanged) => {
+                            debug!("LibraryChanged event received, refreshing app state");
+
+                            let (albums, artists) = match try_join!(
+                                async {
+                                    db_refresh.get_albums(None).await.map_err(|e| {
+                                        error!(error = %e, "Failed to refresh albums");
+                                        e
+                                    })
+                                },
+                                async {
+                                    db_refresh.get_artists(None).await.map_err(|e| {
+                                        error!(error = %e, "Failed to refresh artists");
+                                        e
+                                    })
+                                }
+                            ) {
+                                Ok((albums, artists)) => (albums, artists),
+                                Err(_) => (Vec::new(), Vec::new()),
+                            };
+
+                            app_state_refresh.update_library_data(albums, artists);
+                        }
+                        Err(_) => {
+                            debug!("Scanner event channel closed");
+                            break;
+                        }
+                    }
+                }
+            });
+        }
+    }
+
+    /// Starts the background library scan thread.
+    fn start_background_scan(
+        app_state: &Arc<AppState>,
+        library_db: &Arc<LibraryDatabase>,
+        settings_manager: &Arc<SettingsManager>,
+        tokio_runtime: &Arc<tokio::runtime::Runtime>,
+        scan_cancelled: &Arc<AtomicBool>,
+        scan_thread: &Arc<parking_lot::Mutex<Option<JoinHandle<()>>>>,
+    ) {
+        let scanner = {
+            let guard = app_state.library_scanner.read();
+            guard.as_ref().map(Arc::clone)
+        };
+
+        if let Some(scanner) = scanner {
+            let db_for_scan = Arc::clone(library_db);
+            let settings_for_scan = Arc::clone(settings_manager);
+            let rt = Arc::clone(tokio_runtime);
+            let cancelled = Arc::clone(scan_cancelled);
+            let thread_storage = Arc::clone(scan_thread);
+
+            let handle = spawn(move || {
+                rt.block_on(async move {
+                    if cancelled.load(SeqCst) {
+                        debug!("Library scan cancelled before start");
+                        return;
+                    }
+
+                    let user_settings_arc = settings_for_scan.get_settings_arc();
+
+                    if let Err(e) = scanner
+                        .read()
+                        .await
+                        .scan_initial_directories(&db_for_scan, &user_settings_arc, &cancelled)
+                        .await
+                    {
+                        if cancelled.load(SeqCst) {
+                            debug!("Library scan cancelled during execution");
+                        } else {
+                            error!(error = %e, "Failed to perform initial library scan");
+                        }
+                    }
+                });
+            });
+
+            let mut guard = thread_storage.lock();
+            *guard = Some(handle);
+        }
     }
 }
 
@@ -800,29 +836,32 @@ fn spawn_player_bar_visibility_handler(
     });
 }
 
-/// Sets up ESC key controller for back navigation from detail views.
+/// Sets up keyboard shortcut controllers for the main window.
 ///
 /// # Arguments
 ///
 /// * `app_state` - Application state reference
 /// * `window` - The application window
-fn setup_esc_key_controller(app_state: &Arc<AppState>, window: &ApplicationWindow) {
-    let app_state_esc = Arc::clone(app_state);
-    let esc_controller = EventControllerKey::new();
+fn setup_keyboard_shortcuts(app_state: &Arc<AppState>, window: &ApplicationWindow) {
+    let app_state_shortcuts = Arc::clone(app_state);
+    let key_controller = EventControllerKey::new();
 
-    esc_controller.connect_key_pressed(move |_, key, _, _| {
+    key_controller.set_propagation_phase(Capture);
+
+    key_controller.connect_key_pressed(move |_, key, _, _| {
         if key == Key::Escape {
-            let current_nav = app_state_esc.get_navigation_state();
+            let current_nav = app_state_shortcuts.get_navigation_state();
             if current_nav != Library {
                 debug!("ESC pressed in detail view, navigating back to library");
-                app_state_esc.update_navigation(Library);
+                app_state_shortcuts.update_navigation(Library);
                 return Stop;
             }
         }
+
         Proceed
     });
 
-    window.add_controller(esc_controller);
+    window.add_controller(key_controller);
 }
 
 /// Assembles the main layout using `ToolbarView` with header, content, and player bar.
@@ -954,9 +993,13 @@ fn build_ui(
         error!(error = %e, "Failed to load custom CSS");
     }
 
-    setup_esc_key_controller(app_state, &window);
+    setup_keyboard_shortcuts(app_state, &window);
 
     window.set_content(Some(&main_box));
+    main_box.set_can_focus(true);
+
+    toast_overlay.set_can_focus(true);
+
     window.present();
 }
 
