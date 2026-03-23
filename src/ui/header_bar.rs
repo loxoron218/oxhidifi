@@ -18,8 +18,8 @@ use {
         Application, ApplicationWindow, HeaderBar as LibadwaitaHeaderBar, SplitButton,
         gio::{Icon, Menu, MenuItem, SimpleAction, SimpleActionGroup},
         glib::{
-            ControlFlow::Continue, JoinHandle, MainContext, SourceId, Variant, VariantTy,
-            timeout_add_local, timeout_add_local_once,
+            ControlFlow::Continue, JoinHandle, MainContext, SourceId, Variant, VariantTy, WeakRef,
+            clone::Downgrade, timeout_add_local, timeout_add_local_once,
         },
         gtk::{
             Align::{Center, End, Start},
@@ -1373,11 +1373,16 @@ impl HeaderBar {
         let settings_separator = Separator::new(Horizontal);
         menu_box.append(&settings_separator);
 
-        let settings_button =
-            Self::create_merged_settings_button(app_state, application, library_db);
-        menu_box.append(&settings_button);
+        let popover = Popover::builder()
+            .child(&menu_box)
+            .has_arrow(true)
+            .autohide(true)
+            .build();
 
-        let popover = Popover::builder().child(&menu_box).has_arrow(true).build();
+        let popover_weak = popover.downgrade();
+        let settings_button =
+            Self::create_merged_settings_button(app_state, application, library_db, popover_weak);
+        menu_box.append(&settings_button);
 
         let zoom_timer_handle_closed = Arc::clone(zoom_timer_handle);
         popover.connect_closed(move |_| {
@@ -1729,6 +1734,7 @@ impl HeaderBar {
         app_state: &Arc<AppState>,
         application: Option<&Arc<Application>>,
         library_db: Option<&Arc<LibraryDatabase>>,
+        popover_weak: WeakRef<Popover>,
     ) -> Button {
         let settings_row_box = Box::builder()
             .orientation(Horizontal)
@@ -1753,6 +1759,10 @@ impl HeaderBar {
         let application_settings = application.cloned();
         let library_db_settings = library_db.cloned();
         settings_button_merged.connect_clicked(move |_| {
+            if let Some(pop) = popover_weak.upgrade() {
+                pop.popdown();
+            }
+
             if let Some(app) = &application_settings
                 && let Some(db) = &library_db_settings
             {
