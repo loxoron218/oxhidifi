@@ -1346,7 +1346,8 @@ impl HeaderBar {
         let separator = Separator::new(Horizontal);
         menu_box.append(&separator);
 
-        let zoom_controls_box = Self::create_zoom_controls_box(app_state, zoom_timer_handle);
+        let (zoom_controls_box, merged_zoom_out_btn, merged_zoom_in_btn) =
+            Self::create_zoom_controls_box(app_state, zoom_timer_handle);
         menu_box.append(&zoom_controls_box);
 
         let sort_separator = Separator::new(Horizontal);
@@ -1383,6 +1384,22 @@ impl HeaderBar {
         let settings_button =
             Self::create_merged_settings_button(app_state, application, library_db, popover_weak);
         menu_box.append(&settings_button);
+
+        let app_state_show = Arc::clone(app_state);
+        let zoom_out_show = merged_zoom_out_btn;
+        let zoom_in_show = merged_zoom_in_btn;
+        let zoom_timer_handle_show = Arc::clone(zoom_timer_handle);
+        popover.connect_show(move |_| {
+            if let Some(old_timer) = zoom_timer_handle_show.lock().take() {
+                old_timer.remove();
+            }
+            Self::setup_zoom_buttons(
+                &app_state_show,
+                &zoom_out_show,
+                &zoom_in_show,
+                &zoom_timer_handle_show,
+            );
+        });
 
         let zoom_timer_handle_closed = Arc::clone(zoom_timer_handle);
         popover.connect_closed(move |_| {
@@ -1551,11 +1568,11 @@ impl HeaderBar {
     ///
     /// # Returns
     ///
-    /// A `Box` containing zoom out label, zoom in label, and icon size label.
+    /// Tuple of (`Box` containing zoom controls, `zoom_out_button`, `zoom_in_button`).
     fn create_zoom_controls_box(
         app_state: &Arc<AppState>,
         zoom_timer_handle: &Arc<Mutex<Option<SourceId>>>,
-    ) -> Box {
+    ) -> (Box, Button, Button) {
         let zoom_controls_box = Box::builder()
             .orientation(Vertical)
             .spacing(6)
@@ -1572,7 +1589,7 @@ impl HeaderBar {
 
         Self::setup_zoom_buttons(app_state, &zoom_out_btn, &zoom_in_btn, zoom_timer_handle);
 
-        zoom_controls_box
+        (zoom_controls_box, zoom_out_btn, zoom_in_btn)
     }
 
     /// Creates a zoom button with icon and label.
