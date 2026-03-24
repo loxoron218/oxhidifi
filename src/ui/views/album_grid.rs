@@ -1051,6 +1051,9 @@ impl AlbumGridView {
             self.search_empty_state.update_search_query(query);
             self.search_empty_state.show();
         }
+
+        // Update count label to reflect filtered results
+        self.update_count_label();
     }
 
     /// Clears the view by hiding all items.

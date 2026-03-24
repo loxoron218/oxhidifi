@@ -19,7 +19,7 @@ use {
             SortType::{Ascending, Descending},
             Widget,
         },
-        prelude::{BoxExt, Cast, ListModelExt, SelectionModelExt, SorterExt},
+        prelude::{BoxExt, Cast, ListModelExt, SelectionModelExt, SorterExt, WidgetExt},
     },
     tracing::{debug, error},
 };
@@ -516,6 +516,49 @@ impl ColumnListView {
             &self.albums,
             &self.artists,
         );
+
+        // Update count label to reflect filtered results
+        self.update_filtered_count_label();
+    }
+
+    /// Updates the count label based on the currently filtered items.
+    fn update_filtered_count_label(&self) {
+        let filtered_count = self.filter_model.n_items() as usize;
+        let has_filter = self.filter_model.filter().is_some();
+
+        if !has_filter {
+            // No active filter, use standard count label update
+            self.update_count_label();
+            return;
+        }
+
+        if filtered_count == 0 {
+            self.count_label.set_visible(false);
+            return;
+        }
+
+        self.count_label.set_visible(true);
+
+        let label_text = match &self.config.view_type {
+            Albums => {
+                let album_word = if filtered_count == 1 {
+                    "Album"
+                } else {
+                    "Albums"
+                };
+                format!("{filtered_count} {album_word}")
+            }
+            Artists => {
+                let artist_word = if filtered_count == 1 {
+                    "Artist"
+                } else {
+                    "Artists"
+                };
+                format!("{filtered_count} {artist_word}")
+            }
+        };
+
+        self.count_label.set_text(&label_text);
     }
 
     /// Connects selection sync to update `AppState` when selection changes in the UI.
