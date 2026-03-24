@@ -53,6 +53,7 @@ use crate::{
             },
         },
     },
+    update_visibility_by_count,
 };
 
 /// Column view for displaying albums or artists with detailed metadata.
@@ -167,6 +168,7 @@ impl ColumnListView {
             .margin_top(12)
             .margin_bottom(6)
             .css_classes(["dim-label"])
+            .visible(false)
             .build();
 
         main_container.append(&count_label.clone().upcast::<Widget>());
@@ -443,6 +445,8 @@ impl ColumnListView {
         let album_count = self.albums.len();
         let song_count: i64 = self.albums.iter().map(|a| a.track_count).sum();
 
+        update_visibility_by_count!(album_count, self.count_label);
+
         let label_text = if song_count > 0 {
             if song_count == 1 {
                 format!("{album_count} Album (1 Song)")
@@ -480,6 +484,8 @@ impl ColumnListView {
     fn update_artist_count_label(&self) {
         let artist_count = self.artists.len();
         let album_count: i64 = self.artists.iter().map(|a| a.album_count).sum();
+
+        update_visibility_by_count!(artist_count, self.count_label);
 
         let label_text = if album_count > 0 {
             if album_count == 1 {

@@ -24,3 +24,4 @@ pub mod detail_playback;
 pub mod detail_types;
 pub mod detail_view;
 pub mod filtering;
+pub mod ui_macros;

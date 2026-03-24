@@ -62,6 +62,7 @@ use crate::{
         formatting::create_format_display,
         views::{detail_playback::play_album, filtering::Filterable},
     },
+    update_visibility_by_count,
 };
 
 /// Builder pattern for configuring `AlbumGridView` components.
@@ -399,6 +400,7 @@ impl AlbumGridView {
             .margin_top(12)
             .margin_bottom(6)
             .css_classes(["dim-label"])
+            .visible(false)
             .build();
 
         main_container.append(&count_label.clone().upcast::<Widget>());
@@ -745,6 +747,8 @@ impl AlbumGridView {
     fn update_count_label(&self) {
         let album_count = self.albums.len();
         let song_count: i64 = self.albums.iter().map(|a| a.track_count).sum();
+
+        update_visibility_by_count!(album_count, self.count_label);
 
         let label_text = if song_count > 0 {
             let album_word = if album_count == 1 { "Album" } else { "Albums" };

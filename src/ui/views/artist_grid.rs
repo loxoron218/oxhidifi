@@ -58,6 +58,7 @@ use crate::{
         },
         views::filtering::Filterable,
     },
+    update_visibility_by_count,
 };
 
 /// Maximum cover size in pixels to prevent UI rendering issues.
@@ -203,6 +204,7 @@ impl ArtistGridView {
             .margin_top(12)
             .margin_bottom(6)
             .css_classes(["dim-label"])
+            .visible(false)
             .build();
 
         main_container.append(&count_label.clone().upcast::<Widget>());
@@ -478,6 +480,8 @@ impl ArtistGridView {
     fn update_count_label(&self) {
         let artist_count = self.artists.len();
         let song_count: i64 = self.artists.iter().map(|a| a.album_count).sum();
+
+        update_visibility_by_count!(artist_count, self.count_label);
 
         let label_text = if song_count > 0 {
             if song_count == 1 {
