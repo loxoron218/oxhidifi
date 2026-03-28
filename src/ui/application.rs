@@ -111,7 +111,7 @@ pub struct OxhidifiApplication {
     /// Long-lived Tokio runtime for background operations.
     tokio_runtime: Arc<Runtime>,
     /// Flag to signal cancellation of background scan thread.
-    scan_cancelled: Arc<AtomicBool>,
+    is_scan_cancelled: Arc<AtomicBool>,
     /// Join handle for the background scan thread.
     scan_thread: Arc<parking_lot::Mutex<Option<JoinHandle<()>>>>,
 }
@@ -268,7 +268,7 @@ impl OxhidifiApplication {
             queue_manager,
             settings: Arc::clone(&settings_manager_shared),
             tokio_runtime,
-            scan_cancelled: Arc::new(AtomicBool::new(false)),
+            is_scan_cancelled: Arc::new(AtomicBool::new(false)),
             scan_thread: Arc::new(parking_lot::Mutex::new(None)),
         })
     }
@@ -306,7 +306,7 @@ impl OxhidifiApplication {
         let settings_manager_clone = Arc::clone(&self.settings);
         let queue_manager_clone = Arc::clone(&self.queue_manager);
         let tokio_runtime_clone = Arc::clone(&self.tokio_runtime);
-        let scan_cancelled_clone = Arc::clone(&self.scan_cancelled);
+        let is_scan_cancelled_clone = Arc::clone(&self.is_scan_cancelled);
         let scan_thread_clone = Arc::clone(&self.scan_thread);
 
         self.app.connect_activate(move |_| {
@@ -325,7 +325,7 @@ impl OxhidifiApplication {
                 &library_db_clone,
                 &settings_manager_clone,
                 &tokio_runtime_clone,
-                &scan_cancelled_clone,
+                &is_scan_cancelled_clone,
                 &scan_thread_clone,
             );
         });
@@ -385,7 +385,7 @@ impl OxhidifiApplication {
         library_db: &Arc<LibraryDatabase>,
         settings_manager: &Arc<SettingsManager>,
         tokio_runtime: &Arc<tokio::runtime::Runtime>,
-        scan_cancelled: &Arc<AtomicBool>,
+        is_scan_cancelled: &Arc<AtomicBool>,
         scan_thread: &Arc<parking_lot::Mutex<Option<JoinHandle<()>>>>,
     ) {
         let scanner = {
@@ -397,7 +397,7 @@ impl OxhidifiApplication {
             let db_for_scan = Arc::clone(library_db);
             let settings_for_scan = Arc::clone(settings_manager);
             let rt = Arc::clone(tokio_runtime);
-            let cancelled = Arc::clone(scan_cancelled);
+            let cancelled = Arc::clone(is_scan_cancelled);
             let thread_storage = Arc::clone(scan_thread);
 
             let handle = spawn(move || {
@@ -434,7 +434,7 @@ impl Drop for OxhidifiApplication {
     fn drop(&mut self) {
         debug!("OxhidifiApplication dropped, cancelling background scan thread");
 
-        self.scan_cancelled.store(true, SeqCst);
+        self.is_scan_cancelled.store(true, SeqCst);
 
         if let Some(handle) = self.scan_thread.lock().take() {
             if handle.join().is_err() {

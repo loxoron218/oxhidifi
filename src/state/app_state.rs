@@ -6,7 +6,10 @@
 
 use std::{
     collections::HashSet,
-    sync::{Arc, Weak},
+    sync::{
+        Arc, Weak,
+        atomic::{AtomicBool, Ordering::Relaxed},
+    },
 };
 
 use {
@@ -67,6 +70,8 @@ pub struct AppState {
     pub zoom_manager: Arc<ZoomManager>,
     /// Settings manager reference for persistence (wrapped in `RwLock` for mutability).
     pub settings_manager: Arc<RwLock<SettingsManager>>,
+    /// Global scanning state - true when library is being scanned.
+    pub is_scanning: Arc<AtomicBool>,
 }
 
 /// Current library view state.
@@ -183,6 +188,15 @@ pub enum AppStateEvent {
     ExclusiveModeFailed { reason: String },
     /// Library scan failed.
     LibraryScanFailed { reason: String },
+    /// Library scanning state changed.
+    LibraryScanningChanged { is_scanning: bool },
+    /// Library scan progress update.
+    LibraryScanProgress {
+        /// Number of albums processed so far.
+        current: usize,
+        /// Total number of albums to process.
+        total: usize,
+    },
 }
 
 impl AppState {
@@ -215,6 +229,7 @@ impl AppState {
             subscribers: Arc::new(RwLock::new(Vec::new())),
             zoom_manager,
             settings_manager,
+            is_scanning: Arc::new(AtomicBool::new(false)),
         };
 
         state.listen_to_audio_engine();
@@ -690,6 +705,39 @@ impl AppState {
     pub fn report_library_scan_failure(&self, reason: String) {
         debug!("AppState: Reporting library scan failure: {}", reason);
         self.broadcast_event(&AppStateEvent::LibraryScanFailed { reason });
+    }
+
+    /// Sets the library scanning state and notifies subscribers.
+    ///
+    /// # Arguments
+    ///
+    /// * `scanning` - Whether a scan is in progress
+    pub fn set_scanning(&self, scanning: bool) {
+        debug!("AppState: Setting scanning state to {}", scanning);
+        self.is_scanning.store(scanning, Relaxed);
+        self.broadcast_event(&AppStateEvent::LibraryScanningChanged {
+            is_scanning: scanning,
+        });
+    }
+
+    /// Gets the current scanning state.
+    ///
+    /// # Returns
+    ///
+    /// `true` if a scan is in progress, `false` otherwise
+    #[must_use]
+    pub fn is_scanning(&self) -> bool {
+        self.is_scanning.load(Relaxed)
+    }
+
+    /// Broadcasts library scan progress.
+    ///
+    /// # Arguments
+    ///
+    /// * `current` - Number of albums processed so far
+    /// * `total` - Total number of albums to process
+    pub fn broadcast_scan_progress(&self, current: usize, total: usize) {
+        self.broadcast_event(&AppStateEvent::LibraryScanProgress { current, total });
     }
 
     /// Subscribes to application state changes.

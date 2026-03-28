@@ -4,7 +4,8 @@
 //! message with a button to add library directories when no albums or artists are available.
 
 use std::{
-    path::Path,
+    collections::HashMap,
+    path::{Path, PathBuf},
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering::Relaxed},
@@ -19,12 +20,13 @@ use {
             Align::{Center, Fill},
             Box, Button, FileDialog, Label,
             Orientation::Vertical,
-            Widget,
+            ProgressBar, Spinner, Widget,
         },
         prelude::{BoxExt, ButtonExt, Cast, FileExt, WidgetExt},
     },
+    num_traits::ToPrimitive,
     parking_lot::RwLock,
-    tokio::{spawn, sync::RwLock as TokioRwLock, try_join},
+    tokio::{select, spawn, sync::RwLock as TokioRwLock, try_join},
     tracing::{debug, error, info, warn},
 };
 
@@ -37,8 +39,15 @@ use crate::{
             LibraryScanner, ScannerEvent::LibraryChanged, event_processing::handle_files_changed,
         },
     },
-    state::app_state::{AppState, LibraryState},
+    state::app_state::{
+        AppState,
+        AppStateEvent::{LibraryDataChanged, LibraryScanProgress, LibraryScanningChanged},
+        LibraryState,
+    },
 };
+
+/// Progress update interval for library scanning (in number of albums processed)
+pub const SCAN_PROGRESS_INTERVAL: usize = 20;
 
 /// Configuration for `EmptyState` display options.
 #[derive(Debug, Clone)]
@@ -60,8 +69,20 @@ pub struct EmptyState {
     pub container: Box,
     /// Message label.
     pub message_label: Label,
+    /// Description label.
+    pub description_label: Label,
     /// Add directory button.
     pub add_button: Button,
+    /// Progress spinner (shown during file discovery).
+    pub progress_spinner: Option<Spinner>,
+    /// Progress bar (shown during processing).
+    pub progress_bar: Option<ProgressBar>,
+    /// Progress status label.
+    pub progress_label: Option<Label>,
+    /// Cancel scan button.
+    pub cancel_button: Option<Button>,
+    /// Whether a scan is currently in progress.
+    pub is_scanning: Arc<AtomicBool>,
     /// Application state reference.
     pub app_state: Option<Arc<AppState>>,
     /// Settings manager reference.
@@ -127,6 +148,41 @@ impl EmptyState {
             .use_underline(true)
             .build();
 
+        // Create progress spinner (hidden initially)
+        let progress_spinner = Spinner::builder()
+            .spinning(true)
+            .halign(Center)
+            .visible(false)
+            .build();
+        progress_spinner.set_size_request(48, 48);
+
+        // Create progress bar (hidden initially)
+        let progress_bar = ProgressBar::builder()
+            .halign(Center)
+            .hexpand(true)
+            .visible(false)
+            .build();
+        progress_bar.set_fraction(0.0);
+
+        // Create progress label (hidden initially)
+        let progress_label = Label::builder()
+            .label("Scanning...")
+            .halign(Center)
+            .css_classes(["dim-label"])
+            .visible(false)
+            .wrap(true)
+            .max_width_chars(40)
+            .build();
+
+        // Create cancel button (hidden initially)
+        let cancel_button = Button::builder()
+            .label("Cancel")
+            .halign(Center)
+            .css_classes(["destructive-action"])
+            .tooltip_text("Cancel the current scan")
+            .visible(false)
+            .build();
+
         // Create main container
         let container = Box::builder()
             .orientation(Vertical)
@@ -142,6 +198,10 @@ impl EmptyState {
         container.append(&message_label);
         container.append(&description_label);
         container.append(&add_button);
+        container.append(&progress_spinner);
+        container.append(&progress_bar);
+        container.append(&progress_label);
+        container.append(&cancel_button);
 
         // Create outer widget container
         let widget = Box::builder()
@@ -157,7 +217,13 @@ impl EmptyState {
             widget: widget.upcast_ref::<Widget>().clone(),
             container,
             message_label,
+            description_label,
             add_button,
+            progress_spinner: Some(progress_spinner),
+            progress_bar: Some(progress_bar),
+            progress_label: Some(progress_label),
+            cancel_button: Some(cancel_button),
+            is_scanning: Arc::new(AtomicBool::new(false)),
             app_state,
             settings_manager,
             config,
@@ -177,7 +243,15 @@ impl EmptyState {
         }
         self.scanner_cancel_token = None;
     }
+}
 
+impl Drop for EmptyState {
+    fn drop(&mut self) {
+        self.stop_scanner_event_listener();
+    }
+}
+
+impl EmptyState {
     /// Connects event handlers to the add directory button.
     ///
     /// # Panics
@@ -200,7 +274,13 @@ impl EmptyState {
             return;
         };
 
+        let add_button_clone = self.add_button.clone();
+
         self.add_button.connect_clicked(move |_| {
+            let Some(settings_manager) = settings_manager_clone.clone() else {
+                return;
+            };
+
             // Create file dialog for folder selection
             let dialog = FileDialog::builder()
                 .title("Select Music Folder")
@@ -210,59 +290,94 @@ impl EmptyState {
 
             // Get window reference for dialog parent
             if let Some(window) = &window_clone {
-                // Open folder selection dialog asynchronously
-                let dialog_clone = dialog;
-                let window_clone2 = window.clone();
-                let settings_manager_clone2 = settings_manager_clone.as_ref().map(Arc::clone);
-                let app_state_clone2 = app_state_clone.as_ref().map(Arc::clone);
-                let cancel_token = Arc::clone(&cancel_token_clone);
+                Self::handle_folder_selection(
+                    dialog,
+                    window.clone(),
+                    settings_manager,
+                    app_state_clone.clone(),
+                    Arc::clone(&cancel_token_clone),
+                    &add_button_clone,
+                );
+            }
+        });
 
-                MainContext::default().spawn_local(async move {
-                    match dialog_clone
-                        .select_folder_future(Some(&window_clone2))
-                        .await
-                    {
-                        Ok(folder) => {
-                            if let Some(settings_manager) = &settings_manager_clone2 {
-                                // Get the selected folder path
-                                if let Some(path) = folder.path()
-                                    && let Some(path_str) = path.to_str()
-                                {
-                                    let path_str: &str = path_str;
+        if let Some(cancel_button) = &self.cancel_button {
+            let cancel_token_clone = self.scanner_cancel_token.as_ref().map(Arc::clone);
+            let app_state_clone = self.app_state.as_ref().map(Arc::clone);
+            cancel_button.connect_clicked(move |button| {
+                if let Some(token) = &cancel_token_clone {
+                    token.store(true, Relaxed);
+                    debug!("Scan cancellation requested via button");
+                }
+                if let Some(app) = &app_state_clone {
+                    app.set_scanning(false);
+                }
+                button.set_visible(false);
+            });
+        }
+    }
 
-                                    // Only add if not already present
-                                    let path_string = path_str.to_string();
+    /// Handles folder selection and triggers library rescan.
+    ///
+    /// # Arguments
+    ///
+    /// * `dialog` - File dialog for folder selection
+    /// * `window` - Parent window for the dialog
+    /// * `settings_manager` - Settings manager for adding library directory
+    /// * `app_state` - Application state for triggering rescan
+    /// * `cancel_token` - Cancellation token for stopping scan
+    /// * `add_button` - Add button to hide after selection
+    fn handle_folder_selection(
+        dialog: FileDialog,
+        window: ApplicationWindow,
+        settings_manager: Arc<RwLock<SettingsManager>>,
+        app_state: Option<Arc<AppState>>,
+        cancel_token: Arc<AtomicBool>,
+        add_button: &Button,
+    ) {
+        add_button.set_visible(false);
 
-                                    // Get mutable reference to update settings in a tight scope
-                                    let add_result = {
-                                        let settings_write = settings_manager.write();
-                                        settings_write.add_library_directory(&path_string)
-                                    };
+        MainContext::default().spawn_local(async move {
+            match dialog.select_folder_future(Some(&window)).await {
+                Ok(folder) => {
+                    // Get the selected folder path
+                    let Some(path) = folder.path() else {
+                        return;
+                    };
 
-                                    if let Err(e) = add_result {
-                                        error!(error = %e, "Failed to add library directory");
-                                        return;
-                                    }
+                    let Some(path_str) = path.to_str() else {
+                        return;
+                    };
 
-                                    // Log successful addition
-                                    info!("Library directory added: {path_string}");
+                    // Only add if not already present
+                    let path_string = path_str.to_string();
 
-                                    // Trigger library rescan
-                                    Self::trigger_library_rescan(
-                                        path_str,
-                                        Arc::clone(settings_manager),
-                                        app_state_clone2,
-                                        cancel_token,
-                                    )
-                                    .await;
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            warn!(error = %e, "Folder selection cancelled or failed");
-                        }
+                    // Get mutable reference to update settings in a tight scope
+                    let add_result = {
+                        let settings_write = settings_manager.write();
+                        settings_write.add_library_directory(&path_string)
+                    };
+
+                    if let Err(e) = add_result {
+                        error!(error = %e, "Failed to add library directory");
+                        return;
                     }
-                });
+
+                    // Log successful addition
+                    info!("Library directory added: {path_string}");
+
+                    cancel_token.store(false, Relaxed);
+                    Self::trigger_library_rescan(
+                        path_str,
+                        settings_manager,
+                        app_state,
+                        cancel_token,
+                    )
+                    .await;
+                }
+                Err(e) => {
+                    warn!(error = %e, "Folder selection cancelled or failed");
+                }
             }
         });
     }
@@ -280,6 +395,137 @@ impl EmptyState {
         };
 
         self.widget.set_visible(is_empty);
+
+        // Reset progress widgets when library is empty (e.g., after folder removal)
+        if is_empty {
+            if let Some(spinner) = &self.progress_spinner {
+                spinner.set_visible(false);
+            }
+            if let Some(progress_bar) = &self.progress_bar {
+                progress_bar.set_visible(false);
+            }
+            if let Some(progress_label) = &self.progress_label {
+                progress_label.set_visible(false);
+            }
+            if let Some(cancel_button) = &self.cancel_button {
+                cancel_button.set_visible(false);
+            }
+            self.is_scanning.store(false, Relaxed);
+
+            // Show the regular empty state UI
+            self.add_button.set_visible(true);
+            self.message_label.set_visible(true);
+            self.description_label.set_visible(true);
+        }
+    }
+
+    /// Starts listening to `AppState` events for scanning state changes.
+    ///
+    /// This allows the `EmptyState` to show progress UI when scanning is triggered
+    /// from other parts of the application (e.g., Library preferences page).
+    pub fn start_scanning_subscription(&mut self) {
+        let Some(app_state) = &self.app_state else {
+            return;
+        };
+
+        let Some(spinner) = self.progress_spinner.as_ref() else {
+            return;
+        };
+
+        if self.scanner_cancel_token.is_none() {
+            self.scanner_cancel_token = Some(Arc::new(AtomicBool::new(false)));
+        }
+        let Some(cancel_token) = &self.scanner_cancel_token else {
+            return;
+        };
+
+        let app_state_clone = Arc::clone(app_state);
+        let spinner = spinner.clone();
+        let progress_bar = self.progress_bar.clone();
+        let progress_label = self.progress_label.clone();
+        let cancel_button = self.cancel_button.clone();
+        let add_button = self.add_button.clone();
+        let message_label = self.message_label.clone();
+        let description_label = self.description_label.clone();
+        let is_scanning = Arc::clone(&self.is_scanning);
+        let cancel_token_clone = Arc::clone(cancel_token);
+
+        MainContext::default().spawn_local(async move {
+            let rx = app_state_clone.subscribe();
+            loop {
+                select! {
+                    result = rx.recv() => {
+                        if let Ok(event) = result {
+                            match event.as_ref() {
+                                LibraryScanningChanged { is_scanning: true } => {
+                                    add_button.set_visible(false);
+                                    message_label.set_visible(false);
+                                    description_label.set_visible(false);
+
+                                    spinner.set_visible(true);
+                                    spinner.set_size_request(48, 48);
+
+                                    if let Some(bar) = &progress_bar {
+                                        bar.set_visible(true);
+                                        bar.set_fraction(0.0);
+                                    }
+
+                                    if let Some(label) = &progress_label {
+                                        label.set_label("Scanning library...");
+                                        label.set_visible(true);
+                                    }
+
+                                    if let Some(btn) = &cancel_button {
+                                        btn.set_visible(true);
+                                    }
+
+                                    is_scanning.store(true, Relaxed);
+                                }
+                                LibraryScanningChanged { is_scanning: false } | LibraryDataChanged { .. } => {
+                                    spinner.set_visible(false);
+
+                                    if let Some(bar) = &progress_bar {
+                                        bar.set_visible(false);
+                                    }
+
+                                    if let Some(label) = &progress_label {
+                                        label.set_visible(false);
+                                    }
+
+                                    if let Some(btn) = &cancel_button {
+                                        btn.set_visible(false);
+                                    }
+
+                                    is_scanning.store(false, Relaxed);
+                                }
+                                LibraryScanProgress { current, total } => {
+                                    if let Some(bar) = &progress_bar {
+                                        let fraction = if *total > 0 {
+                                            current.to_f64().unwrap_or(0.0) / total.to_f64().unwrap_or(1.0)
+                                        } else {
+                                            0.0
+                                        };
+                                        bar.set_fraction(fraction);
+                                    }
+
+                                    if let Some(label) = &progress_label {
+                                        label.set_label(&format!("Processing: {current}/{total} albums"));
+                                    }
+                                }
+                                _ => {}
+                            }
+                        } else {
+                            debug!("Scanner subscription closed, stopping listener");
+                            break;
+                        }
+                    }
+                }
+                if cancel_token_clone.load(Relaxed) {
+                    debug!("Scanner event listener cancelled, resetting token and continuing");
+                    cancel_token_clone.store(false, Relaxed);
+                }
+            }
+        });
     }
 
     /// Prepares scanning resources including database connection, settings arc, and DR parser.
@@ -442,6 +688,7 @@ impl EmptyState {
     /// * `dr_parser` - Optional DR parser for metadata
     /// * `new_directory` - New directory to add
     /// * `cancelled` - Cancellation token for stopping the scan
+    /// * `app_state` - Application state for broadcasting progress updates
     async fn execute_background_scan(
         scanner: Arc<TokioRwLock<LibraryScanner>>,
         db: Arc<LibraryDatabase>,
@@ -449,20 +696,16 @@ impl EmptyState {
         dr_parser: Option<Arc<DrParser>>,
         new_directory: String,
         cancelled: Arc<AtomicBool>,
-    ) {
+        app_state: Option<Arc<AppState>>,
+    ) -> bool {
         // Offload heavy scanning work to a background task
-        let scanner_for_task = Arc::clone(&scanner);
-        let db_for_task = Arc::clone(&db);
-        let settings_for_task = Arc::clone(&settings);
-        let dr_parser_for_task = dr_parser.clone();
-        let dir_for_task = new_directory.clone();
-        let cancelled_for_task = Arc::clone(&cancelled);
-
+        // Clone for spawned task, keep original for error handling after
+        let app_state_clone = app_state.as_ref().map(Arc::clone);
         let scan_handle = spawn(async move {
             // 1. Add directory to scanner (fast, takes write lock)
             {
-                let mut scanner_write = scanner_for_task.write().await;
-                if let Err(e) = scanner_write.add_library_directory(&dir_for_task) {
+                let mut scanner_write = scanner.write().await;
+                if let Err(e) = scanner_write.add_library_directory(&new_directory) {
                     error!(error = %e, "Failed to add directory to scanner");
                 }
             }
@@ -474,7 +717,7 @@ impl EmptyState {
             // - The entire scanning operation is already CPU/IO heavy by design
             // - Converting to fully async would require tokio-async-compat wrappers
             let all_audio_files = {
-                let library_dirs = settings_for_task.read().library_directories.clone();
+                let library_dirs = settings.read().library_directories.clone();
                 let mut all_files = Vec::new();
 
                 for dir in library_dirs {
@@ -487,33 +730,79 @@ impl EmptyState {
                         continue;
                     }
 
-                    if let Ok(audio_files) = LibraryScanner::collect_audio_files_from_directory(
-                        dir_path,
-                        &cancelled_for_task,
-                    ) {
+                    if let Ok(audio_files) =
+                        LibraryScanner::collect_audio_files_from_directory(dir_path, &cancelled)
+                    {
                         all_files.extend(audio_files);
                     }
                 }
                 all_files
             };
 
-            // 3. Process files (Heavy CPU/IO)
-            if !all_audio_files.is_empty()
-                && let Err(e) = handle_files_changed(
-                    all_audio_files,
-                    &db_for_task,
-                    &settings_for_task,
-                    &dr_parser_for_task,
-                )
-                .await
-            {
-                error!(error = %e, "Failed to process files");
+            // 3. Group files by album directory first (preserves album integrity)
+            let mut files_by_album: HashMap<Arc<PathBuf>, Vec<Arc<PathBuf>>> = HashMap::new();
+            for path in &all_audio_files {
+                if let Some(parent) = path.parent() {
+                    let parent_arc = Arc::new(parent.to_path_buf());
+                    let path_arc = Arc::new(path.clone());
+                    files_by_album.entry(parent_arc).or_default().push(path_arc);
+                }
             }
+
+            let total_albums = files_by_album.len();
+            let progress_interval = SCAN_PROGRESS_INTERVAL;
+
+            // 4. Process albums with progress updates
+            for (processed_albums, (_album_dir, album_files)) in
+                files_by_album.into_iter().enumerate()
+            {
+                let is_cancelled = cancelled.load(Relaxed)
+                    || app_state_clone
+                        .as_ref()
+                        .is_some_and(|app| !app.is_scanning());
+
+                if is_cancelled {
+                    if let Some(app) = app_state_clone.as_ref() {
+                        app.set_scanning(false);
+                    }
+                    return true;
+                }
+
+                let paths: Vec<PathBuf> =
+                    album_files.into_iter().map(Arc::unwrap_or_clone).collect();
+
+                if let Err(e) =
+                    handle_files_changed(paths, &db, &settings, dr_parser.as_ref()).await
+                {
+                    error!(error = %e, "Failed to process files");
+                }
+
+                let current = processed_albums + 1;
+
+                if (current % progress_interval == 0 || current == total_albums)
+                    && let Some(app) = app_state_clone.as_ref()
+                {
+                    app.broadcast_scan_progress(current, total_albums);
+                }
+            }
+
+            if let Some(app) = app_state_clone.as_ref() {
+                app.set_scanning(false);
+            }
+
+            false
         });
 
-        // Await the background task (yields to main loop so UI stays responsive)
-        if let Err(e) = scan_handle.await {
-            error!(error = %e, "Scan task panicked");
+        match scan_handle.await {
+            Ok(was_cancelled) => was_cancelled,
+            Err(e) => {
+                error!(error = %e, "Scan task panicked");
+                if let Some(app) = app_state.as_ref() {
+                    app.report_library_scan_failure(e.to_string());
+                    app.set_scanning(false);
+                }
+                false
+            }
         }
     }
 
@@ -556,31 +845,64 @@ impl EmptyState {
         let settings_arc = settings_manager.read().get_settings_arc();
 
         if let Some(app_state) = app_state {
+            app_state.set_scanning(true);
+
             let app_state_clone = Arc::clone(&app_state);
             let new_directory = new_directory.to_string();
 
             if let Some((library_db_arc, (), dr_parser)) =
                 Self::prepare_scan_resources(&settings_arc).await
-                && let Some(scanner_arc) = Self::get_or_create_scanner(
+            {
+                let scanner_arc = Self::get_or_create_scanner(
                     &app_state_clone,
                     &library_db_arc,
                     &settings_arc,
                     &cancel_token,
                 )
-                .await
-            {
-                Self::execute_background_scan(
-                    scanner_arc,
-                    Arc::clone(&library_db_arc),
-                    Arc::clone(&settings_arc),
-                    dr_parser,
-                    new_directory,
-                    Arc::clone(&cancel_token),
-                )
                 .await;
 
-                Self::refresh_library_ui_state(app_state_clone, library_db_arc).await;
+                if let Some(scanner) = scanner_arc {
+                    let was_cancelled = Self::execute_background_scan(
+                        scanner,
+                        Arc::clone(&library_db_arc),
+                        Arc::clone(&settings_arc),
+                        dr_parser,
+                        new_directory.clone(),
+                        Arc::clone(&cancel_token),
+                        Some(Arc::clone(&app_state)),
+                    )
+                    .await;
+
+                    if was_cancelled {
+                        if let Err(e) = settings_manager
+                            .write()
+                            .remove_library_directory(&new_directory)
+                        {
+                            error!(error = %e, "Failed to remove cancelled directory from settings");
+                        }
+
+                        if let Err(e) = library_db_arc
+                            .remove_tracks_in_directory(&new_directory)
+                            .await
+                        {
+                            error!(error = %e, "Failed to remove tracks from cancelled directory");
+                        }
+                    }
+
+                    Self::refresh_library_ui_state(Arc::clone(&app_state_clone), library_db_arc)
+                        .await;
+                } else {
+                    app_state_clone
+                        .report_library_scan_failure("Failed to create scanner".to_string());
+                    app_state_clone.set_scanning(false);
+                }
+            } else {
+                app_state_clone
+                    .report_library_scan_failure("Failed to prepare scan resources".to_string());
+                app_state_clone.set_scanning(false);
             }
+
+            app_state.set_scanning(false);
         }
     }
 }
@@ -826,6 +1148,7 @@ mod tests {
             None,
             test_path,
             Arc::new(AtomicBool::new(false)),
+            None,
         )
         .await;
         Ok(())
@@ -861,6 +1184,7 @@ mod tests {
             None,
             test_path,
             Arc::new(AtomicBool::new(false)),
+            None,
         )
         .await;
 
@@ -908,6 +1232,7 @@ mod tests {
             dr_parser,
             test_path,
             Arc::new(AtomicBool::new(false)),
+            None,
         )
         .await;
         Ok(())
@@ -937,6 +1262,7 @@ mod tests {
             None,
             test_path,
             Arc::new(AtomicBool::new(false)),
+            None,
         )
         .await;
         Ok(())

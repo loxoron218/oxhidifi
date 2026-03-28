@@ -307,14 +307,16 @@ impl ArtistGridView {
     /// Option containing `EmptyState` if `app_state` is provided.
     fn create_empty_state(app_state: Option<&Arc<AppState>>) -> Option<EmptyState> {
         let state = app_state?;
-        Some(EmptyState::new(
+        let mut empty = EmptyState::new(
             Some(Arc::clone(state)),
             None,
             EmptyStateConfig {
                 is_album_view: false,
             },
             None,
-        ))
+        );
+        empty.start_scanning_subscription();
+        Some(empty)
     }
 
     /// Sets up zoom subscription for real-time cover size updates.
@@ -415,6 +417,18 @@ impl ArtistGridView {
     ///
     /// * `artists` - New vector of artists to display
     pub fn set_artists(&mut self, artists: Vec<Artist>) {
+        // Update empty state visibility only when artists change
+        if let Some(empty_state) = &self.empty_state {
+            let library_state = self.app_state.as_ref().map_or_else(
+                || LibraryState {
+                    artists: artists.clone(),
+                    ..Default::default()
+                },
+                |app_state| app_state.get_library_state(),
+            );
+            empty_state.update_from_library_state(&library_state);
+        }
+
         // Check if artists are actually different to avoid unnecessary widget recreation
         let artists_unchanged = self.artists.len() == artists.len()
             && self
@@ -439,19 +453,6 @@ impl ArtistGridView {
 
         // Apply current sort
         self.apply_sort();
-
-        // Update empty state visibility only when artists change
-        if let Some(empty_state) = &self.empty_state {
-            let library_state = if let Some(app_state) = &self.app_state {
-                app_state.get_library_state()
-            } else {
-                LibraryState {
-                    artists: self.artists.clone(),
-                    ..Default::default()
-                }
-            };
-            empty_state.update_from_library_state(&library_state);
-        }
 
         let cover_size = self.get_cover_size();
 

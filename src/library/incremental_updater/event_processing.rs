@@ -91,13 +91,12 @@ pub async fn process_file_batch(
     let mut tx = pool.begin().await?;
 
     // Group files by album directory
-    let mut files_by_album: HashMap<PathBuf, Vec<PathBuf>> = HashMap::new();
+    let mut files_by_album: HashMap<Arc<PathBuf>, Vec<Arc<PathBuf>>> = HashMap::new();
     for path in batch {
         if let Some(parent) = path.parent() {
-            files_by_album
-                .entry(parent.to_path_buf())
-                .or_default()
-                .push(path.clone());
+            let parent_arc = Arc::new(parent.to_path_buf());
+            let path_arc = Arc::new(path.clone());
+            files_by_album.entry(parent_arc).or_default().push(path_arc);
         }
     }
 
@@ -106,9 +105,9 @@ pub async fn process_file_batch(
         // Extract metadata for all files
         let mut tracks_metadata = Vec::new();
         for file_path in &album_files {
-            match TagReader::read_metadata(file_path) {
+            match TagReader::read_metadata(file_path.as_ref()) {
                 Ok(metadata) => {
-                    tracks_metadata.push((file_path.clone(), metadata));
+                    tracks_metadata.push((Arc::unwrap_or_clone(Arc::clone(file_path)), metadata));
                 }
                 Err(e) => {
                     warn!(file_path = ?file_path, error = %e, "Failed to read metadata");
@@ -157,7 +156,7 @@ pub async fn process_file_batch(
 
         // Parse and update DR value if enabled
         if let Some(parser) = dr_parser
-            && let Ok(Some(dr_value)) = parser.parse_dr_for_album(&album_dir).await
+            && let Ok(Some(dr_value)) = parser.parse_dr_for_album(album_dir.as_ref()).await
         {
             query("UPDATE albums SET dr_value = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
                 .bind(&dr_value)

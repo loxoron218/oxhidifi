@@ -58,7 +58,7 @@ pub async fn handle_files_changed(
     paths: Vec<PathBuf>,
     database: &LibraryDatabase,
     _settings: &RwLock<UserSettings>,
-    dr_parser: &Option<Arc<DrParser>>,
+    dr_parser: Option<&Arc<DrParser>>,
 ) -> Result<(), LibraryError> {
     // Separate audio files from text files
     let mut audio_files = Vec::new();
@@ -77,13 +77,12 @@ pub async fn handle_files_changed(
     // Process audio files for metadata and database updates
     if !audio_files.is_empty() {
         // Group audio files by album directory
-        let mut files_by_album: HashMap<PathBuf, Vec<PathBuf>> = HashMap::new();
+        let mut files_by_album: HashMap<Arc<PathBuf>, Vec<Arc<PathBuf>>> = HashMap::new();
         for path in audio_files {
             if let Some(parent) = path.parent() {
-                files_by_album
-                    .entry(parent.to_path_buf())
-                    .or_default()
-                    .push(path);
+                let parent_arc = Arc::new(parent.to_path_buf());
+                let path_arc = Arc::new(path);
+                files_by_album.entry(parent_arc).or_default().push(path_arc);
             }
         }
 
@@ -94,9 +93,10 @@ pub async fn handle_files_changed(
             // Extract metadata for all audio files in the album
             let mut tracks_metadata = Vec::new();
             for file_path in &album_files {
-                match TagReader::read_metadata(file_path) {
+                match TagReader::read_metadata(file_path.as_ref()) {
                     Ok(metadata) => {
-                        tracks_metadata.push((file_path.clone(), metadata));
+                        tracks_metadata
+                            .push((Arc::unwrap_or_clone(Arc::clone(file_path)), metadata));
                     }
                     Err(e) => {
                         warn!(file_path = ?file_path, error = %e, "Failed to read metadata");
@@ -119,7 +119,7 @@ pub async fn handle_files_changed(
 
             // Update database with new/modified tracks
             update_album_in_database(
-                &album_dir,
+                album_dir.as_ref(),
                 album_info.as_ref(),
                 artist_info.as_ref(),
                 &tracks_metadata,
@@ -130,17 +130,17 @@ pub async fn handle_files_changed(
 
             // Parse and update DR value if enabled
             if let Some(parser) = dr_parser {
-                match parser.parse_dr_for_album(&album_dir).await {
+                match parser.parse_dr_for_album(album_dir.as_ref()).await {
                     Ok(dr_value) => {
                         database
-                            .update_dr_value(&album_dir, dr_value.as_deref())
+                            .update_dr_value(album_dir.as_ref(), dr_value.as_deref())
                             .await?;
                     }
                     Err(e) => {
                         warn!(album_dir = ?album_dir, error = %e, "Failed to parse DR value");
 
                         // Update with None to clear any existing DR value
-                        database.update_dr_value(&album_dir, None).await?;
+                        database.update_dr_value(album_dir.as_ref(), None).await?;
                     }
                 }
             }
@@ -203,7 +203,7 @@ pub async fn handle_files_changed(
 pub async fn handle_files_removed(
     paths: Vec<PathBuf>,
     database: &LibraryDatabase,
-    dr_parser: &Option<Arc<DrParser>>,
+    dr_parser: Option<&Arc<DrParser>>,
 ) -> Result<(), LibraryError> {
     // Process all removal paths (including directories and unsupported files)
     // since directory deletions and non-audio file deletions may affect the library
@@ -323,7 +323,7 @@ pub async fn handle_files_renamed(
     paths: Vec<(PathBuf, PathBuf)>,
     database: &LibraryDatabase,
     settings: &RwLock<UserSettings>,
-    dr_parser: &Option<Arc<DrParser>>,
+    dr_parser: Option<&Arc<DrParser>>,
 ) -> Result<(), LibraryError> {
     // Handle renames as remove + add
     let removed_paths: Vec<PathBuf> = paths.iter().map(|(from, _)| from.clone()).collect();

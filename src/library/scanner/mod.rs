@@ -201,7 +201,7 @@ impl LibraryScanner {
                 FilesChanged { paths } => {
                     debug!("Processing {} changed files", paths.len());
                     if let Err(e) =
-                        handle_files_changed(paths, &database, &settings, &dr_parser).await
+                        handle_files_changed(paths, &database, &settings, dr_parser.as_ref()).await
                     {
                         error!(error = %e, "Error handling changed files");
                     } else {
@@ -210,7 +210,8 @@ impl LibraryScanner {
                 }
                 FilesRemoved { paths } => {
                     debug!("Processing {} removed files", paths.len());
-                    if let Err(e) = handle_files_removed(paths, &database, &dr_parser).await {
+                    if let Err(e) = handle_files_removed(paths, &database, dr_parser.as_ref()).await
+                    {
                         error!(error = %e, "Error handling removed files");
                     } else {
                         changes_processed = true;
@@ -219,7 +220,7 @@ impl LibraryScanner {
                 FilesRenamed { paths } => {
                     debug!("Processing {} renamed files", paths.len());
                     if let Err(e) =
-                        handle_files_renamed(paths, &database, &settings, &dr_parser).await
+                        handle_files_renamed(paths, &database, &settings, dr_parser.as_ref()).await
                     {
                         error!(error = %e, "Error handling renamed files");
                     } else {
@@ -344,7 +345,8 @@ impl LibraryScanner {
                 return Ok(());
             }
 
-            handle_files_changed(all_audio_files, database, settings, &self.dr_parser).await?;
+            handle_files_changed(all_audio_files, database, settings, self.dr_parser.as_ref())
+                .await?;
         }
 
         Ok(())

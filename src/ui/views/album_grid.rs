@@ -411,14 +411,16 @@ impl AlbumGridView {
 
         // Create empty state component
         let empty_state = app_state.as_ref().map(|state| {
-            EmptyState::new(
+            let mut empty = EmptyState::new(
                 Some(Arc::clone(state)),
                 None,
                 EmptyStateConfig {
                     is_album_view: true,
                 },
                 None,
-            )
+            );
+            empty.start_scanning_subscription();
+            empty
         });
 
         // Add empty state to main container if it exists
@@ -691,6 +693,18 @@ impl AlbumGridView {
     ///
     /// Panics if empty state exists but is None (should never happen with proper initialization).
     pub fn set_albums(&mut self, albums: Vec<Album>) {
+        // Update empty state visibility only when albums change
+        if let Some(empty_state) = &self.empty_state {
+            let library_state = self.app_state.as_ref().map_or_else(
+                || LibraryState {
+                    albums: albums.clone(),
+                    ..Default::default()
+                },
+                |app_state| app_state.get_library_state(),
+            );
+            empty_state.update_from_library_state(&library_state);
+        }
+
         // Check if albums are actually different to avoid unnecessary widget recreation
         let albums_unchanged = self.albums == albums;
 
@@ -709,19 +723,6 @@ impl AlbumGridView {
 
         // Apply current sort
         self.apply_sort();
-
-        // Update empty state visibility only when albums change
-        if let Some(empty_state) = &self.empty_state {
-            let library_state = if let Some(app_state) = &self.app_state {
-                app_state.get_library_state()
-            } else {
-                LibraryState {
-                    albums: self.albums.clone(),
-                    ..Default::default()
-                }
-            };
-            empty_state.update_from_library_state(&library_state);
-        }
 
         // Add new album items using the new AlbumCard component
         for album in &self.albums {
