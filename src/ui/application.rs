@@ -472,7 +472,6 @@ fn create_main_window(app: &Application, header_bar: &Rc<HeaderBar>) -> Applicat
             let settings_button = &header_bar.settings_button;
             let view_split_button = &header_bar.view_split_button;
             let merged_menu_button = &header_bar.merged_menu_button;
-            let search_bar = header_bar.get_search_bar();
             let header_bar_arc = Rc::clone(header_bar);
 
             let false_value = Value::from(false);
@@ -481,7 +480,6 @@ fn create_main_window(app: &Application, header_bar: &Rc<HeaderBar>) -> Applicat
             breakpoint.add_setter(settings_button, "visible", Some(&false_value));
             breakpoint.add_setter(view_split_button, "visible", Some(&false_value));
             breakpoint.add_setter(merged_menu_button, "visible", Some(&true_value));
-            breakpoint.add_setter(search_bar, "visible", Some(&true_value));
 
             let header_bar_arc_apply = Rc::clone(&header_bar_arc);
             breakpoint.connect_apply(move |_bp| {
@@ -864,12 +862,12 @@ fn setup_keyboard_shortcuts(app_state: &Arc<AppState>, window: &ApplicationWindo
     window.add_controller(key_controller);
 }
 
-/// Assembles the main layout using `ToolbarView` with header, content, and player bar.
+/// Assembles the main layout using `ToolbarView` with header, search bar, content, and player bar.
 ///
 /// # Arguments
 ///
 /// * `header_bar_widget` - Header bar widget
-/// * `search_bar_widget` - Search bar widget (below header on small screens)
+/// * `search_bar_widget` - Search bar widget (below header)
 /// * `toast_overlay` - Toast overlay widget
 /// * `player_bar_widget` - Player bar widget
 ///
@@ -878,17 +876,14 @@ fn setup_keyboard_shortcuts(app_state: &Arc<AppState>, window: &ApplicationWindo
 /// A `ToolbarView` widget containing all main layout elements.
 fn assemble_main_layout(
     header_bar_widget: &Widget,
-    search_bar_widget: Option<&Widget>,
+    search_bar_widget: &Widget,
     toast_overlay: &ToastOverlay,
     player_bar_widget: &Widget,
 ) -> ToolbarView {
     let toolbar_view = ToolbarView::builder().build();
 
     toolbar_view.add_top_bar(header_bar_widget);
-
-    if let Some(search_bar) = search_bar_widget {
-        toolbar_view.add_top_bar(search_bar);
-    }
+    toolbar_view.add_top_bar(search_bar_widget);
 
     toolbar_view.set_content(Some(toast_overlay));
     toolbar_view.add_bottom_bar(player_bar_widget);
@@ -979,11 +974,9 @@ fn build_ui(
         player_bar,
     );
 
-    let search_bar_widget = header_bar.get_search_bar();
-
     let main_box = assemble_main_layout(
         &header_bar.widget.clone().upcast::<Widget>(),
-        Some(search_bar_widget.as_ref()),
+        &header_bar.get_search_bar().clone().upcast::<Widget>(),
         &toast_overlay,
         &player_bar_widget,
     );

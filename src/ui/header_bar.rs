@@ -55,15 +55,6 @@ use crate::{
     },
 };
 
-/// Search display mode for the header bar.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum SearchDisplayMode {
-    /// Inline search entry (desktop/tablet).
-    Inline,
-    /// Search bar below header (mobile/smallest screens).
-    Bar,
-}
-
 /// Type alias for search debounce timer handle.
 type SearchDebounceHandle = Arc<Mutex<Option<SourceId>>>;
 
@@ -73,44 +64,23 @@ type SearchClearingFlag = Arc<AtomicBool>;
 /// Type alias for `setup_search_functionality` return tuple.
 type SearchSetupResult = (
     ToggleButton,
-    Box,
-    SearchEntry,
     SearchEntry,
     SearchBar,
-    SearchDebounceHandle,
     SearchDebounceHandle,
     SearchClearingFlag,
 );
 
-/// Search state containing debounce handles and clearing flag.
-struct SearchState {
-    /// Debounce timer handle for inline search entry.
-    debounce_handle_entry: Arc<Mutex<Option<SourceId>>>,
-    /// Debounce timer handle for mobile search bar entry.
-    debounce_handle_bar: Arc<Mutex<Option<SourceId>>>,
-    /// Flag to prevent search debounce during programmatic text clearing.
-    clearing_search: Arc<AtomicBool>,
-    /// Current search display mode.
-    search_display_mode: Arc<Mutex<SearchDisplayMode>>,
-}
-
 /// Grouped state for search button toggle callback.
 /// Groups related Rc references to reduce cloning overhead.
 struct SearchToggleState {
-    /// Search entry container box.
-    search_entry_container: Rc<Box>,
     /// Search entry widget.
     search_entry: Rc<SearchEntry>,
     /// Search bar widget.
     search_bar: Rc<SearchBar>,
-    /// Debounce handle for inline search entry.
-    debounce_handle_entry: Arc<Mutex<Option<SourceId>>>,
-    /// Debounce handle for mobile search bar.
-    debounce_handle_bar: Arc<Mutex<Option<SourceId>>>,
+    /// Debounce handle for search entry.
+    debounce_handle: Arc<Mutex<Option<SourceId>>>,
     /// Flag to prevent debounce during programmatic clearing.
     clearing_search: Arc<AtomicBool>,
-    /// Current search display mode.
-    search_display_mode: Arc<Mutex<SearchDisplayMode>>,
     /// Application state reference.
     app_state: Arc<AppState>,
 }
@@ -123,25 +93,7 @@ struct SearchStopState {
     search_entry: Rc<SearchEntry>,
     /// Search bar widget.
     search_bar: Rc<SearchBar>,
-    /// Debounce handle for inline search entry.
-    debounce_handle_entry: Arc<Mutex<Option<SourceId>>>,
-    /// Debounce handle for mobile search bar.
-    debounce_handle_bar: Arc<Mutex<Option<SourceId>>>,
-    /// Flag to prevent debounce during programmatic clearing.
-    clearing_search: Arc<AtomicBool>,
-    /// Application state reference.
-    app_state: Arc<AppState>,
-}
-
-/// Grouped state for mobile search bar ESC callback.
-struct MobileSearchStopState {
-    /// Search toggle button.
-    search_button: Rc<ToggleButton>,
-    /// Search entry widget.
-    search_entry: Rc<SearchEntry>,
-    /// Search bar widget.
-    search_bar: Rc<SearchBar>,
-    /// Debounce handle for mobile search bar.
+    /// Debounce handle for search entry.
     debounce_handle: Arc<Mutex<Option<SourceId>>>,
     /// Flag to prevent debounce during programmatic clearing.
     clearing_search: Arc<AtomicBool>,
@@ -167,14 +119,10 @@ pub struct HeaderBar {
     pub merged_menu_button: MenuButton,
     /// Application reference for preferences dialog.
     pub application: Option<Arc<Application>>,
-    /// Search entry container for inline search (desktop/tablet).
-    pub search_entry_container: Box,
-    /// Search entry for inline search (desktop/tablet).
-    pub search_entry: SearchEntry,
-    /// Search bar for mobile/smallest screens.
+    /// Search bar widget.
     pub search_bar: SearchBar,
-    /// Search entry for mobile search bar (smallest screens).
-    pub search_entry_for_bar: SearchEntry,
+    /// Search entry inside the search bar.
+    pub search_entry: SearchEntry,
     /// Album tab button.
     pub album_tab: ToggleButton,
     /// Artist tab button.
@@ -199,16 +147,14 @@ pub struct HeaderBar {
     pub zoom_popover: Popover,
     /// Subscription handle for state changes (to ensure proper cleanup)
     _subscription_handle: JoinHandle<()>,
-    /// Debounce timer handle for inline search entry.
-    search_debounce_handle_entry: Arc<Mutex<Option<SourceId>>>,
-    /// Debounce timer handle for mobile search bar entry.
-    search_debounce_handle_bar: Arc<Mutex<Option<SourceId>>>,
+    /// Debounce timer handle for search entry.
+    search_debounce_handle: Arc<Mutex<Option<SourceId>>>,
     /// Timer handle for zoom button sensitivity updates.
     zoom_timer_handle: Arc<Mutex<Option<SourceId>>>,
     /// Flag to prevent search debounce during programmatic text clearing.
     pub clearing_search: Arc<AtomicBool>,
-    /// Current search display mode.
-    search_display_mode: Arc<Mutex<SearchDisplayMode>>,
+    /// Whether the header bar is in adaptive/narrow mode.
+    is_adaptive: Arc<AtomicBool>,
     /// Bulk action button for selection operations.
     pub bulk_action_button: Button,
     /// Popover for bulk selection actions.
@@ -252,24 +198,17 @@ impl HeaderBar {
     ) -> Self {
         let widget = LibadwaitaHeaderBar::builder().build();
 
-        let (back_button, search_display_mode) =
-            Self::init_widget_and_back_button(&widget, app_state);
+        let back_button = Self::create_back_button(app_state);
+        widget.pack_start(&back_button);
 
         let current_view_mode = app_state.get_library_state().view_mode;
 
-        let (
-            search_button,
-            search_entry_container,
-            search_entry,
-            search_entry_for_bar,
-            search_bar,
-            debounce_handle_entry,
-            debounce_handle_bar,
-            clearing_search,
-        ) = Self::setup_search_functionality(app_state, &settings_manager, &search_display_mode);
+        let is_adaptive = Arc::new(AtomicBool::new(false));
+
+        let (search_button, search_entry, search_bar, debounce_handle, clearing_search) =
+            Self::setup_search_functionality(app_state, &settings_manager);
 
         widget.pack_start(&search_button);
-        widget.pack_start(&search_entry_container);
 
         let (
             bulk_action_button,
@@ -327,10 +266,8 @@ impl HeaderBar {
             view_split_button,
             settings_button,
             merged_menu_button,
-            search_entry_container,
-            search_entry,
-            search_entry_for_bar,
             search_bar,
+            search_entry,
             album_tab,
             artist_tab,
             tab_box,
@@ -343,12 +280,11 @@ impl HeaderBar {
             application: application_arc,
             current_view_mode,
             library_db,
-            search_debounce_handle_entry: debounce_handle_entry,
-            search_debounce_handle_bar: debounce_handle_bar,
+            search_debounce_handle: debounce_handle,
             zoom_timer_handle,
             clearing_search,
             _subscription_handle: subscription_handle,
-            search_display_mode,
+            is_adaptive,
             bulk_action_button,
             bulk_action_popover,
             selection_toggle,
@@ -360,26 +296,6 @@ impl HeaderBar {
             merged_menu_selection_counter,
             merged_menu_sort_box,
         }
-    }
-
-    /// Initializes the header bar widget and back button.
-    ///
-    /// # Arguments
-    ///
-    /// * `widget` - The header bar widget to pack the back button into
-    /// * `app_state` - Application state reference
-    ///
-    /// # Returns
-    ///
-    /// Tuple of (`back_button`, `search_display_mode`).
-    fn init_widget_and_back_button(
-        widget: &LibadwaitaHeaderBar,
-        app_state: &Arc<AppState>,
-    ) -> (Button, Arc<Mutex<SearchDisplayMode>>) {
-        let back_button = Self::create_back_button(app_state);
-        widget.pack_start(&back_button);
-        let search_display_mode = Arc::new(Mutex::new(SearchDisplayMode::Inline));
-        (back_button, search_display_mode)
     }
 
     /// Initializes bulk action components (popover, button, and selection controls).
@@ -537,93 +453,54 @@ impl HeaderBar {
     ///
     /// # Returns
     ///
-    /// Tuple of (`search_button`, `search_entry_container`, `search_entry`,
-    /// `search_entry_for_bar`, `search_bar`, `debounce_handle_entry`, `debounce_handle_bar`,
+    /// Tuple of (`search_button`, `search_entry`, `search_bar`, `debounce_handle`,
     /// `clearing_search_flag`).
     fn setup_search_functionality(
         app_state: &Arc<AppState>,
         settings_manager: &Arc<SettingsManager>,
-        search_display_mode: &Arc<Mutex<SearchDisplayMode>>,
     ) -> SearchSetupResult {
-        let (search_entry, search_entry_container, search_entry_for_bar, search_bar) =
-            Self::create_search_widgets();
+        let (search_entry, search_bar) = Self::create_search_widgets();
 
         let search_button = Self::create_search_button();
 
-        let search_state = SearchState {
-            debounce_handle_entry: Arc::new(Mutex::new(None)),
-            debounce_handle_bar: Arc::new(Mutex::new(None)),
-            clearing_search: Arc::new(AtomicBool::new(false)),
-            search_display_mode: Arc::clone(search_display_mode),
-        };
+        let debounce_handle: Arc<Mutex<Option<SourceId>>> = Arc::new(Mutex::new(None));
+        let clearing_search = Arc::new(AtomicBool::new(false));
 
         Self::connect_search_button_toggle(
             &search_button,
             app_state,
-            &search_entry_container,
             &search_entry,
             &search_bar,
-            &search_state,
+            &debounce_handle,
+            &clearing_search,
         );
 
         Self::connect_search_entry_handlers(
             &search_entry,
             app_state,
-            &search_state,
+            &debounce_handle,
+            &clearing_search,
             settings_manager,
-        );
-
-        Self::connect_search_bar_handlers(
-            &search_entry_for_bar,
-            app_state,
             &search_button,
-            &search_state,
-            settings_manager,
             &search_bar,
         );
 
         (
             search_button,
-            search_entry_container,
             search_entry,
-            search_entry_for_bar,
             search_bar,
-            search_state.debounce_handle_entry,
-            search_state.debounce_handle_bar,
-            search_state.clearing_search,
+            debounce_handle,
+            clearing_search,
         )
     }
 
-    /// Creates search entry widgets for both inline and mobile search modes.
-    ///
-    /// This function creates:
-    /// - An inline search entry for desktop/tablet layouts
-    /// - A container box for the inline search entry
-    /// - A separate search entry for the mobile search bar
-    /// - A search bar widget that wraps the mobile search entry
+    /// Creates search entry and search bar widgets.
     ///
     /// # Returns
     ///
-    /// Tuple of (`search_entry`, `search_entry_container`, `search_entry_for_bar`, `search_bar`).
-    fn create_search_widgets() -> (SearchEntry, Box, SearchEntry, SearchBar) {
+    /// Tuple of (`search_entry`, `search_bar`).
+    fn create_search_widgets() -> (SearchEntry, SearchBar) {
         let search_entry = SearchEntry::builder()
-            .placeholder_text("Search albums and artists...")
-            .hexpand(true)
-            .margin_start(12)
-            .margin_end(12)
-            .visible(true)
-            .build();
-
-        // Wrap in a box to ensure visibility
-        let search_entry_container = Box::builder()
-            .orientation(Horizontal)
-            .visible(false)
-            .hexpand(true)
-            .build();
-        search_entry_container.append(&search_entry);
-
-        // Create a separate search entry for the search bar (mobile/small screens)
-        let search_entry_for_bar = SearchEntry::builder()
             .placeholder_text("Search albums and artists...")
             .hexpand(true)
             .margin_start(12)
@@ -632,15 +509,9 @@ impl HeaderBar {
 
         let search_bar = SearchBar::new();
         search_bar.set_search_mode(false);
-        search_bar.set_visible(false);
-        search_bar.set_child(Some(&search_entry_for_bar));
+        search_bar.set_child(Some(&search_entry));
 
-        (
-            search_entry,
-            search_entry_container,
-            search_entry_for_bar,
-            search_bar,
-        )
+        (search_entry, search_bar)
     }
 
     /// Creates the search toggle button.
@@ -662,51 +533,32 @@ impl HeaderBar {
     ///
     /// * `search_button` - The search toggle button
     /// * `app_state` - Application state for filter updates
-    /// * `search_entry_container` - Container for inline search entry
-    /// * `search_entry` - The inline search entry widget
-    /// * `search_bar` - The mobile search bar widget
-    /// * `search_state` - Search state containing debounce and clearing flags
+    /// * `search_entry` - The search entry widget
+    /// * `search_bar` - The search bar widget
+    /// * `debounce_handle` - Shared debounce timer handle
+    /// * `clearing_search` - Flag to prevent debounce during programmatic clearing
     fn connect_search_button_toggle(
         search_button: &ToggleButton,
         app_state: &Arc<AppState>,
-        search_entry_container: &Box,
         search_entry: &SearchEntry,
         search_bar: &SearchBar,
-        search_state: &SearchState,
+        debounce_handle: &Arc<Mutex<Option<SourceId>>>,
+        clearing_search: &Arc<AtomicBool>,
     ) {
         let toggle_state = SearchToggleState {
-            search_entry_container: Rc::new(search_entry_container.clone()),
             search_entry: Rc::new(search_entry.clone()),
             search_bar: Rc::new(search_bar.clone()),
-            debounce_handle_entry: Arc::clone(&search_state.debounce_handle_entry),
-            debounce_handle_bar: Arc::clone(&search_state.debounce_handle_bar),
-            clearing_search: Arc::clone(&search_state.clearing_search),
-            search_display_mode: Arc::clone(&search_state.search_display_mode),
+            debounce_handle: Arc::clone(debounce_handle),
+            clearing_search: Arc::clone(clearing_search),
             app_state: Arc::clone(app_state),
         };
 
         search_button.connect_toggled(move |button: &ToggleButton| {
             let is_active = button.is_active();
-            let display_mode = *toggle_state.search_display_mode.lock();
+            toggle_state.search_bar.set_search_mode(is_active);
 
-            if display_mode == SearchDisplayMode::Bar {
-                // Small screen: toggle search bar below header
-                toggle_state.search_bar.set_search_mode(is_active);
-
-                // Focus on the search entry inside the search bar
-                if is_active
-                    && let Some(child) = toggle_state.search_bar.child()
-                    && let Some(entry) = child.downcast_ref::<SearchEntry>()
-                {
-                    entry.grab_focus();
-                }
-            } else {
-                // Large screen: toggle inline search entry
-                toggle_state.search_entry_container.set_visible(is_active);
-
-                if is_active {
-                    toggle_state.search_entry.grab_focus();
-                }
+            if is_active {
+                toggle_state.search_entry.grab_focus();
             }
 
             if !is_active {
@@ -714,11 +566,8 @@ impl HeaderBar {
                 toggle_state.search_entry.set_text("");
                 toggle_state.clearing_search.store(false, SeqCst);
 
-                // Cancel any pending debounce timers for both search entries
-                if let Some(timer_id) = toggle_state.debounce_handle_entry.lock().take() {
-                    let () = timer_id.remove();
-                }
-                if let Some(timer_id) = toggle_state.debounce_handle_bar.lock().take() {
+                // Cancel any pending debounce timer
+                if let Some(timer_id) = toggle_state.debounce_handle.lock().take() {
                     let () = timer_id.remove();
                 }
 
@@ -732,9 +581,8 @@ impl HeaderBar {
             search_button: Rc::new(search_button.clone()),
             search_entry: Rc::new(search_entry.clone()),
             search_bar: Rc::new(search_bar.clone()),
-            debounce_handle_entry: Arc::clone(&search_state.debounce_handle_entry),
-            debounce_handle_bar: Arc::clone(&search_state.debounce_handle_bar),
-            clearing_search: Arc::clone(&search_state.clearing_search),
+            debounce_handle: Arc::clone(debounce_handle),
+            clearing_search: Arc::clone(clearing_search),
             app_state: Arc::clone(app_state),
         };
 
@@ -745,11 +593,8 @@ impl HeaderBar {
             // Set flag first to block any in-flight timers before cancelling
             stop_state.clearing_search.store(true, SeqCst);
 
-            // Cancel any pending debounce timers for both search entries
-            if let Some(timer_id) = stop_state.debounce_handle_entry.lock().take() {
-                let () = timer_id.remove();
-            }
-            if let Some(timer_id) = stop_state.debounce_handle_bar.lock().take() {
+            // Cancel any pending debounce timer
+            if let Some(timer_id) = stop_state.debounce_handle.lock().take() {
                 let () = timer_id.remove();
             }
 
@@ -774,8 +619,8 @@ impl HeaderBar {
     fn connect_debounced_search(
         search_entry: &SearchEntry,
         app_state: &Arc<AppState>,
-        debounce_handle: SearchDebounceHandle,
-        clearing_flag: SearchClearingFlag,
+        debounce_handle: Arc<Mutex<Option<SourceId>>>,
+        clearing_flag: Arc<AtomicBool>,
         settings_manager: &Arc<SettingsManager>,
     ) {
         let state_clone = Arc::clone(app_state);
@@ -819,78 +664,53 @@ impl HeaderBar {
         });
     }
 
-    /// Connects search handlers for the inline search entry.
+    /// Connects debounced search and ESC handlers for the search entry.
     ///
     /// # Arguments
     ///
-    /// * `search_entry` - The inline search entry widget
+    /// * `search_entry` - The search entry widget
     /// * `app_state` - Application state for filter updates
-    /// * `search_state` - Search state containing debounce and clearing flags
+    /// * `debounce_handle` - Shared debounce timer handle
+    /// * `clearing_flag` - Flag to prevent debounce during programmatic clearing
     /// * `settings_manager` - Settings manager for debounce duration configuration
     fn connect_search_entry_handlers(
         search_entry: &SearchEntry,
         app_state: &Arc<AppState>,
-        search_state: &SearchState,
+        debounce_handle: &Arc<Mutex<Option<SourceId>>>,
+        clearing_flag: &Arc<AtomicBool>,
         settings_manager: &Arc<SettingsManager>,
+        search_button: &ToggleButton,
+        search_bar: &SearchBar,
     ) {
         Self::connect_debounced_search(
             search_entry,
             app_state,
-            Arc::clone(&search_state.debounce_handle_entry),
-            Arc::clone(&search_state.clearing_search),
-            settings_manager,
-        );
-    }
-
-    /// Connects search handlers for the mobile search bar.
-    ///
-    /// # Arguments
-    ///
-    /// * `search_entry_for_bar` - The search entry within the mobile search bar
-    /// * `app_state` - Application state for filter updates
-    /// * `search_button` - The search toggle button to sync state with
-    /// * `search_state` - Search state containing debounce and clearing flags
-    /// * `settings_manager` - Settings manager for debounce duration configuration
-    /// * `search_bar` - The search bar widget to close on ESC
-    fn connect_search_bar_handlers(
-        search_entry_for_bar: &SearchEntry,
-        app_state: &Arc<AppState>,
-        search_button: &ToggleButton,
-        search_state: &SearchState,
-        settings_manager: &Arc<SettingsManager>,
-        search_bar: &SearchBar,
-    ) {
-        Self::connect_debounced_search(
-            search_entry_for_bar,
-            app_state,
-            Arc::clone(&search_state.debounce_handle_bar),
-            Arc::clone(&search_state.clearing_search),
+            Arc::clone(debounce_handle),
+            Arc::clone(clearing_flag),
             settings_manager,
         );
 
-        // Handle ESC on search bar entry
-        let esc_state = MobileSearchStopState {
-            search_button: Rc::new(search_button.clone()),
-            search_entry: Rc::new(search_entry_for_bar.clone()),
-            search_bar: Rc::new(search_bar.clone()),
-            debounce_handle: Arc::clone(&search_state.debounce_handle_bar),
-            clearing_search: Arc::clone(&search_state.clearing_search),
-            app_state: Arc::clone(app_state),
-        };
+        // Handle ESC on search bar
+        let esc_search_button = Rc::new(search_button.clone());
+        let esc_search_bar = Rc::new(search_bar.clone());
+        let esc_debounce_handle = Arc::clone(debounce_handle);
+        let esc_clearing = Arc::clone(clearing_flag);
+        let esc_app_state = Arc::clone(app_state);
+        let esc_entry = Rc::new(search_entry.clone());
 
-        search_entry_for_bar.connect_stop_search(move |_| {
-            esc_state.search_button.set_active(false);
-            esc_state.search_bar.set_search_mode(false);
+        search_entry.connect_stop_search(move |_| {
+            esc_search_button.set_active(false);
+            esc_search_bar.set_search_mode(false);
 
-            if let Some(timer_id) = esc_state.debounce_handle.lock().take() {
+            if let Some(timer_id) = esc_debounce_handle.lock().take() {
                 let () = timer_id.remove();
             }
 
-            esc_state.clearing_search.store(true, SeqCst);
-            esc_state.search_entry.set_text("");
-            esc_state.clearing_search.store(false, SeqCst);
+            esc_clearing.store(true, SeqCst);
+            esc_entry.set_text("");
+            esc_clearing.store(false, SeqCst);
 
-            esc_state.app_state.update_search_filter(None);
+            esc_app_state.update_search_filter(None);
         });
     }
 
@@ -1994,10 +1814,7 @@ impl Drop for HeaderBar {
         if let Some(timer_id) = self.zoom_timer_handle.lock().take() {
             let () = timer_id.remove();
         }
-        if let Some(timer_id) = self.search_debounce_handle_entry.lock().take() {
-            let () = timer_id.remove();
-        }
-        if let Some(timer_id) = self.search_debounce_handle_bar.lock().take() {
+        if let Some(timer_id) = self.search_debounce_handle.lock().take() {
             let () = timer_id.remove();
         }
     }
@@ -2041,7 +1858,6 @@ impl HeaderBar {
     pub fn clear_search(&self) {
         self.clearing_search.store(true, SeqCst);
         self.search_entry.set_text("");
-        self.search_entry_for_bar.set_text("");
         self.clearing_search.store(false, SeqCst);
     }
 
@@ -2067,44 +1883,12 @@ impl HeaderBar {
     /// When enabled:
     /// - Settings and View buttons are hidden
     /// - Merged menu button is shown
-    /// - Search bar mode is enabled (inline search entry hidden)
     ///
-    /// Search text and active state are transferred between the inline
-    /// entry and the mobile search bar so the user's search persists
-    /// across breakpoint transitions.
+    /// When disabled:
+    /// - Settings and View buttons are shown
+    /// - Merged menu button is hidden
     pub fn set_adaptive_mode(&self, adaptive: bool) {
-        let search_was_active = self.search_button.is_active();
-
-        // Capture text from the outgoing search entry before switching (only if active)
-        let current_text = if search_was_active {
-            if adaptive {
-                Some(self.search_entry.text().to_string())
-            } else {
-                Some(self.search_entry_for_bar.text().to_string())
-            }
-        } else {
-            None
-        };
-
-        let new_mode = if adaptive {
-            SearchDisplayMode::Bar
-        } else {
-            SearchDisplayMode::Inline
-        };
-        *self.search_display_mode.lock() = new_mode;
-
-        // Set flag to block any in-flight timers before cancelling
-        self.clearing_search.store(true, SeqCst);
-        if let Some(timer_id) = self.search_debounce_handle_entry.lock().take() {
-            // SourceId::remove() returns (), no error handling needed
-            // The timer is guaranteed to be valid when removed
-            let () = timer_id.remove();
-        }
-        if let Some(timer_id) = self.search_debounce_handle_bar.lock().take() {
-            // SourceId::remove() returns (), no error handling needed
-            // The timer is guaranteed to be valid when removed
-            let () = timer_id.remove();
-        }
+        self.is_adaptive.store(adaptive, SeqCst);
 
         if adaptive {
             self.settings_button.set_visible(false);
@@ -2114,66 +1898,21 @@ impl HeaderBar {
 
             let is_on_library = matches!(self.app_state.get_navigation_state(), Library);
             self.merged_menu_bulk_action_box.set_visible(is_on_library);
-
-            // Hide the inline entry, show the search bar
-            self.search_entry_container.set_visible(false);
-            self.search_bar.set_visible(true);
-
-            // Transfer text and active state to the mobile search bar
-            if search_was_active {
-                self.clearing_search.store(true, SeqCst);
-                self.search_entry_for_bar
-                    .set_text(current_text.as_deref().unwrap_or(""));
-                self.search_entry_for_bar.set_position(-1);
-
-                self.search_bar.set_search_mode(true);
-                self.clearing_search.store(false, SeqCst);
-            }
         } else {
             self.settings_button.set_visible(true);
             self.view_split_button.set_visible(true);
             self.merged_menu_button.set_visible(false);
             self.bulk_action_button.set_visible(true);
             self.merged_menu_bulk_action_box.set_visible(false);
-
-            // Wrap the UI state updates in clearing_search to prevent synchronous
-            // search-changed signals from clearing the AppState filter.
-            self.clearing_search.store(true, SeqCst);
-
-            // Hide the search bar, conditionally show the inline entry
-            self.search_bar.set_search_mode(false);
-            self.search_bar.set_visible(false);
-
-            // Transfer text and active state to the inline entry
-            if search_was_active {
-                self.search_entry
-                    .set_text(current_text.as_deref().unwrap_or(""));
-                self.search_entry.set_position(-1);
-
-                self.search_entry_container.set_visible(true);
-
-                let search_entry_clone = self.search_entry.clone();
-                timeout_add_local_once(Duration::from_millis(50), move || {
-                    search_entry_clone.grab_focus();
-                    search_entry_clone.set_position(-1);
-                });
-            } else {
-                self.search_entry_container.set_visible(false);
-            }
-
-            self.clearing_search.store(false, SeqCst);
         }
     }
 
     /// Returns whether the header bar is in adaptive mode.
     pub fn is_adaptive(&self) -> bool {
-        *self.search_display_mode.lock() == SearchDisplayMode::Bar
+        self.is_adaptive.load(SeqCst)
     }
 
     /// Gets the search bar widget for placement below the header bar.
-    ///
-    /// This should be used in adaptive mode where the search bar
-    /// appears below the header bar instead of inline.
     pub fn get_search_bar(&self) -> &SearchBar {
         &self.search_bar
     }
