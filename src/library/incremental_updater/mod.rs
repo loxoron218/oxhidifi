@@ -11,7 +11,7 @@ use std::sync::Arc;
 use {
     async_channel::Receiver,
     parking_lot::RwLock,
-    tokio::task::JoinHandle,
+    tokio::{spawn, task::JoinHandle},
     tracing::{debug, error, warn},
 };
 
@@ -104,7 +104,7 @@ impl IncrementalUpdater {
         let settings = Arc::clone(&self.settings);
         let config = self.config.clone();
 
-        tokio::spawn(async move {
+        spawn(async move {
             Self::process_events_loop(receiver, database, dr_parser, settings, config).await;
         })
     }
