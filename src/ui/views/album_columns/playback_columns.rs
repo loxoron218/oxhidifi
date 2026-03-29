@@ -94,10 +94,9 @@ pub fn setup_dr_column(column_view: &ColumnView, fixed_width: i32, show_dr_badge
     column.set_resizable(true);
     let sorter = CustomSorter::new(|item1, item2| {
         let extract_dr = |item: &Object| -> Option<i64> {
-            item.downcast_ref::<BoxedAnyObject>().and_then(|boxed| {
-                let album = boxed.borrow::<Arc<Album>>();
-                album.dr_value_numeric()
-            })
+            let boxed = item.downcast_ref::<BoxedAnyObject>()?;
+            let album = boxed.borrow::<Arc<Album>>();
+            album.dr_value_numeric()
         };
         let val1 = extract_dr(item1);
         let val2 = extract_dr(item2);

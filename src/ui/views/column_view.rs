@@ -376,9 +376,8 @@ impl ColumnListView {
         self.column_view
             .connect_activate(move |column_view, position| {
                 let item = column_view.model().and_then(|model| {
-                    model
-                        .item(position)
-                        .and_then(|obj| obj.downcast::<BoxedAnyObject>().ok())
+                    let obj = model.item(position)?;
+                    obj.downcast::<BoxedAnyObject>().ok()
                 });
 
                 if let Some(boxed) = item {

@@ -111,10 +111,9 @@ pub fn setup_sample_rate_column(column_view: &ColumnView, fixed_width: i32) {
     column.set_resizable(true);
     let sorter = CustomSorter::new(|item1, item2| {
         let extract_sample_rate = |item: &Object| -> Option<i64> {
-            item.downcast_ref::<BoxedAnyObject>().and_then(|boxed| {
-                let album = boxed.borrow::<Arc<Album>>();
-                album.sample_rate
-            })
+            let boxed = item.downcast_ref::<BoxedAnyObject>()?;
+            let album = boxed.borrow::<Arc<Album>>();
+            album.sample_rate
         };
         let val1 = extract_sample_rate(item1);
         let val2 = extract_sample_rate(item2);
