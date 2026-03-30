@@ -6,12 +6,12 @@ use libadwaita::{
     glib::{BoxedAnyObject, Object},
     gtk::{
         CustomSorter,
-        Ordering::{self, Equal, Larger, Smaller},
+        Ordering::{self as GtkOrdering, Equal as GtkEqual, Larger, Smaller},
     },
     prelude::Cast,
 };
 
-use crate::library::models::Album;
+use crate::{library::models::Album, ui::views::column_sorting::compare_ignore_ascii_case};
 
 /// Extracts an album from a generic object.
 ///
@@ -41,22 +41,20 @@ fn extract_album(item: &Object) -> Option<Arc<Album>> {
 pub fn create_string_sorter(get_value: fn(&Album) -> Option<&String>) -> CustomSorter {
     CustomSorter::new(move |item1, item2| {
         let Some(arc_album1) = extract_album(item1) else {
-            return Equal;
+            return GtkEqual;
         };
         let Some(arc_album2) = extract_album(item2) else {
-            return Equal;
+            return GtkEqual;
         };
 
         let val1 = get_value(&arc_album1);
         let val2 = get_value(&arc_album2);
 
         match (val1, val2) {
-            (Some(s1), Some(s2)) => {
-                Ordering::from(s1.to_ascii_lowercase().cmp(&s2.to_ascii_lowercase()))
-            }
+            (Some(s1), Some(s2)) => compare_ignore_ascii_case(s1, s2),
             (Some(_), None) => Larger,
             (None, Some(_)) => Smaller,
-            (None, None) => Equal,
+            (None, None) => GtkEqual,
         }
     })
 }
@@ -73,20 +71,20 @@ pub fn create_string_sorter(get_value: fn(&Album) -> Option<&String>) -> CustomS
 pub fn create_numeric_sorter(get_value: fn(&Album) -> Option<i64>) -> CustomSorter {
     CustomSorter::new(move |item1, item2| {
         let Some(arc_album1) = extract_album(item1) else {
-            return Equal;
+            return GtkEqual;
         };
         let Some(arc_album2) = extract_album(item2) else {
-            return Equal;
+            return GtkEqual;
         };
 
         let val1 = get_value(&arc_album1);
         let val2 = get_value(&arc_album2);
 
         match (val1, val2) {
-            (Some(n1), Some(n2)) => Ordering::from(n1.cmp(&n2)),
+            (Some(n1), Some(n2)) => GtkOrdering::from(n1.cmp(&n2)),
             (Some(_), None) => Larger,
             (None, Some(_)) => Smaller,
-            (None, None) => Equal,
+            (None, None) => GtkEqual,
         }
     })
 }

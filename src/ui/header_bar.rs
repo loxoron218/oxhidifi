@@ -501,7 +501,7 @@ impl HeaderBar {
     /// Tuple of (`search_entry`, `search_bar`).
     fn create_search_widgets() -> (SearchEntry, SearchBar) {
         let search_entry = SearchEntry::builder()
-            .placeholder_text("Search albums and artists...")
+            .placeholder_text("Search songs, albums and artists...")
             .hexpand(true)
             .margin_start(12)
             .margin_end(12)
@@ -630,6 +630,11 @@ impl HeaderBar {
 
         search_entry.connect_search_changed(move |entry| {
             let text = entry.text();
+
+            // Reject excessively long search queries to prevent DoS
+            if text.len() > 500 {
+                return;
+            }
 
             // Cancel any pending debounce timer first
             if let Some(timer_id) = debounce_search.lock().take() {

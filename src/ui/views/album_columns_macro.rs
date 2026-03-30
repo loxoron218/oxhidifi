@@ -1,9 +1,11 @@
-//! Album column macro for creating simple text columns.
+//! Column macro for creating simple text columns.
 
 /// Macro to create simple text columns with boilerplate reduction.
+///
+/// Generic over the data type stored in the `BoxedAnyObject`.
 #[macro_export]
 macro_rules! label_column {
-    ($title:expr, $extractor:expr, $resizable:expr, $fixed_width:expr) => {{
+    ($title:expr, $type:ty, $extractor:expr, $resizable:expr, $fixed_width:expr) => {{
         let factory = SignalListItemFactory::new();
         let extractor_fn = $extractor;
 
@@ -19,9 +21,9 @@ macro_rules! label_column {
                 if let Some(child) = list_item.child() {
                     if let Some(label) = child.downcast_ref::<Label>() {
                         if let Some(boxed) = list_item.item() {
-                            if let Ok(album_obj) = boxed.downcast::<BoxedAnyObject>() {
-                                let album = album_obj.borrow::<Arc<Album>>();
-                                if let Some(text) = (extractor_fn)(&album) {
+                            if let Ok(obj) = boxed.downcast::<BoxedAnyObject>() {
+                                let item = obj.borrow::<Arc<$type>>();
+                                if let Some(text) = (extractor_fn)(&item) {
                                     label.set_text(&text);
                                     label.set_visible(true);
                                 } else {

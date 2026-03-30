@@ -24,6 +24,7 @@ use crate::{label_column, library::models::Album, ui::views::column_view_types::
 pub fn setup_title_column(column_view: &mut ColumnView) {
     let column = label_column!(
         "Album",
+        Album,
         |album: &Album| Some(album.title.clone()),
         true,
         None::<i32>
@@ -87,6 +88,7 @@ pub fn setup_artist_column(
 pub fn setup_year_column(column_view: &mut ColumnView, fixed_width: i32) {
     let column = label_column!(
         "Year",
+        Album,
         |album: &Album| album.year.map(|y| y.to_string()),
         true,
         Some(fixed_width)
@@ -103,6 +105,7 @@ pub fn setup_year_column(column_view: &mut ColumnView, fixed_width: i32) {
 pub fn setup_genre_column(column_view: &mut ColumnView, fixed_width: i32) {
     let column = label_column!(
         "Genre",
+        Album,
         |album: &Album| album.genre.clone(),
         true,
         Some(fixed_width)
@@ -119,6 +122,7 @@ pub fn setup_genre_column(column_view: &mut ColumnView, fixed_width: i32) {
 pub fn setup_track_count_column(column_view: &mut ColumnView, fixed_width: i32) {
     let column = label_column!(
         "Tracks",
+        Album,
         |album: &Album| Some(album.track_count.to_string()),
         true,
         Some(fixed_width)
@@ -135,6 +139,7 @@ pub fn setup_track_count_column(column_view: &mut ColumnView, fixed_width: i32) 
 pub fn setup_bit_depth_column(column_view: &mut ColumnView, fixed_width: i32) {
     let column = label_column!(
         "Bit Depth",
+        Album,
         |album: &Album| album.bits_per_sample.map(|b| b.to_string()),
         true,
         Some(fixed_width)
@@ -151,6 +156,7 @@ pub fn setup_bit_depth_column(column_view: &mut ColumnView, fixed_width: i32) {
 pub fn setup_channels_column(column_view: &mut ColumnView, fixed_width: i32) {
     let column = label_column!(
         "Channels",
+        Album,
         |album: &Album| album.channels.map(|c| c.to_string()),
         true,
         Some(fixed_width)

@@ -301,6 +301,8 @@ pub struct AlbumCard {
     pub selection_checkbox: CheckButton,
     /// Flag to prevent callback during programmatic updates.
     updating_checkbox: Cell<bool>,
+    /// Whether any item in the view is currently selected (selection mode).
+    pub has_selection: Rc<Cell<bool>>,
 }
 
 impl AlbumCard {
@@ -342,6 +344,7 @@ impl AlbumCard {
             .halign(Start)
             .valign(Start)
             .visible(false)
+            .css_classes(["selection-checkbox"])
             .build();
         selection_checkbox.set_can_target(false);
         selection_checkbox.set_active(selected);
@@ -380,6 +383,8 @@ impl AlbumCard {
             album.year,
         );
 
+        let has_selection = Rc::new(Cell::new(selected));
+
         let child = Self::create_flow_box_child(
             &album_tile,
             on_play_clicked,
@@ -404,6 +409,7 @@ impl AlbumCard {
             album_id: album.id,
             selection_checkbox,
             updating_checkbox: updating_flag,
+            has_selection,
         })
     }
 
@@ -416,6 +422,15 @@ impl AlbumCard {
         self.updating_checkbox.set(true);
         self.selection_checkbox.set_active(selected);
         self.updating_checkbox.set(false);
+    }
+
+    /// Updates whether selection mode is active for this card.
+    ///
+    /// # Arguments
+    ///
+    /// * `has_selection` - Whether any item is currently selected
+    pub fn set_has_selection(&self, has_selection: bool) {
+        self.has_selection.set(has_selection);
     }
 
     /// Calculates cover dimensions based on configuration.
@@ -709,7 +724,6 @@ impl AlbumCard {
     /// * `on_card_clicked` - Optional card click callback
     /// * `play_overlay` - The play overlay component
     /// * `selection_checkbox` - The selection checkbox
-    /// * `selection_mode_active` - Cell tracking if selection mode is active
     ///
     /// # Returns
     ///

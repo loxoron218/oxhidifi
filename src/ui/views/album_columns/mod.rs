@@ -15,7 +15,7 @@ use libadwaita::{
         Align::Center,
         CheckButton, ColumnView, ColumnViewColumn, CustomSorter, Label, ListItem, ListItemFactory,
         MultiSelection,
-        Ordering::{self, Equal, Larger, Smaller},
+        Ordering::{Equal as GtkEqual, Larger, Smaller},
         SignalListItemFactory,
         pango::EllipsizeMode::End,
     },
@@ -27,7 +27,7 @@ use crate::{
     label_column,
     library::{database::LibraryDatabase, models::Album},
     state::app_state::AppState,
-    ui::views::column_view_types::ArtistNameCache,
+    ui::views::{column_sorting::compare_ignore_ascii_case, column_view_types::ArtistNameCache},
 };
 
 /// Context for playback-related operations.
@@ -204,6 +204,7 @@ fn create_numeric_sorter(get_value: fn(&Album) -> Option<i64>) -> CustomSorter {
 pub fn setup_title_column(column_view: &mut ColumnView) {
     let column = label_column!(
         "Album",
+        Album,
         |album: &Album| Some(album.title.clone()),
         true,
         None::<i32>
@@ -267,22 +268,20 @@ pub fn setup_artist_column(
         };
 
         let Some(arc_album1) = extract_album(item1) else {
-            return Equal;
+            return GtkEqual;
         };
         let Some(arc_album2) = extract_album(item2) else {
-            return Equal;
+            return GtkEqual;
         };
 
         let cache = cache_for_sort.borrow();
         let val1 = cache.get(&arc_album1.artist_id);
         let val2 = cache.get(&arc_album2.artist_id);
         match (val1, val2) {
-            (Some(s1), Some(s2)) => {
-                Ordering::from(s1.to_ascii_lowercase().cmp(&s2.to_ascii_lowercase()))
-            }
+            (Some(s1), Some(s2)) => compare_ignore_ascii_case(s1, s2),
             (Some(_), None) => Larger,
             (None, Some(_)) => Smaller,
-            (None, None) => Equal,
+            (None, None) => GtkEqual,
         }
     });
     column.set_sorter(Some(&sorter));
@@ -298,6 +297,7 @@ pub fn setup_artist_column(
 pub fn setup_year_column(column_view: &mut ColumnView, fixed_width: i32) {
     let column = label_column!(
         "Year",
+        Album,
         |album: &Album| album.year.map(|y| y.to_string()),
         true,
         Some(fixed_width)
@@ -316,6 +316,7 @@ pub fn setup_year_column(column_view: &mut ColumnView, fixed_width: i32) {
 pub fn setup_genre_column(column_view: &mut ColumnView, fixed_width: i32) {
     let column = label_column!(
         "Genre",
+        Album,
         |album: &Album| album.genre.clone(),
         true,
         Some(fixed_width)
@@ -334,6 +335,7 @@ pub fn setup_genre_column(column_view: &mut ColumnView, fixed_width: i32) {
 pub fn setup_track_count_column(column_view: &mut ColumnView, fixed_width: i32) {
     let column = label_column!(
         "Tracks",
+        Album,
         |album: &Album| Some(album.track_count.to_string()),
         true,
         Some(fixed_width)
@@ -352,6 +354,7 @@ pub fn setup_track_count_column(column_view: &mut ColumnView, fixed_width: i32) 
 pub fn setup_bit_depth_column(column_view: &mut ColumnView, fixed_width: i32) {
     let column = label_column!(
         "Bit Depth",
+        Album,
         |album: &Album| album.bits_per_sample.map(|b| b.to_string()),
         true,
         Some(fixed_width)
@@ -370,6 +373,7 @@ pub fn setup_bit_depth_column(column_view: &mut ColumnView, fixed_width: i32) {
 pub fn setup_channels_column(column_view: &mut ColumnView, fixed_width: i32) {
     let column = label_column!(
         "Channels",
+        Album,
         |album: &Album| album.channels.map(|c| c.to_string()),
         true,
         Some(fixed_width)

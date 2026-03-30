@@ -6,6 +6,9 @@
 
 use libadwaita::{StatusPage, prelude::WidgetExt};
 
+/// Max query length for display (truncated with "..." if exceeded).
+const MAX_QUERY_LENGTH: usize = 100;
+
 /// Configuration for `SearchEmptyState` display options.
 #[derive(Debug, Clone, Default)]
 pub struct SearchEmptyStateConfig {
@@ -17,6 +20,7 @@ pub struct SearchEmptyStateConfig {
 ///
 /// The `SearchEmptyState` component displays a clear message when
 /// search returns no results using Libadwaita's `StatusPage` widget.
+#[derive(Clone)]
 pub struct SearchEmptyState {
     /// The underlying `StatusPage` widget.
     widget: StatusPage,
@@ -47,6 +51,23 @@ impl SearchEmptyState {
         }
     }
 
+    /// Truncates a query string for display.
+    ///
+    /// # Arguments
+    ///
+    /// * `query` - The query to truncate
+    ///
+    /// # Returns
+    ///
+    /// The truncated query with "..." appended if over 100 chars.
+    fn truncate_query_for_display(query: &str) -> String {
+        if query.len() > MAX_QUERY_LENGTH {
+            format!("{}...", &query[..MAX_QUERY_LENGTH])
+        } else {
+            query.to_string()
+        }
+    }
+
     /// Updates the empty state message based on search query.
     ///
     /// # Arguments
@@ -65,8 +86,9 @@ impl SearchEmptyState {
                 "Try searching for something",
             )
         } else {
+            let truncated_query = Self::truncate_query_for_display(query);
             (
-                format!("No {item_type} found for \"{query}\""),
+                format!("No {item_type} found for \"{truncated_query}\""),
                 "Try searching for something else",
             )
         };

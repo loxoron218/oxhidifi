@@ -3,6 +3,11 @@
     background-color: @theme_bg_color;
 }
 
+/* Selection checkbox - disable transitions to prevent flash */
+.selection-checkbox check {
+    transition: none;
+}
+
 /* Cover art picture styling */
 .cover-art-picture {
     background-color: @theme_unfocused_bg_color;

@@ -391,6 +391,7 @@ impl ArtistGridView {
                         let is_selected = selected_ids.contains(&card.artist_id);
                         card.selection_checkbox.set_visible(has_selection);
                         card.selection_checkbox.set_can_target(has_selection);
+                        card.set_has_selection(has_selection);
                         if card.selection_checkbox.is_active() != is_selected {
                             card.set_selection_state(is_selected);
                         }
@@ -784,6 +785,8 @@ pub struct ArtistCard {
     pub selection_checkbox: CheckButton,
     /// Flag to prevent callback during programmatic updates.
     updating_checkbox: Cell<bool>,
+    /// Whether any item in the view is currently selected (selection mode).
+    pub has_selection: Rc<Cell<bool>>,
 }
 
 impl ArtistCard {
@@ -842,6 +845,8 @@ impl ArtistCard {
         let artist_tile =
             Self::create_artist_tile(&cover_art, &name_label, &album_count_label, artist);
 
+        let has_selection = Rc::new(Cell::new(selected));
+
         let child = FlowBoxChild::new();
         child.set_child(Some(&artist_tile));
         child.set_focusable(true);
@@ -858,6 +863,7 @@ impl ArtistCard {
             artist_id: artist.id,
             selection_checkbox,
             updating_checkbox: updating_flag,
+            has_selection,
         }
     }
 
@@ -880,6 +886,7 @@ impl ArtistCard {
             .halign(Start)
             .valign(Start)
             .visible(false)
+            .css_classes(["selection-checkbox"])
             .build();
         selection_checkbox.set_can_target(false);
         selection_checkbox.set_active(selected);
@@ -1053,6 +1060,15 @@ impl ArtistCard {
         self.updating_checkbox.set(true);
         self.selection_checkbox.set_active(selected);
         self.updating_checkbox.set(false);
+    }
+
+    /// Updates whether selection mode is active for this card.
+    ///
+    /// # Arguments
+    ///
+    /// * `has_selection` - Whether any item is currently selected
+    pub fn set_has_selection(&self, has_selection: bool) {
+        self.has_selection.set(has_selection);
     }
 
     /// Updates the cover size for this artist card.

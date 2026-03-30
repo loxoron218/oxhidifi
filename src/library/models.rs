@@ -119,9 +119,28 @@ pub struct Track {
     pub updated_at: Option<String>,
 }
 
-/// Search results containing albums and artists that match a query.
+/// A track with its associated album and artist metadata for search results.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TrackSearchResult {
+    /// The track data.
+    pub track: Track,
+    /// ID of the associated album.
+    pub album_id: i64,
+    /// Album title.
+    pub album_title: String,
+    /// ID of the associated artist.
+    pub artist_id: i64,
+    /// Artist name.
+    pub artist_name: String,
+    /// Path to album artwork file (if available).
+    pub artwork_path: Option<String>,
+}
+
+/// Search results containing tracks, albums and artists that match a query.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SearchResults {
+    /// Matching tracks with album/artist context.
+    pub tracks: Vec<TrackSearchResult>,
     /// Matching albums.
     pub albums: Vec<Album>,
     /// Matching artists.

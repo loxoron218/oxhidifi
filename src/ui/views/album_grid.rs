@@ -621,6 +621,7 @@ impl AlbumGridView {
                         let is_selected = selected_ids.contains(&card.album_id);
                         card.selection_checkbox.set_visible(has_selection);
                         card.selection_checkbox.set_can_target(has_selection);
+                        card.set_has_selection(has_selection);
                         if card.selection_checkbox.is_active() != is_selected {
                             card.set_selection_state(is_selected);
                         }

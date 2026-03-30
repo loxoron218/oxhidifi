@@ -84,6 +84,7 @@ use crate::{
             },
             detail_types::DetailType::{Album as DetailTypeAlbum, Artist as DetailTypeArtist},
             detail_view::DetailView,
+            search_results_view::SearchResultsView,
         },
     },
 };
@@ -126,6 +127,8 @@ struct ViewControllers {
     artist_grid: ArtistGridView,
     /// Artist list view controller.
     artist_list: ColumnListView,
+    /// Unified search results view controller.
+    search_results: SearchResultsView,
 }
 
 /// Context struct for view options handling.
@@ -675,6 +678,7 @@ fn handle_navigation_state_change(
 
             header_bar.back_button.set_visible(false);
             header_bar.search_button.set_visible(true);
+            header_bar.search_bar.set_visible(true);
             header_bar.view_split_button.set_visible(true);
             header_bar
                 .widget
@@ -707,6 +711,7 @@ fn handle_navigation_state_change(
             );
 
             header_bar.back_button.set_visible(true);
+            header_bar.search_bar.set_visible(false);
             header_bar.search_button.set_visible(false);
             header_bar.view_split_button.set_visible(false);
             header_bar.bulk_action_button.set_visible(false);
@@ -729,6 +734,7 @@ fn handle_navigation_state_change(
             );
 
             header_bar.back_button.set_visible(true);
+            header_bar.search_bar.set_visible(false);
             header_bar.search_button.set_visible(false);
             header_bar.view_split_button.set_visible(false);
             header_bar.bulk_action_button.set_visible(false);
@@ -1219,18 +1225,21 @@ fn create_artist_list_view(
 /// * `album_list_scrolled` - Album list view wrapper
 /// * `artist_grid_scrolled` - Artist grid view wrapper
 /// * `artist_list_scrolled` - Artist list view wrapper
+/// * `search_scrolled` - Search results view wrapper
 fn add_views_to_stack(
     view_stack: &Stack,
     album_grid_scrolled: &ScrolledWindow,
     album_list_scrolled: &ScrolledWindow,
     artist_grid_scrolled: &ScrolledWindow,
     artist_list_scrolled: &ScrolledWindow,
+    search_scrolled: &ScrolledWindow,
 ) {
     // Add ALL scrolled views to the stack initially with unique names
     view_stack.add_named(album_grid_scrolled, Some("album_grid"));
     view_stack.add_named(album_list_scrolled, Some("album_list"));
     view_stack.add_named(artist_grid_scrolled, Some("artist_grid"));
     view_stack.add_named(artist_list_scrolled, Some("artist_list"));
+    view_stack.add_named(search_scrolled, Some("search_results"));
 }
 
 /// Sets the initially visible view based on current tab and mode.
@@ -1263,13 +1272,11 @@ fn set_initial_visible_view(
 /// * `artists` - Updated artist list
 /// * `views` - View controllers context
 /// * `search_app_state` - `AppState` for retrieving search filter
-/// * `view_stack` - View stack for getting current child
 fn handle_library_data_changed(
     albums: Vec<Album>,
     artists: Vec<Artist>,
     views: &mut ViewControllers,
     search_app_state: &Arc<AppState>,
-    view_stack: &Stack,
 ) {
     debug!("Handling LibraryDataChanged event");
 
@@ -1287,19 +1294,11 @@ fn handle_library_data_changed(
     views.album_list.set_albums(album_arcs);
     views.artist_list.set_artists(artist_arcs);
 
-    // Re-apply current search filter if active
-    if let Some(filter) = &current_filter {
-        let query = filter.as_str();
-        let visible_child = view_stack.visible_child_name();
-        if let Some(child_name) = visible_child.as_deref() {
-            match child_name {
-                "album_grid" => views.album_grid.filter_albums(query),
-                "album_list" => views.album_list.filter_view_items(query),
-                "artist_grid" => views.artist_grid.filter_artists(query),
-                "artist_list" => views.artist_list.filter_view_items(query),
-                _ => {}
-            }
-        }
+    // Re-populate search results if search is active
+    if let Some(filter) = &current_filter
+        && !filter.is_empty()
+    {
+        views.search_results.populate(filter);
     }
 }
 
@@ -1333,25 +1332,20 @@ fn handle_view_options_changed(
     let library_state = ctx.app_state.get_library_state();
     let has_active_search = library_state.search_filter.is_some();
 
-    // Handle view switching
-    if tab_changed {
-        // Tab switch: clear search filter to prevent stale results
-        debug!("Tab changed, resetting search filter");
+    // When search is active:
+    // - Tab switch: clear search, clear search results, show new tab's view
+    // - View mode switch: keep showing search results (search view is independent of mode)
+    if has_active_search {
+        if tab_changed {
+            debug!("Tab changed with active search, clearing search and switching view");
 
-        if has_active_search {
-            debug!("Clearing target view before tab switch to prevent flicker");
+            // Clear search silently (without broadcasting)
+            ctx.header_bar.clear_search();
+            ctx.header_bar.close_search();
+            ctx.app_state.clear_search_filter_silent();
+            ctx.views.search_results.clear();
 
-            match child_name {
-                "album_grid" => ctx.views.album_grid.clear_view(),
-                "album_list" => ctx.views.album_list.clear_view(),
-                "artist_grid" => ctx.views.artist_grid.clear_view(),
-                "artist_list" => ctx.views.artist_list.clear_view(),
-                _ => {}
-            }
-        } else {
-            // No active search - restore view to show all items
-            debug!("Restoring view to show all items");
-
+            // Show the new tab's view
             match child_name {
                 "album_grid" => ctx.views.album_grid.filter_albums(""),
                 "album_list" => ctx.views.album_list.filter_view_items(""),
@@ -1359,33 +1353,15 @@ fn handle_view_options_changed(
                 "artist_list" => ctx.views.artist_list.filter_view_items(""),
                 _ => {}
             }
-        }
-    } else {
-        // View mode switch within same tab: preserve search results
-        debug!("View mode changed within same tab, preserving search");
 
-        if let Some(filter) = &library_state.search_filter {
-            let query = filter.as_str();
-            debug!("Applying search filter '{query}' to new view {child_name}");
-
-            match child_name {
-                "album_grid" => ctx.views.album_grid.filter_albums(query),
-                "album_list" => ctx.views.album_list.filter_view_items(query),
-                "artist_grid" => ctx.views.artist_grid.filter_artists(query),
-                "artist_list" => ctx.views.artist_list.filter_view_items(query),
-                _ => {}
-            }
-        } else {
-            // No search - just show all items
-            match child_name {
-                "album_grid" => ctx.views.album_grid.filter_albums(""),
-                "album_list" => ctx.views.album_list.filter_view_items(""),
-                "artist_grid" => ctx.views.artist_grid.filter_artists(""),
-                "artist_list" => ctx.views.artist_list.filter_view_items(""),
-                _ => {}
-            }
+            ctx.view_stack.set_visible_child_name(child_name);
         }
+
+        // View mode switch with active search: do nothing, keep showing search results
+        return;
     }
+
+    // No active search: normal view switching
 
     // Reset scroll position before switching
     if let Some(child) = ctx.view_stack.child_by_name(child_name)
@@ -1397,23 +1373,13 @@ fn handle_view_options_changed(
 
     ctx.view_stack.set_visible_child_name(child_name);
 
-    // Clear search AFTER view switch but WITHOUT broadcasting to prevent
-    // the outgoing view (still visible during crossfade) from showing all items
-    if tab_changed && has_active_search {
-        ctx.header_bar.clear_search();
-        ctx.header_bar.close_search();
-        ctx.app_state.clear_search_filter_silent();
-
-        // Restore the view to show all items now that the search is cleared
-        debug!("Restoring view after clearing search");
-
-        match child_name {
-            "album_grid" => ctx.views.album_grid.filter_albums(""),
-            "album_list" => ctx.views.album_list.filter_view_items(""),
-            "artist_grid" => ctx.views.artist_grid.filter_artists(""),
-            "artist_list" => ctx.views.artist_list.filter_view_items(""),
-            _ => {}
-        }
+    // Restore view to show all items
+    match child_name {
+        "album_grid" => ctx.views.album_grid.filter_albums(""),
+        "album_list" => ctx.views.album_list.filter_view_items(""),
+        "artist_grid" => ctx.views.artist_grid.filter_artists(""),
+        "artist_list" => ctx.views.artist_list.filter_view_items(""),
+        _ => {}
     }
 }
 
@@ -1423,15 +1389,36 @@ fn handle_view_options_changed(
 ///
 /// * `filter` - Optional search filter query
 /// * `views` - View controllers context
-fn handle_search_filter_changed(filter: Option<&str>, views: &mut ViewControllers) {
+/// * `view_stack` - The view stack for switching visible child
+fn handle_search_filter_changed(
+    filter: Option<&str>,
+    views: &mut ViewControllers,
+    view_stack: &Stack,
+    app_state: &Arc<AppState>,
+) {
     let query = filter.unwrap_or("");
 
-    debug!("Updating search filter for all views: '{}'", query);
+    debug!("Updating search filter: '{}'", query);
 
-    views.album_grid.filter_albums(query);
-    views.artist_grid.filter_artists(query);
-    views.album_list.filter_view_items(query);
-    views.artist_list.filter_view_items(query);
+    if query.is_empty() {
+        // Clear search results and don't switch views
+        // The normal tab view will be shown by handle_view_options_changed
+        views.search_results.clear();
+
+        let library_state = app_state.get_library_state();
+        let child_name = match (&library_state.current_tab, &library_state.view_mode) {
+            (Albums, Grid) => "album_grid",
+            (Albums, List) => "album_list",
+            (Artists, Grid) => "artist_grid",
+            (Artists, List) => "artist_list",
+        };
+
+        view_stack.set_visible_child_name(child_name);
+    } else {
+        // Populate search results and show the search view
+        views.search_results.populate(query);
+        view_stack.set_visible_child_name("search_results");
+    }
 }
 
 /// Handles settings changed events.
@@ -1515,7 +1502,6 @@ fn spawn_view_stack_event_handler(
                             artists.clone(),
                             &mut views,
                             &search_app_state,
-                            &view_stack,
                         );
                     }
                     GridSortChanged(tab) => {
@@ -1553,7 +1539,12 @@ fn spawn_view_stack_event_handler(
                         handle_view_options_changed(current_tab, view_mode, &mut ctx);
                     }
                     SearchFilterChanged(filter) => {
-                        handle_search_filter_changed(filter.as_deref(), &mut views);
+                        handle_search_filter_changed(
+                            filter.as_deref(),
+                            &mut views,
+                            &view_stack,
+                            &search_app_state,
+                        );
                     }
                     SettingsChanged { show_dr_values } => {
                         handle_settings_changed(*show_dr_values, &mut views);
@@ -1635,12 +1626,26 @@ fn create_main_content(
     let (artist_list_view, artist_list_scrolled) =
         create_artist_list_view(app_state, &library_state);
 
+    let search_results_view = SearchResultsView::builder()
+        .app_state(Arc::clone(app_state))
+        .library_db(Arc::clone(library_db))
+        .audio_engine(Arc::clone(audio_engine))
+        .queue_manager(Arc::clone(queue_manager))
+        .build();
+
+    let search_scrolled = ScrolledWindow::builder()
+        .vexpand(true)
+        .hexpand(true)
+        .child(&search_results_view.widget)
+        .build();
+
     add_views_to_stack(
         &view_stack,
         &album_grid_scrolled,
         &album_list_scrolled,
         &artist_grid_scrolled,
         &artist_list_scrolled,
+        &search_scrolled,
     );
 
     let current_tab = library_state.current_tab;
@@ -1653,6 +1658,7 @@ fn create_main_content(
         album_list: album_list_view,
         artist_grid: artist_grid_view,
         artist_list: artist_list_view,
+        search_results: search_results_view,
     };
 
     spawn_view_stack_event_handler(

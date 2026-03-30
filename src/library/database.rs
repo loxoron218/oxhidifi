@@ -7,14 +7,14 @@
 use std::{collections::HashMap, path::Path};
 
 use {
-    sqlx::{Error, SqlitePool, query, query_as, query_scalar},
+    sqlx::{Error, FromRow, SqlitePool, query, query_as, query_scalar},
     thiserror::Error,
     tracing::debug,
 };
 
 use crate::library::{
     connection::create_connection_pool,
-    models::{Album, Artist, SearchResults, Track},
+    models::{Album, Artist, SearchResults, Track, TrackSearchResult},
 };
 
 /// Error type for library database operations.
@@ -39,6 +39,60 @@ pub enum LibraryError {
 pub struct LibraryDatabase {
     /// `SQLite` connection pool for database operations.
     pool: SqlitePool,
+}
+
+/// Helper struct for track search query row mapping.
+#[derive(FromRow)]
+struct TrackSearchRow {
+    /// Track ID.
+    id: i64,
+    /// Album ID.
+    album_id: i64,
+    /// Track title.
+    title: String,
+    /// Track number.
+    track_number: Option<i64>,
+    /// Disc number.
+    disc_number: i64,
+    /// Duration in milliseconds.
+    duration_ms: i64,
+    /// File path.
+    path: String,
+    /// File size in bytes.
+    file_size: i64,
+    /// Audio format.
+    format: String,
+    /// Audio codec.
+    codec: String,
+    /// Sample rate in Hz.
+    sample_rate: i64,
+    /// Bits per sample.
+    bits_per_sample: i64,
+    /// Number of audio channels.
+    channels: i64,
+    /// Whether the format is lossless.
+    is_lossless: bool,
+    /// Whether the format is high-resolution.
+    is_high_resolution: bool,
+    /// Creation timestamp.
+    created_at: Option<String>,
+    /// Update timestamp.
+    updated_at: Option<String>,
+    /// Album ID (from JOIN).
+    #[sqlx(rename = "search_album_id")]
+    search_album_id: i64,
+    /// Album title (from JOIN).
+    #[sqlx(rename = "album_title")]
+    album_title: String,
+    /// Artwork path (from JOIN).
+    #[sqlx(rename = "search_artwork_path")]
+    search_artwork_path: Option<String>,
+    /// Artist ID (from JOIN).
+    #[sqlx(rename = "search_artist_id")]
+    search_artist_id: i64,
+    /// Artist name (from JOIN).
+    #[sqlx(rename = "artist_name")]
+    artist_name: String,
 }
 
 impl LibraryDatabase {
@@ -164,6 +218,10 @@ impl LibraryDatabase {
             .execute(pool)
             .await?;
 
+        query("CREATE INDEX IF NOT EXISTS idx_tracks_title ON tracks (title)")
+            .execute(pool)
+            .await?;
+
         Ok(())
     }
 
@@ -183,7 +241,8 @@ impl LibraryDatabase {
     pub async fn get_albums(&self, filter: Option<&str>) -> Result<Vec<Album>, LibraryError> {
         let albums = match filter {
             Some(filter_str) => {
-                let search_pattern = format!("%{filter_str}%");
+                let escaped = escape_like_pattern(filter_str);
+                let search_pattern = format!("%{escaped}%");
                 query_as::<_, Album>(
                     "
                     SELECT a.id, a.artist_id, a.title, a.year, a.genre, a.compilation,
@@ -240,7 +299,8 @@ impl LibraryDatabase {
     pub async fn get_artists(&self, filter: Option<&str>) -> Result<Vec<Artist>, LibraryError> {
         let artists = match filter {
             Some(filter_str) => {
-                let search_pattern = format!("%{filter_str}%");
+                let escaped = escape_like_pattern(filter_str);
+                let search_pattern = format!("%{escaped}%");
                 query_as::<_, Artist>(
                     "
                     SELECT a.id, a.name, COUNT(a2.id) as album_count, a.created_at, a.updated_at
@@ -672,7 +732,7 @@ impl LibraryDatabase {
         Ok(tracks)
     }
 
-    /// Searches the library for albums and artists matching the query.
+    /// Searches the library for tracks, albums, and artists matching the query.
     ///
     /// # Arguments
     ///
@@ -686,15 +746,23 @@ impl LibraryDatabase {
     ///
     /// Returns `LibraryError` if the queries fail.
     pub async fn search_library(&self, query: &str) -> Result<SearchResults, LibraryError> {
-        let search_pattern = format!("%{query}%");
+        let escaped = escape_like_pattern(query);
+        let search_pattern = format!("%{escaped}%");
+
+        let tracks = self.search_tracks(query).await?;
 
         let albums = query_as::<_, Album>(
             "
-            SELECT id, artist_id, title, year, genre, compilation, path, dr_value,
-                   artwork_path, format, bits_per_sample, sample_rate, created_at, updated_at
-            FROM albums
-            WHERE title LIKE ? ESCAPE '\\'
-            ORDER BY title, year
+            SELECT a.id, a.artist_id, a.title, a.year, a.genre, a.compilation,
+                   a.path, a.dr_value, a.artwork_path, a.format, a.bits_per_sample,
+                   a.sample_rate, a.created_at, a.updated_at,
+                   COUNT(t.id) as track_count,
+                   MAX(t.channels) as channels
+            FROM albums a
+            LEFT JOIN tracks t ON a.id = t.album_id
+            WHERE a.title LIKE ? ESCAPE '\\'
+            GROUP BY a.id
+            ORDER BY a.title, a.year
             ",
         )
         .bind(&search_pattern)
@@ -703,17 +771,162 @@ impl LibraryDatabase {
 
         let artists = query_as::<_, Artist>(
             "
-            SELECT id, name, created_at, updated_at
-            FROM artists
-            WHERE name LIKE ? ESCAPE '\\'
-            ORDER BY name
+            SELECT a.id, a.name, COUNT(a2.id) as album_count, a.created_at, a.updated_at
+            FROM artists a
+            LEFT JOIN albums a2 ON a.id = a2.artist_id
+            WHERE a.name LIKE ? ESCAPE '\\'
+            GROUP BY a.id, a.name, a.created_at, a.updated_at
+            ORDER BY a.name
             ",
         )
         .bind(&search_pattern)
         .fetch_all(&self.pool)
         .await?;
 
-        Ok(SearchResults { albums, artists })
+        Ok(SearchResults {
+            tracks,
+            albums,
+            artists,
+        })
+    }
+
+    /// Searches for tracks by title.
+    ///
+    /// # Arguments
+    ///
+    /// * `query` - Search query string to match against track titles.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing a vector of `TrackSearchResult` or a `LibraryError`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `LibraryError` if the query fails.
+    pub async fn search_tracks(&self, query: &str) -> Result<Vec<TrackSearchResult>, LibraryError> {
+        let escaped = escape_like_pattern(query);
+        let search_pattern = format!("%{escaped}%");
+
+        let results = query_as::<_, TrackSearchRow>(
+            "
+            SELECT t.id, t.album_id, t.title, t.track_number, t.disc_number,
+                   t.duration_ms, t.path, t.file_size, t.format, t.codec,
+                   t.sample_rate, t.bits_per_sample, t.channels,
+                   t.is_lossless, t.is_high_resolution, t.created_at, t.updated_at,
+                   a.id as search_album_id, a.title as album_title, a.artwork_path as \
+             search_artwork_path,
+                   ar.id as search_artist_id, ar.name as artist_name
+            FROM tracks t
+            JOIN albums a ON t.album_id = a.id
+            JOIN artists ar ON a.artist_id = ar.id
+            WHERE t.title LIKE ? ESCAPE '\\'
+            ORDER BY ar.name, a.title, t.disc_number, t.track_number
+            ",
+        )
+        .bind(&search_pattern)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut track_results = Vec::with_capacity(results.len());
+        for row in results {
+            track_results.push(TrackSearchResult {
+                track: Track {
+                    id: row.id,
+                    album_id: row.album_id,
+                    title: row.title,
+                    track_number: row.track_number,
+                    disc_number: row.disc_number,
+                    duration_ms: row.duration_ms,
+                    path: row.path,
+                    file_size: row.file_size,
+                    format: row.format,
+                    codec: row.codec,
+                    sample_rate: row.sample_rate,
+                    bits_per_sample: row.bits_per_sample,
+                    channels: row.channels,
+                    is_lossless: row.is_lossless,
+                    is_high_resolution: row.is_high_resolution,
+                    created_at: row.created_at,
+                    updated_at: row.updated_at,
+                },
+                album_id: row.search_album_id,
+                album_title: row.album_title,
+                artist_id: row.search_artist_id,
+                artist_name: row.artist_name,
+                artwork_path: row.search_artwork_path,
+            });
+        }
+
+        Ok(track_results)
+    }
+
+    /// Searches albums by title using a LIKE query.
+    ///
+    /// # Arguments
+    ///
+    /// * `query` - The search query string.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing a vector of `Album` or a `LibraryError`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `LibraryError` if the query fails.
+    pub async fn search_albums(&self, query: &str) -> Result<Vec<Album>, LibraryError> {
+        let escaped = escape_like_pattern(query);
+        let search_pattern = format!("%{escaped}%");
+
+        let results = query_as::<_, Album>(
+            "
+            SELECT a.id, a.artist_id, a.title, a.year, a.genre, a.format,
+                   a.bits_per_sample, a.sample_rate, a.compilation, a.path,
+                   a.dr_value, a.artwork_path, a.created_at, a.updated_at,
+                   0 as track_count, NULL as channels
+            FROM albums a
+            WHERE a.title LIKE ? ESCAPE '\\'
+            ORDER BY a.title
+            ",
+        )
+        .bind(&search_pattern)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(results)
+    }
+
+    /// Searches artists by name using a LIKE query.
+    ///
+    /// # Arguments
+    ///
+    /// * `query` - The search query string.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing a vector of `Artist` or a `LibraryError`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `LibraryError` if the query fails.
+    pub async fn search_artists(&self, query: &str) -> Result<Vec<Artist>, LibraryError> {
+        let escaped = escape_like_pattern(query);
+        let search_pattern = format!("%{escaped}%");
+
+        let results = query_as::<_, Artist>(
+            "
+            SELECT a.id, a.name, COUNT(a2.id) as album_count, a.created_at, a.updated_at
+            FROM artists a
+            LEFT JOIN albums a2 ON a.id = a2.artist_id
+            WHERE a.name LIKE ? ESCAPE '\\'
+            GROUP BY a.id, a.name, a.created_at, a.updated_at
+            ORDER BY a.name
+            ",
+        )
+        .bind(&search_pattern)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(results)
     }
 
     /// Gets the DR (Dynamic Range) value for an album.
