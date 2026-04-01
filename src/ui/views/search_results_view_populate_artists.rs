@@ -36,7 +36,7 @@ use crate::{
 ///
 /// `true` if any artists were found.
 pub fn populate_artists(
-    artists: &[Artist],
+    artists: &[Arc<Artist>],
     artists_header: &Label,
     artist_flow_box: &FlowBox,
     app_state: Option<&Arc<AppState>>,
@@ -56,7 +56,7 @@ pub fn populate_artists(
         let artist_id = artist.id;
         let app_state_clone = app_state.cloned();
         let app_state_for_selection = app_state.cloned();
-        let artist_clone = artist.clone();
+        let artist_clone = Arc::clone(artist);
 
         let is_selected = app_state
             .as_ref()
@@ -78,12 +78,12 @@ pub fn populate_artists(
         });
 
         match ArtistCard::builder()
-            .artist(artist.clone())
+            .artist((**artist).clone())
             .cover_size(cover_size)
             .selected(is_selected)
             .on_card_clicked(move || {
                 if let Some(state) = &app_state_clone {
-                    state.update_navigation(ArtistDetail(artist_clone.clone()));
+                    state.update_navigation(ArtistDetail((*artist_clone).clone()));
                 }
             })
             .on_selection_toggled(move |selected| {

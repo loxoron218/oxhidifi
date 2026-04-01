@@ -95,6 +95,37 @@ struct TrackSearchRow {
     artist_name: String,
 }
 
+impl From<TrackSearchRow> for TrackSearchResult {
+    fn from(row: TrackSearchRow) -> Self {
+        Self {
+            track: Track {
+                id: row.id,
+                album_id: row.album_id,
+                title: row.title,
+                track_number: row.track_number,
+                disc_number: row.disc_number,
+                duration_ms: row.duration_ms,
+                path: row.path,
+                file_size: row.file_size,
+                format: row.format,
+                codec: row.codec,
+                sample_rate: row.sample_rate,
+                bits_per_sample: row.bits_per_sample,
+                channels: row.channels,
+                is_lossless: row.is_lossless,
+                is_high_resolution: row.is_high_resolution,
+                created_at: row.created_at,
+                updated_at: row.updated_at,
+            },
+            album_id: row.search_album_id,
+            album_title: row.album_title,
+            artist_id: row.search_artist_id,
+            artist_name: row.artist_name,
+            artwork_path: row.search_artwork_path,
+        }
+    }
+}
+
 impl LibraryDatabase {
     /// Creates a new library database instance.
     ///
@@ -753,6 +784,42 @@ impl LibraryDatabase {
         Ok(tracks)
     }
 
+    /// Gets all tracks with their associated album and artist metadata.
+    ///
+    /// Used by the search index to build an in-memory representation of all
+    /// searchable tracks.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing a vector of `TrackSearchResult` or a `LibraryError`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `LibraryError` if the query fails.
+    pub async fn get_all_tracks_with_metadata(
+        &self,
+    ) -> Result<Vec<TrackSearchResult>, LibraryError> {
+        let results = query_as::<_, TrackSearchRow>(
+            "
+            SELECT t.id, t.album_id, t.title, t.track_number, t.disc_number,
+                   t.duration_ms, t.path, t.file_size, t.format, t.codec,
+                   t.sample_rate, t.bits_per_sample, t.channels,
+                   t.is_lossless, t.is_high_resolution, t.created_at, t.updated_at,
+                   a.id as search_album_id, a.title as album_title, a.artwork_path as \
+             search_artwork_path,
+                   ar.id as search_artist_id, ar.name as artist_name
+            FROM tracks t
+            JOIN albums a ON t.album_id = a.id
+            JOIN artists ar ON a.artist_id = ar.id
+            ORDER BY ar.name, a.title, t.disc_number, t.track_number
+            ",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(results.into_iter().map(Into::into).collect())
+    }
+
     /// Searches the library for tracks, albums, and artists matching the query.
     ///
     /// # Arguments
@@ -848,37 +915,7 @@ impl LibraryDatabase {
         .fetch_all(&self.pool)
         .await?;
 
-        let mut track_results = Vec::with_capacity(results.len());
-        for row in results {
-            track_results.push(TrackSearchResult {
-                track: Track {
-                    id: row.id,
-                    album_id: row.album_id,
-                    title: row.title,
-                    track_number: row.track_number,
-                    disc_number: row.disc_number,
-                    duration_ms: row.duration_ms,
-                    path: row.path,
-                    file_size: row.file_size,
-                    format: row.format,
-                    codec: row.codec,
-                    sample_rate: row.sample_rate,
-                    bits_per_sample: row.bits_per_sample,
-                    channels: row.channels,
-                    is_lossless: row.is_lossless,
-                    is_high_resolution: row.is_high_resolution,
-                    created_at: row.created_at,
-                    updated_at: row.updated_at,
-                },
-                album_id: row.search_album_id,
-                album_title: row.album_title,
-                artist_id: row.search_artist_id,
-                artist_name: row.artist_name,
-                artwork_path: row.search_artwork_path,
-            });
-        }
-
-        Ok(track_results)
+        Ok(results.into_iter().map(Into::into).collect())
     }
 
     /// Searches albums by title using a LIKE query.

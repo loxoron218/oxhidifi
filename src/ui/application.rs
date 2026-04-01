@@ -1272,11 +1272,15 @@ fn set_initial_visible_view(
 /// * `artists` - Updated artist list
 /// * `views` - View controllers context
 /// * `search_app_state` - `AppState` for retrieving search filter
+/// * `library_db` - Library database for loading tracks into search index
+/// * `toast_overlay` - Toast overlay for displaying failure notification
 fn handle_library_data_changed(
     albums: Vec<Album>,
     artists: Vec<Artist>,
     views: &mut ViewControllers,
     search_app_state: &Arc<AppState>,
+    library_db: &Arc<LibraryDatabase>,
+    toast_overlay: &ToastOverlay,
 ) {
     debug!("Handling LibraryDataChanged event");
 
@@ -1286,6 +1290,14 @@ fn handle_library_data_changed(
     // Update full lists (clone for grid views that take ownership)
     views.album_grid.update_all_albums(albums.clone());
     views.artist_grid.update_all_artists(artists.clone());
+
+    refresh_search_index(
+        search_app_state,
+        library_db,
+        albums.clone(),
+        artists.clone(),
+        toast_overlay,
+    );
 
     // Update list views (convert to Arc-wrapped vectors once)
     let artist_arcs: Vec<Arc<Artist>> = artists.into_iter().map(Arc::new).collect();
@@ -1300,6 +1312,41 @@ fn handle_library_data_changed(
     {
         views.search_results.populate(filter);
     }
+}
+
+/// Refreshes the in-memory search index from the database.
+///
+/// Loads all tracks with metadata and rebuilds the fuzzy search index.
+///
+/// # Arguments
+///
+/// * `app_state` - Application state containing the search index
+/// * `library_db` - Library database to load tracks from
+/// * `albums` - Albums to index (consumed)
+/// * `artists` - Artists to index (consumed)
+/// * `toast_overlay` - Toast overlay for displaying failure notification
+fn refresh_search_index(
+    app_state: &Arc<AppState>,
+    library_db: &Arc<LibraryDatabase>,
+    albums: Vec<Album>,
+    artists: Vec<Artist>,
+    toast_overlay: &ToastOverlay,
+) {
+    let db = Arc::clone(library_db);
+    let search_index = Arc::clone(&app_state.search_index);
+    let toast_overlay = toast_overlay.clone();
+
+    MainContext::default().spawn_local(async move {
+        match db.get_all_tracks_with_metadata().await {
+            Ok(tracks) => {
+                search_index.write().refresh(&artists, &albums, &tracks);
+            }
+            Err(e) => {
+                error!(error = %e, "Failed to load tracks for search index");
+                toast_overlay.add_toast(Toast::new(&format!("Failed to load search index: {e}")));
+            }
+        }
+    });
 }
 
 /// Handles view options changed events (tab and view mode switches).
@@ -1481,6 +1528,7 @@ fn spawn_view_stack_event_handler(
     toast_overlay: ToastOverlay,
     views: ViewControllers,
     initial_tab: LibraryTab,
+    library_db: Arc<LibraryDatabase>,
 ) {
     debug!("Subscribing to AppState changes in main content");
 
@@ -1502,6 +1550,8 @@ fn spawn_view_stack_event_handler(
                             artists.clone(),
                             &mut views,
                             &search_app_state,
+                            &library_db,
+                            &toast_overlay,
                         );
                     }
                     GridSortChanged(tab) => {
@@ -1668,7 +1718,23 @@ fn create_main_content(
         toast_overlay.clone(),
         views,
         current_tab,
+        Arc::clone(library_db),
     );
+
+    // Populate the search index from already-loaded library data.
+    // This is needed because the initial LibraryDataChanged event (sent in
+    // OxhidifiApplication::new) occurs before any subscribers exist, so the
+    // event-driven path to refresh_search_index is never triggered on startup.
+    let library_state = app_state.get_library_state();
+    if !library_state.albums.is_empty() || !library_state.artists.is_empty() {
+        refresh_search_index(
+            app_state,
+            library_db,
+            library_state.albums,
+            library_state.artists,
+            toast_overlay,
+        );
+    }
 
     view_stack.upcast::<Widget>()
 }

@@ -3,6 +3,8 @@
 //! This module defines the core data structures used throughout the library system,
 //! including Album, Artist, and Track models with proper serde serialization.
 
+use std::sync::Arc;
+
 use {
     serde::{Deserialize, Serialize},
     sqlx::FromRow,
@@ -145,6 +147,17 @@ pub struct SearchResults {
     pub albums: Vec<Album>,
     /// Matching artists.
     pub artists: Vec<Artist>,
+}
+
+/// Fuzzy search results with direct matches sorted by score and expanded related entities.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct FuzzySearchResults {
+    /// Matching tracks (direct fuzzy matches first, then expanded from artist/album matches).
+    pub tracks: Vec<TrackSearchResult>,
+    /// Matching albums (direct fuzzy matches first, then expanded from artist/track matches).
+    pub albums: Vec<Arc<Album>>,
+    /// Matching artists (direct fuzzy matches first, then expanded from album/track matches).
+    pub artists: Vec<Arc<Artist>>,
 }
 
 impl Album {

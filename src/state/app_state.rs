@@ -30,6 +30,7 @@ use crate::{
     library::{
         models::{Album, Artist, Track},
         scanner::LibraryScanner,
+        search::SearchIndex,
     },
     state::zoom_manager::ZoomManager,
 };
@@ -72,6 +73,8 @@ pub struct AppState {
     pub settings_manager: Arc<RwLock<SettingsManager>>,
     /// Global scanning state - true when library is being scanned.
     pub is_scanning: Arc<AtomicBool>,
+    /// In-memory fuzzy search index for library search.
+    pub search_index: Arc<RwLock<SearchIndex>>,
 }
 
 /// Current library view state.
@@ -230,6 +233,7 @@ impl AppState {
             zoom_manager,
             settings_manager,
             is_scanning: Arc::new(AtomicBool::new(false)),
+            search_index: Arc::new(RwLock::new(SearchIndex::new())),
         };
 
         state.listen_to_audio_engine();

@@ -9,11 +9,9 @@ use std::{
 use {
     libadwaita::{
         gio::ListStore,
-        glib::MainContext,
         gtk::{Button, ColumnView, FlowBox, Label, Widget},
         prelude::{Cast, WidgetExt},
     },
-    tokio::join,
     tracing::error,
 };
 
@@ -21,13 +19,13 @@ use crate::{
     audio::{engine::AudioEngine, queue_manager::QueueManager},
     library::{
         database::LibraryDatabase,
-        models::{Album, Artist, TrackSearchResult},
+        models::{FuzzySearchResults, TrackSearchResult},
     },
     state::app_state::AppState,
     ui::{
         components::{album_card::AlbumCard, search_empty_state::SearchEmptyState},
         views::{
-            artist_grid::ArtistCard as ArtistCardType,
+            artist_grid::ArtistCard,
             search_results_view::{AlbumCardContext, SearchResultsView},
             search_results_view_populate_albums::populate_albums,
             search_results_view_populate_artists::populate_artists,
@@ -71,9 +69,11 @@ struct SearchWidgetRefs {
     /// Album cards container.
     album_cards: Rc<RefCell<Vec<AlbumCard>>>,
     /// Artist cards container.
-    artist_cards: Rc<RefCell<Vec<Rc<ArtistCardType>>>>,
+    artist_cards: Rc<RefCell<Vec<Rc<ArtistCard>>>>,
     /// Selection sync state.
     is_syncing_selection: Rc<Cell<bool>>,
+    /// Library database reference.
+    library_db: Option<Arc<LibraryDatabase>>,
 }
 
 /// Captures widget references from the search results view for async operations.
@@ -105,6 +105,7 @@ fn get_widget_refs(this: &SearchResultsView) -> SearchWidgetRefs {
         album_cards: Rc::clone(&this.album_cards),
         artist_cards: Rc::clone(&this.artist_cards),
         is_syncing_selection: Rc::clone(&this.is_syncing_selection),
+        library_db: this.library_db.clone(),
     }
 }
 
@@ -119,7 +120,7 @@ fn clear_search_results(this: &SearchResultsView) {
     SearchResultsView::clear_artists(this);
 }
 
-/// Checks if the view has no library database.
+/// Checks if the view has no application state.
 ///
 /// # Arguments
 ///
@@ -128,40 +129,29 @@ fn clear_search_results(this: &SearchResultsView) {
 /// # Returns
 ///
 /// `true` if no library database is available, `false` otherwise
-fn has_no_library_db(this: &SearchResultsView) -> bool {
-    this.library_db.is_none()
+fn has_no_app_state(this: &SearchResultsView) -> bool {
+    this.app_state.is_none()
 }
 
-/// Performs the asynchronous search operation, populating songs, albums, and artists.
+/// Performs the fuzzy search using the in-memory search index.
 ///
 /// # Arguments
 ///
-/// * `library_db` - Library database for search queries
-/// * `query_owned` - The search query string (owned)
+/// * `query` - The search query string
 /// * `refs` - Widget references for updating the UI
-async fn perform_search(
-    library_db: Arc<LibraryDatabase>,
-    query_owned: String,
-    refs: SearchWidgetRefs,
-) {
-    let mut has_any_results = false;
-
-    let (tracks_result, search_artists_result, albums_result) = join!(
-        library_db.search_tracks(&query_owned),
-        library_db.search_artists(&query_owned),
-        library_db.search_albums(&query_owned)
+fn perform_search(query: &str, refs: &SearchWidgetRefs) {
+    let fuzzy_results = refs.app_state.as_ref().map_or_else(
+        || {
+            error!(query = query, "No AppState available for search");
+            FuzzySearchResults::default()
+        },
+        |state| state.search_index.read().search(query),
     );
 
-    let tracks = match tracks_result {
-        Ok(t) => t,
-        Err(e) => {
-            error!(error = %e, "Failed to search tracks");
-            Vec::new()
-        }
-    };
+    let mut has_any_results = false;
 
     has_any_results |= populate_songs(
-        tracks,
+        fuzzy_results.tracks,
         &refs.songs_header,
         &refs.column_view,
         &refs.list_store,
@@ -170,37 +160,14 @@ async fn perform_search(
         &refs.expanded_cell,
     );
 
-    let search_artists: Vec<Artist> = match search_artists_result {
-        Ok(a) => a,
-        Err(e) => {
-            error!(error = %e, "Failed to search artists");
-            Vec::new()
-        }
-    };
-
-    let all_albums: Vec<Album> = match albums_result {
-        Ok(a) => a,
-        Err(e) => {
-            error!(error = %e, "Failed to search albums");
-            Vec::new()
-        }
-    };
-
-    let mut album_artist_ids = Vec::with_capacity(all_albums.len());
-    album_artist_ids.extend(all_albums.iter().map(|album| album.artist_id));
-    let album_artists: Vec<Artist> = search_artists
-        .iter()
-        .filter(|artist| album_artist_ids.contains(&artist.id))
-        .cloned()
-        .collect();
-
+    let library_db = refs.library_db.as_ref();
     has_any_results |= populate_albums(
-        &all_albums,
-        &album_artists,
+        &fuzzy_results.albums,
+        &fuzzy_results.artists,
         &refs.albums_header,
         &refs.album_flow_box,
         &AlbumCardContext {
-            library_db: Some(&library_db),
+            library_db,
             playback_deps: (
                 refs.audio_engine.as_ref(),
                 refs.queue_manager.as_ref(),
@@ -212,7 +179,7 @@ async fn perform_search(
     );
 
     has_any_results |= populate_artists(
-        &search_artists,
+        &fuzzy_results.artists,
         &refs.artists_header,
         &refs.artist_flow_box,
         refs.app_state.as_ref(),
@@ -224,7 +191,7 @@ async fn perform_search(
         refs.search_empty_state.hide();
         refs.search_empty_state_widget.set_visible(false);
     } else {
-        refs.search_empty_state.update_search_query(&query_owned);
+        refs.search_empty_state.update_search_query(query);
         refs.search_empty_state.show();
         refs.search_empty_state_widget.set_visible(true);
     }
@@ -245,20 +212,11 @@ pub fn populate(this: &mut SearchResultsView, query: &str) {
         return;
     }
 
-    if has_no_library_db(this) {
+    if has_no_app_state(this) {
         SearchResultsView::hide_all_sections(this);
         return;
     }
 
-    let Some(library_db) = this.library_db.as_ref() else {
-        SearchResultsView::hide_all_sections(this);
-        return;
-    };
-    let library_db = Arc::clone(library_db);
     let widget_refs = get_widget_refs(this);
-    let query_owned = query.to_string();
-
-    MainContext::default().spawn_local(async move {
-        perform_search(library_db, query_owned, widget_refs).await;
-    });
+    perform_search(query, &widget_refs);
 }

@@ -1,6 +1,6 @@
 //! Album population for `SearchResultsView`.
 
-use std::{collections::HashMap, rc::Rc};
+use std::{collections::HashMap, rc::Rc, sync::Arc};
 
 use {
     libadwaita::{
@@ -37,8 +37,8 @@ use crate::{
 /// `true` if any albums were found.
 #[must_use]
 pub fn populate_albums(
-    albums: &[Album],
-    all_artists: &[Artist],
+    albums: &[Arc<Album>],
+    all_artists: &[Arc<Artist>],
     albums_header: &Label,
     album_flow_box: &FlowBox,
     ctx: &AlbumCardContext<'_>,
@@ -80,8 +80,8 @@ pub fn populate_albums(
 /// * `ctx` - Album card context with playback dependencies
 /// * `any_selected` - Whether any album is currently selected
 fn create_and_add_album_card(
-    album: &Album,
-    artist_map: &HashMap<i64, &Artist>,
+    album: &Arc<Album>,
+    artist_map: &HashMap<i64, &Arc<Artist>>,
     album_flow_box: &FlowBox,
     ctx: &AlbumCardContext<'_>,
     any_selected: bool,
@@ -93,8 +93,8 @@ fn create_and_add_album_card(
 
     let format = create_format_display(album).unwrap_or_default();
     let app_state_clone = ctx.playback_deps.2.cloned();
-    let album_for_click = album.clone();
-    let album_for_card = album_for_click.clone();
+    let album_for_click = Arc::clone(album);
+    let album_for_card = (*album_for_click).clone();
 
     let album_id = album.id;
     let db_clone = ctx.library_db.cloned();
@@ -132,7 +132,7 @@ fn create_and_add_album_card(
         .selected(is_selected)
         .on_card_clicked(move || {
             if let Some(state) = &app_state_for_card {
-                state.update_navigation(AlbumDetail(album_for_click.clone()));
+                state.update_navigation(AlbumDetail((*album_for_click).clone()));
             }
         })
         .on_play_clicked(move || {
