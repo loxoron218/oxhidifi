@@ -115,6 +115,27 @@ impl LibraryDatabase {
         Ok(Self { pool })
     }
 
+    /// Creates a new library database instance with an existing connection pool.
+    ///
+    /// This method initializes the database schema using the provided pool.
+    ///
+    /// # Arguments
+    ///
+    /// * `pool` - An existing `SQLite` connection pool.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing the `LibraryDatabase` or a `LibraryError`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `LibraryError` if schema initialization fails.
+    pub async fn new_with_pool(pool: SqlitePool) -> Result<Self, LibraryError> {
+        Self::initialize_schema(&pool).await?;
+
+        Ok(Self { pool })
+    }
+
     /// Initializes the database schema by creating all necessary tables and indexes.
     ///
     /// # Arguments
@@ -1354,26 +1375,4 @@ pub fn escape_like_pattern(s: &str) -> String {
         }
     }
     result
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::library::database::LibraryError::{InvalidData, NotFound};
-
-    #[test]
-    fn library_error_display() {
-        let not_found_error = NotFound {
-            entity: "album".to_string(),
-            id: 123,
-        };
-        assert_eq!(
-            not_found_error.to_string(),
-            "Record not found: album with id 123"
-        );
-
-        let invalid_data_error = InvalidData {
-            reason: "test reason".to_string(),
-        };
-        assert_eq!(invalid_data_error.to_string(), "Invalid data: test reason");
-    }
 }

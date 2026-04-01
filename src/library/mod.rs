@@ -3,6 +3,9 @@
 //! This module provides the foundation for managing a music library,
 //! including database operations and data models.
 
+#[cfg(test)]
+pub mod database_tests;
+
 pub mod connection;
 pub mod database;
 pub mod dr_parser;
