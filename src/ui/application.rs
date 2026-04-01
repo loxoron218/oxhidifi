@@ -18,7 +18,7 @@ use {
     libadwaita::{
         Application, ApplicationWindow, Breakpoint, BreakpointCondition, NavigationPage,
         NavigationView, Toast, ToastOverlay, ToolbarView,
-        gdk::{Display, Key},
+        gdk::{Display, Key, ModifierType},
         gio::SimpleAction,
         glib::{
             MainContext,
@@ -296,8 +296,6 @@ impl OxhidifiApplication {
             app_state_for_action.toggle_select_all();
         });
         self.app.add_action(&select_all_action);
-        self.app
-            .set_accels_for_action("app.select-all", &["<Ctrl>A"]);
     }
 
     /// Sets up the activate handler for the application.
@@ -845,14 +843,20 @@ fn spawn_player_bar_visibility_handler(
 /// # Arguments
 ///
 /// * `app_state` - Application state reference
+/// * `header_bar` - Header bar for search focus checking
 /// * `window` - The application window
-fn setup_keyboard_shortcuts(app_state: &Arc<AppState>, window: &ApplicationWindow) {
+fn setup_keyboard_shortcuts(
+    app_state: &Arc<AppState>,
+    header_bar: &Rc<HeaderBar>,
+    window: &ApplicationWindow,
+) {
     let app_state_shortcuts = Arc::clone(app_state);
+    let header_bar_shortcuts = Rc::clone(header_bar);
     let key_controller = EventControllerKey::new();
 
     key_controller.set_propagation_phase(Capture);
 
-    key_controller.connect_key_pressed(move |_, key, _, _| {
+    key_controller.connect_key_pressed(move |_, key, _code, state| {
         if key == Key::Escape {
             let current_nav = app_state_shortcuts.get_navigation_state();
             if current_nav != Library {
@@ -860,6 +864,15 @@ fn setup_keyboard_shortcuts(app_state: &Arc<AppState>, window: &ApplicationWindo
                 app_state_shortcuts.update_navigation(Library);
                 return Stop;
             }
+        }
+
+        if (key == Key::a || key == Key::A) && state.contains(ModifierType::CONTROL_MASK) {
+            if header_bar_shortcuts.search_entry_has_focus() {
+                header_bar_shortcuts.select_all_search_text();
+            } else {
+                app_state_shortcuts.toggle_select_all();
+            }
+            return Stop;
         }
 
         Proceed
@@ -992,7 +1005,7 @@ fn build_ui(
         error!(error = %e, "Failed to load custom CSS");
     }
 
-    setup_keyboard_shortcuts(app_state, &window);
+    setup_keyboard_shortcuts(app_state, &header_bar, &window);
 
     let toggle_search_action = SimpleAction::new("toggle-search", None);
     let header_bar_for_action = Rc::clone(&header_bar);

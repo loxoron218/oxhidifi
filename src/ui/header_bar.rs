@@ -25,11 +25,11 @@ use {
             Align::{Center, End, Start},
             Box, Button, Image, Label, MenuButton,
             Orientation::{Horizontal, Vertical},
-            Popover, SearchBar, SearchEntry, Separator, ToggleButton,
+            Popover, SearchBar, SearchEntry, Separator, ToggleButton, Widget,
         },
         prelude::{
             ActionMapExt, BoxExt, ButtonExt, Cast, EditableExt, GtkApplicationExt, PopoverExt,
-            ToggleButtonExt, WidgetExt,
+            RootExt, ToggleButtonExt, WidgetExt,
         },
     },
     parking_lot::Mutex,
@@ -1920,6 +1920,30 @@ impl HeaderBar {
     /// Gets the search bar widget for placement below the header bar.
     pub fn get_search_bar(&self) -> &SearchBar {
         &self.search_bar
+    }
+
+    /// Returns whether the search entry (or its internal entry child) has keyboard focus.
+    pub fn search_entry_has_focus(&self) -> bool {
+        if let Some(root) = self.search_entry.root()
+            && let Some(focused) = root.focus()
+        {
+            let entry_widget = self.search_entry.upcast_ref::<Widget>();
+
+            return focused.is_ancestor(entry_widget) || focused == *entry_widget;
+        }
+        false
+    }
+
+    /// Selects all text in the search entry, or deselects if already fully selected.
+    pub fn select_all_search_text(&self) {
+        let text_len = i32::try_from(self.search_entry.text().chars().count())
+            .unwrap_or(i32::MAX);
+        if let Some((start, end)) = self.search_entry.selection_bounds()
+            && start == 0 && end == text_len {
+                self.search_entry.select_region(text_len, text_len);
+                return;
+            }
+        self.search_entry.select_region(0, -1);
     }
 }
 
