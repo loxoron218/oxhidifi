@@ -18,7 +18,10 @@ use crate::{
     error::numeric_conversion::safe_i32_to_u32,
     library::models::Artist,
     state::app_state::{AppState, NavigationState::ArtistDetail},
-    ui::views::artist_grid::ArtistCard,
+    ui::views::{
+        artist_grid::ArtistCard,
+        search_highlight::{highlight_query, resolve_accent_color},
+    },
 };
 
 /// Populates the artist grid section with pre-filtered artists.
@@ -31,6 +34,7 @@ use crate::{
 /// * `app_state` - Application state reference
 /// * `artist_cards` - Container for artist cards
 /// * `is_syncing_selection` - Flag to prevent feedback loops
+/// * `query` - Search query string for highlighting
 ///
 /// # Returns
 ///
@@ -42,6 +46,7 @@ pub fn populate_artists(
     app_state: Option<&Arc<AppState>>,
     artist_cards: &Rc<RefCell<Vec<Rc<ArtistCard>>>>,
     is_syncing_selection: &Rc<Cell<bool>>,
+    query: &str,
 ) -> bool {
     if artists.is_empty() {
         artists_header.set_visible(false);
@@ -111,6 +116,9 @@ pub fn populate_artists(
                     card.selection_checkbox.set_visible(true);
                     card.selection_checkbox.set_can_target(true);
                 }
+                let accent = resolve_accent_color(&card.name_label, None);
+                let markup = highlight_query(card.name_label.label().as_str(), query, &accent);
+                card.name_label.set_markup(&markup);
                 artist_flow_box.insert(&card.widget, -1);
                 artist_cards.borrow_mut().push(Rc::new(card));
             }

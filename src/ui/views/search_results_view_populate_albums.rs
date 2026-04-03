@@ -1,6 +1,6 @@
 //! Album population for `SearchResultsView`.
 
-use std::{collections::HashMap, rc::Rc, sync::Arc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
 
 use {
     libadwaita::{
@@ -18,7 +18,11 @@ use crate::{
     ui::{
         components::album_card::AlbumCard,
         formatting::create_format_display,
-        views::{detail_playback::play_album, search_results_view::AlbumCardContext},
+        views::{
+            detail_playback::play_album,
+            search_highlight::{highlight_query, resolve_accent_color},
+            search_results_view::AlbumCardContext,
+        },
     },
 };
 
@@ -31,6 +35,8 @@ use crate::{
 /// * `albums_header` - Albums section header label
 /// * `album_flow_box` - Flow box to populate
 /// * `ctx` - Album card context with dependencies
+/// * `query` - Search query string for highlighting
+/// * `accent_color_hex` - Cached accent color for highlighting
 ///
 /// # Returns
 ///
@@ -42,6 +48,8 @@ pub fn populate_albums(
     albums_header: &Label,
     album_flow_box: &FlowBox,
     ctx: &AlbumCardContext<'_>,
+    query: &str,
+    accent_color_hex: &Rc<RefCell<Option<String>>>,
 ) -> bool {
     if albums.is_empty() {
         albums_header.set_visible(false);
@@ -64,7 +72,15 @@ pub fn populate_albums(
     }
 
     for album in albums {
-        create_and_add_album_card(album, &artist_map, album_flow_box, ctx, any_selected);
+        create_and_add_album_card(
+            album,
+            &artist_map,
+            album_flow_box,
+            ctx,
+            any_selected,
+            query,
+            accent_color_hex,
+        );
     }
 
     true
@@ -79,12 +95,16 @@ pub fn populate_albums(
 /// * `album_flow_box` - Flow box to add card to
 /// * `ctx` - Album card context with playback dependencies
 /// * `any_selected` - Whether any album is currently selected
+/// * `query` - Search query string for highlighting
+/// * `accent_color_hex` - Cached accent color for highlighting
 fn create_and_add_album_card(
     album: &Arc<Album>,
     artist_map: &HashMap<i64, &Arc<Artist>>,
     album_flow_box: &FlowBox,
     ctx: &AlbumCardContext<'_>,
     any_selected: bool,
+    query: &str,
+    accent_color_hex: &Rc<RefCell<Option<String>>>,
 ) {
     let artist_name = artist_map.get(&album.artist_id).map_or_else(
         || "Unknown Artist".to_string(),
@@ -172,6 +192,7 @@ fn create_and_add_album_card(
                 card.selection_checkbox.set_visible(true);
                 card.selection_checkbox.set_can_target(true);
             }
+            apply_album_highlighting(&card, query, accent_color_hex);
             album_flow_box.insert(&card.widget, -1);
             ctx.album_cards.borrow_mut().push(card);
         }
@@ -179,4 +200,25 @@ fn create_and_add_album_card(
             error!(error = %e, album_id = album.id, "Failed to create album card");
         }
     }
+}
+
+/// Applies search query highlighting to album card labels.
+///
+/// # Arguments
+///
+/// * `card` - The album card to highlight
+/// * `query` - Search query string
+/// * `accent_color_hex` - Cached accent color
+fn apply_album_highlighting(
+    card: &AlbumCard,
+    query: &str,
+    accent_color_hex: &Rc<RefCell<Option<String>>>,
+) {
+    let accent = resolve_accent_color(&card.title_label, Some(accent_color_hex));
+
+    let title_markup = highlight_query(card.title_label.label().as_str(), query, &accent);
+    card.title_label.set_markup(&title_markup);
+
+    let artist_markup = highlight_query(card.artist_label.label().as_str(), query, &accent);
+    card.artist_label.set_markup(&artist_markup);
 }

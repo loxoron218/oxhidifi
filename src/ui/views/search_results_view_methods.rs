@@ -111,6 +111,8 @@ pub fn create_view_state() -> (
 /// * `audio_engine` - Audio engine reference
 /// * `queue_manager` - Queue manager reference
 /// * `app_state` - Application state reference
+/// * `search_query` - Shared search query cell for highlighting
+/// * `accent_color_hex` - Shared accent color cache cell
 ///
 /// # Returns
 ///
@@ -122,6 +124,8 @@ pub fn create_songs_section(
     audio_engine: Option<&Arc<AudioEngine>>,
     queue_manager: Option<&Arc<QueueManager>>,
     app_state: Option<&Arc<AppState>>,
+    search_query: &Rc<RefCell<String>>,
+    accent_color_hex: &Rc<RefCell<Option<String>>>,
 ) -> (
     Label,
     ColumnView,
@@ -155,6 +159,8 @@ pub fn create_songs_section(
         audio_engine,
         queue_manager,
         app_state,
+        search_query,
+        accent_color_hex,
     );
 
     let sorter = column_view.sorter();

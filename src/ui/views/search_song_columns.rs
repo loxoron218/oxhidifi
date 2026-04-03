@@ -29,9 +29,11 @@ use crate::{
         metadata::TagReader,
         queue_manager::QueueManager,
     },
-    label_column,
     library::{database::LibraryDatabase, models::TrackSearchResult},
-    state::app_state::AppState,
+    state::app_state::{
+        AppState,
+        AppStateEvent::{CurrentTrackChanged, PlaybackStateChanged, QueueChanged},
+    },
     ui::{
         components::hifi_metadata::{
             BitDepthDisplay::Show as ShowBitDepth, ChannelsDisplay::Hide as HideChannels,
@@ -39,7 +41,9 @@ use crate::{
             SampleRateDisplay::Show as ShowSampleRate,
         },
         views::{
-            column_sorting::compare_ignore_ascii_case, search_results_view::SONG_DISPLAY_LIMIT,
+            column_sorting::compare_ignore_ascii_case,
+            search_highlight::{highlight_query, resolve_accent_color},
+            search_results_view::SONG_DISPLAY_LIMIT,
         },
     },
 };
@@ -92,60 +96,136 @@ pub fn setup_track_number_column(column_view: &mut ColumnView, fixed_width: i32)
     column_view.append_column(&column);
 }
 
-/// Sets up the title column with sorting support.
+/// Sets up a text column with sorting and search highlighting support.
 ///
 /// # Arguments
 ///
 /// * `column_view` - Column view to add column to
-pub fn setup_title_column(column_view: &mut ColumnView) {
-    let column = label_column!(
+/// * `title` - Column header text
+/// * `get_text` - Function to extract the text field from a search result
+/// * `fixed_width` - Optional fixed width (None for expandable columns)
+/// * `expand` - Whether the column should expand to fill available space
+/// * `search_query` - Shared search query cell for highlighting
+/// * `accent_color_hex` - Shared accent color cache cell
+fn setup_highlighted_text_column(
+    column_view: &ColumnView,
+    title: &str,
+    get_text: fn(&TrackSearchResult) -> &String,
+    fixed_width: Option<i32>,
+    expand: bool,
+    search_query: &Rc<RefCell<String>>,
+    accent_color_hex: &Rc<RefCell<Option<String>>>,
+) {
+    let factory = SignalListItemFactory::new();
+    let search_query_bind = Rc::clone(search_query);
+    let accent_color_bind = Rc::clone(accent_color_hex);
+
+    factory.connect_setup(|_, list_item| {
+        let label = Label::builder().ellipsize(End).xalign(0.0).build();
+        if let Some(list_item) = list_item.downcast_ref::<ListItem>() {
+            list_item.set_child(Some(&label));
+        }
+    });
+
+    factory.connect_bind(move |_, list_item| {
+        if let Some(list_item) = list_item.downcast_ref::<ListItem>()
+            && let Some(child) = list_item.child()
+            && let Some(label) = child.downcast_ref::<Label>()
+            && let Some(boxed) = list_item.item()
+            && let Ok(obj) = boxed.downcast::<BoxedAnyObject>()
+        {
+            let result = obj.borrow::<Arc<TrackSearchResult>>();
+            let text = get_text(&result);
+            let query = search_query_bind.borrow().clone();
+            let accent = resolve_accent_color(label, Some(&accent_color_bind));
+            let markup = highlight_query(text, &query, &accent);
+            label.set_markup(&markup);
+            label.set_visible(true);
+        }
+    });
+
+    let column = ColumnViewColumn::new(Some(title), Some(factory.upcast::<ListItemFactory>()));
+    column.set_resizable(true);
+    column.set_expand(expand);
+    if let Some(width) = fixed_width {
+        column.set_fixed_width(width);
+    }
+    let sorter = create_string_sorter(move |result| Some(get_text(result)));
+    column.set_sorter(Some(&sorter));
+    column_view.append_column(&column);
+}
+
+/// Sets up the title column with sorting and search highlighting support.
+///
+/// # Arguments
+///
+/// * `column_view` - Column view to add column to
+/// * `search_query` - Shared search query cell for highlighting
+/// * `accent_color_hex` - Shared accent color cache cell
+pub fn setup_title_column(
+    column_view: &mut ColumnView,
+    search_query: &Rc<RefCell<String>>,
+    accent_color_hex: &Rc<RefCell<Option<String>>>,
+) {
+    setup_highlighted_text_column(
+        column_view,
         "Title",
-        TrackSearchResult,
-        |result: &TrackSearchResult| Some(result.track.title.clone()),
+        |result| &result.track.title,
+        None,
         true,
-        None::<i32>
+        search_query,
+        accent_color_hex,
     );
-    let sorter = create_string_sorter(|result| Some(&result.track.title));
-    column.set_sorter(Some(&sorter));
-    column_view.append_column(&column);
 }
 
-/// Sets up the artist column with sorting support.
+/// Sets up the artist column with sorting and search highlighting support.
 ///
 /// # Arguments
 ///
 /// * `column_view` - Column view to add column to
 /// * `fixed_width` - Fixed width for the column
-pub fn setup_artist_column(column_view: &mut ColumnView, fixed_width: i32) {
-    let column = label_column!(
+/// * `search_query` - Shared search query cell for highlighting
+/// * `accent_color_hex` - Shared accent color cache cell
+pub fn setup_artist_column(
+    column_view: &mut ColumnView,
+    fixed_width: i32,
+    search_query: &Rc<RefCell<String>>,
+    accent_color_hex: &Rc<RefCell<Option<String>>>,
+) {
+    setup_highlighted_text_column(
+        column_view,
         "Artist",
-        TrackSearchResult,
-        |result: &TrackSearchResult| Some(result.artist_name.clone()),
-        true,
-        Some(fixed_width)
+        |result| &result.artist_name,
+        Some(fixed_width),
+        false,
+        search_query,
+        accent_color_hex,
     );
-    let sorter = create_string_sorter(|result| Some(&result.artist_name));
-    column.set_sorter(Some(&sorter));
-    column_view.append_column(&column);
 }
 
-/// Sets up the album column with sorting support.
+/// Sets up the album column with sorting and search highlighting support.
 ///
 /// # Arguments
 ///
 /// * `column_view` - Column view to add column to
 /// * `fixed_width` - Fixed width for the column
-pub fn setup_album_column(column_view: &mut ColumnView, fixed_width: i32) {
-    let column = label_column!(
+/// * `search_query` - Shared search query cell for highlighting
+/// * `accent_color_hex` - Shared accent color cache cell
+pub fn setup_album_column(
+    column_view: &mut ColumnView,
+    fixed_width: i32,
+    search_query: &Rc<RefCell<String>>,
+    accent_color_hex: &Rc<RefCell<Option<String>>>,
+) {
+    setup_highlighted_text_column(
+        column_view,
         "Album",
-        TrackSearchResult,
-        |result: &TrackSearchResult| Some(result.album_title.clone()),
-        true,
-        Some(fixed_width)
+        |result| &result.album_title,
+        Some(fixed_width),
+        false,
+        search_query,
+        accent_color_hex,
     );
-    let sorter = create_string_sorter(|result| Some(&result.album_title));
-    column.set_sorter(Some(&sorter));
-    column_view.append_column(&column);
 }
 
 /// Sets up the duration column with MM:SS format and sorting support.
@@ -383,6 +463,8 @@ pub fn setup_play_button_column(
 /// * `audio_engine` - Optional audio engine for playback
 /// * `queue_manager` - Optional queue manager for queue operations
 /// * `app_state` - Optional application state for UI updates
+/// * `search_query` - Shared search query cell for highlighting
+/// * `accent_color_hex` - Shared accent color cache cell
 ///
 /// # Returns
 ///
@@ -393,11 +475,13 @@ pub fn setup_search_song_columns(
     audio_engine: Option<&Arc<AudioEngine>>,
     queue_manager: Option<&Arc<QueueManager>>,
     app_state: Option<&Arc<AppState>>,
+    search_query: &Rc<RefCell<String>>,
+    accent_color_hex: &Rc<RefCell<Option<String>>>,
 ) -> Option<JoinHandle<()>> {
     setup_track_number_column(column_view, 40);
-    setup_title_column(column_view);
-    setup_artist_column(column_view, 200);
-    setup_album_column(column_view, 200);
+    setup_title_column(column_view, search_query, accent_color_hex);
+    setup_artist_column(column_view, 200, search_query, accent_color_hex);
+    setup_album_column(column_view, 200, search_query, accent_color_hex);
     setup_duration_column(column_view, 72);
     setup_hifi_metadata_column(column_view, 200);
     setup_play_button_column(
@@ -544,10 +628,6 @@ fn spawn_state_subscription(
     buttons_map: Rc<RefCell<HashMap<String, Button>>>,
 ) -> JoinHandle<()> {
     MainContext::default().spawn_local(async move {
-        use crate::state::app_state::AppStateEvent::{
-            CurrentTrackChanged, PlaybackStateChanged, QueueChanged,
-        };
-
         let rx = app_state.subscribe();
         while let Ok(event) = rx.recv().await {
             if matches!(
@@ -606,12 +686,15 @@ fn decode_path_from_widget_name(encoded: &str) -> String {
 ///
 /// # Arguments
 ///
-/// * `get_value` - Function to extract the string field to sort by
+/// * `get_value` - Closure to extract the string field to sort by
 ///
 /// # Returns
 ///
 /// A `CustomSorter` configured for case-insensitive string sorting
-fn create_string_sorter(get_value: fn(&TrackSearchResult) -> Option<&String>) -> CustomSorter {
+fn create_string_sorter<F>(get_value: F) -> CustomSorter
+where
+    F: Fn(&TrackSearchResult) -> Option<&String> + 'static,
+{
     CustomSorter::new(move |item1, item2| {
         let boxed1 = item1.downcast_ref::<BoxedAnyObject>();
         let boxed2 = item2.downcast_ref::<BoxedAnyObject>();

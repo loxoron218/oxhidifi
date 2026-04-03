@@ -25,6 +25,7 @@ pub mod detail_playback;
 pub mod detail_types;
 pub mod detail_view;
 pub mod filtering;
+pub mod search_highlight;
 pub mod search_results_view;
 pub mod search_results_view_builder;
 pub mod search_results_view_methods;

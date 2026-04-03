@@ -74,6 +74,10 @@ struct SearchWidgetRefs {
     is_syncing_selection: Rc<Cell<bool>>,
     /// Library database reference.
     library_db: Option<Arc<LibraryDatabase>>,
+    /// Shared search query cell for highlighting.
+    search_query: Rc<RefCell<String>>,
+    /// Cached accent color hex string.
+    accent_color_hex: Rc<RefCell<Option<String>>>,
 }
 
 /// Captures widget references from the search results view for async operations.
@@ -106,6 +110,8 @@ fn get_widget_refs(this: &SearchResultsView) -> SearchWidgetRefs {
         artist_cards: Rc::clone(&this.artist_cards),
         is_syncing_selection: Rc::clone(&this.is_syncing_selection),
         library_db: this.library_db.clone(),
+        search_query: Rc::clone(&this.search_query),
+        accent_color_hex: Rc::clone(&this.accent_color_hex),
     }
 }
 
@@ -140,6 +146,8 @@ fn has_no_app_state(this: &SearchResultsView) -> bool {
 /// * `query` - The search query string
 /// * `refs` - Widget references for updating the UI
 fn perform_search(query: &str, refs: &SearchWidgetRefs) {
+    *refs.search_query.borrow_mut() = query.to_string();
+
     let fuzzy_results = refs.app_state.as_ref().map_or_else(
         || {
             error!(query = query, "No AppState available for search");
@@ -176,6 +184,8 @@ fn perform_search(query: &str, refs: &SearchWidgetRefs) {
             album_cards: &refs.album_cards,
             is_syncing_selection: &refs.is_syncing_selection,
         },
+        query,
+        &refs.accent_color_hex,
     );
 
     has_any_results |= populate_artists(
@@ -185,6 +195,7 @@ fn perform_search(query: &str, refs: &SearchWidgetRefs) {
         refs.app_state.as_ref(),
         &refs.artist_cards,
         &refs.is_syncing_selection,
+        query,
     );
 
     if has_any_results {

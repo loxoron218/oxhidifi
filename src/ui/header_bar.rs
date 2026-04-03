@@ -1936,13 +1936,14 @@ impl HeaderBar {
 
     /// Selects all text in the search entry, or deselects if already fully selected.
     pub fn select_all_search_text(&self) {
-        let text_len = i32::try_from(self.search_entry.text().chars().count())
-            .unwrap_or(i32::MAX);
+        let text_len = i32::try_from(self.search_entry.text().chars().count()).unwrap_or(i32::MAX);
         if let Some((start, end)) = self.search_entry.selection_bounds()
-            && start == 0 && end == text_len {
-                self.search_entry.select_region(text_len, text_len);
-                return;
-            }
+            && start == 0
+            && end == text_len
+        {
+            self.search_entry.select_region(text_len, text_len);
+            return;
+        }
         self.search_entry.select_region(0, -1);
     }
 }

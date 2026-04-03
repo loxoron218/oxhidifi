@@ -110,6 +110,10 @@ pub struct SearchResultsView {
     pub artist_cards: Rc<RefCell<Vec<Rc<ArtistCardType>>>>,
     /// Whether we are currently syncing selection from `AppState` (prevents feedback loops).
     pub is_syncing_selection: Rc<Cell<bool>>,
+    /// Shared search query string for column factories.
+    pub search_query: Rc<RefCell<String>>,
+    /// Cached accent color hex string for highlighting.
+    pub accent_color_hex: Rc<RefCell<Option<String>>>,
 }
 
 impl SearchResultsView {
@@ -134,6 +138,9 @@ impl SearchResultsView {
     ) -> Self {
         let main_container = create_main_container();
 
+        let search_query = Rc::new(RefCell::new(String::new()));
+        let accent_color_hex = Rc::new(RefCell::new(None));
+
         let (
             songs_header,
             column_view,
@@ -147,6 +154,8 @@ impl SearchResultsView {
             audio_engine.as_ref(),
             queue_manager.as_ref(),
             app_state.as_ref(),
+            &search_query,
+            &accent_color_hex,
         );
 
         forget(sort_model);
@@ -240,6 +249,8 @@ impl SearchResultsView {
             album_cards,
             artist_cards,
             is_syncing_selection,
+            search_query,
+            accent_color_hex,
         }
     }
 
