@@ -48,13 +48,22 @@ use crate::{
     },
 };
 
-/// Sets up the track number column with sorting support.
+/// Sets up a simple label column with numeric sorting support.
 ///
 /// # Arguments
 ///
 /// * `column_view` - Column view to add column to
+/// * `title` - Column header text
+/// * `get_value` - Function to extract the numeric value for display and sorting
+/// * `format_value` - Function to format the numeric value as display text
 /// * `fixed_width` - Fixed width for the column
-pub fn setup_track_number_column(column_view: &mut ColumnView, fixed_width: i32) {
+fn setup_numeric_label_column(
+    column_view: &ColumnView,
+    title: &str,
+    get_value: fn(&TrackSearchResult) -> i64,
+    format_value: fn(i64) -> String,
+    fixed_width: i32,
+) {
     let factory = SignalListItemFactory::new();
 
     factory.connect_setup(|_, list_item| {
@@ -67,7 +76,7 @@ pub fn setup_track_number_column(column_view: &mut ColumnView, fixed_width: i32)
         }
     });
 
-    factory.connect_bind(|_, list_item| {
+    factory.connect_bind(move |_, list_item| {
         if let Some(list_item) = list_item.downcast_ref::<ListItem>()
             && let Some(child) = list_item.child()
             && let Some(label) = child.downcast_ref::<Label>()
@@ -75,25 +84,41 @@ pub fn setup_track_number_column(column_view: &mut ColumnView, fixed_width: i32)
             && let Ok(obj) = boxed.downcast::<BoxedAnyObject>()
         {
             let result = obj.borrow::<Arc<TrackSearchResult>>();
-            let num = result.track.track_number.unwrap_or(0);
-            label.set_text(&num.to_string());
+            let value = get_value(&result);
+            label.set_text(&format_value(value));
         }
     });
 
-    let column = ColumnViewColumn::new(Some("#"), Some(factory.upcast::<ListItemFactory>()));
+    let column = ColumnViewColumn::new(Some(title), Some(factory.upcast::<ListItemFactory>()));
     column.set_fixed_width(fixed_width);
-    column.set_resizable(false);
-    let sorter = CustomSorter::new(|item1, item2| {
+    column.set_resizable(true);
+    let sorter = CustomSorter::new(move |item1, item2| {
         let extract = |item: &Object| -> i64 {
             item.downcast_ref::<BoxedAnyObject>().map_or(0, |boxed| {
                 let result = boxed.borrow::<Arc<TrackSearchResult>>();
-                result.track.track_number.unwrap_or(0)
+                get_value(&result)
             })
         };
         GtkOrdering::from(extract(item1).cmp(&extract(item2)))
     });
     column.set_sorter(Some(&sorter));
     column_view.append_column(&column);
+}
+
+/// Sets up the track number column with sorting support.
+///
+/// # Arguments
+///
+/// * `column_view` - Column view to add column to
+/// * `fixed_width` - Fixed width for the column
+pub fn setup_track_number_column(column_view: &ColumnView, fixed_width: i32) {
+    setup_numeric_label_column(
+        column_view,
+        "#",
+        |result| result.track.track_number.unwrap_or(0),
+        |num| num.to_string(),
+        fixed_width,
+    );
 }
 
 /// Sets up a text column with sorting and search highlighting support.
@@ -234,48 +259,19 @@ pub fn setup_album_column(
 ///
 /// * `column_view` - Column view to add column to
 /// * `fixed_width` - Fixed width for the column
-pub fn setup_duration_column(column_view: &mut ColumnView, fixed_width: i32) {
-    let factory = SignalListItemFactory::new();
-
-    factory.connect_setup(|_, list_item| {
-        let label = Label::builder()
-            .xalign(1.0)
-            .css_classes(["dim-label"])
-            .build();
-        if let Some(list_item) = list_item.downcast_ref::<ListItem>() {
-            list_item.set_child(Some(&label));
-        }
-    });
-
-    factory.connect_bind(|_, list_item| {
-        if let Some(list_item) = list_item.downcast_ref::<ListItem>()
-            && let Some(child) = list_item.child()
-            && let Some(label) = child.downcast_ref::<Label>()
-            && let Some(boxed) = list_item.item()
-            && let Ok(obj) = boxed.downcast::<BoxedAnyObject>()
-        {
-            let result = obj.borrow::<Arc<TrackSearchResult>>();
-            let secs = result.track.duration_ms / 1000;
+pub fn setup_duration_column(column_view: &ColumnView, fixed_width: i32) {
+    setup_numeric_label_column(
+        column_view,
+        "Duration",
+        |result| result.track.duration_ms,
+        |ms| {
+            let secs = ms / 1000;
             let mins = secs / 60;
             let rem = secs % 60;
-            label.set_text(&format!("{mins:02}:{rem:02}"));
-        }
-    });
-
-    let column = ColumnViewColumn::new(Some("Duration"), Some(factory.upcast::<ListItemFactory>()));
-    column.set_fixed_width(fixed_width);
-    column.set_resizable(true);
-    let sorter = CustomSorter::new(|item1, item2| {
-        let extract = |item: &Object| -> i64 {
-            item.downcast_ref::<BoxedAnyObject>().map_or(0, |boxed| {
-                let result = boxed.borrow::<Arc<TrackSearchResult>>();
-                result.track.duration_ms
-            })
-        };
-        GtkOrdering::from(extract(item1).cmp(&extract(item2)))
-    });
-    column.set_sorter(Some(&sorter));
-    column_view.append_column(&column);
+            format!("{mins:02}:{rem:02}")
+        },
+        fixed_width,
+    );
 }
 
 /// Sets up the `HiFi` metadata column showing format, sample rate, and bit depth.
@@ -284,7 +280,7 @@ pub fn setup_duration_column(column_view: &mut ColumnView, fixed_width: i32) {
 ///
 /// * `column_view` - Column view to add column to
 /// * `fixed_width` - Fixed width for the column
-pub fn setup_hifi_metadata_column(column_view: &mut ColumnView, fixed_width: i32) {
+pub fn setup_hifi_metadata_column(column_view: &ColumnView, fixed_width: i32) {
     let factory = SignalListItemFactory::new();
 
     factory.connect_setup(|_, list_item| {
@@ -347,8 +343,9 @@ pub fn setup_hifi_metadata_column(column_view: &mut ColumnView, fixed_width: i32
 /// # Returns
 ///
 /// An optional join handle for the state subscription.
+#[must_use]
 pub fn setup_play_button_column(
-    column_view: &mut ColumnView,
+    column_view: &ColumnView,
     library_db: Option<&Arc<LibraryDatabase>>,
     audio_engine: Option<&Arc<AudioEngine>>,
     queue_manager: Option<&Arc<QueueManager>>,
