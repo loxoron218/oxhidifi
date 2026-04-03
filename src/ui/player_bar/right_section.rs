@@ -64,7 +64,7 @@ pub struct RightSectionWidgets {
 pub fn create_right_section() -> RightSectionWidgets {
     let right_section = Box::builder()
         .orientation(Horizontal)
-        .spacing(18)
+        .spacing(12)
         .hexpand(false)
         .vexpand(false)
         .halign(End)

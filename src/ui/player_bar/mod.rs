@@ -147,6 +147,7 @@ impl PlayerBar {
             .spacing(12)
             .margin_start(12)
             .margin_end(12)
+            .margin_top(12)
             .margin_bottom(12)
             .css_classes(["player-bar"])
             .build();
