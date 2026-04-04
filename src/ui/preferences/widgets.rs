@@ -35,7 +35,6 @@ pub fn create_combo_row_from_settings<F, G>(
     title: &str,
     subtitle: Option<&str>,
     options: Vec<String>,
-    _current_value: String,
     getter: F,
     setter: G,
     settings_manager: Arc<SettingsManager>,
@@ -115,15 +114,13 @@ mod tests {
             "Option2".to_string(),
             "Option3".to_string(),
         ];
-        let current_value = "Option2".to_string();
 
         let combo_row = create_combo_row_from_settings(
             "Test Title",
             Some("Test Subtitle"),
             options,
-            current_value,
             |_settings| "grid".to_string(), // Default value since setting is removed
-            |_settings, _value| {},         // No-op since setting is removed
+            |_, _| {},                      // No-op since setting is removed
             settings_manager_arc,
         );
 

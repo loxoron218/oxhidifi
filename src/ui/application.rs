@@ -818,7 +818,7 @@ fn spawn_player_bar_visibility_handler(
 ) {
     MainContext::default().spawn_local(async move {
         // Keep player_bar alive throughout the subscription closure lifetime
-        let _player_bar_keepalive = player_bar;
+        let player_bar_keepalive = player_bar;
 
         let receiver = app_state.subscribe();
 
@@ -835,6 +835,8 @@ fn spawn_player_bar_visibility_handler(
                 }
             }
         }
+
+        drop(player_bar_keepalive);
     });
 }
 
@@ -856,7 +858,7 @@ fn setup_keyboard_shortcuts(
 
     key_controller.set_propagation_phase(Capture);
 
-    key_controller.connect_key_pressed(move |_, key, _code, state| {
+    key_controller.connect_key_pressed(move |_, key, _, state| {
         if key == Key::Escape {
             let current_nav = app_state_shortcuts.get_navigation_state();
             if current_nav != Library {

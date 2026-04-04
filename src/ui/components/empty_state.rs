@@ -771,9 +771,7 @@ impl EmptyState {
                 let paths: Vec<PathBuf> =
                     album_files.into_iter().map(Arc::unwrap_or_clone).collect();
 
-                if let Err(e) =
-                    handle_files_changed(paths, &db, &settings, dr_parser.as_ref()).await
-                {
+                if let Err(e) = handle_files_changed(paths, &db, dr_parser.as_ref()).await {
                     error!(error = %e, "Failed to process files");
                 }
 

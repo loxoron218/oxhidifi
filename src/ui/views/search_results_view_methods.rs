@@ -2,7 +2,6 @@
 
 use std::{
     cell::{Cell, RefCell},
-    mem::forget,
     rc::Rc,
     sync::Arc,
 };
@@ -33,6 +32,64 @@ use crate::{
     },
 };
 
+/// Subscription handles that keep async subscriptions alive.
+pub struct SubscriptionHandles {
+    /// Playback subscription handle.
+    pub playback: Option<JoinHandle<()>>,
+    /// Selection subscription handle.
+    pub selection: Option<JoinHandle<()>>,
+    /// Zoom subscription handle.
+    pub zoom: Option<JoinHandle<()>>,
+    /// Play button subscription handle.
+    pub play_button: Option<JoinHandle<()>>,
+}
+
+impl Drop for SubscriptionHandles {
+    fn drop(&mut self) {
+        self.abort_all();
+    }
+}
+
+impl SubscriptionHandles {
+    /// Aborts all held subscription handles.
+    pub fn abort_all(&self) {
+        if let Some(handle) = &self.playback {
+            handle.abort();
+        }
+        if let Some(handle) = &self.selection {
+            handle.abort();
+        }
+        if let Some(handle) = &self.zoom {
+            handle.abort();
+        }
+        if let Some(handle) = &self.play_button {
+            handle.abort();
+        }
+    }
+}
+
+/// Collects subscription handles to keep them alive.
+///
+/// # Arguments
+///
+/// * `playback` - Playback subscription handle
+/// * `selection` - Selection subscription handle
+/// * `zoom` - Zoom subscription handle
+/// * `play_button` - Play button subscription handle
+pub fn collect_subscription_handles(
+    playback: Option<JoinHandle<()>>,
+    selection: Option<JoinHandle<()>>,
+    zoom: Option<JoinHandle<()>>,
+    play_button: Option<JoinHandle<()>>,
+) -> SubscriptionHandles {
+    SubscriptionHandles {
+        playback,
+        selection,
+        zoom,
+        play_button,
+    }
+}
+
 /// Creates the main container box with standard spacing and margins.
 ///
 /// # Returns
@@ -48,32 +105,6 @@ pub fn create_main_container() -> Box {
         .margin_start(12)
         .margin_end(12)
         .build()
-}
-
-/// Forgets subscription handles to keep them alive.
-///
-/// # Arguments
-///
-/// * `playback` - Playback subscription handle
-/// * `selection` - Selection subscription handle
-/// * `zoom` - Zoom subscription handle
-/// * `play_button` - Play button subscription handle
-pub fn forget_subscription_handles(
-    playback: Option<JoinHandle<()>>,
-    selection: Option<JoinHandle<()>>,
-    zoom: Option<JoinHandle<()>>,
-    play_button: Option<JoinHandle<()>>,
-) {
-    if let Some(handle) = playback {
-        forget(handle);
-    }
-    if let Some(handle) = selection {
-        forget(handle);
-    }
-    if let Some(handle) = zoom {
-        forget(handle);
-    }
-    forget(play_button);
 }
 
 /// Creates state containers for the view.

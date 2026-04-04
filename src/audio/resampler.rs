@@ -20,7 +20,7 @@ use std::{
 use {
     audioadapter_buffers::direct::InterleavedSlice,
     cpal::{
-        OutputCallbackInfo, SampleFormat, Stream, StreamConfig,
+        SampleFormat, Stream, StreamConfig,
         StreamError::{self, BackendSpecific},
         traits::DeviceTrait,
     },
@@ -651,7 +651,7 @@ pub fn create_resampling_stream(
     let stream = match sample_format {
         SampleFormat::F32 => output.device().build_output_stream(
             target_config,
-            move |data: &mut [f32], _: &OutputCallbackInfo| {
+            move |data: &mut [f32], _| {
                 process_samples_f32(
                     data,
                     &mut resampled_consumer,
@@ -665,7 +665,7 @@ pub fn create_resampling_stream(
         )?,
         SampleFormat::I16 => output.device().build_output_stream(
             target_config,
-            move |data: &mut [i16], _: &OutputCallbackInfo| {
+            move |data: &mut [i16], _| {
                 process_samples_i16(
                     data,
                     &mut resampled_consumer,
@@ -679,7 +679,7 @@ pub fn create_resampling_stream(
         )?,
         SampleFormat::U16 => output.device().build_output_stream(
             target_config,
-            move |data: &mut [u16], _: &OutputCallbackInfo| {
+            move |data: &mut [u16], _| {
                 process_samples_u16(
                     data,
                     &mut resampled_consumer,

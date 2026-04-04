@@ -84,7 +84,6 @@ impl AudioPreferencesPage {
 
         // TODO: Open device selection dialog
         // For now, we'll just show the current device
-        let _settings_manager_clone = Arc::clone(&self.settings_manager);
         device_row.connect_activated(move |_| {
             debug!("AudioPreferencesPage: Device selection dialog would be shown here");
 

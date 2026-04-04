@@ -39,14 +39,16 @@ mod ui_compliance_tests {
     #[ignore = "Requires GTK display for UI testing"]
     fn gnome_hig_compliance() -> Result<()> {
         // Test spacing guidelines (6px, 12px, 18px, 24px increments)
-        let _album_grid = AlbumGridView::default();
+        drop(AlbumGridView::default());
 
         // The margin values should follow GNOME spacing guidelines
         // TODO: Verify margin values by visual inspection in real implementation
 
-        let _detail_view = DetailView::builder()
-            .detail_type(Some(DetailType::Album(Album::default())))
-            .build()?;
+        drop(
+            DetailView::builder()
+                .detail_type(Some(DetailType::Album(Album::default())))
+                .build()?,
+        );
 
         // Spacing in detail view should follow guidelines
         Ok(())
@@ -208,7 +210,7 @@ mod ui_compliance_tests {
 
         let start_time = Instant::now();
         let app_state_arc = Arc::new(app_state);
-        let _album_grid = AlbumGridView::new(
+        drop(AlbumGridView::new(
             Some(&app_state_arc),
             None,
             None,
@@ -216,7 +218,7 @@ mod ui_compliance_tests {
             large_albums,
             true,
             false,
-        );
+        ));
         let duration = start_time.elapsed();
 
         // Should be able to create grid with 1000 albums in reasonable time
@@ -250,14 +252,14 @@ mod ui_compliance_tests {
                 .build();
             let settings_manager = SettingsManager::new()?;
             let library_db = LibraryDatabase::new().await?;
-            let _header_bar = HeaderBar::default_with_state(
+            drop(HeaderBar::default_with_state(
                 &app_state_arc,
                 application,
                 Arc::new(settings_manager),
                 Arc::new(library_db),
-            );
-            let _player_bar = PlayerBar::new(&app_state_arc, &Arc::new(engine), None);
-            let _album_grid = AlbumGridView::new(
+            ));
+            drop(PlayerBar::new(&app_state_arc, &Arc::new(engine), None));
+            drop(AlbumGridView::new(
                 Some(&app_state_arc),
                 None,
                 None,
@@ -265,15 +267,15 @@ mod ui_compliance_tests {
                 Vec::new(),
                 true,
                 false,
-            );
-            let _detail_view = DetailView::new(
+            ));
+            drop(DetailView::new(
                 Some(app_state_arc),
                 None,
                 None,
                 None,
                 DetailType::Album(Album::default()),
                 false,
-            );
+            ));
         }
 
         // After dropping all components, ref count should be back to initial
@@ -299,7 +301,7 @@ mod ui_compliance_tests {
 
         // Test that views adapt to different screen sizes
         let app_state_arc = Arc::new(app_state);
-        let _small_album_grid = AlbumGridView::new(
+        drop(AlbumGridView::new(
             Some(&app_state_arc),
             None,
             None,
@@ -307,17 +309,8 @@ mod ui_compliance_tests {
             Vec::new(),
             true,
             true,
-        );
-        let _large_album_grid = AlbumGridView::new(
-            Some(&app_state_arc),
-            None,
-            None,
-            None,
-            Vec::new(),
-            true,
-            false,
-        );
-        let _album_grid = AlbumGridView::new(
+        ));
+        drop(AlbumGridView::new(
             Some(&app_state_arc),
             None,
             None,
@@ -325,15 +318,24 @@ mod ui_compliance_tests {
             Vec::new(),
             true,
             false,
-        );
-        let _detail_view = DetailView::new(
+        ));
+        drop(AlbumGridView::new(
+            Some(&app_state_arc),
+            None,
+            None,
+            None,
+            Vec::new(),
+            true,
+            false,
+        ));
+        drop(DetailView::new(
             Some(app_state_arc),
             None,
             None,
             None,
             DetailType::Album(Album::default()),
             false,
-        );
+        ));
 
         // Compact mode should have different layout characteristics
         Ok(())

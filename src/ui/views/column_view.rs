@@ -245,7 +245,7 @@ impl ColumnListView {
                 );
             }
             Artists => {
-                setup_artist_columns(&mut self.column_view, &self.multi_selection, &self.config);
+                setup_artist_columns(&mut self.column_view, &self.multi_selection);
             }
         }
     }
@@ -266,7 +266,7 @@ impl ColumnListView {
             let settings_mgr = Arc::clone(settings_manager);
             let view_type = self.config.view_type.clone();
 
-            cvs.connect_changed(move |_sorter, _change| {
+            cvs.connect_changed(move |_, _| {
                 let base_sorter = column_view.sorter();
                 let Some(base_sorter) = base_sorter else {
                     return;

@@ -1239,16 +1239,14 @@ impl LibraryDatabase {
         );
 
         // Clean up empty albums
-        let _album_result =
-            query("DELETE FROM albums WHERE id NOT IN (SELECT DISTINCT album_id FROM tracks)")
-                .execute(&mut *tx)
-                .await?;
+        query("DELETE FROM albums WHERE id NOT IN (SELECT DISTINCT album_id FROM tracks)")
+            .execute(&mut *tx)
+            .await?;
 
         // Clean up empty artists
-        let _artist_result =
-            query("DELETE FROM artists WHERE id NOT IN (SELECT DISTINCT artist_id FROM albums)")
-                .execute(&mut *tx)
-                .await?;
+        query("DELETE FROM artists WHERE id NOT IN (SELECT DISTINCT artist_id FROM albums)")
+            .execute(&mut *tx)
+            .await?;
 
         // Clear DR values for the deleted directory (in case album wasn't fully deleted)
         query("UPDATE albums SET dr_value = NULL WHERE path = ?")

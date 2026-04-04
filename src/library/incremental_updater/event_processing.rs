@@ -7,7 +7,6 @@ use std::{
 };
 
 use {
-    parking_lot::RwLock,
     sqlx::{Sqlite, Transaction, query, query_scalar},
     tracing::warn,
 };
@@ -17,7 +16,6 @@ use crate::{
         artwork::{extract_artwork, save_embedded_artwork},
         metadata::{TagReader, TrackMetadata},
     },
-    config::settings::UserSettings,
     error::{domain::LibraryError, numeric_conversion::safe_u64_to_i64},
     library::{
         database::{LibraryDatabase, escape_like_pattern},
@@ -54,12 +52,11 @@ pub async fn handle_files_changed_incremental(
     paths: Vec<PathBuf>,
     database: &LibraryDatabase,
     dr_parser: Option<&Arc<DrParser>>,
-    settings: &RwLock<UserSettings>,
     config: &IncrementalUpdaterConfig,
 ) -> Result<(), LibraryError> {
     // Process files in batches
     for batch in paths.chunks(config.max_batch_size) {
-        process_file_batch(batch, database, dr_parser, settings).await?;
+        process_file_batch(batch, database, dr_parser).await?;
     }
 
     Ok(())
@@ -85,7 +82,6 @@ pub async fn process_file_batch(
     batch: &[PathBuf],
     database: &LibraryDatabase,
     dr_parser: Option<&Arc<DrParser>>,
-    _settings: &RwLock<UserSettings>,
 ) -> Result<(), LibraryError> {
     let pool = database.pool();
     let mut tx = pool.begin().await?;
@@ -271,7 +267,6 @@ pub async fn handle_files_renamed_incremental(
     paths: Vec<(PathBuf, PathBuf)>,
     database: &LibraryDatabase,
     dr_parser: Option<&Arc<DrParser>>,
-    settings: &RwLock<UserSettings>,
     config: &IncrementalUpdaterConfig,
 ) -> Result<(), LibraryError> {
     // Handle as remove + add
@@ -279,7 +274,7 @@ pub async fn handle_files_renamed_incremental(
     let added_paths: Vec<PathBuf> = paths.iter().map(|(_, to)| to.clone()).collect();
 
     handle_files_removed_incremental(removed_paths, database).await?;
-    handle_files_changed_incremental(added_paths, database, dr_parser, settings, config).await?;
+    handle_files_changed_incremental(added_paths, database, dr_parser, config).await?;
 
     Ok(())
 }
@@ -481,7 +476,7 @@ async fn get_or_create_album(
 /// An `Option<String>` containing the artwork file path if found.
 fn extract_album_artwork_path(album_dir: &Path, audio_files: &[PathBuf]) -> Option<String> {
     if let Some(first_file) = audio_files.first()
-        && let Ok((data, _mime_type)) = extract_artwork(first_file)
+        && let Ok((data, _)) = extract_artwork(first_file)
     {
         let artwork_path = album_dir.join("folder.jpg");
         if save_embedded_artwork(&data, &artwork_path).is_ok() {

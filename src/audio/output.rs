@@ -15,8 +15,7 @@ use std::{
 use {
     cpal::{
         BufferSize::Default as CpalDefault,
-        BuildStreamError, ChannelCount, Device, Host, OutputCallbackInfo, PauseStreamError,
-        PlayStreamError,
+        BuildStreamError, ChannelCount, Device, Host, PauseStreamError, PlayStreamError,
         SampleFormat::{self, F32, F64, I8, I16, I24, I32, I64, U8, U16, U24, U32, U64},
         Stream, StreamConfig,
         StreamError::{self, BackendSpecific},
@@ -30,7 +29,6 @@ use {
     num_traits::cast::ToPrimitive,
     rtrb::{Consumer, PopError::Empty, RingBuffer},
     rubato::{Fft, FixedSync::Input, ResamplerConstructionError},
-    symphonia::core::audio::SignalSpec,
     thiserror::Error,
     tracing::{debug, error, info, warn},
 };
@@ -67,7 +65,7 @@ macro_rules! build_sample_stream {
         $device
             .build_output_stream(
                 $stream_config,
-                move |data: &mut [$type], _: &OutputCallbackInfo| {
+                move |data: &mut [$type], _| {
                     let mut samples_consumed = 0;
                     for sample in data.iter_mut() {
                         match $consumer.pop() {
@@ -481,7 +479,6 @@ impl AudioOutput {
     pub fn get_target_config(
         &self,
         source_format: &AudioFormat,
-        _source_spec: &SignalSpec,
     ) -> Result<(StreamConfig, bool), OutputError> {
         let exclusive_mode = self.config.exclusive_mode;
 
@@ -826,11 +823,9 @@ impl AudioConsumer {
         mut output: AudioOutput,
         consumer: Consumer<f32>,
         source_format: &AudioFormat,
-        source_spec: &SignalSpec,
         current_position: Arc<AtomicU64>,
     ) -> Result<(Self, OutputConfig), OutputError> {
-        let (target_config, needs_resampling) =
-            output.get_target_config(source_format, source_spec)?;
+        let (target_config, needs_resampling) = output.get_target_config(source_format)?;
 
         let sample_format = output
             .device
@@ -912,7 +907,6 @@ impl AudioConsumer {
     pub fn run(
         self,
         source_format: &AudioFormat,
-        source_spec: &SignalSpec,
     ) -> Result<(Stream, Option<ResamplingAudioConsumer>), OutputError> {
         match self {
             Self::Direct {
@@ -920,7 +914,7 @@ impl AudioConsumer {
                 consumer,
                 current_position,
             } => {
-                let (stream_config, _) = output.get_target_config(source_format, source_spec)?;
+                let (stream_config, _) = output.get_target_config(source_format)?;
                 let stream = output.create_stream(&stream_config, consumer, &current_position)?;
                 stream.play()?;
                 Ok((stream, None))

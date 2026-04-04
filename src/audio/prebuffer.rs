@@ -105,7 +105,7 @@ impl Prebuffer {
         let path = track_path.as_ref();
 
         // Extract metadata first
-        let _metadata = TagReader::read_metadata(path)?;
+        TagReader::read_metadata(path)?;
 
         // Create decoder
         let decoder = AudioDecoder::new(path)?;

@@ -18,7 +18,7 @@ use libadwaita::{
     prelude::{Cast, CheckButtonExt, ListItemExt, ObjectExt, SelectionModelExt, WidgetExt},
 };
 
-use crate::{library::models::Artist, ui::views::column_view_types::ColumnListViewConfig};
+use crate::library::models::Artist;
 
 /// Sets up all 3 artist columns for the column view.
 ///
@@ -26,12 +26,7 @@ use crate::{library::models::Artist, ui::views::column_view_types::ColumnListVie
 ///
 /// * `column_view` - Column view to add columns to
 /// * `selection_model` - Selection model for the column view
-/// * `_config` - Configuration options for the column view
-pub fn setup_artist_columns(
-    column_view: &mut ColumnView,
-    selection_model: &MultiSelection,
-    _config: &ColumnListViewConfig,
-) {
+pub fn setup_artist_columns(column_view: &mut ColumnView, selection_model: &MultiSelection) {
     setup_artist_selection_column(column_view, selection_model, 40);
     setup_artist_cover_art_column(column_view, 48);
     setup_artist_name_column(column_view);

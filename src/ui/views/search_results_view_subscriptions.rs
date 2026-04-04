@@ -50,7 +50,6 @@ pub fn create_album_playback_subscription(
     album_cards: &Rc<RefCell<Vec<AlbumCard>>>,
 ) -> JoinHandle<()> {
     let state_clone = Arc::clone(app_state);
-    let _album_flow_box_clone = album_flow_box.clone();
     let album_cards_clone = Rc::clone(album_cards);
     MainContext::default().spawn_local(async move {
         let rx = state_clone.subscribe();

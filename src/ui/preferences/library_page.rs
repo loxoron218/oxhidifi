@@ -604,7 +604,6 @@ impl LibraryPreferencesPage {
             let (total_albums, processed, was_cancelled) = Self::process_albums(
                 all_audio_files,
                 &library_db_clone,
-                &settings_arc,
                 dr_parser.as_ref(),
                 &cancel_token,
                 &app_state_clone,
@@ -764,7 +763,6 @@ impl LibraryPreferencesPage {
     async fn process_albums(
         all_audio_files: Vec<PathBuf>,
         library_db_clone: &Arc<LibraryDatabase>,
-        settings_arc: &Arc<RwLock<UserSettings>>,
         dr_parser: Option<&Arc<DrParser>>,
         cancel_token: &Arc<AtomicBool>,
         app_state_clone: &Arc<AppState>,
@@ -788,9 +786,7 @@ impl LibraryPreferencesPage {
             }
 
             let paths: Vec<PathBuf> = album_files.into_iter().map(Arc::unwrap_or_clone).collect();
-            if let Err(e) =
-                handle_files_changed(paths, library_db_clone, settings_arc, dr_parser).await
-            {
+            if let Err(e) = handle_files_changed(paths, library_db_clone, dr_parser).await {
                 error!(error = %e, "Failed to process files");
             }
 

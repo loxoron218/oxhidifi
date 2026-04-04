@@ -2,13 +2,13 @@
 
 use std::{
     cell::{Cell, RefCell},
-    mem::forget,
     rc::Rc,
     sync::Arc,
 };
 
 use libadwaita::{
     gio::ListStore,
+    glib::JoinHandle,
     gtk::{Button, ColumnView, FlowBox, Label, Widget},
     prelude::{BoxExt, Cast, WidgetExt},
 };
@@ -23,9 +23,9 @@ use crate::{
             artist_grid::ArtistCard as ArtistCardType,
             search_results_view_builder::SearchResultsViewBuilder,
             search_results_view_methods::{
-                connect_row_activation, create_albums_section, create_artists_section,
-                create_main_container, create_songs_section, create_view_state,
-                forget_subscription_handles, setup_see_more_button,
+                SubscriptionHandles, collect_subscription_handles, connect_row_activation,
+                create_albums_section, create_artists_section, create_main_container,
+                create_songs_section, create_view_state, setup_see_more_button,
             },
             search_results_view_population::populate,
             search_results_view_subscriptions::{
@@ -114,6 +114,14 @@ pub struct SearchResultsView {
     pub search_query: Rc<RefCell<String>>,
     /// Cached accent color hex string for highlighting.
     pub accent_color_hex: Rc<RefCell<Option<String>>>,
+    /// Subscription handles keeping async callbacks alive.
+    subscription_handles: SubscriptionHandles,
+}
+
+impl Drop for SearchResultsView {
+    fn drop(&mut self) {
+        self.subscription_handles.abort_all();
+    }
 }
 
 impl SearchResultsView {
@@ -158,8 +166,8 @@ impl SearchResultsView {
             &accent_color_hex,
         );
 
-        forget(sort_model);
-        forget(no_selection);
+        drop(sort_model);
+        drop(no_selection);
 
         let (albums_header, album_flow_box) = create_albums_section();
         let (artists_header, artist_flow_box) = create_artists_section();
@@ -194,40 +202,19 @@ impl SearchResultsView {
             &scrolled_window,
         );
 
-        let album_cards_clone = Rc::clone(&album_cards);
-        let album_flow_box_clone = album_flow_box.clone();
-        let playback_subscription_handle = app_state.as_ref().map(|state| {
-            create_album_playback_subscription(state, &album_flow_box_clone, &album_cards_clone)
-        });
-
-        let selection_subscription_handle = app_state.as_ref().map(|state| {
-            create_selection_subscription(state, &album_cards, &artist_cards, &is_syncing_selection)
-        });
-
-        let album_flow_box_clone = album_flow_box.clone();
-        let artist_flow_box_clone = artist_flow_box.clone();
-        let album_cards_zoom = Rc::clone(&album_cards);
-        let artist_cards_zoom = Rc::clone(&artist_cards);
-        let zoom_subscription_handle = app_state.as_ref().map(|state| {
-            create_zoom_subscription(
-                state,
-                &album_flow_box_clone,
-                &artist_flow_box_clone,
-                &album_cards_zoom,
-                &artist_cards_zoom,
-            )
-        });
+        let subscription_handles = Self::create_subscriptions(
+            app_state.as_ref(),
+            &album_cards,
+            &artist_cards,
+            &is_syncing_selection,
+            &album_flow_box,
+            &artist_flow_box,
+            play_button_handle,
+        );
 
         if let Some(state) = &app_state {
             connect_row_activation(&column_view, state);
         }
-
-        forget_subscription_handles(
-            playback_subscription_handle,
-            selection_subscription_handle,
-            zoom_subscription_handle,
-            play_button_handle,
-        );
 
         Self {
             widget: scrolled_window.upcast::<Widget>(),
@@ -251,7 +238,64 @@ impl SearchResultsView {
             is_syncing_selection,
             search_query,
             accent_color_hex,
+            subscription_handles,
         }
+    }
+
+    /// Subscribes to `AppState` events for playback overlay sync, selection sync, and zoom changes.
+    ///
+    /// # Arguments
+    ///
+    /// * `app_state` - Optional application state to subscribe to
+    /// * `album_cards` - Shared album card list for playback overlay and selection updates
+    /// * `artist_cards` - Shared artist card list for selection updates
+    /// * `is_syncing_selection` - Flag to prevent selection feedback loops
+    /// * `album_flow_box` - Flow box containing album cards for zoom relayout
+    /// * `artist_flow_box` - Flow box containing artist cards for zoom relayout
+    /// * `play_button_handle` - Pre-existing play button subscription handle to collect
+    ///
+    /// # Returns
+    ///
+    /// A `SubscriptionHandles` containing all created subscription handles.
+    fn create_subscriptions(
+        app_state: Option<&Arc<AppState>>,
+        album_cards: &Rc<RefCell<Vec<AlbumCard>>>,
+        artist_cards: &Rc<RefCell<Vec<Rc<ArtistCardType>>>>,
+        is_syncing_selection: &Rc<Cell<bool>>,
+        album_flow_box: &FlowBox,
+        artist_flow_box: &FlowBox,
+        play_button_handle: Option<JoinHandle<()>>,
+    ) -> SubscriptionHandles {
+        let album_cards_clone = Rc::clone(album_cards);
+        let album_flow_box_clone = album_flow_box.clone();
+        let playback_subscription_handle = app_state.map(|state| {
+            create_album_playback_subscription(state, &album_flow_box_clone, &album_cards_clone)
+        });
+
+        let selection_subscription_handle = app_state.map(|state| {
+            create_selection_subscription(state, album_cards, artist_cards, is_syncing_selection)
+        });
+
+        let album_flow_box_clone = album_flow_box.clone();
+        let artist_flow_box_clone = artist_flow_box.clone();
+        let album_cards_zoom = Rc::clone(album_cards);
+        let artist_cards_zoom = Rc::clone(artist_cards);
+        let zoom_subscription_handle = app_state.map(|state| {
+            create_zoom_subscription(
+                state,
+                &album_flow_box_clone,
+                &artist_flow_box_clone,
+                &album_cards_zoom,
+                &artist_cards_zoom,
+            )
+        });
+
+        collect_subscription_handles(
+            playback_subscription_handle,
+            selection_subscription_handle,
+            zoom_subscription_handle,
+            play_button_handle,
+        )
     }
 
     /// Creates a builder for the `SearchResultsView`.

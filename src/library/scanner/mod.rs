@@ -57,12 +57,20 @@ pub struct LibraryScanner {
     file_watcher: FileWatcher,
     /// Configuration.
     config: ScannerConfig,
-    /// Task handles for background operations.
-    _tasks: Vec<JoinHandle<()>>,
     /// List of active subscribers for manual broadcast fan-out.
     subscribers: Arc<RwLock<Vec<Sender<ScannerEvent>>>>,
     /// DR parser for extracting DR values from album directories.
     dr_parser: Option<Arc<DrParser>>,
+    /// Background task handles.
+    tasks: Vec<JoinHandle<()>>,
+}
+
+impl Drop for LibraryScanner {
+    fn drop(&mut self) {
+        for task in &self.tasks {
+            task.abort();
+        }
+    }
 }
 
 impl LibraryScanner {
@@ -140,14 +148,12 @@ impl LibraryScanner {
 
         // Spawn debounced event handler task
         let database_clone = Arc::clone(database);
-        let settings_clone = Arc::clone(settings);
         let subscribers_clone = Arc::clone(&subscribers);
         let dr_parser_clone = dr_parser.clone();
         tasks.push(spawn(async move {
             Self::handle_debounced_events(
                 debounced_event_receiver,
                 database_clone,
-                settings_clone,
                 dr_parser_clone,
                 subscribers_clone,
             )
@@ -157,9 +163,9 @@ impl LibraryScanner {
         Ok(Self {
             file_watcher,
             config,
-            _tasks: tasks,
             subscribers,
             dr_parser,
+            tasks,
         })
     }
 
@@ -191,7 +197,6 @@ impl LibraryScanner {
     async fn handle_debounced_events(
         receiver: Receiver<DebouncedEvent>,
         database: Arc<LibraryDatabase>,
-        settings: Arc<RwLock<UserSettings>>,
         dr_parser: Option<Arc<DrParser>>,
         subscribers: Arc<RwLock<Vec<Sender<ScannerEvent>>>>,
     ) {
@@ -200,8 +205,7 @@ impl LibraryScanner {
             match event {
                 FilesChanged { paths } => {
                     debug!("Processing {} changed files", paths.len());
-                    if let Err(e) =
-                        handle_files_changed(paths, &database, &settings, dr_parser.as_ref()).await
+                    if let Err(e) = handle_files_changed(paths, &database, dr_parser.as_ref()).await
                     {
                         error!(error = %e, "Error handling changed files");
                     } else {
@@ -219,8 +223,7 @@ impl LibraryScanner {
                 }
                 FilesRenamed { paths } => {
                     debug!("Processing {} renamed files", paths.len());
-                    if let Err(e) =
-                        handle_files_renamed(paths, &database, &settings, dr_parser.as_ref()).await
+                    if let Err(e) = handle_files_renamed(paths, &database, dr_parser.as_ref()).await
                     {
                         error!(error = %e, "Error handling renamed files");
                     } else {
@@ -345,8 +348,7 @@ impl LibraryScanner {
                 return Ok(());
             }
 
-            handle_files_changed(all_audio_files, database, settings, self.dr_parser.as_ref())
-                .await?;
+            handle_files_changed(all_audio_files, database, self.dr_parser.as_ref()).await?;
         }
 
         Ok(())

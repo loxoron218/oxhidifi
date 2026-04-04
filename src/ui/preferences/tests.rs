@@ -142,8 +142,10 @@ fn settings_persistence_across_sessions() -> Result<()> {
     );
     let app_state_arc = Arc::new(app_state);
 
-    let _general_page =
-        GeneralPreferencesPage::new(app_state_arc.clone(), settings_manager_arc.clone());
+    drop(GeneralPreferencesPage::new(
+        app_state_arc.clone(),
+        settings_manager_arc.clone(),
+    ));
     let current_theme = settings_manager_arc.get_settings().theme_preference.clone();
     assert_eq!(current_theme, "dark");
 
@@ -151,18 +153,18 @@ fn settings_persistence_across_sessions() -> Result<()> {
     assert!(!current_show_dr);
 
     let library_db2 = LibraryDatabase::new()?;
-    let _library_page = LibraryPreferencesPage::new(
+    drop(LibraryPreferencesPage::new(
         app_state_arc.clone(),
         Arc::new(library_db2),
         settings_manager_arc.clone(),
-    );
+    ));
     let current_directories = settings_manager_arc
         .get_settings()
         .library_directories
         .clone();
     assert_eq!(current_directories, vec!["/music/test".to_string()]);
 
-    let _audio_page = AudioPreferencesPage::new(settings_manager_arc.clone());
+    drop(AudioPreferencesPage::new(settings_manager_arc.clone()));
     let current_sample_rate = settings_manager_arc.get_settings().sample_rate;
     assert_eq!(current_sample_rate, 96000);
 

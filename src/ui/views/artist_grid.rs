@@ -695,13 +695,15 @@ impl Filterable<Artist> for ArtistGridView {
     ///
     /// * `visible_ids` - Set of artist IDs that should be visible
     fn set_visibility(&self, visible_ids: &HashSet<i64>) {
-        let _freeze_guard = self.flow_box.freeze_notify();
+        let freeze_guard = self.flow_box.freeze_notify();
 
         let cards = self.artist_cards_ref.borrow();
         for card in cards.iter() {
             let card_visible = visible_ids.contains(&card.artist_id);
             card.widget.set_visible(card_visible);
         }
+
+        drop(freeze_guard);
     }
 }
 
@@ -998,7 +1000,7 @@ impl ArtistCard {
     fn setup_motion_controller(child: &FlowBoxChild, selection_checkbox: &CheckButton) {
         let motion_controller = EventControllerMotion::new();
         let checkbox_clone = selection_checkbox.clone();
-        motion_controller.connect_enter(move |_controller, _x, _y| {
+        motion_controller.connect_enter(move |_, _, _| {
             checkbox_clone.set_can_target(true);
             checkbox_clone.set_visible(true);
         });
@@ -1027,7 +1029,7 @@ impl ArtistCard {
             let callback_for_click = Rc::clone(&callback);
             let callback_for_activate = Rc::clone(&callback);
 
-            click_controller.connect_released(move |_gesture, n_press, _x, _y| {
+            click_controller.connect_released(move |_, n_press, _, _| {
                 if n_press == 2 {
                     callback_for_click();
                 }

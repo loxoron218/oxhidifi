@@ -144,19 +144,20 @@ async fn create_test_database() -> Result<(LibraryDatabase, TempDir)> {
 
 #[tokio::test]
 async fn search_tracks_empty_database() -> Result<()> {
-    let (db, _temp_dir) = create_test_database().await?;
+    let (db, temp_dir) = create_test_database().await?;
 
     let results = db.search_tracks("test").await?;
     if !results.is_empty() {
         bail!("Expected empty results for empty database");
     }
 
+    drop(temp_dir);
     Ok(())
 }
 
 #[tokio::test]
 async fn search_tracks_with_data() -> Result<()> {
-    let (db, _temp_dir) = create_test_database().await?;
+    let (db, temp_dir) = create_test_database().await?;
 
     query("INSERT INTO artists (id, name) VALUES (1, 'Test Artist')")
         .execute(db.pool())
@@ -220,12 +221,13 @@ async fn search_tracks_with_data() -> Result<()> {
         bail!("Expected no results for nonexistent query");
     }
 
+    drop(temp_dir);
     Ok(())
 }
 
 #[tokio::test]
 async fn search_tracks_case_insensitive() -> Result<()> {
-    let (db, _temp_dir) = create_test_database().await?;
+    let (db, temp_dir) = create_test_database().await?;
 
     query("INSERT INTO artists (id, name) VALUES (1, 'Artist')")
         .execute(db.pool())
@@ -258,24 +260,26 @@ async fn search_tracks_case_insensitive() -> Result<()> {
         bail!("Expected 1 result for 'LoWeR', got {}", results.len());
     }
 
+    drop(temp_dir);
     Ok(())
 }
 
 #[tokio::test]
 async fn search_albums_empty_database() -> Result<()> {
-    let (db, _temp_dir) = create_test_database().await?;
+    let (db, temp_dir) = create_test_database().await?;
 
     let results = db.search_albums("test").await?;
     if !results.is_empty() {
         bail!("Expected empty results for empty database");
     }
 
+    drop(temp_dir);
     Ok(())
 }
 
 #[tokio::test]
 async fn search_albums_with_data() -> Result<()> {
-    let (db, _temp_dir) = create_test_database().await?;
+    let (db, temp_dir) = create_test_database().await?;
 
     query("INSERT INTO artists (id, name) VALUES (1, 'Test Artist')")
         .execute(db.pool())
@@ -316,24 +320,26 @@ async fn search_albums_with_data() -> Result<()> {
         bail!("Expected no results for nonexistent query");
     }
 
+    drop(temp_dir);
     Ok(())
 }
 
 #[tokio::test]
 async fn search_artists_empty_database() -> Result<()> {
-    let (db, _temp_dir) = create_test_database().await?;
+    let (db, temp_dir) = create_test_database().await?;
 
     let results = db.search_artists("test").await?;
     if !results.is_empty() {
         bail!("Expected empty results for empty database");
     }
 
+    drop(temp_dir);
     Ok(())
 }
 
 #[tokio::test]
 async fn search_artists_with_data() -> Result<()> {
-    let (db, _temp_dir) = create_test_database().await?;
+    let (db, temp_dir) = create_test_database().await?;
 
     query("INSERT INTO artists (id, name) VALUES (1, 'Jazz Master')")
         .execute(db.pool())
@@ -382,12 +388,13 @@ async fn search_artists_with_data() -> Result<()> {
         bail!("Expected no results for nonexistent query");
     }
 
+    drop(temp_dir);
     Ok(())
 }
 
 #[tokio::test]
 async fn search_with_special_characters() -> Result<()> {
-    let (db, _temp_dir) = create_test_database().await?;
+    let (db, temp_dir) = create_test_database().await?;
 
     query("INSERT INTO artists (id, name) VALUES (1, 'Artist%100')")
         .execute(db.pool())
@@ -420,5 +427,6 @@ async fn search_with_special_characters() -> Result<()> {
         bail!("Expected 1 track matching '100', got {}", results.len());
     }
 
+    drop(temp_dir);
     Ok(())
 }

@@ -145,8 +145,6 @@ pub struct HeaderBar {
     pub zoom_in_button: Button,
     /// Zoom popover container.
     pub zoom_popover: Popover,
-    /// Subscription handle for state changes (to ensure proper cleanup)
-    _subscription_handle: JoinHandle<()>,
     /// Debounce timer handle for search entry.
     search_debounce_handle: Arc<Mutex<Option<SourceId>>>,
     /// Timer handle for zoom button sensitivity updates.
@@ -175,6 +173,8 @@ pub struct HeaderBar {
     pub merged_menu_selection_counter: Label,
     /// Sort list box in merged menu for showing sort options on small screens.
     pub merged_menu_sort_box: Box,
+    /// Subscription handle for view options changes.
+    subscription_handle: JoinHandle<()>,
 }
 
 impl HeaderBar {
@@ -283,7 +283,6 @@ impl HeaderBar {
             search_debounce_handle: debounce_handle,
             zoom_timer_handle,
             clearing_search,
-            _subscription_handle: subscription_handle,
             is_adaptive,
             bulk_action_button,
             bulk_action_popover,
@@ -295,6 +294,7 @@ impl HeaderBar {
             merged_menu_selection_toggle,
             merged_menu_selection_counter,
             merged_menu_sort_box,
+            subscription_handle,
         }
     }
 
@@ -1822,6 +1822,7 @@ impl Drop for HeaderBar {
         if let Some(timer_id) = self.search_debounce_handle.lock().take() {
             let () = timer_id.remove();
         }
+        self.subscription_handle.abort();
     }
 }
 
@@ -1913,16 +1914,19 @@ impl HeaderBar {
     }
 
     /// Returns whether the header bar is in adaptive mode.
+    #[must_use]
     pub fn is_adaptive(&self) -> bool {
         self.is_adaptive.load(SeqCst)
     }
 
     /// Gets the search bar widget for placement below the header bar.
+    #[must_use]
     pub fn get_search_bar(&self) -> &SearchBar {
         &self.search_bar
     }
 
     /// Returns whether the search entry (or its internal entry child) has keyboard focus.
+    #[must_use]
     pub fn search_entry_has_focus(&self) -> bool {
         if let Some(root) = self.search_entry.root()
             && let Some(focused) = root.focus()

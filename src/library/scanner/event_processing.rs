@@ -7,7 +7,6 @@ use std::{
 };
 
 use {
-    parking_lot::RwLock,
     sqlx::{Sqlite, Transaction, query, query_scalar},
     tracing::{debug, warn},
 };
@@ -18,7 +17,6 @@ use crate::{
         constants::{DEFAULT_BIT_DEPTH, DEFAULT_SAMPLE_RATE},
         metadata::{TagReader, TrackMetadata},
     },
-    config::settings::UserSettings,
     error::{domain::LibraryError, numeric_conversion::safe_u64_to_i64},
     library::{
         database::{LibraryDatabase, escape_like_pattern},
@@ -57,7 +55,6 @@ const MAX_FILE_SIZE_BYTES: u64 = 100 * 1024 * 1024 * 1024;
 pub async fn handle_files_changed(
     paths: Vec<PathBuf>,
     database: &LibraryDatabase,
-    _settings: &RwLock<UserSettings>,
     dr_parser: Option<&Arc<DrParser>>,
 ) -> Result<(), LibraryError> {
     // Separate audio files from text files
@@ -322,7 +319,6 @@ pub async fn handle_files_removed(
 pub async fn handle_files_renamed(
     paths: Vec<(PathBuf, PathBuf)>,
     database: &LibraryDatabase,
-    settings: &RwLock<UserSettings>,
     dr_parser: Option<&Arc<DrParser>>,
 ) -> Result<(), LibraryError> {
     // Handle renames as remove + add
@@ -330,7 +326,7 @@ pub async fn handle_files_renamed(
     let added_paths: Vec<PathBuf> = paths.iter().map(|(_, to)| to.clone()).collect();
 
     handle_files_removed(removed_paths, database, dr_parser).await?;
-    handle_files_changed(added_paths, database, settings, dr_parser).await?;
+    handle_files_changed(added_paths, database, dr_parser).await?;
 
     Ok(())
 }
@@ -745,7 +741,7 @@ async fn update_track_in_transaction(
 /// An `Option<String>` containing the artwork file path if found.
 fn extract_album_artwork_path(album_dir: &Path, audio_files: &[PathBuf]) -> Option<String> {
     if let Some(first_file) = audio_files.first()
-        && let Ok((data, _mime_type)) = extract_artwork(first_file)
+        && let Ok((data, _)) = extract_artwork(first_file)
     {
         let artwork_path = album_dir.join("folder.jpg");
         if save_embedded_artwork(&data, &artwork_path).is_ok() {

@@ -37,7 +37,7 @@ pub fn connect_seek_handler(
     let pending_seek_position = Arc::clone(&state.pending_seek_position);
     let pending_seek_sequence = Arc::clone(&state.pending_seek_sequence);
 
-    progress_scale.connect_change_value(move |_scale, _scroll_type, value: f64| {
+    progress_scale.connect_change_value(move |_, _, value: f64| {
         let is_seeking = Arc::clone(&is_seeking);
         let audio_engine = Arc::clone(&audio_engine);
         let track_duration_ms = Arc::clone(&track_duration_ms);

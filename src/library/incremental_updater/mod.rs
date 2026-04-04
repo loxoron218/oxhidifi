@@ -10,13 +10,11 @@ use std::sync::Arc;
 
 use {
     async_channel::Receiver,
-    parking_lot::RwLock,
     tokio::{spawn, task::JoinHandle},
     tracing::{debug, error, warn},
 };
 
 use crate::{
-    config::settings::UserSettings,
     error::domain::LibraryError,
     library::{
         database::LibraryDatabase, dr_parser::DrParser, file_watcher::events::DebouncedEvent,
@@ -33,12 +31,8 @@ pub struct IncrementalUpdater {
     database: Arc<LibraryDatabase>,
     /// DR parser (optional).
     dr_parser: Option<Arc<DrParser>>,
-    /// User settings.
-    settings: Arc<parking_lot::RwLock<UserSettings>>,
     /// Configuration.
     config: IncrementalUpdaterConfig,
-    /// Task handles for background operations.
-    _tasks: Vec<JoinHandle<()>>,
 }
 
 impl IncrementalUpdater {
@@ -59,7 +53,6 @@ impl IncrementalUpdater {
     /// Returns `LibraryError` if initialization fails.
     pub fn new(
         database: Arc<LibraryDatabase>,
-        settings: Arc<RwLock<UserSettings>>,
         config: Option<IncrementalUpdaterConfig>,
     ) -> Result<Self, LibraryError> {
         let config = config.unwrap_or_default();
@@ -77,14 +70,10 @@ impl IncrementalUpdater {
             None
         };
 
-        let tasks = Vec::new();
-
         Ok(Self {
             database,
             dr_parser,
-            settings,
             config,
-            _tasks: tasks,
         })
     }
 
@@ -101,11 +90,10 @@ impl IncrementalUpdater {
     pub fn start_processing(&self, receiver: Receiver<DebouncedEvent>) -> JoinHandle<()> {
         let database = Arc::clone(&self.database);
         let dr_parser = self.dr_parser.clone();
-        let settings = Arc::clone(&self.settings);
         let config = self.config.clone();
 
         spawn(async move {
-            Self::process_events_loop(receiver, database, dr_parser, settings, config).await;
+            Self::process_events_loop(receiver, database, dr_parser, config).await;
         })
     }
 
@@ -114,7 +102,6 @@ impl IncrementalUpdater {
         receiver: Receiver<DebouncedEvent>,
         database: Arc<LibraryDatabase>,
         dr_parser: Option<Arc<DrParser>>,
-        settings: Arc<parking_lot::RwLock<UserSettings>>,
         config: IncrementalUpdaterConfig,
     ) {
         while let Ok(event) = receiver.recv().await {
@@ -125,7 +112,6 @@ impl IncrementalUpdater {
                         paths,
                         &database,
                         dr_parser.as_ref(),
-                        &settings,
                         &config,
                     )
                     .await
@@ -147,7 +133,6 @@ impl IncrementalUpdater {
                         paths,
                         &database,
                         dr_parser.as_ref(),
-                        &settings,
                         &config,
                     )
                     .await

@@ -1105,13 +1105,15 @@ impl Filterable<Album> for AlbumGridView {
     ///
     /// * `visible_ids` - Set of album IDs that should be visible
     fn set_visibility(&self, visible_ids: &HashSet<i64>) {
-        let _freeze_guard = self.flow_box.freeze_notify();
+        let freeze_guard = self.flow_box.freeze_notify();
 
         let cards = self.album_cards.borrow();
         for card in cards.iter() {
             let card_visible = visible_ids.contains(&card.album_id);
             card.widget.set_visible(card_visible);
         }
+
+        drop(freeze_guard);
     }
 }
 
@@ -1143,7 +1145,7 @@ impl AlbumGridView {
         // Apply sort to current albums and refresh display
         self.apply_sort();
 
-        let _freeze_guard = self.flow_box.freeze_notify();
+        let freeze_guard = self.flow_box.freeze_notify();
 
         let mut album_cards = self.album_cards.borrow_mut();
 
@@ -1171,6 +1173,8 @@ impl AlbumGridView {
         for card in album_cards.iter() {
             self.flow_box.insert(&card.widget, -1);
         }
+
+        drop(freeze_guard);
     }
 
     /// Applies the current sort criteria to the albums vector.

@@ -720,14 +720,12 @@ impl AudioEngine {
         if let Some(pos) = initial_position_ms {
             decoder.seek(pos)?;
         }
-        let signal_spec = decoder.signal_spec;
 
         // Create audio consumer
         let (consumer, target_output_config) = AudioConsumer::new(
             output,
             consumer,
             &track_info.format,
-            &signal_spec,
             Arc::clone(&self.current_position),
         )?;
 
@@ -742,7 +740,7 @@ impl AudioEngine {
         let decoder_handle = spawn(move || producer.run());
 
         // Start audio stream
-        let (stream, resampling_consumer) = consumer.run(&track_info.format, &signal_spec)?;
+        let (stream, resampling_consumer) = consumer.run(&track_info.format)?;
 
         // Store stream handle
         *self.stream_handle.write() = Some(StreamHandle {
@@ -840,8 +838,6 @@ impl AudioEngine {
             // Update current position
             self.current_position.store(position_ms, SeqCst);
 
-            let signal_spec = decoder.signal_spec;
-
             let config_for_output = self.output_config.read().clone();
 
             // Recreate the playback stream
@@ -856,7 +852,6 @@ impl AudioEngine {
                 output,
                 consumer,
                 &track_info.format,
-                &signal_spec,
                 Arc::clone(&self.current_position),
             )?;
 
@@ -868,7 +863,7 @@ impl AudioEngine {
 
             let decoder_handle = spawn(move || producer.run());
 
-            let (stream, resampling_consumer) = consumer.run(&track_info.format, &signal_spec)?;
+            let (stream, resampling_consumer) = consumer.run(&track_info.format)?;
 
             if !always_playing {
                 stream.pause().map_err(|e| AudioError::InvalidOperation {

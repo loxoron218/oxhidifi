@@ -140,6 +140,6 @@ mod tests {
     #[test]
     fn prebuffer_clone() {
         let prebuffer = Prebuffer::new();
-        let _cloned = prebuffer;
+        drop(prebuffer);
     }
 }

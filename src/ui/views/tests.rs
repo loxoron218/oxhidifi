@@ -47,49 +47,61 @@ mod view_integration_tests {
         let app_state = AppState::new(engine_weak, None, Arc::new(RwLock::new(settings_manager)));
 
         // Test album grid view creation
-        let _album_grid = AlbumGridView::builder()
-            .app_state(Arc::new(app_state.clone()))
-            .albums(Vec::new())
-            .show_dr_badges(true)
-            .compact(false)
-            .build();
+        drop(
+            AlbumGridView::builder()
+                .app_state(Arc::new(app_state.clone()))
+                .albums(Vec::new())
+                .show_dr_badges(true)
+                .compact(false)
+                .build(),
+        );
 
         // Test artist grid view creation
-        let _artist_grid = ArtistGridView::builder()
-            .app_state(Arc::new(app_state.clone()))
-            .artists(Vec::new())
-            .compact(false)
-            .build();
+        drop(
+            ArtistGridView::builder()
+                .app_state(Arc::new(app_state.clone()))
+                .artists(Vec::new())
+                .compact(false)
+                .build(),
+        );
 
         // Test list view creation for albums
-        let _album_list = ColumnListView::builder()
-            .app_state(Arc::new(app_state.clone()))
-            .view_type(Albums)
-            .compact(false)
-            .build();
+        drop(
+            ColumnListView::builder()
+                .app_state(Arc::new(app_state.clone()))
+                .view_type(Albums)
+                .compact(false)
+                .build(),
+        );
 
         // Test list view creation for artists
-        let _artist_list = ColumnListView::builder()
-            .app_state(Arc::new(app_state.clone()))
-            .view_type(Artists)
-            .compact(false)
-            .build();
+        drop(
+            ColumnListView::builder()
+                .app_state(Arc::new(app_state.clone()))
+                .view_type(Artists)
+                .compact(false)
+                .build(),
+        );
 
         // Test detail view creation for album
         let album = Album::default();
-        let _album_detail = DetailView::builder()
-            .app_state(Arc::new(app_state.clone()))
-            .detail_type(Some(DetailTypeAlbum(album)))
-            .compact(false)
-            .build();
+        drop(
+            DetailView::builder()
+                .app_state(Arc::new(app_state.clone()))
+                .detail_type(Some(DetailTypeAlbum(album)))
+                .compact(false)
+                .build(),
+        );
 
         // Test detail view creation for artist
         let artist = Artist::default();
-        let _artist_detail = DetailView::builder()
-            .app_state(Arc::new(app_state))
-            .detail_type(Some(DetailTypeArtist(artist)))
-            .compact(false)
-            .build();
+        drop(
+            DetailView::builder()
+                .app_state(Arc::new(app_state))
+                .detail_type(Some(DetailTypeArtist(artist)))
+                .compact(false)
+                .build(),
+        );
         Ok(())
     }
 
@@ -154,7 +166,7 @@ mod view_integration_tests {
 
         // Test that views support keyboard navigation
         let app_state_arc = Arc::new(app_state.clone());
-        let _album_grid = AlbumGridView::new(
+        drop(AlbumGridView::new(
             Some(&app_state_arc),
             None,
             None,
@@ -162,7 +174,7 @@ mod view_integration_tests {
             Vec::new(),
             true,
             false,
-        );
+        ));
 
         let artist_grid =
             ArtistGridView::new(Some(&Arc::new(app_state.clone())), Vec::new(), false);

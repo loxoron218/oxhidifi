@@ -306,7 +306,6 @@ mod tests {
         write(&dr_file3, "Some other content")?;
 
         // Test file finding - should find all text files (no database needed)
-        let _extractor = DrExtractor::new()?;
         let files = DrExtractor::find_dr_files(album_dir)?;
 
         if files.len() != 3 {

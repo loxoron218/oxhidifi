@@ -8,6 +8,7 @@ use std::{cell::RefCell, fmt::Write, rc::Rc};
 use {
     libadwaita::{gtk::Label, prelude::WidgetExt},
     num_traits::cast::NumCast,
+    tracing::warn,
 };
 
 /// Escapes text for safe use in Pango markup.
@@ -61,11 +62,13 @@ pub fn highlight_query(text: &str, query: &str, accent_hex: &str) -> String {
         result.push_str(&escape_pango(before));
 
         let matched = &text[start..start + query_lower.len()];
-        let _ = write!(
+        if let Err(e) = write!(
             result,
             "<span background=\"{accent_hex}\" foreground=\"#ffffff\">{}</span>",
             escape_pango(matched)
-        );
+        ) {
+            warn!(error = %e, "Failed to write highlight markup");
+        }
 
         last_end = start + query_lower.len();
     }

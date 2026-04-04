@@ -163,7 +163,7 @@ pub fn filter_view_items(
 ///
 /// * `filter_model` - Filter model to apply filter to
 pub fn clear_view(filter_model: &FilterListModel) {
-    let filter = CustomFilter::new(|_: &Object| false);
+    let filter = CustomFilter::new(|_| false);
     filter_model.set_filter(Some(&filter));
 }
 

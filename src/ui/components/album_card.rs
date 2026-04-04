@@ -749,7 +749,7 @@ impl AlbumCard {
 
         let motion_controller = EventControllerMotion::new();
         let checkbox_clone = selection_checkbox.clone();
-        motion_controller.connect_enter(move |_controller, _x, _y| {
+        motion_controller.connect_enter(move |_, _, _| {
             checkbox_clone.set_can_target(true);
             checkbox_clone.set_visible(true);
         });
@@ -788,7 +788,7 @@ impl AlbumCard {
 
         // Clone for closures
         let card_callback_clone = on_card_clicked.clone();
-        click_controller.connect_released(move |_gesture, n_press, _x, _y| {
+        click_controller.connect_released(move |_, n_press, _, _| {
             // If we have a card callback, trigger it
             if n_press == 2
                 && let Some(callback) = &card_callback_clone
