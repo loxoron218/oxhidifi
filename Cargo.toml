@@ -1,53 +1,9 @@
 [package]
 edition = "2024"
-name = "oxhidifi"
+name = "oxhidifi-refactor"
 version = "0.1.0"
 
 [dependencies]
-# Audio
-# crossbeam = "0.8.4"
-audioadapter-buffers = "2.0.0"
-cpal = { version = "0.17.3", features = ["jack"] }
-lofty = "0.23.3"
-num-traits = "0.2.19"
-rtrb = "0.3.3"
-rubato = "1.0.1"
-symphonia = { version = "0.5.5", features = ["all"] }
-
-# Concurrency
-# dynosaur = "0.3.0"
-# rayon = "1.11.0"
-async-channel = "2.5.0"
-parking_lot = "0.12.5"
-tokio = { version = "1.50.0", features = ["macros", "rt-multi-thread"] }
-
-# Error handling
-anyhow = "1.0.102"
-thiserror = "2.0.18"
-tracing = "0.1.44"
-tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
-
-# General
-libadwaita = { version = "0.9.1", features = [
-  "gio_v2_80",
-  "gtk_v4_22",
-  "v1_9",
-] }
-notify = "8.2.0"
-nucleo-matcher = "0.3.1"
-regex = "1.12.3"
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.149"
-sqlx = { version = "0.8.6", features = ["runtime-tokio", "sqlite"] }
-
-[dev-dependencies]
-# Tests and bechmarking
-criterion = "0.8.2"
-tempfile = "3.27.0"
-
-[[bench]]
-harness = false
-name = "audio_producer"
 
 [lints.clippy]
 # missing_asserts_for_indexing = "deny"

@@ -3,6 +3,7 @@ comment_width = 100
 format_code_in_doc_comments = true
 format_strings = true
 imports_granularity = "One"
+reorder_impl_items = true
 style_edition = "2024"
 unstable_features = true
 wrap_comments = true
