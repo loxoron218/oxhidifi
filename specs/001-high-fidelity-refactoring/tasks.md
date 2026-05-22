@@ -129,7 +129,7 @@ description: "Task list for high-fidelity music player refactoring"
 
 - [ ] T037 [US4] Implement slide-in side player panel UI (artwork, track title, artist, play/pause/next/prev/seek/volume controls) in src/ui/player/panel.rs
 - [ ] T038 [US4] Wire panel to PlaybackState and PlaybackEvent stream in src/ui/player/mod.rs (update UI on TrackStarted, TrackProgress, Paused, Resumed, Stopped events)
-- [ ] T039 [US4] Implement responsive Leaflet/Breakpoint behavior for narrow windows (panel back button to hide, maximize content) in src/ui/player/panel.rs
+- [ ] T039 [US4] Implement responsive AdwOverlaySplitView/AdwBreakpoint behavior for narrow windows (panel back button to hide, maximize content) in src/ui/player/panel.rs
 - [ ] T040 [US4] Implement panel auto-show on playback start and auto-hide on queue empty/stop
 
 **Checkpoint**: Side panel slides in on play, shows live track state, library browsing unaffected, panel hides on stop
@@ -157,7 +157,7 @@ description: "Task list for high-fidelity music player refactoring"
 
 **Purpose**: Non-functional improvements across the entire application
 
-- [ ] T045 [P] Add keyboard navigation (Tab/arrows/Enter/Escape) and accessible labels (AccessibleProperty::Label) across all UI widgets per GNOME HIG
+- [ ] T045 [P] Add keyboard navigation (Tab/arrows/Enter/Escape), accessible labels (AccessibleProperty::Label), and tooltips (set_tooltip_text) across all UI widgets per GNOME HIG
 - [ ] T046 Implement performance metrics collector (playback latency, scan throughput, memory usage, UI response) with tracing in src/metrics/collector.rs
 - [ ] T047 Add structured tracing instrumentation (error/warn/info levels) across library scanner, playback engine, and UI subsystems
 - [ ] T048 [P] Add graceful error handling for edge cases per spec.md Edge Cases section (device disconnection, no device at startup, corrupt files, empty queue)
@@ -165,6 +165,10 @@ description: "Task list for high-fidelity music player refactoring"
 - [ ] T050 Validate with quickstart.md — build (debug + release), run, verify all user stories functional
 - [ ] T051 [P] Implement PreferencesDialog with library directory management (add/remove directories), audio device selection, and view preferences per plan.md
 - [ ] T052 Add load verification task: populate library with 10,000 synthetic tracks, measure scan throughput (<30s per SC-004) and UI response (<100ms per SC-005)
+- [ ] T053 [P] Implement adaptive/responsive main layout using AdwNavigationSplitView + AdwNavigationView + AdwBreakpoint per FR-013 (wide mode >800sp, narrow mode ≤800sp) in src/ui/window.rs
+- [ ] T054 [P] Implement artwork caching pipeline (extract thumbnail, cache to disk, fallback placeholder) in src/library/metadata.rs and src/library/mod.rs
+- [ ] T055 [P] Audit HIG compliance across all UI widgets: Toast for transient messages, 6px spacing scale, 200ms ease transitions, no hardcoded radii
+- [ ] T056 [P] Add multi-format end-to-end verification test fixture covering FLAC, MP3, AAC, Ogg Vorbis, Opus, WAV, and AIFF per FR-017
 
 ---
 
@@ -192,6 +196,7 @@ description: "Task list for high-fidelity music player refactoring"
 - Tasks marked [P] can run in parallel within the same phase
 - Non-[P] tasks within a phase must be sequential
 - Phase completes only when all its tasks are done
+- **Note**: US2's T025 (empty state) and T028 (watcher) have no dependency on US1 data and can be implemented in parallel with Phase 3, though the phase ordering is preserved for checkpoint clarity.
 
 ### Parallel Opportunities
 
@@ -204,7 +209,7 @@ description: "Task list for high-fidelity music player refactoring"
 | Phase 5: US3 | T032, T036b, T036c |
 | Phase 6: US4 | — (mostly sequential) |
 | Phase 7: US5 | T041, T042 |
-| Phase 8: Polish | T045, T048, T051 |
+| Phase 8: Polish | T045, T048, T051, T053, T054, T055, T056 |
 
 ---
 
