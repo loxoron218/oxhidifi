@@ -8,6 +8,16 @@
 
 **Input**: User description: "Build a high-fidelity refactoring of `/home/arch/Downloads/github/oxhidifi` that has better performance and improves on maintainability. An empty state page appears when nothing has been added to the library. Album/artist tabs, each with grid/column views can be toggled via buttons on the header bar. All albums/artists have detail pages and a side panel with the player slides from the left side when playback starts. Adaptive design should adapt to GTK4/Libadwaita modern and idiomatic standards. Audio pipeline should be gapless and bit-perfect, while resampling when needed"
 
+## Clarifications
+
+### Session 2026-05-22
+
+- Q: How should duplicate audio files be detected? → A: Layered strategy — primary dedup by file path, content hash (SHA-256) on path collision, metadata fingerprint (artist+album+title+track) as final fallback.
+- Q: How should the playback queue be populated and managed? → A: Auto-queue from current context (playing an album queues its tracks in order) with full manual reorder/add/remove support; queue state persisted across application restarts.
+- Q: How should the UI behave during library scanning? → A: Incremental non-blocking — UI stays responsive, items appear as discovered, scanning indicator in status bar.
+- Q: What level of observability should be built in? → A: Structured logging (`tracing` crate) plus performance metrics covering playback latency, scan throughput, memory usage, and UI response times.
+- Q: What level of accessibility support is targeted? → A: GNOME HIG baseline — keyboard navigation (Tab/arrows/Enter/Escape), accessible labels on all interactive widgets, focus indicators.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Browse and Play Music from Library (Priority: P1)
@@ -118,9 +128,10 @@ A user on an album detail page sees the full track listing, album metadata (year
 - **FR-002**: The system MUST extract and store metadata (title, artist, album, year, genre, track number, duration) from each audio file.
 - **FR-003**: The system MUST extract and store technical metadata (sample rate, bit depth, number of channels, codec, lossless status) from each audio file.
 - **FR-004**: The system MUST extract and display embedded album artwork from audio files.
-- **FR-005**: The system MUST detect and exclude duplicate files from appearing twice in the library.
+- **FR-005**: The system MUST detect and exclude duplicate files using a layered strategy: file path uniqueness as primary dedup, content hash (SHA-256) on path collision, and metadata fingerprint (artist+album+title+track) as final fallback.
 - **FR-006**: The system MUST gracefully handle files with missing or corrupt metadata, using sensible defaults (filename as title, "Unknown Artist", etc.).
 - **FR-007**: The system MUST automatically scan library directories for changes (additions, removals, updates) and reflect them without manual intervention.
+- **FR-007b**: Library scanning MUST operate incrementally and non-blocking — the UI remains responsive during scan, discovered items appear as they are indexed, and a scanning indicator is shown in the status bar.
 - **FR-008**: The system MUST present an informative empty state when no music library is configured or when the library contains no files.
 
 **Navigation and Views**
@@ -130,6 +141,7 @@ A user on an album detail page sees the full track listing, album metadata (year
 - **FR-011**: The system MUST provide a toggle control in the header bar to switch between grid and column views.
 - **FR-012**: Each album and artist MUST have a dedicated detail page showing full metadata and associated content (tracks for albums, albums for artists).
 - **FR-013**: The system MUST support adaptive/responsive layouts that adjust to different window sizes, following platform design conventions.
+- **FR-013b**: The system MUST support keyboard navigation (Tab, arrows, Enter, Escape) and provide accessible labels via `GtkAccessible` protocol on all interactive widgets.
 
 **Playback**
 
@@ -152,17 +164,22 @@ A user on an album detail page sees the full track listing, album metadata (year
 **Performance and Reliability**
 
 - **FR-026**: Library operations (browsing, searching, filtering) MUST remain responsive regardless of library size.
-- **FR-027**: The system MUST persist library and settings data across application restarts.
+- **FR-027**: The system MUST persist library, playback queue, and settings data across application restarts.
 - **FR-028**: The system MUST recover gracefully from audio device disconnection or configuration changes.
 - **FR-029**: The system MUST handle application startup even when no audio device is available, displaying appropriate messaging.
 
+**Observability**
+
+- **FR-030**: The system MUST emit structured logs using the `tracing` crate at minimum error, warn, and info levels across all subsystems (library scanning, playback engine, UI).
+- **FR-031**: The system MUST collect and expose performance metrics for playback latency (play initiation to first audio output), library scan throughput (files/second), memory usage, and UI response times to validate success criteria.
+
 ### Key Entities *(include if feature involves data)*
 
-- **Track**: Represents a single audio file. Attributes include title, track number, duration, file path, format, sample rate, bit depth, channels, codec, lossless flag, and a foreign key to its album.
+- **Track**: Represents a single audio file. Attributes include title, track number, duration, file path, content hash (SHA-256 for dedup), format, sample rate, bit depth, channels, codec, lossless flag, and a foreign key to its album.
 - **Album**: A collection of tracks grouped by release. Attributes include title, artist, year, genre, artwork path, track count, format summary, and a foreign key to the artist.
 - **Artist**: A music artist or group. Attributes include name and a list of associated albums.
 - **Library Directory**: A user-configured filesystem path containing audio files to be cataloged.
-- **Playback Queue**: An ordered list of tracks awaiting or currently being played, supporting advance to next track and return to previous track.
+- **Playback Queue**: An ordered list of tracks awaiting or currently being played, supporting advance to next track and return to previous track. Auto-populated from current browsing context (album or artist). Supports manual reorder, add, and remove. Queue state is persisted across application restarts.
 - **User Settings**: Persisted user preferences including library directories, audio output configuration, view preferences, and volume level.
 
 ## Success Criteria *(mandatory)*
