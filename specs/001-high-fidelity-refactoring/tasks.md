@@ -22,12 +22,12 @@ description: "Task list for high-fidelity music player refactoring"
 
 **Purpose**: Project initialization, dependency declaration, tooling configuration
 
-- [ ] T001 Create Cargo.toml with all dependencies per plan.md (cpal, symphonia, rtrb, lofty, rubato, audioadapter-buffers, tokio, libadwaita/gtk4-rs, sqlx, serde/serde_json, notify, tracing/tracing-subscriber, crossbeam, rayon, parking-lot, thiserror, anyhow, criterion, tempfile)
-- [ ] T002 [P] Configure clippy (clippy.toml or .cargo/config.toml) with pedantic warnings and rustfmt config
-- [ ] T003 [P] Initialize tracing-subscriber in src/main.rs with structured logging (file + stderr)
-- [ ] T004 Create empty module structure with mod.rs re-exports per plan.md: src/library/, src/storage/, src/playback/, src/ui/, src/ui/library/, src/ui/detail/, src/ui/player/, src/metrics/
-- [ ] T004b [P] Create criterion benchmark harness in benches/ with baseline benchmarks for decoder PCM output, ring buffer throughput, and resampler latency
-- [ ] T004c [P] Set up test infrastructure: mock Storage backend, tempfile-based scanner fixtures, async test helpers in tests/common/
+- [X] T001 Create Cargo.toml with all dependencies per plan.md (cpal, symphonia, rtrb, lofty, rubato, audioadapter-buffers, tokio, libadwaita/gtk4-rs, sqlx, serde/serde_json, notify, tracing/tracing-subscriber, crossbeam, rayon, parking-lot, thiserror, anyhow, criterion, tempfile)
+- [X] T002 [P] Configure clippy (clippy.toml or .cargo/config.toml) with pedantic warnings and rustfmt config
+- [X] T003 [P] Initialize tracing-subscriber in src/main.rs with structured logging (file + stderr)
+- [X] T004 Create empty module structure with mod.rs re-exports per plan.md: src/library/, src/storage/, src/playback/, src/ui/, src/ui/library/, src/ui/detail/, src/ui/player/, src/metrics/
+- [X] T004b [P] Create criterion benchmark harness in benches/ with baseline benchmarks for decoder PCM output, ring buffer throughput, and resampler latency
+- [X] T004c [P] Set up test infrastructure: mock Storage backend, tempfile-based scanner fixtures, async test helpers in tests/common/
 
 **Checkpoint**: Cargo build succeeds, project structure mirrors plan.md
 

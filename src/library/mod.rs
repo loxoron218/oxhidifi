@@ -1,18 +1,6 @@
-//! Music library management system.
-//!
-//! This module provides the foundation for managing a music library,
-//! including database operations and data models.
+//! Library scanning, metadata extraction, deduplication, and file watching.
 
-#[cfg(test)]
-pub mod database_tests;
-#[cfg(test)]
-pub mod search_tests;
-
-pub mod connection;
-pub mod database;
-pub mod dr_parser;
-pub mod file_watcher;
-pub mod incremental_updater;
-pub mod models;
+pub mod dedup;
+pub mod metadata;
 pub mod scanner;
-pub mod search;
+pub mod watcher;

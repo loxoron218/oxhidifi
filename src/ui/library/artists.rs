@@ -1,0 +1,1 @@
+//! Artist grid/column view.

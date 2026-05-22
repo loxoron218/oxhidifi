@@ -1,0 +1,1 @@
+//! SQLite database implementation using sqlx for library catalog persistence.

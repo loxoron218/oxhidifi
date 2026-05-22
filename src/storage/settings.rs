@@ -1,0 +1,1 @@
+//! XDG-based user settings persistence using serde_json.

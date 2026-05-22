@@ -1,15 +1,9 @@
-//! GNOME HIG-compliant user interface built entirely with Libadwaita.
-//!
-//! This module provides the foundation for the Oxhidifi user interface,
-//! including the main application window, header bar, and player controls.
+//! Libadwaita UI components: window, header, library views, detail pages, player panel.
 
-#[cfg(test)]
-mod tests;
-
-pub mod application;
-pub mod components;
-pub mod formatting;
-pub mod header_bar;
-pub mod player_bar;
-pub mod preferences;
-pub mod views;
+pub mod detail;
+pub mod header;
+pub mod library;
+pub mod player;
+pub mod settings;
+pub mod status;
+pub mod window;
