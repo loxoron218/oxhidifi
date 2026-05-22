@@ -8,7 +8,7 @@ description: "Task list for high-fidelity music player refactoring"
 
 **Prerequisites**: plan.md, spec.md, research.md, data-model.md, contracts/
 
-**Checks**: The feature specification does not explicitly request unit test tasks, so no test tasks are generated. Each phase includes acceptance criteria as independent test verification.
+**Checks**: Tests required per Constitution Principles II & IV: unit tests at bottom of every source file, integration tests for contract boundaries, deterministic simulation for concurrency-sensitive audio logic, and criterion benchmarks for audio hot paths. Each phase lists test tasks alongside implementation tasks.
 
 **Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story.
 
@@ -26,6 +26,8 @@ description: "Task list for high-fidelity music player refactoring"
 - [ ] T002 [P] Configure clippy (clippy.toml or .cargo/config.toml) with pedantic warnings and rustfmt config
 - [ ] T003 [P] Initialize tracing-subscriber in src/main.rs with structured logging (file + stderr)
 - [ ] T004 Create empty module structure with mod.rs re-exports per plan.md: src/library/, src/storage/, src/playback/, src/ui/, src/ui/library/, src/ui/detail/, src/ui/player/, src/metrics/
+- [ ] T004b [P] Create criterion benchmark harness in benches/ with baseline benchmarks for decoder PCM output, ring buffer throughput, and resampler latency
+- [ ] T004c [P] Set up test infrastructure: mock Storage backend, tempfile-based scanner fixtures, async test helpers in tests/common/
 
 **Checkpoint**: Cargo build succeeds, project structure mirrors plan.md
 
@@ -43,6 +45,7 @@ description: "Task list for high-fidelity music player refactoring"
 - [ ] T008 [P] Implement `SettingsStore` with serde_json at XDG config path in src/storage/settings.rs per data-model.md UserSettings entity
 - [ ] T009 Define error types (PlaybackError, DecoderError, OutputError, ScanError, StorageError) using thiserror in src/playback/mod.rs and src/storage/mod.rs per contracts/playback.md
 - [ ] T010 Setup XDG base directory resolution (data_home, config_home, cache_home) utility in src/app.rs
+- [ ] T010b [P] Write integration tests for Storage trait + SqliteStorage using tempfile fixtures per Principle II; cover all CRUD paths, dedup queries, and queue persistence
 
 **Checkpoint**: Storage trait fully implemented, database migrations run, settings read/write works
 
@@ -70,6 +73,7 @@ description: "Task list for high-fidelity music player refactoring"
 - [ ] T022 [US1] Implement album grid view with cover art thumbnails in src/ui/library/albums.rs
 - [ ] T023 [US1] Wire play action from album grid click to PlaybackController in src/ui/library/albums.rs
 - [ ] T024 [US1] Wire scanner to storage and emit TrackDiscovered events for UI updates in src/library/scanner.rs
+- [ ] T024b [P] [US1] Write unit tests for scanner, metadata extraction engine, and dedup logic at bottom of each implementing source file per Principle II (red-green-refactor)
 
 **Checkpoint**: User can launch app, scan library dir, see albums, click to play, hear audio output
 
@@ -85,7 +89,7 @@ description: "Task list for high-fidelity music player refactoring"
 
 - [ ] T025 [P] [US2] Implement empty state page with guidance text and icon in src/ui/library/empty.rs
 - [ ] T026 [P] [US2] Implement artist grid/column view in src/ui/library/artists.rs
-- [ ] T027 [P] [US2] Implement grid/column toggle button logic in src/ui/header.rs (switch AlbumFlowBox between grid and list)
+- [ ] T027 [P] [US2] Implement grid/column toggle button logic in src/ui/header.rs (switch album view between grid and column layout)
 - [ ] T028 [P] [US2] Implement filesystem watcher with notify in src/library/watcher.rs (debounced events, incremental scan trigger)
 - [ ] T029 [US2] Implement status bar with scanning progress indicator in src/ui/status.rs
 - [ ] T030 [US2] Implement tab switching logic (Albums ↔ Artists) with view content swap in src/ui/window.rs
@@ -108,6 +112,8 @@ description: "Task list for high-fidelity music player refactoring"
 - [ ] T034 [US3] Integrate decoder pre-buffering in src/playback/decoder.rs (dual decoder state: active + preloaded next track)
 - [ ] T035 [US3] Implement sample rate reconfiguration on track transition in src/playback/engine.rs (detect sample rate change, reset resampler with new coefficients)
 - [ ] T036 [US3] Add bit-perfect output path in src/playback/output.rs (passthrough mode when device supports native sample rate/bit depth)
+- [ ] T036b [US3] Write deterministic simulation tests for gapless transition concurrent logic (pre-buffer race, decoder switch, ring buffer drain) per Principle II
+- [ ] T036c [US3] Add criterion benchmarks for resampler throughput and bit-perfect output path latency; verify no regression against Phase 1 baseline per Principle IV
 
 **Checkpoint**: Gapless playback across tracks at same and different sample rates, resampling kicks in transparently when device doesn't support native rate
 
@@ -157,6 +163,8 @@ description: "Task list for high-fidelity music player refactoring"
 - [ ] T048 [P] Add graceful error handling for edge cases per spec.md Edge Cases section (device disconnection, no device at startup, corrupt files, empty queue)
 - [ ] T049 Run `cargo clippy --fix --allow-dirty --all-targets -- -W clippy::pedantic && cargo fmt` and fix all warnings
 - [ ] T050 Validate with quickstart.md — build (debug + release), run, verify all user stories functional
+- [ ] T051 [P] Implement PreferencesDialog with library directory management (add/remove directories), audio device selection, and view preferences per plan.md
+- [ ] T052 Add load verification task: populate library with 10,000 synthetic tracks, measure scan throughput (<30s per SC-004) and UI response (<100ms per SC-005)
 
 ---
 
@@ -189,14 +197,14 @@ description: "Task list for high-fidelity music player refactoring"
 
 | Phase | Parallel Tasks |
 |-------|---------------|
-| Phase 1: Setup | T002, T003 |
-| Phase 2: Foundational | T008 |
-| Phase 3: US1 | T011, T012, T013 |
+| Phase 1: Setup | T002, T003, T004b, T004c |
+| Phase 2: Foundational | T008, T010b |
+| Phase 3: US1 | T011, T012, T013, T024b |
 | Phase 4: US2 | T025, T026, T027, T028 |
-| Phase 5: US3 | T032 |
+| Phase 5: US3 | T032, T036b, T036c |
 | Phase 6: US4 | — (mostly sequential) |
 | Phase 7: US5 | T041, T042 |
-| Phase 8: Polish | T045, T048 |
+| Phase 8: Polish | T045, T048, T051 |
 
 ---
 
