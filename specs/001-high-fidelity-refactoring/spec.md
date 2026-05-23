@@ -130,14 +130,13 @@ A user on an album detail page sees the full track listing, album metadata (year
 - **FR-004**: The system MUST extract and display embedded album artwork from audio files.
 - **FR-005**: The system MUST detect and exclude duplicate files using a layered strategy: file path uniqueness as primary dedup, content hash (SHA-256) on path collision, and metadata fingerprint (artist+album+title+track) as final fallback.
 - **FR-006**: The system MUST gracefully handle files with missing or corrupt metadata using the following fallback chain: filename stem as title, "Unknown Artist" as artist, "Unknown Album" as album, 0 as year, "Unknown Genre" as genre, null as track/disc number, 0 as duration (files with 0 duration MUST be skipped as corrupt).
-- **FR-007**: The system MUST automatically scan library directories for changes (additions, removals, updates) and reflect them without manual intervention.
-- **FR-007b**: Library scanning MUST operate incrementally and non-blocking — the UI remains responsive during scan, discovered items appear as they are indexed, and a scanning indicator is shown in the status bar.
+- **FR-007**: The system MUST automatically scan library directories for changes (additions, removals, updates) and reflect them without manual intervention. Scanning MUST operate incrementally and non-blocking — the UI remains responsive during scan, discovered items appear as they are indexed, and a scanning indicator is shown in the status bar.
 - **FR-008**: The system MUST present an informative empty state when no music library is configured or when the library contains no files.
 
 **Navigation and Views**
 
 - **FR-009**: The system MUST provide separate browsable views for Albums and Artists, switchable via tab buttons in the header bar.
-- **FR-010**: The system MUST support at least two view modes per tab: a grid layout and a column/list layout.
+- **FR-010**: The system MUST support at least two view modes per tab: a grid layout and a column layout.
 - **FR-011**: The system MUST provide a toggle control in the header bar to switch between grid and column views.
 - **FR-012**: Each album and artist MUST have a dedicated detail page showing full metadata and associated content (tracks for albums, albums for artists).
 - **FR-013**: The system MUST support adaptive/responsive layouts using `AdwBreakpoint` with the modern widget stack (`AdwNavigationSplitView` for sidebar/content, `AdwNavigationView` for page stacks, `AdwOverlaySplitView` for player panel, `AdwViewSwitcher` + `AdwViewSwitcherBar` for tab navigation) that adjust to different window sizes, with at minimum: a wide mode (>800px) showing side panel and library side-by-side, and a narrow mode (≤800px) stacking them with back-navigation.
@@ -192,14 +191,13 @@ A user on an album detail page sees the full track listing, album metadata (year
 ### Measurable Outcomes
 
 - **SC-001**: Users can browse their full library (albums and artists), start playback of any track, and hear audio output within 3 seconds of initiating play.
-- **SC-002**: Gapless playback is verified by playing a sequence of tracks — there is no audible silence or gap between any two consecutive tracks.
+- **SC-002**: Gapless playback is verified by playing a sequence of tracks — there is no audible silence or gap between any two consecutive tracks, including transitions between tracks with different sample rates (e.g., 44.1 kHz to 96 kHz) which MUST be seamless without requiring user intervention.
 - **SC-003**: Bit-perfect playback is verified by comparing the digital audio output against the source file — the bit stream matches exactly when the device supports the file's native format.
 - **SC-004**: A library of 10,000 tracks loads and becomes browsable within 30 seconds on reference hardware (Intel i5-1135G7, 16 GB RAM, NVMe SSD).
 - **SC-005**: Users can navigate between Albums and Artists views, toggle between grid and column layouts, and access detail pages without perceivable UI lag (response under 100ms).
 - **SC-006**: The empty state is shown on first launch when no library is configured; the library view populates within 10 seconds of configuring a directory with 1,000 audio files.
 - **SC-007**: The side player panel appears within 500ms of playback starting and display correct track metadata and artwork.
-- **SC-008**: Transitions between tracks with different sample rates (e.g., 44.1 kHz to 96 kHz) are seamless and gapless without requiring user intervention.
-- **SC-009**: Resampled audio MUST pass a blind ABX test (p < 0.05 threshold) comparing resampled output against the original source at matched sample rate, with a minimum of 10 trials per test.
+- **SC-008**: Resampled audio MUST pass a blind ABX test (p < 0.05 threshold) comparing resampled output against the original source at matched sample rate, with a minimum of 10 trials per test.
 
 ## Assumptions
 

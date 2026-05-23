@@ -1,8 +1,8 @@
 <!--
   Sync Impact Report
   ==================
-  Version change: N/A → 1.0.0 (initial constitution)
-  Modified principles: N/A (all new)
+  Version change: 1.0.0 → 1.1.0 (amended Principle III)
+  Modified principles: III (Leaflet → NavigationSplitView/OverlaySplitView stack)
   Added sections:
     - I. Code Quality (NON-NEGOTIABLE)
     - II. Testing Standards
@@ -58,7 +58,7 @@ Accessibility is mandatory: every widget MUST set an accessible label via
 `accessible_update_property(AccessibleProperty::Label, value)`, enable keyboard navigation
 via `set_can_focus(true)`, and provide tooltip text via `set_tooltip_text()`. User
 feedback MUST use `Toast` for transient messages and `suggested-action`/`destructive-action`
-CSS classes for emphasis. Responsive layouts MUST use `Leaflet` and `Breakpoint`. Motion
+CSS classes for emphasis. Responsive layouts MUST use `AdwNavigationSplitView` for sidebar/content navigation, `AdwOverlaySplitView` for overlay panels (e.g., player panel), and `AdwBreakpoint` for responsive breakpoint sizing (≥800px wide mode, <800px narrow mode). `AdwNavigationView` MUST be used for push/pop page stacks, and `AdwViewSwitcher`/`AdwViewSwitcherBar` for tab navigation. `AdwLeaflet` is deprecated as of Libadwaita 1.4 and MUST NOT be used. Motion
 animations MUST use 200ms ease transitions. Spacing MUST follow the 6px scale
 (6/12/18/24/30px). Border radii MUST NEVER be hardcoded. Rationale: GNOME HIG compliance
 ensures the application feels native, accessible, and professional across all desktop
@@ -149,4 +149,4 @@ principles herein. Any violation of a NON-NEGOTIABLE principle MUST be accompani
 a documented justification of complexity accepted by the team. Use `AGENTS.md` for
 runtime agent development guidance.
 
-**Version**: 1.0.0 | **Ratified**: TODO(RATIFICATION_DATE): Original adoption date unknown | **Last Amended**: 2026-05-21
+**Version**: 1.1.0 | **Ratified**: TODO(RATIFICATION_DATE): Original adoption date unknown | **Last Amended**: 2026-05-23

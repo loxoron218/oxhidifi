@@ -20,6 +20,7 @@ pub trait PlaybackController: Send + 'static {
     fn previous_track(&self) -> Result<()>;
     fn seek(&self, position: Duration) -> Result<()>;
     fn set_volume(&self, volume: f64) -> Result<()>;
+    fn set_muted(&self, muted: bool) -> Result<()>;
 }
 ```
 
@@ -32,6 +33,7 @@ pub struct PlaybackState {
     pub position: Duration,
     pub duration: Duration,
     pub volume: f64,
+    pub is_muted: bool,
     pub is_playing: bool,
     pub queue: Vec<Track>,
 }
@@ -49,6 +51,8 @@ pub enum PlaybackEvent {
     Resumed,
     Stopped,
     VolumeChanged { volume: f64 },
+    Muted,
+    Unmuted,
     Seeked { position: Duration },
     QueueChanged { queue: Vec<Track> },
     DeviceLost { error: String },

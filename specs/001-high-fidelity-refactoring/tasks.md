@@ -74,6 +74,8 @@ description: "Task list for high-fidelity music player refactoring"
 - [ ] T023 [US1] Wire play action from album grid click to PlaybackController in src/ui/library/albums.rs
 - [ ] T024 [US1] Wire scanner to storage and emit TrackDiscovered events for UI updates in src/library/scanner.rs
 - [ ] T024b [P] [US1] Write unit tests for scanner, metadata extraction engine, and dedup logic at bottom of each implementing source file per Principle II (red-green-refactor)
+- [ ] T024c [P] [US1] Implement adaptive/responsive main window layout using AdwNavigationSplitView + AdwNavigationView + AdwBreakpoint (wide mode >800sp, narrow mode ≤800sp) per FR-013 in src/ui/window.rs — build with the adaptive stack from the start
+- [ ] T024d [P] [US1] Apply initial keyboard navigation (Tab/arrows/Enter/Escape), accessible labels (AccessibleProperty::Label), and tooltips (set_tooltip_text) to Phase 3 UI widgets (window, header, album grid) per FR-013b
 
 **Checkpoint**: User can launch app, scan library dir, see albums, click to play, hear audio output
 
@@ -114,6 +116,8 @@ description: "Task list for high-fidelity music player refactoring"
 - [ ] T036 [US3] Add bit-perfect output path in src/playback/output.rs (passthrough mode when device supports native sample rate/bit depth)
 - [ ] T036b [US3] Write deterministic simulation tests for gapless transition concurrent logic (pre-buffer race, decoder switch, ring buffer drain) per Principle II
 - [ ] T036c [US3] Add criterion benchmarks for resampler throughput and bit-perfect output path latency; verify no regression against Phase 1 baseline per Principle IV
+- [ ] T036d [US3] Implement ABX perceptual quality validation harness for resampled output per SC-008 (minimum 10 trials, p < 0.05 against original at matched sample rate); document manual QA procedure for SNR > 120 dB verification
+- [ ] T036e [US3] Verify high-resolution audio support (sample rates up to 192 kHz, bit depth up to 24-bit) per FR-018; add test fixtures with 96 kHz and 192 kHz files
 
 **Checkpoint**: Gapless playback across tracks at same and different sample rates, resampling kicks in transparently when device doesn't support native rate
 
@@ -127,10 +131,11 @@ description: "Task list for high-fidelity music player refactoring"
 
 ### Implementation for User Story 4
 
-- [ ] T037 [US4] Implement slide-in side player panel UI (artwork, track title, artist, play/pause/next/prev/seek/volume controls) in src/ui/player/panel.rs
+- [ ] T037 [US4] Implement slide-in side player panel UI (artwork, track title, artist, play/pause/next/prev/seek/volume/mute controls) in src/ui/player/panel.rs
 - [ ] T038 [US4] Wire panel to PlaybackState and PlaybackEvent stream in src/ui/player/mod.rs (update UI on TrackStarted, TrackProgress, Paused, Resumed, Stopped events)
 - [ ] T039 [US4] Implement responsive AdwOverlaySplitView/AdwBreakpoint behavior for narrow windows (panel back button to hide, maximize content) in src/ui/player/panel.rs
 - [ ] T040 [US4] Implement panel auto-show on playback start and auto-hide on queue empty/stop
+- [ ] T040b [US4] Implement visible queue view UI (track list with current/upcoming sections, drag-and-drop reorder via GtkDragSource/GtkDropTarget, remove button per entry) in src/ui/player/queue.rs per FR-022
 
 **Checkpoint**: Side panel slides in on play, shows live track state, library browsing unaffected, panel hides on stop
 
@@ -157,15 +162,15 @@ description: "Task list for high-fidelity music player refactoring"
 
 **Purpose**: Non-functional improvements across the entire application
 
-- [ ] T045 [P] Add keyboard navigation (Tab/arrows/Enter/Escape), accessible labels (AccessibleProperty::Label), and tooltips (set_tooltip_text) across all UI widgets per GNOME HIG
-- [ ] T046 Implement performance metrics collector (playback latency, scan throughput, memory usage, UI response) with tracing in src/metrics/collector.rs
+- [ ] T045 [P] Audit and complete keyboard navigation (Tab/arrows/Enter/Escape), accessible labels (AccessibleProperty::Label), and tooltips (set_tooltip_text) across Phase 4-7 UI widgets (artist view, status bar, detail pages, player panel, queue view) per FR-013b; core accessibility already established in T024d
+- [ ] T046 Implement performance metrics collector with tracing in src/metrics/collector.rs — collect playback latency (target <3s per SC-001), scan throughput (target <30s for 10k tracks per SC-004), UI response (target <100ms per SC-005), side panel reveal time (target <500ms per SC-007), and steady-state memory usage (target <200MB); emit structured metric events for each threshold gate
 - [ ] T047 Add structured tracing instrumentation (error/warn/info levels) across library scanner, playback engine, and UI subsystems
 - [ ] T048 [P] Add graceful error handling for edge cases per spec.md Edge Cases section (device disconnection, no device at startup, corrupt files, empty queue)
 - [ ] T049 Run `cargo clippy --fix --allow-dirty --all-targets -- -W clippy::pedantic && cargo fmt` and fix all warnings
 - [ ] T050 Validate with quickstart.md — build (debug + release), run, verify all user stories functional
 - [ ] T051 [P] Implement PreferencesDialog with library directory management (add/remove directories), audio device selection, and view preferences per plan.md
 - [ ] T052 Add load verification task: populate library with 10,000 synthetic tracks, measure scan throughput (<30s per SC-004) and UI response (<100ms per SC-005)
-- [ ] T053 [P] Implement adaptive/responsive main layout using AdwNavigationSplitView + AdwNavigationView + AdwBreakpoint per FR-013 (wide mode >800sp, narrow mode ≤800sp) in src/ui/window.rs
+- [ ] T053 [P] Audit and polish adaptive/responsive main layout (initially built in T024c) — verify AdwBreakpoint thresholds, test narrow/wide transitions, ensure all pages handle both modes correctly per FR-013
 - [ ] T054 [P] Implement artwork caching pipeline (extract thumbnail, cache to disk, fallback placeholder) in src/library/metadata.rs and src/library/mod.rs
 - [ ] T055 [P] Audit HIG compliance across all UI widgets: Toast for transient messages, 6px spacing scale, 200ms ease transitions, no hardcoded radii
 - [ ] T056 [P] Add multi-format end-to-end verification test fixture covering FLAC, MP3, AAC, Ogg Vorbis, Opus, WAV, and AIFF per FR-017
@@ -186,7 +191,7 @@ description: "Task list for high-fidelity music player refactoring"
 | Story | Priority | Depends On | Blocks |
 |-------|----------|------------|--------|
 | US1 — Browse & Play | P1 | Phases 1-2 | US2 (data needed), US3 (pipeline), US4 (playback), US5 (data) |
-| US2 — Empty State & Nav | P1 | Phases 1-2, US1 (data population) | — |
+| US2 — Empty State & Nav | P1 | Phases 1-2, US1 (data population)¹ | — |
 | US3 — Gapless Resampling | P2 | Phases 1-2, US1 (basic pipeline) | — |
 | US4 — Side Panel | P2 | Phases 1-2, US1 (playback engine) | — |
 | US5 — Detail Pages | P3 | Phases 1-2, US1 (library data) | — |
@@ -196,7 +201,7 @@ description: "Task list for high-fidelity music player refactoring"
 - Tasks marked [P] can run in parallel within the same phase
 - Non-[P] tasks within a phase must be sequential
 - Phase completes only when all its tasks are done
-- **Note**: US2's T025 (empty state) and T028 (watcher) have no dependency on US1 data and can be implemented in parallel with Phase 3, though the phase ordering is preserved for checkpoint clarity.
+- **Note ¹**: US2 overall requires US1 data for tasks T026, T027, T029, T030, T031. However, T025 (empty state) and T028 (watcher) have no dependency on US1 data and may begin in parallel with Phase 3, though formal phase ordering is preserved for checkpoint clarity.
 
 ### Parallel Opportunities
 
@@ -204,7 +209,7 @@ description: "Task list for high-fidelity music player refactoring"
 |-------|---------------|
 | Phase 1: Setup | T002, T003, T004b, T004c |
 | Phase 2: Foundational | T008, T010b |
-| Phase 3: US1 | T011, T012, T013, T024b |
+| Phase 3: US1 | T011, T012, T013, T024b, T024c, T024d |
 | Phase 4: US2 | T025, T026, T027, T028 |
 | Phase 5: US3 | T032, T036b, T036c |
 | Phase 6: US4 | — (mostly sequential) |
@@ -216,10 +221,12 @@ description: "Task list for high-fidelity music player refactoring"
 ## Parallel Example: User Story 1
 
 ```bash
-# Launch all scanner/metadata/dedup tasks together:
+# Launch all scanner/metadata/dedup/adaptive tasks together:
 Task: "Implement filesystem scanner in src/library/scanner.rs"
 Task: "Implement metadata extraction in src/library/metadata.rs"
 Task: "Implement layered dedup in src/library/dedup.rs"
+Task: "Implement adaptive main layout in src/ui/window.rs"
+Task: "Apply initial accessibility to Phase 3 widgets"
 ```
 
 ---
