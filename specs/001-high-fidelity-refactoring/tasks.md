@@ -39,13 +39,13 @@ description: "Task list for high-fidelity music player refactoring"
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T005 Define domain structs (Track, Album, Artist, LibraryDirectory, PlaybackQueueEntry, NewTrack, NewAlbum, NewArtist, NewQueueEntry, TrackUpdate, QueueContext) in src/storage/mod.rs per data-model.md schema
-- [ ] T006 Implement `Storage` trait with all methods (insert/get/delete/search for tracks, albums, artists; queue management; directory management; dedup queries) in src/storage/mod.rs per contracts/storage.md
-- [ ] T007 Implement `SqliteStorage` with sqlx connection pool, migrations (create tables per data-model.md schema + indexes), and all Storage trait methods in src/storage/database.rs
-- [ ] T008 [P] Implement `SettingsStore` with serde_json at XDG config path in src/storage/settings.rs per data-model.md UserSettings entity
-- [ ] T009 Define error types (PlaybackError, DecoderError, OutputError, ScanError, StorageError) using thiserror in src/playback/mod.rs and src/storage/mod.rs per contracts/playback.md
-- [ ] T010 Setup XDG base directory resolution (data_home, config_home, cache_home) utility in src/app.rs
-- [ ] T010b [P] Write integration tests for Storage trait + SqliteStorage using tempfile fixtures per Principle II; cover all CRUD paths, dedup queries, and queue persistence
+- [X] T005 Define domain structs (Track, Album, Artist, LibraryDirectory, PlaybackQueueEntry, NewTrack, NewAlbum, NewArtist, NewQueueEntry, TrackUpdate, QueueContext) in src/storage/mod.rs per data-model.md schema
+- [X] T006 Implement `Storage` trait with all methods (insert/get/delete/search for tracks, albums, artists; queue management; directory management; dedup queries) in src/storage/mod.rs per contracts/storage.md
+- [X] T007 Implement `SqliteStorage` with sqlx connection pool, migrations (create tables per data-model.md schema + indexes), and all Storage trait methods in src/storage/database.rs
+- [X] T008 [P] Implement `SettingsStore` with serde_json at XDG config path in src/storage/settings.rs per data-model.md UserSettings entity
+- [X] T009 Define error types (PlaybackError, DecoderError, OutputError, StorageError) using thiserror in src/playback/mod.rs and src/storage/mod.rs per contracts/playback.md
+- [X] T010 Setup XDG base directory resolution (data_home, config_home, cache_home) utility in src/app.rs
+- [X] T010b [P] Write integration tests for Storage trait + SqliteStorage using tempfile fixtures per Principle II; cover all CRUD paths, dedup queries, and queue persistence
 
 **Checkpoint**: Storage trait fully implemented, database migrations run, settings read/write works
 

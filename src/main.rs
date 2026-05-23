@@ -1,11 +1,13 @@
 //! Application entry point with structured logging initialization.
 
-use std::{
-    env::{var, var_os},
-    fs::create_dir_all,
-    io::stderr,
-    path::PathBuf,
-};
+mod app;
+mod library;
+mod metrics;
+mod playback;
+mod storage;
+mod ui;
+
+use std::{fs::create_dir_all, io::stderr};
 
 use {
     anyhow::{Context, Result},
@@ -15,6 +17,8 @@ use {
         filter::EnvFilter, fmt::layer, layer::SubscriberExt, registry, util::SubscriberInitExt,
     },
 };
+
+use oxhidifi_refactor::app::dirs_data_home;
 
 /// Initialize structured logging to file and stderr.
 ///
@@ -50,24 +54,6 @@ fn init_logging() -> Result<()> {
         .init();
 
     Ok(())
-}
-
-/// Resolve the XDG data home directory.
-///
-/// Falls back to `$HOME/.local/share` when `XDG_DATA_HOME` is not set.
-///
-/// # Errors
-///
-/// Returns an error if `HOME` is not set and `XDG_DATA_HOME` is also unset.
-fn dirs_data_home() -> Result<PathBuf> {
-    if let Some(dir) = var_os("XDG_DATA_HOME")
-        .map(PathBuf::from)
-        .filter(|p| !p.as_os_str().is_empty())
-    {
-        return Ok(dir);
-    }
-    let home = var("HOME").context("HOME environment variable is not set")?;
-    Ok(PathBuf::from(home).join(".local").join("share"))
 }
 
 /// Application entry point.
