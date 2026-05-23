@@ -51,37 +51,57 @@ description: "Task list for high-fidelity music player refactoring"
 
 ---
 
-## Phase 3: User Story 1 - Browse and Play Music from Library (Priority: P1) 🎯 MVP
+## Phase 3: US1a — Library Ingestion (Priority: P1) 🎯 MVP
 
-**Goal**: User can scan a configured music directory, see albums in a grid, and play tracks with basic gapless audio output
+**Goal**: Recursively scan configured music directories, extract metadata, deduplicate tracks, and populate the storage layer
 
-**Independent Test**: Point application to a directory with audio files, verify library populates, select a track, confirm audible playback starts
-
-### Implementation for User Story 1
+**Independent Test**: Run scanner against a directory with audio files, verify storage contains correct tracks with metadata; re-scan and confirm no duplicate entries
 
 - [ ] T011 [P] [US1] Implement filesystem scanner (recursive walk, extension filtering) in src/library/scanner.rs per contracts/scanner.md scan algorithm
 - [ ] T012 [P] [US1] Implement metadata extraction with lofty in src/library/metadata.rs (title, artist, album, year, genre, track number, duration, sample rate, bit depth, channels, codec, artwork)
 - [ ] T013 [P] [US1] Implement layered dedup (path uniqueness → SHA-256 hash collision → metadata fingerprint) in src/library/dedup.rs per data-model.md duplicate detection hierarchy
+- [ ] T018 [US1] Implement LibraryScanner trait and scan orchestration (scan_all, scan_directory, cancel) in src/library/scanner.rs per contracts/scanner.md
+- [ ] T024 [US1] Wire scanner to storage and emit TrackDiscovered events for UI updates in src/library/scanner.rs
+- [ ] T024b [P] [US1] Write unit tests for scanner, metadata extraction engine, and dedup logic at bottom of each implementing source file per Principle II (red-green-refactor)
+
+**Checkpoint**: Library scan populates storage with correct track metadata; re-scanning produces no duplicates
+
+---
+
+## Phase 4: US1b — Playback Pipeline (Priority: P1) 🎯 MVP
+
+**Goal**: Implement the audio playback pipeline — decode PCM frames, output via CPAL, manage a playback queue, and wire everything through a PlaybackController
+
+**Independent Test**: Open an audio file, decode it, verify PCM output reaches CPAL callback; test queue navigation (next/previous) programmatically
+
 - [ ] T014 [US1] Implement decoder bridge for symphonia in src/playback/decoder.rs (open file, decode PCM frames, emit end-of-stream signal)
 - [ ] T015 [US1] Implement CPAL audio output in src/playback/output.rs (device enumeration, stream config, rtrb-based callback)
 - [ ] T016 [US1] Implement playback queue with current/next/previous navigation in src/playback/queue.rs
 - [ ] T017 [US1] Implement PlaybackController trait and playback engine orchestrator in src/playback/engine.rs (wire decoder → rtrb → output, handle play/pause/stop/seek/volume commands)
-- [ ] T018 [US1] Implement LibraryScanner trait and scan orchestration (scan_all, scan_directory, cancel) in src/library/scanner.rs per contracts/scanner.md
+
+**Checkpoint**: Playback engine plays audio from a file path; queue navigation works; output device renders PCM correctly
+
+---
+
+## Phase 5: US1c — UI Shell & Album Browsing (Priority: P1) 🎯 MVP
+
+**Goal**: Build the application window, album grid view, and wire play action so the user can visually browse albums and click to play
+
+**Independent Test**: Launch app, verify window appears with HeaderBar and album grid; click an album → playback starts
+
 - [ ] T019 [US1] Implement Libadwaita Application setup in src/app.rs (Application::new, activate signal, window creation)
 - [ ] T020 [US1] Create main window with ToolbarView in src/ui/window.rs
 - [ ] T021 [US1] Create HeaderBar with Albums/Artists tab buttons and view toggle placeholder in src/ui/header.rs
 - [ ] T022 [US1] Implement album grid view with cover art thumbnails in src/ui/library/albums.rs
 - [ ] T023 [US1] Wire play action from album grid click to PlaybackController in src/ui/library/albums.rs
-- [ ] T024 [US1] Wire scanner to storage and emit TrackDiscovered events for UI updates in src/library/scanner.rs
-- [ ] T024b [P] [US1] Write unit tests for scanner, metadata extraction engine, and dedup logic at bottom of each implementing source file per Principle II (red-green-refactor)
 - [ ] T024c [P] [US1] Implement adaptive/responsive main window layout using AdwNavigationSplitView + AdwNavigationView + AdwBreakpoint (wide mode >800sp, narrow mode ≤800sp) per FR-013 in src/ui/window.rs — build with the adaptive stack from the start
-- [ ] T024d [P] [US1] Apply initial keyboard navigation (Tab/arrows/Enter/Escape), accessible labels (AccessibleProperty::Label), and tooltips (set_tooltip_text) to Phase 3 UI widgets (window, header, album grid) per FR-013b
+- [ ] T024d [P] [US1] Apply initial keyboard navigation (Tab/arrows/Enter/Escape), accessible labels (AccessibleProperty::Label), and tooltips (set_tooltip_text) to Phase 5 UI widgets (window, header, album grid) per FR-013b
 
-**Checkpoint**: User can launch app, scan library dir, see albums, click to play, hear audio output
+**Checkpoint**: User can launch app, scan library dir, see albums, click to play, hear audio output — **MVP complete!**
 
 ---
 
-## Phase 4: User Story 2 - Empty State and Library Navigation (Priority: P1)
+## Phase 6: User Story 2 - Empty State and Library Navigation (Priority: P1)
 
 **Goal**: First-launch empty state with guidance, tab switching between Albums/Artists, grid/column view toggle, filesystem watching with status indicator
 
@@ -101,7 +121,7 @@ description: "Task list for high-fidelity music player refactoring"
 
 ---
 
-## Phase 5: User Story 3 - Bit-Perfect Gapless Playback with Resampling (Priority: P2)
+## Phase 7: User Story 3 - Bit-Perfect Gapless Playback with Resampling (Priority: P2)
 
 **Goal**: Transparent resampling for mismatched sample rates, gapless track transitions with zero audible gap, bit-perfect output path
 
@@ -123,7 +143,7 @@ description: "Task list for high-fidelity music player refactoring"
 
 ---
 
-## Phase 6: User Story 4 - Side Panel Player (Priority: P2)
+## Phase 8: User Story 4 - Side Panel Player (Priority: P2)
 
 **Goal**: Slide-in side panel from left showing album artwork, track info, and playback controls, remaining functional while browsing library
 
@@ -141,7 +161,7 @@ description: "Task list for high-fidelity music player refactoring"
 
 ---
 
-## Phase 7: User Story 5 - Detail Pages for Albums and Artists (Priority: P3)
+## Phase 9: User Story 5 - Detail Pages for Albums and Artists (Priority: P3)
 
 **Goal**: Rich detail pages with full metadata, artwork, track listings, and play/queue actions
 
@@ -158,11 +178,11 @@ description: "Task list for high-fidelity music player refactoring"
 
 ---
 
-## Phase 8: Polish & Cross-Cutting Concerns
+## Phase 10: Polish & Cross-Cutting Concerns
 
 **Purpose**: Non-functional improvements across the entire application
 
-- [ ] T045 [P] Audit and complete keyboard navigation (Tab/arrows/Enter/Escape), accessible labels (AccessibleProperty::Label), and tooltips (set_tooltip_text) across Phase 4-7 UI widgets (artist view, status bar, detail pages, player panel, queue view) per FR-013b; core accessibility already established in T024d
+- [ ] T045 [P] Audit and complete keyboard navigation (Tab/arrows/Enter/Escape), accessible labels (AccessibleProperty::Label), and tooltips (set_tooltip_text) across Phase 6-9 UI widgets (artist view, status bar, detail pages, player panel, queue view) per FR-013b; core accessibility already established in T024d
 - [ ] T046 Implement performance metrics collector with tracing in src/metrics/collector.rs — collect playback latency (target <3s per SC-001), scan throughput (target <30s for 10k tracks per SC-004), UI response (target <100ms per SC-005), side panel reveal time (target <500ms per SC-007), and steady-state memory usage (target <200MB); emit structured metric events for each threshold gate
 - [ ] T047 Add structured tracing instrumentation (error/warn/info levels) across library scanner, playback engine, and UI subsystems
 - [ ] T048 [P] Add graceful error handling for edge cases per spec.md Edge Cases section (device disconnection, no device at startup, corrupt files, empty queue)
@@ -183,8 +203,14 @@ description: "Task list for high-fidelity music player refactoring"
 
 - **Setup (Phase 1)**: No dependencies — can start immediately
 - **Foundational (Phase 2)**: Depends on Setup completion — **BLOCKS** all user stories
-- **User Stories (Phase 3-7)**: All depend on Foundational phase completion
-- **Polish (Phase 8)**: Depends on all user stories being complete
+- **US1a — Library Ingestion (Phase 3)**: Depends on Phases 1-2
+- **US1b — Playback Pipeline (Phase 4)**: Depends on Phases 1-2 (can start in parallel with Phase 3)
+- **US1c — UI Shell & Browsing (Phase 5)**: Depends on Phases 1-2, Phase 4 (playback engine needed)
+- **US2 — Empty State & Nav (Phase 6)**: Depends on Phases 1-2, Phase 3 (library data)
+- **US3 — Gapless Resampling (Phase 7)**: Depends on Phases 1-2, Phase 4 (basic pipeline)
+- **US4 — Side Panel (Phase 8)**: Depends on Phases 1-2, Phase 4 (playback engine)
+- **US5 — Detail Pages (Phase 9)**: Depends on Phases 1-2, Phase 3 (library data)
+- **Polish (Phase 10)**: Depends on all user stories being complete
 
 ### User Story Dependencies
 
@@ -201,7 +227,7 @@ description: "Task list for high-fidelity music player refactoring"
 - Tasks marked [P] can run in parallel within the same phase
 - Non-[P] tasks within a phase must be sequential
 - Phase completes only when all its tasks are done
-- **Note ¹**: US2 overall requires US1 data for tasks T026, T027, T029, T030, T031. However, T025 (empty state) and T028 (watcher) have no dependency on US1 data and may begin in parallel with Phase 3, though formal phase ordering is preserved for checkpoint clarity.
+- **Note ¹**: US2 overall requires Phase 3 (library data) for tasks T026, T027, T029, T030, T031. However, T025 (empty state) and T028 (watcher) have no dependency on library data and may begin in parallel with US1 phases (3-5), though formal phase ordering is preserved for checkpoint clarity.
 
 ### Parallel Opportunities
 
@@ -209,24 +235,26 @@ description: "Task list for high-fidelity music player refactoring"
 |-------|---------------|
 | Phase 1: Setup | T002, T003, T004b, T004c |
 | Phase 2: Foundational | T008, T010b |
-| Phase 3: US1 | T011, T012, T013, T024b, T024c, T024d |
-| Phase 4: US2 | T025, T026, T027, T028 |
-| Phase 5: US3 | T032, T036b, T036c |
-| Phase 6: US4 | — (mostly sequential) |
-| Phase 7: US5 | T041, T042 |
-| Phase 8: Polish | T045, T048, T051, T053, T054, T055, T056 |
+| Phase 3: US1a | T011, T012, T013, T024b |
+| Phase 4: US1b | — (sequential) |
+| Phase 5: US1c | T024c, T024d |
+| Phase 6: US2 | T025, T026, T027, T028 |
+| Phase 7: US3 | T032, T036b, T036c |
+| Phase 8: US4 | — (mostly sequential) |
+| Phase 9: US5 | T041, T042 |
+| Phase 10: Polish | T045, T048, T051, T053, T054, T055, T056 |
 
 ---
 
 ## Parallel Example: User Story 1
 
 ```bash
-# Launch all scanner/metadata/dedup/adaptive tasks together:
-Task: "Implement filesystem scanner in src/library/scanner.rs"
-Task: "Implement metadata extraction in src/library/metadata.rs"
-Task: "Implement layered dedup in src/library/dedup.rs"
-Task: "Implement adaptive main layout in src/ui/window.rs"
-Task: "Apply initial accessibility to Phase 3 widgets"
+# Parallel tasks from US1a and US1c can run concurrently (different files):
+Task: "Implement filesystem scanner in src/library/scanner.rs"         # Phase 3
+Task: "Implement metadata extraction in src/library/metadata.rs"       # Phase 3
+Task: "Implement layered dedup in src/library/dedup.rs"                # Phase 3
+Task: "Implement adaptive main layout in src/ui/window.rs"             # Phase 5
+Task: "Apply initial accessibility to Phase 5 widgets"                 # Phase 5
 ```
 
 ---
@@ -237,19 +265,23 @@ Task: "Apply initial accessibility to Phase 3 widgets"
 
 1. Complete Phase 1: Setup
 2. Complete Phase 2: Foundational
-3. Complete Phase 3: User Story 1 (Browse & Play)
-4. **STOP and VALIDATE**: User can scan library, browse albums, play music
-5. Deploy/demo if ready
+3. Complete Phase 3: US1a (Library Ingestion)
+4. Complete Phase 4: US1b (Playback Pipeline)
+5. Complete Phase 5: US1c (UI Shell & Browsing)
+6. **STOP and VALIDATE**: User can scan library, browse albums, play music
+7. Deploy/demo if ready
 
 ### Incremental Delivery
 
 1. Phase 1 + Phase 2 → Foundation ready
-2. Add US1 (Browse & Play) → Test independently → **MVP!**
-3. Add US2 (Empty State & Nav) → Test independently → Deploy
-4. Add US3 (Gapless Resampling) → Test independently → Deploy
-5. Add US4 (Side Panel) → Test independently → Deploy
-6. Add US5 (Detail Pages) → Test independently → Deploy
-7. Phase 8 (Polish) → Finalize
+2. Add US1a (Library Ingestion) → Validate storage population
+3. Add US1b (Playback Pipeline) → Validate audio playback
+4. Add US1c (UI Shell & Browsing) → Test independently → **MVP!**
+5. Add US2 (Empty State & Nav) → Test independently → Deploy
+6. Add US3 (Gapless Resampling) → Test independently → Deploy
+7. Add US4 (Side Panel) → Test independently → Deploy
+8. Add US5 (Detail Pages) → Test independently → Deploy
+9. Phase 10 (Polish) → Finalize
 
 ### Parallel Team Strategy
 
@@ -257,14 +289,16 @@ With multiple developers:
 
 1. Team completes Phase 1 + Phase 2 together
 2. Once Foundational is done:
-   - Developer A: US1 (Browse & Play) — largest scope
-   - Developer B: US2 (Empty State & Nav) — UI-focused, parallel to US1
-   - Developer C: Standby for US1 integration help, then US3/US4
-3. After US1 done:
-   - Developer A: US3 (Gapless Resampling)
-   - Developer B: US4 (Side Panel)
-   - Developer C: US5 (Detail Pages)
-4. Team completes Phase 8 together
+   - Developer A: Phase 3 (US1a — Library Ingestion)
+   - Developer B: Phase 4 (US1b — Playback Pipeline)
+   - Developer C: Phase 6 (US2 — Empty State & Nav), starting with T025/T028 which don't need library data
+3. After Phase 3 + Phase 4 done:
+   - Developer A: Phase 5 (US1c — UI Shell & Browsing)
+   - Developer B: Phase 7 (US3 — Gapless Resampling)
+   - Developer C: Phase 8 (US4 — Side Panel)
+4. After Phase 5 done:
+   - Developers A+B: Phase 9 (US5 — Detail Pages)
+   - Developer C: Phase 10 (Polish)
 
 ---
 
