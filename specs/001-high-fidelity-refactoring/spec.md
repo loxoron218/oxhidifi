@@ -49,10 +49,8 @@ A user opens the application for the first time with no music library configured
 **Acceptance Scenarios**:
 
 1. **Given** the application launches with no music library, **When** the main view is displayed, **Then** an empty state page is shown with guidance on adding music
-2. **Given** the library is populated, **When** the user clicks the Albums tab, **Then** albums are displayed in the current view mode
-3. **Given** the library is populated, **When** the user clicks the Artists tab, **Then** artists are displayed in the current view mode
-4. **Given** any tab is active, **When** the user clicks the grid/column toggle button in the header bar, **Then** the view mode switches accordingly
-5. **Given** music is added to the library after an empty state, **When** scanning completes, **Then** the empty state is replaced by the populated library view
+2. **Given** music is added to the library after an empty state, **When** scanning completes, **Then** the empty state is replaced by the populated library view
+3. **Given** the library transitions from empty to populated, **When** the user interacts with the new content, **Then** tab switching (Albums/Artists) and grid/column toggle function correctly on the now-populated views
 
 ---
 
@@ -128,6 +126,7 @@ A user on an album detail page sees the full track listing, album metadata (year
 - **FR-002**: The system MUST extract and store metadata (title, artist, album, year, genre, track number, disc number, duration) from each audio file.
 - **FR-003**: The system MUST extract and store technical metadata (sample rate, bit depth, number of channels, codec, lossless status) from each audio file.
 - **FR-004**: The system MUST extract and display embedded album artwork from audio files.
+- **FR-004b**: The system MUST cache extracted artwork to disk and generate thumbnails for grid/column views. A fallback placeholder MUST be displayed when no embedded artwork is available.
 - **FR-005**: The system MUST detect and exclude duplicate files using a layered strategy: file path uniqueness as primary dedup, content hash (SHA-256) on path collision, and metadata fingerprint (artist+album+title+track) as final fallback.
 - **FR-006**: The system MUST gracefully handle files with missing or corrupt metadata using the following fallback chain: filename stem as title, "Unknown Artist" as artist, "Unknown Album" as album, 0 as year, "Unknown Genre" as genre, null as track/disc number, 0 as duration (files with 0 duration MUST be skipped as corrupt).
 - **FR-007**: The system MUST automatically scan library directories for changes (additions, removals, updates) and reflect them without manual intervention. Scanning MUST operate incrementally and non-blocking — the UI remains responsive during scan, discovered items appear as they are indexed, and a scanning indicator is shown in the status bar.
@@ -146,7 +145,7 @@ A user on an album detail page sees the full track listing, album metadata (year
 
 - **FR-014**: The system MUST support gapless playback — consecutive tracks play without any audible silence or interruption between them.
 - **FR-015**: The system MUST output audio at the file's native sample rate and bit depth when the output device supports it, preserving the original bit-perfect stream.
-- **FR-016**: When the output device does not support the file's native sample rate, the system MUST transparently resample to a supported rate. Resampled output MUST maintain SNR > 120 dB relative to the original and MUST pass a blind ABX test with p < 0.05 against the original at the matched sample rate.
+- **FR-016**: When the output device does not support the file's native sample rate, the system MUST transparently resample to a supported rate. Resampled output MUST maintain SNR > 120 dB relative to the original and MUST pass a blind ABX test with p < 0.05 against the original at the matched sample rate. Quality is defined by these measurable thresholds — no subjective criteria apply.
 - **FR-017**: The system MUST support common audio formats including FLAC, MP3, AAC, Ogg Vorbis, Opus, WAV, and AIFF.
 - **FR-018**: The system MUST support high-resolution audio (sample rates up to at least 192 kHz, bit depths up to 24-bit).
 - **FR-019**: The system MUST provide standard playback controls: play, pause, stop, next track, previous track.
@@ -197,7 +196,7 @@ A user on an album detail page sees the full track listing, album metadata (year
 - **SC-005**: Users can navigate between Albums and Artists views, toggle between grid and column layouts, and access detail pages without perceivable UI lag (response under 100ms).
 - **SC-006**: The empty state is shown on first launch when no library is configured; the library view populates within 10 seconds of configuring a directory with 1,000 audio files.
 - **SC-007**: The side player panel appears within 500ms of playback starting and display correct track metadata and artwork.
-- **SC-008**: Resampled audio MUST pass a blind ABX test (p < 0.05 threshold) comparing resampled output against the original source at matched sample rate, with a minimum of 10 trials per test.
+- **SC-008**: Resampled audio MUST pass a blind ABX test (p < 0.05 threshold, binomial test) comparing resampled output against the original source at matched sample rate, with a minimum of 10 trials per test. The ABX test MUST be supported by an automated validation harness (programmatic stimulus generation, randomization, and statistical evaluation); manual perceptual verification is permitted as a supplementary check.
 
 ## Assumptions
 

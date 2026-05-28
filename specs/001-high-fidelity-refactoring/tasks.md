@@ -136,7 +136,7 @@ description: "Task list for high-fidelity music player refactoring"
 - [ ] T036 [US3] Add bit-perfect output path in src/playback/output.rs (passthrough mode when device supports native sample rate/bit depth)
 - [ ] T036b [US3] Write deterministic simulation tests for gapless transition concurrent logic (pre-buffer race, decoder switch, ring buffer drain) per Principle II
 - [ ] T036c [US3] Add criterion benchmarks for resampler throughput and bit-perfect output path latency; verify no regression against Phase 1 baseline per Principle IV
-- [ ] T036d [US3] Implement ABX perceptual quality validation harness for resampled output per SC-008 (minimum 10 trials, p < 0.05 against original at matched sample rate); document manual QA procedure for SNR > 120 dB verification
+- [ ] T036d [US3] Implement automated ABX validation harness for resampled output per SC-008: programmatic stimulus generation, randomized ABX presentation, binomial statistical evaluation (p < 0.05 threshold, minimum 10 trials per test condition); document manual QA procedure as supplementary verification for SNR > 120 dB
 - [ ] T036e [US3] Verify high-resolution audio support (sample rates up to 192 kHz, bit depth up to 24-bit) per FR-018; add test fixtures with 96 kHz and 192 kHz files
 
 **Checkpoint**: Gapless playback across tracks at same and different sample rates, resampling kicks in transparently when device doesn't support native rate
@@ -190,8 +190,9 @@ description: "Task list for high-fidelity music player refactoring"
 - [ ] T050 Validate with quickstart.md — build (debug + release), run, verify all user stories functional
 - [ ] T051 [P] Implement PreferencesDialog with library directory management (add/remove directories), audio device selection, and view preferences per plan.md
 - [ ] T052 Add load verification task: populate library with 10,000 synthetic tracks, measure scan throughput (<30s per SC-004) and UI response (<100ms per SC-005)
+- [ ] T052b [P] Add queue persistence verification: populate queue, restart application, verify queue order, track IDs, and context are preserved per FR-029
 - [ ] T053 [P] Audit and polish adaptive/responsive main layout (initially built in T024c) — verify AdwBreakpoint thresholds, test narrow/wide transitions, ensure all pages handle both modes correctly per FR-013
-- [ ] T054 [P] Implement artwork caching pipeline (extract thumbnail, cache to disk, fallback placeholder) in src/library/metadata.rs and src/library/mod.rs
+- [ ] T054 [P] [US1] Implement artwork caching pipeline (extract thumbnail, cache to disk, fallback placeholder) in src/library/metadata.rs and src/library/mod.rs per FR-004b
 - [ ] T055 [P] Audit HIG compliance across all UI widgets: Toast for transient messages, 6px spacing scale, 200ms ease transitions, no hardcoded radii
 - [ ] T056 [P] Add multi-format end-to-end verification test fixture covering FLAC, MP3, AAC, Ogg Vorbis, Opus, WAV, and AIFF per FR-017
 
