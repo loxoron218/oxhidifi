@@ -95,7 +95,8 @@ src/
 │   │   └── artist.rs    # Artist detail page
 │   ├── player/
 │   │   ├── mod.rs
-│   │   └── panel.rs     # Slide-in side player panel
+│   │   ├── panel.rs     # Slide-in side player panel
+│   │   └── queue.rs     # Queue view UI (track list, drag-and-drop, remove)
 │   ├── settings.rs      # PreferencesDialog
 │   └── status.rs        # Status bar (scanning indicator)
 └── metrics/             # Observability & metrics

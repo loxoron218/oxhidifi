@@ -125,7 +125,7 @@ A user on an album detail page sees the full track listing, album metadata (year
 - **FR-001**: The system MUST detect and catalog all supported audio files from one or more user-configured directories.
 - **FR-002**: The system MUST extract and store metadata (title, artist, album, year, genre, track number, disc number, duration) from each audio file.
 - **FR-003**: The system MUST extract and store technical metadata (sample rate, bit depth, number of channels, codec, lossless status) from each audio file.
-- **FR-004**: The system MUST extract and display embedded album artwork from audio files.
+- **FR-004**: The system MUST extract embedded album artwork from audio files for display.
 - **FR-004b**: The system MUST cache extracted artwork to disk and generate thumbnails for grid/column views. A fallback placeholder MUST be displayed when no embedded artwork is available.
 - **FR-005**: The system MUST detect and exclude duplicate files using a layered strategy: file path uniqueness as primary dedup, content hash (SHA-256) on path collision, and metadata fingerprint (artist+album+title+track) as final fallback.
 - **FR-006**: The system MUST gracefully handle files with missing or corrupt metadata using the following fallback chain: filename stem as title, "Unknown Artist" as artist, "Unknown Album" as album, 0 as year, "Unknown Genre" as genre, null as track/disc number, 0 as duration (files with 0 duration MUST be skipped as corrupt).
@@ -138,7 +138,7 @@ A user on an album detail page sees the full track listing, album metadata (year
 - **FR-010**: The system MUST support at least two view modes per tab: a grid layout and a column layout.
 - **FR-011**: The system MUST provide a toggle control in the header bar to switch between grid and column views.
 - **FR-012**: Each album and artist MUST have a dedicated detail page showing full metadata and associated content (tracks for albums, albums for artists).
-- **FR-013**: The system MUST support adaptive/responsive layouts using `AdwBreakpoint` with the modern widget stack (`AdwNavigationSplitView` for sidebar/content, `AdwNavigationView` for page stacks, `AdwOverlaySplitView` for player panel, `AdwViewSwitcher` + `AdwViewSwitcherBar` for tab navigation) that adjust to different window sizes, with at minimum: a wide mode (>800px) showing side panel and library side-by-side, and a narrow mode (≤800px) stacking them with back-navigation.
+- **FR-013**: The system MUST support adaptive/responsive layouts using `AdwBreakpoint` with the modern widget stack (`AdwNavigationSplitView` for sidebar/content, `AdwNavigationView` for page stacks, `AdwOverlaySplitView` for player panel, `AdwViewSwitcher` + `AdwViewSwitcherBar` for tab navigation) that adjust to different window sizes, with at minimum: a wide mode (≥800px) showing side panel and library side-by-side, and a narrow mode (<800px) stacking them with back-navigation.
 - **FR-013b**: The system MUST support keyboard navigation (Tab, arrows, Enter, Escape), provide accessible labels via `AccessibleProperty::Label` on all interactive widgets, and provide tooltip text via `set_tooltip_text()` on all actionable controls.
 
 **Playback**

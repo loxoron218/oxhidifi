@@ -28,6 +28,7 @@ description: "Task list for high-fidelity music player refactoring"
 - [X] T004 Create empty module structure with mod.rs re-exports per plan.md: src/library/, src/storage/, src/playback/, src/ui/, src/ui/library/, src/ui/detail/, src/ui/player/, src/metrics/
 - [X] T004b [P] Create criterion benchmark harness in benches/ with baseline benchmarks for decoder PCM output, ring buffer throughput, and resampler latency
 - [X] T004c [P] Set up test infrastructure: mock Storage backend, tempfile-based scanner fixtures, async test helpers in tests/common/
+- [X] T004d [P] Query Context7 MCP server for cpal, symphonia, rubato, lofty, and libadwaita documentation and best practices before implementing any features using these libraries
 
 **Checkpoint**: Cargo build succeeds, project structure mirrors plan.md
 
@@ -58,7 +59,7 @@ description: "Task list for high-fidelity music player refactoring"
 **Independent Test**: Run scanner against a directory with audio files, verify storage contains correct tracks with metadata; re-scan and confirm no duplicate entries
 
 - [X] T011 [P] [US1] Implement filesystem scanner (recursive walk, extension filtering) in src/library/scanner.rs per contracts/scanner.md scan algorithm
-- [X] T012 [P] [US1] Implement metadata extraction with lofty in src/library/metadata.rs (title, artist, album, year, genre, track number, duration, sample rate, bit depth, channels, codec, artwork)
+- [X] T012 [P] [US1] Implement metadata extraction with lofty in src/library/metadata.rs (title, artist, album, year, genre, track number, duration, sample rate, bit depth, channels, codec, artwork); implement FR-006 fallback chain: filename stem as title, "Unknown Artist" as artist, "Unknown Album" as album, 0 as year, "Unknown Genre" as genre, null as track/disc number, 0 as duration (skip files with 0 duration as corrupt)
 - [X] T013 [P] [US1] Implement layered dedup (path uniqueness → SHA-256 hash collision → metadata fingerprint) in src/library/dedup.rs per data-model.md duplicate detection hierarchy
 - [X] T018 [US1] Implement LibraryScanner trait and scan orchestration (scan_all, scan_directory, cancel) in src/library/scanner.rs per contracts/scanner.md
 - [X] T024 [US1] Wire scanner to storage and emit TrackDiscovered events for UI updates in src/library/scanner.rs
@@ -77,7 +78,7 @@ description: "Task list for high-fidelity music player refactoring"
 - [X] T014 [US1] Implement decoder bridge for symphonia in src/playback/decoder.rs (open file, decode PCM frames, emit end-of-stream signal)
 - [X] T015 [US1] Implement CPAL audio output in src/playback/output.rs (device enumeration, stream config, rtrb-based callback)
 - [X] T016 [US1] Implement playback queue with current/next/previous navigation in src/playback/queue.rs
-- [X] T017 [US1] Implement PlaybackController trait and playback engine orchestrator in src/playback/engine.rs (wire decoder → rtrb → output, handle play/pause/stop/seek/volume commands)
+- [X] T017 [US1] Implement PlaybackController trait and playback engine orchestrator in src/playback/engine.rs (wire decoder → rtrb → output, handle play/pause/stop/seek/volume commands); volume range 0.0–1.0 mapped to dB attenuation per FR-021, volume level persisted via `UserSettings.volume`
 
 **Checkpoint**: Playback engine plays audio from a file path; queue navigation works; output device renders PCM correctly
 
@@ -91,10 +92,10 @@ description: "Task list for high-fidelity music player refactoring"
 
 - [ ] T019 [US1] Implement Libadwaita Application setup in src/app.rs (Application::new, activate signal, window creation)
 - [ ] T020 [US1] Create main window with ToolbarView in src/ui/window.rs
-- [ ] T021 [US1] Create HeaderBar with Albums/Artists tab buttons and view toggle placeholder in src/ui/header.rs
+- [ ] T021 [US1] Create HeaderBar with Albums/Artists tab buttons using `AdwViewSwitcher` + `AdwViewSwitcherBar` for tab navigation and view toggle placeholder in src/ui/header.rs
 - [ ] T022 [US1] Implement album grid view with cover art thumbnails in src/ui/library/albums.rs
 - [ ] T023 [US1] Wire play action from album grid click to PlaybackController in src/ui/library/albums.rs
-- [ ] T024c [P] [US1] Implement adaptive/responsive main window layout using AdwNavigationSplitView + AdwNavigationView + AdwBreakpoint (wide mode >800sp, narrow mode ≤800sp) per FR-013 in src/ui/window.rs — build with the adaptive stack from the start
+- [ ] T024c [P] [US1] Implement adaptive/responsive main window layout using AdwNavigationSplitView + AdwNavigationView + AdwBreakpoint (wide mode ≥800px, narrow mode <800px) per FR-013 in src/ui/window.rs — build with the adaptive stack from the start
 - [ ] T024d [P] [US1] Apply initial keyboard navigation (Tab/arrows/Enter/Escape), accessible labels (AccessibleProperty::Label), and tooltips (set_tooltip_text) to Phase 5 UI widgets (window, header, album grid) per FR-013b
 
 **Checkpoint**: User can launch app, scan library dir, see albums, click to play, hear audio output — **MVP complete!**
@@ -183,18 +184,25 @@ description: "Task list for high-fidelity music player refactoring"
 **Purpose**: Non-functional improvements across the entire application
 
 - [ ] T045 [P] Audit and complete keyboard navigation (Tab/arrows/Enter/Escape), accessible labels (AccessibleProperty::Label), and tooltips (set_tooltip_text) across Phase 6-9 UI widgets (artist view, status bar, detail pages, player panel, queue view) per FR-013b; core accessibility already established in T024d
-- [ ] T046 Implement performance metrics collector with tracing in src/metrics/collector.rs — collect playback latency (target <3s per SC-001), scan throughput (target <30s for 10k tracks per SC-004), UI response (target <100ms per SC-005), side panel reveal time (target <500ms per SC-007), and steady-state memory usage (target <200MB); emit structured metric events for each threshold gate
-- [ ] T047 Add structured tracing instrumentation (error/warn/info levels) across library scanner, playback engine, and UI subsystems
-- [ ] T048 [P] Add graceful error handling for edge cases per spec.md Edge Cases section (device disconnection, no device at startup, corrupt files, empty queue)
-- [ ] T049 Run `cargo clippy --fix --allow-dirty --all-targets -- -W clippy::pedantic && cargo fmt` and fix all warnings
+- [ ] T046 Implement performance metrics collector with tracing in src/metrics/collector.rs — collect playback latency (target <3s per SC-001), scan throughput (target <30s for 10k tracks per SC-004), UI response (target <100ms per SC-005), side panel reveal time (target <500ms per SC-007), and steady-state memory usage (target <200MB); emit structured metric events for each threshold gate via `tracing::info!` with typed fields for downstream consumption
+- [ ] T047 Add structured tracing instrumentation (error/warn/info levels) across library scanner (target: `library::scanner`), playback engine (target: `playback::engine`), and UI subsystems (target: `ui::*`) in src/library/scanner.rs, src/playback/engine.rs, and src/ui/window.rs with typed fields for all diagnostic events per constitution Principle V
+- [ ] T048a [P] Implement graceful handling for audio device disconnection during playback in src/playback/output.rs — detect device loss, pause playback, emit device-lost event, attempt reconnection to default device per FR-030
+- [ ] T048b [P] Implement graceful handling for no audio device at startup in src/playback/output.rs — application starts without error, display message about missing audio hardware per FR-031 and spec.md Edge Cases
+- [ ] T048c [P] Implement corrupted/unreadable file handling in src/library/scanner.rs — skip files during scanning, log warning with file path, exclude from playback per spec.md Edge Cases
+- [ ] T048d [P] Implement empty queue end-of-playback handling in src/playback/engine.rs — stop playback, show idle state, auto-hide side panel per FR-026 and spec.md Edge Cases
+- [ ] T048e [P] Implement large library browsing performance in src/ui/library/ — ensure smooth scrolling and view switching for 10k+ items without UI freezes per spec.md Edge Cases
+- [ ] T049 Run `cargo clippy --fix --allow-dirty --all-targets -- -W clippy::pedantic && cargo fmt` and fix all warnings; then run `find . -name "*.rs" -exec perl -i -0777 -pe 's/([;}])[ \t]*\r?\n([ \t]*\/\/(?!\/))/$1\n\n$2/g' {} +` to enforce blank lines before single-line comments after braces/semicolons per constitution
 - [ ] T050 Validate with quickstart.md — build (debug + release), run, verify all user stories functional
-- [ ] T051 [P] Implement PreferencesDialog with library directory management (add/remove directories), audio device selection, and view preferences per plan.md
-- [ ] T052 Add load verification task: populate library with 10,000 synthetic tracks, measure scan throughput (<30s per SC-004) and UI response (<100ms per SC-005)
+- [ ] T051 [P] Implement PreferencesDialog with library directory management (add/remove directories), audio device selection, and view preferences per plan.md; wire audio device selection to playback engine output device enumeration and volume level to `UserSettings.volume` with dB attenuation mapping per FR-021
+- [ ] T052 Add library load verification: populate library with 10,000 synthetic tracks, measure scan throughput (<30s per SC-004) using metrics collector in src/metrics/collector.rs
+- [ ] T052c Add UI response verification: navigate between Albums/Artists views, toggle grid/column, access detail pages — measure response time (<100ms per SC-005) using metrics collector in src/metrics/collector.rs
 - [ ] T052b [P] Add queue persistence verification: populate queue, restart application, verify queue order, track IDs, and context are preserved per FR-029
 - [ ] T053 [P] Audit and polish adaptive/responsive main layout (initially built in T024c) — verify AdwBreakpoint thresholds, test narrow/wide transitions, ensure all pages handle both modes correctly per FR-013
-- [ ] T054 [P] [US1] Implement artwork caching pipeline (extract thumbnail, cache to disk, fallback placeholder) in src/library/metadata.rs and src/library/mod.rs per FR-004b
+- [ ] T054 [P] [US1] Implement artwork caching pipeline (extract thumbnail, cache to disk, fallback placeholder) in src/library/metadata.rs per FR-004b
 - [ ] T055 [P] Audit HIG compliance across all UI widgets: Toast for transient messages, 6px spacing scale, 200ms ease transitions, no hardcoded radii
 - [ ] T056 [P] Add multi-format end-to-end verification test fixture covering FLAC, MP3, AAC, Ogg Vorbis, Opus, WAV, and AIFF per FR-017
+- [ ] T057 Add library persistence verification: populate library, restart application, verify all tracks/albums/artists are reloaded from SQLite without re-scanning per FR-029
+- [ ] T058 Add settings persistence verification: configure library directories, audio device, view preferences, volume level; restart application; verify all settings restored from XDG config path per FR-029
 
 ---
 
@@ -234,7 +242,7 @@ description: "Task list for high-fidelity music player refactoring"
 
 | Phase | Parallel Tasks |
 |-------|---------------|
-| Phase 1: Setup | T002, T003, T004b, T004c |
+| Phase 1: Setup | T002, T003, T004b, T004c, T004d |
 | Phase 2: Foundational | T008, T010b |
 | Phase 3: US1a | T011, T012, T013, T024b |
 | Phase 4: US1b | — (sequential) |
@@ -243,7 +251,7 @@ description: "Task list for high-fidelity music player refactoring"
 | Phase 7: US3 | T032, T036b, T036c |
 | Phase 8: US4 | — (mostly sequential) |
 | Phase 9: US5 | T041, T042 |
-| Phase 10: Polish | T045, T048, T051, T053, T054, T055, T056 |
+| Phase 10: Polish | T045, T048a, T048b, T048c, T048d, T048e, T051, T053, T054, T055, T056 |
 
 ---
 
