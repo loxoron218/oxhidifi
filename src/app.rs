@@ -1,11 +1,33 @@
-//! Application-level utilities including XDG base directory resolution.
+//! Application-level utilities including XDG base directory resolution and
+//! Libadwaita `AdwApplication` setup.
 
 use std::{
     env::{var, var_os},
+    fs::create_dir_all,
     path::PathBuf,
+    sync::Arc,
 };
 
-use anyhow::{Context, Result};
+use {
+    anyhow::{Context, Result},
+    libadwaita::{Application, prelude::*},
+    tracing::info,
+};
+
+use crate::{
+    playback::engine::PlaybackEngine, storage::database::SqliteStorage, ui::window::build_window,
+};
+
+/// Application identifier for D-Bus and resource paths.
+const APP_ID: &str = "com.github.oxhidifi";
+
+/// Shared application state passed to the window.
+pub struct AppState {
+    /// The playback engine controlling audio output.
+    pub playback: Arc<PlaybackEngine>,
+    /// The storage backend for library data.
+    pub storage: Arc<SqliteStorage>,
+}
 
 /// Resolve an XDG directory from an environment variable with a fallback path.
 ///
@@ -54,4 +76,49 @@ pub fn dirs_config_home() -> Result<PathBuf> {
 /// Returns an error if `HOME` is not set and `XDG_CACHE_HOME` is also unset.
 pub fn dirs_cache_home() -> Result<PathBuf> {
     resolve_xdg_dir("XDG_CACHE_HOME", ".cache")
+}
+
+/// Build the data directory for the application database.
+fn data_dir() -> PathBuf {
+    dirs_data_home()
+        .unwrap_or_else(|_| PathBuf::from("."))
+        .join("oxhidifi")
+}
+
+/// Build and run the Libadwaita application.
+///
+/// Initializes the storage backend, playback engine, and presents the main
+/// window. This is the top-level entry point for the GUI.
+///
+/// # Errors
+///
+/// Returns an error if the application cannot be built or if the storage
+/// backend fails to initialize.
+pub async fn run_application() -> Result<()> {
+    let db_dir = data_dir();
+    create_dir_all(&db_dir)
+        .with_context(|| format!("Failed to create data directory: {}", db_dir.display()))?;
+
+    let db_path = db_dir.join("library.db");
+    let storage = Arc::new(
+        SqliteStorage::connect(&db_path)
+            .await
+            .context("Failed to initialize storage")?,
+    );
+
+    let playback = Arc::new(PlaybackEngine::new());
+
+    let state = Arc::new(AppState { playback, storage });
+
+    let app = Application::builder().application_id(APP_ID).build();
+
+    app.connect_activate(move |app| {
+        let window = build_window(app, &state);
+        window.present();
+    });
+
+    info!("Starting application");
+    app.run();
+
+    Ok(())
 }

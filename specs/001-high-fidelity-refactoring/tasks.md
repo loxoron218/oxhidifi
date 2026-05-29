@@ -90,13 +90,13 @@ description: "Task list for high-fidelity music player refactoring"
 
 **Independent Test**: Launch app, verify window appears with HeaderBar and album grid; click an album → playback starts
 
-- [ ] T019 [US1] Implement Libadwaita Application setup in src/app.rs (Application::new, activate signal, window creation)
-- [ ] T020 [US1] Create main window with ToolbarView in src/ui/window.rs
-- [ ] T021 [US1] Create HeaderBar with Albums/Artists tab buttons using `AdwViewSwitcher` + `AdwViewSwitcherBar` for tab navigation and view toggle placeholder in src/ui/header.rs
-- [ ] T022 [US1] Implement album grid view with cover art thumbnails in src/ui/library/albums.rs
-- [ ] T023 [US1] Wire play action from album grid click to PlaybackController in src/ui/library/albums.rs
-- [ ] T024c [P] [US1] Implement adaptive/responsive main window layout using AdwNavigationSplitView + AdwNavigationView + AdwBreakpoint (wide mode ≥800px, narrow mode <800px) per FR-013 in src/ui/window.rs — build with the adaptive stack from the start
-- [ ] T024d [P] [US1] Apply initial keyboard navigation (Tab/arrows/Enter/Escape), accessible labels (AccessibleProperty::Label), and tooltips (set_tooltip_text) to Phase 5 UI widgets (window, header, album grid) per FR-013b
+- [X] T019 [US1] Implement Libadwaita Application setup in src/app.rs (Application::new, activate signal, window creation)
+- [X] T020 [US1] Create main window with ToolbarView in src/ui/window.rs
+- [X] T021 [US1] Create HeaderBar with Albums/Artists tab buttons using `AdwViewSwitcher` + `AdwViewSwitcherBar` for tab navigation and view toggle placeholder in src/ui/header.rs
+- [X] T022 [US1] Implement album grid view with cover art thumbnails in src/ui/library/albums.rs
+- [X] T023 [US1] Wire play action from album grid click to PlaybackController in src/ui/library/albums.rs
+- [X] T024c [P] [US1] Implement adaptive/responsive main window layout using AdwNavigationSplitView + AdwNavigationView + AdwBreakpoint (wide mode ≥800px, narrow mode <800px) per FR-013 in src/ui/window.rs — build with the adaptive stack from the start
+- [X] T024d [P] [US1] Apply initial keyboard navigation (Tab/arrows/Enter/Escape), accessible labels (AccessibleProperty::Label), and tooltips (set_tooltip_text) to Phase 5 UI widgets (window, header, album grid) per FR-013b
 
 **Checkpoint**: User can launch app, scan library dir, see albums, click to play, hear audio output — **MVP complete!**
 

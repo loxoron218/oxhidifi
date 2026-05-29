@@ -11,11 +11,11 @@ cpal = "0.17.3"
 #crossbeam = "0.8.4"
 #dynosaur = "0.3.0"
 hex = "0.4.3"
-#libadwaita = { version = "0.9.1", features = [
-#    "gio_v2_80",
-#    "gtk_v4_22",
-#    "v1_9",
-#] }
+libadwaita = { version = "0.9.1", features = [
+    "gio_v2_80",
+    "gtk_v4_22",
+    "v1_9",
+] }
 lofty = "0.24.0"
 #notify = "8.2.0"
 #num-traits = "0.2.19"
@@ -30,7 +30,7 @@ sha2 = "0.11.0"
 sqlx = { version = "0.9.0", features = ["runtime-tokio", "sqlite"] }
 symphonia = { version = "0.6.0", features = ["all"] }
 thiserror = "2.0.18"
-tokio = { version = "1.52.3", features = ["macros", "rt", "sync", "time"] }
+tokio = { version = "1.52.3", features = ["macros", "rt", "rt-multi-thread"] }
 #tokio-stream = "0.1.18"
 #tokio-util = "0.7.18"
 tracing = "0.1.44"

@@ -11,6 +11,7 @@ use std::{fs::create_dir_all, io::stderr};
 
 use {
     anyhow::{Context, Result},
+    tokio::runtime::Runtime,
     tracing::info,
     tracing_appender::{non_blocking, rolling::daily},
     tracing_subscriber::{
@@ -18,7 +19,7 @@ use {
     },
 };
 
-use oxhidifi_refactor::app::dirs_data_home;
+use oxhidifi_refactor::app::{dirs_data_home, run_application};
 
 /// Initialize structured logging to file and stderr.
 ///
@@ -58,13 +59,16 @@ fn init_logging() -> Result<()> {
 
 /// Application entry point.
 ///
-/// Initializes logging and starts the application.
+/// Initializes logging and starts the Libadwaita application.
 ///
 /// # Errors
 ///
-/// Returns an error if logging initialization fails.
+/// Returns an error if logging initialization fails or the application
+/// cannot be built.
 fn main() -> Result<()> {
     init_logging()?;
     info!("Application starting");
-    Ok(())
+
+    let rt = Runtime::new().context("Failed to create tokio runtime")?;
+    rt.block_on(run_application())
 }
