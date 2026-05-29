@@ -194,6 +194,12 @@ fn adjust_index_after_move(idx: usize, from: usize, to: usize) -> usize {
 mod tests {
     use crate::playback::queue::PlaybackQueue;
 
+    fn three_track_queue() -> PlaybackQueue {
+        let q = PlaybackQueue::new();
+        q.set_queue(vec![10, 20, 30]);
+        q
+    }
+
     #[test]
     fn new_queue_is_empty() {
         let q = PlaybackQueue::new();
@@ -204,16 +210,14 @@ mod tests {
 
     #[test]
     fn set_queue_starts_at_first() {
-        let q = PlaybackQueue::new();
-        q.set_queue(vec![10, 20, 30]);
+        let q = three_track_queue();
         assert_eq!(q.current(), Some(10));
         assert_eq!(q.len(), 3);
     }
 
     #[test]
     fn next_advances_index() {
-        let q = PlaybackQueue::new();
-        q.set_queue(vec![10, 20, 30]);
+        let q = three_track_queue();
         assert_eq!(q.next(), Some(20));
         assert_eq!(q.next(), Some(30));
         assert_eq!(q.next(), None);
@@ -221,8 +225,7 @@ mod tests {
 
     #[test]
     fn previous_goes_back() {
-        let q = PlaybackQueue::new();
-        q.set_queue(vec![10, 20, 30]);
+        let q = three_track_queue();
         assert_eq!(q.next(), Some(20));
         assert_eq!(q.next(), Some(30));
         assert_eq!(q.previous(), Some(20));
