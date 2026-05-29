@@ -74,10 +74,10 @@ description: "Task list for high-fidelity music player refactoring"
 
 **Independent Test**: Open an audio file, decode it, verify PCM output reaches CPAL callback; test queue navigation (next/previous) programmatically
 
-- [ ] T014 [US1] Implement decoder bridge for symphonia in src/playback/decoder.rs (open file, decode PCM frames, emit end-of-stream signal)
-- [ ] T015 [US1] Implement CPAL audio output in src/playback/output.rs (device enumeration, stream config, rtrb-based callback)
-- [ ] T016 [US1] Implement playback queue with current/next/previous navigation in src/playback/queue.rs
-- [ ] T017 [US1] Implement PlaybackController trait and playback engine orchestrator in src/playback/engine.rs (wire decoder → rtrb → output, handle play/pause/stop/seek/volume commands)
+- [X] T014 [US1] Implement decoder bridge for symphonia in src/playback/decoder.rs (open file, decode PCM frames, emit end-of-stream signal)
+- [X] T015 [US1] Implement CPAL audio output in src/playback/output.rs (device enumeration, stream config, rtrb-based callback)
+- [X] T016 [US1] Implement playback queue with current/next/previous navigation in src/playback/queue.rs
+- [X] T017 [US1] Implement PlaybackController trait and playback engine orchestrator in src/playback/engine.rs (wire decoder → rtrb → output, handle play/pause/stop/seek/volume commands)
 
 **Checkpoint**: Playback engine plays audio from a file path; queue navigation works; output device renders PCM correctly
 
