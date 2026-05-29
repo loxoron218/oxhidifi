@@ -73,18 +73,18 @@ A user plays a high-resolution audio file (e.g., 96 kHz / 24-bit FLAC). The play
 
 ### User Story 4 - Side Panel Player (Priority: P2)
 
-A user starts playback from the library view. A side panel slides in from the left side of the window showing album artwork, current track information, and playback controls. The user can continue browsing while the panel remains visible.
+A user starts playback from the library view. A player panel slides in from the left side of the window showing album artwork, current track information, and playback controls. The user can continue browsing while the panel remains visible.
 
 **Why this priority**: Enhances the browsing-while-listening experience but depends on basic playback.
 
-**Independent Test**: Can be tested by starting playback and verifying the side panel appears, shows correct track info, allows navigation of the library simultaneously, and can be closed or auto-hides when playback stops.
+**Independent Test**: Can be tested by starting playback and verifying the player panel appears, shows correct track info, allows navigation of the library simultaneously, and can be closed or auto-hides when playback stops.
 
 **Acceptance Scenarios**:
 
-1. **Given** no playback is active, **When** the user starts playing a track, **Then** a side panel slides in from the left with album artwork, track title, artist name, and playback controls
-2. **Given** the side panel is visible, **When** the user interacts with the main library view, **Then** both the panel and library remain accessible
-3. **Given** the side panel is visible, **When** the user stops playback or the queue empties, **Then** the panel slides back out
-4. **Given** the side panel is visible on a narrow window, **When** the user clicks a back button in the panel, **Then** the panel hides to maximize content space
+1. **Given** no playback is active, **When** the user starts playing a track, **Then** a player panel slides in from the left with album artwork, track title, artist name, and playback controls
+2. **Given** the player panel is visible, **When** the user interacts with the main library view, **Then** both the panel and library remain accessible
+3. **Given** the player panel is visible, **When** the user stops playback or the queue empties, **Then** the panel slides back out
+4. **Given** the player panel is visible on a narrow window, **When** the user clicks a back button in the panel, **Then** the panel hides to maximize content space
 
 ---
 
@@ -123,8 +123,7 @@ A user on an album detail page sees the full track listing, album metadata (year
 **Library Management**
 
 - **FR-001**: The system MUST detect and catalog all supported audio files from one or more user-configured directories.
-- **FR-002**: The system MUST extract and store metadata (title, artist, album, year, genre, track number, disc number, duration) from each audio file.
-- **FR-003**: The system MUST extract and store technical metadata (sample rate, bit depth, number of channels, codec, lossless status) from each audio file.
+- **FR-002**: The system MUST extract and store content metadata (title, artist, album, year, genre, track number, disc number, duration, bitrate) and technical metadata (sample rate, bit depth, number of channels, codec, lossless status) from each audio file. Both categories are co-extracted in a single pass via the metadata library.
 - **FR-004**: The system MUST extract embedded album artwork from audio files for display.
 - **FR-004b**: The system MUST cache extracted artwork to disk and generate thumbnails for grid/column views. A fallback placeholder MUST be displayed when no embedded artwork is available.
 - **FR-005**: The system MUST detect and exclude duplicate files using a layered strategy: file path uniqueness as primary dedup, content hash (SHA-256) on path collision, and metadata fingerprint (artist+album+title+track) as final fallback.
@@ -138,14 +137,14 @@ A user on an album detail page sees the full track listing, album metadata (year
 - **FR-010**: The system MUST support at least two view modes per tab: a grid layout and a column layout.
 - **FR-011**: The system MUST provide a toggle control in the header bar to switch between grid and column views.
 - **FR-012**: Each album and artist MUST have a dedicated detail page showing full metadata and associated content (tracks for albums, albums for artists).
-- **FR-013**: The system MUST support adaptive/responsive layouts using `AdwBreakpoint` with the modern widget stack (`AdwNavigationSplitView` for sidebar/content, `AdwNavigationView` for page stacks, `AdwOverlaySplitView` for player panel, `AdwViewSwitcher` + `AdwViewSwitcherBar` for tab navigation) that adjust to different window sizes, with at minimum: a wide mode (≥800px) showing side panel and library side-by-side, and a narrow mode (<800px) stacking them with back-navigation.
+- **FR-013**: The system MUST support adaptive/responsive layouts using `AdwBreakpoint` with the modern widget stack (`AdwNavigationSplitView` for sidebar/content, `AdwNavigationView` for page stacks, `AdwOverlaySplitView` for player panel, `AdwViewSwitcher` + `AdwViewSwitcherBar` for tab navigation) that adjust to different window sizes, with at minimum: a wide mode (≥800px) showing player panel and library side-by-side, and a narrow mode (<800px) stacking them with back-navigation.
 - **FR-013b**: The system MUST support keyboard navigation (Tab, arrows, Enter, Escape), provide accessible labels via `AccessibleProperty::Label` on all interactive widgets, and provide tooltip text via `set_tooltip_text()` on all actionable controls.
 
 **Playback**
 
 - **FR-014**: The system MUST support gapless playback — consecutive tracks play without any audible silence or interruption between them.
 - **FR-015**: The system MUST output audio at the file's native sample rate and bit depth when the output device supports it, preserving the original bit-perfect stream.
-- **FR-016**: When the output device does not support the file's native sample rate, the system MUST transparently resample to a supported rate. Resampled output MUST maintain SNR > 120 dB relative to the original and MUST pass a blind ABX test with p < 0.05 against the original at the matched sample rate. Quality is defined by these measurable thresholds — no subjective criteria apply.
+- **FR-016**: When the output device does not support the file's native sample rate, the system MUST transparently resample to a supported rate. Resampled output MUST maintain RMS SNR > 120 dB relative to the original (measured over a full-band pink noise signal across the 20 Hz–20 kHz audible range) and MUST pass a blind ABX test with p < 0.05 against the original at the matched sample rate. Quality is defined by these measurable thresholds — no subjective criteria apply.
 - **FR-017**: The system MUST support common audio formats including FLAC, MP3, AAC, Ogg Vorbis, Opus, WAV, and AIFF.
 - **FR-018**: The system MUST support high-resolution audio (sample rates up to at least 192 kHz, bit depths up to 24-bit).
 - **FR-019**: The system MUST provide standard playback controls: play, pause, stop, next track, previous track.
@@ -154,15 +153,15 @@ A user on an album detail page sees the full track listing, album metadata (year
 
 **Queue Management**
 
-- **FR-022**: The system MUST provide a visible playback queue with the ability to view upcoming tracks, manually reorder (drag-and-drop), add tracks from any browse/detail view, and remove individual entries.
+- **FR-022**: The system MUST provide a visible playback queue with the ability to view upcoming tracks, manually reorder via GTK4 drag-and-drop (`GtkDragSource`/`GtkDropTarget` on queue row widgets), add tracks from any browse/detail view, and remove individual entries. The queue MUST support a maximum of 100,000 entries.
 - **FR-023**: The queue MUST auto-populate from the current browsing context (playing an album queues all its tracks in order; playing an artist queues all albums' tracks). Manual additions and reordering MUST be preserved until the context changes.
 
 **Player Panel**
 
-- **FR-024**: When playback starts, a side panel MUST slide in from the left displaying album artwork, current track metadata, and playback controls.
-- **FR-025**: The side panel MUST remain visible and functional while the user interacts with the main library view.
-- **FR-026**: The side panel MUST slide out when playback stops or the queue is empty.
-- **FR-027**: On narrow/compact window sizes, the side panel MUST support a back navigation to hide it and maximize content space.
+- **FR-024**: When playback starts, a player panel MUST slide in from the left displaying album artwork, current track metadata, and playback controls.
+- **FR-025**: The player panel MUST remain visible and functional while the user interacts with the main library view.
+- **FR-026**: The player panel MUST slide out when playback stops or the queue is empty.
+- **FR-027**: On narrow/compact window sizes, the player panel MUST support a back navigation to hide it and maximize content space.
 
 **Performance and Reliability**
 
@@ -171,10 +170,14 @@ A user on an album detail page sees the full track listing, album metadata (year
 - **FR-030**: The system MUST recover gracefully from audio device disconnection or configuration changes.
 - **FR-031**: The system MUST handle application startup even when no audio device is available, displaying appropriate messaging.
 
+**Settings**
+
+- **FR-034**: The system MUST provide a `PreferencesDialog` (per GNOME HIG) with `PreferencesPage` and `PreferencesGroup` containing typed rows (`ActionRow` for library directories, `ComboRow` for audio device selection, `SwitchRow`/`SpinRow` for view and playback preferences) to manage library directories, audio output device, view preferences, and volume level.
+
 **Observability**
 
 - **FR-032**: The system MUST emit structured logs using the `tracing` crate at minimum error, warn, and info levels across all subsystems (library scanning, playback engine, UI).
-- **FR-033**: The system MUST collect and expose performance metrics for playback latency (play initiation to first audio output), library scan throughput (files/second), memory usage, and UI response times to validate success criteria.
+- **FR-033**: The system MUST collect and expose performance metrics via structured `tracing` output (typed fields on `tracing::info!` events) for playback latency (play initiation to first audio output), library scan throughput (files/second), memory usage, and UI response times to validate success criteria.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -195,7 +198,7 @@ A user on an album detail page sees the full track listing, album metadata (year
 - **SC-004**: A library of 10,000 tracks loads and becomes browsable within 30 seconds on reference hardware (Intel i5-1135G7, 16 GB RAM, NVMe SSD).
 - **SC-005**: Users can navigate between Albums and Artists views, toggle between grid and column layouts, and access detail pages without perceivable UI lag (response under 100ms).
 - **SC-006**: The empty state is shown on first launch when no library is configured; the library view populates within 10 seconds of configuring a directory with 1,000 audio files.
-- **SC-007**: The side player panel appears within 500ms of playback starting and display correct track metadata and artwork.
+- **SC-007**: The player panel appears within 500ms of playback starting and display correct track metadata and artwork.
 - **SC-008**: Resampled audio MUST pass a blind ABX test (p < 0.05 threshold, binomial test) comparing resampled output against the original source at matched sample rate, with a minimum of 10 trials per test. The ABX test MUST be supported by an automated validation harness (programmatic stimulus generation, randomization, and statistical evaluation); manual perceptual verification is permitted as a supplementary check.
 
 ## Assumptions

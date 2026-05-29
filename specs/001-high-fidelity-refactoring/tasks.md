@@ -22,7 +22,7 @@ description: "Task list for high-fidelity music player refactoring"
 
 **Purpose**: Project initialization, dependency declaration, tooling configuration
 
-- [X] T001 Create Cargo.toml with all dependencies per plan.md (cpal, symphonia, rtrb, lofty, rubato, audioadapter-buffers, tokio, libadwaita/gtk4-rs, sqlx, serde/serde_json, notify, tracing/tracing-subscriber, crossbeam, rayon, parking-lot, thiserror, anyhow, criterion, tempfile)
+- [X] T001 Create Cargo.toml with all dependencies per plan.md (cpal, symphonia, rtrb, lofty, rubato, audioadapter-buffers, tokio, libadwaita/gtk4-rs, sqlx, serde/serde_json, notify, walkdir, tracing/tracing-subscriber, crossbeam, rayon, parking-lot, thiserror, anyhow, criterion, tempfile)
 - [X] T002 [P] Configure clippy (clippy.toml or .cargo/config.toml) with pedantic warnings and rustfmt config
 - [X] T003 [P] Initialize tracing-subscriber in src/main.rs with structured logging (file + stderr)
 - [X] T004 Create empty module structure with mod.rs re-exports per plan.md: src/library/, src/storage/, src/playback/, src/ui/, src/ui/library/, src/ui/detail/, src/ui/player/, src/metrics/
@@ -139,6 +139,8 @@ description: "Task list for high-fidelity music player refactoring"
 - [ ] T036c [US3] Add criterion benchmarks for resampler throughput and bit-perfect output path latency; verify no regression against Phase 1 baseline per Principle IV
 - [ ] T036d [US3] Implement automated ABX validation harness for resampled output per SC-008: programmatic stimulus generation, randomized ABX presentation, binomial statistical evaluation (p < 0.05 threshold, minimum 10 trials per test condition); document manual QA procedure as supplementary verification for SNR > 120 dB
 - [ ] T036e [US3] Verify high-resolution audio support (sample rates up to 192 kHz, bit depth up to 24-bit) per FR-018; add test fixtures with 96 kHz and 192 kHz files
+- [ ] T036f [US3] Implement bit-perfect output verification per SC-003: capture CPAL output buffer after playback, decode source file to PCM via symphonia, assert byte-identical match across all frames; add test fixture with known-reference FLAC file
+- [ ] T036g [US3] Implement RMS SNR measurement for resampled output per FR-016: generate full-band pink noise reference signal (20 Hz–20 kHz), resample via rubato, compute RMS SNR against original, assert > 120 dB threshold
 
 **Checkpoint**: Gapless playback across tracks at same and different sample rates, resampling kicks in transparently when device doesn't support native rate
 
@@ -146,9 +148,9 @@ description: "Task list for high-fidelity music player refactoring"
 
 ## Phase 8: User Story 4 - Side Panel Player (Priority: P2)
 
-**Goal**: Slide-in side panel from left showing album artwork, track info, and playback controls, remaining functional while browsing library
+**Goal**: Slide-in player panel from left showing album artwork, track info, and playback controls, remaining functional while browsing library
 
-**Independent Test**: Start playback, verify side panel appears with correct track info, library remains navigable, panel hides when queue empties
+**Independent Test**: Start playback, verify player panel appears with correct track info, library remains navigable, panel hides when queue empties
 
 ### Implementation for User Story 4
 
@@ -184,20 +186,20 @@ description: "Task list for high-fidelity music player refactoring"
 **Purpose**: Non-functional improvements across the entire application
 
 - [ ] T045 [P] Audit and complete keyboard navigation (Tab/arrows/Enter/Escape), accessible labels (AccessibleProperty::Label), and tooltips (set_tooltip_text) across Phase 6-9 UI widgets (artist view, status bar, detail pages, player panel, queue view) per FR-013b; core accessibility already established in T024d
-- [ ] T046 Implement performance metrics collector with tracing in src/metrics/collector.rs — collect playback latency (target <3s per SC-001), scan throughput (target <30s for 10k tracks per SC-004), UI response (target <100ms per SC-005), side panel reveal time (target <500ms per SC-007), and steady-state memory usage (target <200MB); emit structured metric events for each threshold gate via `tracing::info!` with typed fields for downstream consumption
+- [ ] T046 Implement performance metrics collector with tracing in src/metrics/collector.rs — collect playback latency (target <3s per SC-001), scan throughput (target <30s for 10k tracks per SC-004), UI response (target <100ms per SC-005), player panel reveal time (target <500ms per SC-007), and steady-state memory usage (target <200MB); emit structured metric events for each threshold gate via `tracing::info!` with typed fields for downstream consumption
 - [ ] T047 Add structured tracing instrumentation (error/warn/info levels) across library scanner (target: `library::scanner`), playback engine (target: `playback::engine`), and UI subsystems (target: `ui::*`) in src/library/scanner.rs, src/playback/engine.rs, and src/ui/window.rs with typed fields for all diagnostic events per constitution Principle V
 - [ ] T048a [P] Implement graceful handling for audio device disconnection during playback in src/playback/output.rs — detect device loss, pause playback, emit device-lost event, attempt reconnection to default device per FR-030
 - [ ] T048b [P] Implement graceful handling for no audio device at startup in src/playback/output.rs — application starts without error, display message about missing audio hardware per FR-031 and spec.md Edge Cases
 - [ ] T048c [P] Implement corrupted/unreadable file handling in src/library/scanner.rs — skip files during scanning, log warning with file path, exclude from playback per spec.md Edge Cases
-- [ ] T048d [P] Implement empty queue end-of-playback handling in src/playback/engine.rs — stop playback, show idle state, auto-hide side panel per FR-026 and spec.md Edge Cases
+- [ ] T048d [P] Implement empty queue end-of-playback handling in src/playback/engine.rs — stop playback, show idle state, auto-hide player panel per FR-026 and spec.md Edge Cases
 - [ ] T048e [P] Implement large library browsing performance in src/ui/library/ — ensure smooth scrolling and view switching for 10k+ items without UI freezes per spec.md Edge Cases
 - [ ] T049 Run `cargo clippy --fix --allow-dirty --all-targets -- -W clippy::pedantic && cargo fmt` and fix all warnings; then run `find . -name "*.rs" -exec perl -i -0777 -pe 's/([;}])[ \t]*\r?\n([ \t]*\/\/(?!\/))/$1\n\n$2/g' {} +` to enforce blank lines before single-line comments after braces/semicolons per constitution
 - [ ] T050 Validate with quickstart.md — build (debug + release), run, verify all user stories functional
-- [ ] T051 [P] Implement PreferencesDialog with library directory management (add/remove directories), audio device selection, and view preferences per plan.md; wire audio device selection to playback engine output device enumeration and volume level to `UserSettings.volume` with dB attenuation mapping per FR-021
+- [ ] T051 [P] Implement PreferencesDialog with library directory management (add/remove directories), audio device selection, and view preferences per FR-034 and plan.md; wire audio device selection to playback engine output device enumeration and volume level to `UserSettings.volume` with dB attenuation mapping per FR-021
 - [ ] T052 Add library load verification: populate library with 10,000 synthetic tracks, measure scan throughput (<30s per SC-004) using metrics collector in src/metrics/collector.rs
 - [ ] T052c Add UI response verification: navigate between Albums/Artists views, toggle grid/column, access detail pages — measure response time (<100ms per SC-005) using metrics collector in src/metrics/collector.rs
 - [ ] T052b [P] Add queue persistence verification: populate queue, restart application, verify queue order, track IDs, and context are preserved per FR-029
-- [ ] T053 [P] Audit and polish adaptive/responsive main layout (initially built in T024c) — verify AdwBreakpoint thresholds, test narrow/wide transitions, ensure all pages handle both modes correctly per FR-013
+- [ ] T053 Audit and polish adaptive/responsive main layout (initially built in T024c) — verify AdwBreakpoint thresholds, test narrow/wide transitions, ensure all pages handle both modes correctly per FR-013
 - [ ] T054 [P] [US1] Implement artwork caching pipeline (extract thumbnail, cache to disk, fallback placeholder) in src/library/metadata.rs per FR-004b
 - [ ] T055 [P] Audit HIG compliance across all UI widgets: Toast for transient messages, 6px spacing scale, 200ms ease transitions, no hardcoded radii
 - [ ] T056 [P] Add multi-format end-to-end verification test fixture covering FLAC, MP3, AAC, Ogg Vorbis, Opus, WAV, and AIFF per FR-017
@@ -248,10 +250,10 @@ description: "Task list for high-fidelity music player refactoring"
 | Phase 4: US1b | — (sequential) |
 | Phase 5: US1c | T024c, T024d |
 | Phase 6: US2 | T025, T026, T027, T028 |
-| Phase 7: US3 | T032, T036b, T036c |
+| Phase 7: US3 | T032, T036b, T036c, T036f, T036g |
 | Phase 8: US4 | — (mostly sequential) |
 | Phase 9: US5 | T041, T042 |
-| Phase 10: Polish | T045, T048a, T048b, T048c, T048d, T048e, T051, T053, T054, T055, T056 |
+| Phase 10: Polish | T045, T048a, T048b, T048c, T048d, T048e, T051, T054, T055, T056 |
 
 ---
 

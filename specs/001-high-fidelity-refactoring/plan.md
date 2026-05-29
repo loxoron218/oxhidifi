@@ -6,7 +6,7 @@
 
 ## Summary
 
-Refactor oxhidifi into a high-fidelity GTK4/Libadwaita desktop music player with gapless bit-perfect playback. The application provides library management (metadata extraction, filesystem watching, dedup), browsable Albums/Artists views with grid/column toggles and detail pages, a slide-in side player panel, and robust observability — all built with modern idiomatic Rust.
+Refactor oxhidifi into a high-fidelity GTK4/Libadwaita desktop music player with gapless bit-perfect playback. The application provides library management (metadata extraction, filesystem watching, dedup), browsable Albums/Artists views with grid/column toggles and detail pages, a slide-in player panel, and robust observability — all built with modern idiomatic Rust.
 
 ## Technical Context
 
@@ -22,7 +22,7 @@ Refactor oxhidifi into a high-fidelity GTK4/Libadwaita desktop music player with
 
 **Project Type**: desktop-app (GTK4/Libadwaita, programmatic widgets only)
 
-**Performance Goals**: < 3s play initiation (click-to-audio), gapless track transitions (zero audible gap), bit-perfect output (bit-identical compare), < 100ms UI response, < 500ms side panel reveal
+**Performance Goals**: < 3s play initiation (click-to-audio), gapless track transitions (zero audible gap), bit-perfect output (bit-identical compare), < 100ms UI response, < 500ms player panel reveal
 
 **Constraints**: Lock-free audio pipeline, zero heap allocation on audio hot path (pre-allocated buffers only), < 200MB steady-state memory, offline-only (local filesystem), stereo output only
 
@@ -95,7 +95,7 @@ src/
 │   │   └── artist.rs    # Artist detail page
 │   ├── player/
 │   │   ├── mod.rs
-│   │   ├── panel.rs     # Slide-in side player panel
+│   │   ├── panel.rs     # Slide-in player panel
 │   │   └── queue.rs     # Queue view UI (track list, drag-and-drop, remove)
 │   ├── settings.rs      # PreferencesDialog
 │   └── status.rs        # Status bar (scanning indicator)
