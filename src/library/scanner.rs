@@ -27,7 +27,7 @@ use crate::{
         dedup::{compute_content_hash, is_supported_audio_format},
         metadata::{
             AudioMetadata,
-            MetadataError::{FileNotFound, InvalidDuration, ReadError},
+            MetadataError::{FileNotFound, InvalidDuration, ParseError, ReadError},
             extract_metadata, metadata_fingerprint,
         },
     },
@@ -105,6 +105,10 @@ impl<S: Storage> FsScanner<S> {
     }
 
     /// Check if a file should be skipped based on path uniqueness.
+    ///
+    /// # Errors
+    ///
+    /// Returns a storage error if the database lookup fails.
     async fn check_path_exists(&self, path: &Path) -> Result<bool, StorageError> {
         match self.storage.find_by_path(path).await {
             Ok(Some(_)) => Ok(true),
@@ -114,6 +118,10 @@ impl<S: Storage> FsScanner<S> {
     }
 
     /// Check if a file should be skipped based on content hash.
+    ///
+    /// # Errors
+    ///
+    /// Returns a storage error if the database lookup fails.
     async fn check_hash_duplicate(&self, hash: &str) -> Result<bool, StorageError> {
         match self.storage.find_by_hash(hash).await {
             Ok(tracks) => Ok(!tracks.is_empty()),
@@ -122,6 +130,10 @@ impl<S: Storage> FsScanner<S> {
     }
 
     /// Check if a file should be skipped based on metadata fingerprint.
+    ///
+    /// # Errors
+    ///
+    /// Returns a storage error if the database lookup fails.
     async fn check_fingerprint_duplicate(
         &self,
         metadata: &AudioMetadata,
@@ -139,6 +151,10 @@ impl<S: Storage> FsScanner<S> {
     }
 
     /// Get or create an artist in storage.
+    ///
+    /// # Errors
+    ///
+    /// Returns a storage error if the database operation fails.
     async fn get_or_create_artist(&self, name: &str) -> Result<i64, StorageError> {
         let artist_name = if name.is_empty() {
             "Unknown Artist"
@@ -162,6 +178,10 @@ impl<S: Storage> FsScanner<S> {
     }
 
     /// Get or create an album in storage.
+    ///
+    /// # Errors
+    ///
+    /// Returns a storage error if the database operation fails.
     async fn get_or_create_album(
         &self,
         metadata: &AudioMetadata,
@@ -200,13 +220,19 @@ impl<S: Storage> FsScanner<S> {
     }
 
     /// Process a single audio file: extract metadata, dedup, and store.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`SkipReason`] if the file cannot be processed (corrupt, duplicate, etc.).
     async fn process_file(
         &self,
         path: &Path,
         event_tx: &UnboundedSender<ScanEvent>,
     ) -> Result<TrackInfo, SkipReason> {
         let metadata = extract_metadata(path).map_err(|e| match e {
-            ReadError(_) | FileNotFound(_) | InvalidDuration(_) => SkipReason::CorruptFile,
+            ReadError(_) | FileNotFound(_) | InvalidDuration(_) | ParseError(_) => {
+                SkipReason::CorruptFile
+            }
         })?;
 
         if self.check_path_exists(path).await.map_err(|e| {
@@ -383,22 +409,26 @@ impl<S: Storage + 'static> LibraryScanner for FsScanner<S> {
         let dirs = self.storage.list_library_directories().await?;
         let (event_tx, event_rx) = unbounded_channel();
 
-        let _event_handle = spawn(drain_events(event_rx));
+        let event_handle = spawn(drain_events(event_rx));
 
         for dir in &dirs {
             let path = Path::new(&dir.path);
             self.scan_dir(path, &event_tx).await;
         }
 
+        drop(event_tx);
+        drop(event_handle);
         Ok(())
     }
 
     async fn scan_directory(&self, path: &Path) -> Result<(), StorageError> {
         let (event_tx, event_rx) = unbounded_channel();
 
-        let _event_handle = spawn(drain_events(event_rx));
+        let event_handle = spawn(drain_events(event_rx));
 
         self.scan_dir(path, &event_tx).await;
+        drop(event_tx);
+        drop(event_handle);
         Ok(())
     }
 

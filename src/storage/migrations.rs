@@ -97,6 +97,10 @@ pub async fn run(pool: &SqlitePool) -> StorageResult<()> {
 }
 
 /// Create database indexes for query performance.
+///
+/// # Errors
+///
+/// Returns a storage error if any index creation fails.
 async fn create_indexes(pool: &SqlitePool) -> StorageResult<()> {
     query("CREATE INDEX IF NOT EXISTS idx_track_album_id ON tracks(album_id)")
         .execute(pool)

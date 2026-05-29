@@ -2,16 +2,25 @@
 
 use std::path::Path;
 
-use tempfile::{TempDir, tempdir};
+use {
+    anyhow::{Context, Result},
+    tempfile::{TempDir, tempdir},
+};
 
 use oxhidifi_refactor::storage::{NewTrack, TrackAudio, database::SqliteStorage};
 
-/// Create a temporary `SqliteStorage` for testing, keeping the `TempDir` alive.
-async fn test_storage() -> Option<(SqliteStorage, TempDir)> {
-    let dir = tempdir().ok()?;
+/// Create a temporary `SqliteStorage` instance for testing.
+///
+/// # Errors
+///
+/// Returns an error if the temp directory or database connection cannot be created.
+async fn test_storage() -> Result<(SqliteStorage, TempDir)> {
+    let dir = tempdir().context("failed to create temp dir")?;
     let db_path = dir.path().join("test.db");
-    let storage = SqliteStorage::connect(&db_path).await.ok()?;
-    Some((storage, dir))
+    let storage = SqliteStorage::connect(&db_path)
+        .await
+        .context("failed to connect to storage")?;
+    Ok((storage, dir))
 }
 
 fn make_track(title: &str, path: &Path, album_id: Option<i64>) -> NewTrack {
@@ -55,7 +64,7 @@ mod tests {
 
     #[test]
     async fn insert_and_get_artist() -> Result<()> {
-        let (storage, _dir) = test_storage().await.context("test storage")?;
+        let (storage, _dir) = test_storage().await?;
         let artist_id = storage
             .insert_artist(NewArtist {
                 name: "Test Artist".to_string(),
@@ -76,7 +85,7 @@ mod tests {
 
     #[test]
     async fn insert_and_get_album() -> anyhow::Result<()> {
-        let (storage, _dir) = test_storage().await.context("test storage")?;
+        let (storage, _dir) = test_storage().await?;
         let artist_id = storage
             .insert_artist(NewArtist {
                 name: "Album Artist".to_string(),
@@ -108,7 +117,7 @@ mod tests {
 
     #[test]
     async fn insert_and_get_track() -> Result<()> {
-        let (storage, _dir) = test_storage().await.context("test storage")?;
+        let (storage, _dir) = test_storage().await?;
         let track = make_track("Test Track", Path::new("/music/test.flac"), None);
         let track_id = storage.insert_track(track).await?;
         let fetched = storage
@@ -126,7 +135,7 @@ mod tests {
 
     #[test]
     async fn track_crud() -> Result<()> {
-        let (storage, _dir) = test_storage().await.context("test storage")?;
+        let (storage, _dir) = test_storage().await?;
         let track = make_track("CRUD Track", Path::new("/music/crud.flac"), None);
         let track_id = storage.insert_track(track).await?;
         let fetched = storage
@@ -170,7 +179,7 @@ mod tests {
 
     #[test]
     async fn duplicate_detection_by_path() -> Result<()> {
-        let (storage, _dir) = test_storage().await.context("test storage")?;
+        let (storage, _dir) = test_storage().await?;
         let path = Path::new("/music/unique.flac");
         let track = make_track("Unique Path", path, None);
         storage.insert_track(track).await?;
@@ -196,7 +205,7 @@ mod tests {
 
     #[test]
     async fn duplicate_detection_by_hash() -> Result<()> {
-        let (storage, _dir) = test_storage().await.context("test storage")?;
+        let (storage, _dir) = test_storage().await?;
         let hash = "abcdef1234567890";
 
         let mut track1 = make_track("Track 1", Path::new("/music/track1.flac"), None);
@@ -214,7 +223,7 @@ mod tests {
 
     #[test]
     async fn album_track_relationships() -> Result<()> {
-        let (storage, _dir) = test_storage().await.context("test storage")?;
+        let (storage, _dir) = test_storage().await?;
 
         let artist_id = storage
             .insert_artist(NewArtist {
@@ -259,7 +268,7 @@ mod tests {
 
     #[test]
     async fn queue_operations() -> Result<()> {
-        let (storage, _dir) = test_storage().await.context("test storage")?;
+        let (storage, _dir) = test_storage().await?;
 
         let track1_id = storage
             .insert_track(make_track("Q1", Path::new("/music/q1.flac"), None))
@@ -316,7 +325,7 @@ mod tests {
 
     #[test]
     async fn library_directories() -> Result<()> {
-        let (storage, _dir) = test_storage().await.context("test storage")?;
+        let (storage, _dir) = test_storage().await?;
 
         storage.add_library_directory(Path::new("/music")).await?;
         storage.add_library_directory(Path::new("/audio")).await?;
@@ -333,7 +342,7 @@ mod tests {
 
     #[test]
     async fn track_search() -> Result<()> {
-        let (storage, _dir) = test_storage().await.context("test storage")?;
+        let (storage, _dir) = test_storage().await?;
 
         storage
             .insert_track(make_track(
@@ -366,7 +375,7 @@ mod tests {
 
     #[test]
     async fn get_all_artists() -> Result<()> {
-        let (storage, _dir) = test_storage().await.context("test storage")?;
+        let (storage, _dir) = test_storage().await?;
 
         storage
             .insert_artist(NewArtist {

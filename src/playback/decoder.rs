@@ -135,6 +135,10 @@ impl Decoder {
     }
 
     /// Attempt to decode a single packet, returning `None` on skip/eos.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DecoderError::DecodeError`] if the packet cannot be decoded.
     fn try_decode_one(&mut self) -> Result<Option<DecodedSamples>, DecoderError> {
         let packet = match self.format.next_packet() {
             Ok(Some(packet)) => packet,

@@ -8,6 +8,10 @@ use std::{
 use anyhow::{Context, Result};
 
 /// Resolve an XDG directory from an environment variable with a fallback path.
+///
+/// # Errors
+///
+/// Returns an error if `HOME` environment variable is not set.
 fn resolve_xdg_dir(env_var: &str, fallback: &str) -> Result<PathBuf> {
     if let Some(dir) = var_os(env_var)
         .map(PathBuf::from)
