@@ -3,5 +3,92 @@
 //! Uses `AdwViewSwitcher` for tab navigation per GNOME HIG. The switcher
 //! is placed in the title widget slot of `AdwHeaderBar`.
 //!
-//! This module is intentionally minimal — the header bar construction and
-//! switcher wiring live in `window.rs` where the `gtk::Stack` is available.
+//! Provides a toggle button to switch between grid and column layout views.
+
+use std::sync::Arc;
+
+use {
+    libadwaita::{
+        gtk::{Box, Orientation::Horizontal, ToggleButton},
+        prelude::{BoxExt, ButtonExt, ToggleButtonExt, WidgetExt},
+    },
+    tracing::warn,
+};
+
+use crate::{
+    app::AppState,
+    storage::settings::ViewMode::{self, Column, Grid},
+};
+
+/// Build the view mode toggle button.
+///
+/// Creates a `ToggleButton` that switches between grid and column layout.
+/// The button icon updates to reflect the current view mode.
+/// The button's `active` state is synced with the initial view mode
+/// so the first click always toggles modes (no redundant no-op toggle).
+///
+/// # Arguments
+///
+/// * `state` - Application state containing storage with settings
+/// * `initial_mode` - The initial view mode to display
+///
+/// # Returns
+///
+/// A `ToggleButton` that toggles the view mode.
+#[must_use]
+pub fn build_view_toggle(state: &Arc<AppState>, initial_mode: ViewMode) -> ToggleButton {
+    let toggle = ToggleButton::builder()
+        .icon_name(initial_mode.icon_name())
+        .tooltip_text(initial_mode.tooltip())
+        .active(initial_mode == Column)
+        .can_focus(true)
+        .css_classes(["flat"])
+        .build();
+
+    let state_clone = Arc::clone(state);
+    toggle.connect_toggled(move |btn| {
+        let mode = if btn.is_active() { Column } else { Grid };
+        btn.set_icon_name(mode.icon_name());
+        btn.set_tooltip_text(Some(mode.tooltip()));
+        if let Err(err) = state_clone.storage.set_view_mode(mode) {
+            warn!(error = %err, "Failed to set view mode");
+        }
+        if let Err(e) = state_clone.view_mode_tx.send(mode) {
+            warn!(error = %e, "Failed to send view mode change");
+        }
+    });
+
+    toggle
+}
+
+/// Build a header bar with view toggle.
+///
+/// Creates a horizontal box containing the view toggle button.
+#[must_use]
+pub fn build_header_controls(state: &Arc<AppState>) -> Box {
+    let controls = Box::builder().orientation(Horizontal).spacing(6).build();
+
+    let initial_mode = state.storage.get_view_mode();
+
+    let toggle = build_view_toggle(state, initial_mode);
+    controls.append(&toggle);
+
+    controls
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::storage::settings::ViewMode::{Column, Grid};
+
+    #[test]
+    fn view_mode_icon_names() {
+        assert_eq!(Grid.icon_name(), "view-grid-symbolic");
+        assert_eq!(Column.icon_name(), "view-list-symbolic");
+    }
+
+    #[test]
+    fn view_mode_tooltips() {
+        assert_eq!(Grid.tooltip(), "Switch to column view");
+        assert_eq!(Column.tooltip(), "Switch to grid view");
+    }
+}

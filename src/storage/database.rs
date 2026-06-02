@@ -2,9 +2,12 @@
 
 use std::path::Path;
 
-use sqlx::{
-    SqlitePool, query, query_as,
-    sqlite::{SqliteConnectOptions, SqlitePoolOptions},
+use {
+    parking_lot::RwLock,
+    sqlx::{
+        SqlitePool, query, query_as,
+        sqlite::{SqliteConnectOptions, SqlitePoolOptions},
+    },
 };
 
 use crate::storage::{
@@ -13,9 +16,10 @@ use crate::storage::{
     LibraryDirectory, NewAlbum, NewArtist, NewQueueEntry, NewTrack,
     QueueContext::{self, Album as QueueAlbum, Artist as QueueArtist, Manual},
     QueueEntry, Storage,
-    StorageError::{Database, InvalidPath},
+    StorageError::{self, Database, InvalidPath},
     StorageResult, Track, TrackUpdate,
     migrations::run,
+    settings::{SettingsStore, ViewMode},
 };
 
 /// Apply a `FieldUpdate` to a column in the tracks table.
@@ -54,35 +58,17 @@ macro_rules! apply_field {
 pub struct SqliteStorage {
     /// `SQLite` connection pool.
     pool: SqlitePool,
+    /// User settings store.
+    settings: RwLock<SettingsStore>,
 }
 
 impl SqliteStorage {
-    /// Create a new `SqliteStorage` with a connection pool to the given database path.
-    ///
-    /// Runs migrations on connect.
+    /// Inserts a new track row into the database and returns its ID.
     ///
     /// # Errors
     ///
-    /// Returns an error if the pool cannot be created or migrations fail.
-    pub async fn connect(database_path: &Path) -> StorageResult<Self> {
-        let opts = SqliteConnectOptions::new()
-            .filename(database_path)
-            .create_if_missing(true);
-
-        let pool = SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect_with(opts)
-            .await
-            .map_err(|e| Database(format!("Failed to connect: {e}")))?;
-
-        run(&pool).await?;
-
-        Ok(Self { pool })
-    }
-}
-
-impl Storage for SqliteStorage {
-    async fn insert_track(&self, track: NewTrack) -> StorageResult<i64> {
+    /// Returns [`StorageError::Database`] if the insert query fails.
+    async fn insert_track_row(&self, track: &NewTrack) -> StorageResult<i64> {
         let row_id: (i64,) = query_as(
             "INSERT INTO tracks (title, number, disc_number, duration, file_path, content_hash, \
              format, sample_rate, bit_depth, channels, codec, lossless, bitrate, album_id, \
@@ -111,6 +97,59 @@ impl Storage for SqliteStorage {
         .map_err(|e| Database(format!("Insert track failed: {e}")))?;
 
         Ok(row_id.0)
+    }
+
+    /// Create a new `SqliteStorage` with a connection pool to the given database path.
+    ///
+    /// Runs migrations on connect.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the pool cannot be created or migrations fail.
+    pub async fn connect(database_path: &Path) -> StorageResult<Self> {
+        let opts = SqliteConnectOptions::new()
+            .filename(database_path)
+            .create_if_missing(true);
+
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(opts)
+            .await
+            .map_err(|e| Database(format!("Failed to connect: {e}")))?;
+
+        run(&pool).await?;
+
+        let settings =
+            SettingsStore::load().map_err(|e| Database(format!("Failed to load settings: {e}")))?;
+
+        Ok(Self {
+            pool,
+            settings: RwLock::new(settings),
+        })
+    }
+
+    /// Get the current view mode.
+    #[must_use]
+    pub fn get_view_mode(&self) -> ViewMode {
+        self.settings.read().get().view_mode
+    }
+
+    /// Set the view mode and persist to disk.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the settings cannot be saved.
+    pub fn set_view_mode(&self, mode: ViewMode) -> Result<(), StorageError> {
+        self.settings
+            .write()
+            .update(|s| s.view_mode = mode)
+            .map_err(|e| Database(format!("Failed to save view mode: {e}")))
+    }
+}
+
+impl Storage for SqliteStorage {
+    async fn insert_track(&self, track: NewTrack) -> StorageResult<i64> {
+        self.insert_track_row(&track).await
     }
 
     async fn update_track(&self, id: i64, track: TrackUpdate) -> StorageResult<()> {
@@ -413,5 +452,43 @@ impl Storage for SqliteStorage {
         .fetch_all(&self.pool)
         .await
         .map_err(|e| Database(format!("Find by fingerprint failed: {e}")))
+    }
+
+    async fn insert_tracks_batch(&self, tracks: Vec<NewTrack>) -> StorageResult<Vec<i64>> {
+        let mut ids = Vec::with_capacity(tracks.len());
+        for track in &tracks {
+            ids.push(self.insert_track_row(track).await?);
+        }
+        Ok(ids)
+    }
+
+    async fn find_by_paths_batch(&self, paths: &[&Path]) -> StorageResult<Vec<Option<Track>>> {
+        let mut results = Vec::with_capacity(paths.len());
+        for path in paths {
+            let path_str = path
+                .to_str()
+                .ok_or_else(|| InvalidPath(path.display().to_string()))?;
+
+            let track = query_as::<_, Track>("SELECT * FROM tracks WHERE file_path = ?")
+                .bind(path_str)
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(|e| Database(format!("Find by path failed: {e}")))?;
+            results.push(track);
+        }
+        Ok(results)
+    }
+
+    async fn find_by_hashes_batch(&self, hashes: &[&str]) -> StorageResult<Vec<Vec<Track>>> {
+        let mut results = Vec::with_capacity(hashes.len());
+        for hash in hashes {
+            let tracks = query_as::<_, Track>("SELECT * FROM tracks WHERE content_hash = ?")
+                .bind(hash)
+                .fetch_all(&self.pool)
+                .await
+                .map_err(|e| Database(format!("Find by hash failed: {e}")))?;
+            results.push(tracks);
+        }
+        Ok(results)
     }
 }

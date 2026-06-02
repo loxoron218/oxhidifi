@@ -3,32 +3,44 @@
 //! Displays albums in a responsive `FlowBox` grid. Each album cell shows
 //! cover art (or a placeholder icon), title, and artist name. Clicking an
 //! album triggers playback via the `PlaybackController`.
+//! Shows an inline empty state when no albums are available.
 
-use std::sync::Arc;
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use {
     libadwaita::{
-        glib::spawn_future_local,
+        glib::{prelude::Cast, spawn_future_local},
         gtk::{
-            Align::{Center, Start},
+            Align::{Center, End, Start},
             Box, Button,
             ContentFit::Cover,
-            FlowBox, Image, Label,
-            Orientation::Vertical,
-            Picture, ScrolledWindow,
-            SelectionMode::None,
-            Widget,
-            pango::EllipsizeMode::End,
-            prelude::*,
+            EventControllerMotion, Image, Label,
+            Orientation::{Horizontal, Vertical},
+            Overlay, Picture, ScrolledWindow, Widget,
+            pango::EllipsizeMode::End as EllipsizeEnd,
         },
+        prelude::{BoxExt, ButtonExt, WidgetExt},
     },
     tracing::info,
 };
 
 use crate::{
     app::AppState,
-    playback::engine::PlaybackController,
-    storage::{Album, Storage},
+    playback::{
+        OutputError::{DeviceDisconnected, NoDeviceAvailable},
+        PlaybackError::{
+            DeviceDisconnected as PlaybackDeviceDisconnected,
+            NoDeviceAvailable as PlaybackNoDeviceAvailable, Output,
+        },
+        engine::PlaybackController,
+    },
+    storage::{
+        Album, Storage,
+        settings::ViewMode::{self, Column, Grid},
+    },
+    ui::library::empty::{
+        EmptyStateParams, build_empty_state, build_library_grid, populate_grid, populate_list,
+    },
 };
 
 /// Size of album cover art thumbnails in pixels.
@@ -37,39 +49,31 @@ const THUMBNAIL_SIZE: i32 = 180;
 /// Build the album grid view.
 ///
 /// Creates a `ScrolledWindow` containing a `FlowBox` populated with
-/// album cards loaded asynchronously from storage.
+/// album cards loaded asynchronously from storage. Shows an inline
+/// empty state when no albums are available.
 #[must_use]
 pub fn build_album_grid(state: &Arc<AppState>) -> ScrolledWindow {
-    let scrolled = ScrolledWindow::builder()
-        .vexpand(true)
-        .hexpand(true)
-        .build();
-
-    let flow_box = FlowBox::builder()
-        .valign(Start)
-        .halign(Center)
-        .row_spacing(12)
-        .column_spacing(12)
-        .selection_mode(None)
-        .can_focus(true)
-        .tooltip_text("Album library grid \u{2014} click an album to play")
-        .build();
-
-    let state_clone = Arc::clone(state);
-    let flow_ref = flow_box.clone();
-    spawn_future_local(async move {
-        load_albums(&state_clone, &flow_ref).await;
-    });
-
-    scrolled.set_child(Some(&flow_box));
-    scrolled
+    build_library_grid(
+        state,
+        "Album library grid \u{2014} click an album to play",
+        |state, container, scrolled, mode| {
+            spawn_future_local(async move {
+                load_albums(&state, &container, &scrolled, mode).await;
+            });
+        },
+    )
 }
 
-/// Load albums from storage and populate the flow box.
+/// Load albums from storage and populate the container.
 ///
-/// Each album is wrapped in a `Button` so clicking it triggers playback
-/// of the album's tracks.
-async fn load_albums(state: &Arc<AppState>, flow_box: &FlowBox) {
+/// If no albums exist, shows an inline empty state with an "Add Folder" button.
+/// Populates either a grid (`FlowBox`) or column (`ListBox`) depending on view mode.
+async fn load_albums(
+    state: &Arc<AppState>,
+    container: &Box,
+    scrolled: &ScrolledWindow,
+    mode: ViewMode,
+) {
     let albums = match state.storage.get_all_albums().await {
         Ok(a) => a,
         Err(e) => {
@@ -78,9 +82,54 @@ async fn load_albums(state: &Arc<AppState>, flow_box: &FlowBox) {
         }
     };
 
+    if albums.is_empty() {
+        let empty_widget = build_empty_state(
+            state,
+            &EmptyStateParams {
+                icon_name: "folder-music-symbolic",
+                icon_label: "Music library icon",
+                heading: "No Albums Found",
+                heading_label: "No albums found",
+                description: "Add a music folder to see your albums here.",
+                description_label: "Add a music folder to see your albums here.",
+            },
+        );
+        scrolled.set_child(Some(&empty_widget));
+        return;
+    }
+
+    let mut artist_names: HashMap<i64, String> = HashMap::new();
     for album in &albums {
-        let card = build_album_card(state, album);
-        flow_box.append(&card);
+        if artist_names.contains_key(&album.artist_id) {
+            continue;
+        }
+        let Ok(Some(artist)) = state.storage.get_artist(album.artist_id).await else {
+            continue;
+        };
+        artist_names.insert(album.artist_id, artist.name);
+    }
+
+    let cards: Vec<Widget> = albums
+        .iter()
+        .map(|album| {
+            let artist_name = artist_names
+                .get(&album.artist_id)
+                .map_or("Unknown Artist", String::as_str);
+            build_album_card(state, album, artist_name).upcast()
+        })
+        .collect();
+
+    match mode {
+        Grid => populate_grid(
+            container,
+            "Album library grid \u{2014} click an album to play",
+            cards,
+        ),
+        Column => populate_list(
+            container,
+            "Album library list \u{2014} click an album to play",
+            cards,
+        ),
     }
 }
 
@@ -115,9 +164,9 @@ fn build_cover_art(album: &Album) -> Widget {
 
 /// Build a single album card widget.
 ///
-/// Returns a `Button` containing a vertical layout with cover art and
-/// title/artist labels.
-fn build_album_card(state: &Arc<AppState>, album: &Album) -> Button {
+/// Returns a `Button` containing a vertical layout with cover art,
+/// title, artist, format summary, and year labels.
+fn build_album_card(state: &Arc<AppState>, album: &Album, artist_name: &str) -> Button {
     let card = Button::builder()
         .css_classes(["flat", "card"])
         .can_focus(true)
@@ -130,28 +179,86 @@ fn build_album_card(state: &Arc<AppState>, album: &Album) -> Button {
     let content = Box::builder()
         .orientation(Vertical)
         .spacing(6)
-        .halign(Center)
+        .halign(Start)
         .build();
 
     let cover_art = build_cover_art(album);
-    content.append(&cover_art);
+
+    let overlay = Overlay::new();
+    overlay.set_child(Some(&cover_art));
+    overlay.set_css_classes(&["cover-overlay"]);
+
+    let play_button = Button::builder()
+        .icon_name("media-playback-start-symbolic")
+        .css_classes(["circular", "osd"])
+        .halign(Center)
+        .valign(Center)
+        .build();
+    play_button.set_visible(false);
+
+    overlay.add_overlay(&play_button);
+
+    let motion_ctrl = EventControllerMotion::new();
+    let btn_show = play_button.clone();
+    motion_ctrl.connect_enter(move |_, _, _| {
+        btn_show.set_visible(true);
+    });
+    let btn_hide = play_button.clone();
+    motion_ctrl.connect_leave(move |_| {
+        btn_hide.set_visible(false);
+    });
+    overlay.add_controller(motion_ctrl);
+
+    let state_clone = Arc::clone(state);
+    let album_id = album.id;
+    play_button.connect_clicked(move |_| {
+        let state = Arc::clone(&state_clone);
+        spawn_future_local(async move {
+            play_album(&state, album_id).await;
+        });
+    });
+
+    content.append(&overlay.upcast::<Widget>());
 
     let title_label = Label::builder()
         .label(&album.title)
-        .ellipsize(End)
+        .ellipsize(EllipsizeEnd)
         .max_width_chars(20)
         .css_classes(["heading", "title"])
+        .halign(Start)
         .build();
 
-    let track_count_label = Label::builder()
-        .label(format!("{} tracks", album.track_count))
-        .ellipsize(End)
+    let artist_label = Label::builder()
+        .label(artist_name)
+        .ellipsize(EllipsizeEnd)
         .max_width_chars(20)
         .css_classes(["dim-label", "caption"])
+        .halign(Start)
         .build();
 
+    let format_row = Box::builder().orientation(Horizontal).spacing(6).build();
+
+    let format_label = Label::builder()
+        .label(&album.format_summary)
+        .ellipsize(EllipsizeEnd)
+        .max_width_chars(14)
+        .css_classes(["dim-label", "caption"])
+        .halign(Start)
+        .build();
+    format_label.set_hexpand(true);
+
+    let year_label = Label::builder()
+        .label(album.year.map_or(String::new(), |y| y.to_string()))
+        .css_classes(["dim-label", "caption"])
+        .halign(End)
+        .build();
+
+    format_row.append(&format_label);
+    format_row.append(&year_label);
+
     content.append(&title_label);
-    content.append(&track_count_label);
+    content.append(&artist_label);
+    content.append(&format_row);
 
     card.set_child(Some(&content));
 
@@ -185,9 +292,27 @@ async fn play_album(state: &Arc<AppState>, album_id: i64) {
         return;
     }
 
+    let track_paths: HashMap<i64, PathBuf> = tracks
+        .iter()
+        .map(|t| (t.id, PathBuf::from(&t.audio.file_path)))
+        .collect();
     let track_ids: Vec<i64> = tracks.iter().map(|t| t.id).collect();
 
+    state.playback.set_track_paths(track_paths);
+
     if let Err(e) = state.playback.play_queue(track_ids) {
-        info!(error = %e, album_id, "Failed to start album playback");
+        let error_str = e.to_string();
+        info!(error = %error_str, album_id, "Failed to start album playback");
+        let msg = match &e {
+            PlaybackNoDeviceAvailable
+            | PlaybackDeviceDisconnected
+            | Output(NoDeviceAvailable | DeviceDisconnected(_)) => {
+                "No audio device available. Check your audio output."
+            }
+            _ => &error_str,
+        };
+        if let Err(e) = state.toast_tx.send(msg.into()).await {
+            info!(error = %e, "Failed to enqueue toast notification");
+        }
     }
 }

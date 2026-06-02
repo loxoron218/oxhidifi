@@ -267,6 +267,24 @@ pub trait Storage: Send + Sync + 'static {
         title: &str,
         track: Option<u32>,
     ) -> impl Future<Output = StorageResult<Vec<Track>>> + Send;
+
+    /// Insert multiple tracks in a batch, returning their ids.
+    fn insert_tracks_batch(
+        &self,
+        tracks: Vec<NewTrack>,
+    ) -> impl Future<Output = StorageResult<Vec<i64>>> + Send;
+
+    /// Find tracks by multiple file paths in a batch.
+    fn find_by_paths_batch(
+        &self,
+        paths: &[&Path],
+    ) -> impl Future<Output = StorageResult<Vec<Option<Track>>>> + Send;
+
+    /// Find tracks by multiple content hashes in a batch.
+    fn find_by_hashes_batch(
+        &self,
+        hashes: &[&str],
+    ) -> impl Future<Output = StorageResult<Vec<Vec<Track>>>> + Send;
 }
 
 /// Error type for storage operations.

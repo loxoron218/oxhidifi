@@ -1,22 +1,21 @@
 //! Playback orchestrator wiring decoder, ring buffer, and output together.
 
 use std::{
+    collections::HashMap,
     path::{Path, PathBuf},
     sync::Arc,
+    thread::{spawn, yield_now},
 };
 
 use {
     parking_lot::Mutex,
-    rtrb::{Producer, RingBuffer},
-    tokio::{
-        sync::{
-            broadcast::{Receiver, Sender, channel},
-            mpsc::{
-                Receiver as MpscReceiver, Sender as MpscSender, channel as MpscChannel,
-                error::TryRecvError::{Disconnected, Empty},
-            },
+    rtrb::{Producer, PushError::Full},
+    tokio::sync::{
+        broadcast::{Receiver, Sender, channel},
+        mpsc::{
+            Receiver as MpscReceiver, Sender as MpscSender, channel as MpscChannel,
+            error::TryRecvError::{Disconnected, Empty},
         },
-        task::spawn_blocking,
     },
     tracing::warn,
 };
@@ -32,6 +31,8 @@ use crate::playback::{
 enum DecodeCommand {
     /// Stop decoding and exit the loop.
     Stop,
+    /// Device was lost — stop gracefully.
+    DeviceLost,
 }
 
 /// Shared engine state.
@@ -42,10 +43,14 @@ struct EngineShared {
     queue: PlaybackQueue,
     /// Broadcast sender for playback events.
     event_tx: Sender<PlaybackEvent>,
+    /// Keep-alive receiver to prevent broadcast channel from closing.
+    _event_rx: Receiver<PlaybackEvent>,
     /// Command sender for the active decode task.
     decode_tx: Mutex<Option<MpscSender<DecodeCommand>>>,
     /// Active audio output kept alive during playback.
     output: Mutex<Option<AudioOutput>>,
+    /// Cached track ID to file path mappings (set before `play_queue`).
+    track_paths: Mutex<HashMap<i64, PathBuf>>,
 }
 
 /// Trait for controlling playback, consumed by the UI layer.
@@ -125,16 +130,23 @@ impl PlaybackEngine {
     /// Create a new playback engine.
     #[must_use]
     pub fn new() -> Self {
-        let (event_tx, _) = channel(64);
+        let (event_tx, event_rx) = channel(64);
         Self {
             shared: Arc::new(EngineShared {
                 state: Mutex::new(PlaybackState::default()),
                 queue: PlaybackQueue::new(),
                 event_tx,
+                _event_rx: event_rx,
                 decode_tx: Mutex::new(None),
                 output: Mutex::new(None),
+                track_paths: Mutex::new(HashMap::new()),
             }),
         }
+    }
+
+    /// Pre-load track ID to file path mappings for queue navigation.
+    pub fn set_track_paths(&self, paths: HashMap<i64, PathBuf>) {
+        *self.shared.track_paths.lock() = paths;
     }
 
     /// Returns a reference to the playback queue.
@@ -152,9 +164,14 @@ impl PlaybackEngine {
         self.stop_decode_task();
 
         let ring_capacity = 48000 * 2;
-        let (producer, consumer) = RingBuffer::<f32>::new(ring_capacity);
-
-        let output = AudioOutput::open(consumer).map_err(Output)?;
+        let (output, producer) = AudioOutput::open(ring_capacity)
+            .inspect_err(|e| {
+                send_error_event(
+                    &self.shared.event_tx,
+                    format!("Audio device unavailable: {e}"),
+                );
+            })
+            .map_err(Output)?;
         *self.shared.output.lock() = Some(output);
 
         {
@@ -175,7 +192,7 @@ impl PlaybackEngine {
             warn!(error = %e, "Failed to send TrackStarted event");
         }
 
-        spawn_blocking(move || {
+        spawn(move || {
             run_decode_loop(&path, producer, cmd_rx, &engine_state, &event_tx, track_id);
         });
 
@@ -199,7 +216,14 @@ impl Default for PlaybackEngine {
 
 impl PlaybackController for PlaybackEngine {
     fn play_track(&self, track_id: i64) -> Result<(), PlaybackError> {
-        Err(PlaybackError::TrackNotFound(track_id))
+        let path = self
+            .shared
+            .track_paths
+            .lock()
+            .get(&track_id)
+            .cloned()
+            .ok_or(PlaybackError::TrackNotFound(track_id))?;
+        self.start_playback(track_id, path)
     }
 
     fn play_queue(&self, queue: Vec<i64>) -> Result<(), PlaybackError> {
@@ -207,8 +231,19 @@ impl PlaybackController for PlaybackEngine {
             return Err(PlaybackError::QueueEmpty);
         }
         self.shared.queue.set_queue(queue);
-
-        Ok(())
+        let first_id = self
+            .shared
+            .queue
+            .current()
+            .ok_or(PlaybackError::QueueEmpty)?;
+        let path = self
+            .shared
+            .track_paths
+            .lock()
+            .get(&first_id)
+            .cloned()
+            .ok_or(PlaybackError::TrackNotFound(first_id))?;
+        self.start_playback(first_id, path)
     }
 
     fn toggle_pause(&self) -> Result<(), PlaybackError> {
@@ -245,17 +280,31 @@ impl PlaybackController for PlaybackEngine {
     }
 
     fn next_track(&self) -> Result<(), PlaybackError> {
-        self.shared
-            .queue
-            .next()
-            .map_or(Err(PlaybackError::QueueEmpty), |_next_id| Ok(()))
+        let next_id = self.shared.queue.next().ok_or(PlaybackError::QueueEmpty)?;
+        let path = self
+            .shared
+            .track_paths
+            .lock()
+            .get(&next_id)
+            .cloned()
+            .ok_or(PlaybackError::TrackNotFound(next_id))?;
+        self.start_playback(next_id, path)
     }
 
     fn previous_track(&self) -> Result<(), PlaybackError> {
-        self.shared
+        let prev_id = self
+            .shared
             .queue
             .previous()
-            .map_or(Err(PlaybackError::QueueEmpty), |_prev_id| Ok(()))
+            .ok_or(PlaybackError::QueueEmpty)?;
+        let path = self
+            .shared
+            .track_paths
+            .lock()
+            .get(&prev_id)
+            .cloned()
+            .ok_or(PlaybackError::TrackNotFound(prev_id))?;
+        self.start_playback(prev_id, path)
     }
 
     fn set_volume(&self, volume: f32) -> Result<(), PlaybackError> {
@@ -306,6 +355,11 @@ pub enum PlaybackEvent {
     VolumeChanged {
         /// New volume level.
         volume: f64,
+    },
+    /// Audio device was lost during playback.
+    DeviceLost {
+        /// Error description.
+        error: String,
     },
     /// An error occurred during playback.
     Error {
@@ -389,7 +443,7 @@ fn run_decode_loop(
 
         match cmd_rx.try_recv() {
             Err(Empty) => {}
-            Ok(DecodeCommand::Stop) | Err(Disconnected) => break,
+            Ok(DecodeCommand::Stop | DecodeCommand::DeviceLost) | Err(Disconnected) => break,
         }
 
         match decoder.decode_next() {
@@ -428,18 +482,40 @@ fn run_decode_loop(
 }
 
 /// Push samples from a decoded batch into the ring buffer.
+///
+/// Blocks by yielding the thread when the ring buffer is full, preventing
+/// sample loss and throttling the decode loop to real-time playback rate.
 fn push_samples(batch: &DecodedSamples, producer: &mut Producer<f32>, volume: f32) {
     for sample in &batch.samples {
-        let s = *sample * volume;
-        if producer.push(s).is_err() {}
+        let mut s = *sample * volume;
+        while let Err(ret) = producer.push(s) {
+            s = match ret {
+                Full(val) => val,
+            };
+            yield_now();
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::{collections::HashMap, path::PathBuf};
+
     use anyhow::{Result, anyhow, bail};
 
-    use crate::playback::engine::{PlaybackController, PlaybackEngine};
+    use crate::playback::{
+        PlaybackError::{NoDeviceAvailable, Output, QueueEmpty, TrackNotFound},
+        engine::{PlaybackController, PlaybackEngine},
+    };
+
+    fn setup_queue(engine: &PlaybackEngine, track_ids: Vec<i64>) {
+        let paths: HashMap<_, _> = track_ids
+            .iter()
+            .map(|id| (*id, PathBuf::from(format!("/fake/{id}.flac"))))
+            .collect();
+        engine.set_track_paths(paths);
+        engine.queue().set_queue(track_ids);
+    }
 
     #[test]
     fn engine_creates_with_default_state() {
@@ -482,5 +558,60 @@ mod tests {
             bail!("engine should not be playing after toggle_pause");
         }
         Ok(())
+    }
+
+    #[test]
+    fn play_queue_returns_error_when_empty() {
+        let engine = PlaybackEngine::new();
+        assert!(matches!(engine.play_queue(vec![]), Err(QueueEmpty)));
+    }
+
+    #[test]
+    fn play_queue_returns_error_when_path_not_set() {
+        let engine = PlaybackEngine::new();
+        assert!(matches!(
+            engine.play_queue(vec![42]),
+            Err(TrackNotFound(42))
+        ));
+    }
+
+    #[test]
+    fn play_queue_succeeds_when_path_is_set() -> Result<()> {
+        let engine = PlaybackEngine::new();
+        setup_queue(&engine, vec![1, 2, 3]);
+        let result = engine.play_queue(vec![1, 2, 3]);
+        match result {
+            Err(NoDeviceAvailable | Output(_)) | Ok(()) => Ok(()),
+            Err(e) => bail!("unexpected error: {e}"),
+        }
+    }
+
+    #[test]
+    fn play_track_returns_error_when_not_found() {
+        let engine = PlaybackEngine::new();
+        assert!(matches!(engine.play_track(99), Err(TrackNotFound(99))));
+    }
+
+    #[test]
+    fn next_track_returns_error_when_path_not_set() {
+        let engine = PlaybackEngine::new();
+        assert!(matches!(
+            engine.play_queue(vec![1, 2]),
+            Err(TrackNotFound(1))
+        ));
+        assert!(matches!(engine.next_track(), Err(TrackNotFound(2))));
+    }
+
+    #[test]
+    fn next_track_returns_queue_empty_when_single() {
+        let engine = PlaybackEngine::new();
+        setup_queue(&engine, vec![1]);
+        assert!(matches!(engine.next_track(), Err(QueueEmpty)));
+    }
+
+    #[test]
+    fn previous_track_returns_error_at_start() {
+        let engine = PlaybackEngine::new();
+        assert!(matches!(engine.previous_track(), Err(QueueEmpty)));
     }
 }

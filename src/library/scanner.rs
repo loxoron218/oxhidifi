@@ -4,6 +4,7 @@
 //! extracting metadata, deduplicating tracks, and persisting results to storage.
 
 use std::{
+    collections::HashMap,
     fs::{DirEntry, metadata, read_dir},
     io::Error,
     path::{Path, PathBuf},
@@ -12,11 +13,13 @@ use std::{
 };
 
 use {
+    async_channel::Sender,
+    rayon::prelude::{IntoParallelRefIterator, ParallelIterator},
     tokio::{
         spawn,
         sync::{
             mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel},
-            watch::{Receiver, Sender, channel},
+            watch::{Receiver, Sender as TokioSender, channel},
         },
     },
     tracing::warn,
@@ -24,11 +27,10 @@ use {
 
 use crate::{
     library::{
-        dedup::{compute_content_hash, is_supported_audio_format},
-        metadata::{
-            AudioMetadata,
-            MetadataError::{FileNotFound, InvalidDuration, ParseError, ReadError},
-            extract_metadata, metadata_fingerprint,
+        dedup::is_supported_audio_format,
+        metadata::{AudioMetadata, extract_metadata, metadata_fingerprint},
+        scanner::ScanEvent::{
+            ScanCompleted, ScanProgress, ScanStarted, TrackDiscovered, TrackSkipped,
         },
     },
     storage::{NewAlbum, NewArtist, NewTrack, Storage, StorageError, TrackAudio},
@@ -41,21 +43,24 @@ pub struct FsScanner<S: Storage> {
     /// Configuration for the scanner.
     config: ScannerConfig,
     /// Cancellation signal sender.
-    cancel_tx: Sender<bool>,
+    cancel_tx: TokioSender<bool>,
     /// Cancellation signal receiver (cloned into scan tasks).
     cancel_rx: Receiver<bool>,
+    /// Channel sender for forwarding scan events to the UI.
+    scan_event_tx: Sender<ScanEvent>,
 }
 
 impl<S: Storage> FsScanner<S> {
     /// Create a new filesystem scanner.
     #[must_use]
-    pub fn new(storage: Arc<S>, config: ScannerConfig) -> Self {
+    pub fn new(storage: Arc<S>, config: ScannerConfig, scan_event_tx: Sender<ScanEvent>) -> Self {
         let (cancel_tx, cancel_rx) = channel(false);
         Self {
             storage,
             config,
             cancel_tx,
             cancel_rx,
+            scan_event_tx,
         }
     }
 
@@ -72,6 +77,49 @@ impl<S: Storage> FsScanner<S> {
         let mut results = Vec::new();
         Self::walk_recursive(dir, &mut results);
         results
+    }
+
+    /// Walk a directory recursively in parallel using rayon.
+    ///
+    /// # Arguments
+    ///
+    /// * `dir` - Root directory to walk
+    ///
+    /// # Returns
+    ///
+    /// A vector of paths to supported audio files.
+    fn walk_directory_parallel(dir: &Path) -> Vec<PathBuf> {
+        let entries: Vec<_> = read_dir(dir).into_iter().flatten().flatten().collect();
+
+        let mut results: Vec<PathBuf> = Vec::new();
+        let mut subdirs: Vec<PathBuf> = Vec::new();
+
+        for entry in &entries {
+            Self::classify_entry(entry, &mut subdirs, &mut results);
+        }
+
+        let sub_results: Vec<Vec<PathBuf>> = subdirs
+            .par_iter()
+            .map(|path| Self::walk_directory_parallel(path))
+            .collect();
+
+        for sub_result in sub_results {
+            results.extend(sub_result);
+        }
+
+        results
+    }
+
+    /// Classify a directory entry as a subdirectory or supported audio file.
+    fn classify_entry(entry: &DirEntry, subdirs: &mut Vec<PathBuf>, results: &mut Vec<PathBuf>) {
+        let path = entry.path();
+        if path.is_dir() {
+            subdirs.push(path);
+            return;
+        }
+        if path.is_file() && is_supported_audio_format(&path) {
+            results.push(path);
+        }
     }
 
     /// Process a single directory entry during recursive walk.
@@ -150,65 +198,207 @@ impl<S: Storage> FsScanner<S> {
         }
     }
 
-    /// Get or create an artist in storage.
-    ///
-    /// # Errors
-    ///
-    /// Returns a storage error if the database operation fails.
-    async fn get_or_create_artist(&self, name: &str) -> Result<i64, StorageError> {
-        let artist_name = if name.is_empty() {
-            "Unknown Artist"
-        } else {
-            name
-        };
-
-        let artists = self.storage.get_all_artists().await?;
-        if let Some(artist) = artists
-            .iter()
-            .find(|a| a.name.eq_ignore_ascii_case(artist_name))
-        {
-            return Ok(artist.id);
+    /// Scan a single directory and emit events.
+    async fn scan_dir(&self, dir: &Path, event_tx: &UnboundedSender<ScanEvent>) {
+        if let Err(e) = event_tx.send(ScanStarted {
+            directory: dir.to_path_buf(),
+        }) {
+            warn!(error = %e, "Failed to send ScanStarted event");
         }
-
-        self.storage
-            .insert_artist(NewArtist {
-                name: artist_name.to_string(),
+        if let Err(e) = self
+            .scan_event_tx
+            .send(ScanStarted {
+                directory: dir.to_path_buf(),
             })
             .await
+        {
+            warn!(error = %e, "Failed to send ScanStarted event");
+        }
+
+        let start = Instant::now();
+        let files = Self::walk_directory_parallel(dir);
+        let files_found = u32::try_from(files.len()).unwrap_or(0);
+
+        let extracted: Vec<_> = files
+            .par_iter()
+            .filter_map(|path| match extract_metadata(path) {
+                Ok(metadata) => Some((path.clone(), metadata)),
+                Err(e) => {
+                    warn!(path = %path.display(), error = %e, "Failed to extract metadata");
+                    None
+                }
+            })
+            .collect();
+
+        let total = extracted.len();
+
+        let mut artist_cache: HashMap<String, i64> = HashMap::new();
+        let mut album_cache: HashMap<(i64, String), i64> = HashMap::new();
+
+        let artists = self.storage.get_all_artists().await.unwrap_or_default();
+        for a in &artists {
+            artist_cache.insert(a.name.to_lowercase(), a.id);
+        }
+
+        let mut tracks_added: u64 = 0;
+        let mut tracks_skipped: u64 = 0;
+
+        for (idx, (path, metadata)) in extracted.into_iter().enumerate() {
+            let mut ctx = ScanContext {
+                dir,
+                files_found,
+                event_tx,
+                artist_cache: &mut artist_cache,
+                album_cache: &mut album_cache,
+                tracks_added: &mut tracks_added,
+                tracks_skipped: &mut tracks_skipped,
+            };
+            self.process_scan_item(idx, total, path, metadata, &mut ctx)
+                .await;
+        }
+
+        if let Err(e) = event_tx.send(ScanCompleted {
+            directory: dir.to_path_buf(),
+            duration: start.elapsed(),
+            tracks_added,
+            tracks_skipped,
+        }) {
+            warn!(error = %e, "Failed to send ScanCompleted event");
+        }
+        if let Err(e) = self
+            .scan_event_tx
+            .send(ScanCompleted {
+                directory: dir.to_path_buf(),
+                duration: start.elapsed(),
+                tracks_added,
+                tracks_skipped,
+            })
+            .await
+        {
+            warn!(error = %e, "Failed to send ScanCompleted event");
+        }
     }
 
-    /// Get or create an album in storage.
+    /// Process a single extracted item during directory scanning.
+    async fn process_scan_item(
+        &self,
+        idx: usize,
+        total: usize,
+        path: PathBuf,
+        metadata: AudioMetadata,
+        ctx: &mut ScanContext<'_>,
+    ) {
+        if *self.cancel_rx.borrow() {
+            return;
+        }
+
+        if (idx.is_multiple_of(100) || idx + 1 == total)
+            && let Err(e) = ctx.event_tx.send(ScanProgress {
+                directory: ctx.dir.to_path_buf(),
+                files_found: ctx.files_found,
+                files_processed: u32::try_from(idx + 1).unwrap_or(0),
+            })
+        {
+            warn!(error = %e, "Failed to send ScanProgress event");
+        }
+        if (idx.is_multiple_of(100) || idx + 1 == total)
+            && let Err(e) = self
+                .scan_event_tx
+                .send(ScanProgress {
+                    directory: ctx.dir.to_path_buf(),
+                    files_found: ctx.files_found,
+                    files_processed: u32::try_from(idx + 1).unwrap_or(0),
+                })
+                .await
+        {
+            warn!(error = %e, "Failed to send ScanProgress event");
+        }
+
+        match self
+            .process_file_cached(
+                &path,
+                metadata,
+                ctx.artist_cache,
+                ctx.album_cache,
+                ctx.event_tx,
+            )
+            .await
+        {
+            Ok(_) => *ctx.tracks_added += 1,
+            Err(reason) => Self::handle_skipped(reason, path, ctx.tracks_skipped, ctx.event_tx),
+        }
+    }
+
+    /// Handle a skipped track by incrementing the counter and emitting an event.
+    fn handle_skipped(
+        reason: SkipReason,
+        path: PathBuf,
+        tracks_skipped: &mut u64,
+        event_tx: &UnboundedSender<ScanEvent>,
+    ) {
+        *tracks_skipped += 1;
+        if let Err(e) = event_tx.send(TrackSkipped { path, reason }) {
+            warn!(error = %e, "Failed to send TrackSkipped event");
+        }
+    }
+
+    /// Map a storage insertion error to a skip reason with logging.
+    fn map_insert_error(e: &StorageError, entity: &str) -> SkipReason {
+        warn!(error = %e, "Failed to insert {entity}");
+        SkipReason::CorruptFile
+    }
+
+    /// Resolve an artist ID from cache or by inserting into storage.
     ///
     /// # Errors
     ///
-    /// Returns a storage error if the database operation fails.
-    async fn get_or_create_album(
+    /// Returns `SkipReason::CorruptFile` if the database insert fails.
+    async fn resolve_artist(
         &self,
-        metadata: &AudioMetadata,
-        artist_id: i64,
-    ) -> Result<i64, StorageError> {
-        let album_title = metadata.album.as_deref().unwrap_or("Unknown Album");
-
-        let albums = self.storage.get_albums_by_artist(artist_id).await?;
-        if let Some(album) = albums
-            .iter()
-            .find(|a| a.title.eq_ignore_ascii_case(album_title))
-        {
-            return Ok(album.id);
+        name: &str,
+        cache: &mut HashMap<String, i64>,
+    ) -> Result<i64, SkipReason> {
+        let key = name.to_lowercase();
+        if let Some(&id) = cache.get(&key) {
+            return Ok(id);
         }
+        let id = self
+            .storage
+            .insert_artist(NewArtist {
+                name: name.to_string(),
+            })
+            .await
+            .map_err(|e| Self::map_insert_error(&e, "artist"))?;
+        cache.insert(key, id);
+        Ok(id)
+    }
 
-        let format_summary = format!(
-            "{}{}/{}",
-            metadata.codec.to_uppercase(),
-            metadata
-                .bit_depth
-                .map_or(String::new(), |bd| format!(" {bd}-bit")),
-            metadata.sample_rate,
+    /// Resolve an album ID from cache or by inserting into storage.
+    ///
+    /// # Errors
+    ///
+    /// Returns `SkipReason::CorruptFile` if the database insert fails.
+    async fn resolve_album(
+        &self,
+        title: &str,
+        artist_id: i64,
+        metadata: &AudioMetadata,
+        cache: &mut HashMap<(i64, String), i64>,
+    ) -> Result<i64, SkipReason> {
+        let key = (artist_id, title.to_lowercase());
+        if let Some(&id) = cache.get(&key) {
+            return Ok(id);
+        }
+        let sr = format_sample_rate(metadata.sample_rate);
+        let codec_upper = metadata.codec.to_uppercase();
+        let format_summary = metadata.bit_depth.map_or_else(
+            || format!("{codec_upper}/{sr}"),
+            |bd| format!("{codec_upper} {bd}/{sr}"),
         );
-
-        self.storage
+        let id = self
+            .storage
             .insert_album(NewAlbum {
-                title: album_title.to_string(),
+                title: title.to_string(),
                 artist_id,
                 year: metadata.year,
                 genre: metadata.genre.clone(),
@@ -217,45 +407,53 @@ impl<S: Storage> FsScanner<S> {
                 lossless: metadata.lossless,
             })
             .await
+            .map_err(|e| Self::map_insert_error(&e, "album"))?;
+        cache.insert(key, id);
+        Ok(id)
     }
 
-    /// Process a single audio file: extract metadata, dedup, and store.
+    /// Build track audio metadata from file path and extracted metadata.
+    fn build_track_audio(
+        path: &Path,
+        metadata: &AudioMetadata,
+        album_id: i64,
+        artist_id: i64,
+    ) -> TrackAudio {
+        TrackAudio {
+            file_path: path.to_string_lossy().to_string(),
+            content_hash: None,
+            format: metadata.codec.to_uppercase(),
+            sample_rate: metadata.sample_rate,
+            bit_depth: metadata.bit_depth,
+            channels: metadata.channels,
+            codec: metadata.codec.clone(),
+            lossless: metadata.lossless,
+            bitrate: metadata.bitrate,
+            album_id: Some(album_id),
+            artist_id: Some(artist_id),
+            file_size: metadata.file_size,
+            last_modified: utc_now_rfc3339(),
+        }
+    }
+
+    /// Process a file using cached artist/album lookups to avoid repeated DB queries.
     ///
     /// # Errors
     ///
-    /// Returns a [`SkipReason`] if the file cannot be processed (corrupt, duplicate, etc.).
-    async fn process_file(
+    /// Returns a `SkipReason` if the file is a duplicate, corrupt, or cannot be inserted.
+    async fn process_file_cached(
         &self,
         path: &Path,
+        metadata: AudioMetadata,
+        artist_cache: &mut HashMap<String, i64>,
+        album_cache: &mut HashMap<(i64, String), i64>,
         event_tx: &UnboundedSender<ScanEvent>,
     ) -> Result<TrackInfo, SkipReason> {
-        let metadata = extract_metadata(path).map_err(|e| match e {
-            ReadError(_) | FileNotFound(_) | InvalidDuration(_) | ParseError(_) => {
-                SkipReason::CorruptFile
-            }
-        })?;
-
         if self.check_path_exists(path).await.map_err(|e| {
             warn!(error = %e, path = %path.display(), "Failed to check path existence");
             SkipReason::CorruptFile
         })? {
             return Err(SkipReason::DuplicateByPath);
-        }
-
-        let content_hash = compute_content_hash(path).map_err(|e| {
-            warn!(error = %e, path = %path.display(), "Failed to compute content hash");
-            SkipReason::CorruptFile
-        })?;
-
-        if self
-            .check_hash_duplicate(&content_hash)
-            .await
-            .map_err(|e| {
-                warn!(error = %e, hash = %content_hash, "Failed to check hash duplicate");
-                SkipReason::CorruptFile
-            })?
-        {
-            return Err(SkipReason::DuplicateByHash);
         }
 
         if self
@@ -269,21 +467,13 @@ impl<S: Storage> FsScanner<S> {
             return Err(SkipReason::DuplicateByFingerprint);
         }
 
-        let artist_id = self
-            .get_or_create_artist(metadata.artist.as_deref().unwrap_or("Unknown Artist"))
-            .await
-            .map_err(|e| {
-                warn!(error = %e, "Failed to get or create artist");
-                SkipReason::CorruptFile
-            })?;
+        let artist_name = metadata.artist.as_deref().unwrap_or("Unknown Artist");
+        let artist_id = self.resolve_artist(artist_name, artist_cache).await?;
 
+        let album_title = metadata.album.as_deref().unwrap_or("Unknown Album");
         let album_id = self
-            .get_or_create_album(&metadata, artist_id)
-            .await
-            .map_err(|e| {
-                warn!(error = %e, "Failed to get or create album");
-                SkipReason::CorruptFile
-            })?;
+            .resolve_album(album_title, artist_id, &metadata, album_cache)
+            .await?;
 
         let track = NewTrack {
             title: metadata
@@ -293,21 +483,7 @@ impl<S: Storage> FsScanner<S> {
             track_number: metadata.track_number,
             disc_number: metadata.disc_number,
             duration: metadata.duration,
-            audio: TrackAudio {
-                file_path: path.to_string_lossy().to_string(),
-                content_hash: Some(content_hash.clone()),
-                format: metadata.codec.to_uppercase(),
-                sample_rate: metadata.sample_rate,
-                bit_depth: metadata.bit_depth,
-                channels: metadata.channels,
-                codec: metadata.codec.clone(),
-                lossless: metadata.lossless,
-                bitrate: metadata.bitrate,
-                album_id: Some(album_id),
-                artist_id: Some(artist_id),
-                file_size: metadata.file_size,
-                last_modified: utc_now_rfc3339(),
-            },
+            audio: Self::build_track_audio(path, &metadata, album_id, artist_id),
         };
 
         let track_id = self.storage.insert_track(track).await.map_err(|e| {
@@ -319,88 +495,18 @@ impl<S: Storage> FsScanner<S> {
             id: track_id,
             metadata,
             path: path.to_path_buf(),
-            content_hash: Some(content_hash),
+            content_hash: None,
             artist_id: Some(artist_id),
             album_id: Some(album_id),
         };
 
-        if let Err(e) = event_tx.send(ScanEvent::TrackDiscovered {
+        if let Err(e) = event_tx.send(TrackDiscovered {
             track: Box::new(track_info.clone()),
         }) {
             warn!(error = %e, "Failed to send TrackDiscovered event");
         }
 
         Ok(track_info)
-    }
-
-    /// Process a single file during directory scanning.
-    async fn process_scan_entry(&self, idx: usize, path: &Path, ctx: &mut ScanContext<'_>) {
-        if *self.cancel_rx.borrow() {
-            return;
-        }
-
-        if idx.is_multiple_of(100)
-            && let Err(e) = ctx.event_tx.send(ScanEvent::ScanProgress {
-                directory: ctx.dir.to_path_buf(),
-                files_found: ctx.files_found,
-                files_processed: u64::try_from(idx).unwrap_or(0),
-            })
-        {
-            warn!(error = %e, "Failed to send ScanProgress event");
-        }
-
-        let mut maybe_reason = None;
-        match self.process_file(path, ctx.event_tx).await {
-            Ok(_) => *ctx.tracks_added += 1,
-            Err(reason) => {
-                *ctx.tracks_skipped += 1;
-                maybe_reason = Some(reason);
-            }
-        }
-        if let Some(reason) = maybe_reason
-            && let Err(e) = ctx.event_tx.send(ScanEvent::TrackSkipped {
-                path: path.to_path_buf(),
-                reason,
-            })
-        {
-            warn!(error = %e, "Failed to send TrackSkipped event");
-        }
-    }
-
-    /// Scan a single directory and emit events.
-    async fn scan_dir(&self, dir: &Path, event_tx: &UnboundedSender<ScanEvent>) {
-        if let Err(e) = event_tx.send(ScanEvent::ScanStarted {
-            directory: dir.to_path_buf(),
-        }) {
-            warn!(error = %e, "Failed to send ScanStarted event");
-        }
-
-        let start = Instant::now();
-        let files = Self::walk_directory(dir);
-        let files_found = u64::try_from(files.len()).unwrap_or(0);
-        let mut tracks_added: u64 = 0;
-        let mut tracks_skipped: u64 = 0;
-
-        let mut ctx = ScanContext {
-            dir,
-            files_found,
-            event_tx,
-            tracks_added: &mut tracks_added,
-            tracks_skipped: &mut tracks_skipped,
-        };
-
-        for (idx, path) in files.iter().enumerate() {
-            self.process_scan_entry(idx, path, &mut ctx).await;
-        }
-
-        if let Err(e) = event_tx.send(ScanEvent::ScanCompleted {
-            directory: dir.to_path_buf(),
-            duration: start.elapsed(),
-            tracks_added,
-            tracks_skipped,
-        }) {
-            warn!(error = %e, "Failed to send ScanCompleted event");
-        }
     }
 }
 
@@ -463,17 +569,21 @@ pub trait LibraryScanner: Send + 'static {
     fn cancel(&self) -> Result<(), StorageError>;
 }
 
-/// Mutable state shared across scan entry processing.
+/// Mutable state shared across scan item processing.
 struct ScanContext<'a> {
     /// Directory being scanned.
     dir: &'a Path,
     /// Total files found in the directory.
-    files_found: u64,
-    /// Channel sender for scan events.
+    files_found: u32,
+    /// Channel for emitting scan events.
     event_tx: &'a UnboundedSender<ScanEvent>,
-    /// Counter for tracks successfully added.
+    /// Cache of artist names to database IDs.
+    artist_cache: &'a mut HashMap<String, i64>,
+    /// Cache of (`artist_id`, `album_name`) to database IDs.
+    album_cache: &'a mut HashMap<(i64, String), i64>,
+    /// Counter for successfully added tracks.
     tracks_added: &'a mut u64,
-    /// Counter for tracks skipped during scanning.
+    /// Counter for skipped tracks.
     tracks_skipped: &'a mut u64,
 }
 
@@ -490,9 +600,9 @@ pub enum ScanEvent {
         /// Directory being scanned.
         directory: PathBuf,
         /// Total files found so far.
-        files_found: u64,
+        files_found: u32,
         /// Files processed so far.
-        files_processed: u64,
+        files_processed: u32,
     },
     /// A new track was discovered and added to storage.
     TrackDiscovered {
@@ -574,6 +684,17 @@ pub struct TrackInfo {
 /// Drain events from a channel until it is closed.
 async fn drain_events(mut event_rx: UnboundedReceiver<ScanEvent>) {
     while event_rx.recv().await.is_some() {}
+}
+
+/// Format sample rate for display in Hz.
+///
+/// Converts to kHz-style value: 44100 → "44.1", 48000 → "48".
+fn format_sample_rate(hz: i32) -> String {
+    if hz % 1000 == 0 {
+        (hz / 1000).to_string()
+    } else {
+        format!("{:.1}", f64::from(hz) / 1000.0)
+    }
 }
 
 /// Get the current UTC time as an RFC 3339 formatted string.

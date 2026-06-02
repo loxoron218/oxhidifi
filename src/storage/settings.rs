@@ -146,6 +146,26 @@ pub enum ViewMode {
     Column,
 }
 
+impl ViewMode {
+    /// Get the icon name for this view mode.
+    #[must_use]
+    pub const fn icon_name(self) -> &'static str {
+        match self {
+            Self::Grid => "view-grid-symbolic",
+            Self::Column => "view-list-symbolic",
+        }
+    }
+
+    /// Get the tooltip text for this view mode.
+    #[must_use]
+    pub const fn tooltip(self) -> &'static str {
+        match self {
+            Self::Grid => "Switch to column view",
+            Self::Column => "Switch to grid view",
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::{

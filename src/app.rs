@@ -10,12 +10,20 @@ use std::{
 
 use {
     anyhow::{Context, Result},
-    libadwaita::{Application, prelude::*},
+    async_channel::{Receiver, Sender, unbounded},
+    libadwaita::{
+        Application,
+        prelude::{ApplicationExt, ApplicationExtManual, GtkWindowExt},
+    },
+    tokio::sync::watch::{Sender as TokioSender, channel},
     tracing::info,
 };
 
 use crate::{
-    playback::engine::PlaybackEngine, storage::database::SqliteStorage, ui::window::build_window,
+    library::scanner::{FsScanner, ScanEvent, ScannerConfig},
+    playback::engine::PlaybackEngine,
+    storage::{database::SqliteStorage, settings::ViewMode},
+    ui::window::build_window,
 };
 
 /// Application identifier for D-Bus and resource paths.
@@ -27,6 +35,20 @@ pub struct AppState {
     pub playback: Arc<PlaybackEngine>,
     /// The storage backend for library data.
     pub storage: Arc<SqliteStorage>,
+    /// The library scanner for discovering audio files.
+    pub scanner: Arc<FsScanner<SqliteStorage>>,
+    /// Signal sender to notify the UI when the library changes.
+    pub refresh_tx: TokioSender<()>,
+    /// Broadcasts view mode changes (grid/column) to the UI.
+    pub view_mode_tx: TokioSender<ViewMode>,
+    /// Channel sender for forwarding scan events to the UI (status bar).
+    pub scan_event_tx: Sender<ScanEvent>,
+    /// Channel receiver for consuming scan events (cloned for each subscriber).
+    pub scan_event_rx: Receiver<ScanEvent>,
+    /// Channel sender for toast notifications displayed to the user.
+    pub toast_tx: Sender<String>,
+    /// Channel receiver for toast notifications.
+    pub toast_rx: Receiver<String>,
 }
 
 /// Resolve an XDG directory from an environment variable with a fallback path.
@@ -108,7 +130,28 @@ pub async fn run_application() -> Result<()> {
 
     let playback = Arc::new(PlaybackEngine::new());
 
-    let state = Arc::new(AppState { playback, storage });
+    let (scan_event_tx, scan_event_rx) = unbounded();
+    let (toast_tx, toast_rx) = unbounded();
+
+    let scanner = Arc::new(FsScanner::new(
+        Arc::clone(&storage),
+        ScannerConfig::default(),
+        scan_event_tx.clone(),
+    ));
+
+    let initial_view_mode = storage.get_view_mode();
+
+    let state = Arc::new(AppState {
+        playback,
+        storage,
+        scanner,
+        refresh_tx: channel(()).0,
+        view_mode_tx: channel(initial_view_mode).0,
+        scan_event_tx,
+        scan_event_rx,
+        toast_tx,
+        toast_rx,
+    });
 
     let app = Application::builder().application_id(APP_ID).build();
 
@@ -121,4 +164,75 @@ pub async fn run_application() -> Result<()> {
     app.run();
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        path::Path,
+        sync::{Arc, LazyLock},
+    };
+
+    use {
+        anyhow::{Context, Result, anyhow},
+        async_channel::unbounded,
+        tokio::{runtime::Runtime, sync::watch::channel},
+    };
+
+    use crate::{
+        app::AppState,
+        library::scanner::{FsScanner, ScannerConfig},
+        playback::engine::PlaybackEngine,
+        storage::{database::SqliteStorage, settings::ViewMode::Grid},
+    };
+
+    impl AppState {
+        /// Creates a mock `AppState` with an in-memory `SQLite` database for testing.
+        ///
+        /// # Errors
+        ///
+        /// Returns an error if the in-memory database cannot be initialized.
+        pub fn mock() -> Result<Self> {
+            static MOCK_STORAGE: LazyLock<Result<Arc<SqliteStorage>>> =
+                LazyLock::new(init_mock_storage);
+
+            let storage = MOCK_STORAGE
+                .as_ref()
+                .map(Arc::clone)
+                .map_err(|e| anyhow!("{e:#}"))?;
+
+            let scanner_storage = Arc::clone(&storage);
+
+            let (scan_event_tx, scan_event_rx) = unbounded();
+            let (toast_tx, toast_rx) = unbounded();
+
+            Ok(Self {
+                playback: Arc::new(PlaybackEngine::new()),
+                storage,
+                scanner: Arc::new(FsScanner::new(
+                    scanner_storage,
+                    ScannerConfig::default(),
+                    scan_event_tx.clone(),
+                )),
+                refresh_tx: channel(()).0,
+                view_mode_tx: channel(Grid).0,
+                scan_event_tx,
+                scan_event_rx,
+                toast_tx,
+                toast_rx,
+            })
+        }
+    }
+
+    fn init_mock_storage() -> Result<Arc<SqliteStorage>> {
+        let rt = Runtime::new().context("Failed to create tokio runtime")?;
+        let storage = rt.block_on(create_mock_storage())?;
+        Ok(Arc::new(storage))
+    }
+
+    async fn create_mock_storage() -> Result<SqliteStorage> {
+        SqliteStorage::connect(Path::new(":memory:"))
+            .await
+            .context("Failed to create mock storage")
+    }
 }

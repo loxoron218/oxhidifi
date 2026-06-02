@@ -90,7 +90,7 @@ pub fn extract_metadata(path: &Path) -> Result<AudioMetadata, MetadataError> {
     let title = extract_title(&tagged_file, path);
     let artist = extract_artist(&tagged_file);
     let album = extract_album(&tagged_file);
-    let year = extract_year(&tagged_file)?;
+    let year = extract_year(&tagged_file);
     let genre = extract_genre(&tagged_file);
     let track_number = extract_track_number(&tagged_file);
     let disc_number = extract_disc_number(&tagged_file);
@@ -164,24 +164,32 @@ fn extract_album(tagged_file: &TaggedFile) -> Option<String> {
 
 /// Extract the release year from tags.
 ///
-/// # Errors
-///
-/// Returns [`MetadataError::ParseError`] if the year tag value cannot be parsed as an integer.
-fn extract_year(tagged_file: &TaggedFile) -> Result<Option<i32>, MetadataError> {
-    let Some(tag) = tagged_file
+/// Tries to parse the year as a plain integer first. If that fails,
+/// scans for a 4-digit year substring (handles ranges like "2017–2019"
+/// and full dates like "2017-03-10"). Returns `None` if no year found.
+fn extract_year(tagged_file: &TaggedFile) -> Option<i32> {
+    let tag = tagged_file
         .primary_tag()
-        .or_else(|| tagged_file.first_tag())
-    else {
-        return Ok(None);
-    };
+        .or_else(|| tagged_file.first_tag())?;
 
-    let Some(s) = tag.get_string(RecordingDate) else {
-        return Ok(None);
-    };
+    let s = tag.get_string(RecordingDate)?;
 
-    s.parse::<i32>()
-        .map(Some)
-        .map_err(|e| MetadataError::ParseError(e.to_string()))
+    if let Ok(year) = s.parse::<i32>() {
+        return Some(year);
+    }
+
+    s.chars()
+        .collect::<Vec<_>>()
+        .windows(4)
+        .find(|w| {
+            let s: String = w.iter().collect();
+            s.chars().all(|c| c.is_ascii_digit())
+        })
+        .map(|w| {
+            let s: String = w.iter().collect();
+            s.parse::<i32>()
+        })
+        .and_then(Result::ok)
 }
 
 /// Extract the genre from tags.

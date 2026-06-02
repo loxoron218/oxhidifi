@@ -110,13 +110,13 @@ description: "Task list for high-fidelity music player refactoring"
 
 ### Implementation for User Story 2
 
-- [ ] T025 [P] [US2] Implement empty state page with guidance text and icon in src/ui/library/empty.rs
-- [ ] T026 [P] [US2] Implement artist grid/column view in src/ui/library/artists.rs
-- [ ] T027 [P] [US2] Implement grid/column toggle button logic in src/ui/header.rs (switch album view between grid and column layout)
-- [ ] T028 [P] [US2] Implement filesystem watcher with notify in src/library/watcher.rs (debounced events, incremental scan trigger)
-- [ ] T029 [US2] Implement status bar with scanning progress indicator in src/ui/status.rs
-- [ ] T030 [US2] Implement tab switching logic (Albums ↔ Artists) with view content swap in src/ui/window.rs
-- [ ] T031 [US2] Wire empty state ↔ library view transitions based on scan results
+- [X] T025 [P] [US2] Implement empty state page with guidance text and icon in src/ui/library/empty.rs
+- [X] T026 [P] [US2] Implement artist grid/column view in src/ui/library/artists.rs
+- [X] T027 [P] [US2] Implement grid/column toggle button logic in src/ui/header.rs (switch album view between grid and column layout)
+- [X] T028 [P] [US2] Implement filesystem watcher with notify in src/library/watcher.rs (debounced events, incremental scan trigger)
+- [X] T029 [US2] Implement status bar with scanning progress indicator in src/ui/status.rs
+- [X] T030 [US2] Implement tab switching logic (Albums ↔ Artists) with view content swap in src/ui/window.rs
+- [X] T031 [US2] Wire empty state ↔ library view transitions based on scan results
 
 **Checkpoint**: Empty state shown on first launch, tabs switch views, grid/column toggle works, status bar shows scan progress
 
