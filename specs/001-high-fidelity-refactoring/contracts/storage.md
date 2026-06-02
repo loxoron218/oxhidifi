@@ -67,3 +67,38 @@ pub enum QueueContext {
 - Uses `serde_json` for serialization
 - Loaded at startup, written on mutation
 - Not behind the `Storage` trait — accessed directly by the settings UI
+
+## Error Types
+
+All methods on the `Storage` trait return `Result<T, StorageError>`. The `PlaybackError`,
+`DecoderError`, and `OutputError` enums are defined in `contracts/playback.md`; the
+storage-specific error type is defined here so the storage layer remains self-contained
+per the capability/domain organization (Constitution Principle I).
+
+```rust
+/// Errors originating from the storage layer.
+#[derive(Error, Debug)]
+pub enum StorageError {
+    /// Database connection or pool error.
+    #[error("Database error: {0}")]
+    Database(String),
+    /// SQLite migration failed.
+    #[error("Migration error: {0}")]
+    Migration(String),
+    /// Entity not found in storage.
+    #[error("Not found: {entity} id={id}")]
+    NotFound { entity: &'static str, id: i64 },
+    /// Unique constraint violation (e.g., duplicate file_path, artist name).
+    #[error("Constraint violation: {0}")]
+    ConstraintViolation(String),
+    /// Serialization/deserialization error (JSON settings, etc.).
+    #[error("Serialization error: {0}")]
+    Serialization(String),
+    /// Filesystem I/O error (path resolution, permission, etc.).
+    #[error("I/O error: {0}")]
+    Io(#[from] std::io::Error),
+    /// Queue append rejected because the 100,000-entry cap was reached (FR-021).
+    #[error("Queue full: maximum {max} entries")]
+    QueueFull { max: usize },
+}
+```

@@ -124,60 +124,60 @@ A user on an album detail page sees the full track listing, album metadata (year
 
 - **FR-001**: The system MUST detect and catalog all supported audio files from one or more user-configured directories.
 - **FR-002**: The system MUST extract and store content metadata (title, artist, album, year, genre, track number, disc number, duration, bitrate) and technical metadata (sample rate, bit depth, number of channels, codec, lossless status) from each audio file. Both categories are co-extracted in a single pass via the metadata library.
-- **FR-004**: The system MUST extract embedded album artwork from audio files for display.
-- **FR-004b**: The system MUST cache extracted artwork to disk and generate thumbnails for grid/column views. A fallback placeholder MUST be displayed when no embedded artwork is available.
-- **FR-005**: The system MUST detect and exclude duplicate files using a layered strategy: file path uniqueness as primary dedup, content hash (SHA-256) on path collision, and metadata fingerprint (artist+album+title+track) as final fallback.
-- **FR-006**: The system MUST gracefully handle files with missing or corrupt metadata using the following fallback chain: filename stem as title, "Unknown Artist" as artist, "Unknown Album" as album, 0 as year, "Unknown Genre" as genre, null as track/disc number, 0 as duration (files with 0 duration MUST be skipped as corrupt).
-- **FR-007**: The system MUST automatically scan library directories for changes (additions, removals, updates) and reflect them without manual intervention. Scanning MUST operate incrementally and non-blocking — the UI remains responsive during scan, discovered items appear as they are indexed, and a scanning indicator is shown in the status bar.
-- **FR-008**: The system MUST present an informative empty state when no music library is configured or when the library contains no files.
+- **FR-003**: The system MUST extract embedded album artwork from audio files for display.
+- **FR-003b**: The system MUST cache extracted artwork to disk and generate thumbnails for grid/column views. A fallback placeholder MUST be displayed when no embedded artwork is available.
+- **FR-004**: The system MUST detect and exclude duplicate files using a layered strategy: file path uniqueness as primary dedup, content hash (SHA-256) on path collision, and metadata fingerprint (artist+album+title+track) as final fallback.
+- **FR-005**: The system MUST gracefully handle files with missing or corrupt metadata using the following fallback chain: filename stem as title, "Unknown Artist" as artist, "Unknown Album" as album, 0 as year, "Unknown Genre" as genre, null as track/disc number, 0 as duration (files with 0 duration MUST be skipped as corrupt).
+- **FR-006**: The system MUST automatically scan library directories for changes (additions, removals, updates) and reflect them without manual intervention. Scanning MUST operate incrementally and non-blocking — the UI remains responsive during scan, discovered items appear as they are indexed, and a scanning indicator is shown in the status bar.
+- **FR-007**: The system MUST present an informative empty state when no music library is configured or when the library contains no files.
 
 **Navigation and Views**
 
-- **FR-009**: The system MUST provide separate browsable views for Albums and Artists, switchable via tab buttons in the header bar.
-- **FR-010**: The system MUST support at least two view modes per tab: a grid layout and a column layout.
-- **FR-011**: The system MUST provide a toggle control in the header bar to switch between grid and column views.
-- **FR-012**: Each album and artist MUST have a dedicated detail page showing full metadata and associated content (tracks for albums, albums for artists).
-- **FR-013**: The system MUST support adaptive/responsive layouts using `AdwBreakpoint` with the modern widget stack (`AdwNavigationSplitView` for sidebar/content, `AdwNavigationView` for page stacks, `AdwOverlaySplitView` for player panel, `AdwViewSwitcher` + `AdwViewSwitcherBar` for tab navigation) that adjust to different window sizes, with at minimum: a wide mode (≥800px) showing player panel and library side-by-side, and a narrow mode (<800px) stacking them with back-navigation.
-- **FR-013b**: The system MUST support keyboard navigation (Tab, arrows, Enter, Escape), provide accessible labels via `AccessibleProperty::Label` on all interactive widgets, and provide tooltip text via `set_tooltip_text()` on all actionable controls.
+- **FR-008**: The system MUST provide separate browsable views for Albums and Artists, switchable via tab buttons in the header bar.
+- **FR-009**: The system MUST support at least two view modes per tab: a grid layout and a column layout.
+- **FR-010**: The system MUST provide a toggle control in the header bar to switch between grid and column views.
+- **FR-011**: Each album and artist MUST have a dedicated detail page showing full metadata and associated content (tracks for albums, albums for artists).
+- **FR-012**: The system MUST support adaptive/responsive layouts using `AdwBreakpoint` with the modern widget stack (`AdwNavigationSplitView` for sidebar/content, `AdwNavigationView` for page stacks, `AdwOverlaySplitView` for player panel, `AdwViewSwitcher` + `AdwViewSwitcherBar` for tab navigation) that adjust to different window sizes, with at minimum: a wide mode (≥800px) showing player panel and library side-by-side, and a narrow mode (<800px) stacking them with back-navigation.
+- **FR-012b**: The system MUST support keyboard navigation (Tab, arrows, Enter, Escape), provide accessible labels via `AccessibleProperty::Label` on all interactive widgets, and provide tooltip text via `set_tooltip_text()` on all actionable controls.
 
 **Playback**
 
-- **FR-014**: The system MUST support gapless playback — consecutive tracks play without any audible silence or interruption between them.
-- **FR-015**: The system MUST output audio at the file's native sample rate and bit depth when the output device supports it, preserving the original bit-perfect stream.
-- **FR-016**: When the output device does not support the file's native sample rate, the system MUST transparently resample to a supported rate. Resampled output MUST maintain RMS SNR > 120 dB relative to the original (measured over a full-band pink noise signal across the 20 Hz–20 kHz audible range) and MUST pass a blind ABX test with p < 0.05 against the original at the matched sample rate. Quality is defined by these measurable thresholds — no subjective criteria apply.
-- **FR-017**: The system MUST support common audio formats including FLAC, MP3, AAC, Ogg Vorbis, Opus, WAV, and AIFF.
-- **FR-018**: The system MUST support high-resolution audio (sample rates up to at least 192 kHz, bit depths up to 24-bit).
-- **FR-019**: The system MUST provide standard playback controls: play, pause, stop, next track, previous track.
-- **FR-020**: The system MUST provide a seek control to navigate within the currently playing track.
-- **FR-021**: The system MUST provide a volume slider in the player panel (range 0.0–1.0 mapped to dB attenuation) with a mute toggle button. Volume level MUST be persisted across application restarts via `UserSettings.volume`.
+- **FR-013**: The system MUST support gapless playback — consecutive tracks play without any audible silence or interruption between them.
+- **FR-014**: The system MUST output audio at the file's native sample rate and bit depth when the output device supports it, preserving the original bit-perfect stream.
+- **FR-015**: When the output device does not support the file's native sample rate, the system MUST transparently resample to a supported rate. Resampled output MUST maintain RMS SNR > 120 dB relative to the original (measured over a full-band pink noise signal across the 20 Hz–20 kHz audible range, plus silence, impulse, and 1 kHz sine stimuli) and MUST pass a blind ABX test with p < 0.05 against the original at the matched sample rate. Quality is defined by these measurable thresholds — no subjective criteria apply.
+- **FR-016**: The system MUST support common audio formats including FLAC, MP3, AAC, Ogg Vorbis, Opus, WAV, and AIFF.
+- **FR-017**: The system MUST support high-resolution audio (sample rates up to at least 192 kHz, bit depths up to 24-bit).
+- **FR-018**: The system MUST provide standard playback controls: play, pause, stop, next track, previous track.
+- **FR-019**: The system MUST provide a seek control to navigate within the currently playing track.
+- **FR-020**: The system MUST provide a volume slider in the player panel (range 0.0–1.0 mapped to dB attenuation) with a mute toggle button. Volume level MUST be persisted across application restarts via `UserSettings.volume`.
 
 **Queue Management**
 
-- **FR-022**: The system MUST provide a visible playback queue with the ability to view upcoming tracks, manually reorder via GTK4 drag-and-drop (`GtkDragSource`/`GtkDropTarget` on queue row widgets), add tracks from any browse/detail view, and remove individual entries. The queue MUST support a maximum of 100,000 entries.
-- **FR-023**: The queue MUST auto-populate from the current browsing context (playing an album queues all its tracks in order; playing an artist queues all albums' tracks). Manual additions and reordering MUST be preserved until the context changes.
+- **FR-021**: The system MUST provide a visible playback queue with the ability to view upcoming tracks, manually reorder via GTK4 drag-and-drop (`GtkDragSource`/`GtkDropTarget` on queue row widgets), add tracks from any browse/detail view, and remove individual entries. The queue MUST support a maximum of 100,000 entries; appends beyond the limit MUST be rejected with a user-visible `Toast` warning.
+- **FR-022**: The queue MUST auto-populate from the current browsing context (playing an album queues all its tracks in order; playing an artist queues all albums' tracks in album-then-track order). Manual additions and reordering MUST be preserved until the context changes.
 
 **Player Panel**
 
-- **FR-024**: When playback starts, a player panel MUST slide in from the left displaying album artwork, current track metadata, and playback controls.
-- **FR-025**: The player panel MUST remain visible and functional while the user interacts with the main library view.
-- **FR-026**: The player panel MUST slide out when playback stops or the queue is empty.
-- **FR-027**: On narrow/compact window sizes, the player panel MUST support a back navigation to hide it and maximize content space.
+- **FR-023**: When playback starts, a player panel MUST slide in from the left displaying album artwork, current track metadata, and playback controls. The slide-in transition MUST be 200ms ease per Constitution Principle III.
+- **FR-024**: The player panel MUST remain visible and functional while the user interacts with the main library view.
+- **FR-025**: The player panel MUST slide out when playback stops or the queue is empty.
+- **FR-026**: On narrow/compact window sizes, the player panel MUST support a back navigation to hide it and maximize content space.
 
 **Performance and Reliability**
 
-- **FR-028**: Library browsing operations (view switching, scrolling, detail page navigation) MUST remain responsive (UI response <100 ms per SC-005) regardless of library size.
-- **FR-029**: The system MUST persist library, playback queue, and settings data across application restarts.
-- **FR-030**: The system MUST recover gracefully from audio device disconnection or configuration changes.
-- **FR-031**: The system MUST handle application startup even when no audio device is available, displaying appropriate messaging.
-
-**Settings**
-
-- **FR-034**: The system MUST provide a `PreferencesDialog` (per GNOME HIG) with `PreferencesPage` and `PreferencesGroup` containing typed rows (`ActionRow` for library directories, `ComboRow` for audio device selection, `SwitchRow`/`SpinRow` for view and playback preferences) to manage library directories, audio output device, view preferences, and volume level.
+- **FR-027**: Library browsing operations (view switching, scrolling, detail page navigation) MUST remain responsive (UI response <100 ms per SC-005) regardless of library size.
+- **FR-028**: The system MUST persist library, playback queue, and settings data (including `window_width`, `window_height`, and `window_maximized` from `UserSettings`) across application restarts.
+- **FR-029**: The system MUST recover gracefully from audio device disconnection or configuration changes.
+- **FR-030**: The system MUST handle application startup even when no audio device is available, displaying appropriate messaging.
 
 **Observability**
 
-- **FR-032**: The system MUST emit structured logs using the `tracing` crate at minimum error, warn, and info levels across all subsystems (library scanning, playback engine, UI).
-- **FR-033**: The system MUST collect and expose performance metrics via structured `tracing` output (typed fields on `tracing::info!` events) for playback latency (play initiation to first audio output), library scan throughput (files/second), memory usage, and UI response times to validate success criteria.
+- **FR-031**: The system MUST emit structured logs using the `tracing` crate at minimum error, warn, and info levels across all subsystems (library scanning, playback engine, UI).
+- **FR-032**: The system MUST collect and expose performance metrics via structured `tracing` output (typed fields on `tracing::info!` events) for playback latency (play initiation to first audio output), library scan throughput (files/second), memory usage, and UI response times to validate success criteria.
+
+**Settings**
+
+- **FR-033**: The system MUST provide a `PreferencesDialog` (per GNOME HIG) with `PreferencesPage` and `PreferencesGroup` containing typed rows (`ActionRow` for library directories, `ComboRow` for audio device selection, `SwitchRow`/`SpinRow` for view and playback preferences) to manage library directories, audio output device, view preferences, and volume level.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -193,11 +193,11 @@ A user on an album detail page sees the full track listing, album metadata (year
 ### Measurable Outcomes
 
 - **SC-001**: Users can browse their full library (albums and artists), start playback of any track, and hear audio output within 3 seconds of initiating play.
-- **SC-002**: Gapless playback is verified by playing a sequence of tracks — there is no audible silence or gap between any two consecutive tracks, including transitions between tracks with different sample rates (e.g., 44.1 kHz to 96 kHz) which MUST be seamless without requiring user intervention.
+- **SC-002**: Gapless playback is verified by playing a sequence of tracks — there is no audible silence or gap between any two consecutive tracks, including transitions between tracks with different sample rates (e.g., 44.1 kHz to 96 kHz) which MUST be seamless without requiring user intervention. The measurable threshold is: the inter-track silence region MUST be < 5 ms (less than one audio frame at 192 kHz) and the ring buffer MUST NOT underrun during the transition (underrun count = 0 across 100 consecutive transitions).
 - **SC-003**: Bit-perfect playback is verified by comparing the digital audio output against the source file — the bit stream matches exactly when the device supports the file's native format.
 - **SC-004**: A library of 10,000 tracks loads and becomes browsable within 30 seconds on reference hardware (Intel i5-1135G7, 16 GB RAM, NVMe SSD).
 - **SC-005**: Users can navigate between Albums and Artists views, toggle between grid and column layouts, and access detail pages without perceivable UI lag (response under 100ms).
-- **SC-006**: The empty state is shown on first launch when no library is configured; the library view populates within 10 seconds of configuring a directory with 1,000 audio files.
+- **SC-006**: The empty state is shown on first launch when no library is configured; the library view populates within 10 seconds of configuring a directory with 3,000 audio files (consistent with the ≥333 files/second throughput implied by SC-004, accounting for the smaller first-scan workload).
 - **SC-007**: The player panel appears within 500ms of playback starting and display correct track metadata and artwork.
 - **SC-008**: Resampled audio MUST pass a blind ABX test (p < 0.05 threshold, binomial test) comparing resampled output against the original source at matched sample rate, with a minimum of 10 trials per test. The ABX test MUST be supported by an automated validation harness (programmatic stimulus generation, randomization, and statistical evaluation); manual perceptual verification is permitted as a supplementary check.
 
@@ -214,3 +214,9 @@ A user on an album detail page sees the full track listing, album metadata (year
 - The application window size defaults to a standard desktop size (~1200x800 pixels) and adapts down to a minimum viable size.
 - The user is responsible for managing their audio files outside the application — file organization, renaming, and deletion happen in the filesystem and the library reflects these changes.
 - Playback is expected to run for extended periods (hours) without degradation of audio quality or accumulation of audio drift.
+
+## Engineering Targets (non-success-criteria)
+
+The following engineering targets are tracked internally by the metrics collector (`src/metrics/collector.rs`, tasks T046a–T046e) but are **not** Success Criteria — they are engineering budgets, not user-facing commitments. Exceeding a target triggers a `tracing::warn!` event for visibility, not a release-blocking failure.
+
+- **Steady-state memory**: < 200 MB RSS during playback of a 10,000-track library (target derived from the project plan's resource budget; baseline to be established by T046e).

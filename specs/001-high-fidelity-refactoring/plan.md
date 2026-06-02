@@ -32,15 +32,45 @@ Refactor oxhidifi into a high-fidelity GTK4/Libadwaita desktop music player with
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-**Code Quality Gate (Principle I)**: All committed code MUST pass `cargo clippy -- -W clippy::pedantic` and `cargo fmt`. No `#[allow]`, `unsafe`, or `unwrap()`/`expect()`/`panic!()` calls permitted. Each `.rs` file MUST NOT exceed 400 lines. Source files MUST be grouped by capability/domain — NEVER use `models/`/`handlers/`/`utils/`. Only `.rs` files permitted (no `.ui`/`.xml`/`.blp`). Status: **PASS** (project is empty scaffold; all new code will follow these rules).
+| Gate | Check | Verifier | Status |
+|------|-------|----------|--------|
+| **Code Quality (Principle I)** | `cargo clippy --fix --allow-dirty --all-targets -- -W clippy::pedantic` exits 0 | CI | PASS (no existing code) |
+| **Code Quality (Principle I)** | `cargo fmt --check` exits 0 | CI | PASS (no existing code) |
+| **Code Quality (Principle I)** | No `#[allow(...)]` attributes in `src/` | `rg '#\[allow\(' src/` returns empty | PASS (no existing code) |
+| **Code Quality (Principle I)** | No `unsafe` blocks in `src/` | `rg 'unsafe ' src/` returns empty | PASS (no existing code) |
+| **Code Quality (Principle I)** | No `unwrap()`/`expect()`/`panic!()` in `src/` | `rg '\.(unwrap\|expect)\|panic!' src/` returns empty | PASS (no existing code) |
+| **Code Quality (Principle I)** | No file in `src/` exceeds 400 lines | `awk 'length>400' src/**/*.rs` returns empty | PASS (no existing code) |
+| **Code Quality (Principle I)** | No `models/`/`handlers/`/`utils/` directories | `ls src/` | PASS (no existing code) |
+| **Code Quality (Principle I)** | No `.ui`/`.xml`/`.blp` files in repo | `find . -name '*.ui' -o -name '*.xml' -o -name '*.blp'` returns empty | PASS (no existing code) |
+| **Testing (Principle II)** | Unit tests at bottom of every source file | Code review | PASS (new code only) |
+| **Testing (Principle II)** | `criterion` benchmark for every audio hot path | `cargo bench --no-run` succeeds | PASS (new code only) |
+| **Testing (Principle II)** | Integration tests for contract boundaries | `cargo test --test '*'` succeeds | PASS (new code only) |
+| **UX (Principle III)** | Navigation uses `AdwNavigationSplitView`/`AdwNavigationView`/`AdwOverlaySplitView` + `AdwBreakpoint` | Code review + `rg 'AdwLeaflet' src/` returns empty | PASS (amended Principle III) |
+| **UX (Principle III)** | 6px spacing scale (no hardcoded radii) | `rg 'border-radius' src/` returns empty | PASS (no existing code) |
+| **UX (Principle III)** | 200ms ease transitions for motion | Code review | PASS (no existing code) |
+| **Performance (Principle IV)** | Hot paths use `rtrb` (lock-free ring buffers) | Code review | PASS (designed in) |
+| **Performance (Principle IV)** | Resampling uses `rubato` + `audioadapter-buffers` | Code review | PASS (designed in) |
+| **Observability (Principle V)** | Library crates use `thiserror` with documented variants | Code review | PASS (designed in) |
+| **Observability (Principle V)** | No `let _` / `.ok()` in `src/` | `rg 'let _\|\.ok\(\)' src/` returns empty | PASS (no existing code) |
 
-**Testing Gate (Principle II)**: Unit tests at bottom of source files, integration tests for contract boundaries, `criterion` benchmarks for audio hot paths. Tests MUST be written and confirmed failing before implementation (red-green-refactor). Status: **PASS** (no existing violations; testing infrastructure to be established in Phase 1).
+## Phases
 
-**UX Gate (Principle III)**: UI MUST follow GNOME HIG: `ToolbarView`/`HeaderBar`, programmatic Libadwaita widgets (never `GtkBox` layouts for navigation), `PreferencesDialog` for settings, accessible labels via `AccessibleProperty::Label`, keyboard navigation, `Toast` feedback, `AdwNavigationSplitView`/`AdwNavigationView`/`AdwOverlaySplitView` + `AdwBreakpoint` for responsiveness, 6px spacing scale, 200ms ease transitions, no hardcoded radii. Status: **PASS** (design will follow HIG from the start; research confirms the modern adaptive stack; constitution Principle III amended to match).
+The plan is decomposed into 10 phases, each producing a checkpoint. Phase dependencies are listed in `tasks.md` § "Phase Dependencies".
 
-**Performance Gate (Principle IV)**: Audio pipeline changes MUST include `criterion` benchmarks showing no regression relative to baseline. Hot paths MUST be lock-free with zero heap allocation (pre-allocated buffers, `rtrb` for ring buffers). `tokio` for async I/O, `crossbeam` for message passing, `rayon` for CPU parallelism. `rubato` + `audioadapter-buffers` for resampling. Status: **PASS** (pipeline designed with these constraints).
+| # | Phase | Priority | Output | Tasks |
+|---|-------|----------|--------|-------|
+| 1 | Setup | — | Cargo scaffold, lint config, test infra, criterion harness | T001–T004d |
+| 2 | Foundational | — | Storage trait, SQLite impl, settings, error types, XDG | T005–T010b |
+| 3 | US1a Library Ingestion | P1 (MVP) | Scanner, metadata, dedup, events | T011–T013, T018–T018c |
+| 4 | US1b Playback Pipeline | P1 (MVP) | Decoder, output, queue, engine | T014–T017 |
+| 5 | US1c UI Shell & Browsing | P1 (MVP) | App, window, header, album grid, play wiring, adaptive layout, a11y, window-geometry restore | T019–T023, T019b–T019d |
+| 6 | US2 Empty State & Nav | P1 | Empty state, artist view, grid/column toggle, watcher, status bar, tab switching, scan+status integration test | T025–T031, T031b |
+| 7 | US3 Gapless Resampling | P2 | Resampler (with criterion baseline), gapless, pre-buffer, sample-rate reconfig, bit-perfect path, ABX harness, hi-res, SNR, bit-perfect verify | T032–T036, T032b, T036b–T036g |
+| 8 | US4 Side Panel | P2 | Slide-in panel, state wiring, narrow-mode back nav, auto show/hide, queue view UI | T037–T040, T040b |
+| 9 | US5 Detail Pages | P3 | Album detail, artist detail, navigation, play/queue actions | T041–T044 |
+| 10 | Polish | — | A11y audit, metrics (T046a–T046e), tracing instrumentation, edge-case handlers, lint/fmt, validation, preferences dialog, persistence verification | T045, T046a–T046e, T047, T048a–T048e, T049–T058 |
 
-**Observability Gate (Principle V)**: Structured `tracing` with typed fields for all diagnostic output. Library crates use `thiserror` with documented variants. Binary crate uses `anyhow` at top level only. NEVER use `let _`/`.ok()` — return errors with context. NEVER leak `anyhow::Error` across library boundaries. Status: **PASS** (error handling pattern established per constitution).
+**Sub-task suffix convention**: tasks suffixed with a letter (`T004b`, `T019b`, `T032b`, `T036b`, `T040b`, `T046a`, `T048a`, `T052b`) are sub-tasks of the parent task. The parent's ID is implied by stripping the letter suffix (e.g., `T046a`–`T046e` are sub-tasks of `T046`). When a parent task is renamed, its sub-tasks are renamed in lockstep (e.g., T024 → T018b moved its sub-tasks T024b → T018c, and the Phase 5 T024c/T024d became T019b/T019c).
 
 ## Project Structure
 
@@ -108,9 +138,12 @@ src/
 
 ## Complexity Tracking
 
-> **Fill ONLY if Constitution Check has violations that must be justified**
+> **Fill ONLY if Constitution Check has violations that must be justified.**
+> No violations currently exist — the design follows every principle. If a future change
+> requires relaxing a MUST principle, document the violation, the simpler alternative that
+> was rejected, and obtain team approval per the constitution's Governance section before
+> proceeding.
 
 | Violation | Why Needed | Simpler Alternative Rejected Because |
 |-----------|------------|-------------------------------------|
-| [e.g., 4th project] | [current need] | [why 3 projects insufficient] |
-| [e.g., Repository pattern] | [specific problem] | [why direct DB access insufficient] |
+| _(none)_ | — | — |
