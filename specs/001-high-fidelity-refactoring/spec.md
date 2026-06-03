@@ -65,7 +65,7 @@ A user plays a high-resolution audio file (e.g., 96 kHz / 24-bit FLAC). The play
 **Acceptance Scenarios**:
 
 1. **Given** a high-resolution audio file is loaded, **When** playback starts, **Then** the audio is output at the file's native sample rate when the device supports it
-2. **Given** a file's sample rate differs from the device's capabilities, **When** playback starts, **Then** the audio is transparently resampled with imperceptible quality loss
+2. **Given** a file's sample rate differs from the device's capabilities, **When** playback starts, **Then** the audio is transparently resampled meeting the measurable quality thresholds defined in FR-015 (RMS SNR > 120 dB against pink noise reference, ABX p < 0.05)
 3. **Given** files with different sample rates play consecutively, **When** transitioning between tracks, **Then** playback remains gapless with seamless sample rate reconfiguration
 4. **Given** a lossless file is played, **When** the audio reaches the output device, **Then** no data is altered or re-encoded, preserving the original bit-perfect fidelity
 

@@ -18,7 +18,7 @@
     - .specify/templates/spec-template.md → ✅ no changes needed
     - .specify/templates/tasks-template.md → ✅ no changes needed
   Follow-up TODOs:
-    - TODO(RATIFICATION_DATE): Original adoption date unknown — set when first ratified
+    - 2026-05-22: Original adoption date estimated from feature branch creation
 -->
 
 # oxhidifi-refactor Constitution
@@ -149,4 +149,4 @@ principles herein. Any violation of a NON-NEGOTIABLE principle MUST be accompani
 a documented justification of complexity accepted by the team. Use `AGENTS.md` for
 runtime agent development guidance.
 
-**Version**: 1.1.0 | **Ratified**: TODO(RATIFICATION_DATE): Original adoption date unknown | **Last Amended**: 2026-05-23
+**Version**: 1.1.0 | **Ratified**: 2026-05-22 | **Last Amended**: 2026-05-23
