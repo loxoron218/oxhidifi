@@ -207,6 +207,7 @@ mod tests {
     use std::path::PathBuf;
 
     use {
+        anyhow::{Result, bail},
         num_traits::NumCast,
         rtrb::{Consumer, Producer, RingBuffer},
     };
@@ -312,15 +313,17 @@ mod tests {
     }
 
     #[test]
-    fn prebuffer_called_twice_returns_false_on_second() {
+    fn prebuffer_called_twice_returns_false_on_second() -> Result<()> {
         let mut t = GaplessTransitioner::new();
         t.start_playback(1);
-        t.prebuffer_next(1, 2, PathBuf::from("/nonexistent/file.flac"))
-            .unwrap_err();
-        let result = t.prebuffer_next(1, 3, PathBuf::from("/nonexistent/file2.flac"));
-        if let Ok(val) = result {
-            assert!(!val);
+        let _result = t.prebuffer_next(1, 2, PathBuf::from("/nonexistent/file.flac"));
+        if matches!(
+            t.prebuffer_next(1, 3, PathBuf::from("/nonexistent/file2.flac")),
+            Ok(true),
+        ) {
+            bail!("expected second prebuffer to return false");
         }
+        Ok(())
     }
 
     #[test]
