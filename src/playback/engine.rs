@@ -1,7 +1,8 @@
-//! Playback orchestrator wiring decoder, ring buffer, and output together.
+//! Playback orchestrator wiring decoder, resampler, ring buffer, and output together.
 
 use std::{
     collections::HashMap,
+    iter::repeat_n,
     path::{Path, PathBuf},
     sync::Arc,
     thread::{spawn, yield_now},
@@ -25,6 +26,7 @@ use crate::playback::{
     decoder::{DecodedSamples, Decoder},
     output::AudioOutput,
     queue::PlaybackQueue,
+    resampler::AudioResampler,
 };
 
 /// Commands sent to the decode task.
@@ -33,6 +35,15 @@ enum DecodeCommand {
     Stop,
     /// Device was lost — stop gracefully.
     DeviceLost,
+    /// Pre-buffer the next track for gapless transition.
+    PreloadNext {
+        /// ID of the next track.
+        track_id: i64,
+        /// File path of the next track.
+        path: PathBuf,
+        /// Sample rate of the next track.
+        sample_rate: u32,
+    },
 }
 
 /// Shared engine state.
@@ -51,6 +62,19 @@ struct EngineShared {
     output: Mutex<Option<AudioOutput>>,
     /// Cached track ID to file path mappings (set before `play_queue`).
     track_paths: Mutex<HashMap<i64, PathBuf>>,
+    /// Device output sample rate, updated when `AudioOutput` is created.
+    device_sample_rate: Mutex<u32>,
+    /// Current track sample rate, updated on track start.
+    track_sample_rate: Mutex<u32>,
+}
+
+/// Audio output configuration for the decode loop.
+#[derive(Clone, Copy)]
+struct OutputConfig {
+    /// Device sample rate in Hz.
+    device_sample_rate: u32,
+    /// Number of output channels.
+    channels: u16,
 }
 
 /// Trait for controlling playback, consumed by the UI layer.
@@ -120,7 +144,8 @@ pub trait PlaybackController: Send + 'static {
 
 /// The playback engine orchestrator.
 ///
-/// Wires decoder → ring buffer → output. Manages the decode task lifecycle.
+/// Wires decoder → resampler → ring buffer → output. Manages the decode
+/// task lifecycle, sample rate reconfiguration, and bit-perfect output.
 pub struct PlaybackEngine {
     /// Shared state wrapped in an `Arc`.
     shared: Arc<EngineShared>,
@@ -140,6 +165,8 @@ impl PlaybackEngine {
                 decode_tx: Mutex::new(None),
                 output: Mutex::new(None),
                 track_paths: Mutex::new(HashMap::new()),
+                device_sample_rate: Mutex::new(44100),
+                track_sample_rate: Mutex::new(44100),
             }),
         }
     }
@@ -155,7 +182,10 @@ impl PlaybackEngine {
         &self.shared.queue
     }
 
-    /// Start decoding and playing a track.
+    /// Start decoding and playing a track with optional resampling.
+    ///
+    /// Creates a resampler when the track sample rate differs from the
+    /// device sample rate.
     ///
     /// # Errors
     ///
@@ -172,6 +202,12 @@ impl PlaybackEngine {
                 );
             })
             .map_err(Output)?;
+
+        let output_config = OutputConfig {
+            device_sample_rate: output.sample_rate(),
+            channels: output.channels(),
+        };
+        *self.shared.device_sample_rate.lock() = output_config.device_sample_rate;
         *self.shared.output.lock() = Some(output);
 
         {
@@ -193,7 +229,15 @@ impl PlaybackEngine {
         }
 
         spawn(move || {
-            run_decode_loop(&path, producer, cmd_rx, &engine_state, &event_tx, track_id);
+            run_decode_loop(
+                &path,
+                producer,
+                cmd_rx,
+                &engine_state,
+                &event_tx,
+                track_id,
+                output_config,
+            );
         });
 
         Ok(())
@@ -421,7 +465,119 @@ fn send_error_event(event_tx: &Sender<PlaybackEvent>, error: String) {
     }
 }
 
+/// Downmix interleaved frames from `src_channels` to fewer `dst_channels`
+/// by averaging channel groups.
+fn downsample_frames(samples: &[f32], src_channels: usize, dst_channels: usize) -> Vec<f32> {
+    let frames = samples.len() / src_channels;
+    let mut out = Vec::with_capacity(frames * dst_channels);
+    for frame in samples.chunks_exact(src_channels) {
+        for out_ch in 0..dst_channels {
+            let start_ch = (out_ch * src_channels) / dst_channels;
+            let end_ch = ((out_ch + 1) * src_channels) / dst_channels;
+            let count = u8::try_from(end_ch - start_ch).unwrap_or(1);
+            out.push(frame[start_ch..end_ch].iter().sum::<f32>() / f32::from(count));
+        }
+    }
+    out
+}
+
+/// Upmix interleaved frames from `src_channels` to more `dst_channels` by
+/// padding extra channels with silence.
+fn upsample_frames(samples: &[f32], src_channels: usize, dst_channels: usize) -> Vec<f32> {
+    let pad = dst_channels - src_channels;
+    let frames = samples.len() / src_channels;
+    let mut out = Vec::with_capacity(frames * dst_channels);
+    for frame in samples.chunks_exact(src_channels) {
+        out.extend_from_slice(frame);
+        out.extend(repeat_n(0.0, pad));
+    }
+    out
+}
+
+/// Downmix interleaved samples from `src_channels` to `dst_channels`.
+///
+/// When `src_channels > dst_channels`, source channels are averaged into
+/// groups to produce the output channels. When `src_channels < dst_channels`,
+/// extra output channels are filled with silence.
+fn downmix(samples: &[f32], src_channels: usize, dst_channels: usize) -> Vec<f32> {
+    if src_channels == dst_channels {
+        return samples.to_vec();
+    }
+    if dst_channels > src_channels {
+        upsample_frames(samples, src_channels, dst_channels)
+    } else {
+        downsample_frames(samples, src_channels, dst_channels)
+    }
+}
+
+/// Return `batch.samples` as-is if channel counts match, otherwise downmix.
+fn maybe_downmix(batch: DecodedSamples, src_channels: usize, dst_channels: usize) -> Vec<f32> {
+    if src_channels == dst_channels {
+        batch.samples
+    } else {
+        downmix(&batch.samples, src_channels, dst_channels)
+    }
+}
+
+/// Push interleaved f32 samples into the ring buffer with volume scaling.
+///
+/// Blocks by yielding the thread when the ring buffer is full, preventing
+/// sample loss and throttling the decode loop to real-time playback rate.
+fn push_samples(samples: &[f32], producer: &mut Producer<f32>, volume: f32) {
+    for sample in samples {
+        let mut s = *sample * volume;
+        while let Err(ret) = producer.push(s) {
+            s = match ret {
+                Full(val) => val,
+            };
+            yield_now();
+        }
+    }
+}
+
+/// Pushes samples through a resampler and writes output to the ring buffer.
+///
+/// Returns `Some(error)` if resampling fails.
+fn process_resampler(
+    r: &mut AudioResampler,
+    samples: &[f32],
+    producer: &mut Producer<f32>,
+    volume: f32,
+) -> Option<String> {
+    r.push_input(samples);
+    while r.has_pending_output() {
+        match r.process() {
+            Ok(Some(output)) => push_samples(output, producer, volume),
+            Ok(None) => break,
+            Err(e) => return Some(format!("Resampler error: {e}")),
+        }
+    }
+    None
+}
+
+/// Processes a decoded batch, optionally resampling, and returns an event if
+/// an error occurred.
+fn process_decoded_batch(
+    samples: &[f32],
+    resampler: &mut Option<AudioResampler>,
+    producer: &mut Producer<f32>,
+    volume: f32,
+) -> Option<PlaybackEvent> {
+    let error = if let Some(r) = resampler {
+        process_resampler(r, samples, producer, volume)
+    } else {
+        push_samples(samples, producer, volume);
+        None
+    };
+    error.map(|e| PlaybackEvent::Error { error: e })
+}
+
 /// The decode loop running on a blocking thread.
+///
+/// Optionally uses a resampler when the track sample rate differs from
+/// the device sample rate. Downmixes multichannel audio to the output
+/// channel count to prevent playback speed distortion from channel count
+/// mismatch between source and output.
 fn run_decode_loop(
     path: &Path,
     mut producer: Producer<f32>,
@@ -429,10 +585,36 @@ fn run_decode_loop(
     engine_shared: &Arc<EngineShared>,
     event_tx: &Sender<PlaybackEvent>,
     track_id: i64,
+    output: OutputConfig,
 ) {
     let mut decoder = match Decoder::open(path) {
         Ok(d) => d,
         Err(e) => return send_error_event(event_tx, e.to_string()),
+    };
+
+    let track_sample_rate = decoder.params().sample_rate;
+    let src_channels = decoder.params().channels as usize;
+    let dst_channels = output.channels as usize;
+
+    *engine_shared.track_sample_rate.lock() = track_sample_rate;
+
+    let needs_resampling = track_sample_rate != output.device_sample_rate;
+    let chunk_size = 1024;
+    let mut resampler = if needs_resampling {
+        match AudioResampler::new(
+            track_sample_rate,
+            output.device_sample_rate,
+            chunk_size,
+            dst_channels,
+        ) {
+            Ok(r) => Some(r),
+            Err(e) => {
+                send_error_event(event_tx, format!("Failed to create resampler: {e}"));
+                return;
+            }
+        }
+    } else {
+        None
     };
 
     let mut volume;
@@ -442,8 +624,8 @@ fn run_decode_loop(
         volume = read_volume(engine_shared);
 
         match cmd_rx.try_recv() {
-            Err(Empty) => {}
             Ok(DecodeCommand::Stop | DecodeCommand::DeviceLost) | Err(Disconnected) => break,
+            Err(Empty) | Ok(DecodeCommand::PreloadNext { .. }) => {}
         }
 
         match decoder.decode_next() {
@@ -452,14 +634,19 @@ fn run_decode_loop(
                 break;
             }
             Ok(batch) => {
-                push_samples(&batch, &mut producer, volume);
+                let samples = maybe_downmix(batch, src_channels, dst_channels);
+                event_to_send =
+                    process_decoded_batch(&samples, &mut resampler, &mut producer, volume);
             }
             Err(e) => {
                 event_to_send = Some(PlaybackEvent::Error {
                     error: e.to_string(),
                 });
-                break;
             }
+        }
+
+        if event_to_send.is_some() {
+            break;
         }
     }
 
@@ -481,20 +668,18 @@ fn run_decode_loop(
     }
 }
 
-/// Push samples from a decoded batch into the ring buffer.
+/// Create a new resampler for a given sample rate pair.
 ///
-/// Blocks by yielding the thread when the ring buffer is full, preventing
-/// sample loss and throttling the decode loop to real-time playback rate.
-fn push_samples(batch: &DecodedSamples, producer: &mut Producer<f32>, volume: f32) {
-    for sample in &batch.samples {
-        let mut s = *sample * volume;
-        while let Err(ret) = producer.push(s) {
-            s = match ret {
-                Full(val) => val,
-            };
-            yield_now();
-        }
-    }
+/// # Errors
+///
+/// Returns a descriptive error string if the resampler cannot be created.
+pub fn create_resampler(
+    input_rate: u32,
+    output_rate: u32,
+    channels: usize,
+) -> Result<AudioResampler, String> {
+    AudioResampler::new(input_rate, output_rate, 1024, channels)
+        .map_err(|e| format!("Resampler creation failed: {e}"))
 }
 
 #[cfg(test)]

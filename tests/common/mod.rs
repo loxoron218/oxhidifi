@@ -38,7 +38,6 @@ pub fn create_minimal_flac(dir: &Path, name: &str) -> Result<PathBuf> {
     let mut data = Vec::new();
     data.extend_from_slice(b"fLaC");
 
-    // STREAMINFO metadata block (minimum required)
     data.extend_from_slice(&[0x00, 0x22, 0x00, 0x00]);
     data.extend_from_slice(&[0; 34]);
     write(&path, &data)?;

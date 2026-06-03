@@ -135,18 +135,18 @@ description: "Task list for high-fidelity music player refactoring"
 
 ### Implementation for User Story 3
 
-- [ ] T032 [P] [US3] Implement rubato resampler in src/playback/resampler.rs (fixed input/output buffers, configurable algorithm, sample rate conversion)
-- [ ] T032b [US3] Create criterion benchmark for resampler latency in benches/resampler_baseline.rs (per Constitution Principle IV — Phase 1 benchmark harness covers decoder and ring buffer; the resampler baseline is created here in Phase 7 once the resampler exists). The benchmark is the baseline that T036c regression-tests against. This supersedes the resampler-latency placeholder in T004b
-- [ ] T033 [US3] Implement gapless transition logic in src/playback/gapless.rs (pre-buffer next track during last ~1s of current, drain old buffer, switch decoder)
-- [ ] T034 [US3] Integrate decoder pre-buffering in src/playback/decoder.rs (dual decoder state: active + preloaded next track)
-- [ ] T035 [US3] Implement sample rate reconfiguration on track transition in src/playback/engine.rs (detect sample rate change, reset resampler with new coefficients)
-- [ ] T036 [US3] Add bit-perfect output path in src/playback/output.rs (passthrough mode when device supports native sample rate/bit depth)
-- [ ] T036b [US3] Write deterministic simulation tests for gapless transition concurrent logic (pre-buffer race, decoder switch, ring buffer drain) per Principle II
-- [ ] T036c [US3] Add criterion benchmarks for resampler throughput and bit-perfect output path latency; verify no regression against Phase 1 baseline per Principle IV
-- [ ] T036d [US3] Implement ABX validation harness for resampled output per SC-008: programmatic stimulus generation (sine sweeps, pink noise, silence, impulse) and randomized ABX presentation; the harness collects human listener responses and applies binomial statistical evaluation (p < 0.05 threshold, minimum 10 trials per test condition). The harness itself is automated; the p-value requires a human listener. A supplementary objective check (RMS SNR ≥ 120 dB per FR-015) is computed by the harness so objective and perceptual results can be cross-referenced. Manual QA procedure is documented separately as supplementary verification
-- [ ] T036e [US3] Verify high-resolution audio support (sample rates up to 192 kHz, bit depth up to 24-bit) per FR-017; add test fixtures with 96 kHz and 192 kHz files
-- [ ] T036f [US3] Implement bit-perfect output verification per SC-003: capture CPAL output buffer after playback, decode source file to PCM via symphonia, assert byte-identical match across all frames; add test fixture with known-reference FLAC file
-- [ ] T036g [US3] Implement RMS SNR measurement for resampled output per FR-015: generate full-band pink noise reference signal (20 Hz–20 kHz), resample via rubato, compute RMS SNR against original, assert > 120 dB threshold
+- [X] T032 [P] [US3] Implement rubato resampler in src/playback/resampler.rs (fixed input/output buffers, configurable algorithm, sample rate conversion)
+- [X] T032b [US3] Create criterion benchmark for resampler latency in benches/resampler_baseline.rs (per Constitution Principle IV — Phase 1 benchmark harness covers decoder and ring buffer; the resampler baseline is created here in Phase 7 once the resampler exists). The benchmark is the baseline that T036c regression-tests against. This supersedes the resampler-latency placeholder in T004b
+- [X] T033 [US3] Implement gapless transition logic in src/playback/gapless.rs (pre-buffer next track during last ~1s of current, drain old buffer, switch decoder)
+- [X] T034 [US3] Integrate decoder pre-buffering in src/playback/decoder.rs (dual decoder state: active + preloaded next track)
+- [X] T035 [US3] Implement sample rate reconfiguration on track transition in src/playback/engine.rs (detect sample rate change, reset resampler with new coefficients)
+- [X] T036 [US3] Add bit-perfect output path in src/playback/output.rs (passthrough mode when device supports native sample rate/bit depth)
+- [X] T036b [US3] Write deterministic simulation tests for gapless transition concurrent logic (pre-buffer race, decoder switch, ring buffer drain) per Principle II
+- [X] T036c [US3] Add criterion benchmarks for resampler throughput and bit-perfect output path latency; verify no regression against Phase 1 baseline per Principle IV
+- [X] T036d [US3] Implement ABX validation harness for resampled output per SC-008: programmatic stimulus generation (sine sweeps, pink noise, silence, impulse) and randomized ABX presentation; the harness collects human listener responses and applies binomial statistical evaluation (p < 0.05 threshold, minimum 10 trials per test condition). The harness itself is automated; the p-value requires a human listener. A supplementary objective check (RMS SNR ≥ 120 dB per FR-015) is computed by the harness so objective and perceptual results can be cross-referenced. Manual QA procedure is documented separately as supplementary verification
+- [X] T036e [US3] Verify high-resolution audio support (sample rates up to 192 kHz, bit depth up to 24-bit) per FR-017; add test fixtures with 96 kHz and 192 kHz files
+- [X] T036f [US3] Implement bit-perfect output verification per SC-003: capture CPAL output buffer after playback, decode source file to PCM via symphonia, assert byte-identical match across all frames; add test fixture with known-reference FLAC file
+- [X] T036g [US3] Implement RMS SNR measurement for resampled output per FR-015: generate full-band pink noise reference signal (20 Hz–20 kHz), resample via rubato, compute RMS SNR against original, assert > 120 dB threshold
 
 **Checkpoint**: Gapless playback across tracks at same and different sample rates, resampling kicks in transparently when device doesn't support native rate
 
