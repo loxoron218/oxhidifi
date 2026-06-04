@@ -320,10 +320,14 @@ fn copy_interleaved_f32(buf: &GenericAudioBufferRef<'_>, out: &mut Vec<f32>) {
 
 #[cfg(test)]
 mod tests {
-    use std::io::Write;
+    use std::{
+        fs::File,
+        io::{Result, Write},
+        path::Path,
+    };
 
     use {
-        anyhow::{Result, bail},
+        anyhow::{Result as AnyhowResult, bail},
         tempfile::NamedTempFile,
     };
 
@@ -331,6 +335,33 @@ mod tests {
         DecoderError::OpenError,
         decoder::{Decoder, DualDecoder},
     };
+
+    fn write_minimal_wav(path: &Path) -> Result<()> {
+        let mut f = File::create(path)?;
+        let channels = 1u16;
+        let sample_rate = 44100u32;
+        let bits_per_sample = 16u16;
+        let data_size = 2u32;
+        let riff_size = 36u32 + data_size;
+
+        f.write_all(b"RIFF")?;
+        f.write_all(&riff_size.to_le_bytes())?;
+        f.write_all(b"WAVE")?;
+        f.write_all(b"fmt ")?;
+        f.write_all(&16u32.to_le_bytes())?;
+        f.write_all(&1u16.to_le_bytes())?;
+        f.write_all(&channels.to_le_bytes())?;
+        f.write_all(&sample_rate.to_le_bytes())?;
+        f.write_all(
+            &(sample_rate * u32::from(channels) * u32::from(bits_per_sample / 8)).to_le_bytes(),
+        )?;
+        f.write_all(&(channels * (bits_per_sample / 8)).to_le_bytes())?;
+        f.write_all(&bits_per_sample.to_le_bytes())?;
+        f.write_all(b"data")?;
+        f.write_all(&data_size.to_le_bytes())?;
+        f.write_all(&[0u8, 0u8])?;
+        Ok(())
+    }
 
     #[test]
     fn open_nonexistent_file_returns_error() {
@@ -340,7 +371,7 @@ mod tests {
     }
 
     #[test]
-    fn open_invalid_content_returns_error() -> Result<()> {
+    fn open_invalid_content_returns_error() -> AnyhowResult<()> {
         let mut tmp = NamedTempFile::new()?;
         tmp.write_all(b"not an audio file")?;
         let result = Decoder::open(tmp.path());
@@ -385,5 +416,24 @@ mod tests {
         dd.stop();
         assert!(!dd.is_active());
         assert!(!dd.has_preloaded());
+    }
+
+    #[test]
+    fn decode_next_returns_empty_on_end_of_stream() -> AnyhowResult<()> {
+        let tmp = NamedTempFile::new()?;
+        write_minimal_wav(tmp.path())?;
+        let mut decoder = match Decoder::open(tmp.path()) {
+            Ok(d) => d,
+            Err(e) => bail!("failed to open test wav: {e}"),
+        };
+        let batch = decoder.decode_next()?;
+        if batch.samples.is_empty() {
+            bail!("expected at least one sample batch before EOS");
+        }
+        let eos = decoder.decode_next()?;
+        if !eos.samples.is_empty() {
+            bail!("expected empty samples at end of stream");
+        }
+        Ok(())
     }
 }

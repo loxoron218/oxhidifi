@@ -582,19 +582,17 @@ fn try_auto_advance(
     event_to_send: &mut Option<PlaybackEvent>,
 ) -> bool {
     let next_track = match &event_to_send {
-        Some(PlaybackEvent::TrackFinished { .. }) => engine_shared
-            .queue
-            .upcoming()
-            .first()
-            .copied()
-            .and_then(|next_id| {
+        Some(PlaybackEvent::TrackFinished { .. }) => {
+            let upcoming = engine_shared.queue.upcoming();
+            upcoming.get(1).copied().and_then(|next_id| {
                 engine_shared
                     .track_paths
                     .lock()
                     .get(&next_id)
                     .cloned()
                     .map(|path| (next_id, path))
-            }),
+            })
+        }
         _ => None,
     };
     let Some((next_id, next_path)) = next_track else {
@@ -622,7 +620,7 @@ fn try_auto_advance(
     *engine_shared.device_sample_rate.lock() = output_config.device_sample_rate;
     *engine_shared.output.lock() = Some(output);
 
-    let _ = engine_shared.queue.next();
+    let _next_track_id = engine_shared.queue.next();
 
     {
         let mut state = engine_shared.state.lock();
@@ -777,14 +775,23 @@ pub fn create_resampler(
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashMap, path::PathBuf};
+    use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
-    use anyhow::{Result, anyhow, bail};
+    use {
+        anyhow::{Result, anyhow, bail},
+        parking_lot::Mutex,
+        tokio::sync::broadcast::channel,
+    };
 
     use crate::playback::{
         PlaybackError::{NoDeviceAvailable, Output, QueueEmpty, TrackNotFound},
         decoder::{AudioParams, DecodedSamples},
-        engine::{PlaybackController, PlaybackEngine, downmix, maybe_downmix},
+        engine::{
+            EngineShared, PlaybackController, PlaybackEngine,
+            PlaybackEvent::{Paused, TrackFinished},
+            PlaybackState, downmix, maybe_downmix, try_auto_advance,
+        },
+        queue::PlaybackQueue,
     };
 
     fn setup_queue(engine: &PlaybackEngine, track_ids: Vec<i64>) {
@@ -892,6 +899,71 @@ mod tests {
     fn previous_track_returns_error_at_start() {
         let engine = PlaybackEngine::new();
         assert!(matches!(engine.previous_track(), Err(QueueEmpty)));
+    }
+
+    #[test]
+    fn try_auto_advance_returns_false_for_non_track_finished() {
+        let (event_tx, event_rx) = channel(64);
+        let shared = Arc::new(EngineShared {
+            state: Mutex::new(PlaybackState::default()),
+            queue: PlaybackQueue::new(),
+            event_tx,
+            _event_rx: event_rx,
+            decode_tx: Mutex::new(None),
+            output: Mutex::new(None),
+            track_paths: Mutex::new(HashMap::new()),
+            device_sample_rate: Mutex::new(44100),
+            track_sample_rate: Mutex::new(44100),
+        });
+        let (test_tx, _test_rx) = channel(64);
+        let mut event = Some(Paused);
+        let result = try_auto_advance(&shared, &test_tx, &mut event);
+        assert!(!result, "should return false for non-TrackFinished event");
+    }
+
+    #[test]
+    fn try_auto_advance_returns_false_when_no_upcoming_track() {
+        let (event_tx, event_rx) = channel(64);
+        let shared = Arc::new(EngineShared {
+            state: Mutex::new(PlaybackState::default()),
+            queue: PlaybackQueue::new(),
+            event_tx,
+            _event_rx: event_rx,
+            decode_tx: Mutex::new(None),
+            output: Mutex::new(None),
+            track_paths: Mutex::new(HashMap::new()),
+            device_sample_rate: Mutex::new(44100),
+            track_sample_rate: Mutex::new(44100),
+        });
+        shared.queue.set_queue(vec![1]);
+        let (test_tx, _test_rx) = channel(64);
+        let mut event = Some(TrackFinished { track_id: 1 });
+        let result = try_auto_advance(&shared, &test_tx, &mut event);
+        assert!(!result, "should return false when queue has only one track");
+    }
+
+    #[test]
+    fn try_auto_advance_returns_false_when_path_not_found() {
+        let (event_tx, event_rx) = channel(64);
+        let shared = Arc::new(EngineShared {
+            state: Mutex::new(PlaybackState::default()),
+            queue: PlaybackQueue::new(),
+            event_tx,
+            _event_rx: event_rx,
+            decode_tx: Mutex::new(None),
+            output: Mutex::new(None),
+            track_paths: Mutex::new(HashMap::new()),
+            device_sample_rate: Mutex::new(44100),
+            track_sample_rate: Mutex::new(44100),
+        });
+        shared.queue.set_queue(vec![1, 2]);
+        let (test_tx, _test_rx) = channel(64);
+        let mut event = Some(TrackFinished { track_id: 1 });
+        let result = try_auto_advance(&shared, &test_tx, &mut event);
+        assert!(
+            !result,
+            "should return false when path not found for upcoming track"
+        );
     }
 
     #[test]
