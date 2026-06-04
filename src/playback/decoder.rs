@@ -130,10 +130,21 @@ impl Decoder {
     ///
     /// Returns [`DecoderError`] on decode failure.
     pub fn decode_next(&mut self) -> Result<DecodedSamples, DecoderError> {
-        match self.try_decode_one() {
-            Ok(Some(result)) => Ok(result),
-            Ok(None) => self.decode_next(),
-            Err(e) => Err(e),
+        loop {
+            match self.try_decode_one() {
+                Ok(Some(result)) => return Ok(result),
+                Ok(None) => (),
+                Err(EndOfStream) => return Ok(self.empty_samples()),
+                Err(e) => return Err(e),
+            }
+        }
+    }
+
+    /// Return an empty sample batch with the current audio params.
+    fn empty_samples(&self) -> DecodedSamples {
+        DecodedSamples {
+            samples: Vec::new(),
+            params: self.params,
         }
     }
 
@@ -145,7 +156,8 @@ impl Decoder {
     fn try_decode_one(&mut self) -> Result<Option<DecodedSamples>, DecoderError> {
         let packet = match self.format.next_packet() {
             Ok(Some(packet)) => packet,
-            Ok(None) | Err(ResetRequired) => return Ok(None),
+            Ok(None) => return Err(EndOfStream),
+            Err(ResetRequired) => return Ok(None),
             Err(e) => return Err(PlaybackDecodeError(e.to_string())),
         };
 
