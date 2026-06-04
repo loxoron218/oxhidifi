@@ -16,6 +16,11 @@ use std::{
 
 use {
     libadwaita::{
+        gdk::{
+            MemoryFormat::{R8g8b8, R8g8b8a8},
+            MemoryTexture,
+        },
+        gio::spawn_blocking,
         glib::{
             ControlFlow::{Break, Continue},
             idle_add_local,
@@ -29,12 +34,7 @@ use {
             EventControllerMotion, GestureClick, Image, Label,
             Orientation::{Horizontal, Vertical},
             Overlay, Picture, ScrolledWindow, Widget,
-            gdk::{
-                MemoryFormat::{R8g8b8, R8g8b8a8},
-                MemoryTexture,
-            },
             gdk_pixbuf::Pixbuf,
-            gio::spawn_blocking,
             pango::EllipsizeMode::End as EllipsizeEnd,
         },
         prelude::{BoxExt, ButtonExt, WidgetExt},

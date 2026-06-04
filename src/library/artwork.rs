@@ -52,7 +52,6 @@ pub fn extract_artwork(path: &Path) -> Result<Option<Vec<u8>>, ArtworkError> {
         return Ok(None);
     }
 
-    // Prefer front cover, otherwise use the first picture.
     let picture = pictures
         .iter()
         .find(|p| p.pic_type() == CoverFront)
