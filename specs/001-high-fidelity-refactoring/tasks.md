@@ -149,7 +149,7 @@ description: "Task list for high-fidelity music player refactoring"
 - [X] T036e [US3] Verify high-resolution audio support (sample rates up to 192 kHz, bit depth up to 24-bit) per FR-017; add test fixtures with 96 kHz and 192 kHz files
 - [X] T036f [US3] Implement bit-perfect output verification per SC-003: capture CPAL output buffer after playback, decode source file to PCM via symphonia, assert byte-identical match across all frames; add test fixture with known-reference FLAC file
 - [X] T036g [US3] Implement RMS SNR measurement for resampled output per FR-015: generate full-band pink noise reference signal (20 Hz–20 kHz), resample via rubato, compute RMS SNR against original, assert > 120 dB threshold
-- [ ] T036i [US3] Add incompatible sample rate transition test per spec.md edge case: play tracks from 44.1 kHz family (44.1 kHz, 88.2 kHz, 176.4 kHz) and 48 kHz family (48 kHz, 96 kHz, 192 kHz) consecutively with no common divisor rate; assert resampler reconfigures transparently, gapless transition maintained (inter-track silence < 5 ms), and no audible glitch in tests/sample_rate_transitions.rs
+- [X] T036i [US3] Add incompatible sample rate transition test per spec.md edge case: play tracks from 44.1 kHz family (44.1 kHz, 88.2 kHz, 176.4 kHz) and 48 kHz family (48 kHz, 96 kHz, 192 kHz) consecutively with no common divisor rate; assert resampler reconfigures transparently, gapless transition maintained (inter-track silence < 5 ms), and no audible glitch in tests/sample_rate_transitions.rs
 
 **Checkpoint**: Gapless playback across tracks at same and different sample rates, resampling kicks in transparently when device doesn't support native rate
 
