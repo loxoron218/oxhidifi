@@ -27,6 +27,7 @@ use {
 
 use crate::{
     library::{
+        artwork::{cache_artwork, extract_artwork},
         dedup::is_supported_audio_format,
         metadata::{AudioMetadata, extract_metadata, metadata_fingerprint},
         scanner::ScanEvent::{
@@ -375,6 +376,9 @@ impl<S: Storage> FsScanner<S> {
 
     /// Resolve an album ID from cache or by inserting into storage.
     ///
+    /// When a new album is inserted, embedded artwork is extracted from `file_path`,
+    /// cached to disk, and the cached path is stored as `artwork_path`.
+    ///
     /// # Errors
     ///
     /// Returns `SkipReason::CorruptFile` if the database insert fails.
@@ -382,6 +386,7 @@ impl<S: Storage> FsScanner<S> {
         &self,
         title: &str,
         artist_id: i64,
+        file_path: &Path,
         metadata: &AudioMetadata,
         cache: &mut HashMap<(i64, String), i64>,
     ) -> Result<i64, SkipReason> {
@@ -395,6 +400,14 @@ impl<S: Storage> FsScanner<S> {
             || format!("{codec_upper}/{sr}"),
             |bd| format!("{codec_upper} {bd}/{sr}"),
         );
+        let artwork_path = match extract_artwork(file_path) {
+            Ok(Some(data)) => {
+                cache_artwork(&format!("{artist_id}_{}", title.to_lowercase()), &data)
+                    .ok()
+                    .map(|p| p.to_string_lossy().to_string())
+            }
+            _ => None,
+        };
         let id = self
             .storage
             .insert_album(NewAlbum {
@@ -402,7 +415,7 @@ impl<S: Storage> FsScanner<S> {
                 artist_id,
                 year: metadata.year,
                 genre: metadata.genre.clone(),
-                artwork_path: None,
+                artwork_path,
                 format_summary,
                 lossless: metadata.lossless,
             })
@@ -472,7 +485,7 @@ impl<S: Storage> FsScanner<S> {
 
         let album_title = metadata.album.as_deref().unwrap_or("Unknown Album");
         let album_id = self
-            .resolve_album(album_title, artist_id, &metadata, album_cache)
+            .resolve_album(album_title, artist_id, path, &metadata, album_cache)
             .await?;
 
         let track = NewTrack {

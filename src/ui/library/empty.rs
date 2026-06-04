@@ -215,6 +215,7 @@ fn extract_cards(container: &Box) -> Vec<Widget> {
 /// Populate a `FlowBox` in grid mode with pre-built card widgets.
 pub fn populate_grid(container: &Box, tooltip: &str, cards: Vec<Widget>) {
     let flow = FlowBox::builder()
+        .min_children_per_line(2)
         .valign(Start)
         .halign(Center)
         .row_spacing(12)

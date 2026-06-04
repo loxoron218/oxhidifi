@@ -334,31 +334,13 @@ mod tests {
     use crate::playback::{
         DecoderError::OpenError,
         decoder::{Decoder, DualDecoder},
+        write_wav_header,
     };
 
     fn write_minimal_wav(path: &Path) -> Result<()> {
         let mut f = File::create(path)?;
-        let channels = 1u16;
-        let sample_rate = 44100u32;
-        let bits_per_sample = 16u16;
         let data_size = 2u32;
-        let riff_size = 36u32 + data_size;
-
-        f.write_all(b"RIFF")?;
-        f.write_all(&riff_size.to_le_bytes())?;
-        f.write_all(b"WAVE")?;
-        f.write_all(b"fmt ")?;
-        f.write_all(&16u32.to_le_bytes())?;
-        f.write_all(&1u16.to_le_bytes())?;
-        f.write_all(&channels.to_le_bytes())?;
-        f.write_all(&sample_rate.to_le_bytes())?;
-        f.write_all(
-            &(sample_rate * u32::from(channels) * u32::from(bits_per_sample / 8)).to_le_bytes(),
-        )?;
-        f.write_all(&(channels * (bits_per_sample / 8)).to_le_bytes())?;
-        f.write_all(&bits_per_sample.to_le_bytes())?;
-        f.write_all(b"data")?;
-        f.write_all(&data_size.to_le_bytes())?;
+        write_wav_header(&mut f, 1, 44100, 16, data_size)?;
         f.write_all(&[0u8, 0u8])?;
         Ok(())
     }

@@ -7,7 +7,10 @@ pub mod output;
 pub mod queue;
 pub mod resampler;
 
-use std::path::PathBuf;
+use std::{
+    io::{Result, Write},
+    path::PathBuf,
+};
 
 use thiserror::Error;
 
@@ -69,4 +72,39 @@ pub enum PlaybackError {
     /// Playback queue is empty.
     #[error("Queue empty")]
     QueueEmpty,
+}
+
+/// Write a WAV file header (PCM, mono/stereo). Does not write audio data.
+///
+/// After calling this, write `data_size` bytes of sample data to `writer`.
+///
+/// # Errors
+///
+/// Returns `std::io::Error` if writing to `writer` fails.
+pub fn write_wav_header<W: Write>(
+    writer: &mut W,
+    channels: u16,
+    sample_rate: u32,
+    bits_per_sample: u16,
+    data_size: u32,
+) -> Result<()> {
+    let riff_size = 36u32 + data_size;
+
+    writer.write_all(b"RIFF")?;
+    writer.write_all(&riff_size.to_le_bytes())?;
+    writer.write_all(b"WAVE")?;
+    writer.write_all(b"fmt ")?;
+    writer.write_all(&16u32.to_le_bytes())?;
+    writer.write_all(&1u16.to_le_bytes())?;
+    writer.write_all(&channels.to_le_bytes())?;
+    writer.write_all(&sample_rate.to_le_bytes())?;
+    writer.write_all(
+        &(sample_rate * u32::from(channels) * u32::from(bits_per_sample / 8)).to_le_bytes(),
+    )?;
+    writer.write_all(&(channels * (bits_per_sample / 8)).to_le_bytes())?;
+    writer.write_all(&bits_per_sample.to_le_bytes())?;
+    writer.write_all(b"data")?;
+    writer.write_all(&data_size.to_le_bytes())?;
+
+    Ok(())
 }

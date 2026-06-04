@@ -11,10 +11,10 @@ use {
     libadwaita::{
         glib::{prelude::Cast, spawn_future_local},
         gtk::{
-            Align::Center, Box, Button, Image, Label, Orientation::Vertical, ScrolledWindow,
-            Widget, pango::EllipsizeMode::End,
+            Box, GestureClick, Image, Label, Orientation::Vertical, ScrolledWindow, Widget,
+            pango::EllipsizeMode::End,
         },
-        prelude::{BoxExt, ButtonExt},
+        prelude::{BoxExt, WidgetExt},
     },
     tracing::info,
 };
@@ -122,21 +122,17 @@ fn build_artist_avatar() -> Widget {
 ///
 /// Returns a `Button` containing a vertical layout with avatar and
 /// name/album count labels.
-fn build_artist_card(state: &Arc<AppState>, artist: &Artist) -> Button {
-    let card = Button::builder()
-        .css_classes(["flat", "card"])
+fn build_artist_card(state: &Arc<AppState>, artist: &Artist) -> Box {
+    let card = Box::builder()
+        .orientation(Vertical)
+        .spacing(6)
+        .css_classes(["card"])
         .can_focus(true)
         .tooltip_text(format!("View albums by {}", artist.name))
         .build();
 
-    let content = Box::builder()
-        .orientation(Vertical)
-        .spacing(6)
-        .halign(Center)
-        .build();
-
     let avatar = build_artist_avatar();
-    content.append(&avatar);
+    card.append(&avatar);
 
     let name_label = Label::builder()
         .label(&artist.name)
@@ -152,16 +148,16 @@ fn build_artist_card(state: &Arc<AppState>, artist: &Artist) -> Button {
         .css_classes(["dim-label", "caption"])
         .build();
 
-    content.append(&name_label);
-    content.append(&album_count_label);
+    card.append(&name_label);
+    card.append(&album_count_label);
 
-    card.set_child(Some(&content));
-
+    let gesture = GestureClick::new();
     let _state = Arc::clone(state);
     let artist_id = artist.id;
-    card.connect_clicked(move |_| {
+    gesture.connect_released(move |_, _, _, _| {
         info!(artist_id, "Artist card clicked");
     });
+    card.add_controller(gesture);
 
     card
 }
@@ -172,7 +168,7 @@ mod tests {
 
     use {
         anyhow::{Result, ensure},
-        libadwaita::prelude::ButtonExt,
+        libadwaita::prelude::WidgetExt,
     };
 
     use crate::{app::AppState, storage::Artist, ui::library::artists::build_artist_card};
@@ -188,7 +184,7 @@ mod tests {
         };
         let card = build_artist_card(&state, &artist);
         ensure!(
-            card.child().is_some(),
+            card.first_child().is_some(),
             "artist card must have child content"
         );
         Ok(())

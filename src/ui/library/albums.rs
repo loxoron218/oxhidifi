@@ -5,18 +5,36 @@
 //! album triggers playback via the `PlaybackController`.
 //! Shows an inline empty state when no albums are available.
 
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use std::{
+    collections::HashMap,
+    path::PathBuf,
+    sync::{
+        Arc,
+        mpsc::{Sender, channel},
+    },
+};
 
 use {
     libadwaita::{
-        glib::{prelude::Cast, spawn_future_local},
+        glib::{
+            ControlFlow::{Break, Continue},
+            idle_add_local,
+            prelude::Cast,
+            spawn_future_local,
+        },
         gtk::{
             Align::{Center, End, Start},
             Box, Button,
             ContentFit::Cover,
-            EventControllerMotion, Image, Label,
+            EventControllerMotion, GestureClick, Image, Label,
             Orientation::{Horizontal, Vertical},
             Overlay, Picture, ScrolledWindow, Widget,
+            gdk::{
+                MemoryFormat::{R8g8b8, R8g8b8a8},
+                MemoryTexture,
+            },
+            gdk_pixbuf::Pixbuf,
+            gio::spawn_blocking,
             pango::EllipsizeMode::End as EllipsizeEnd,
         },
         prelude::{BoxExt, ButtonExt, WidgetExt},
@@ -98,24 +116,30 @@ async fn load_albums(
         return;
     }
 
-    let mut artist_names: HashMap<i64, String> = HashMap::new();
-    for album in &albums {
-        if artist_names.contains_key(&album.artist_id) {
-            continue;
+    let artist_names: HashMap<i64, String> = match state.storage.get_all_artists().await {
+        Ok(artists) => artists.into_iter().map(|a| (a.id, a.name)).collect(),
+        Err(e) => {
+            info!(error = %e, "Failed to load artists");
+            HashMap::new()
         }
-        let Ok(Some(artist)) = state.storage.get_artist(album.artist_id).await else {
-            continue;
-        };
-        artist_names.insert(album.artist_id, artist.name);
-    }
+    };
+
+    let mut cover_art_data: Vec<(usize, String)> = Vec::new();
+    let mut overlays: Vec<Overlay> = Vec::new();
 
     let cards: Vec<Widget> = albums
         .iter()
-        .map(|album| {
+        .enumerate()
+        .map(|(i, album)| {
             let artist_name = artist_names
                 .get(&album.artist_id)
                 .map_or("Unknown Artist", String::as_str);
-            build_album_card(state, album, artist_name).upcast()
+            let (card, overlay) = build_album_card(state, album, artist_name);
+            if let Some(path) = &album.artwork_path {
+                cover_art_data.push((i, path.clone()));
+            }
+            overlays.push(overlay);
+            card.upcast()
         })
         .collect();
 
@@ -131,44 +155,121 @@ async fn load_albums(
             cards,
         ),
     }
+
+    load_cover_art_async(&cover_art_data, &overlays);
 }
 
-/// Build the cover art widget for an album.
+/// Build a placeholder cover art widget.
 ///
-/// Returns either a `Picture` with the album artwork loaded from disk,
-/// or a placeholder `Image` with a generic audio icon.
-fn build_cover_art(album: &Album) -> Widget {
-    album.artwork_path.as_ref().map_or_else(
-        || {
-            let placeholder = Image::builder()
-                .icon_name("audio-x-generic-symbolic")
-                .pixel_size(THUMBNAIL_SIZE / 2)
-                .width_request(THUMBNAIL_SIZE)
-                .height_request(THUMBNAIL_SIZE)
-                .css_classes(["album-cover", "dim-label"])
-                .build();
-            placeholder.upcast()
-        },
-        |path| {
-            let picture = Picture::builder()
-                .width_request(THUMBNAIL_SIZE)
-                .height_request(THUMBNAIL_SIZE)
-                .content_fit(Cover)
-                .css_classes(["album-cover"])
-                .build();
-            picture.set_filename(Some(path));
-            picture.upcast()
-        },
-    )
+/// Returns an `Image` with a generic audio icon. Used as the initial
+/// state before async cover art loading completes.
+fn build_placeholder() -> Widget {
+    Image::builder()
+        .icon_name("audio-x-generic-symbolic")
+        .pixel_size(THUMBNAIL_SIZE / 2)
+        .width_request(THUMBNAIL_SIZE)
+        .height_request(THUMBNAIL_SIZE)
+        .css_classes(["album-cover", "dim-label"])
+        .build()
+        .upcast()
+}
+
+/// Decode an image file at thumbnail size on a background thread.
+///
+/// Returns a `MemoryTexture` suitable for painting, or `None` if the
+/// file could not be loaded or decoded.
+fn decode_cover_art(path: &str) -> Option<MemoryTexture> {
+    let pixbuf = Pixbuf::from_file_at_scale(path, THUMBNAIL_SIZE, THUMBNAIL_SIZE, true).ok()?;
+    let format = if pixbuf.has_alpha() { R8g8b8a8 } else { R8g8b8 };
+    let bytes = pixbuf.read_pixel_bytes();
+    Some(MemoryTexture::new(
+        pixbuf.width(),
+        pixbuf.height(),
+        format,
+        &bytes,
+        pixbuf.rowstride().cast_unsigned() as usize,
+    ))
+}
+
+/// Decode a batch of cover art images and send results through a channel.
+fn decode_batch(batch: Vec<(usize, String)>, tx: &Sender<(usize, Option<MemoryTexture>)>) {
+    for (i, path) in batch {
+        let texture = decode_cover_art(&path);
+        let _ = tx.send((i, texture));
+    }
+}
+
+/// Apply a decoded texture to an overlay's child.
+///
+/// If the child is already a `Picture`, updates its paintable in place.
+/// Otherwise replaces the child with a new `Picture`.
+fn apply_texture(overlay: &Overlay, texture: &MemoryTexture) {
+    let updated = overlay.child().and_then(|c| {
+        c.downcast_ref::<Picture>()
+            .map(|p| p.set_paintable(Some(texture)))
+    });
+    if updated.is_none() {
+        let picture = Picture::builder()
+            .paintable(texture)
+            .content_fit(Cover)
+            .width_request(THUMBNAIL_SIZE)
+            .height_request(THUMBNAIL_SIZE)
+            .css_classes(["album-cover"])
+            .build();
+        overlay.set_child(Some(&picture));
+    }
+}
+
+/// Load cover art images off the main thread and apply them to overlays.
+///
+/// Splits work across multiple `gio::spawn_blocking` workers for parallel
+/// decoding. Uses `std::sync::mpsc` to send results back and
+/// `glib::idle_add_local` to apply textures on the `GLib` main thread.
+fn load_cover_art_async(cover_art_data: &[(usize, String)], overlays: &[Overlay]) {
+    if cover_art_data.is_empty() {
+        return;
+    }
+
+    let (tx, rx) = channel();
+    let total = cover_art_data.len();
+    let num_workers = 4.min(total);
+
+    let mut paths: Vec<(usize, String)> = cover_art_data.to_vec();
+    let batch_size = total.div_ceil(num_workers);
+
+    for _ in 0..num_workers {
+        let batch: Vec<(usize, String)> = paths.drain(..batch_size.min(paths.len())).collect();
+        let tx = tx.clone();
+        spawn_blocking(move || decode_batch(batch, &tx));
+    }
+    drop(tx);
+
+    let overlays: Vec<Overlay> = overlays.to_vec();
+    let mut received = 0usize;
+
+    idle_add_local(move || {
+        while let Ok((i, Some(texture))) = rx.try_recv() {
+            apply_texture(&overlays[i], &texture);
+            received += 1;
+        }
+        if received < total { Continue } else { Break }
+    });
 }
 
 /// Build a single album card widget.
 ///
-/// Returns a `Button` containing a vertical layout with cover art,
-/// title, artist, format summary, and year labels.
-fn build_album_card(state: &Arc<AppState>, album: &Album, artist_name: &str) -> Button {
-    let card = Button::builder()
-        .css_classes(["flat", "card"])
+/// Returns a `Box` containing a vertical layout with cover art,
+/// title, artist, format summary, and year labels. Uses
+/// `GestureClick` for click handling instead of `Button` to avoid
+/// theme-inflated natural sizing from the `card` CSS class.
+///
+/// Also returns the `Overlay` wrapping the cover art so it can be
+/// updated asynchronously after the card is added to the container.
+fn build_album_card(state: &Arc<AppState>, album: &Album, artist_name: &str) -> (Box, Overlay) {
+    let card = Box::builder()
+        .orientation(Vertical)
+        .spacing(6)
+        .css_classes(["card"])
         .can_focus(true)
         .tooltip_text(format!(
             "Play \u{201c}{}\u{201d} by album artist",
@@ -176,13 +277,7 @@ fn build_album_card(state: &Arc<AppState>, album: &Album, artist_name: &str) -> 
         ))
         .build();
 
-    let content = Box::builder()
-        .orientation(Vertical)
-        .spacing(6)
-        .halign(Start)
-        .build();
-
-    let cover_art = build_cover_art(album);
+    let cover_art = build_placeholder();
 
     let overlay = Overlay::new();
     overlay.set_child(Some(&cover_art));
@@ -218,7 +313,7 @@ fn build_album_card(state: &Arc<AppState>, album: &Album, artist_name: &str) -> 
         });
     });
 
-    content.append(&overlay.upcast::<Widget>());
+    card.append(&overlay.clone().upcast::<Widget>());
 
     let title_label = Label::builder()
         .label(&album.title)
@@ -256,22 +351,22 @@ fn build_album_card(state: &Arc<AppState>, album: &Album, artist_name: &str) -> 
     format_row.append(&format_label);
     format_row.append(&year_label);
 
-    content.append(&title_label);
-    content.append(&artist_label);
-    content.append(&format_row);
+    card.append(&title_label);
+    card.append(&artist_label);
+    card.append(&format_row);
 
-    card.set_child(Some(&content));
-
+    let gesture = GestureClick::new();
     let state_clone = Arc::clone(state);
     let album_id = album.id;
-    card.connect_clicked(move |_| {
+    gesture.connect_released(move |_, _, _, _| {
         let state = Arc::clone(&state_clone);
         spawn_future_local(async move {
             play_album(&state, album_id).await;
         });
     });
+    card.add_controller(gesture);
 
-    card
+    (card, overlay)
 }
 
 /// Play all tracks in an album by queueing them and starting playback.

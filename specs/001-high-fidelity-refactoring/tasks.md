@@ -96,7 +96,7 @@ description: "Task list for high-fidelity music player refactoring"
 - [X] T019 [US1] Implement Libadwaita Application setup in src/app.rs (Application::new, activate signal, window creation)
 - [X] T020 [US1] Create main window with ToolbarView in src/ui/window.rs
 - [X] T021 [US1] Create HeaderBar with Albums/Artists tab buttons using `AdwViewSwitcher` + `AdwViewSwitcherBar` for tab navigation and view toggle placeholder in src/ui/header.rs
-- [ ] T054 [US1] Implement artwork caching pipeline (extract thumbnail, cache to disk, fallback placeholder) in src/library/metadata.rs per FR-003b — MUST complete before T022 (album grid requires cached artwork)
+- [X] T054 [US1] Implement artwork caching pipeline (extract thumbnail, cache to disk, fallback placeholder) in src/library/artwork.rs per FR-003b — MUST complete before T022 (album grid requires cached artwork)
 - [X] T022 [US1] Implement album grid view with cover art thumbnails in src/ui/library/albums.rs
 - [X] T023 [US1] Wire play action from album grid click to PlaybackController in src/ui/library/albums.rs
 - [X] T019b [P] [US1] Implement adaptive/responsive main window layout using AdwNavigationSplitView + AdwNavigationView + AdwBreakpoint (wide mode ≥800px, narrow mode <800px) per FR-012 in src/ui/window.rs — build with the adaptive stack from the start
@@ -143,7 +143,7 @@ description: "Task list for high-fidelity music player refactoring"
 - [X] T035 [US3] Implement sample rate reconfiguration on track transition in src/playback/engine.rs (detect sample rate change, reset resampler with new coefficients)
 - [X] T036 [US3] Add bit-perfect output path in src/playback/output.rs (passthrough mode when device supports native sample rate/bit depth)
 - [X] T036b [US3] Write deterministic simulation tests for gapless transition concurrent logic (pre-buffer race, decoder switch, ring buffer drain) per Principle II
-- [ ] T036h [US3] Add SC-002 verification: measure inter-track silence region and assert < 5 ms (less than one audio frame at 192 kHz), and assert ring buffer underrun count = 0 across 100 consecutive gapless transitions in src/playback/gapless.rs; wire into ci/criterion harness or standalone test binary
+- [X] T036h [US3] Add SC-002 verification: measure inter-track silence region and assert < 5 ms (less than one audio frame at 192 kHz), and assert ring buffer underrun count = 0 across 100 consecutive gapless transitions in tests/gapless_sc002.rs; standalone test binary
 - [X] T036c [US3] Add criterion benchmarks for resampler throughput and bit-perfect output path latency; verify no regression against Phase 1 baseline per Principle IV
 - [X] T036d [US3] Implement ABX validation harness for resampled output per SC-008: programmatic stimulus generation (sine sweeps, pink noise, silence, impulse) and randomized ABX presentation; the harness collects human listener responses and applies binomial statistical evaluation (p < 0.05 threshold, minimum 10 trials per test condition). The harness itself is automated; the p-value requires a human listener. A supplementary objective check (RMS SNR ≥ 120 dB per FR-015) is computed by the harness so objective and perceptual results can be cross-referenced. Manual QA procedure is documented separately as supplementary verification
 - [X] T036e [US3] Verify high-resolution audio support (sample rates up to 192 kHz, bit depth up to 24-bit) per FR-017; add test fixtures with 96 kHz and 192 kHz files
