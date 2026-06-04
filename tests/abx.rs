@@ -167,7 +167,7 @@ pub fn generate_all_stimuli(sample_rate: u32, channels: usize) -> Vec<(StimulusT
 mod tests {
     use anyhow::{Result, ensure};
 
-    use super::{
+    use crate::{
         StimulusType::{Impulse, PinkNoise, Silence, Sine},
         binomial_p_value, binomial_probability, generate_all_stimuli, run_abx_trial,
     };
