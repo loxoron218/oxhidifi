@@ -81,6 +81,7 @@ description: "Task list for high-fidelity music player refactoring"
 - [X] T016 [US1] Implement playback queue with current/next/previous navigation in src/playback/queue.rs
 - [X] T016b [US1] Implement browsing-context auto-queue logic in src/playback/queue.rs per FR-022: when playback is initiated from an album context, queue all album tracks in track-number order; when initiated from an artist context, queue all artist albums' tracks in (album title, track number) order; manual additions and reorders MUST be preserved until the browsing context changes (explicit reset via UI action or context-switch)
 - [X] T016c [P] [US1] Add unit tests for the 100,000-entry queue cap in src/playback/queue.rs per FR-021: assert appends below the cap succeed, the 100,001st append returns `StorageError::QueueFull { max: 100_000 }`, the UI surfaces a `Toast` warning, and the cap is enforced per-queue-instance (not globally)
+- [X] T016d [US1] Implement queue persistence in SqliteStorage: CRUD methods for PlaybackQueue entries (insert, remove, reorder, get_all_ordered) in src/storage/database.rs per data-model.md PlaybackQueue schema; queue state saved on every mutation and restored on application start per FR-028
 - [X] T017 [US1] Implement PlaybackController trait and playback engine orchestrator in src/playback/engine.rs (wire decoder → rtrb → output, handle play/pause/stop/seek/volume commands); volume range 0.0–1.0 mapped to dB attenuation per FR-020, volume level persisted via `UserSettings.volume`
 
 **Checkpoint**: Playback engine plays audio from a file path; queue navigation works; output device renders PCM correctly
@@ -155,7 +156,7 @@ description: "Task list for high-fidelity music player refactoring"
 
 ---
 
-## Phase 8: User Story 4 - Side Panel Player (Priority: P2)
+## Phase 8: User Story 4 - Player Panel (Priority: P2)
 
 **Goal**: Slide-in player panel from left showing album artwork, track info, and playback controls, remaining functional while browsing library
 
@@ -234,7 +235,7 @@ description: "Task list for high-fidelity music player refactoring"
 - **US2 — Empty State & Nav (Phase 6)**: Depends on Phases 1-2, Phase 3 (library data)
 - **US3 — Gapless Resampling (Phase 7)**: Depends on Phases 1-2, Phase 4 (basic pipeline)
 - **US4 — Side Panel (Phase 8)**: Depends on Phases 1-2, Phase 4 (playback engine)
-- **US5 — Detail Pages (Phase 9)**: Depends on Phases 1-2, Phase 3 (library data)
+- **US5 — Detail Pages (Phase 9)**: Depends on Phases 1-2, Phase 3 (library data), Phase 4 (playback engine — required for T044 play/queue actions)
 - **Polish (Phase 10)**: Depends on all user stories being complete
 
 ### User Story Dependencies
@@ -245,7 +246,7 @@ description: "Task list for high-fidelity music player refactoring"
 | US2 — Empty State & Nav | P1 | Phases 1-2, US1 (data population)¹ | — |
 | US3 — Gapless Resampling | P2 | Phases 1-2, US1 (basic pipeline) | — |
 | US4 — Side Panel | P2 | Phases 1-2, US1 (playback engine) | — |
-| US5 — Detail Pages | P3 | Phases 1-2, US1 (library data) | — |
+| US5 — Detail Pages | P3 | Phases 1-2, US1 (library data), US1b (playback engine) | — |
 
 ### Within Each Phase
 
@@ -261,8 +262,8 @@ description: "Task list for high-fidelity music player refactoring"
 | Phase 1: Setup | T002, T003, T004b, T004c, T004d |
 | Phase 2: Foundational | T008, T010b |
 | Phase 3: US1a | T011, T012, T013, T018c |
-| Phase 4: US1b | T016, T016c (auto-queue and queue-cap test) |
-| Phase 5: US1c | T019b, T019c |
+| Phase 4: US1b | T016 (includes auto-queue and queue-cap sub-tasks) |
+| Phase 5: US1c | T019b, T019c, T054 |
 | Phase 6: US2 | T025, T026, T027, T028, T031b |
 | Phase 7: US3 | T032, T032b, T036b, T036c, T036e, T036f, T036g, T036i |
 | Phase 8: US4 | T040b, T040c (queue view UI and seek tests; remaining tasks sequential) |

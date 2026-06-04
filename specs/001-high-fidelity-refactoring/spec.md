@@ -137,8 +137,8 @@ A user on an album detail page sees the full track listing, album metadata (year
 - **FR-009**: The system MUST support at least two view modes per tab: a grid layout and a column layout.
 - **FR-010**: The system MUST provide a toggle control in the header bar to switch between grid and column views.
 - **FR-011**: Each album and artist MUST have a dedicated detail page showing full metadata and associated content (tracks for albums, albums for artists).
-- **FR-012**: The system MUST support adaptive/responsive layouts using `AdwBreakpoint` with the modern widget stack (`AdwNavigationSplitView` for sidebar/content, `AdwNavigationView` for page stacks, `AdwOverlaySplitView` for player panel, `AdwViewSwitcher` + `AdwViewSwitcherBar` for tab navigation) that adjust to different window sizes, with at minimum: a wide mode (≥800px) showing player panel and library side-by-side, and a narrow mode (<800px) stacking them with back-navigation.
-- **FR-012b**: The system MUST support keyboard navigation (Tab, arrows, Enter, Escape), provide accessible labels via `AccessibleProperty::Label` on all interactive widgets, and provide tooltip text via `set_tooltip_text()` on all actionable controls.
+- **FR-012**: The system MUST support adaptive/responsive layouts per Constitution Principle III, using the mandated widget stack (`AdwNavigationSplitView`, `AdwNavigationView`, `AdwOverlaySplitView`, `AdwViewSwitcher`/`AdwViewSwitcherBar`, `AdwBreakpoint`) that adjust to different window sizes, with at minimum: a wide mode (≥800px) showing player panel and library side-by-side, and a narrow mode (<800px) stacking them with back-navigation.
+- **FR-012b**: The system MUST meet all accessibility requirements specified in Constitution Principle III: keyboard navigation (Tab, arrows, Enter, Escape), accessible labels via `AccessibleProperty::Label` on all interactive widgets, and tooltip text via `set_tooltip_text()` on all actionable controls.
 
 **Playback**
 
@@ -177,7 +177,10 @@ A user on an album detail page sees the full track listing, album metadata (year
 
 **Settings**
 
-- **FR-033**: The system MUST provide a `PreferencesDialog` (per GNOME HIG) with `PreferencesPage` and `PreferencesGroup` containing typed rows (`ActionRow` for library directories, `ComboRow` for audio device selection, `SwitchRow`/`SpinRow` for view and playback preferences) to manage library directories, audio output device, view preferences, and volume level.
+- **FR-033**: The system MUST provide a `PreferencesDialog` (per GNOME HIG) with the following `PreferencesPage` and `PreferencesGroup` structure:
+  - **Library** page, **Directories** group: `ActionRow` entries for each configured library directory (add/remove via file chooser)
+  - **Audio** page, **Output** group: `ComboRow` for audio device selection (enumerated from CPAL); **Playback** group: `SpinRow` for volume level (0–100, mapped to 0.0–1.0), `SwitchRow` for gapless playback toggle
+  - **View** page, **Display** group: `ComboRow` for default view mode (Grid/Column), `ComboRow` for default active tab (Albums/Artists)
 
 ### Key Entities *(include if feature involves data)*
 
@@ -197,7 +200,7 @@ A user on an album detail page sees the full track listing, album metadata (year
 - **SC-003**: Bit-perfect playback is verified by comparing the digital audio output against the source file — the bit stream matches exactly when the device supports the file's native format.
 - **SC-004**: A library of 10,000 tracks loads and becomes browsable within 30 seconds on reference hardware (Intel i5-1135G7, 16 GB RAM, NVMe SSD).
 - **SC-005**: Users can navigate between Albums and Artists views, toggle between grid and column layouts, and access detail pages without perceivable UI lag (response under 100ms).
-- **SC-006**: The empty state is shown on first launch when no library is configured; the library view populates within 10 seconds of configuring a directory with 3,000 audio files (consistent with the ≥333 files/second throughput implied by SC-004, accounting for the smaller first-scan workload).
+- **SC-006**: The empty state is shown on first launch when no library is configured; the library view populates within 9 seconds of configuring a directory with 3,000 audio files (consistent with the ≥333 files/second throughput required by SC-004).
 - **SC-007**: The player panel appears within 500ms of playback starting and display correct track metadata and artwork.
 - **SC-008**: Resampled audio MUST pass a blind ABX test (p < 0.05 threshold, binomial test) comparing resampled output against the original source at matched sample rate, with a minimum of 10 trials per test. The ABX test MUST be supported by an automated validation harness (programmatic stimulus generation, randomization, and statistical evaluation); manual perceptual verification is permitted as a supplementary check.
 

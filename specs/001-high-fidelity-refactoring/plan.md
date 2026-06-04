@@ -96,6 +96,7 @@ src/
 │   ├── mod.rs
 │   ├── scanner.rs       # Filesystem scan & index
 │   ├── metadata.rs      # Metadata extraction (lofty)
+│   ├── artwork.rs       # Artwork extraction, caching, thumbnails
 │   ├── dedup.rs         # Layered duplicate detection
 │   └── watcher.rs       # Filesystem change monitoring (notify)
 ├── storage/             # Persistence layer
