@@ -368,7 +368,7 @@ In narrow layout: sidebar is collapsed; tapping an album pushes detail into `Adw
 | Album grid | `GtkFlowBox` or custom `GridView` | Responsive column count |
 | Artist grid | `GtkFlowBox` or custom `GridView` | Responsive column count |
 | Detail page nav | `AdwNavigationView` | Push/pop detail pages |
-| Player side panel | `GtkRevealer` or `AdwOverlaySplitView` | Slides in from left on playback |
+| Player panel | `GtkRevealer` or `AdwOverlaySplitView` | Slides in from left on playback |
 | List view (column) | `GtkListView` / `GtkColumnView` | Standard list layout |
 | Empty state | Custom widget (icon + label) | Centered in content area |
 | Status bar | `GtkLabel` in `AdwToolbarView` bottom bar | Scanning indicator |

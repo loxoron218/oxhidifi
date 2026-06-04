@@ -149,6 +149,7 @@ description: "Task list for high-fidelity music player refactoring"
 - [X] T036e [US3] Verify high-resolution audio support (sample rates up to 192 kHz, bit depth up to 24-bit) per FR-017; add test fixtures with 96 kHz and 192 kHz files
 - [X] T036f [US3] Implement bit-perfect output verification per SC-003: capture CPAL output buffer after playback, decode source file to PCM via symphonia, assert byte-identical match across all frames; add test fixture with known-reference FLAC file
 - [X] T036g [US3] Implement RMS SNR measurement for resampled output per FR-015: generate full-band pink noise reference signal (20 Hz–20 kHz), resample via rubato, compute RMS SNR against original, assert > 120 dB threshold
+- [ ] T036i [US3] Add incompatible sample rate transition test per spec.md edge case: play tracks from 44.1 kHz family (44.1 kHz, 88.2 kHz, 176.4 kHz) and 48 kHz family (48 kHz, 96 kHz, 192 kHz) consecutively with no common divisor rate; assert resampler reconfigures transparently, gapless transition maintained (inter-track silence < 5 ms), and no audible glitch in tests/sample_rate_transitions.rs
 
 **Checkpoint**: Gapless playback across tracks at same and different sample rates, resampling kicks in transparently when device doesn't support native rate
 
@@ -162,11 +163,12 @@ description: "Task list for high-fidelity music player refactoring"
 
 ### Implementation for User Story 4
 
-- [ ] T037 [US4] Implement slide-in side player panel UI (artwork, track title, artist, play/pause/next/prev/seek/volume/mute controls) in src/ui/player/panel.rs
+- [ ] T037 [US4] Implement slide-in player panel UI (artwork, track title, artist, play/pause/next/prev/seek/volume/mute controls) in src/ui/player/panel.rs
 - [ ] T038 [US4] Wire panel to PlaybackState and PlaybackEvent stream in src/ui/player/mod.rs (update UI on TrackStarted, TrackProgress, Paused, Resumed, Stopped events)
 - [ ] T039 [US4] Implement responsive AdwOverlaySplitView/AdwBreakpoint behavior for narrow windows (panel back button to hide, maximize content) in src/ui/player/panel.rs
 - [ ] T040 [US4] Implement panel auto-show on playback start and auto-hide on queue empty/stop
 - [ ] T040b [US4] Implement visible queue view UI (track list with current/upcoming sections, drag-and-drop reorder via GtkDragSource/GtkDropTarget, remove button per entry) in src/ui/player/queue.rs per FR-021
+- [ ] T040c [US4] Add seek control tests per FR-019: verify seek position accuracy (assert audio output matches expected position within 100 ms tolerance), seek near track start (< 1 s), seek near track end (last 1 s), and seek during gapless transition in tests/seek_control.rs
 
 **Checkpoint**: Side panel slides in on play, shows live track state, library browsing unaffected, panel hides on stop
 
@@ -202,12 +204,13 @@ description: "Task list for high-fidelity music player refactoring"
 - [ ] T047 Add structured tracing instrumentation (error/warn/info levels) across library scanner (target: `library::scanner`), playback engine (target: `playback::engine`), and UI subsystems (target: `ui::*`) in src/library/scanner.rs, src/playback/engine.rs, and src/ui/window.rs with typed fields for all diagnostic events per constitution Principle V
 - [ ] T048a [P] Implement graceful handling for audio device disconnection during playback in src/playback/output.rs — detect device loss, pause playback, emit device-lost event, attempt reconnection to default device per FR-029
 - [ ] T048b [P] Implement graceful handling for no audio device at startup in src/playback/output.rs — application starts without error, display message about missing audio hardware per FR-030 and spec.md Edge Cases
+- [ ] T048f [P] Add no-device-at-startup acceptance test per FR-030: launch application with mocked absent audio device, assert application starts without panic, assert UI displays missing-hardware message, assert library scanning still functions in tests/no_device_startup.rs
 - [ ] T048c [P] Implement corrupted/unreadable file handling in src/library/scanner.rs — skip files during scanning, log warning with file path, exclude from playback per spec.md Edge Cases
 - [ ] T048d [P] Implement empty queue end-of-playback handling in src/playback/engine.rs — stop playback, show idle state, auto-hide player panel per FR-025 and spec.md Edge Cases
 - [ ] T048e [P] Implement large library browsing performance in src/ui/library/ — ensure smooth scrolling and view switching for 10k+ items without UI freezes per spec.md Edge Cases
 - [ ] T049 Run `cargo clippy --fix --allow-dirty --all-targets -- -W clippy::pedantic && cargo fmt` and fix all warnings; then run `find . -name "*.rs" -exec perl -i -0777 -pe 's/([;}])[ \t]*\r?\n([ \t]*\/\/(?!\/))/$1\n\n$2/g' {} +` to enforce blank lines before single-line comments after braces/semicolons per constitution
 - [ ] T050 Validate with quickstart.md — build (debug + release), run, verify all user stories functional
-- [ ] T051 [P] Implement PreferencesDialog with library directory management (add/remove directories), audio device selection, and view preferences per FR-033 and plan.md; wire audio device selection to playback engine output device enumeration and volume level to `UserSettings.volume` with dB attenuation mapping per FR-020
+- [ ] T051 [P] Implement PreferencesDialog with library directory management (add/remove directories), audio device selection, and view preferences (default view mode: grid/column, default tab: Albums/Artists) per FR-033 and plan.md; wire audio device selection to playback engine output device enumeration; wire volume slider to PlaybackController (volume persistence to `UserSettings.volume` is handled by T017 — T051 only binds the UI slider to the engine and reads the initial value from settings)
 - [ ] T052 Add library load verification: populate library with 10,000 synthetic tracks, measure scan throughput (<30s per SC-004) using metrics collector in src/metrics/collector.rs
 - [ ] T052c Add UI response verification: navigate between Albums/Artists views, toggle grid/column, access detail pages — measure response time (<100ms per SC-005) using metrics collector in src/metrics/collector.rs
 - [ ] T052b [P] Add queue persistence verification: populate queue, restart application, verify queue order, track IDs, and context are preserved per FR-028
@@ -261,10 +264,10 @@ description: "Task list for high-fidelity music player refactoring"
 | Phase 4: US1b | T016, T016c (auto-queue and queue-cap test) |
 | Phase 5: US1c | T019b, T019c |
 | Phase 6: US2 | T025, T026, T027, T028, T031b |
-| Phase 7: US3 | T032, T032b, T036b, T036c, T036e, T036f, T036g |
-| Phase 8: US4 | T040b (queue view UI; remaining tasks sequential) |
+| Phase 7: US3 | T032, T032b, T036b, T036c, T036e, T036f, T036g, T036i |
+| Phase 8: US4 | T040b, T040c (queue view UI and seek tests; remaining tasks sequential) |
 | Phase 9: US5 | T041, T042 |
-| Phase 10: Polish | T045, T046a, T046b, T046c, T046d, T046e, T047, T048a, T048b, T048c, T048d, T048e, T051, T055, T056 |
+| Phase 10: Polish | T045, T046a, T046b, T046c, T046d, T046e, T047, T048a, T048b, T048c, T048d, T048e, T048f, T051, T055, T056 |
 
 ---
 
