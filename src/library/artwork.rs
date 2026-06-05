@@ -125,7 +125,9 @@ fn has_cached_artwork_in(cache_dir: &Path, key: &str) -> bool {
 /// Get the cached artwork path for a given key, returning `None` if not cached.
 #[must_use]
 pub fn get_cached_artwork_path(key: &str) -> Option<PathBuf> {
-    let cache_dir = ensure_artwork_cache_dir().ok()?;
+    let Ok(cache_dir) = ensure_artwork_cache_dir() else {
+        return None;
+    };
     let file_path = cache_dir.join(format!("{key}.png"));
     file_path.exists().then_some(file_path)
 }

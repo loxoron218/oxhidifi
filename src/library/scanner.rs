@@ -22,12 +22,12 @@ use {
             watch::{Receiver, Sender as TokioSender, channel},
         },
     },
-    tracing::warn,
+    tracing::{error, warn},
 };
 
 use crate::{
     library::{
-        artwork::{cache_artwork, extract_artwork},
+        artwork::{ArtworkError, cache_artwork, extract_artwork},
         dedup::is_supported_audio_format,
         metadata::{AudioMetadata, extract_metadata, metadata_fingerprint},
         scanner::ScanEvent::{
@@ -374,6 +374,23 @@ impl<S: Storage> FsScanner<S> {
         Ok(id)
     }
 
+    /// Try to extract and cache artwork, returning the cached path string on success.
+    fn cache_extracted_artwork(
+        result: Result<Option<Vec<u8>>, ArtworkError>,
+        key: &str,
+    ) -> Option<String> {
+        match result {
+            Ok(Some(data)) => match cache_artwork(key, &data) {
+                Ok(p) => Some(p.to_string_lossy().to_string()),
+                Err(e) => {
+                    error!(error = %e, "Failed to cache artwork");
+                    None
+                }
+            },
+            _ => None,
+        }
+    }
+
     /// Resolve an album ID from cache or by inserting into storage.
     ///
     /// When a new album is inserted, embedded artwork is extracted from `file_path`,
@@ -400,14 +417,10 @@ impl<S: Storage> FsScanner<S> {
             || format!("{codec_upper}/{sr}"),
             |bd| format!("{codec_upper} {bd}/{sr}"),
         );
-        let artwork_path = match extract_artwork(file_path) {
-            Ok(Some(data)) => {
-                cache_artwork(&format!("{artist_id}_{}", title.to_lowercase()), &data)
-                    .ok()
-                    .map(|p| p.to_string_lossy().to_string())
-            }
-            _ => None,
-        };
+        let artwork_path = Self::cache_extracted_artwork(
+            extract_artwork(file_path),
+            &format!("{artist_id}_{}", title.to_lowercase()),
+        );
         let id = self
             .storage
             .insert_album(NewAlbum {

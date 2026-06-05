@@ -106,7 +106,7 @@ pub fn extract_metadata(path: &Path) -> Result<AudioMetadata, MetadataError> {
 
     let channels = i32::from(props.channels().unwrap_or(0));
 
-    let codec = codec_name(file_type);
+    let codec = codec_name(file_type).to_string();
 
     let lossless = matches!(file_type, Flac | Wav | Aiff);
 
@@ -220,16 +220,16 @@ fn extract_disc_number(tagged_file: &TaggedFile) -> Option<i32> {
 }
 
 /// Get a human-readable codec name from the file type.
-fn codec_name(file_type: FileType) -> String {
+fn codec_name(file_type: FileType) -> &'static str {
     match file_type {
-        Flac => "flac".to_string(),
-        Mpeg => "mp3".to_string(),
-        Mp4 => "aac".to_string(),
-        Vorbis => "ogg".to_string(),
-        Opus => "opus".to_string(),
-        Wav => "wav".to_string(),
-        Aiff => "aiff".to_string(),
-        _ => "unknown".to_string(),
+        Flac => "flac",
+        Mpeg => "mp3",
+        Mp4 => "aac",
+        Vorbis => "ogg",
+        Opus => "opus",
+        Wav => "wav",
+        Aiff => "aiff",
+        _ => "unknown",
     }
 }
 

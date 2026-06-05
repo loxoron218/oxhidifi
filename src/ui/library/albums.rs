@@ -405,7 +405,9 @@ fn album_play_icon(state: &AppState, album_id: i64) -> &'static str {
 async fn toggle_or_play_album(state: &Arc<AppState>, album_id: i64) {
     let is_current = state.current_album_id.load(Relaxed) == album_id;
     if is_current {
-        let _ = state.playback.toggle_pause();
+        if let Err(e) = state.playback.toggle_pause() {
+            error!(error = %e, "Failed to toggle pause");
+        }
     } else {
         play_album(state, album_id).await;
     }
