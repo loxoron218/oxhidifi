@@ -5,7 +5,7 @@ use std::{
     env::{var, var_os},
     fs::create_dir_all,
     path::PathBuf,
-    sync::Arc,
+    sync::{Arc, atomic::AtomicI64},
 };
 
 use {
@@ -49,6 +49,8 @@ pub struct AppState {
     pub toast_tx: Sender<String>,
     /// Channel receiver for toast notifications.
     pub toast_rx: Receiver<String>,
+    /// Currently playing album ID (`-1` means none). Used by album grid overlay buttons.
+    pub current_album_id: AtomicI64,
 }
 
 /// Resolve an XDG directory from an environment variable with a fallback path.
@@ -151,6 +153,7 @@ pub async fn run_application() -> Result<()> {
         scan_event_rx,
         toast_tx,
         toast_rx,
+        current_album_id: AtomicI64::new(-1),
     });
 
     let app = Application::builder().application_id(APP_ID).build();
@@ -170,7 +173,7 @@ pub async fn run_application() -> Result<()> {
 mod tests {
     use std::{
         path::Path,
-        sync::{Arc, LazyLock},
+        sync::{Arc, LazyLock, atomic::AtomicI64},
     };
 
     use {
@@ -220,6 +223,7 @@ mod tests {
                 scan_event_rx,
                 toast_tx,
                 toast_rx,
+                current_album_id: AtomicI64::new(-1),
             })
         }
     }

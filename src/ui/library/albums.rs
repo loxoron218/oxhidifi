@@ -10,6 +10,7 @@ use std::{
     path::PathBuf,
     sync::{
         Arc,
+        atomic::Ordering::Relaxed,
         mpsc::{Sender, channel},
     },
 };
@@ -39,7 +40,7 @@ use {
         },
         prelude::{BoxExt, ButtonExt, WidgetExt},
     },
-    tracing::info,
+    tracing::{error, info},
 };
 
 use crate::{
@@ -179,7 +180,13 @@ fn build_placeholder() -> Widget {
 /// Returns a `MemoryTexture` suitable for painting, or `None` if the
 /// file could not be loaded or decoded.
 fn decode_cover_art(path: &str) -> Option<MemoryTexture> {
-    let pixbuf = Pixbuf::from_file_at_scale(path, THUMBNAIL_SIZE, THUMBNAIL_SIZE, true).ok()?;
+    let pixbuf = match Pixbuf::from_file_at_scale(path, THUMBNAIL_SIZE, THUMBNAIL_SIZE, true) {
+        Ok(p) => p,
+        Err(e) => {
+            error!(error = %e, "Failed to decode cover art at {path}");
+            return None;
+        }
+    };
     let format = if pixbuf.has_alpha() { R8g8b8a8 } else { R8g8b8 };
     let bytes = pixbuf.read_pixel_bytes();
     Some(MemoryTexture::new(
@@ -195,7 +202,9 @@ fn decode_cover_art(path: &str) -> Option<MemoryTexture> {
 fn decode_batch(batch: Vec<(usize, String)>, tx: &Sender<(usize, Option<MemoryTexture>)>) {
     for (i, path) in batch {
         let texture = decode_cover_art(&path);
-        let _ = tx.send((i, texture));
+        if let Err(e) = tx.send((i, texture)) {
+            error!(error = %e, "Failed to send cover art texture");
+        }
     }
 }
 
@@ -277,6 +286,8 @@ fn build_album_card(state: &Arc<AppState>, album: &Album, artist_name: &str) -> 
         ))
         .build();
 
+    let album_id = album.id;
+
     let cover_art = build_placeholder();
 
     let overlay = Overlay::new();
@@ -295,7 +306,9 @@ fn build_album_card(state: &Arc<AppState>, album: &Album, artist_name: &str) -> 
 
     let motion_ctrl = EventControllerMotion::new();
     let btn_show = play_button.clone();
+    let state_enter = Arc::clone(state);
     motion_ctrl.connect_enter(move |_, _, _| {
+        btn_show.set_icon_name(album_play_icon(&state_enter, album_id));
         btn_show.set_visible(true);
     });
     let btn_hide = play_button.clone();
@@ -305,11 +318,20 @@ fn build_album_card(state: &Arc<AppState>, album: &Album, artist_name: &str) -> 
     overlay.add_controller(motion_ctrl);
 
     let state_clone = Arc::clone(state);
-    let album_id = album.id;
+    let btn_click = play_button.clone();
     play_button.connect_clicked(move |_| {
+        let icon = album_play_icon(&state_clone, album_id);
+        btn_click.set_icon_name(if icon == "media-playback-pause-symbolic" {
+            "media-playback-start-symbolic"
+        } else {
+            "media-playback-pause-symbolic"
+        });
+
         let state = Arc::clone(&state_clone);
+        let btn = btn_click.clone();
         spawn_future_local(async move {
-            play_album(&state, album_id).await;
+            toggle_or_play_album(&state, album_id).await;
+            btn.set_icon_name(album_play_icon(&state, album_id));
         });
     });
 
@@ -357,16 +379,36 @@ fn build_album_card(state: &Arc<AppState>, album: &Album, artist_name: &str) -> 
 
     let gesture = GestureClick::new();
     let state_clone = Arc::clone(state);
-    let album_id = album.id;
     gesture.connect_released(move |_, _, _, _| {
         let state = Arc::clone(&state_clone);
         spawn_future_local(async move {
-            play_album(&state, album_id).await;
+            toggle_or_play_album(&state, album_id).await;
         });
     });
     card.add_controller(gesture);
 
     (card, overlay)
+}
+
+/// Determine the overlay button icon for an album based on playback state.
+fn album_play_icon(state: &AppState, album_id: i64) -> &'static str {
+    let is_current = state.current_album_id.load(Relaxed) == album_id;
+    let ps = state.playback.state();
+    if is_current && ps.is_playing && !ps.is_paused {
+        "media-playback-pause-symbolic"
+    } else {
+        "media-playback-start-symbolic"
+    }
+}
+
+/// Toggle pause if this album is currently playing, otherwise play it.
+async fn toggle_or_play_album(state: &Arc<AppState>, album_id: i64) {
+    let is_current = state.current_album_id.load(Relaxed) == album_id;
+    if is_current {
+        let _ = state.playback.toggle_pause();
+    } else {
+        play_album(state, album_id).await;
+    }
 }
 
 /// Play all tracks in an album by queueing them and starting playback.

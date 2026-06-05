@@ -19,7 +19,7 @@ use crate::playback::OutputError::{self, NoDeviceAvailable, Output, StreamConfig
 /// Dropping this struct stops playback and releases the audio device.
 pub struct AudioOutput {
     /// CPAL output stream (kept alive until dropped).
-    _stream: Stream,
+    stream: Stream,
     /// Stable device identifier for persisting device selection across restarts.
     device_id: String,
     /// Human-readable device name for display purposes.
@@ -115,7 +115,7 @@ impl AudioOutput {
         let mode = OutputMode::Resampled;
 
         Ok(Self {
-            _stream: stream,
+            stream,
             device_id,
             device_name,
             config,
@@ -181,6 +181,20 @@ impl AudioOutput {
     #[must_use]
     pub fn supports_sample_rate(&self, sample_rate: u32) -> bool {
         sample_rate == self.config.sample_rate
+    }
+
+    /// Pause the audio output stream instantly.
+    pub fn pause(&self) {
+        if let Err(e) = self.stream.pause() {
+            error!(error = %e, "Failed to pause output stream");
+        }
+    }
+
+    /// Resume the audio output stream.
+    pub fn play(&self) {
+        if let Err(e) = self.stream.play() {
+            error!(error = %e, "Failed to play output stream");
+        }
     }
 }
 

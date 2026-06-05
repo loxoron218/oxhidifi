@@ -164,12 +164,12 @@ description: "Task list for high-fidelity music player refactoring"
 
 ### Implementation for User Story 4
 
-- [ ] T037 [US4] Implement slide-in player panel UI (artwork, track title, artist, play/pause/next/prev/seek/volume/mute controls) in src/ui/player/panel.rs
-- [ ] T038 [US4] Wire panel to PlaybackState and PlaybackEvent stream in src/ui/player/mod.rs (update UI on TrackStarted, TrackProgress, Paused, Resumed, Stopped events)
-- [ ] T039 [US4] Implement responsive AdwOverlaySplitView/AdwBreakpoint behavior for narrow windows (panel back button to hide, maximize content) in src/ui/player/panel.rs
-- [ ] T040 [US4] Implement panel auto-show on playback start and auto-hide on queue empty/stop
-- [ ] T040b [US4] Implement visible queue view UI (track list with current/upcoming sections, drag-and-drop reorder via GtkDragSource/GtkDropTarget, remove button per entry) in src/ui/player/queue.rs per FR-021
-- [ ] T040c [US4] Add seek control tests per FR-019: verify seek position accuracy (assert audio output matches expected position within 100 ms tolerance), seek near track start (< 1 s), seek near track end (last 1 s), and seek during gapless transition in tests/seek_control.rs
+- [X] T037 [US4] Implement slide-in player panel UI (artwork, track title, artist, play/pause/next/prev/seek/volume/mute controls) in src/ui/player/panel.rs
+- [X] T038 [US4] Wire panel to PlaybackState and PlaybackEvent stream in src/ui/player/mod.rs (update UI on TrackStarted, TrackProgress, Paused, Resumed, Stopped events)
+- [X] T039 [US4] Implement responsive AdwOverlaySplitView/AdwBreakpoint behavior for narrow windows (panel back button to hide, maximize content) in src/ui/player/panel.rs
+- [X] T040 [US4] Implement panel auto-show on playback start and auto-hide on queue empty/stop
+- [X] T040b [US4] Implement visible queue view UI (track list with current/upcoming sections, drag-and-drop reorder via GtkDragSource/GtkDropTarget, remove button per entry) in src/ui/player/queue.rs per FR-021
+- [X] T040c [US4] Add seek control tests per FR-019: verify seek position accuracy (assert audio output matches expected position within 100 ms tolerance), seek near track start (< 1 s), seek near track end (last 1 s), and seek during gapless transition in tests/seek_control.rs
 
 **Checkpoint**: Side panel slides in on play, shows live track state, library browsing unaffected, panel hides on stop
 

@@ -9,6 +9,7 @@ use std::{
 };
 
 use {
+    num_traits::cast::FromPrimitive,
     parking_lot::Mutex,
     rtrb::{Producer, PushError::Full},
     tokio::sync::{
@@ -126,7 +127,7 @@ pub trait PlaybackController: Send + 'static {
     /// # Errors
     ///
     /// Returns [`PlaybackError`] on failure.
-    fn set_volume(&self, volume: f32) -> Result<(), PlaybackError>;
+    fn set_volume(&self, volume: f64) -> Result<(), PlaybackError>;
 
     /// Mute or unmute playback.
     ///
@@ -216,6 +217,8 @@ impl PlaybackEngine {
             state.current_path = Some(path.clone());
             state.is_playing = true;
             state.is_paused = false;
+            state.elapsed_seconds = 0.0;
+            state.duration_seconds = 0.0;
         }
 
         let engine_state = Arc::clone(&self.shared);
@@ -291,18 +294,33 @@ impl PlaybackController for PlaybackEngine {
     }
 
     fn toggle_pause(&self) -> Result<(), PlaybackError> {
-        let mut state = self.shared.state.lock();
-        if !state.is_playing {
+        let is_playing = {
+            let state = self.shared.state.lock();
+            state.is_playing
+        };
+        if !is_playing {
             return Ok(());
         }
-        let event = if state.is_paused {
+
+        let mut state = self.shared.state.lock();
+        let was_paused = state.is_paused;
+        let event = if was_paused {
             state.is_paused = false;
             PlaybackEvent::Resumed
         } else {
             state.is_paused = true;
             PlaybackEvent::Paused
         };
+        let guard = self.shared.output.lock();
+        let output_ref = Option::as_ref(&*guard);
+        match (was_paused, output_ref) {
+            (true, Some(output)) => output.play(),
+            (false, Some(output)) => output.pause(),
+            _ => {}
+        }
         drop(state);
+        drop(guard);
+
         if let Err(e) = self.shared.event_tx.send(event) {
             warn!(error = %e, "Failed to send pause toggle event");
         }
@@ -316,6 +334,8 @@ impl PlaybackController for PlaybackEngine {
         state.is_paused = false;
         state.current_track_id = None;
         state.current_path = None;
+        state.elapsed_seconds = 0.0;
+        state.duration_seconds = 0.0;
         drop(state);
         if let Err(e) = self.shared.event_tx.send(PlaybackEvent::Stopped) {
             warn!(error = %e, "Failed to send Stopped event");
@@ -351,12 +371,14 @@ impl PlaybackController for PlaybackEngine {
         self.start_playback(prev_id, path)
     }
 
-    fn set_volume(&self, volume: f32) -> Result<(), PlaybackError> {
+    fn set_volume(&self, volume: f64) -> Result<(), PlaybackError> {
         let clamped = volume.clamp(0.0, 1.0);
         self.shared.state.lock().volume = clamped;
-        if let Err(e) = self.shared.event_tx.send(PlaybackEvent::VolumeChanged {
-            volume: f64::from(clamped),
-        }) {
+        if let Err(e) = self
+            .shared
+            .event_tx
+            .send(PlaybackEvent::VolumeChanged { volume: clamped })
+        {
             warn!(error = %e, "Failed to send VolumeChanged event");
         }
         Ok(())
@@ -424,9 +446,13 @@ pub struct PlaybackState {
     /// Whether the engine is paused.
     pub is_paused: bool,
     /// Current volume (0.0 to 1.0).
-    pub volume: f32,
+    pub volume: f64,
     /// Whether audio is muted.
     pub is_muted: bool,
+    /// Elapsed playback time in seconds.
+    pub elapsed_seconds: f64,
+    /// Total track duration in seconds (0.0 if unknown).
+    pub duration_seconds: f64,
 }
 
 impl Default for PlaybackState {
@@ -438,6 +464,8 @@ impl Default for PlaybackState {
             is_paused: false,
             volume: 1.0,
             is_muted: false,
+            elapsed_seconds: 0.0,
+            duration_seconds: 0.0,
         }
     }
 }
@@ -453,7 +481,7 @@ pub trait TrackPathResolver: Send + Sync + 'static {
 }
 
 /// Read the current volume from shared state.
-fn read_volume(shared: &EngineShared) -> f32 {
+fn read_volume(shared: &EngineShared) -> f64 {
     let state = shared.state.lock();
     if state.is_muted { 0.0 } else { state.volume }
 }
@@ -628,6 +656,8 @@ fn try_auto_advance(
         state.current_path = Some(next_path.clone());
         state.is_playing = true;
         state.is_paused = false;
+        state.elapsed_seconds = 0.0;
+        state.duration_seconds = 0.0;
     }
 
     let (new_cmd_tx, new_cmd_rx) = MpscChannel(4);
@@ -685,6 +715,12 @@ fn run_decode_loop(
 
     *engine_shared.track_sample_rate.lock() = track_sample_rate;
 
+    {
+        let mut state = engine_shared.state.lock();
+        state.duration_seconds = decoder.params().duration_seconds;
+        state.elapsed_seconds = 0.0;
+    }
+
     let needs_resampling = track_sample_rate != output.device_sample_rate;
     let chunk_size = 1024;
     let mut resampler = if needs_resampling {
@@ -706,6 +742,8 @@ fn run_decode_loop(
 
     let mut volume;
     let mut event_to_send = None;
+    let mut elapsed: f64 = 0.0;
+    let track_sample_rate_f64 = f64::from(track_sample_rate);
 
     loop {
         volume = read_volume(engine_shared);
@@ -715,15 +753,24 @@ fn run_decode_loop(
             Err(Empty) | Ok(DecodeCommand::PreloadNext { .. }) => {}
         }
 
+        if engine_shared.state.lock().is_paused {
+            yield_now();
+            continue;
+        }
+
         match decoder.decode_next() {
             Ok(batch) if batch.samples.is_empty() => {
                 event_to_send = Some(PlaybackEvent::TrackFinished { track_id });
                 break;
             }
             Ok(batch) => {
+                let frame_count =
+                    u32::try_from(batch.samples.len() / src_channels).unwrap_or(u32::MAX);
+                elapsed += f64::from(frame_count) / track_sample_rate_f64;
+                engine_shared.state.lock().elapsed_seconds = elapsed;
                 let samples = maybe_downmix(batch, src_channels, dst_channels);
-                event_to_send =
-                    process_decoded_batch(&samples, &mut resampler, &mut producer, volume);
+                let vol = FromPrimitive::from_f64(volume).unwrap_or(0.0);
+                event_to_send = process_decoded_batch(&samples, &mut resampler, &mut producer, vol);
             }
             Err(e) => {
                 event_to_send = Some(PlaybackEvent::Error {
@@ -747,6 +794,8 @@ fn run_decode_loop(
         state.is_paused = false;
         state.current_track_id = None;
         state.current_path = None;
+        state.elapsed_seconds = 0.0;
+        state.duration_seconds = 0.0;
     }
     *engine_shared.decode_tx.lock() = None;
     if let Some(event) = event_to_send
@@ -809,18 +858,18 @@ mod tests {
         let state = engine.state();
         assert!(!state.is_playing);
         assert!(!state.is_paused);
-        assert!((state.volume - 1.0).abs() < f32::EPSILON);
+        assert!((state.volume - 1.0).abs() < f64::EPSILON);
     }
 
     #[test]
     fn set_volume_clamps() -> Result<()> {
         let engine = PlaybackEngine::new();
         engine.set_volume(2.0).map_err(|e| anyhow!("{e}"))?;
-        if (engine.state().volume - 1.0).abs() >= f32::EPSILON {
+        if (engine.state().volume - 1.0).abs() >= f64::EPSILON {
             bail!("volume should be clamped to 1.0");
         }
         engine.set_volume(-0.5).map_err(|e| anyhow!("{e}"))?;
-        if engine.state().volume.abs() >= f32::EPSILON {
+        if engine.state().volume.abs() >= f64::EPSILON {
             bail!("volume should be clamped to 0.0");
         }
         Ok(())
@@ -1030,6 +1079,7 @@ mod tests {
             params: AudioParams {
                 sample_rate: 44100,
                 channels: 2,
+                duration_seconds: 0.0,
             },
         };
         let result = maybe_downmix(batch, 2, 2);
@@ -1043,6 +1093,7 @@ mod tests {
             params: AudioParams {
                 sample_rate: 44100,
                 channels: 2,
+                duration_seconds: 0.0,
             },
         };
         let result = maybe_downmix(batch, 2, 1);

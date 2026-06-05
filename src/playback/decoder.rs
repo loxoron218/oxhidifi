@@ -16,6 +16,7 @@ use symphonia::{
         formats::{FormatOptions, FormatReader, TrackType::Audio as TypeAudio, probe::Hint},
         io::{MediaSourceStream, MediaSourceStreamOptions},
         meta::MetadataOptions,
+        units::Timestamp,
     },
     default::{get_codecs, get_probe},
 };
@@ -31,6 +32,8 @@ pub struct AudioParams {
     pub sample_rate: u32,
     /// Number of audio channels.
     pub channels: u16,
+    /// Total duration of the track in seconds (0.0 if unknown).
+    pub duration_seconds: f64,
 }
 
 /// Decoded PCM samples with associated audio parameters.
@@ -104,9 +107,19 @@ impl Decoder {
             .as_ref()
             .map_or(2, |c| u16::try_from(c.count()).unwrap_or(2));
 
+        let duration_seconds = track
+            .time_base
+            .zip(track.duration)
+            .and_then(|(tb, dur)| {
+                let ts = Timestamp::new(i64::try_from(dur.get()).unwrap_or(0));
+                tb.calc_time(ts)
+            })
+            .map_or(0.0, |t| t.as_secs_f64());
+
         let params = AudioParams {
             sample_rate,
             channels,
+            duration_seconds,
         };
 
         let dec_opts = AudioDecoderOptions::default();
