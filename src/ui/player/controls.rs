@@ -33,7 +33,7 @@ pub fn build_playback_controls(state: &Arc<AppState>) -> (Box, Button) {
 
     let prev_button = Button::builder()
         .icon_name("media-skip-backward-symbolic")
-        .css_classes(["flat", "circular"])
+        .css_classes(["flat"])
         .tooltip_text("Previous track")
         .build();
     prev_button.update_property(&[PropertyLabel("Previous track")]);
@@ -61,7 +61,7 @@ pub fn build_playback_controls(state: &Arc<AppState>) -> (Box, Button) {
 
     let next_button = Button::builder()
         .icon_name("media-skip-forward-symbolic")
-        .css_classes(["flat", "circular"])
+        .css_classes(["flat"])
         .tooltip_text("Next track")
         .build();
     next_button.update_property(&[PropertyLabel("Next track")]);
@@ -119,7 +119,7 @@ pub fn build_volume_control(state: &Arc<AppState>) -> Box {
 
     let mute_button = Button::builder()
         .icon_name("audio-volume-high-symbolic")
-        .css_classes(["flat", "circular"])
+        .css_classes(["flat"])
         .tooltip_text("Mute or unmute")
         .build();
     mute_button.update_property(&[PropertyLabel("Mute or unmute")]);

@@ -112,12 +112,12 @@ fn build_content(
 
     let back_button = ToggleButton::builder()
         .icon_name("view-dual-symbolic")
-        .css_classes(["flat", "circular"])
+        .css_classes(["flat"])
         .tooltip_text("Hide player panel")
         .active(true)
         .build();
     back_button.set_visible(false);
-    sidebar_header.pack_end(&back_button);
+    sidebar_header.pack_start(&back_button);
 
     sidebar_toolbar.add_top_bar(&sidebar_header);
 
