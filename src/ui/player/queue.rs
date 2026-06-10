@@ -1,29 +1,27 @@
 //! Visible queue view with track list, drag-and-drop reorder, and remove button.
 //!
 //! Displays the playback queue with current/upcoming sections.
-//! Supports drag-and-drop reorder via `GtkDragSource`/`GtkDropTarget`.
+//! Uses `ListView` with compact rows. Each row has a drag handle to reorder.
 
 use std::sync::Arc;
 
 use {
     libadwaita::{
         gdk::{ContentProvider, DragAction},
+        gio::{ListStore, prelude::ListModelExt},
         glib::{
-            ControlFlow::Break,
-            idle_add_local, spawn_future_local,
-            types::Type as GType,
-            value::{ToValue, Value},
+            BoxedAnyObject, ControlFlow::Break, Value, idle_add_local, prelude::StaticType,
+            spawn_future_local, types::Type, value::ToValue,
         },
         gtk::{
-            Align::{Center, Start},
-            Box, Button, DragSource, DropTarget, Image, Label, ListBox, ListBoxRow,
+            Align::Start,
+            Box, Button, DragSource, DropTarget, Label, ListItem, ListView, NoSelection,
             Orientation::{Horizontal, Vertical},
-            ScrolledWindow,
-            SelectionMode::None as SelectionNone,
+            SignalListItemFactory,
             accessible::Property::Label as PropertyLabel,
             pango::EllipsizeMode::End,
         },
-        prelude::{AccessibleExtManual, BoxExt, ButtonExt, WidgetExt},
+        prelude::{AccessibleExtManual, BoxExt, ButtonExt, Cast, ListItemExt, WidgetExt},
     },
     tracing::error,
 };
@@ -34,49 +32,201 @@ use crate::{
     storage::Storage,
 };
 
-/// Build the queue view.
-///
-/// Creates a `ScrolledWindow` containing a `ListBox` populated with
-/// queue entries. Shows current/upcoming sections.
-#[must_use]
-pub fn build_queue_view(state: &Arc<AppState>, queue: &PlaybackQueue) -> ScrolledWindow {
-    let scrolled = ScrolledWindow::builder()
-        .vexpand(true)
-        .hexpand(true)
-        .build();
+/// Data for a single queue entry.
+#[derive(Clone, Debug)]
+struct QueueItemData {
+    /// Track ID from storage.
+    track_id: i64,
+    /// Display name for the track.
+    name: String,
+    /// Whether this is the currently playing track.
+    is_current: bool,
+}
 
-    let list = ListBox::builder()
-        .selection_mode(SelectionNone)
-        .can_focus(true)
-        .tooltip_text("Playback queue — drag to reorder, click remove to delete")
-        .css_classes(["boxed-list"])
-        .build();
+/// Reorder an item within both the queue model and the `ListStore`.
+fn reorder_entry(queue: &PlaybackQueue, store: &ListStore, from: usize, to: usize) {
+    if from == to {
+        return;
+    }
+    queue.move_track(from, to);
+    let Ok(from_u32) = u32::try_from(from) else {
+        return;
+    };
+    let Some(item) = store.item(from_u32) else {
+        return;
+    };
+    store.remove(from_u32);
+    let adjusted_pos = if to > from { to - 1 } else { to };
+    let Ok(adjusted_u32) = u32::try_from(adjusted_pos) else {
+        return;
+    };
+    store.insert(adjusted_u32, &item);
+}
 
-    let initial_queue = queue.clone();
-    let initial_state = Arc::clone(state);
-    let initial_list = list.clone();
-    let initial_ids = initial_queue.tracks();
+/// Process a drop value for reordering.
+fn handle_drop_value(value: &Value, queue: &PlaybackQueue, store: &ListStore, to_pos: usize) {
+    let from = match value.get::<i32>() {
+        Ok(v) => v,
+        Err(e) => {
+            error!(error = %e, "Failed to get drop value");
+            return;
+        }
+    };
+    let from_u = usize::try_from(from).unwrap_or(0);
+    reorder_entry(queue, store, from_u, to_pos);
+}
+
+/// Refresh the store on a queue change event.
+fn on_queue_event(state: &Arc<AppState>, store: &ListStore, queue: &PlaybackQueue) {
+    let state_c = Arc::clone(state);
+    let store_c = store.clone();
+    let queue_c = queue.clone();
     spawn_future_local(async move {
-        let names = fetch_track_names(&initial_state, &initial_ids).await;
+        let ids = queue_c.tracks();
+        let names = fetch_track_names(&state_c, &ids).await;
+        let s = store_c;
+        let q = queue_c;
         idle_add_local(move || {
-            populate_queue_list(&initial_list, &initial_queue, &initial_state, &names);
+            populate_store(&s, &q, &names);
             Break
         });
     });
+}
 
-    scrolled.set_child(Some(&list));
+/// Create the `SignalListItemFactory` that builds and binds queue rows.
+fn build_row_factory(queue: &PlaybackQueue, store: &ListStore) -> SignalListItemFactory {
+    let factory = SignalListItemFactory::new();
+    let factory_queue = queue.clone();
+    let factory_store = store.clone();
 
-    let mut event_rx = state.playback.subscribe();
-    let list_ref = list;
-    let state_ref = Arc::clone(state);
-    let queue_ref = queue.clone();
+    factory.connect_setup(move |_factory, list_item| {
+        let Some(list_item_obj) = list_item.downcast_ref::<ListItem>() else {
+            return;
+        };
+        let li = list_item_obj.clone();
+        let queue_li = factory_queue.clone();
+        let store_li = factory_store.clone();
+
+        let container = Box::builder()
+            .orientation(Horizontal)
+            .spacing(6)
+            .margin_top(3)
+            .margin_bottom(3)
+            .margin_start(6)
+            .margin_end(6)
+            .build();
+
+        let handle = Button::builder()
+            .icon_name("list-drag-handle-symbolic")
+            .css_classes(["flat"])
+            .tooltip_text("Drag to reorder")
+            .build();
+        handle.update_property(&[PropertyLabel("Drag handle")]);
+
+        let drag = DragSource::builder().actions(DragAction::MOVE).build();
+        let li_drag = li.clone();
+        drag.connect_prepare(move |_src, _x, _y| {
+            let pos = li_drag.position();
+            let pos_i32 = i32::try_from(pos).unwrap_or(0);
+            let value = pos_i32.to_value();
+            Some(ContentProvider::for_value(&value))
+        });
+        handle.add_controller(drag);
+
+        let label = Label::builder()
+            .ellipsize(End)
+            .max_width_chars(25)
+            .halign(Start)
+            .hexpand(true)
+            .build();
+
+        let remove = Button::builder()
+            .icon_name("window-close-symbolic")
+            .css_classes(["flat"])
+            .tooltip_text("Remove from queue")
+            .build();
+        remove.update_property(&[PropertyLabel("Remove from queue")]);
+
+        let li_remove = li.clone();
+        let queue_remove = queue_li.clone();
+        let store_remove = store_li.clone();
+        remove.connect_clicked(move |_| {
+            let pos = li_remove.position() as usize;
+            let q = queue_remove.clone();
+            let _ = q.remove(pos);
+            store_remove.remove(u32::try_from(pos).unwrap_or(0));
+        });
+
+        let drop = DropTarget::new(Type::I32, DragAction::MOVE);
+        let li_drop = li;
+        let queue_drop = queue_li;
+        let store_drop = store_li;
+        drop.connect_drop(move |_target, value, _x, _y| {
+            let to_pos = li_drop.position() as usize;
+            handle_drop_value(value, &queue_drop, &store_drop, to_pos);
+            true
+        });
+
+        container.append(&handle);
+        container.append(&label);
+        container.append(&remove);
+        container.add_controller(drop);
+
+        list_item_obj.set_child(Some(&container));
+    });
+
+    factory.connect_bind(|_factory, list_item| {
+        let Some(list_item) = list_item.downcast_ref::<ListItem>() else {
+            return;
+        };
+        bind_row(list_item);
+    });
+
+    factory
+}
+
+/// Build the queue view using `ListView` with compact rows.
+///
+/// Each row has a drag handle for reordering, track name, and remove button.
+#[must_use]
+pub fn build_queue_view(state: &Arc<AppState>, queue: &PlaybackQueue) -> Box {
+    let store = ListStore::builder()
+        .item_type(BoxedAnyObject::static_type())
+        .build();
+
+    let queue = queue.clone();
+    let state_arc = Arc::clone(state);
+
+    on_queue_event(&state_arc, &store, &queue);
+
+    let factory = build_row_factory(&queue, &store);
+
+    let model = NoSelection::new(Some(store.clone()));
+    let list_view = ListView::builder()
+        .model(&model)
+        .factory(&factory)
+        .single_click_activate(false)
+        .show_separators(true)
+        .can_focus(true)
+        .build();
+
+    let container = Box::builder().orientation(Vertical).spacing(4).build();
+
+    container.append(&list_view);
+
+    let state_evt = Arc::clone(state);
+    let store_evt = store;
+    let q_evt = queue;
     spawn_future_local(async move {
+        let mut event_rx = state_evt.playback.subscribe();
         while event_rx.recv().await.is_ok() {
-            on_queue_event(&state_ref, &queue_ref, &list_ref).await;
+            let ids = q_evt.tracks();
+            let names = fetch_track_names(&state_evt, &ids).await;
+            refresh_store_on_main(&store_evt, &q_evt, &names);
         }
     });
 
-    scrolled
+    container
 }
 
 /// Fetch display names for all track IDs concurrently.
@@ -93,201 +243,74 @@ async fn fetch_track_names(state: &Arc<AppState>, ids: &[i64]) -> Vec<(i64, Stri
     names
 }
 
-/// Remove all children from a list box.
-fn clear_container(list: &ListBox) {
-    while let Some(child) = list.first_child() {
-        list.remove(&child);
-    }
-}
-
-/// Handle a queue change event by re-fetching names and repopulating.
-async fn on_queue_event(state: &Arc<AppState>, queue: &PlaybackQueue, list: &ListBox) {
+/// Refresh the store from the main thread via `idle_add_local`.
+fn refresh_store_on_main(store: &ListStore, queue: &PlaybackQueue, names: &[(i64, String)]) {
+    let s = store.clone();
     let q = queue.clone();
-    let names = fetch_track_names(state, &q.tracks()).await;
-    let l = list.clone();
-    let s = Arc::clone(state);
+    let n = names.to_vec();
     idle_add_local(move || {
-        populate_queue_list(&l, &q, &s, &names);
+        populate_store(&s, &q, &n);
         Break
     });
 }
 
-/// Populate the queue list with pre-fetched track names.
-fn populate_queue_list(
-    list: &ListBox,
-    queue: &PlaybackQueue,
-    state: &Arc<AppState>,
-    name_cache: &[(i64, String)],
-) {
-    clear_container(list);
+/// Populate the `ListStore` with current queue data.
+fn populate_store(store: &ListStore, queue: &PlaybackQueue, name_cache: &[(i64, String)]) {
+    store.remove_all();
 
     let current_id = queue.current();
     let tracks = queue.tracks();
 
-    if tracks.is_empty() {
-        let empty_label = Label::builder()
-            .label("Queue is empty")
-            .css_classes(["dim-label", "body"])
-            .vexpand(true)
-            .valign(Center)
-            .build();
-        empty_label.update_property(&[PropertyLabel("Queue is empty")]);
-        list.append(&empty_label);
-        return;
-    }
-
-    let current_index = current_id.and_then(|cid| tracks.iter().position(|&id| id == cid));
-
-    for (i, &track_id) in tracks.iter().enumerate() {
-        let is_current = current_index == Some(i);
-        let track_name = name_cache
+    for &track_id in &tracks {
+        let is_current = current_id == Some(track_id);
+        let name = name_cache
             .iter()
             .find(|(id, _)| *id == track_id)
-            .map_or_else(|| format!("Track #{track_id}"), |(_, name)| name.clone());
-        let row = build_queue_row(state, list, track_id, &track_name, Some(i), is_current);
-        list.append(&row);
+            .map_or_else(|| format!("Track #{track_id}"), |(_, n)| n.clone());
+
+        let data = QueueItemData {
+            track_id,
+            name,
+            is_current,
+        };
+        let boxed = BoxedAnyObject::new(data);
+        store.append(&boxed);
     }
 }
 
-/// Re-fetch track names and re-populate the queue list asynchronously.
-fn reload_queue(state: &Arc<AppState>, list: &ListBox, queue: PlaybackQueue) {
-    let state_fut = Arc::clone(state);
-    let list_fut = list.clone();
-    let q_fut = queue;
-    spawn_future_local(async move {
-        let tracks = q_fut.tracks();
-        let names = fetch_track_names(&state_fut, &tracks).await;
-        idle_add_local(move || {
-            populate_queue_list(&list_fut, &q_fut, &state_fut, &names);
-            Break
-        });
-    });
-}
-
-/// Handle a remove-from-queue button click.
-fn on_remove_clicked(list: &ListBox, state: &Arc<AppState>, pos: usize) {
-    let q = state.playback.queue().clone();
-    let _removed = q.remove(pos);
-    clear_container(list);
-    reload_queue(state, list, q);
-}
-
-/// Handle a drag-and-drop reorder of a queue item.
-fn on_drop(list: &ListBox, state: &Arc<AppState>, pos: usize, from_pos: Option<i32>) -> bool {
-    let Some(from_pos) = from_pos else {
-        return true;
+/// Bind data to a row widget (called when item data changes).
+fn bind_row(list_item: &ListItem) {
+    let Some(item) = list_item.item() else {
+        return;
     };
-    let from = usize::try_from(from_pos).unwrap_or(0);
-    if from != pos {
-        let q = state.playback.queue().clone();
-        q.move_track(from, pos);
-        clear_container(list);
-        reload_queue(state, list, q);
-    }
-    true
-}
-
-/// Extract drop position from a GTK `Value` and handle the drop.
-fn on_drop_value(list: &ListBox, state: &Arc<AppState>, pos: usize, value: &Value) -> bool {
-    let from_pos = match value.get::<i32>() {
-        Ok(v) => Some(v),
-        Err(e) => {
-            error!(error = %e, "Failed to get drop target value");
-            None
-        }
+    let Some(boxed) = item.downcast_ref::<BoxedAnyObject>() else {
+        return;
     };
-    on_drop(list, state, pos, from_pos)
-}
+    let data = boxed.borrow::<QueueItemData>();
 
-/// Build a single queue row with track info and remove button.
-fn build_queue_row(
-    state: &Arc<AppState>,
-    list: &ListBox,
-    _track_id: i64,
-    track_name: &str,
-    position: Option<usize>,
-    is_current: bool,
-) -> ListBoxRow {
-    let row_content = Box::builder()
-        .orientation(Horizontal)
-        .spacing(12)
-        .margin_top(6)
-        .margin_bottom(6)
-        .margin_start(12)
-        .margin_end(12)
-        .build();
+    let Some(child) = list_item.child() else {
+        return;
+    };
+    let Some(container) = child.downcast_ref::<Box>() else {
+        return;
+    };
+    let Some(handle) = container.first_child() else {
+        return;
+    };
+    let Some(label_widget) = handle.next_sibling() else {
+        return;
+    };
+    let Some(label) = label_widget.downcast_ref::<Label>() else {
+        return;
+    };
 
-    if is_current {
-        let now_playing = Image::builder()
-            .icon_name("audio-volume-high-symbolic")
-            .pixel_size(16)
-            .build();
-        now_playing.update_property(&[PropertyLabel("Now playing")]);
-        row_content.append(&now_playing);
+    label.set_label(&data.name);
+
+    let mut classes: Vec<&str> = vec![];
+    if data.is_current {
+        classes.push("heading");
     }
-
-    let info_box = Box::builder()
-        .orientation(Vertical)
-        .spacing(2)
-        .hexpand(true)
-        .build();
-
-    let mut title_classes = Vec::new();
-    if is_current {
-        title_classes.push("heading");
-    }
-    let title_label = Label::builder()
-        .label(track_name)
-        .ellipsize(End)
-        .max_width_chars(30)
-        .halign(Start)
-        .css_classes(&*title_classes)
-        .build();
-    info_box.append(&title_label);
-
-    row_content.append(&info_box);
-
-    let remove_button = Button::builder()
-        .icon_name("edit-delete-symbolic")
-        .css_classes(["flat", "circular"])
-        .valign(Center)
-        .tooltip_text("Remove from queue")
-        .build();
-    remove_button.update_property(&[PropertyLabel("Remove from queue")]);
-    row_content.append(&remove_button);
-
-    if let Some(pos) = position {
-        let list_for_remove = list.clone();
-        let state_for_remove = Arc::clone(state);
-        remove_button.connect_clicked(move |_| {
-            on_remove_clicked(&list_for_remove, &state_for_remove, pos);
-        });
-    }
-
-    let row = ListBoxRow::builder()
-        .child(&row_content)
-        .activatable(false)
-        .build();
-
-    if let Some(pos) = position {
-        let pos_i32 = i32::try_from(pos).unwrap_or(0);
-        let drag_src = DragSource::builder().actions(DragAction::MOVE).build();
-        drag_src.connect_prepare(move |_src, _x, _y| {
-            let value = pos_i32.to_value();
-            Some(ContentProvider::for_value(&value))
-        });
-        row_content.add_controller(drag_src);
-
-        let drop_target = DropTarget::new(GType::I32, DragAction::MOVE);
-        let list_for_dnd = list.clone();
-        let state_for_dnd = Arc::clone(state);
-        drop_target.connect_drop(move |_target, value, _x, _y| {
-            on_drop_value(&list_for_dnd, &state_for_dnd, pos, value)
-        });
-        row_content.add_controller(drop_target);
-    }
-
-    row
+    label.set_css_classes(&classes);
 }
 
 #[cfg(test)]
