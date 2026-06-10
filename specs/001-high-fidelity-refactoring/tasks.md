@@ -212,6 +212,7 @@ description: "Task list for high-fidelity music player refactoring"
 - [ ] T049 Run `cargo clippy --fix --allow-dirty --all-targets -- -W clippy::pedantic && cargo fmt` and fix all warnings; then run `find . -name "*.rs" -exec perl -i -0777 -pe 's/([;}])[ \t]*\r?\n([ \t]*\/\/(?!\/))/$1\n\n$2/g' {} +` to enforce blank lines before single-line comments after braces/semicolons per constitution
 - [ ] T050 Validate with quickstart.md — build (debug + release), run, verify all user stories functional
 - [ ] T051 [P] Implement PreferencesDialog with library directory management (add/remove directories), audio device selection, and view preferences (default view mode: grid/column, default tab: Albums/Artists) per FR-033 and plan.md; wire audio device selection to playback engine output device enumeration; wire volume slider to PlaybackController (volume persistence to `UserSettings.volume` is handled by T017 — T051 only binds the UI slider to the engine and reads the initial value from settings)
+- [ ] T051b [P] Implement gapless playback toggle (SwitchRow) in PreferencesDialog Audio > Playback group per FR-033; wire toggle to playback engine to enable/disable gapless transition logic in src/playback/gapless.rs
 - [ ] T052 Add library load verification: populate library with 10,000 synthetic tracks, measure scan throughput (<30s per SC-004) using metrics collector in src/metrics/collector.rs
 - [ ] T052c Add UI response verification: navigate between Albums/Artists views, toggle grid/column, access detail pages — measure response time (<100ms per SC-005) using metrics collector in src/metrics/collector.rs
 - [ ] T052b [P] Add queue persistence verification: populate queue, restart application, verify queue order, track IDs, and context are preserved per FR-028
@@ -220,6 +221,7 @@ description: "Task list for high-fidelity music player refactoring"
 - [ ] T056 [P] Add multi-format end-to-end verification test fixture covering FLAC, MP3, AAC, Ogg Vorbis, Opus, WAV, and AIFF per FR-016
 - [ ] T057 Add library persistence verification: populate library, restart application, verify all tracks/albums/artists are reloaded from SQLite without re-scanning per FR-028
 - [ ] T058 Add settings persistence verification: configure library directories, audio device, view preferences, volume level, window geometry (width/height/maximized); restart application; verify all settings restored from XDG config path per FR-028
+- [ ] T059 Add SC-006 verification: configure library directory with 3,000 synthetic audio files, start scan, assert library populates and becomes browsable within 9 seconds per SC-006; use metrics collector from T046b for throughput timing
 
 ---
 
@@ -231,7 +233,7 @@ description: "Task list for high-fidelity music player refactoring"
 - **Foundational (Phase 2)**: Depends on Setup completion — **BLOCKS** all user stories
 - **US1a — Library Ingestion (Phase 3)**: Depends on Phases 1-2
 - **US1b — Playback Pipeline (Phase 4)**: Depends on Phases 1-2 (can start in parallel with Phase 3)
-- **US1c — UI Shell & Browsing (Phase 5)**: Depends on Phases 1-2, Phase 4 (playback engine needed)
+- **US1c — UI Shell & Browsing (Phase 5)**: Depends on Phases 1-2. T023 (play wiring) requires Phase 4; T019b (adaptive layout), T019c (a11y), T054 (artwork cache) are parallelizable with Phase 4 per [P] markers
 - **US2 — Empty State & Nav (Phase 6)**: Depends on Phases 1-2, Phase 3 (library data)
 - **US3 — Gapless Resampling (Phase 7)**: Depends on Phases 1-2, Phase 4 (basic pipeline)
 - **US4 — Side Panel (Phase 8)**: Depends on Phases 1-2, Phase 4 (playback engine)
@@ -268,7 +270,7 @@ description: "Task list for high-fidelity music player refactoring"
 | Phase 7: US3 | T032, T032b, T036b, T036c, T036e, T036f, T036g, T036i |
 | Phase 8: US4 | T040b, T040c (queue view UI and seek tests; remaining tasks sequential) |
 | Phase 9: US5 | T041, T042 |
-| Phase 10: Polish | T045, T046a, T046b, T046c, T046d, T046e, T047, T048a, T048b, T048c, T048d, T048e, T048f, T051, T055, T056 |
+| Phase 10: Polish | T045, T046a, T046b, T046c, T046d, T046e, T047, T048a, T048b, T048c, T048d, T048e, T048f, T051, T051b, T055, T056 |
 
 ---
 

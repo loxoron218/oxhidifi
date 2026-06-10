@@ -63,12 +63,12 @@ The plan is decomposed into 10 phases, each producing a checkpoint. Phase depend
 | 2 | Foundational | — | Storage trait, SQLite impl, settings, error types, XDG | T005–T010b |
 | 3 | US1a Library Ingestion | P1 (MVP) | Scanner, metadata, dedup, events | T011–T013, T018–T018c |
 | 4 | US1b Playback Pipeline | P1 (MVP) | Decoder, output, queue, engine | T014–T017 |
-| 5 | US1c UI Shell & Browsing | P1 (MVP) | App, window, header, album grid, play wiring, adaptive layout, a11y, window-geometry restore | T019–T023, T019b–T019d |
+| 5 | US1c UI Shell & Browsing | P1 (MVP) | App, window, header, album grid, artwork cache, play wiring, adaptive layout, a11y, window-geometry restore | T019–T023, T054, T019b–T019d |
 | 6 | US2 Empty State & Nav | P1 | Empty state, artist view, grid/column toggle, watcher, status bar, tab switching, scan+status integration test | T025–T031, T031b |
-| 7 | US3 Gapless Resampling | P2 | Resampler (with criterion baseline), gapless, pre-buffer, sample-rate reconfig, bit-perfect path, ABX harness, hi-res, SNR, bit-perfect verify | T032–T036, T032b, T036b–T036g |
+| 7 | US3 Gapless Resampling | P2 | Resampler (with criterion baseline), gapless, pre-buffer, sample-rate reconfig, bit-perfect path, ABX harness, hi-res, SNR, bit-perfect verify, SC-002 verification, incompatible SR transitions | T032–T036, T032b, T036b–T036i |
 | 8 | US4 Side Panel | P2 | Slide-in panel, state wiring, narrow-mode back nav, auto show/hide, queue view UI | T037–T040, T040b |
 | 9 | US5 Detail Pages | P3 | Album detail, artist detail, navigation, play/queue actions | T041–T044 |
-| 10 | Polish | — | A11y audit, metrics (T046a–T046e), tracing instrumentation, edge-case handlers, lint/fmt, validation, preferences dialog, persistence verification | T045, T046a–T046e, T047, T048a–T048e, T049–T058 |
+| 10 | Polish | — | A11y audit, metrics (T046a–T046e), tracing instrumentation, edge-case handlers, lint/fmt, validation, preferences dialog, gapless toggle, persistence verification, SC-006 verification | T045, T046a–T046e, T047, T048a–T048e, T049–T059 |
 
 **Sub-task suffix convention**: tasks suffixed with a letter (`T004b`, `T019b`, `T032b`, `T036b`, `T040b`, `T046a`, `T048a`, `T052b`) are sub-tasks of the parent task. The parent's ID is implied by stripping the letter suffix (e.g., `T046a`–`T046e` are sub-tasks of `T046`). When a parent task is renamed, its sub-tasks are renamed in lockstep (e.g., T024 → T018b moved its sub-tasks T024b → T018c, and the Phase 5 T024c/T024d became T019b/T019c).
 

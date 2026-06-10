@@ -160,14 +160,14 @@ A user on an album detail page sees the full track listing, album metadata (year
 
 - **FR-023**: When playback starts, a player panel MUST slide in from the left displaying album artwork, current track metadata, and playback controls. The slide-in transition MUST be 200ms ease per Constitution Principle III.
 - **FR-024**: The player panel MUST remain visible and functional while the user interacts with the main library view.
-- **FR-025**: The player panel MUST slide out when playback stops or the queue is empty.
-- **FR-026**: On narrow/compact window sizes, the player panel MUST support a back navigation to hide it and maximize content space.
+- **FR-025**: The player panel MUST slide out when playback stops or the queue is empty. The slide-out transition MUST be 200ms ease per Constitution Principle III.
+- **FR-026**: On narrow/compact window sizes, the player panel MUST provide a back button that hides the panel and maximizes content space.
 
 **Performance and Reliability**
 
 - **FR-027**: Library browsing operations (view switching, scrolling, detail page navigation) MUST remain responsive (UI response <100 ms per SC-005) regardless of library size.
 - **FR-028**: The system MUST persist library, playback queue, and settings data (including `window_width`, `window_height`, and `window_maximized` from `UserSettings`) across application restarts.
-- **FR-029**: The system MUST recover gracefully from audio device disconnection or configuration changes.
+- **FR-029**: The system MUST recover gracefully from audio device disconnection or configuration changes. On device disconnection during playback: detect the device loss, pause playback, log a structured tracing event, and attempt reconnection to the default audio device. If reconnection succeeds, resume playback from the paused position.
 - **FR-030**: The system MUST handle application startup even when no audio device is available, displaying appropriate messaging.
 
 **Observability**
