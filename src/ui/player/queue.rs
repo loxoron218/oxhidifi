@@ -153,7 +153,7 @@ fn build_row_factory(queue: &PlaybackQueue, store: &ListStore) -> SignalListItem
         remove.connect_clicked(move |_| {
             let pos = li_remove.position() as usize;
             let q = queue_remove.clone();
-            let _ = q.remove(pos);
+            let _entry = q.remove(pos);
             store_remove.remove(u32::try_from(pos).unwrap_or(0));
         });
 
