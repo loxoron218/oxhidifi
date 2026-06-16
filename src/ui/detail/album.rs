@@ -75,7 +75,7 @@ struct AlbumDetailWidgets<'a> {
 /// Decode cover art on a background thread and send through the channel.
 ///
 /// Runs inside a `spawn` closure so the decode does not block the main thread.
-fn decode_and_send_cover(tx: Sender<Option<MemoryTexture>>, path: &str) {
+fn decode_and_send_cover(tx: &Sender<Option<MemoryTexture>>, path: &str) {
     let texture = decode_cover_at_size(path, DETAIL_COVER_SIZE);
     if let Err(e) = tx.try_send(texture) {
         error!(error = %e, "Failed to send decoded cover art");
@@ -223,7 +223,7 @@ async fn populate_album_detail(
     if let Some(path) = &album.artwork_path {
         let path = path.clone();
         let (tx, rx) = bounded(1);
-        spawn(move || decode_and_send_cover(tx, &path));
+        spawn(move || decode_and_send_cover(&tx, &path));
         if let Ok(Some(texture)) = rx.recv().await {
             widgets.artwork.set_paintable(Some(&texture));
         }

@@ -196,18 +196,43 @@ pub fn build_track_row(
     row
 }
 
-/// Play a single track by setting up paths and queueing it.
+/// Play a track in its album context.
+///
+/// When the track belongs to an album, queues the entire album in
+/// track-number order with the clicked track first. Otherwise plays
+/// the track individually.
 async fn play_single_track(state: &Arc<AppState>, track_id: i64) {
     let Ok(Some(track)) = state.storage.get_track(track_id).await else {
         info!(track_id, "Track not found");
         return;
     };
 
-    let mut paths = HashMap::new();
-    paths.insert(track_id, PathBuf::from(&track.audio.file_path));
-    state.playback.set_track_paths(paths);
+    let album_id = track.audio.album_id;
+    let tracks = match album_id {
+        Some(aid) => match state.storage.get_tracks_by_album(aid).await {
+            Ok(t) => t,
+            Err(e) => {
+                info!(error = %e, album_id = aid, "Failed to fetch album tracks");
+                vec![track]
+            }
+        },
+        None => vec![track],
+    };
 
-    if let Err(e) = state.playback.play_queue(vec![track_id]) {
+    let clicked_idx = tracks.iter().position(|t| t.id == track_id).unwrap_or(0);
+    let ordered: Vec<i64> = tracks[clicked_idx..]
+        .iter()
+        .chain(tracks[..clicked_idx].iter())
+        .map(|t| t.id)
+        .collect();
+
+    let track_paths: HashMap<i64, PathBuf> = tracks
+        .iter()
+        .map(|t| (t.id, PathBuf::from(&t.audio.file_path)))
+        .collect();
+    state.playback.set_track_paths(track_paths);
+
+    if let Err(e) = state.playback.play_queue(ordered) {
         info!(error = %e, track_id, "Failed to play track");
     }
 }
