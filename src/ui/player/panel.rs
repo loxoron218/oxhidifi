@@ -11,8 +11,13 @@ use libadwaita::{
         idle_add_local, spawn_future_local, timeout_add_local,
     },
     gtk::{
-        Align::Start, Button, ContentFit::Cover, Label, Picture, ScrolledWindow,
-        accessible::Property::Label as PropertyLabel, pango::EllipsizeMode::End, prelude::RangeExt,
+        Align::{Center, Start},
+        Button,
+        ContentFit::Cover,
+        Label, Picture, ScrolledWindow,
+        accessible::Property::Label as PropertyLabel,
+        pango::EllipsizeMode::End,
+        prelude::RangeExt,
     },
     prelude::{AccessibleExtManual, BoxExt, ButtonExt},
 };
@@ -234,7 +239,7 @@ fn build_artwork_placeholder() -> Picture {
     Picture::builder()
         .content_fit(Cover)
         .can_shrink(true)
-        .hexpand(true)
+        .halign(Center)
         .width_request(280)
         .height_request(280)
         .css_classes(["album-cover"])

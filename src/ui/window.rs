@@ -237,6 +237,7 @@ fn build_content(
         .min_sidebar_width(320.0)
         .max_sidebar_width(400.0)
         .show_sidebar(false)
+        .pin_sidebar(true)
         .tooltip_text("Player panel — toggle with button in header")
         .build();
 
