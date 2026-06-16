@@ -11,8 +11,8 @@ use {
     libadwaita::{
         glib::{prelude::Cast, spawn_future_local},
         gtk::{
-            Box, GestureClick, Image, Label, Orientation::Vertical, ScrolledWindow, Widget,
-            pango::EllipsizeMode::End,
+            Align::Start, Box, GestureClick, Image, Label, Orientation::Vertical, Overlay,
+            ScrolledWindow, Widget, pango::EllipsizeMode::End,
         },
         prelude::{BoxExt, WidgetExt},
     },
@@ -31,7 +31,7 @@ use crate::{
 };
 
 /// Size of artist avatar icons in pixels.
-const AVATAR_SIZE: i32 = 120;
+const AVATAR_SIZE: i32 = 180;
 
 /// Build the artist grid view.
 ///
@@ -123,8 +123,9 @@ fn build_artist_avatar() -> Widget {
 
 /// Build a single artist card widget.
 ///
-/// Returns a `Button` containing a vertical layout with avatar and
-/// name/album count labels.
+/// Returns a `Box` containing a vertical layout with avatar,
+/// name, and album count labels. Matches the album card structural
+/// pattern (Overlay wrapper) for consistent card sizing.
 fn build_artist_card(state: &Arc<AppState>, artist: &Artist) -> Box {
     let card = Box::builder()
         .orientation(Vertical)
@@ -135,13 +136,19 @@ fn build_artist_card(state: &Arc<AppState>, artist: &Artist) -> Box {
         .build();
 
     let avatar = build_artist_avatar();
-    card.append(&avatar);
+
+    let overlay = Overlay::new();
+    overlay.set_child(Some(&avatar));
+    overlay.set_css_classes(&["cover-overlay"]);
+
+    card.append(&overlay.upcast::<Widget>());
 
     let name_label = Label::builder()
         .label(&artist.name)
         .ellipsize(End)
         .max_width_chars(20)
         .css_classes(["heading", "title"])
+        .halign(Start)
         .build();
 
     let album_count_label = Label::builder()
@@ -149,6 +156,7 @@ fn build_artist_card(state: &Arc<AppState>, artist: &Artist) -> Box {
         .ellipsize(End)
         .max_width_chars(20)
         .css_classes(["dim-label", "caption"])
+        .halign(Start)
         .build();
 
     card.append(&name_label);
