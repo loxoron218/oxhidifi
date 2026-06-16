@@ -228,7 +228,7 @@ fn build_stream<T: SizedSample + FromSample<f32>>(
 ) -> Result<Stream, OutputError> {
     let stream = device
         .build_output_stream(
-            config,
+            *config,
             move |data: &mut [T], _: &OutputCallbackInfo| {
                 for sample in data.iter_mut() {
                     let s: f32 = consumer.pop().unwrap_or(0.0);
