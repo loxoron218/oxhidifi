@@ -1,0 +1,247 @@
+//! Common UI widgets and helpers for detail pages.
+
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
+
+use {
+    async_channel::Sender,
+    libadwaita::{
+        gdk::Key,
+        glib::{
+            Propagation::{Proceed, Stop},
+            spawn_future_local,
+        },
+        gtk::{
+            Align::{End, Start},
+            Box, Button, EventControllerKey, GestureClick, Label, ListBoxRow,
+            Orientation::{Horizontal, Vertical},
+            ScrolledWindow,
+            pango::EllipsizeMode::End as EllipsizeEnd,
+            prelude::{BoxExt, GestureSingleExt, ListBoxRowExt, WidgetExt},
+        },
+        prelude::ButtonExt,
+    },
+    num_traits::NumCast,
+    tracing::{error, info},
+};
+
+use crate::{
+    app::{
+        AppState,
+        NavigationEvent::{self, Back},
+    },
+    playback::engine::PlaybackController,
+    storage::{Storage, Track},
+};
+
+/// Build the wrapper box with back navigation and header bar for a detail page.
+#[must_use]
+pub fn build_detail_wrapper(nav_tx: &Sender<NavigationEvent>, title: &str) -> Box {
+    let wrapper = Box::builder().orientation(Vertical).can_focus(true).build();
+    let back_button = setup_back_navigation(&wrapper, nav_tx.clone());
+    let header_bar = build_detail_header(&back_button, title);
+    wrapper.append(&header_bar);
+    wrapper
+}
+
+/// Try to send a Back navigation event, logging on failure.
+pub fn try_send_back(tx: &Sender<NavigationEvent>) {
+    if let Err(e) = tx.try_send(Back) {
+        error!(error = %e, "Failed to send Back navigation");
+    }
+}
+
+/// Set up back button and Escape key navigation.
+#[must_use]
+pub fn setup_back_navigation(widget: &impl WidgetExt, nav_tx: Sender<NavigationEvent>) -> Button {
+    let back_button = Button::builder()
+        .icon_name("go-previous-symbolic")
+        .tooltip_text("Back to library")
+        .css_classes(["flat"])
+        .build();
+
+    let ntx = nav_tx.clone();
+    back_button.connect_clicked(move |_| {
+        try_send_back(&ntx);
+    });
+
+    let nav_back = nav_tx;
+    let key_controller = EventControllerKey::new();
+    key_controller.connect_key_pressed(move |_, key, _, _| {
+        if key == Key::Escape {
+            try_send_back(&nav_back);
+            Stop
+        } else {
+            Proceed
+        }
+    });
+    widget.add_controller(key_controller);
+
+    back_button
+}
+
+/// Build a scrollable content area with standard margins and spacing.
+#[must_use]
+pub fn build_scroll_content() -> (ScrolledWindow, Box) {
+    let scroll = ScrolledWindow::builder()
+        .vexpand(true)
+        .hexpand(true)
+        .build();
+
+    let content = Box::builder()
+        .orientation(Vertical)
+        .spacing(12)
+        .margin_top(12)
+        .margin_bottom(12)
+        .margin_start(18)
+        .margin_end(18)
+        .build();
+
+    (scroll, content)
+}
+
+/// Build a header bar-like box with back button and title.
+#[must_use]
+pub fn build_detail_header(back_button: &Button, title: &str) -> Box {
+    let header = Box::builder()
+        .orientation(Horizontal)
+        .spacing(6)
+        .margin_top(6)
+        .margin_bottom(6)
+        .margin_start(6)
+        .margin_end(6)
+        .css_classes(["toolbar"])
+        .build();
+
+    header.append(back_button);
+
+    let title_label = Label::builder()
+        .label(title)
+        .css_classes(["title-4", "heading"])
+        .hexpand(true)
+        .halign(Start)
+        .build();
+    header.append(&title_label);
+
+    header
+}
+
+/// Build a single track row with number, title, duration, and play/queue actions.
+#[must_use]
+pub fn build_track_row(
+    state: &Arc<AppState>,
+    track: &Track,
+    display_number: usize,
+    _nav_tx: &Sender<NavigationEvent>,
+) -> ListBoxRow {
+    let row = ListBoxRow::builder()
+        .activatable(true)
+        .tooltip_text("Click to play, right-click to add to queue")
+        .build();
+
+    let hbox = Box::builder()
+        .orientation(Horizontal)
+        .spacing(12)
+        .margin_top(6)
+        .margin_bottom(6)
+        .margin_start(12)
+        .margin_end(12)
+        .build();
+
+    let number_label = Label::builder()
+        .label(display_number.to_string())
+        .width_request(30)
+        .css_classes(["dim-label", "caption"])
+        .halign(Start)
+        .build();
+    hbox.append(&number_label);
+
+    let title_lbl = Label::builder()
+        .label(&track.title)
+        .ellipsize(EllipsizeEnd)
+        .hexpand(true)
+        .halign(Start)
+        .build();
+    hbox.append(&title_lbl);
+
+    let duration_label = Label::builder()
+        .label(format_duration(track.duration))
+        .css_classes(["dim-label", "caption"])
+        .halign(End)
+        .build();
+    hbox.append(&duration_label);
+
+    row.set_child(Some(&hbox));
+
+    let sc = Arc::clone(state);
+    let tid = track.id;
+    let click = GestureClick::new();
+    click.connect_released(move |_, _, _, _| {
+        let state = Arc::clone(&sc);
+        let track_id = tid;
+        spawn_future_local(async move {
+            play_single_track(&state, track_id).await;
+        });
+    });
+    row.add_controller(click);
+
+    let sc2 = Arc::clone(state);
+    let tid2 = track.id;
+    let right_click = GestureClick::new();
+    right_click.set_button(3);
+    right_click.connect_released(move |_, _, _, _| {
+        sc2.playback.queue().append(tid2);
+    });
+    row.add_controller(right_click);
+
+    row
+}
+
+/// Play a single track by setting up paths and queueing it.
+async fn play_single_track(state: &Arc<AppState>, track_id: i64) {
+    let Ok(Some(track)) = state.storage.get_track(track_id).await else {
+        info!(track_id, "Track not found");
+        return;
+    };
+
+    let mut paths = HashMap::new();
+    paths.insert(track_id, PathBuf::from(&track.audio.file_path));
+    state.playback.set_track_paths(paths);
+
+    if let Err(e) = state.playback.play_queue(vec![track_id]) {
+        info!(error = %e, track_id, "Failed to play track");
+    }
+}
+
+/// Format seconds as `M:SS` or `MM:SS`.
+#[must_use]
+pub fn format_duration(seconds: f64) -> String {
+    let total: u64 = NumCast::from(seconds.max(0.0)).unwrap_or(0);
+    let mins = total / 60;
+    let secs = total % 60;
+    format!("{mins}:{secs:02}")
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::ui::detail::common::format_duration;
+
+    #[test]
+    fn format_duration_zero() {
+        assert_eq!(format_duration(0.0), "0:00");
+    }
+
+    #[test]
+    fn format_duration_minutes() {
+        assert_eq!(format_duration(65.0), "1:05");
+    }
+
+    #[test]
+    fn format_duration_hours() {
+        assert_eq!(format_duration(3661.0), "61:01");
+    }
+
+    #[test]
+    fn format_duration_negative_treated_as_zero() {
+        assert_eq!(format_duration(-5.0), "0:00");
+    }
+}

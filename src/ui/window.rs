@@ -5,26 +5,41 @@
 //! The sidebar pane has its own `AdwHeaderBar` with back button,
 //! mirroring the Nautilus sidebar pattern.
 
-use std::sync::Arc;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering::Relaxed},
+};
 
-use libadwaita::{
-    Application, ApplicationWindow, Breakpoint, BreakpointCondition,
-    BreakpointConditionLengthType::MaxWidth,
-    HeaderBar,
-    LengthUnit::Sp,
-    OverlaySplitView, Toast, ToastOverlay,
-    ToastPriority::Normal,
-    ToolbarView, ViewStack, ViewSwitcher, ViewSwitcherBar,
-    ViewSwitcherPolicy::Wide,
-    WindowTitle,
-    glib::{prelude::ToValue, spawn_future_local},
-    gtk::{ToggleButton, prelude::ToggleButtonExt},
-    prelude::{AdwApplicationWindowExt, WidgetExt},
+use {
+    async_channel::Sender,
+    libadwaita::{
+        Application, ApplicationWindow, Breakpoint, BreakpointCondition,
+        BreakpointConditionLengthType::MaxWidth,
+        HeaderBar,
+        LengthUnit::Sp,
+        OverlaySplitView, Toast, ToastOverlay,
+        ToastPriority::Normal,
+        ToolbarView, ViewStack, ViewSwitcher, ViewSwitcherBar,
+        ViewSwitcherPolicy::Wide,
+        WindowTitle,
+        glib::{
+            object::{Cast, ObjectExt},
+            prelude::ToValue,
+            spawn_future_local,
+        },
+        gtk::{Stack, ToggleButton, Widget, prelude::ToggleButtonExt},
+        prelude::{AdwApplicationWindowExt, WidgetExt},
+    },
+    tracing::error,
 };
 
 use crate::{
-    app::AppState,
+    app::{
+        AppState,
+        NavigationEvent::{self, AlbumDetail, ArtistDetail, Back},
+    },
     ui::{
+        detail::{album::build_album_detail, artist::build_artist_detail},
         header::build_header_controls,
         library::{albums::build_album_grid, artists::build_artist_grid},
         player::{panel::build_player_content, wire_panel_events},
@@ -90,40 +105,27 @@ fn add_responsive_breakpoint(window: &ApplicationWindow, split_view: &OverlaySpl
     window.add_breakpoint(breakpoint);
 }
 
-/// Build the split-view content with sidebar and content panes.
-///
-/// Each pane has its own `ToolbarView` and `HeaderBar`. The sidebar
-/// contains the player panel with a back button and "Now Playing"
-/// title. The content pane contains the library view switcher and
-/// stack. Bottom bars (view switcher and status) are attached to the
-/// content pane.
-///
-/// Returns the `(ToastOverlay, OverlaySplitView, toggle_button, back_button)` for
-/// event wiring in `build_window`.
-fn build_content(
-    state: &Arc<AppState>,
-) -> (ToastOverlay, OverlaySplitView, ToggleButton, ToggleButton) {
-    let toast_overlay = ToastOverlay::new();
-
+/// Build the sidebar panel with player content.
+fn build_sidebar(state: &Arc<AppState>, back_button: &ToggleButton) -> ToolbarView {
     let sidebar_toolbar = ToolbarView::new();
 
     let sidebar_header = HeaderBar::new();
     sidebar_header.set_title_widget(Some(&WindowTitle::new("Now Playing", "")));
-
-    let back_button = ToggleButton::builder()
-        .icon_name("view-dual-symbolic")
-        .css_classes(["flat"])
-        .tooltip_text("Hide player panel")
-        .active(true)
-        .build();
-    back_button.set_visible(false);
-    sidebar_header.pack_start(&back_button);
+    sidebar_header.pack_start(back_button);
 
     sidebar_toolbar.add_top_bar(&sidebar_header);
 
     let player_content = build_player_content(state);
     sidebar_toolbar.set_content(Some(&player_content));
 
+    sidebar_toolbar
+}
+
+/// Build the content pane with library views and controls.
+fn build_content_pane(
+    state: &Arc<AppState>,
+    toggle_button: &ToggleButton,
+) -> (ToolbarView, ViewStack, Stack, Widget) {
     let content_toolbar = ToolbarView::new();
 
     let content_header = HeaderBar::new();
@@ -155,40 +157,18 @@ fn build_content(
 
     let controls = build_header_controls(state);
     content_header.pack_end(&controls);
-
-    let toggle_button = ToggleButton::builder()
-        .icon_name("view-dual-symbolic")
-        .tooltip_text("Toggle player panel")
-        .active(false)
-        .css_classes(["flat"])
-        .build();
-    content_header.pack_start(&toggle_button);
+    content_header.pack_start(toggle_button);
 
     content_toolbar.add_top_bar(&content_header);
-    content_toolbar.set_content(Some(&stack));
 
-    let split_view = OverlaySplitView::builder()
-        .sidebar(&sidebar_toolbar)
-        .content(&content_toolbar)
-        .min_sidebar_width(320.0)
-        .max_sidebar_width(400.0)
-        .show_sidebar(false)
-        .tooltip_text("Player panel — toggle with button in header")
-        .build();
+    let content_area = Stack::new();
+    content_area.set_vexpand(true);
+    content_area.set_hexpand(true);
+    content_area.add_named(&stack, Some("library"));
+    content_area.set_visible_child(&stack);
+    content_toolbar.set_content(Some(&content_area));
 
-    let sv = split_view.clone();
-    toggle_button.connect_toggled(move |btn| {
-        if sv.shows_sidebar() != btn.is_active() {
-            sv.set_show_sidebar(btn.is_active());
-        }
-    });
-
-    let sv_back = split_view.clone();
-    back_button.connect_toggled(move |btn| {
-        if sv_back.shows_sidebar() != btn.is_active() {
-            sv_back.set_show_sidebar(btn.is_active());
-        }
-    });
+    let orig_stack = stack.clone().upcast::<Widget>();
 
     let switcher_bar = ViewSwitcherBar::builder()
         .stack(&stack)
@@ -200,9 +180,144 @@ fn build_content(
     let status_bar = StatusBar::new(state);
     content_toolbar.add_bottom_bar(status_bar.widget());
 
+    (content_toolbar, stack, content_area, orig_stack)
+}
+
+/// Build the split-view content with sidebar and content panes.
+///
+/// Each pane has its own `ToolbarView` and `HeaderBar`. The sidebar
+/// contains the player panel with a back button and "Now Playing"
+/// title. The content pane contains the library view switcher and
+/// stack. Bottom bars (view switcher and status) are attached to the
+/// content pane.
+///
+/// Returns the `(ToastOverlay, OverlaySplitView, toggle_button, back_button)` for
+/// event wiring in `build_window`.
+fn build_content(
+    state: &Arc<AppState>,
+) -> (ToastOverlay, OverlaySplitView, ToggleButton, ToggleButton) {
+    let toast_overlay = ToastOverlay::new();
+
+    let back_button = ToggleButton::builder()
+        .icon_name("view-dual-symbolic")
+        .css_classes(["flat"])
+        .tooltip_text("Hide player panel")
+        .active(true)
+        .build();
+    back_button.set_visible(false);
+
+    let sidebar_toolbar = build_sidebar(state, &back_button);
+
+    let toggle_button = ToggleButton::builder()
+        .icon_name("view-dual-symbolic")
+        .tooltip_text("Toggle player panel")
+        .active(false)
+        .css_classes(["flat"])
+        .build();
+
+    let (content_toolbar, stack, content_area, orig_stack) =
+        build_content_pane(state, &toggle_button);
+
+    let nav_tx = state.navigation_tx.clone();
+
+    let tab_nav_tx = nav_tx.clone();
+    let tab_content_area = content_area.clone();
+    let tab_orig = orig_stack.clone();
+    stack.connect_visible_child_notify(move |_| {
+        let visible = tab_content_area.visible_child();
+        let is_on_detail = visible.as_ref().is_none_or(|child| *child != tab_orig);
+        if is_on_detail && let Err(err) = tab_nav_tx.try_send(Back) {
+            error!(error = %err, "Failed to send Back navigation event");
+        }
+    });
+
+    let split_view = OverlaySplitView::builder()
+        .sidebar(&sidebar_toolbar)
+        .content(&content_toolbar)
+        .min_sidebar_width(320.0)
+        .max_sidebar_width(400.0)
+        .show_sidebar(false)
+        .tooltip_text("Player panel — toggle with button in header")
+        .build();
+
+    let user_wants_sidebar = Arc::new(AtomicBool::new(false));
+
+    let sv = split_view.clone();
+    let intended = Arc::clone(&user_wants_sidebar);
+    toggle_button.connect_toggled(move |btn| {
+        intended.store(btn.is_active(), Relaxed);
+        if sv.shows_sidebar() != btn.is_active() {
+            sv.set_show_sidebar(btn.is_active());
+        }
+    });
+
+    let sv_back = split_view.clone();
+    let intended_back = Arc::clone(&user_wants_sidebar);
+    back_button.connect_toggled(move |btn| {
+        intended_back.store(btn.is_active(), Relaxed);
+        if sv_back.shows_sidebar() != btn.is_active() {
+            sv_back.set_show_sidebar(btn.is_active());
+        }
+    });
+
+    let _sv_collapse = split_view.clone();
+    let intended_collapse = Arc::clone(&user_wants_sidebar);
+    split_view.connect_notify(Some("collapsed"), move |sv, _| {
+        if sv.is_collapsed() {
+            return;
+        }
+        let wants = intended_collapse.load(Relaxed);
+        if sv.shows_sidebar() != wants {
+            sv.set_show_sidebar(wants);
+        }
+    });
+
     toast_overlay.set_child(Some(&split_view));
 
+    let nav_state = Arc::clone(state);
+    let nav_content_area = content_area;
+    spawn_future_local(async move {
+        let rx = nav_state.navigation_rx.clone();
+        while let Ok(event) = rx.recv().await {
+            handle_navigation_event(&nav_state, &nav_content_area, &nav_tx, &orig_stack, event);
+        }
+    });
+
     (toast_overlay, split_view, toggle_button, back_button)
+}
+
+/// Handle navigation events (album/artist detail, back navigation).
+fn handle_navigation_event(
+    nav_state: &Arc<AppState>,
+    nav_content_area: &Stack,
+    nav_tx: &Sender<NavigationEvent>,
+    orig_stack: &Widget,
+    event: NavigationEvent,
+) {
+    match event {
+        AlbumDetail(album_id) => {
+            if let Some(prev_detail) = nav_content_area.child_by_name("detail") {
+                nav_content_area.remove(&prev_detail);
+            }
+            let detail = build_album_detail(nav_state, album_id, nav_tx.clone());
+            nav_content_area.add_named(&detail, Some("detail"));
+            nav_content_area.set_visible_child(&detail);
+        }
+        ArtistDetail(artist_id) => {
+            if let Some(prev_detail) = nav_content_area.child_by_name("detail") {
+                nav_content_area.remove(&prev_detail);
+            }
+            let detail = build_artist_detail(nav_state, artist_id, nav_tx.clone());
+            nav_content_area.add_named(&detail, Some("detail"));
+            nav_content_area.set_visible_child(&detail);
+        }
+        Back => {
+            nav_content_area.set_visible_child(orig_stack);
+            if let Some(prev_detail) = nav_content_area.child_by_name("detail") {
+                nav_content_area.remove(&prev_detail);
+            }
+        }
+    }
 }
 
 #[cfg(test)]

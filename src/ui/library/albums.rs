@@ -17,10 +17,7 @@ use std::{
 
 use {
     libadwaita::{
-        gdk::{
-            MemoryFormat::{R8g8b8, R8g8b8a8},
-            MemoryTexture,
-        },
+        gdk::MemoryTexture,
         gio::spawn_blocking,
         glib::{
             ControlFlow::{Break, Continue},
@@ -35,7 +32,6 @@ use {
             EventControllerMotion, GestureClick, Image, Label,
             Orientation::{Horizontal, Vertical},
             Overlay, Picture, ScrolledWindow, Widget,
-            gdk_pixbuf::Pixbuf,
             pango::EllipsizeMode::End as EllipsizeEnd,
         },
         prelude::{BoxExt, ButtonExt, WidgetExt},
@@ -44,7 +40,7 @@ use {
 };
 
 use crate::{
-    app::AppState,
+    app::{AppState, NavigationEvent::AlbumDetail},
     playback::{
         OutputError::{DeviceDisconnected, NoDeviceAvailable},
         PlaybackError::{
@@ -57,8 +53,11 @@ use crate::{
         Album, Storage,
         settings::ViewMode::{self, Column, Grid},
     },
-    ui::library::empty::{
-        EmptyStateParams, build_empty_state, build_library_grid, populate_grid, populate_list,
+    ui::{
+        decode_cover_at_size,
+        library::empty::{
+            EmptyStateParams, build_empty_state, build_library_grid, populate_grid, populate_list,
+        },
     },
 };
 
@@ -180,22 +179,7 @@ fn build_placeholder() -> Widget {
 /// Returns a `MemoryTexture` suitable for painting, or `None` if the
 /// file could not be loaded or decoded.
 fn decode_cover_art(path: &str) -> Option<MemoryTexture> {
-    let pixbuf = match Pixbuf::from_file_at_scale(path, THUMBNAIL_SIZE, THUMBNAIL_SIZE, true) {
-        Ok(p) => p,
-        Err(e) => {
-            error!(error = %e, "Failed to decode cover art at {path}");
-            return None;
-        }
-    };
-    let format = if pixbuf.has_alpha() { R8g8b8a8 } else { R8g8b8 };
-    let bytes = pixbuf.read_pixel_bytes();
-    Some(MemoryTexture::new(
-        pixbuf.width(),
-        pixbuf.height(),
-        format,
-        &bytes,
-        pixbuf.rowstride().cast_unsigned() as usize,
-    ))
+    decode_cover_at_size(path, THUMBNAIL_SIZE)
 }
 
 /// Decode a batch of cover art images and send results through a channel.
@@ -382,7 +366,7 @@ fn build_album_card(state: &Arc<AppState>, album: &Album, artist_name: &str) -> 
     gesture.connect_released(move |_, _, _, _| {
         let state = Arc::clone(&state_clone);
         spawn_future_local(async move {
-            toggle_or_play_album(&state, album_id).await;
+            state.send_navigation_event(AlbumDetail(album_id)).await;
         });
     });
     card.add_controller(gesture);

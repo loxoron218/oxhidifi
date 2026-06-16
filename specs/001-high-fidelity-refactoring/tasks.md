@@ -183,10 +183,10 @@ description: "Task list for high-fidelity music player refactoring"
 
 ### Implementation for User Story 5
 
-- [ ] T041 [P] [US5] Implement album detail page (artwork, title, artist, year, genre, format, sample rate, bit depth, track listing with numbers/durations) in src/ui/detail/album.rs
-- [ ] T042 [P] [US5] Implement artist detail page (artist name, all albums by artist grouped, album count) in src/ui/detail/artist.rs
-- [ ] T043 [US5] Implement detail page navigation from library views (click album → album detail, click artist → artist detail)
-- [ ] T044 [US5] Implement track listing play/queue actions in detail pages (click track → play, right-click → add to queue)
+- [X] T041 [P] [US5] Implement album detail page (artwork, title, artist, year, genre, format, sample rate, bit depth, track listing with numbers/durations) in src/ui/detail/album.rs
+- [X] T042 [P] [US5] Implement artist detail page (artist name, all albums by artist grouped, album count) in src/ui/detail/artist.rs
+- [X] T043 [US5] Implement detail page navigation from library views (click album → album detail, click artist → artist detail) in src/ui/window.rs, src/ui/library/albums.rs, src/ui/library/artists.rs
+- [X] T044 [US5] Implement track listing play/queue actions in detail pages (click track → play, right-click → add to queue) in src/ui/detail/album.rs and src/ui/detail/artist.rs
 
 **Checkpoint**: Album/artist detail pages show full metadata, tracks are playable from detail views
 

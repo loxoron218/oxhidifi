@@ -22,6 +22,15 @@ use crate::storage::{
     settings::{SettingsStore, ViewMode},
 };
 
+/// Subquery fragment for album count and duration columns.
+macro_rules! album_meta_cols {
+    () => {
+        "(SELECT COUNT(*) FROM tracks WHERE album_id = al.id) AS track_count, (SELECT \
+         COALESCE(SUM(duration), 0.0) FROM tracks WHERE album_id = al.id) AS total_duration, \
+         al.format_summary, al.lossless FROM albums al"
+    };
+}
+
 /// Apply a `FieldUpdate` to a column in the tracks table.
 macro_rules! apply_field {
     ($track:expr, $field:ident, $pool:expr, $id:expr) => {
@@ -240,26 +249,38 @@ impl Storage for SqliteStorage {
     }
 
     async fn get_album(&self, id: i64) -> StorageResult<Option<Album>> {
-        query_as::<_, Album>("SELECT * FROM albums WHERE id = ?")
-            .bind(id)
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(|e| Database(format!("Get album failed: {e}")))
+        query_as::<_, Album>(concat!(
+            "SELECT al.id, al.title, al.artist_id, al.year, al.genre, al.artwork_path, ",
+            album_meta_cols!(),
+            " WHERE al.id = ?",
+        ))
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| Database(format!("Get album failed: {e}")))
     }
 
     async fn get_all_albums(&self) -> StorageResult<Vec<Album>> {
-        query_as::<_, Album>("SELECT * FROM albums ORDER BY title")
-            .fetch_all(&self.pool)
-            .await
-            .map_err(|e| Database(format!("Get all albums failed: {e}")))
+        query_as::<_, Album>(concat!(
+            "SELECT al.id, al.title, al.artist_id, al.year, al.genre, al.artwork_path, ",
+            album_meta_cols!(),
+            " ORDER BY al.title",
+        ))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| Database(format!("Get all albums failed: {e}")))
     }
 
     async fn get_albums_by_artist(&self, artist_id: i64) -> StorageResult<Vec<Album>> {
-        query_as::<_, Album>("SELECT * FROM albums WHERE artist_id = ? ORDER BY year")
-            .bind(artist_id)
-            .fetch_all(&self.pool)
-            .await
-            .map_err(|e| Database(format!("Get albums by artist failed: {e}")))
+        query_as::<_, Album>(concat!(
+            "SELECT al.id, al.title, al.artist_id, al.year, al.genre, al.artwork_path, ",
+            album_meta_cols!(),
+            " WHERE al.artist_id = ? ORDER BY al.year",
+        ))
+        .bind(artist_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| Database(format!("Get albums by artist failed: {e}")))
     }
 
     async fn insert_artist(&self, artist: NewArtist) -> StorageResult<i64> {
@@ -273,18 +294,24 @@ impl Storage for SqliteStorage {
     }
 
     async fn get_artist(&self, id: i64) -> StorageResult<Option<Artist>> {
-        query_as::<_, Artist>("SELECT * FROM artists WHERE id = ?")
-            .bind(id)
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(|e| Database(format!("Get artist failed: {e}")))
+        query_as::<_, Artist>(
+            "SELECT ar.id, ar.name, (SELECT COUNT(*) FROM albums WHERE artist_id = ar.id) AS \
+             album_count FROM artists ar WHERE ar.id = ?",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| Database(format!("Get artist failed: {e}")))
     }
 
     async fn get_all_artists(&self) -> StorageResult<Vec<Artist>> {
-        query_as::<_, Artist>("SELECT * FROM artists ORDER BY name")
-            .fetch_all(&self.pool)
-            .await
-            .map_err(|e| Database(format!("Get all artists failed: {e}")))
+        query_as::<_, Artist>(
+            "SELECT ar.id, ar.name, (SELECT COUNT(*) FROM albums WHERE artist_id = ar.id) AS \
+             album_count FROM artists ar ORDER BY ar.name",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| Database(format!("Get all artists failed: {e}")))
     }
 
     async fn list_library_directories(&self) -> StorageResult<Vec<LibraryDirectory>> {

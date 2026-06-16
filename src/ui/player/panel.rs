@@ -11,9 +11,8 @@ use libadwaita::{
         idle_add_local, spawn_future_local, timeout_add_local,
     },
     gtk::{
-        Align::Start, Box, Button, ContentFit::Cover, Label, Orientation::Vertical, Picture,
-        ScrolledWindow, accessible::Property::Label as PropertyLabel, pango::EllipsizeMode::End,
-        prelude::RangeExt,
+        Align::Start, Button, ContentFit::Cover, Label, Picture, ScrolledWindow,
+        accessible::Property::Label as PropertyLabel, pango::EllipsizeMode::End, prelude::RangeExt,
     },
     prelude::{AccessibleExtManual, BoxExt, ButtonExt},
 };
@@ -29,8 +28,11 @@ use crate::{
         layout::{AudioLayout, format_channel_label},
     },
     storage::{Storage, database::SqliteStorage},
-    ui::player::controls::{
-        build_playback_controls, build_queue_section, build_seek_section, build_volume_control,
+    ui::{
+        detail::common::build_scroll_content,
+        player::controls::{
+            build_playback_controls, build_queue_section, build_seek_section, build_volume_control,
+        },
     },
 };
 
@@ -162,19 +164,7 @@ async fn handle_track_event(
 /// Subscribes to `PlaybackEvent` to update UI when tracks change.
 #[must_use]
 pub fn build_player_content(state: &Arc<AppState>) -> ScrolledWindow {
-    let scroll = ScrolledWindow::builder()
-        .vexpand(true)
-        .hexpand(true)
-        .build();
-
-    let content = Box::builder()
-        .orientation(Vertical)
-        .spacing(12)
-        .margin_top(12)
-        .margin_bottom(12)
-        .margin_start(18)
-        .margin_end(18)
-        .build();
+    let (scroll, content) = build_scroll_content();
 
     let artwork_image = build_artwork_placeholder();
     content.append(&artwork_image);

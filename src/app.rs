@@ -51,6 +51,30 @@ pub struct AppState {
     pub toast_rx: Receiver<String>,
     /// Currently playing album ID (`-1` means none). Used by album grid overlay buttons.
     pub current_album_id: AtomicI64,
+    /// Sender for navigation events (detail page navigation).
+    pub navigation_tx: Sender<NavigationEvent>,
+    /// Receiver for navigation events.
+    pub navigation_rx: Receiver<NavigationEvent>,
+}
+
+impl AppState {
+    /// Send a navigation event and log on failure.
+    pub async fn send_navigation_event(&self, event: NavigationEvent) {
+        if let Err(e) = self.navigation_tx.send(event).await {
+            info!(error = %e, "Failed to send navigation event");
+        }
+    }
+}
+
+/// Events for navigating between library views and detail pages.
+#[derive(Debug, Clone, Copy)]
+pub enum NavigationEvent {
+    /// Navigate to the album detail page.
+    AlbumDetail(i64),
+    /// Navigate to the artist detail page.
+    ArtistDetail(i64),
+    /// Go back to the library grid view.
+    Back,
 }
 
 /// Resolve an XDG directory from an environment variable with a fallback path.
@@ -143,6 +167,8 @@ pub async fn run_application() -> Result<()> {
 
     let initial_view_mode = storage.get_view_mode();
 
+    let (navigation_tx, navigation_rx) = unbounded();
+
     let state = Arc::new(AppState {
         playback,
         storage,
@@ -154,6 +180,8 @@ pub async fn run_application() -> Result<()> {
         toast_tx,
         toast_rx,
         current_album_id: AtomicI64::new(-1),
+        navigation_tx,
+        navigation_rx,
     });
 
     let app = Application::builder().application_id(APP_ID).build();
@@ -209,6 +237,8 @@ mod tests {
             let (scan_event_tx, scan_event_rx) = unbounded();
             let (toast_tx, toast_rx) = unbounded();
 
+            let (navigation_tx, navigation_rx) = unbounded();
+
             Ok(Self {
                 playback: Arc::new(PlaybackEngine::new()),
                 storage,
@@ -224,6 +254,8 @@ mod tests {
                 toast_tx,
                 toast_rx,
                 current_album_id: AtomicI64::new(-1),
+                navigation_tx,
+                navigation_rx,
             })
         }
     }

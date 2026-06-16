@@ -20,7 +20,7 @@ use {
 };
 
 use crate::{
-    app::AppState,
+    app::{AppState, NavigationEvent::ArtistDetail},
     storage::{
         Artist, Storage,
         settings::ViewMode::{self, Column, Grid},
@@ -152,10 +152,13 @@ fn build_artist_card(state: &Arc<AppState>, artist: &Artist) -> Box {
     card.append(&album_count_label);
 
     let gesture = GestureClick::new();
-    let _state = Arc::clone(state);
+    let state_clone = Arc::clone(state);
     let artist_id = artist.id;
     gesture.connect_released(move |_, _, _, _| {
-        info!(artist_id, "Artist card clicked");
+        let state = Arc::clone(&state_clone);
+        spawn_future_local(async move {
+            state.send_navigation_event(ArtistDetail(artist_id)).await;
+        });
     });
     card.add_controller(gesture);
 
