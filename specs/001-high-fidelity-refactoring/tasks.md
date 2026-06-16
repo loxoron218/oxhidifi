@@ -149,7 +149,7 @@ description: "Task list for high-fidelity music player refactoring"
 - [X] T036d [US3] Implement ABX validation harness for resampled output per SC-008: programmatic stimulus generation (sine sweeps, pink noise, silence, impulse) and randomized ABX presentation; the harness collects human listener responses and applies binomial statistical evaluation (p < 0.05 threshold, minimum 10 trials per test condition). The harness itself is automated; the p-value requires a human listener. A supplementary objective check (RMS SNR ≥ 120 dB per FR-015) is computed by the harness so objective and perceptual results can be cross-referenced. Manual QA procedure is documented separately as supplementary verification
 - [X] T036e [US3] Verify high-resolution audio support (sample rates up to 192 kHz, bit depth up to 24-bit) per FR-017; add test fixtures with 96 kHz and 192 kHz files
 - [X] T036f [US3] Implement bit-perfect output verification per SC-003: capture CPAL output buffer after playback, decode source file to PCM via symphonia, assert byte-identical match across all frames; add test fixture with known-reference FLAC file
-- [X] T036g [US3] Implement RMS SNR measurement for resampled output per FR-015: generate full-band pink noise reference signal (20 Hz–20 kHz), resample via rubato, compute RMS SNR against original, assert > 120 dB threshold
+- [X] T036g [US3] Implement RMS SNR measurement for resampled output per FR-015: generate test stimuli (full-band pink noise 20 Hz–20 kHz, silence, impulse, and 1 kHz sine), resample each via rubato, compute RMS SNR against original for each stimulus, assert > 120 dB threshold for all
 - [X] T036i [US3] Add incompatible sample rate transition test per spec.md edge case: play tracks from 44.1 kHz family (44.1 kHz, 88.2 kHz, 176.4 kHz) and 48 kHz family (48 kHz, 96 kHz, 192 kHz) consecutively with no common divisor rate; assert resampler reconfigures transparently, gapless transition maintained (inter-track silence < 5 ms), and no audible glitch in tests/sample_rate_transitions.rs
 
 **Checkpoint**: Gapless playback across tracks at same and different sample rates, resampling kicks in transparently when device doesn't support native rate
@@ -244,11 +244,11 @@ description: "Task list for high-fidelity music player refactoring"
 
 | Story | Priority | Depends On | Blocks |
 |-------|----------|------------|--------|
-| US1 — Browse & Play | P1 | Phases 1-2 | US2 (data needed), US3 (pipeline), US4 (playback), US5 (data) |
-| US2 — Empty State & Nav | P1 | Phases 1-2, US1 (data population)¹ | — |
-| US3 — Gapless Resampling | P2 | Phases 1-2, US1 (basic pipeline) | — |
-| US4 — Side Panel | P2 | Phases 1-2, US1 (playback engine) | — |
-| US5 — Detail Pages | P3 | Phases 1-2, US1 (library data), US1b (playback engine) | — |
+| US1 — Browse & Play | P1 | Phases 1-2 | US2 (US1a data needed), US3 (US1b pipeline), US4 (US1b playback), US5 (US1a+US1b data+engine) |
+| US2 — Empty State & Nav | P1 | Phases 1-2, US1a (data population)¹ | — |
+| US3 — Gapless Resampling | P2 | Phases 1-2, US1b (basic pipeline) | — |
+| US4 — Side Panel | P2 | Phases 1-2, US1b (playback engine) | — |
+| US5 — Detail Pages | P3 | Phases 1-2, US1a (library data), US1b (playback engine) | — |
 
 ### Within Each Phase
 
