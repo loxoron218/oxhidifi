@@ -62,7 +62,10 @@ async fn load_artists(
     mode: ViewMode,
 ) {
     let artists = match state.storage.get_all_artists().await {
-        Ok(a) => a,
+        Ok(a) => a
+            .into_iter()
+            .filter(|a| a.album_count > 0)
+            .collect::<Vec<_>>(),
         Err(e) => {
             info!(error = %e, "Failed to load artists");
             return;

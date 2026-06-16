@@ -493,13 +493,24 @@ impl<S: Storage> FsScanner<S> {
             return Err(SkipReason::DuplicateByFingerprint);
         }
 
-        let artist_name = metadata.artist.as_deref().unwrap_or("Unknown Artist");
-        let artist_id = self.resolve_artist(artist_name, artist_cache).await?;
+        let album_artist_name = metadata
+            .album_artist
+            .as_deref()
+            .or(metadata.artist.as_deref())
+            .unwrap_or("Unknown Artist");
+        let album_artist_id = self.resolve_artist(album_artist_name, artist_cache).await?;
 
         let album_title = metadata.album.as_deref().unwrap_or("Unknown Album");
         let album_id = self
-            .resolve_album(album_title, artist_id, path, &metadata, album_cache)
+            .resolve_album(album_title, album_artist_id, path, &metadata, album_cache)
             .await?;
+
+        let track_artist_name = metadata.artist.as_deref().unwrap_or("Unknown Artist");
+        let track_artist_id = if track_artist_name == album_artist_name {
+            album_artist_id
+        } else {
+            self.resolve_artist(track_artist_name, artist_cache).await?
+        };
 
         let track = NewTrack {
             title: metadata
@@ -509,7 +520,7 @@ impl<S: Storage> FsScanner<S> {
             track_number: metadata.track_number,
             disc_number: metadata.disc_number,
             duration: metadata.duration,
-            audio: Self::build_track_audio(path, &metadata, album_id, artist_id),
+            audio: Self::build_track_audio(path, &metadata, album_id, track_artist_id),
         };
 
         let track_id = self.storage.insert_track(track).await.map_err(|e| {
@@ -522,7 +533,7 @@ impl<S: Storage> FsScanner<S> {
             metadata,
             path: path.to_path_buf(),
             content_hash: None,
-            artist_id: Some(artist_id),
+            artist_id: Some(track_artist_id),
             album_id: Some(album_id),
         };
 

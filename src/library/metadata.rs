@@ -12,7 +12,7 @@ use {
         },
         prelude::Accessor,
         read_from_path,
-        tag::ItemKey::RecordingDate,
+        tag::ItemKey::{AlbumArtist, RecordingDate},
     },
     thiserror::Error,
 };
@@ -22,8 +22,10 @@ use {
 pub struct AudioMetadata {
     /// Track title.
     pub title: Option<String>,
-    /// Artist name.
+    /// Track artist name.
     pub artist: Option<String>,
+    /// Album artist name (may differ from track artist for compilations).
+    pub album_artist: Option<String>,
     /// Album title.
     pub album: Option<String>,
     /// Release year.
@@ -89,6 +91,7 @@ pub fn extract_metadata(path: &Path) -> Result<AudioMetadata, MetadataError> {
 
     let title = extract_title(&tagged_file, path);
     let artist = extract_artist(&tagged_file);
+    let album_artist = extract_album_artist(&tagged_file);
     let album = extract_album(&tagged_file);
     let year = extract_year(&tagged_file);
     let genre = extract_genre(&tagged_file);
@@ -117,6 +120,7 @@ pub fn extract_metadata(path: &Path) -> Result<AudioMetadata, MetadataError> {
     Ok(AudioMetadata {
         title,
         artist,
+        album_artist,
         album,
         year,
         genre,
@@ -151,6 +155,15 @@ fn extract_artist(tagged_file: &TaggedFile) -> Option<String> {
         .or_else(|| tagged_file.first_tag())?;
 
     tag.artist().map(String::from)
+}
+
+/// Extract the album artist from tags.
+fn extract_album_artist(tagged_file: &TaggedFile) -> Option<String> {
+    let tag = tagged_file
+        .primary_tag()
+        .or_else(|| tagged_file.first_tag())?;
+
+    tag.get_string(AlbumArtist).map(String::from)
 }
 
 /// Extract the album title from tags.
@@ -274,6 +287,7 @@ pub mod tests {
         AudioMetadata {
             title: Some("My Track".to_string()),
             artist: Some("Some Artist".to_string()),
+            album_artist: Some("Some Artist".to_string()),
             album: Some("Some Album".to_string()),
             year: Some(2024),
             genre: Some("Rock".to_string()),
@@ -295,6 +309,7 @@ pub mod tests {
         AudioMetadata {
             title: None,
             artist: None,
+            album_artist: None,
             album: None,
             year: None,
             genre: None,
