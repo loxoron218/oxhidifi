@@ -6,7 +6,6 @@ version = "0.1.0"
 [dependencies]
 anyhow = "1.0.102"
 async-channel = "2.5.0"
-audioadapter-buffers = "3.0.0"
 cpal = "0.18.1"
 #crossbeam = "0.8.4"
 #dynosaur = "0.3.0"

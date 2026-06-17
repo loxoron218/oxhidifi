@@ -3,7 +3,6 @@
 use std::f64::consts::PI;
 
 use {
-    audioadapter_buffers::direct::InterleavedSlice,
     num_traits,
     rubato::{
         Fft,
@@ -11,6 +10,7 @@ use {
         Indexing,
         ResampleError::{self, InsufficientInputBufferSize, InsufficientOutputBufferSize},
         Resampler, ResamplerConstructionError,
+        audioadapter_buffers::direct::InterleavedSlice,
     },
 };
 
