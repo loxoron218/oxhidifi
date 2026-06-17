@@ -192,36 +192,74 @@ description: "Task list for high-fidelity music player refactoring"
 
 ---
 
-## Phase 10: Polish & Cross-Cutting Concerns
+## Phase 10: Metrics & Instrumentation
 
-**Purpose**: Non-functional improvements across the entire application
+**Purpose**: Implement metrics collection and structured tracing across the application
 
-- [ ] T045 [P] Audit and complete keyboard navigation (Tab/arrows/Enter/Escape), accessible labels (AccessibleProperty::Label), and tooltips (set_tooltip_text) across Phase 6-9 UI widgets (artist view, status bar, detail pages, player panel, queue view) per FR-012b; core accessibility already established in T019c
 - [ ] T046a Implement playback-latency metrics collector in src/metrics/collector.rs — measure time from `play_track` invocation to first PCM sample reaching the CPAL callback; emit `tracing::info!(target: "metrics.playback_latency", latency_ms, track_id, "Playback latency")` and assert latency < 3,000 ms per SC-001
 - [ ] T046b Implement scan-throughput metrics collector in src/metrics/collector.rs — measure files/second during library scan; emit `tracing::info!(target: "metrics.scan_throughput", files_per_second, files_total, duration_seconds, "Scan throughput")` and assert ≥ 333 files/second for 10,000 tracks per SC-004
 - [ ] T046c Implement UI-response metrics collector in src/metrics/collector.rs — measure tab/view/detail navigation response time; emit `tracing::info!(target: "metrics.ui_response", response_ms, action, "UI response")` and assert < 100 ms per SC-005
 - [ ] T046d Implement player-panel-reveal metrics collector in src/metrics/collector.rs — measure time from `play_track` to panel fully visible; emit `tracing::info!(target: "metrics.panel_reveal", reveal_ms, "Panel reveal")` and assert < 500 ms per SC-007
 - [ ] T046e Implement steady-state memory metrics collector in src/metrics/collector.rs — sample RSS via `/proc/self/status` (or platform equivalent) every 30 s during steady-state playback; emit `tracing::info!(target: "metrics.memory", rss_mb, "Steady-state memory")` and assert < 200 MB engineering target (per plan.md constraint; not a SC)
 - [ ] T047 Add structured tracing instrumentation (error/warn/info levels) across library scanner (target: `library::scanner`), playback engine (target: `playback::engine`), and UI subsystems (target: `ui::*`) in src/library/scanner.rs, src/playback/engine.rs, and src/ui/window.rs with typed fields for all diagnostic events per constitution Principle V
+
+**Checkpoint**: Metrics collectors emit structured events to tracing; instrumentation covers all major subsystems
+
+---
+
+## Phase 11: Edge Case Handling
+
+**Purpose**: Graceful handling of device disconnection, missing devices, corrupted files, empty queue, and large libraries
+
 - [ ] T048a [P] Implement graceful handling for audio device disconnection during playback in src/playback/output.rs — detect device loss, pause playback, emit device-lost event, attempt reconnection to default device per FR-029
 - [ ] T048b [P] Implement graceful handling for no audio device at startup in src/playback/output.rs — application starts without error, display message about missing audio hardware per FR-030 and spec.md Edge Cases
 - [ ] T048f [P] Add no-device-at-startup acceptance test per FR-030: launch application with mocked absent audio device, assert application starts without panic, assert UI displays missing-hardware message, assert library scanning still functions in tests/no_device_startup.rs
 - [ ] T048c [P] Implement corrupted/unreadable file handling in src/library/scanner.rs — skip files during scanning, log warning with file path, exclude from playback per spec.md Edge Cases
 - [ ] T048d [P] Implement empty queue end-of-playback handling in src/playback/engine.rs — stop playback, show idle state, auto-hide player panel per FR-025 and spec.md Edge Cases
 - [ ] T048e [P] Implement large library browsing performance in src/ui/library/ — ensure smooth scrolling and view switching for 10k+ items without UI freezes per spec.md Edge Cases
-- [ ] T049 Run `cargo clippy --fix --allow-dirty --all-targets -- -W clippy::pedantic && cargo fmt` and fix all warnings; then run `find . -name "*.rs" -exec perl -i -0777 -pe 's/([;}])[ \t]*\r?\n([ \t]*\/\/(?!\/))/$1\n\n$2/g' {} +` to enforce blank lines before single-line comments after braces/semicolons per constitution
-- [ ] T050 Validate with quickstart.md — build (debug + release), run, verify all user stories functional
+
+**Checkpoint**: Application handles device disconnection, missing devices, corrupted files, empty queue, and large libraries gracefully
+
+---
+
+## Phase 12: UI Polish & Accessibility
+
+**Purpose**: Polish UI with full accessibility, adaptive layout verification, and HIG compliance
+
+- [ ] T045 [P] Audit and complete keyboard navigation (Tab/arrows/Enter/Escape), accessible labels (AccessibleProperty::Label), and tooltips (set_tooltip_text) across Phase 6-9 UI widgets (artist view, status bar, detail pages, player panel, queue view) per FR-012b; core accessibility already established in T019c
+- [ ] T053 Audit and polish adaptive/responsive main layout (initially built in T019b) — verify AdwBreakpoint thresholds, test narrow/wide transitions, ensure all pages handle both modes correctly per FR-012
+- [ ] T055 [P] Audit HIG compliance across all UI widgets: Toast for transient messages, 6px spacing scale, 200ms ease transitions, no hardcoded radii
+
+**Checkpoint**: Full keyboard navigation, adaptive layout tested on narrow/wide, HIG compliance verified
+
+---
+
+## Phase 13: Preferences & Configuration
+
+**Purpose**: User preferences dialog with library management, audio device selection, view preferences, and gapless toggle
+
 - [ ] T051 [P] Implement PreferencesDialog with library directory management (add/remove directories), audio device selection, and view preferences (default view mode: grid/column, default tab: Albums/Artists) per FR-033 and plan.md; wire audio device selection to playback engine output device enumeration; wire volume slider to PlaybackController (volume persistence to `UserSettings.volume` is handled by T017 — T051 only binds the UI slider to the engine and reads the initial value from settings)
 - [ ] T051b [P] Implement gapless playback toggle (SwitchRow) in PreferencesDialog Audio > Playback group per FR-033; wire toggle to playback engine to enable/disable gapless transition logic in src/playback/gapless.rs
+
+**Checkpoint**: PreferencesDialog functional with library directory management, audio device selection, view preferences, and gapless toggle
+
+---
+
+## Phase 14: Code Quality & Final Verification
+
+**Purpose**: Final code quality enforcement and comprehensive verification of all system requirements
+
+- [ ] T049 Run `cargo clippy --fix --allow-dirty --all-targets -- -W clippy::pedantic && cargo fmt` and fix all warnings; then run `find . -name "*.rs" -exec perl -i -0777 -pe 's/([;}])[ \t]*\r?\n([ \t]*\/\/(?!\/))/$1\n\n$2/g' {} +` to enforce blank lines before single-line comments after braces/semicolons per constitution
+- [ ] T050 Validate with quickstart.md — build (debug + release), run, verify all user stories functional
 - [ ] T052 Add library load verification: populate library with 10,000 synthetic tracks, measure scan throughput (<30s per SC-004) using metrics collector in src/metrics/collector.rs
 - [ ] T052c Add UI response verification: navigate between Albums/Artists views, toggle grid/column, access detail pages — measure response time (<100ms per SC-005) using metrics collector in src/metrics/collector.rs
 - [ ] T052b [P] Add queue persistence verification: populate queue, restart application, verify queue order, track IDs, and context are preserved per FR-028
-- [ ] T053 Audit and polish adaptive/responsive main layout (initially built in T019b) — verify AdwBreakpoint thresholds, test narrow/wide transitions, ensure all pages handle both modes correctly per FR-012
-- [ ] T055 [P] Audit HIG compliance across all UI widgets: Toast for transient messages, 6px spacing scale, 200ms ease transitions, no hardcoded radii
 - [ ] T056 [P] Add multi-format end-to-end verification test fixture covering FLAC, MP3, AAC, Ogg Vorbis, Opus, WAV, and AIFF per FR-016
 - [ ] T057 Add library persistence verification: populate library, restart application, verify all tracks/albums/artists are reloaded from SQLite without re-scanning per FR-028
 - [ ] T058 Add settings persistence verification: configure library directories, audio device, view preferences, volume level, window geometry (width/height/maximized); restart application; verify all settings restored from XDG config path per FR-028
 - [ ] T059 Add SC-006 verification: configure library directory with 3,000 synthetic audio files, start scan, assert library populates and becomes browsable within 9 seconds per SC-006; use metrics collector from T046b for throughput timing
+
+**Checkpoint**: All code quality checks pass, all verification tests pass, system meets all success criteria
 
 ---
 
@@ -238,7 +276,13 @@ description: "Task list for high-fidelity music player refactoring"
 - **US3 — Gapless Resampling (Phase 7)**: Depends on Phases 1-2, Phase 4 (basic pipeline)
 - **US4 — Side Panel (Phase 8)**: Depends on Phases 1-2, Phase 4 (playback engine)
 - **US5 — Detail Pages (Phase 9)**: Depends on Phases 1-2, Phase 3 (library data), Phase 4 (playback engine — required for T044 play/queue actions)
-- **Polish (Phase 10)**: Depends on all user stories being complete
+- **Metrics & Instrumentation (Phase 10)**: Depends on all user stories being complete
+- **Edge Case Handling (Phase 11)**: Depends on all user stories being complete (can start in parallel with Phase 10)
+- **UI Polish & Accessibility (Phase 12)**: Depends on all user stories being complete (can start in parallel with Phase 10)
+- **Preferences & Configuration (Phase 13)**: Depends on all user stories being complete (can start in parallel with Phase 10)
+- **Code Quality & Final Verification (Phase 14)**: Depends on Phases 10-13
+
+Phases 10–13 can run in parallel (different files, no cross-dependencies). Phase 14 must run after Phases 10–13.
 
 ### User Story Dependencies
 
@@ -270,7 +314,11 @@ description: "Task list for high-fidelity music player refactoring"
 | Phase 7: US3 | T032, T032b, T036b, T036c, T036e, T036f, T036g, T036i |
 | Phase 8: US4 | T040b, T040c (queue view UI and seek tests; remaining tasks sequential) |
 | Phase 9: US5 | T041, T042 |
-| Phase 10: Polish | T045, T046a, T046b, T046c, T046d, T046e, T047, T048a, T048b, T048c, T048d, T048e, T048f, T051, T051b, T055, T056 |
+| Phase 10: Metrics & Instrumentation | T046a, T046b, T046c, T046d, T046e, T047 |
+| Phase 11: Edge Case Handling | T048a, T048b, T048c, T048d, T048e, T048f |
+| Phase 12: UI Polish & Accessibility | T045, T055 |
+| Phase 13: Preferences & Configuration | T051, T051b |
+| Phase 14: Code Quality & Final Verification | T049, T050, T052, T052b, T052c, T056, T057, T058, T059 |
 
 ---
 
@@ -309,7 +357,11 @@ Task: "Apply initial accessibility to Phase 5 widgets"                 # Phase 5
 6. Add US3 (Gapless Resampling) → Test independently → Deploy
 7. Add US4 (Side Panel) → Test independently → Deploy
 8. Add US5 (Detail Pages) → Test independently → Deploy
-9. Phase 10 (Polish) → Finalize
+9. Phase 10 (Metrics & Instrumentation) → Polish
+10. Phase 11 (Edge Case Handling) → Polish
+11. Phase 12 (UI Polish & Accessibility) → Polish
+12. Phase 13 (Preferences & Configuration) → Polish
+13. Phase 14 (Code Quality & Final Verification) → Finalize
 
 ### Parallel Team Strategy
 
@@ -326,7 +378,13 @@ With multiple developers:
    - Developer C: Phase 8 (US4 — Side Panel)
 4. After Phase 5 done:
    - Developers A+B: Phase 9 (US5 — Detail Pages)
-   - Developer C: Phase 10 (Polish)
+   - Developer C: Phase 10 (Metrics & Instrumentation)
+5. After Phase 9 done:
+   - Developer A: Phase 11 (Edge Case Handling)
+   - Developer B: Phase 12 (UI Polish & Accessibility)
+   - Developer C: Phase 13 (Preferences & Configuration)
+6. After Phases 10-13 done:
+   - All developers: Phase 14 (Code Quality & Final Verification)
 
 ---
 
