@@ -82,7 +82,7 @@ description: "Task list for high-fidelity music player refactoring"
 - [X] T016b [US1] Implement browsing-context auto-queue logic in src/playback/queue.rs per FR-022: when playback is initiated from an album context, queue all album tracks in track-number order; when initiated from an artist context, queue all artist albums' tracks in (album title, track number) order; manual additions and reorders MUST be preserved until the browsing context changes (explicit reset via UI action or context-switch)
 - [X] T016c [P] [US1] Add unit tests for the 100,000-entry queue cap in src/playback/queue.rs per FR-021: assert appends below the cap succeed, the 100,001st append returns `StorageError::QueueFull { max: 100_000 }`, the UI surfaces a `Toast` warning, and the cap is enforced per-queue-instance (not globally)
 - [X] T016d [US1] Implement queue persistence in SqliteStorage: CRUD methods for PlaybackQueue entries (insert, remove, reorder, get_all_ordered) in src/storage/database.rs per data-model.md PlaybackQueue schema; queue state saved on every mutation and restored on application start per FR-028
-- [X] T017 [US1] Implement PlaybackController trait and playback engine orchestrator in src/playback/engine.rs (wire decoder → rtrb → output, handle play/pause/stop/seek/volume commands); volume range 0.0–1.0 mapped to dB attenuation per FR-020, volume level persisted via `UserSettings.volume`
+- [X] T017 [US1] Implement PlaybackController trait and playback engine orchestrator in src/playback/engine.rs (wire decoder → rtrb → output, handle play/pause/stop/seek/volume/mute commands); volume range 0.0–1.0 mapped to dB attenuation per FR-020, volume level persisted via `UserSettings.volume`; mute/unmute toggle toggles between current volume and zero attenuation
 
 **Checkpoint**: Playback engine plays audio from a file path; queue navigation works; output device renders PCM correctly
 
@@ -164,7 +164,7 @@ description: "Task list for high-fidelity music player refactoring"
 
 ### Implementation for User Story 4
 
-- [X] T037 [US4] Implement slide-in player panel UI (artwork, track title, artist, play/pause/next/prev/seek/volume/mute controls) in src/ui/player/panel.rs
+- [X] T037 [US4] Implement slide-in player panel UI (artwork, track title, artist, play/pause/stop/next/prev/seek/volume/mute controls) in src/ui/player/panel.rs
 - [X] T038 [US4] Wire panel to PlaybackState and PlaybackEvent stream in src/ui/player/mod.rs (update UI on TrackStarted, TrackProgress, Paused, Resumed, Stopped events)
 - [X] T039 [US4] Implement responsive AdwOverlaySplitView/AdwBreakpoint behavior for narrow windows (panel back button to hide, maximize content) in src/ui/player/panel.rs
 - [X] T040 [US4] Implement panel auto-show on playback start and auto-hide on queue empty/stop

@@ -30,7 +30,7 @@ Refactor oxhidifi into a high-fidelity GTK4/Libadwaita desktop music player with
 
 ## Constitution Check
 
-*GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
+*GATE: Must pass before research phase (research.md created as Phase 0 output). Re-check after Phase 1 design.*
 
 | Gate | Check | Verifier | Status |
 |------|-------|----------|--------|
@@ -55,7 +55,7 @@ Refactor oxhidifi into a high-fidelity GTK4/Libadwaita desktop music player with
 
 ## Phases
 
-The plan is decomposed into 10 phases, each producing a checkpoint. Phase dependencies are listed in `tasks.md` § "Phase Dependencies".
+The plan is decomposed into 14 phases, each producing a checkpoint. Phase dependencies are listed in `tasks.md` § "Phase Dependencies".
 
 | # | Phase | Priority | Output | Tasks |
 |---|-------|----------|--------|-------|
@@ -68,7 +68,11 @@ The plan is decomposed into 10 phases, each producing a checkpoint. Phase depend
 | 7 | US3 Gapless Resampling | P2 | Resampler (with criterion baseline), gapless, pre-buffer, sample-rate reconfig, bit-perfect path, ABX harness, hi-res, SNR, bit-perfect verify, SC-002 verification, incompatible SR transitions | T032–T036, T032b, T036b–T036i |
 | 8 | US4 Side Panel | P2 | Slide-in panel, state wiring, narrow-mode back nav, auto show/hide, queue view UI | T037–T040, T040b |
 | 9 | US5 Detail Pages | P3 | Album detail, artist detail, navigation, play/queue actions | T041–T044 |
-| 10 | Polish | — | A11y audit, metrics (T046a–T046e), tracing instrumentation, edge-case handlers, lint/fmt, validation, preferences dialog, gapless toggle, persistence verification, SC-006 verification | T045, T046a–T046e, T047, T048a–T048f, T049–T059 |
+| 10 | Metrics & Instrumentation | — | Playback-latency, scan-throughput, UI-response, panel-reveal, memory metrics collectors; structured tracing instrumentation | T046a–T046e, T047 |
+| 11 | Edge Case Handling | — | Device disconnection, no-device startup, corrupted files, empty queue, large library handling | T048a–T048f |
+| 12 | UI Polish & Accessibility | — | Full a11y audit, adaptive layout polish, HIG compliance audit | T045, T053, T055 |
+| 13 | Preferences & Configuration | — | PreferencesDialog, gapless playback toggle | T051, T051b |
+| 14 | Code Quality & Final Verification | — | Clippy/fmt, quickstart validate, 10k library load verification, UI response verification, queue persistence, multi-format e2e test, library persistence, settings persistence, SC-006 verification | T049, T050, T052–T052c, T056–T059 |
 
 **Sub-task suffix convention**: tasks suffixed with a letter (`T004b`, `T019b`, `T032b`, `T036b`, `T040b`, `T046a`, `T048a`, `T052b`) are sub-tasks of the parent task. The parent's ID is implied by stripping the letter suffix (e.g., `T046a`–`T046e` are sub-tasks of `T046`). When a parent task is renamed, its sub-tasks are renamed in lockstep (e.g., the original T024 was renamed to T018b and its sub-task T024b became T018c; the Phase 5 tasks originally labelled T024c/T024d became T019b/T019c; T024 no longer exists in the current task list).
 
