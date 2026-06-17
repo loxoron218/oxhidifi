@@ -91,6 +91,7 @@ fn build_album_content() -> AlbumDetailContent {
         .can_shrink(true)
         .css_classes(["album-cover"])
         .build();
+    artwork.update_property(&[PropertyLabel("Album artwork")]);
 
     let artwork_wrapper = Box::builder()
         .orientation(Horizontal)
@@ -127,18 +128,21 @@ fn build_album_content() -> AlbumDetailContent {
         .css_classes(["dim-label", "caption"])
         .halign(Start)
         .build();
+    year_label.update_property(&[PropertyLabel("Release year")]);
     meta_box.append(&year_label);
 
     let genre_label = Label::builder()
         .css_classes(["dim-label", "caption"])
         .halign(Start)
         .build();
+    genre_label.update_property(&[PropertyLabel("Genre")]);
     meta_box.append(&genre_label);
 
     let format_label = Label::builder()
         .css_classes(["dim-label", "caption"])
         .halign(Start)
         .build();
+    format_label.update_property(&[PropertyLabel("Audio format")]);
     meta_box.append(&format_label);
 
     content.append(&meta_box);
@@ -148,6 +152,7 @@ fn build_album_content() -> AlbumDetailContent {
         .css_classes(["title-4", "heading"])
         .halign(Start)
         .build();
+    tracks_header.update_property(&[PropertyLabel("Track list")]);
     content.append(&tracks_header);
 
     let track_list = ListBox::builder().css_classes(["boxed-list"]).build();

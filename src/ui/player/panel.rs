@@ -236,14 +236,16 @@ pub fn build_player_content(state: &Arc<AppState>) -> ScrolledWindow {
 
 /// Build the album artwork placeholder.
 fn build_artwork_placeholder() -> Picture {
-    Picture::builder()
+    let artwork = Picture::builder()
         .content_fit(Cover)
         .can_shrink(true)
         .halign(Center)
         .width_request(280)
         .height_request(280)
         .css_classes(["album-cover"])
-        .build()
+        .build();
+    artwork.update_property(&[PropertyLabel("Album artwork")]);
+    artwork
 }
 
 /// Build the track info section (title, artist, album, and format labels).

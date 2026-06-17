@@ -15,8 +15,9 @@ use {
             Box, Button, EventControllerKey, GestureClick, Label, ListBoxRow,
             Orientation::{Horizontal, Vertical},
             ScrolledWindow,
+            accessible::Property::Label as PropertyLabel,
             pango::EllipsizeMode::End as EllipsizeEnd,
-            prelude::{BoxExt, GestureSingleExt, ListBoxRowExt, WidgetExt},
+            prelude::{AccessibleExtManual, BoxExt, GestureSingleExt, ListBoxRowExt, WidgetExt},
         },
         prelude::ButtonExt,
     },
@@ -58,6 +59,7 @@ pub fn setup_back_navigation(widget: &impl WidgetExt, nav_tx: Sender<NavigationE
         .tooltip_text("Back to library")
         .css_classes(["flat"])
         .build();
+    back_button.update_property(&[PropertyLabel("Back to library")]);
 
     let ntx = nav_tx.clone();
     back_button.connect_clicked(move |_| {
@@ -120,6 +122,7 @@ pub fn build_detail_header(back_button: &Button, title: &str) -> Box {
         .hexpand(true)
         .halign(Start)
         .build();
+    title_label.update_property(&[PropertyLabel(&format!("{title} detail page"))]);
     header.append(&title_label);
 
     header
@@ -153,6 +156,7 @@ pub fn build_track_row(
         .css_classes(["dim-label", "caption"])
         .halign(Start)
         .build();
+    number_label.update_property(&[PropertyLabel(&format!("Track {display_number}"))]);
     hbox.append(&number_label);
 
     let title_lbl = Label::builder()
@@ -161,6 +165,7 @@ pub fn build_track_row(
         .hexpand(true)
         .halign(Start)
         .build();
+    title_lbl.update_property(&[PropertyLabel(&format!("Track: {}", track.title))]);
     hbox.append(&title_lbl);
 
     let duration_label = Label::builder()
@@ -176,13 +181,22 @@ pub fn build_track_row(
     let tid = track.id;
     let click = GestureClick::new();
     click.connect_released(move |_, _, _, _| {
-        let state = Arc::clone(&sc);
-        let track_id = tid;
-        spawn_future_local(async move {
-            play_single_track(&state, track_id).await;
-        });
+        spawn_playback(&sc, tid);
     });
     row.add_controller(click);
+
+    let sc_kb = Arc::clone(state);
+    let tid_kb = track.id;
+    let key_controller = EventControllerKey::new();
+    key_controller.connect_key_pressed(move |_, key, _, _| {
+        if key == Key::Return || key == Key::KP_Enter {
+            spawn_playback(&sc_kb, tid_kb);
+            Stop
+        } else {
+            Proceed
+        }
+    });
+    row.add_controller(key_controller);
 
     let sc2 = Arc::clone(state);
     let tid2 = track.id;
@@ -194,6 +208,14 @@ pub fn build_track_row(
     row.add_controller(right_click);
 
     row
+}
+
+/// Spawns playback of the track with the given ID.
+fn spawn_playback(state: &Arc<AppState>, track_id: i64) {
+    let state = Arc::clone(state);
+    spawn_future_local(async move {
+        play_single_track(&state, track_id).await;
+    });
 }
 
 /// Play a track in its album context.

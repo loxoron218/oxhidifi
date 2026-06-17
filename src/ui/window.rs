@@ -22,12 +22,16 @@ use {
         ToolbarView, ViewStack, ViewSwitcher, ViewSwitcherBar,
         ViewSwitcherPolicy::Wide,
         WindowTitle,
+        gdk::Display,
         glib::{
             object::{Cast, ObjectExt},
             prelude::ToValue,
             spawn_future_local,
         },
-        gtk::{Stack, ToggleButton, Widget, prelude::ToggleButtonExt},
+        gtk::{
+            self, CssProvider, Stack, ToggleButton, Widget, prelude::ToggleButtonExt,
+            style_context_add_provider_for_display,
+        },
         prelude::{AdwApplicationWindowExt, WidgetExt},
     },
     tracing::{error, info},
@@ -67,6 +71,8 @@ pub fn build_window(app: &Application, state: &Arc<AppState>) -> ApplicationWind
         .default_height(800)
         .build();
 
+    load_hig_css();
+
     let (toast_overlay, split_view, toggle_button, back_button) = build_content(state);
     window.set_content(Some(&toast_overlay));
 
@@ -90,6 +96,29 @@ pub fn build_window(app: &Application, state: &Arc<AppState>) -> ApplicationWind
     });
 
     window
+}
+
+/// Load HIG-compliant CSS transitions (200 ms ease) and style rules.
+fn load_hig_css() {
+    let Some(display) = Display::default() else {
+        return;
+    };
+    let provider = CssProvider::new();
+    provider.load_from_string(
+        "
+        .overlay-split-view {
+            transition: all 200ms ease;
+        }
+        headerbar {
+            transition: background 200ms ease;
+        }
+        ",
+    );
+    style_context_add_provider_for_display(
+        &display,
+        &provider,
+        gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
+    );
 }
 
 /// Spawn a future to listen for toast messages and display them.

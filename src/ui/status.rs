@@ -13,8 +13,9 @@ use {
             Box, Label,
             Orientation::Horizontal,
             ProgressBar,
+            accessible::Property::Label as PropertyLabel,
         },
-        prelude::{BoxExt, WidgetExt},
+        prelude::{AccessibleExtManual, BoxExt, WidgetExt},
     },
 };
 
@@ -61,12 +62,14 @@ impl StatusBar {
             .can_focus(true)
             .tooltip_text("Current application status")
             .build();
+        status_label.update_property(&[PropertyLabel("Status: Ready")]);
 
         let progress_bar = ProgressBar::builder()
             .hexpand(false)
             .halign(End)
             .show_text(false)
             .build();
+        progress_bar.update_property(&[PropertyLabel("Scanning progress")]);
 
         root.append(&status_label);
         root.append(&progress_bar);

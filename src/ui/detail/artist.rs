@@ -129,6 +129,7 @@ async fn build_album_section(
             .css_classes(["album-cover"])
             .build();
         thumb.set_from_file(Some(art_path));
+        thumb.update_property(&[PropertyLabel(&format!("Artwork for {}", album.title))]);
         album_header.append(&thumb);
     }
 
@@ -144,6 +145,7 @@ async fn build_album_section(
         .ellipsize(EllipsizeEnd)
         .halign(Start)
         .build();
+    album_title.update_property(&[PropertyLabel(&format!("Album: {}", album.title))]);
     info_box.append(&album_title);
 
     let album_meta = Label::builder()
@@ -154,6 +156,10 @@ async fn build_album_section(
         .css_classes(["dim-label", "caption"])
         .halign(Start)
         .build();
+    album_meta.update_property(&[PropertyLabel(&format!(
+        "{} tracks in {}",
+        album.track_count, album.title
+    ))]);
     info_box.append(&album_meta);
 
     album_header.append(&info_box);

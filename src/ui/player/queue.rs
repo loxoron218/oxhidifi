@@ -139,6 +139,7 @@ fn build_row_factory(queue: &PlaybackQueue, store: &ListStore) -> SignalListItem
             .halign(Start)
             .hexpand(true)
             .build();
+        label.update_property(&[PropertyLabel("Track name in queue")]);
 
         let remove = Button::builder()
             .icon_name("window-close-symbolic")

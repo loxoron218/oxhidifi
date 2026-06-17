@@ -226,9 +226,9 @@ description: "Task list for high-fidelity music player refactoring"
 
 **Purpose**: Polish UI with full accessibility, adaptive layout verification, and HIG compliance
 
-- [ ] T045 [P] Audit and complete keyboard navigation (Tab/arrows/Enter/Escape), accessible labels (AccessibleProperty::Label), and tooltips (set_tooltip_text) across Phase 6-9 UI widgets (artist view, status bar, detail pages, player panel, queue view) per FR-012b; core accessibility already established in T019c
-- [ ] T053 Audit and polish adaptive/responsive main layout (initially built in T019b) — verify AdwBreakpoint thresholds, test narrow/wide transitions, ensure all pages handle both modes correctly per FR-012
-- [ ] T055 [P] Audit HIG compliance across all UI widgets: Toast for transient messages, 6px spacing scale, 200ms ease transitions, no hardcoded radii
+- [X] T045 [P] Audit and complete keyboard navigation (Tab/arrows/Enter/Escape), accessible labels (AccessibleProperty::Label), and tooltips (set_tooltip_text) across Phase 6-9 UI widgets (artist view, status bar, detail pages, player panel, queue view) per FR-012b; core accessibility already established in T019c
+- [X] T053 Audit and polish adaptive/responsive main layout (initially built in T019b) — verify AdwBreakpoint thresholds, test narrow/wide transitions, ensure all pages handle both modes correctly per FR-012
+- [X] T055 [P] Audit HIG compliance across all UI widgets: Toast for transient messages, 6px spacing scale, 200ms ease transitions, no hardcoded radii
 
 **Checkpoint**: Full keyboard navigation, adaptive layout tested on narrow/wide, HIG compliance verified
 

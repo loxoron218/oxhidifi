@@ -12,9 +12,10 @@ use {
         glib::{prelude::Cast, spawn_future_local},
         gtk::{
             Align::Start, Box, GestureClick, Image, Label, Orientation::Vertical, Overlay,
-            ScrolledWindow, Widget, pango::EllipsizeMode::End,
+            ScrolledWindow, Widget, accessible::Property::Label as PropertyLabel,
+            pango::EllipsizeMode::End,
         },
-        prelude::{BoxExt, WidgetExt},
+        prelude::{AccessibleExtManual, BoxExt, WidgetExt},
     },
     tracing::info,
 };
@@ -123,6 +124,7 @@ fn build_artist_avatar() -> Widget {
         .height_request(AVATAR_SIZE)
         .css_classes(["artist-avatar", "dim-label"])
         .build();
+    avatar.update_property(&[PropertyLabel("Artist icon")]);
     avatar.upcast()
 }
 
@@ -155,6 +157,7 @@ fn build_artist_card(state: &Arc<AppState>, artist: &Artist) -> Box {
         .css_classes(["heading", "title"])
         .halign(Start)
         .build();
+    name_label.update_property(&[PropertyLabel(&format!("Artist: {}", artist.name))]);
 
     let album_count_label = Label::builder()
         .label(format!("{} albums", artist.album_count))
@@ -163,6 +166,10 @@ fn build_artist_card(state: &Arc<AppState>, artist: &Artist) -> Box {
         .css_classes(["dim-label", "caption"])
         .halign(Start)
         .build();
+    album_count_label.update_property(&[PropertyLabel(&format!(
+        "{} albums by {}",
+        artist.album_count, artist.name
+    ))]);
 
     card.append(&name_label);
     card.append(&album_count_label);
