@@ -61,7 +61,7 @@ The plan is decomposed into 14 phases, each producing a checkpoint. Phase depend
 |---|-------|----------|--------|-------|
 | 1 | Setup | — | Cargo scaffold, lint config, test infra, criterion harness | T001–T004d |
 | 2 | Foundational | — | Storage trait, SQLite impl, settings, error types, XDG | T005–T010b |
-| 3 | US1a Library Ingestion | P1 (MVP) | Scanner, metadata, dedup, events | T011–T013, T018–T018c |
+| 3 | US1a Library Ingestion | P1 (MVP) | Scanner, metadata, dedup, events | T011–T013, T018, T018b–T018c |
 | 4 | US1b Playback Pipeline | P1 (MVP) | Decoder, output, queue, engine | T014–T017, T016b, T016c, T016d |
 | 5 | US1c UI Shell & Browsing | P1 (MVP) | App, window, header, album grid, artwork cache, play wiring, adaptive layout, a11y, window-geometry restore | T019–T023, T054, T019b–T019d |
 | 6 | US2 Empty State & Nav | P1 | Empty state, artist view, grid/column toggle, watcher, status bar, tab switching, scan+status integration test | T025–T031, T031b |
@@ -72,7 +72,7 @@ The plan is decomposed into 14 phases, each producing a checkpoint. Phase depend
 | 11 | Edge Case Handling | — | Device disconnection, no-device startup, corrupted files, empty queue, large library handling | T048a–T048f |
 | 12 | UI Polish & Accessibility | — | Full a11y audit, adaptive layout polish, HIG compliance audit | T045, T053, T055 |
 | 13 | Preferences & Configuration | — | PreferencesDialog, gapless playback toggle | T051, T051b |
-| 14 | Code Quality & Final Verification | — | Clippy/fmt, quickstart validate, 10k library load verification, UI response verification, queue persistence, multi-format e2e test, library persistence, settings persistence, SC-006 verification | T049, T050, T052–T052c, T056–T059 |
+| 14 | Code Quality & Final Verification | — | Clippy/fmt, quickstart validate, 10k library load verification, UI response verification, queue persistence, multi-format e2e test, library persistence, settings persistence, SC-006 verification, zero-alloc hot path verification | T049, T050, T052–T052c, T056–T060 |
 
 **Sub-task suffix convention**: tasks suffixed with a letter (`T004b`, `T019b`, `T032b`, `T036b`, `T040b`, `T046a`, `T048a`, `T052b`) are sub-tasks of the parent task. The parent's ID is implied by stripping the letter suffix (e.g., `T046a`–`T046e` are sub-tasks of `T046`). When a parent task is renamed, its sub-tasks are renamed in lockstep (e.g., the original T024 was renamed to T018b and its sub-task T024b became T018c; the Phase 5 tasks originally labelled T024c/T024d became T019b/T019c; T024 no longer exists in the current task list).
 

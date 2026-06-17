@@ -7,7 +7,7 @@
 | `id` | `i64` (SQLite AUTOINCREMENT) | PRIMARY KEY | Unique track identifier |
 | `title` | `TEXT` | NOT NULL | Track title (filename stem as fallback) |
 | `track_number` | `INTEGER` | NULLABLE | Disc/track number from metadata |
-| `disc_number` | `INTEGER` | NULLABLE, DEFAULT 1 | Disc number |
+| `disc_number` | `INTEGER` | NULLABLE | Disc number |
 | `duration` | `REAL` | NOT NULL, >= 0 | Duration in seconds (floating-point) |
 | `file_path` | `TEXT` | NOT NULL, UNIQUE | Absolute path to audio file |
 | `content_hash` | `TEXT` | NULLABLE | SHA-256 hex digest (computed on scan) |

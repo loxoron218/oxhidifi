@@ -60,7 +60,7 @@ description: "Task list for high-fidelity music player refactoring"
 **Independent Test**: Run scanner against a directory with audio files, verify storage contains correct tracks with metadata; re-scan and confirm no duplicate entries
 
 - [X] T011 [P] [US1] Implement filesystem scanner (recursive walk, extension filtering) in src/library/scanner.rs per contracts/scanner.md scan algorithm
-- [X] T012 [P] [US1] Implement metadata extraction with lofty in src/library/metadata.rs (title, artist, album, year, genre, track number, duration, sample rate, bit depth, channels, codec, artwork); implement FR-005 fallback chain: filename stem as title, "Unknown Artist" as artist, "Unknown Album" as album, 0 as year, "Unknown Genre" as genre, null as track/disc number, 0 as duration (skip files with 0 duration as corrupt)
+- [X] T012 [P] [US1] Implement metadata extraction with lofty in src/library/metadata.rs (title, artist, album, year, genre, track number, duration, sample rate, bit depth, channels, codec, artwork); implement FR-005 fallback chain: filename stem as title, "Unknown Artist" as artist, "Unknown Album" as album, null as year, "Unknown Genre" as genre, null as track number, null as disc number, 1.0 as placeholder duration (extracted duration of 0.0 is treated as corrupt — skip such files)
 - [X] T013 [P] [US1] Implement layered dedup (path uniqueness → SHA-256 hash collision → metadata fingerprint) in src/library/dedup.rs per data-model.md duplicate detection hierarchy
 - [X] T018 [US1] Implement LibraryScanner trait and scan orchestration (scan_all, scan_directory, cancel) in src/library/scanner.rs per contracts/scanner.md
 - [X] T018b [US1] Wire scanner to storage and emit TrackDiscovered events for UI updates in src/library/scanner.rs
@@ -258,6 +258,7 @@ description: "Task list for high-fidelity music player refactoring"
 - [ ] T057 Add library persistence verification: populate library, restart application, verify all tracks/albums/artists are reloaded from SQLite without re-scanning per FR-028
 - [ ] T058 Add settings persistence verification: configure library directories, audio device, view preferences, volume level, window geometry (width/height/maximized); restart application; verify all settings restored from XDG config path per FR-028
 - [ ] T059 Add SC-006 verification: configure library directory with 3,000 synthetic audio files, start scan, assert library populates and becomes browsable within 9 seconds per SC-006; use metrics collector from T046b for throughput timing
+- [ ] T060 [P] Add zero-heap-allocation verification for audio hot path per Constitution Principle IV: instrument the decoder+output+resampler path (src/playback/decoder.rs, src/playback/output.rs, src/playback/resampler.rs) to assert no heap allocation occurs during audio processing (pre-allocated buffers only). Use `#[global_allocator]` with allocation-count tracking or LRZ (`-Z perf-stats`) in a dedicated criterion benchmark; assert zero allocations over a 60-second steady-state playback run in tests/zero_alloc.rs
 
 **Checkpoint**: All code quality checks pass, all verification tests pass, system meets all success criteria
 
@@ -318,7 +319,7 @@ Phases 10–13 can run in parallel (different files, no cross-dependencies). Pha
 | Phase 11: Edge Case Handling | T048a, T048b, T048c, T048d, T048e, T048f |
 | Phase 12: UI Polish & Accessibility | T045, T055 |
 | Phase 13: Preferences & Configuration | T051, T051b |
-| Phase 14: Code Quality & Final Verification | T049, T050, T052, T052b, T052c, T056, T057, T058, T059 |
+| Phase 14: Code Quality & Final Verification | T049, T050, T052, T052b, T052c, T056, T057, T058, T059, T060 |
 
 ---
 

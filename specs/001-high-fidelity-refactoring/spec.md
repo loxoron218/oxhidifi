@@ -65,7 +65,7 @@ A user plays a high-resolution audio file (e.g., 96 kHz / 24-bit FLAC). The play
 **Acceptance Scenarios**:
 
 1. **Given** a high-resolution audio file is loaded, **When** playback starts, **Then** the audio is output at the file's native sample rate when the device supports it
-2. **Given** a file's sample rate differs from the device's capabilities, **When** playback starts, **Then** the audio is transparently resampled meeting the measurable quality thresholds defined in FR-015 (RMS SNR > 120 dB against pink noise reference, ABX p < 0.05)
+2. **Given** a file's sample rate differs from the device's capabilities, **When** playback starts, **Then** the audio is transparently resampled meeting the measurable quality thresholds defined in FR-015 (RMS SNR > 120 dB against pink noise reference, blind ABX test — listener distinguishes reference A from processed B against unknown X in randomized trials — p < 0.05)
 3. **Given** files with different sample rates play consecutively, **When** transitioning between tracks, **Then** playback remains gapless with seamless sample rate reconfiguration
 4. **Given** a lossless file is played, **When** the audio reaches the output device, **Then** no data is altered or re-encoded, preserving the original bit-perfect fidelity
 
@@ -203,7 +203,7 @@ A user on an album detail page sees the full track listing, album metadata (year
 - **SC-005**: Users can navigate between Albums and Artists views, toggle between grid and column layouts, and access detail pages without perceivable UI lag (response under 100ms).
 - **SC-006**: The empty state is shown on first launch when no library is configured; the library view populates within 9 seconds of configuring a directory with 3,000 audio files (consistent with the ≥333 files/second throughput required by SC-004).
 - **SC-007**: The player panel appears within 500ms of playback starting and display correct track metadata and artwork.
-- **SC-008**: Resampled audio MUST pass a blind ABX test (p < 0.05 threshold, binomial test) comparing resampled output against the original source at matched sample rate, with a minimum of 10 trials per test. The ABX test MUST be supported by an automated validation harness (programmatic stimulus generation, randomization, and statistical evaluation); manual perceptual verification is permitted as a supplementary check.
+- **SC-008**: Resampled audio MUST pass a blind ABX test (Alternative Binary eXchange — p < 0.05 threshold, binomial test) comparing resampled output against the original source at matched sample rate, with a minimum of 10 trials per test. The ABX test MUST be supported by an automated validation harness (programmatic stimulus generation, randomization, and statistical evaluation); manual perceptual verification is permitted as a supplementary check.
 
 ## Assumptions
 
