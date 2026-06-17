@@ -55,8 +55,9 @@ use crate::{
     },
     ui::{
         decode_cover_at_size,
-        library::empty::{
-            EmptyStateParams, build_empty_state, build_library_grid, populate_grid, populate_list,
+        library::{
+            common::{populate_grid_batched, populate_list_batched},
+            empty::{EmptyStateParams, build_empty_state, build_library_grid},
         },
     },
 };
@@ -143,16 +144,20 @@ async fn load_albums(
         })
         .collect();
 
+    let batch_size = 50;
+    let mut remaining = cards;
     match mode {
-        Grid => populate_grid(
+        Grid => populate_grid_batched(
             container,
+            &mut remaining,
+            batch_size,
             "Album library grid \u{2014} click an album to play",
-            cards,
         ),
-        Column => populate_list(
+        Column => populate_list_batched(
             container,
+            &mut remaining,
+            batch_size,
             "Album library list \u{2014} click an album to play",
-            cards,
         ),
     }
 

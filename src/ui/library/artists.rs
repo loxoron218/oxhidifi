@@ -25,8 +25,9 @@ use crate::{
         Artist, Storage,
         settings::ViewMode::{self, Column, Grid},
     },
-    ui::library::empty::{
-        EmptyStateParams, build_empty_state, build_library_grid, populate_grid, populate_list,
+    ui::library::{
+        common::{populate_grid_batched, populate_list_batched},
+        empty::{EmptyStateParams, build_empty_state, build_library_grid},
     },
 };
 
@@ -93,16 +94,20 @@ async fn load_artists(
         .map(|artist| build_artist_card(state, artist).upcast())
         .collect();
 
+    let batch_size = 50;
+    let mut remaining = cards;
     match mode {
-        Grid => populate_grid(
+        Grid => populate_grid_batched(
             container,
+            &mut remaining,
+            batch_size,
             "Artist library grid \u{2014} click an artist to view albums",
-            cards,
         ),
-        Column => populate_list(
+        Column => populate_list_batched(
             container,
+            &mut remaining,
+            batch_size,
             "Artist library list \u{2014} click an artist to view albums",
-            cards,
         ),
     }
 }

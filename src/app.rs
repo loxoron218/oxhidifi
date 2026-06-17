@@ -21,7 +21,7 @@ use {
 
 use crate::{
     library::scanner::{FsScanner, ScanEvent, ScannerConfig},
-    playback::engine::PlaybackEngine,
+    playback::{engine::PlaybackEngine, output::startup_device_check},
     storage::{database::SqliteStorage, settings::ViewMode},
     ui::window::build_window,
 };
@@ -155,6 +155,10 @@ pub async fn run_application() -> Result<()> {
     );
 
     let playback = Arc::new(PlaybackEngine::new());
+
+    if let Some(msg) = startup_device_check() {
+        info!(target: "app::startup", "No audio device at startup: {msg}");
+    }
 
     let (scan_event_tx, scan_event_rx) = unbounded();
     let (toast_tx, toast_rx) = unbounded();

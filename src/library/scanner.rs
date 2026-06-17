@@ -127,6 +127,11 @@ impl<S: Storage> FsScanner<S> {
     fn walk_entry(entry: &DirEntry, results: &mut Vec<PathBuf>) {
         let path = entry.path();
         let Ok(metadata) = metadata(&path) else {
+            warn!(
+                target: "library::scanner",
+                path = %path.display(),
+                "Failed to read file metadata \u{2014} skipping corrupt or inaccessible file",
+            );
             return;
         };
 
@@ -135,7 +140,16 @@ impl<S: Storage> FsScanner<S> {
             return;
         }
 
-        if metadata.is_file() && is_supported_audio_format(&path) {
+        let is_audio = metadata.is_file() && is_supported_audio_format(&path);
+        if is_audio && metadata.len() == 0 {
+            warn!(
+                target: "library::scanner",
+                path = %path.display(),
+                "Skipping zero-length audio file \u{2014} file appears corrupt",
+            );
+            return;
+        }
+        if is_audio {
             results.push(path);
         }
     }
@@ -499,6 +513,16 @@ impl<S: Storage> FsScanner<S> {
         album_cache: &mut HashMap<(i64, String), i64>,
         event_tx: &UnboundedSender<ScanEvent>,
     ) -> Result<TrackInfo, SkipReason> {
+        if metadata.duration <= 0.0 {
+            warn!(
+                target: "library::scanner",
+                path = %path.display(),
+                duration = metadata.duration,
+                "Skipping file with zero or negative duration \u{2014} corrupt audio data",
+            );
+            return Err(SkipReason::CorruptFile);
+        }
+
         if self.check_path_exists(path).await.map_err(|e| {
             warn!(error = %e, path = %path.display(), "Failed to check path existence");
             SkipReason::CorruptFile
@@ -837,15 +861,15 @@ mod tests {
         let dir = tempdir()?;
         let root = dir.path();
 
-        write(root.join("track1.flac"), b"")?;
-        write(root.join("track2.mp3"), b"")?;
-        write(root.join("track3.wav"), b"")?;
-        write(root.join("readme.txt"), b"")?;
-        write(root.join("image.jpg"), b"")?;
+        write(root.join("track1.flac"), b"\0")?;
+        write(root.join("track2.mp3"), b"\0")?;
+        write(root.join("track3.wav"), b"\0")?;
+        write(root.join("readme.txt"), b"hello")?;
+        write(root.join("image.jpg"), b"\0")?;
 
         let sub = root.join("subdir");
         create_dir(&sub)?;
-        write(sub.join("nested.flac"), b"")?;
+        write(sub.join("nested.flac"), b"\0")?;
 
         let files = FsScanner::<SqliteStorage>::walk_directory(root);
         if files.len() != 4 {

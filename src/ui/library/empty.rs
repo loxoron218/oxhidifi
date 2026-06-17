@@ -10,14 +10,9 @@ use {
         ApplicationWindow,
         glib::{prelude::Cast, spawn_future_local},
         gtk::{
-            Align::{Center, Start},
-            Box, Button, FileDialog, FlowBox, Image, Label, ListBox, ListBoxRow,
-            Orientation::Vertical,
-            ScrolledWindow,
-            SelectionMode::None,
-            Widget,
-            accessible::Property::Label as PropertyLabel,
-            prelude::WidgetExt,
+            Align::Center, Box, Button, FileDialog, Image, Label, ListBox, ListBoxRow,
+            Orientation::Vertical, ScrolledWindow, Widget,
+            accessible::Property::Label as PropertyLabel, prelude::WidgetExt,
         },
         prelude::{AccessibleExtManual, BoxExt, ButtonExt, FileExt},
     },
@@ -32,6 +27,7 @@ use crate::{
         Storage,
         settings::ViewMode::{self, Column, Grid},
     },
+    ui::library::common::{build_grid, build_list},
 };
 
 /// Parameters for building an empty state view.
@@ -214,16 +210,7 @@ fn extract_cards(container: &Box) -> Vec<Widget> {
 
 /// Populate a `FlowBox` in grid mode with pre-built card widgets.
 pub fn populate_grid(container: &Box, tooltip: &str, cards: Vec<Widget>) {
-    let flow = FlowBox::builder()
-        .min_children_per_line(2)
-        .valign(Start)
-        .halign(Center)
-        .row_spacing(12)
-        .column_spacing(12)
-        .selection_mode(None)
-        .can_focus(true)
-        .tooltip_text(tooltip)
-        .build();
+    let flow = build_grid(tooltip);
     for card in cards {
         flow.append(&card);
     }
@@ -232,12 +219,7 @@ pub fn populate_grid(container: &Box, tooltip: &str, cards: Vec<Widget>) {
 
 /// Populate a `ListBox` in column mode with pre-built card widgets.
 pub fn populate_list(container: &Box, tooltip: &str, cards: Vec<Widget>) {
-    let list = ListBox::builder()
-        .selection_mode(None)
-        .can_focus(true)
-        .tooltip_text(tooltip)
-        .css_classes(["boxed-list"])
-        .build();
+    let list = build_list(tooltip);
     for card in cards {
         let row = ListBoxRow::builder()
             .child(&card)

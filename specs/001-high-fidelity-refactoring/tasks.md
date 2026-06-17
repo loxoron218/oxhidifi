@@ -211,12 +211,12 @@ description: "Task list for high-fidelity music player refactoring"
 
 **Purpose**: Graceful handling of device disconnection, missing devices, corrupted files, empty queue, and large libraries
 
-- [ ] T048a [P] Implement graceful handling for audio device disconnection during playback in src/playback/output.rs — detect device loss, pause playback, emit device-lost event, attempt reconnection to default device per FR-029
-- [ ] T048b [P] Implement graceful handling for no audio device at startup in src/playback/output.rs — application starts without error, display message about missing audio hardware per FR-030 and spec.md Edge Cases
-- [ ] T048f [P] Add no-device-at-startup acceptance test per FR-030: launch application with mocked absent audio device, assert application starts without panic, assert UI displays missing-hardware message, assert library scanning still functions in tests/no_device_startup.rs
-- [ ] T048c [P] Implement corrupted/unreadable file handling in src/library/scanner.rs — skip files during scanning, log warning with file path, exclude from playback per spec.md Edge Cases
-- [ ] T048d [P] Implement empty queue end-of-playback handling in src/playback/engine.rs — stop playback, show idle state, auto-hide player panel per FR-025 and spec.md Edge Cases
-- [ ] T048e [P] Implement large library browsing performance in src/ui/library/ — ensure smooth scrolling and view switching for 10k+ items without UI freezes per spec.md Edge Cases
+- [X] T048a [P] Implement graceful handling for audio device disconnection during playback in src/playback/output.rs — detect device loss, pause playback, emit device-lost event, attempt reconnection to default device per FR-029
+- [X] T048b [P] Implement graceful handling for no audio device at startup in src/playback/output.rs — application starts without error, display message about missing audio hardware per FR-030 and spec.md Edge Cases
+- [X] T048f [P] Add no-device-at-startup acceptance test per FR-030: launch application with mocked absent audio device, assert application starts without panic, assert UI displays missing-hardware message, assert library scanning still functions in tests/no_device_startup.rs
+- [X] T048c [P] Implement corrupted/unreadable file handling in src/library/scanner.rs — skip files during scanning, log warning with file path, exclude from playback per spec.md Edge Cases
+- [X] T048d [P] Implement empty queue end-of-playback handling in src/playback/engine.rs — stop playback, show idle state, auto-hide player panel per FR-025 and spec.md Edge Cases
+- [X] T048e [P] Implement large library browsing performance in src/ui/library/ — ensure smooth scrolling and view switching for 10k+ items without UI freezes per spec.md Edge Cases
 
 **Checkpoint**: Application handles device disconnection, missing devices, corrupted files, empty queue, and large libraries gracefully
 

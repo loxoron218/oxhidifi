@@ -1,6 +1,11 @@
 //! CPAL audio output: device enumeration, stream configuration, rtrb callback.
 //! Supports both resampled and bit-perfect passthrough output paths.
 
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering::Relaxed},
+};
+
 use {
     cpal::{
         Device, FromSample, OutputCallbackInfo,
@@ -30,6 +35,8 @@ pub struct AudioOutput {
     sample_format: SampleFormat,
     /// Whether the current output path is bit-perfect.
     mode: OutputMode,
+    /// Shared flag set by the error callback when the device is lost.
+    device_lost: Arc<AtomicBool>,
 }
 
 impl AudioOutput {
@@ -45,12 +52,15 @@ impl AudioOutput {
     ///
     /// Returns [`OutputError`] if no device is available or stream creation
     /// fails on all devices.
-    pub fn open(ring_capacity: usize) -> Result<(Self, Producer<f32>), OutputError> {
+    pub fn open(
+        ring_capacity: usize,
+        device_lost: &Arc<AtomicBool>,
+    ) -> Result<(Self, Producer<f32>), OutputError> {
         let host = default_host();
 
         if let Some(device) = host.default_output_device() {
             let (producer, consumer) = RingBuffer::new(ring_capacity);
-            match Self::try_open_on_device(&device, consumer) {
+            match Self::try_open_on_device(&device, consumer, Arc::clone(device_lost)) {
                 Ok(output) => return Ok((output, producer)),
                 Err(e) => warn!(error = %e, "Default audio device failed, trying fallback devices"),
             }
@@ -70,7 +80,7 @@ impl AudioOutput {
         let mut last_err = NoDeviceAvailable;
         for device in &devices {
             let (producer, consumer) = RingBuffer::new(ring_capacity);
-            match Self::try_open_on_device(device, consumer) {
+            match Self::try_open_on_device(device, consumer, Arc::clone(device_lost)) {
                 Ok(output) => return Ok((output, producer)),
                 Err(e) => last_err = e,
             }
@@ -84,7 +94,11 @@ impl AudioOutput {
     /// # Errors
     ///
     /// Returns [`OutputError`] if stream creation fails.
-    fn try_open_on_device(device: &Device, consumer: Consumer<f32>) -> Result<Self, OutputError> {
+    fn try_open_on_device(
+        device: &Device,
+        consumer: Consumer<f32>,
+        device_lost: Arc<AtomicBool>,
+    ) -> Result<Self, OutputError> {
         let device_id = device
             .id()
             .map_or_else(|_| String::new(), |id| id.to_string());
@@ -100,9 +114,9 @@ impl AudioOutput {
         let config = supported.config();
 
         let stream = match sample_format {
-            F32 => build_stream::<f32>(device, &config, consumer)?,
-            I16 => build_stream::<i16>(device, &config, consumer)?,
-            U16 => build_stream::<u16>(device, &config, consumer)?,
+            F32 => build_stream::<f32>(device, &config, consumer, Arc::clone(&device_lost))?,
+            I16 => build_stream::<i16>(device, &config, consumer, Arc::clone(&device_lost))?,
+            U16 => build_stream::<u16>(device, &config, consumer, Arc::clone(&device_lost))?,
             fmt => {
                 return Err(StreamConfigError(format!(
                     "unsupported sample format: {fmt:?}"
@@ -121,6 +135,7 @@ impl AudioOutput {
             config,
             sample_format,
             mode,
+            device_lost,
         })
     }
 
@@ -183,6 +198,12 @@ impl AudioOutput {
         sample_rate == self.config.sample_rate
     }
 
+    /// Whether the device has been detected as lost.
+    #[must_use]
+    pub fn is_device_lost(&self) -> bool {
+        self.device_lost.load(Relaxed)
+    }
+
     /// Pause the audio output stream instantly.
     pub fn pause(&self) {
         if let Err(e) = self.stream.pause() {
@@ -225,6 +246,7 @@ fn build_stream<T: SizedSample + FromSample<f32>>(
     device: &Device,
     config: &StreamConfig,
     mut consumer: Consumer<f32>,
+    device_lost: Arc<AtomicBool>,
 ) -> Result<Stream, OutputError> {
     let stream = device
         .build_output_stream(
@@ -235,8 +257,12 @@ fn build_stream<T: SizedSample + FromSample<f32>>(
                     *sample = T::from_sample(s);
                 }
             },
-            |err| {
-                error!(error = %err, "Audio output stream error");
+            move |err| {
+                device_lost.store(true, Relaxed);
+                error!(
+                    error = %err,
+                    "Audio output stream error \u{2014} device may be disconnected",
+                );
             },
             None,
         )
@@ -256,6 +282,29 @@ pub fn is_device_available() -> bool {
         return true;
     }
     host.output_devices().is_ok_and(|mut d| d.next().is_some())
+}
+
+/// Graceful check for audio device availability.
+///
+/// Returns `None` if at least one device is available, or an explanatory
+/// message string if no device was found. Does not panic or open any stream.
+/// Use this at startup to detect missing audio hardware per FR-030.
+#[must_use]
+pub fn startup_device_check() -> Option<String> {
+    let host = default_host();
+    if host.default_output_device().is_some() {
+        return None;
+    }
+    let has_any = host.output_devices().is_ok_and(|mut d| d.next().is_some());
+    if has_any {
+        return None;
+    }
+    Some(
+        "No audio output device found. Check your audio output and ensure PulseAudio or PipeWire \
+         is running. Playback will be unavailable, but library scanning and browsing will still \
+         work."
+            .to_string(),
+    )
 }
 
 /// Sort devices so that `PipeWire` and `PulseAudio` PCM devices are tried first.

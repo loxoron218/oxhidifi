@@ -24,7 +24,7 @@ use std::{
 use {
     num_traits::cast::cast,
     parking_lot::Mutex,
-    tracing::{info, warn},
+    tracing::{info, trace, warn},
 };
 
 /// Playback latency threshold in milliseconds (SC-001: < 3,000 ms).
@@ -219,7 +219,13 @@ impl UiResponse {
 /// (e.g., on non-Linux platforms).
 #[must_use]
 pub fn read_rss_mb() -> Option<f64> {
-    let status = read_to_string("/proc/self/status").ok()?;
+    let status = match read_to_string("/proc/self/status") {
+        Ok(s) => s,
+        Err(e) => {
+            trace!(target: "metrics", error = %e, "Failed to read /proc/self/status");
+            return None;
+        }
+    };
     for line in status.lines() {
         let Some(rss_line) = line.strip_prefix("VmRSS:") else {
             continue;
@@ -227,7 +233,13 @@ pub fn read_rss_mb() -> Option<f64> {
         let Some(kb_str) = rss_line.trim().strip_suffix(" kB") else {
             continue;
         };
-        let kb: f64 = kb_str.trim().parse().ok()?;
+        let kb: f64 = match kb_str.trim().parse() {
+            Ok(v) => v,
+            Err(e) => {
+                trace!(target: "metrics", error = %e, value = %kb_str.trim(), "Failed to parse VmRSS value");
+                return None;
+            }
+        };
         return Some(kb / 1024.0);
     }
     None
