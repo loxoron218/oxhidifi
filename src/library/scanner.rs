@@ -22,7 +22,7 @@ use {
             watch::{Receiver, Sender as TokioSender, channel},
         },
     },
-    tracing::{error, warn},
+    tracing::{error, info, warn},
 };
 
 use crate::{
@@ -201,6 +201,12 @@ impl<S: Storage> FsScanner<S> {
 
     /// Scan a single directory and emit events.
     async fn scan_dir(&self, dir: &Path, event_tx: &UnboundedSender<ScanEvent>) {
+        info!(
+            target: "library::scanner",
+            directory = %dir.display(),
+            "Scan started",
+        );
+
         if let Err(e) = event_tx.send(ScanStarted {
             directory: dir.to_path_buf(),
         }) {
@@ -258,9 +264,21 @@ impl<S: Storage> FsScanner<S> {
                 .await;
         }
 
+        let duration = start.elapsed();
+        let duration_seconds = duration.as_secs_f64();
+        info!(
+            target: "library::scanner",
+            directory = %dir.display(),
+            tracks_added,
+            tracks_skipped,
+            duration_seconds,
+            files_found,
+            "Scan completed",
+        );
+
         if let Err(e) = event_tx.send(ScanCompleted {
             directory: dir.to_path_buf(),
-            duration: start.elapsed(),
+            duration,
             tracks_added,
             tracks_skipped,
         }) {
@@ -270,7 +288,7 @@ impl<S: Storage> FsScanner<S> {
             .scan_event_tx
             .send(ScanCompleted {
                 directory: dir.to_path_buf(),
-                duration: start.elapsed(),
+                duration,
                 tracks_added,
                 tracks_skipped,
             })
@@ -338,6 +356,12 @@ impl<S: Storage> FsScanner<S> {
         event_tx: &UnboundedSender<ScanEvent>,
     ) {
         *tracks_skipped += 1;
+        info!(
+            target: "library::scanner",
+            path = %path.display(),
+            skip_reason = ?reason,
+            "Track skipped",
+        );
         if let Err(e) = event_tx.send(TrackSkipped { path, reason }) {
             warn!(error = %e, "Failed to send TrackSkipped event");
         }
@@ -536,6 +560,15 @@ impl<S: Storage> FsScanner<S> {
             artist_id: Some(track_artist_id),
             album_id: Some(album_id),
         };
+
+        info!(
+            target: "library::scanner",
+            track_id,
+            album_id,
+            artist_id = track_artist_id,
+            path = %path.display(),
+            "Track discovered",
+        );
 
         if let Err(e) = event_tx.send(TrackDiscovered {
             track: Box::new(track_info.clone()),

@@ -19,7 +19,7 @@ use {
             error::TryRecvError::{Disconnected, Empty},
         },
     },
-    tracing::warn,
+    tracing::{info, warn},
 };
 
 use crate::playback::{
@@ -227,6 +227,13 @@ impl PlaybackEngine {
         *self.shared.decode_tx.lock() = Some(cmd_tx);
 
         let event_tx = self.shared.event_tx.clone();
+        info!(
+            target: "playback::engine",
+            track_id,
+            path = %path.display(),
+            "Playback started",
+        );
+
         if let Err(e) = event_tx.send(PlaybackEvent::TrackStarted { track_id }) {
             warn!(error = %e, "Failed to send TrackStarted event");
         }
@@ -269,14 +276,36 @@ impl PlaybackController for PlaybackEngine {
             .lock()
             .get(&track_id)
             .cloned()
-            .ok_or(PlaybackError::TrackNotFound(track_id))?;
+            .ok_or_else(|| {
+                warn!(
+                    target: "playback::engine",
+                    track_id,
+                    "Track not found for playback",
+                );
+                PlaybackError::TrackNotFound(track_id)
+            })?;
+        info!(
+            target: "playback::engine",
+            track_id,
+            "Play track command",
+        );
         self.start_playback(track_id, path)
     }
 
     fn play_queue(&self, queue: Vec<i64>) -> Result<(), PlaybackError> {
         if queue.is_empty() {
+            warn!(
+                target: "playback::engine",
+                "Play queue command with empty queue",
+            );
             return Err(PlaybackError::QueueEmpty);
         }
+        let queue_len = queue.len();
+        info!(
+            target: "playback::engine",
+            queue_len,
+            "Play queue command",
+        );
         self.shared.queue.set_queue(queue);
         let first_id = self
             .shared
@@ -299,6 +328,10 @@ impl PlaybackController for PlaybackEngine {
             state.is_playing
         };
         if !is_playing {
+            info!(
+                target: "playback::engine",
+                "Toggle pause ignored — not playing",
+            );
             return Ok(());
         }
 
@@ -306,9 +339,17 @@ impl PlaybackController for PlaybackEngine {
         let was_paused = state.is_paused;
         let event = if was_paused {
             state.is_paused = false;
+            info!(
+                target: "playback::engine",
+                "Playback resumed",
+            );
             PlaybackEvent::Resumed
         } else {
             state.is_paused = true;
+            info!(
+                target: "playback::engine",
+                "Playback paused",
+            );
             PlaybackEvent::Paused
         };
         let guard = self.shared.output.lock();
@@ -328,6 +369,12 @@ impl PlaybackController for PlaybackEngine {
     }
 
     fn stop(&self) -> Result<(), PlaybackError> {
+        let current_track = self.shared.state.lock().current_track_id;
+        info!(
+            target: "playback::engine",
+            track_id = current_track,
+            "Playback stopped",
+        );
         self.stop_decode_task();
         let mut state = self.shared.state.lock();
         state.is_playing = false;
@@ -344,7 +391,13 @@ impl PlaybackController for PlaybackEngine {
     }
 
     fn next_track(&self) -> Result<(), PlaybackError> {
-        let next_id = self.shared.queue.next().ok_or(PlaybackError::QueueEmpty)?;
+        let next_id = self.shared.queue.next().ok_or_else(|| {
+            info!(
+                target: "playback::engine",
+                "Next track failed — queue empty",
+            );
+            PlaybackError::QueueEmpty
+        })?;
         let path = self
             .shared
             .track_paths
@@ -356,11 +409,13 @@ impl PlaybackController for PlaybackEngine {
     }
 
     fn previous_track(&self) -> Result<(), PlaybackError> {
-        let prev_id = self
-            .shared
-            .queue
-            .previous()
-            .ok_or(PlaybackError::QueueEmpty)?;
+        let prev_id = self.shared.queue.previous().ok_or_else(|| {
+            info!(
+                target: "playback::engine",
+                "Previous track failed — queue empty",
+            );
+            PlaybackError::QueueEmpty
+        })?;
         let path = self
             .shared
             .track_paths
@@ -373,6 +428,11 @@ impl PlaybackController for PlaybackEngine {
 
     fn set_volume(&self, volume: f64) -> Result<(), PlaybackError> {
         let clamped = volume.clamp(0.0, 1.0);
+        info!(
+            target: "playback::engine",
+            volume = clamped,
+            "Volume changed",
+        );
         self.shared.state.lock().volume = clamped;
         if let Err(e) = self
             .shared
@@ -662,6 +722,12 @@ fn try_auto_advance(
 
     let (new_cmd_tx, new_cmd_rx) = MpscChannel(4);
     *engine_shared.decode_tx.lock() = Some(new_cmd_tx);
+
+    info!(
+        target: "playback::engine",
+        next_id,
+        "Auto-advancing to next track",
+    );
 
     if let Some(tf_event) = event_to_send.take()
         && let Err(e) = event_tx.send(tf_event)

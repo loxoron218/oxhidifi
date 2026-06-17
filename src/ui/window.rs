@@ -30,7 +30,7 @@ use {
         gtk::{Stack, ToggleButton, Widget, prelude::ToggleButtonExt},
         prelude::{AdwApplicationWindowExt, WidgetExt},
     },
-    tracing::error,
+    tracing::{error, info},
 };
 
 use crate::{
@@ -55,6 +55,11 @@ use crate::{
 /// playback start.
 #[must_use]
 pub fn build_window(app: &Application, state: &Arc<AppState>) -> ApplicationWindow {
+    info!(
+        target: "ui::window",
+        "Building main application window",
+    );
+
     let window = ApplicationWindow::builder()
         .application(app)
         .title("Oxhidifi")
@@ -73,6 +78,11 @@ pub fn build_window(app: &Application, state: &Arc<AppState>) -> ApplicationWind
 
     split_view.connect_show_sidebar_notify(move |sv| {
         let showing = sv.shows_sidebar();
+        info!(
+            target: "ui::window",
+            showing,
+            "Sidebar visibility changed",
+        );
         toggle_button.set_visible(!showing);
         toggle_button.set_active(showing);
         back_button.set_visible(showing);
@@ -223,7 +233,18 @@ fn build_content(
     let tab_nav_tx = nav_tx.clone();
     let tab_content_area = content_area.clone();
     let tab_orig = orig_stack.clone();
+    let tab_stack = stack.clone();
     stack.connect_visible_child_notify(move |_| {
+        if let Some(child) = tab_content_area.visible_child()
+            && child == tab_orig
+            && let Some(name) = tab_stack.visible_child_name()
+        {
+            info!(
+                target: "ui::window",
+                tab_name = name.as_str(),
+                "Tab switched",
+            );
+        }
         let visible = tab_content_area.visible_child();
         let is_on_detail = visible.as_ref().is_none_or(|child| *child != tab_orig);
         if is_on_detail && let Err(err) = tab_nav_tx.try_send(Back) {
@@ -297,6 +318,11 @@ fn handle_navigation_event(
 ) {
     match event {
         AlbumDetail(album_id) => {
+            info!(
+                target: "ui::window",
+                album_id,
+                "Navigating to album detail",
+            );
             if let Some(prev_detail) = nav_content_area.child_by_name("detail") {
                 nav_content_area.remove(&prev_detail);
             }
@@ -305,6 +331,11 @@ fn handle_navigation_event(
             nav_content_area.set_visible_child(&detail);
         }
         ArtistDetail(artist_id) => {
+            info!(
+                target: "ui::window",
+                artist_id,
+                "Navigating to artist detail",
+            );
             if let Some(prev_detail) = nav_content_area.child_by_name("detail") {
                 nav_content_area.remove(&prev_detail);
             }
@@ -313,6 +344,10 @@ fn handle_navigation_event(
             nav_content_area.set_visible_child(&detail);
         }
         Back => {
+            info!(
+                target: "ui::window",
+                "Navigating back to library view",
+            );
             nav_content_area.set_visible_child(orig_stack);
             if let Some(prev_detail) = nav_content_area.child_by_name("detail") {
                 nav_content_area.remove(&prev_detail);
