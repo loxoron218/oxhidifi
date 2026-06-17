@@ -107,7 +107,7 @@ A user on an album detail page sees the full track listing, album metadata (year
 
 ### Edge Cases
 
-- What happens when the user has thousands of albums/artists in the library? Library browsing should remain smooth without UI freezes.
+- What happens when the user has thousands of albums/artists in the library? Library browsing must remain smooth without UI freezes, meeting the <100 ms UI response threshold defined in SC-005 for libraries of up to 10,000 tracks.
 - How does the system handle corrupted or unreadable audio files? They should be skipped during scanning and gracefully excluded from playback.
 - What happens when the audio output device is disconnected during playback? The player should pause gracefully and indicate the device was lost.
 - How does the player handle an empty playlist or queue after the last track finishes? It should stop and show the idle state.
@@ -128,17 +128,17 @@ A user on an album detail page sees the full track listing, album metadata (year
 - **FR-003**: The system MUST extract embedded album artwork from audio files for display.
 - **FR-003b**: The system MUST cache extracted artwork to disk and generate thumbnails for grid/column views. A fallback placeholder MUST be displayed when no embedded artwork is available.
 - **FR-004**: The system MUST detect and exclude duplicate files using a layered strategy: file path uniqueness as primary dedup (catches duplicate paths), content hash (SHA-256) on path collision (catches symlinks, hardlinks, and copies of identical content at different paths), and metadata fingerprint (artist+album+title+track) as final fallback (catches files with same metadata but different encoding).
-- **FR-005**: The system MUST gracefully handle files with missing or corrupt metadata using the following fallback chain: filename stem as title, "Unknown Artist" as artist, "Unknown Album" as album, 0 as year, "Unknown Genre" as genre, null as track/disc number, 0 as duration (files with 0 duration MUST be skipped as corrupt).
+- **FR-005**: The system MUST gracefully handle files with missing or corrupt metadata using the following fallback chain: filename stem as title, "Unknown Artist" as artist, "Unknown Album" as album, null as year, "Unknown Genre" as genre, null as track/disc number, 1.0 as placeholder duration. Files whose extracted metadata explicitly reports 0 duration (from a corrupt or malformed file) MUST be skipped as corrupt; files with absent metadata use the 1.0 placeholder and are still added to the library with a warning logged via tracing.
 - **FR-006**: The system MUST automatically scan library directories for changes (additions, removals, updates) and reflect them without manual intervention. Scanning MUST operate incrementally and non-blocking — the UI remains responsive during scan, discovered items appear as they are indexed, and a scanning indicator is shown in the status bar.
 - **FR-007**: The system MUST present an informative empty state when no music library is configured or when the library contains no files. The empty state MUST display a relevant icon (e.g., music-note or library icon), a heading "No Music Library Configured" (or "No Music Found" when library dirs exist but are empty), a descriptive subtitle guiding the user to add music directories via Preferences, and a direct action button "Add Music Folder" that opens the Preferences > Library directory chooser.
 
 **Navigation and Views**
 
 - **FR-008**: The system MUST provide separate browsable views for Albums and Artists, switchable via tab buttons in the header bar.
-- **FR-009**: The system MUST support at least two view modes per tab: a grid layout (album/artist cover art in evenly-spaced rows and columns) and a column layout (compact single-column list with rows showing cover art thumbnail, title, artist, and year/duration metadata per item; rows are uniformly sized and support sort-by-column click in the column header, if present).
+- **FR-009**: The system MUST support at least two view modes per tab: a grid layout (album/artist cover art in evenly-spaced rows and columns) and a column layout (compact single-column list with rows showing cover art thumbnail, title, artist, and year/duration metadata per item; rows are uniformly sized with a column header row supporting sort-by-column click).
 - **FR-010**: The system MUST provide a toggle control in the header bar to switch between grid and column views.
 - **FR-011**: Each album and artist MUST have a dedicated detail page showing full metadata and associated content (tracks for albums, albums for artists).
-- **FR-012**: The system MUST support adaptive/responsive layouts per Constitution Principle III. The main content area MUST use `AdwNavigationSplitView` (library navigation sidebar containing the `AdwViewSwitcher` for Albums/Artists tab selection, browsing/detail content area). The player panel MUST use `AdwOverlaySplitView` as an overlay sliding in from the left per FR-023. Page-based navigation stacks MUST use `AdwNavigationView`, tab navigation MUST use `AdwViewSwitcher`/`AdwViewSwitcherBar`, and responsive breakpoints MUST use `AdwBreakpoint`. At minimum: a wide mode (≥800px) showing the player panel overlay and library content side-by-side, and a narrow mode (<800px) where the player panel overlay covers the full content area with a back button to dismiss per FR-026.
+- **FR-012**: The system MUST support adaptive/responsive layouts per Constitution Principle III. The main content area MUST use `AdwNavigationSplitView` (library navigation sidebar for browsing context, with `AdwViewSwitcher`/`AdwViewSwitcherBar` for Albums/Artists tab selection in the header bar, browsing/detail content area). The player panel MUST use `AdwOverlaySplitView` as an overlay sliding in from the left per FR-023. Page-based navigation stacks MUST use `AdwNavigationView`, tab navigation MUST use `AdwViewSwitcher`/`AdwViewSwitcherBar`, and responsive breakpoints MUST use `AdwBreakpoint`. At minimum: a wide mode (≥800px) showing the player panel overlay and library content side-by-side, and a narrow mode (<800px) where the player panel overlay covers the full content area with a back button to dismiss per FR-026.
 - **FR-012b**: The system MUST meet all accessibility requirements specified in Constitution Principle III: keyboard navigation (Tab, arrows, Enter, Escape), accessible labels via `AccessibleProperty::Label` on all interactive widgets, and tooltip text via `set_tooltip_text()` on all actionable controls.
 
 **Playback**
@@ -149,7 +149,7 @@ A user on an album detail page sees the full track listing, album metadata (year
 - **FR-016**: The system MUST support common audio formats including FLAC, MP3, AAC, Ogg Vorbis, Opus, WAV, and AIFF.
 - **FR-017**: The system MUST support high-resolution audio (sample rates up to at least 192 kHz, bit depths up to 24-bit).
 - **FR-018**: The system MUST provide standard playback controls: play, pause, stop, next track, previous track.
-- **FR-019**: The system MUST provide a seek control to navigate within the currently playing track.
+- **FR-019**: The system MUST provide a seek control to navigate within the currently playing track with a seek accuracy tolerance of ±100 ms of the target position.
 - **FR-020**: The system MUST provide a volume slider in the player panel (range 0.0–1.0 mapped to dB attenuation) with a mute toggle button. Volume level MUST be persisted across application restarts via `UserSettings.volume`. The player panel slider overrides the preference default at runtime; both surfaces persist to the same `UserSettings.volume`.
 
 **Queue Management**
@@ -223,4 +223,4 @@ A user on an album detail page sees the full track listing, album metadata (year
 
 The following engineering targets are tracked internally by the metrics collector but are **not** Success Criteria — they are engineering budgets, not user-facing commitments. Exceeding a target triggers a `tracing::warn!` event for visibility, not a release-blocking failure.
 
-- **Steady-state memory**: < 200 MB RSS during playback of a 10,000-track library (target derived from the project plan's resource budget).
+- **Steady-state memory**: < 200 MB RSS during playback of a 10,000-track library on the SC-004 reference hardware (Intel i5-1135G7, 16 GB RAM, NVMe SSD). Exceeding this target emits a `tracing::warn!` event — it is a non-blocking engineering budget, not a release-blocking success criterion.

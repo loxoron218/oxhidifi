@@ -26,7 +26,7 @@
 
 **Validation rules**:
 - `file_path` must be a valid absolute path to an existing file at scan time
-- `duration` must be positive; 0-duration files are treated as corrupt and skipped
+- `duration` must be > 0 when populated from decoded metadata; files whose extracted metadata explicitly reports 0.0 are treated as corrupt and skipped. Files with absent metadata receive a fallback value of 1.0 (see FR-005).
 - `sample_rate` must be one of: 8000, 11025, 16000, 22050, 44100, 48000, 88200, 96000, 176400, 192000
 - `channels` must be 1 or 2 (stereo-only for initial release)
 

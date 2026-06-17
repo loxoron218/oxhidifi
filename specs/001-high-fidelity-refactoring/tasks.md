@@ -29,7 +29,7 @@ description: "Task list for high-fidelity music player refactoring"
 - [X] T004 Create empty module structure with mod.rs re-exports per plan.md: src/library/, src/storage/, src/playback/, src/ui/, src/ui/library/, src/ui/detail/, src/ui/player/, src/metrics/
 - [X] T004b [P] Create criterion benchmark harness in benches/ with baseline benchmarks for decoder PCM output and ring buffer throughput (resampler baseline is created in T032b once the resampler exists)
 - [X] T004c [P] Set up test infrastructure: mock Storage backend, tempfile-based scanner fixtures, async test helpers in tests/common/
-- [X] T004d [P] Query Context7 MCP server for cpal, symphonia, rubato, lofty, and libadwaita documentation and best practices before implementing any features using these libraries
+- [X] T004d [P] Query Context7 MCP server for cpal, symphonia, rubato, lofty, and libadwaita documentation and best practices as initial baseline; per Constitution Principle I, Context7 MUST be consulted before implementing features with unfamiliar libraries throughout the project
 
 **Checkpoint**: Cargo build succeeds, project structure mirrors plan.md
 
@@ -100,7 +100,7 @@ description: "Task list for high-fidelity music player refactoring"
 - [X] T054 [US1] Implement artwork caching pipeline (extract thumbnail, cache to disk, fallback placeholder) in src/library/artwork.rs per FR-003b — MUST complete before T022 (album grid requires cached artwork)
 - [X] T022 [US1] Implement album grid view with cover art thumbnails in src/ui/library/albums.rs
 - [X] T023 [US1] Wire play action from album grid click to PlaybackController in src/ui/library/albums.rs
-- [X] T019b [P] [US1] Implement adaptive/responsive main window layout using AdwNavigationSplitView + AdwNavigationView + AdwBreakpoint (wide mode ≥800px, narrow mode <800px) per FR-012 in src/ui/window.rs — build with the adaptive stack from the start
+- [X] T019b [P] [US1] Implement adaptive/responsive main window layout using AdwNavigationSplitView + AdwOverlaySplitView + AdwNavigationView + AdwBreakpoint (wide mode ≥800px, narrow mode <800px) per FR-012 in src/ui/window.rs — build with the adaptive stack from the start
 - [X] T019c [P] [US1] Apply initial keyboard navigation (Tab/arrows/Enter/Escape), accessible labels (AccessibleProperty::Label), and tooltips (set_tooltip_text) to Phase 5 UI widgets (window, header, album grid) per FR-012b
 - [X] T019d [US1] Restore window geometry (`window_width`, `window_height`, `window_maximized`) from `UserSettings` on application start, and persist geometry on window `close-request` and `configure-event` signals in src/app.rs and src/ui/window.rs per FR-028
 
@@ -121,7 +121,7 @@ description: "Task list for high-fidelity music player refactoring"
 - [X] T027 [P] [US2] Implement grid/column toggle button logic in src/ui/header.rs (switch album view between grid and column layout)
 - [X] T028 [P] [US2] Implement filesystem watcher with notify in src/library/watcher.rs (debounced events, incremental scan trigger)
 - [X] T029 [US2] Implement status bar with scanning progress indicator in src/ui/status.rs
-- [X] T030 [US2] Implement tab switching logic (Albums ↔ Artists) with view content swap in src/ui/window.rs
+- [X] T030 [US2] Wire AdwViewSwitcher to AdwNavigationView view stack for Albums ↔ Artists tab switching in src/ui/window.rs
 - [X] T031 [US2] Wire empty state ↔ library view transitions based on scan results
 - [X] T031b [P] [US2] Add integration test for incremental non-blocking scan + status indicator (FR-006) in tests/integration/scan_status.rs: drive `notify` watcher with a tempfile directory, assert (a) the UI thread remains responsive (timed events under threshold), (b) the status bar updates with progress as `TrackDiscovered` events arrive, (c) the empty state swaps to the populated view on the first `ScanCompleted` event
 
@@ -200,7 +200,7 @@ description: "Task list for high-fidelity music player refactoring"
 - [X] T046b Implement scan-throughput metrics collector in src/metrics/collector.rs — measure files/second during library scan; emit `tracing::info!(target: "metrics.scan_throughput", files_per_second, files_total, duration_seconds, "Scan throughput")` and assert ≥ 333 files/second for 10,000 tracks per SC-004
 - [X] T046c Implement UI-response metrics collector in src/metrics/collector.rs — measure tab/view/detail navigation response time; emit `tracing::info!(target: "metrics.ui_response", response_ms, action, "UI response")` and assert < 100 ms per SC-005
 - [X] T046d Implement player-panel-reveal metrics collector in src/metrics/collector.rs — measure time from `play_track` to panel fully visible; emit `tracing::info!(target: "metrics.panel_reveal", reveal_ms, "Panel reveal")` and assert < 500 ms per SC-007
-- [X] T046e Implement steady-state memory metrics collector in src/metrics/collector.rs — sample RSS via `/proc/self/status` (or platform equivalent) every 30 s during steady-state playback; emit `tracing::info!(target: "metrics.memory", rss_mb, "Steady-state memory")` and assert < 200 MB engineering target (per plan.md constraint; not a SC)
+- [X] T046e Implement steady-state memory metrics collector in src/metrics/collector.rs — sample RSS via `/proc/self/status` (or platform equivalent) every 30 s during steady-state playback; emit `tracing::info!(target: "metrics.memory", rss_mb, "Steady-state memory")` and emit `tracing::warn!` if > 200 MB (engineering target per spec.md Engineering Targets — not a success criterion; warning only, no assertion)
 - [X] T047 Add structured tracing instrumentation (error/warn/info levels) across library scanner (target: `library::scanner`), playback engine (target: `playback::engine`), and UI subsystems (target: `ui::*`) in src/library/scanner.rs, src/playback/engine.rs, and src/ui/window.rs with typed fields for all diagnostic events per constitution Principle V
 
 **Checkpoint**: Metrics collectors emit structured events to tracing; instrumentation covers all major subsystems

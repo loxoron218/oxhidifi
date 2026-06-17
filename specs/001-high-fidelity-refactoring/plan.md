@@ -62,7 +62,7 @@ The plan is decomposed into 14 phases, each producing a checkpoint. Phase depend
 | 1 | Setup | — | Cargo scaffold, lint config, test infra, criterion harness | T001–T004d |
 | 2 | Foundational | — | Storage trait, SQLite impl, settings, error types, XDG | T005–T010b |
 | 3 | US1a Library Ingestion | P1 (MVP) | Scanner, metadata, dedup, events | T011–T013, T018–T018c |
-| 4 | US1b Playback Pipeline | P1 (MVP) | Decoder, output, queue, engine | T014–T017 |
+| 4 | US1b Playback Pipeline | P1 (MVP) | Decoder, output, queue, engine | T014–T017, T016b, T016c, T016d |
 | 5 | US1c UI Shell & Browsing | P1 (MVP) | App, window, header, album grid, artwork cache, play wiring, adaptive layout, a11y, window-geometry restore | T019–T023, T054, T019b–T019d |
 | 6 | US2 Empty State & Nav | P1 | Empty state, artist view, grid/column toggle, watcher, status bar, tab switching, scan+status integration test | T025–T031, T031b |
 | 7 | US3 Gapless Resampling | P2 | Resampler (with criterion baseline), gapless, pre-buffer, sample-rate reconfig, bit-perfect path, ABX harness, hi-res, SNR, bit-perfect verify, SC-002 verification, incompatible SR transitions | T032–T036, T032b, T036b–T036i |
