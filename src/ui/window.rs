@@ -42,6 +42,7 @@ use crate::{
         AppState,
         NavigationEvent::{self, AlbumDetail, ArtistDetail, Back},
     },
+    storage::settings::ActiveTab::{Albums, Artists},
     ui::{
         detail::{album::build_album_detail, artist::build_artist_detail},
         header::build_header_controls,
@@ -185,6 +186,23 @@ fn build_content_pane(
         "avatar-default-symbolic",
     );
     artists_child.set_icon_name(Some("avatar-default-symbolic"));
+
+    match state.storage.get_active_tab() {
+        Artists => stack.set_visible_child_name("artists"),
+        Albums => {}
+    }
+
+    let mut tab_rx = state.active_tab_tx.subscribe();
+    let active_tab_stack = stack.clone();
+    spawn_future_local(async move {
+        while tab_rx.changed().await.is_ok() {
+            let tab = *tab_rx.borrow();
+            active_tab_stack.set_visible_child_name(match tab {
+                Albums => "albums",
+                Artists => "artists",
+            });
+        }
+    });
 
     let switcher = ViewSwitcher::builder()
         .policy(Wide)

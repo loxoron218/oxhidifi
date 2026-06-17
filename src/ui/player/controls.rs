@@ -18,7 +18,9 @@ use {
 };
 
 use crate::{
-    app::AppState, playback::engine::PlaybackController, ui::player::queue::build_queue_view,
+    app::AppState,
+    playback::engine::{MuteState::Unmuted, PlaybackController},
+    ui::player::queue::build_queue_view,
 };
 
 /// Build the playback control buttons (prev, play/pause, next).
@@ -127,7 +129,7 @@ pub fn build_volume_control(state: &Arc<AppState>) -> Box {
     let mute_btn_ref = mute_button.clone();
     mute_button.connect_clicked(move |_| {
         let current = state_mute.playback.state();
-        let new_muted = !current.is_muted;
+        let new_muted = current.muted == Unmuted;
         if let Err(e) = state_mute.playback.set_muted(new_muted) {
             error!(error = %e, "Failed to set mute");
         }

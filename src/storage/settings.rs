@@ -98,6 +98,66 @@ impl SettingsStore {
         f(&mut self.settings);
         self.save()
     }
+
+    /// Get whether gapless playback is enabled.
+    #[must_use]
+    pub fn get_gapless_enabled(&self) -> bool {
+        self.settings.gapless_enabled
+    }
+
+    /// Set whether gapless playback is enabled.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be written.
+    pub fn set_gapless_enabled(&mut self, enabled: bool) -> Result<()> {
+        self.update(|s| s.gapless_enabled = enabled)
+    }
+
+    /// Get the preferred audio device name.
+    #[must_use]
+    pub fn get_audio_device(&self) -> Option<&str> {
+        self.settings.audio_device.as_deref()
+    }
+
+    /// Set the preferred audio device name.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be written.
+    pub fn set_audio_device(&mut self, device: Option<String>) -> Result<()> {
+        self.update(|s| s.audio_device = device)
+    }
+
+    /// Get the active tab preference.
+    #[must_use]
+    pub fn get_active_tab(&self) -> ActiveTab {
+        self.settings.active_tab
+    }
+
+    /// Set the active tab preference.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be written.
+    pub fn set_active_tab(&mut self, tab: ActiveTab) -> Result<()> {
+        self.update(|s| s.active_tab = tab)
+    }
+
+    /// Get the volume level.
+    #[must_use]
+    pub fn get_volume(&self) -> f64 {
+        self.settings.volume
+    }
+
+    /// Set the volume level.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be written.
+    pub fn set_volume(&mut self, volume: f64) -> Result<()> {
+        self.update(|s| s.volume = volume)
+    }
 }
 
 /// Persistent user settings stored as JSON at XDG config path.
@@ -120,6 +180,8 @@ pub struct UserSettings {
     pub window_height: i32,
     /// Whether window is maximized.
     pub window_maximized: bool,
+    /// Whether gapless playback is enabled.
+    pub gapless_enabled: bool,
 }
 
 impl Default for UserSettings {
@@ -133,6 +195,7 @@ impl Default for UserSettings {
             window_width: 1200,
             window_height: 800,
             window_maximized: false,
+            gapless_enabled: true,
         }
     }
 }

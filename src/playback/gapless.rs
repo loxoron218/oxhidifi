@@ -35,6 +35,7 @@ pub enum GaplessState {
 ///
 /// Coordinates the dual decoder state, resampler reconfiguration,
 /// and event emission during gapless transitions.
+/// When disabled, pre-buffering and transitions are skipped entirely.
 pub struct GaplessTransitioner {
     /// Current transition state.
     state: GaplessState,
@@ -42,17 +43,39 @@ pub struct GaplessTransitioner {
     preloaded_decoder: Option<Decoder>,
     /// Path to the pre-loaded next track.
     preloaded_path: Option<PathBuf>,
+    /// Whether gapless transitions are enabled.
+    enabled: bool,
 }
 
 impl GaplessTransitioner {
-    /// Create a new idle transitioner.
+    /// Create a new idle transitioner with gapless enabled by default.
     #[must_use]
     pub fn new() -> Self {
         Self {
             state: GaplessState::Idle,
             preloaded_decoder: None,
             preloaded_path: None,
+            enabled: true,
         }
+    }
+
+    /// Enable or disable gapless transitions.
+    pub fn set_enabled(&mut self, enabled: bool) {
+        if !enabled {
+            self.preloaded_decoder = None;
+            self.preloaded_path = None;
+            self.state = match self.state {
+                GaplessState::PreBuffered { .. } => GaplessState::Idle,
+                other => other,
+            };
+        }
+        self.enabled = enabled;
+    }
+
+    /// Check whether gapless transitions are enabled.
+    #[must_use]
+    pub fn is_enabled(&self) -> bool {
+        self.enabled
     }
 
     /// Start playback of a track and reset state.
@@ -65,7 +88,8 @@ impl GaplessTransitioner {
     /// Pre-buffer the next track by opening a decoder for it.
     ///
     /// Returns `Ok(true)` if pre-buffering succeeded, `Ok(false)` if already
-    /// pre-buffered, or `Err` if the decoder could not be opened.
+    /// pre-buffered or gapless is disabled, or `Err` if the decoder could not
+    /// be opened.
     ///
     /// # Errors
     ///
@@ -76,7 +100,7 @@ impl GaplessTransitioner {
         next_track_id: i64,
         next_path: PathBuf,
     ) -> Result<bool, DecoderError> {
-        if self.preloaded_decoder.is_some() {
+        if !self.enabled || self.preloaded_decoder.is_some() {
             return Ok(false);
         }
 
@@ -148,7 +172,7 @@ impl GaplessTransitioner {
         self.state
     }
 
-    /// Stop and reset all state.
+    /// Stop and reset all state. Preserves the `enabled` flag.
     pub fn stop(&mut self) {
         self.state = GaplessState::Idle;
         self.preloaded_decoder = None;

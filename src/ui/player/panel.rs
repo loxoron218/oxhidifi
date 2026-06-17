@@ -29,6 +29,7 @@ use crate::{
             PlaybackController,
             PlaybackEvent::{self, Paused, Resumed, Stopped, TrackStarted},
             PlaybackState,
+            PlaybackStatus::{Playing, Stopped as StatusStopped},
         },
         layout::{AudioLayout, format_channel_label},
     },
@@ -52,7 +53,7 @@ pub fn format_time(seconds: f64) -> String {
 
 /// Update the play/pause button icon based on playback state.
 fn update_play_button(button: &Button, state: &PlaybackState) {
-    let icon = if state.is_playing && !state.is_paused {
+    let icon = if state.status == Playing {
         "media-playback-pause-symbolic"
     } else {
         "media-playback-start-symbolic"
@@ -219,7 +220,7 @@ pub fn build_player_content(state: &Arc<AppState>) -> ScrolledWindow {
     timeout_add_local(Duration::from_millis(200), move || {
         let s = playback.state();
         update_play_button(&play_btn_poll, &s);
-        if s.is_playing || s.is_paused {
+        if s.status != StatusStopped {
             let fraction = match s.duration_seconds {
                 d if d > 0.0 => s.elapsed_seconds / d,
                 _ => 0.0,

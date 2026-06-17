@@ -3,13 +3,14 @@
 //! Uses `AdwViewSwitcher` for tab navigation per GNOME HIG. The switcher
 //! is placed in the title widget slot of `AdwHeaderBar`.
 //!
-//! Provides a toggle button to switch between grid and column layout views.
+//! Provides a toggle button to switch between grid and column layout views
+//! and a preferences button to open the settings dialog.
 
 use std::sync::Arc;
 
 use {
     libadwaita::{
-        gtk::{Box, Orientation::Horizontal, ToggleButton},
+        gtk::{Box, Button, Orientation::Horizontal, ToggleButton},
         prelude::{BoxExt, ButtonExt, ToggleButtonExt, WidgetExt},
     },
     tracing::warn,
@@ -18,6 +19,7 @@ use {
 use crate::{
     app::AppState,
     storage::settings::ViewMode::{self, Column, Grid},
+    ui::settings::show_preferences_dialog,
 };
 
 /// Build the view mode toggle button.
@@ -61,9 +63,10 @@ pub fn build_view_toggle(state: &Arc<AppState>, initial_mode: ViewMode) -> Toggl
     toggle
 }
 
-/// Build a header bar with view toggle.
+/// Build a header bar with view toggle and preferences button.
 ///
-/// Creates a horizontal box containing the view toggle button.
+/// Creates a horizontal box containing the view toggle button and a
+/// gear icon button to open the preferences dialog.
 #[must_use]
 pub fn build_header_controls(state: &Arc<AppState>) -> Box {
     let controls = Box::builder().orientation(Horizontal).spacing(6).build();
@@ -72,6 +75,20 @@ pub fn build_header_controls(state: &Arc<AppState>) -> Box {
 
     let toggle = build_view_toggle(state, initial_mode);
     controls.append(&toggle);
+
+    let prefs_btn = Button::builder()
+        .icon_name("open-menu-symbolic")
+        .tooltip_text("Preferences")
+        .css_classes(["flat"])
+        .can_focus(true)
+        .build();
+
+    let state_prefs = Arc::clone(state);
+    prefs_btn.connect_clicked(move |_| {
+        show_preferences_dialog(&state_prefs);
+    });
+
+    controls.append(&prefs_btn);
 
     controls
 }

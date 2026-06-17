@@ -22,7 +22,10 @@ use {
 use crate::{
     library::scanner::{FsScanner, ScanEvent, ScannerConfig},
     playback::{engine::PlaybackEngine, output::startup_device_check},
-    storage::{database::SqliteStorage, settings::ViewMode},
+    storage::{
+        database::SqliteStorage,
+        settings::{ActiveTab, ViewMode},
+    },
     ui::window::build_window,
 };
 
@@ -41,6 +44,8 @@ pub struct AppState {
     pub refresh_tx: TokioSender<()>,
     /// Broadcasts view mode changes (grid/column) to the UI.
     pub view_mode_tx: TokioSender<ViewMode>,
+    /// Broadcasts active tab changes (albums/artists) to the UI.
+    pub active_tab_tx: TokioSender<ActiveTab>,
     /// Channel sender for forwarding scan events to the UI (status bar).
     pub scan_event_tx: Sender<ScanEvent>,
     /// Channel receiver for consuming scan events (cloned for each subscriber).
@@ -170,6 +175,7 @@ pub async fn run_application() -> Result<()> {
     ));
 
     let initial_view_mode = storage.get_view_mode();
+    let initial_active_tab = storage.get_active_tab();
 
     let (navigation_tx, navigation_rx) = unbounded();
 
@@ -179,6 +185,7 @@ pub async fn run_application() -> Result<()> {
         scanner,
         refresh_tx: channel(()).0,
         view_mode_tx: channel(initial_view_mode).0,
+        active_tab_tx: channel(initial_active_tab).0,
         scan_event_tx,
         scan_event_rx,
         toast_tx,
@@ -218,15 +225,13 @@ mod tests {
         app::AppState,
         library::scanner::{FsScanner, ScannerConfig},
         playback::engine::PlaybackEngine,
-        storage::{database::SqliteStorage, settings::ViewMode::Grid},
+        storage::{
+            database::SqliteStorage,
+            settings::{ActiveTab::Albums, ViewMode::Grid},
+        },
     };
 
     impl AppState {
-        /// Creates a mock `AppState` with an in-memory `SQLite` database for testing.
-        ///
-        /// # Errors
-        ///
-        /// Returns an error if the in-memory database cannot be initialized.
         pub fn mock() -> Result<Self> {
             static MOCK_STORAGE: LazyLock<Result<Arc<SqliteStorage>>> =
                 LazyLock::new(init_mock_storage);
@@ -253,6 +258,7 @@ mod tests {
                 )),
                 refresh_tx: channel(()).0,
                 view_mode_tx: channel(Grid).0,
+                active_tab_tx: channel(Albums).0,
                 scan_event_tx,
                 scan_event_rx,
                 toast_tx,

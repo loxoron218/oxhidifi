@@ -238,8 +238,8 @@ description: "Task list for high-fidelity music player refactoring"
 
 **Purpose**: User preferences dialog with library management, audio device selection, view preferences, and gapless toggle
 
-- [ ] T051 [P] Implement PreferencesDialog with library directory management (add/remove directories), audio device selection, and view preferences (default view mode: grid/column, default tab: Albums/Artists) per FR-033 and plan.md; wire audio device selection to playback engine output device enumeration; wire volume slider to PlaybackController (volume persistence to `UserSettings.volume` is handled by T017 — T051 only binds the UI slider to the engine and reads the initial value from settings)
-- [ ] T051b [P] Implement gapless playback toggle (SwitchRow) in PreferencesDialog Audio > Playback group per FR-033; wire toggle to playback engine to enable/disable gapless transition logic in src/playback/gapless.rs
+- [X] T051 [P] Implement PreferencesDialog with library directory management (add/remove directories), audio device selection, and view preferences (default view mode: grid/column, default tab: Albums/Artists) per FR-033 and plan.md; wire audio device selection to playback engine output device enumeration; wire volume slider to PlaybackController (volume persistence to `UserSettings.volume` is handled by T017 — T051 only binds the UI slider to the engine and reads the initial value from settings)
+- [X] T051b [P] Implement gapless playback toggle (SwitchRow) in PreferencesDialog Audio > Playback group per FR-033; wire toggle to playback engine to enable/disable gapless transition logic in src/playback/gapless.rs
 
 **Checkpoint**: PreferencesDialog functional with library directory management, audio device selection, view preferences, and gapless toggle
 

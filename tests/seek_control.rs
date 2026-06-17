@@ -10,7 +10,11 @@ mod tests {
 
     use oxhidifi_refactor::playback::{
         PlaybackError::{QueueEmpty, TrackNotFound},
-        engine::{PlaybackController, PlaybackEngine},
+        engine::{
+            MuteState::{Muted, Unmuted},
+            PlaybackController, PlaybackEngine,
+            PlaybackStatus::Stopped,
+        },
         queue::PlaybackQueue,
     };
 
@@ -49,7 +53,7 @@ mod tests {
         let engine = PlaybackEngine::new();
         let state = engine.state();
         assert!(state.current_track_id.is_none());
-        assert!(!state.is_playing);
+        assert_eq!(state.status, Stopped);
     }
 
     #[test]
@@ -120,7 +124,7 @@ mod tests {
     fn toggle_pause_noop_when_stopped() -> Result<()> {
         let engine = PlaybackEngine::new();
         engine.toggle_pause()?;
-        if engine.state().is_playing {
+        if engine.state().status != Stopped {
             bail!("engine should not be playing after toggle when stopped");
         }
         Ok(())
@@ -157,17 +161,17 @@ mod tests {
     #[test]
     fn mute_toggle() -> Result<()> {
         let engine = PlaybackEngine::new();
-        if engine.state().is_muted {
+        if engine.state().muted == Muted {
             bail!("engine should start unmuted");
         }
 
         engine.set_muted(true)?;
-        if !engine.state().is_muted {
+        if engine.state().muted == Unmuted {
             bail!("engine should be muted after set_muted(true)");
         }
 
         engine.set_muted(false)?;
-        if engine.state().is_muted {
+        if engine.state().muted == Muted {
             bail!("engine should be unmuted after set_muted(false)");
         }
 

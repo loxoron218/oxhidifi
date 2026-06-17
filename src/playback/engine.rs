@@ -88,6 +88,24 @@ struct EngineShared {
     device_lost: Arc<AtomicBool>,
 }
 
+/// Gapless playback mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GaplessMode {
+    /// Gapless playback is enabled.
+    Enabled,
+    /// Gapless playback is disabled.
+    Disabled,
+}
+
+/// Mute state.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MuteState {
+    /// Audio is muted.
+    Muted,
+    /// Audio is unmuted.
+    Unmuted,
+}
+
 /// Audio output configuration for the decode loop.
 #[derive(Clone, Copy)]
 struct OutputConfig {
@@ -160,6 +178,13 @@ pub trait PlaybackController: Send + 'static {
 
     /// Get the current playback state.
     fn state(&self) -> PlaybackState;
+
+    /// Enable or disable gapless playback.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PlaybackError`] on failure.
+    fn set_gapless_enabled(&self, enabled: bool) -> Result<(), PlaybackError>;
 }
 
 /// The playback engine orchestrator.
@@ -236,8 +261,7 @@ impl PlaybackEngine {
             let mut state = self.shared.state.lock();
             state.current_track_id = Some(track_id);
             state.current_path = Some(path.clone());
-            state.is_playing = true;
-            state.is_paused = false;
+            state.status = PlaybackStatus::Playing;
             state.elapsed_seconds = 0.0;
             state.duration_seconds = 0.0;
         }
@@ -346,7 +370,7 @@ impl PlaybackController for PlaybackEngine {
     fn toggle_pause(&self) -> Result<(), PlaybackError> {
         let is_playing = {
             let state = self.shared.state.lock();
-            state.is_playing
+            state.status != PlaybackStatus::Stopped
         };
         if !is_playing {
             info!(
@@ -357,16 +381,16 @@ impl PlaybackController for PlaybackEngine {
         }
 
         let mut state = self.shared.state.lock();
-        let was_paused = state.is_paused;
+        let was_paused = state.status == PlaybackStatus::Paused;
         let event = if was_paused {
-            state.is_paused = false;
+            state.status = PlaybackStatus::Playing;
             info!(
                 target: "playback::engine",
                 "Playback resumed",
             );
             PlaybackEvent::Resumed
         } else {
-            state.is_paused = true;
+            state.status = PlaybackStatus::Paused;
             info!(
                 target: "playback::engine",
                 "Playback paused",
@@ -398,8 +422,7 @@ impl PlaybackController for PlaybackEngine {
         );
         self.stop_decode_task();
         let mut state = self.shared.state.lock();
-        state.is_playing = false;
-        state.is_paused = false;
+        state.status = PlaybackStatus::Stopped;
         state.current_track_id = None;
         state.current_path = None;
         state.elapsed_seconds = 0.0;
@@ -466,7 +489,32 @@ impl PlaybackController for PlaybackEngine {
     }
 
     fn set_muted(&self, muted: bool) -> Result<(), PlaybackError> {
-        self.shared.state.lock().is_muted = muted;
+        self.shared.state.lock().muted = if muted {
+            MuteState::Muted
+        } else {
+            MuteState::Unmuted
+        };
+        Ok(())
+    }
+
+    fn set_gapless_enabled(&self, enabled: bool) -> Result<(), PlaybackError> {
+        info!(
+            target: "playback::engine",
+            enabled,
+            "Gapless playback toggled",
+        );
+        self.shared.state.lock().gapless_mode = if enabled {
+            GaplessMode::Enabled
+        } else {
+            GaplessMode::Disabled
+        };
+        if let Err(e) = self
+            .shared
+            .event_tx
+            .send(PlaybackEvent::GaplessEnabledChanged { enabled })
+        {
+            warn!(error = %e, "Failed to send GaplessEnabledChanged event");
+        }
         Ok(())
     }
 
@@ -513,6 +561,11 @@ pub enum PlaybackEvent {
         /// Error description.
         error: String,
     },
+    /// Gapless playback was enabled or disabled.
+    GaplessEnabledChanged {
+        /// Whether gapless is now enabled.
+        enabled: bool,
+    },
 }
 
 /// Current state of the playback engine.
@@ -522,18 +575,18 @@ pub struct PlaybackState {
     pub current_track_id: Option<i64>,
     /// The file path of the currently playing track, if any.
     pub current_path: Option<PathBuf>,
-    /// Whether the engine is currently playing.
-    pub is_playing: bool,
-    /// Whether the engine is paused.
-    pub is_paused: bool,
+    /// Current playback status.
+    pub status: PlaybackStatus,
     /// Current volume (0.0 to 1.0).
     pub volume: f64,
-    /// Whether audio is muted.
-    pub is_muted: bool,
+    /// Mute state.
+    pub muted: MuteState,
     /// Elapsed playback time in seconds.
     pub elapsed_seconds: f64,
     /// Total track duration in seconds (0.0 if unknown).
     pub duration_seconds: f64,
+    /// Gapless playback mode.
+    pub gapless_mode: GaplessMode,
 }
 
 impl Default for PlaybackState {
@@ -541,14 +594,25 @@ impl Default for PlaybackState {
         Self {
             current_track_id: None,
             current_path: None,
-            is_playing: false,
-            is_paused: false,
+            status: PlaybackStatus::Stopped,
             volume: 1.0,
-            is_muted: false,
+            muted: MuteState::Unmuted,
             elapsed_seconds: 0.0,
             duration_seconds: 0.0,
+            gapless_mode: GaplessMode::Enabled,
         }
     }
+}
+
+/// Playback status.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlaybackStatus {
+    /// Actively playing.
+    Playing,
+    /// Paused.
+    Paused,
+    /// Stopped.
+    Stopped,
 }
 
 /// Path resolver: maps track IDs to file paths.
@@ -564,7 +628,11 @@ pub trait TrackPathResolver: Send + Sync + 'static {
 /// Read the current volume from shared state.
 fn read_volume(shared: &EngineShared) -> f64 {
     let state = shared.state.lock();
-    if state.is_muted { 0.0 } else { state.volume }
+    if state.muted == MuteState::Muted {
+        0.0
+    } else {
+        state.volume
+    }
 }
 
 /// Send an error event through the broadcast channel.
@@ -772,8 +840,7 @@ fn try_auto_advance(
         let mut state = engine_shared.state.lock();
         state.current_track_id = Some(next_id);
         state.current_path = Some(next_path.clone());
-        state.is_playing = true;
-        state.is_paused = false;
+        state.status = PlaybackStatus::Playing;
         state.elapsed_seconds = 0.0;
         state.duration_seconds = 0.0;
     }
@@ -826,8 +893,7 @@ fn finalize_track(
     {
         let mut state = engine_shared.state.lock();
         let had_track = state.current_track_id.is_some();
-        state.is_playing = false;
-        state.is_paused = false;
+        state.status = PlaybackStatus::Stopped;
         state.current_track_id = None;
         state.current_path = None;
         state.elapsed_seconds = 0.0;
@@ -956,7 +1022,7 @@ fn run_decode_loop(
             Err(Empty) | Ok(DecodeCommand::PreloadNext { .. }) => {}
         }
 
-        if engine_shared.state.lock().is_paused {
+        if engine_shared.state.lock().status == PlaybackStatus::Paused {
             yield_now();
             continue;
         }
@@ -1024,7 +1090,9 @@ mod tests {
         engine::{
             EngineShared, PlaybackController, PlaybackEngine,
             PlaybackEvent::{Paused, TrackFinished},
-            PlaybackState, downmix, maybe_downmix, try_auto_advance,
+            PlaybackState,
+            PlaybackStatus::Stopped,
+            downmix, maybe_downmix, try_auto_advance,
         },
         queue::PlaybackQueue,
     };
@@ -1042,8 +1110,7 @@ mod tests {
     fn engine_creates_with_default_state() {
         let engine = PlaybackEngine::new();
         let state = engine.state();
-        assert!(!state.is_playing);
-        assert!(!state.is_paused);
+        assert_eq!(state.status, Stopped);
         assert!((state.volume - 1.0).abs() < f64::EPSILON);
     }
 
@@ -1065,7 +1132,7 @@ mod tests {
     fn stop_when_not_playing_is_noop() -> Result<()> {
         let engine = PlaybackEngine::new();
         engine.stop().map_err(|e| anyhow!("{e}"))?;
-        if engine.state().is_playing {
+        if engine.state().status != Stopped {
             bail!("engine should not be playing after stop");
         }
         Ok(())
@@ -1075,7 +1142,7 @@ mod tests {
     fn toggle_pause_when_not_playing_is_noop() -> Result<()> {
         let engine = PlaybackEngine::new();
         engine.toggle_pause().map_err(|e| anyhow!("{e}"))?;
-        if engine.state().is_playing {
+        if engine.state().status != Stopped {
             bail!("engine should not be playing after toggle_pause");
         }
         Ok(())

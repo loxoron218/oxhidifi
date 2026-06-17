@@ -47,7 +47,7 @@ use crate::{
             DeviceDisconnected as PlaybackDeviceDisconnected,
             NoDeviceAvailable as PlaybackNoDeviceAvailable, Output,
         },
-        engine::PlaybackController,
+        engine::{PlaybackController, PlaybackStatus::Playing},
     },
     storage::{
         Album, Storage,
@@ -383,7 +383,7 @@ fn build_album_card(state: &Arc<AppState>, album: &Album, artist_name: &str) -> 
 fn album_play_icon(state: &AppState, album_id: i64) -> &'static str {
     let is_current = state.current_album_id.load(Relaxed) == album_id;
     let ps = state.playback.state();
-    if is_current && ps.is_playing && !ps.is_paused {
+    if is_current && ps.status == Playing {
         "media-playback-pause-symbolic"
     } else {
         "media-playback-start-symbolic"

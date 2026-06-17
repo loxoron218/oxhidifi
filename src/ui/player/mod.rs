@@ -17,6 +17,7 @@ use crate::{
     playback::engine::{
         PlaybackController,
         PlaybackEvent::{self, Stopped, TrackStarted},
+        PlaybackStatus::Stopped as StatusStopped,
     },
     storage::Storage,
 };
@@ -35,7 +36,7 @@ async fn handle_panel_event(sv: &OverlaySplitView, state: &Arc<AppState>, event:
         }
         Stopped => {
             let ps = state.playback.state();
-            if ps.current_track_id.is_none() && !ps.is_playing {
+            if ps.current_track_id.is_none() && ps.status == StatusStopped {
                 sv.set_show_sidebar(false);
             }
             state.current_album_id.store(-1, Relaxed);
@@ -63,19 +64,22 @@ pub fn wire_panel_events(state: &Arc<AppState>, split_view: &OverlaySplitView) {
 
 #[cfg(test)]
 mod tests {
-    use crate::playback::engine::PlaybackState;
+    use crate::playback::engine::{
+        PlaybackState,
+        PlaybackStatus::{Playing, Stopped},
+    };
 
     #[test]
     fn empty_state_implies_queue_empty() {
         let state = PlaybackState::default();
         assert!(state.current_track_id.is_none());
-        assert!(!state.is_playing);
+        assert_eq!(state.status, Stopped);
     }
 
     #[test]
     fn playing_state_not_empty() {
         let state = PlaybackState {
-            is_playing: true,
+            status: Playing,
             current_track_id: Some(1),
             ..Default::default()
         };

@@ -19,7 +19,7 @@ use crate::storage::{
     StorageError::{self, Database, InvalidPath},
     StorageResult, Track, TrackUpdate,
     migrations::run,
-    settings::{SettingsStore, ViewMode},
+    settings::{ActiveTab, SettingsStore, ViewMode},
 };
 
 /// Subquery fragment for album count and duration columns.
@@ -153,6 +153,66 @@ impl SqliteStorage {
             .write()
             .update(|s| s.view_mode = mode)
             .map_err(|e| Database(format!("Failed to save view mode: {e}")))
+    }
+
+    /// Get whether gapless playback is enabled.
+    #[must_use]
+    pub fn get_gapless_enabled(&self) -> bool {
+        self.settings.read().get_gapless_enabled()
+    }
+
+    /// Set whether gapless playback is enabled.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if settings cannot be saved.
+    pub fn set_gapless_enabled(&self, enabled: bool) -> Result<(), StorageError> {
+        self.settings
+            .write()
+            .set_gapless_enabled(enabled)
+            .map_err(|e| Database(format!("Failed to save gapless setting: {e}")))
+    }
+
+    /// Get the preferred audio device name.
+    #[must_use]
+    pub fn get_audio_device(&self) -> Option<String> {
+        self.settings.read().get_audio_device().map(String::from)
+    }
+
+    /// Set the preferred audio device name.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if settings cannot be saved.
+    pub fn set_audio_device(&self, device: Option<String>) -> Result<(), StorageError> {
+        self.settings
+            .write()
+            .set_audio_device(device)
+            .map_err(|e| Database(format!("Failed to save audio device: {e}")))
+    }
+
+    /// Get the active tab preference.
+    #[must_use]
+    pub fn get_active_tab(&self) -> ActiveTab {
+        self.settings.read().get_active_tab()
+    }
+
+    /// Set the active tab preference.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if settings cannot be saved.
+    pub fn set_active_tab(&self, tab: ActiveTab) -> Result<(), StorageError> {
+        self.settings
+            .write()
+            .set_active_tab(tab)
+            .map_err(|e| Database(format!("Failed to save active tab: {e}")))
+    }
+
+    /// Get the volume level from settings.
+    #[must_use]
+    pub fn get_settings_volume(&self) -> f64 {
+        self.settings.read().get_volume()
     }
 }
 
