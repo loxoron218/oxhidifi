@@ -35,9 +35,9 @@
 - `rodio`: Higher-level but lacks frame-level control needed for gapless transitions
 - FFI to `libavcodec` (FFmpeg): Adds build complexity and C dependency; symphonia covers all needed formats in pure Rust
 
-### Decision: `rubato` + `audioadapter-buffers` for resampling
+### Decision: `rubato` (with its `rubato::audioadapter_buffers` sub-module) for resampling
 
-**Rationale**: `rubato` provides high-quality asynchronous resampling with multiple algorithms (Linear, Sinc, FFT). `audioadapter-buffers` provides efficient buffer management for the resampler I/O. Fixed-size input/output buffers prevent allocation at resample time.
+**Rationale**: `rubato` provides high-quality asynchronous resampling with multiple algorithms (Linear, Sinc, FFT). Its built-in `audioadapter_buffers` sub-module provides efficient buffer management for the resampler I/O. Fixed-size input/output buffers prevent allocation at resample time.
 
 **Alternatives considered**:
 - `sample` crate: Provides type conversion but not sample-rate conversion

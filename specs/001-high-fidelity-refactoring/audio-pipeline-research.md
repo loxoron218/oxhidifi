@@ -1,7 +1,7 @@
 # Audio Pipeline Research: High-Fidelity Gapless Bit-Perfect Playback
 
 **Date**: 2026-05-22
-**Sources**: Google Search, Context7 MCP, crate docs (cpal, symphonia, rtrb, rubato, lofty, audioadapter-buffers)
+**Sources**: Google Search, Context7 MCP, crate docs (cpal, symphonia, rtrb, rubato, lofty)
 
 ---
 
@@ -179,7 +179,6 @@ impl Seek for PrefetchSource {
 
 ```toml
 rubato = "0.14"
-audioadapter-buffers = "0.2"
 ```
 
 ### Decision Tree: Bypass or Resample
@@ -199,7 +198,7 @@ For a session where the output sample rate is fixed, use `Fft::<f64>` (synchrono
 
 ```rust
 use rubato::{Resampler, Fft, FixedSync};
-use audioadapter_buffers::direct::InterleavedSlice;
+use rubato::audioadapter_buffers::direct::InterleavedSlice;
 
 let mut resampler = Fft::<f64>::new(
     input_rate,
@@ -703,7 +702,6 @@ match decoder.decode(&packet) {
 | Symphonia Core | `symphonia-core` | `0.5` | (default) | Types for custom MediaSource |
 | Ring Buffer | `rtrb` | `0.3` | (default) | Lock-free SPSC for audio data |
 | Resampler | `rubato` | `0.14` | (default) | High-quality Sinc resampling |
-| Buffer Adapter | `audioadapter-buffers` | `0.2` | (default) | Zero-copy adapters for rubato |
 | Output | `cpal` | `0.15` | `alsa` for Linux bit-perfect | Cross-platform audio output |
 | Metadata | `lofty` | `0.20` | `mp3, flac, ogg, aac, wav` | Tag parsing during library scan |
 

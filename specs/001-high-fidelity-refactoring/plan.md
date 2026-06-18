@@ -12,7 +12,7 @@ Refactor oxhidifi into a high-fidelity GTK4/Libadwaita desktop music player with
 
 **Language/Version**: Rust Edition 2024 (stable)
 
-**Primary Dependencies**: `cpal` (audio device abstraction), `symphonia` (codec decoding), `rtrb` (lock-free ring buffers), `lofty` (metadata parsing), `rubato` + `audioadapter-buffers` (resampling), `tokio` (async runtime), `libadwaita`/`gtk4-rs` (UI), `sqlx` (SQLite), `serde` + `serde_json` (settings persistence), `notify` (file watching), `tracing` + `tracing-subscriber` (observability), `crossbeam` (concurrency), `rayon` (data parallelism), `parking-lot` (fast mutexes)
+**Primary Dependencies**: `cpal` (audio device abstraction), `symphonia` (codec decoding), `rtrb` (lock-free ring buffers), `lofty` (metadata parsing), `rubato` (with its `rubato::audioadapter_buffers` sub-module) (resampling), `tokio` (async runtime), `libadwaita`/`gtk4-rs` (UI), `sqlx` (SQLite), `serde` + `serde_json` (settings persistence), `notify` (file watching), `tracing` + `tracing-subscriber` (observability), `crossbeam` (concurrency), `rayon` (data parallelism), `parking-lot` (fast mutexes)
 
 **Storage**: SQLite via `sqlx` for library catalog, queue state, and metadata cache. JSON files via `serde` at XDG config/data paths for user settings.
 
@@ -49,7 +49,7 @@ Refactor oxhidifi into a high-fidelity GTK4/Libadwaita desktop music player with
 | **UX (Principle III)** | 6px spacing scale (no hardcoded radii) | `rg 'border-radius' src/` returns empty | PASS (no existing code) |
 | **UX (Principle III)** | 200ms ease transitions for motion | Code review | PASS (no existing code) |
 | **Performance (Principle IV)** | Hot paths use `rtrb` (lock-free ring buffers) | Code review | PASS (designed in) |
-| **Performance (Principle IV)** | Resampling uses `rubato` + `audioadapter-buffers` | Code review | PASS (designed in) |
+| **Performance (Principle IV)** | Resampling uses `rubato` (with its `rubato::audioadapter_buffers` sub-module) | Code review | PASS (designed in) |
 | **Observability (Principle V)** | Library crates use `thiserror` with documented variants | Code review | PASS (designed in) |
 | **Observability (Principle V)** | No `let _` / `.ok()` in `src/` | `rg 'let _\|\.ok\(\)' src/` returns empty | PASS (no existing code) |
 

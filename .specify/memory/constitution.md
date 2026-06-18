@@ -73,7 +73,7 @@ regression relative to the previous baseline. Hot paths MUST use zero heap alloc
 all buffers MUST be pre-allocated at initialization or use statically-sized arrays.
 Concurrent work MUST prefer `tokio` for async I/O, `crossbeam` for high-throughput
 message passing, and `rayon` for data-parallel CPU workloads. Resampling MUST use `rubato`
-with `audioadapter-buffers` for efficient buffer management. Rationale: Bit-perfect gapless
+(with its `rubato::audioadapter_buffers` sub-module) for efficient buffer management. Rationale: Bit-perfect gapless
 playback demands deterministic low-latency execution; allocation stalls or lock contention
 directly causes audible glitches.
 
@@ -94,7 +94,7 @@ not discarded errors or opaque dynamic dispatch.
 ## Technology Stack & Constraints
 
 **Audio Engine:** `cpal` (device abstraction), `symphonia` (codec), `rtrb` (lock-free
-ring buffers), `lofty` (metadata), `rubato` + `audioadapter-buffers` (resampling),
+ring buffers), `lofty` (metadata), `rubato` (with its `rubato::audioadapter_buffers` sub-module) (resampling),
 `crossbeam`, `num-traits`.
 
 **Concurrency:** `tokio` (async runtime), `tokio-stream`, `tokio-util` (async I/O),
