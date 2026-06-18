@@ -1,9 +1,9 @@
 /target
 .specify/extensions
+.specify/extensions.yml
+.specify/init-options.json
 .specify/integrations
+.specify/integration.json
 .specify/scripts
 .specify/templates
 .specify/workflows
-.specify/extensions.yml
-.specify/init-options.json
-.specify/integration.json
