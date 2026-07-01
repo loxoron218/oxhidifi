@@ -13,6 +13,7 @@ mod tests {
         anyhow::{Context, Result, ensure},
         async_channel::unbounded,
         tokio::runtime::Runtime,
+        tracing::info,
     };
 
     use oxhidifi_refactor::{
@@ -21,11 +22,16 @@ mod tests {
         storage::{Storage, database::SqliteStorage},
     };
 
+    fn log_device_check() {
+        let Some(e) = startup_device_check() else {
+            return;
+        };
+        info!(error = %e, "startup_device_check returned");
+    }
+
     #[test]
     fn startup_device_check_does_not_panic() {
-        let result = catch_unwind(|| {
-            let _ = startup_device_check();
-        });
+        let result = catch_unwind(log_device_check);
         assert!(result.is_ok(), "startup_device_check must not panic");
     }
 
