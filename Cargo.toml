@@ -4,7 +4,7 @@ name = "oxhidifi-refactor"
 version = "0.1.0"
 
 [dependencies]
-anyhow = "1.0.102"
+anyhow = "1.0.103"
 async-channel = "2.5.0"
 cpal = "0.18.1"
 #crossbeam = "0.8.4"
