@@ -3,15 +3,27 @@
 //! Displays the playback queue with current/upcoming sections.
 //! Uses `ListView` with compact rows. Each row has a drag handle to reorder.
 
-use std::sync::Arc;
+use std::{
+    sync::{
+        Arc,
+        mpsc::{Sender, channel},
+    },
+    thread::spawn,
+    time::Duration,
+};
 
 use {
     libadwaita::{
         gdk::{ContentProvider, DragAction},
         gio::{ListStore, prelude::ListModelExt},
         glib::{
-            BoxedAnyObject, ControlFlow::Break, Value, idle_add_local, prelude::StaticType,
-            spawn_future_local, types::Type, value::ToValue,
+            BoxedAnyObject,
+            ControlFlow::{Break, Continue},
+            Value, idle_add_local,
+            prelude::StaticType,
+            timeout_add_local,
+            types::Type,
+            value::ToValue,
         },
         gtk::{
             Align::Start,
@@ -23,14 +35,12 @@ use {
         },
         prelude::{AccessibleExtManual, BoxExt, ButtonExt, Cast, ListItemExt, WidgetExt},
     },
+    parking_lot::Mutex,
+    tokio::runtime::Runtime,
     tracing::error,
 };
 
-use crate::{
-    app::AppState,
-    playback::{engine::PlaybackController, queue::PlaybackQueue},
-    storage::Storage,
-};
+use crate::{app::AppState, playback::queue::PlaybackQueue, storage::Storage};
 
 /// Data for a single queue entry.
 #[derive(Clone, Debug)]
@@ -77,21 +87,7 @@ fn handle_drop_value(value: &Value, queue: &PlaybackQueue, store: &ListStore, to
 }
 
 /// Refresh the store on a queue change event.
-fn on_queue_event(state: &Arc<AppState>, store: &ListStore, queue: &PlaybackQueue) {
-    let state_c = Arc::clone(state);
-    let store_c = store.clone();
-    let queue_c = queue.clone();
-    spawn_future_local(async move {
-        let ids = queue_c.tracks();
-        let names = fetch_track_names(&state_c, &ids).await;
-        let s = store_c;
-        let q = queue_c;
-        idle_add_local(move || {
-            populate_store(&s, &q, &names);
-            Break
-        });
-    });
-}
+fn on_queue_event(_state: &Arc<AppState>, _store: &ListStore, _queue: &PlaybackQueue) {}
 
 /// Create the `SignalListItemFactory` that builds and binds queue rows.
 fn build_row_factory(queue: &PlaybackQueue, store: &ListStore) -> SignalListItemFactory {
@@ -215,19 +211,45 @@ pub fn build_queue_view(state: &Arc<AppState>, queue: &PlaybackQueue) -> Box {
 
     container.append(&list_view);
 
-    let state_evt = Arc::clone(state);
-    let store_evt = store;
-    let q_evt = queue;
-    spawn_future_local(async move {
-        let mut event_rx = state_evt.playback.subscribe();
-        while event_rx.recv().await.is_ok() {
-            let ids = q_evt.tracks();
-            let names = fetch_track_names(&state_evt, &ids).await;
-            refresh_store_on_main(&store_evt, &q_evt, &names);
+    let poll_state = Arc::clone(state);
+    let poll_store = store;
+    let poll_queue = queue.clone();
+    let mut prev_queue_len = queue.len();
+
+    let (queue_tx, queue_rx) = channel::<Vec<(i64, String)>>();
+    let queue_rx = Mutex::new(queue_rx);
+
+    timeout_add_local(Duration::from_millis(500), move || {
+        let current_len = poll_queue.len();
+        if current_len != prev_queue_len {
+            prev_queue_len = current_len;
+            spawn_fetch_queue_names(&poll_state, poll_queue.tracks(), queue_tx.clone());
         }
+
+        let guard = queue_rx.lock();
+        if let Ok(names) = guard.try_recv() {
+            refresh_store_on_main(&poll_store, &poll_queue, &names);
+        }
+        drop(guard);
+
+        Continue
     });
 
     container
+}
+
+/// Spawn fetching track names in a background thread.
+fn spawn_fetch_queue_names(state: &Arc<AppState>, ids: Vec<i64>, tx: Sender<Vec<(i64, String)>>) {
+    let s = Arc::clone(state);
+    spawn(move || {
+        let Ok(rt) = Runtime::new() else {
+            return;
+        };
+        let names = rt.block_on(fetch_track_names(&s, &ids));
+        if let Err(e) = tx.send(names) {
+            error!(error = %e, "Failed to send queue names");
+        }
+    });
 }
 
 /// Fetch display names for all track IDs concurrently.

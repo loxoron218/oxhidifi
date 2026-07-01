@@ -8,25 +8,24 @@ use std::{
         Arc,
         atomic::{AtomicBool, Ordering::Relaxed},
     },
-    thread::{spawn, yield_now},
+    thread::{sleep, spawn},
+    time::Duration,
 };
 
 use {
+    async_channel::{Receiver, Sender, unbounded},
     num_traits::cast::FromPrimitive,
     parking_lot::Mutex,
     rtrb::{Producer, PushError::Full},
-    tokio::sync::{
-        broadcast::{Receiver, Sender, channel},
-        mpsc::{
-            Receiver as MpscReceiver, Sender as MpscSender, channel as MpscChannel,
-            error::TryRecvError::{Disconnected, Empty},
-        },
+    tokio::sync::mpsc::{
+        Receiver as MpscReceiver, Sender as MpscSender, channel as MpscChannel,
+        error::TryRecvError::{Disconnected, Empty},
     },
     tracing::{error, info, warn},
 };
 
 use crate::playback::{
-    PlaybackError::{self, Output},
+    PlaybackError,
     decoder::{DecodedSamples, Decoder},
     output::AudioOutput,
     queue::PlaybackQueue,
@@ -70,10 +69,8 @@ struct EngineShared {
     state: Mutex<PlaybackState>,
     /// Playback queue.
     queue: PlaybackQueue,
-    /// Broadcast sender for playback events.
-    event_tx: Sender<PlaybackEvent>,
-    /// Keep-alive receiver to prevent broadcast channel from closing.
-    _event_rx: Receiver<PlaybackEvent>,
+    /// Per-subscriber event senders for fan-out broadcast.
+    event_subs: Mutex<Vec<Sender<PlaybackEvent>>>,
     /// Command sender for the active decode task.
     decode_tx: Mutex<Option<MpscSender<DecodeCommand>>>,
     /// Active audio output kept alive during playback.
@@ -86,6 +83,14 @@ struct EngineShared {
     track_sample_rate: Mutex<u32>,
     /// Shared flag set when the audio device is lost.
     device_lost: Arc<AtomicBool>,
+}
+
+impl EngineShared {
+    /// Broadcast an event to all subscribers, removing closed channels.
+    fn send_event(&self, event: &PlaybackEvent) {
+        let mut subs = self.event_subs.lock();
+        subs.retain(|tx| tx.try_send(event.clone()).is_ok());
+    }
 }
 
 /// Gapless playback mode.
@@ -200,13 +205,11 @@ impl PlaybackEngine {
     /// Create a new playback engine.
     #[must_use]
     pub fn new() -> Self {
-        let (event_tx, event_rx) = channel(64);
         Self {
             shared: Arc::new(EngineShared {
                 state: Mutex::new(PlaybackState::default()),
                 queue: PlaybackQueue::new(),
-                event_tx,
-                _event_rx: event_rx,
+                event_subs: Mutex::new(Vec::new()),
                 decode_tx: Mutex::new(None),
                 output: Mutex::new(None),
                 track_paths: Mutex::new(HashMap::new()),
@@ -230,32 +233,10 @@ impl PlaybackEngine {
 
     /// Start decoding and playing a track with optional resampling.
     ///
-    /// Creates a resampler when the track sample rate differs from the
-    /// device sample rate.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`PlaybackError`] if output device cannot be opened.
-    fn start_playback(&self, track_id: i64, path: PathBuf) -> Result<(), PlaybackError> {
+    /// Spawns a decode thread that handles its own `AudioOutput` lifecycle,
+    /// keeping potentially-blocking device operations off the main thread.
+    fn start_playback(&self, track_id: i64, path: PathBuf) {
         self.stop_decode_task();
-
-        let ring_capacity = 48000 * 2;
-        let device_lost = Arc::clone(&self.shared.device_lost);
-        let (output, producer) = AudioOutput::open(ring_capacity, &device_lost)
-            .inspect_err(|e| {
-                send_error_event(
-                    &self.shared.event_tx,
-                    format!("Audio device unavailable: {e}"),
-                );
-            })
-            .map_err(Output)?;
-
-        let output_config = OutputConfig {
-            device_sample_rate: output.sample_rate(),
-            channels: output.channels(),
-        };
-        *self.shared.device_sample_rate.lock() = output_config.device_sample_rate;
-        *self.shared.output.lock() = Some(output);
 
         {
             let mut state = self.shared.state.lock();
@@ -271,7 +252,6 @@ impl PlaybackEngine {
 
         *self.shared.decode_tx.lock() = Some(cmd_tx);
 
-        let event_tx = self.shared.event_tx.clone();
         info!(
             target: "playback::engine",
             track_id,
@@ -279,31 +259,24 @@ impl PlaybackEngine {
             "Playback started",
         );
 
-        if let Err(e) = event_tx.send(PlaybackEvent::TrackStarted { track_id }) {
-            warn!(error = %e, "Failed to send TrackStarted event");
-        }
+        self.shared
+            .send_event(&PlaybackEvent::TrackStarted { track_id });
 
         spawn(move || {
-            run_decode_loop(
-                &path,
-                producer,
-                cmd_rx,
-                &engine_state,
-                &event_tx,
-                track_id,
-                output_config,
-            );
+            init_decode_thread(&path, cmd_rx, &engine_state, track_id);
         });
-
-        Ok(())
     }
 
     /// Stop the currently running decode task.
+    ///
+    /// Drops the command sender so the old decode thread sees `Disconnected`
+    /// and exits. Does NOT drop the audio output — the new decode thread
+    /// handles that to keep potentially-blocking `Stream::drop` off the
+    /// main thread.
     fn stop_decode_task(&self) {
         if let Some(tx) = self.shared.decode_tx.lock().take() {
-            drop(tx.try_send(DecodeCommand::Stop));
+            drop(tx);
         }
-        *self.shared.output.lock() = None;
     }
 }
 
@@ -334,7 +307,8 @@ impl PlaybackController for PlaybackEngine {
             track_id,
             "Play track command",
         );
-        self.start_playback(track_id, path)
+        self.start_playback(track_id, path);
+        Ok(())
     }
 
     fn play_queue(&self, queue: Vec<i64>) -> Result<(), PlaybackError> {
@@ -364,7 +338,8 @@ impl PlaybackController for PlaybackEngine {
             .get(&first_id)
             .cloned()
             .ok_or(PlaybackError::TrackNotFound(first_id))?;
-        self.start_playback(first_id, path)
+        self.start_playback(first_id, path);
+        Ok(())
     }
 
     fn toggle_pause(&self) -> Result<(), PlaybackError> {
@@ -407,9 +382,7 @@ impl PlaybackController for PlaybackEngine {
         drop(state);
         drop(guard);
 
-        if let Err(e) = self.shared.event_tx.send(event) {
-            warn!(error = %e, "Failed to send pause toggle event");
-        }
+        self.shared.send_event(&event);
         Ok(())
     }
 
@@ -428,9 +401,7 @@ impl PlaybackController for PlaybackEngine {
         state.elapsed_seconds = 0.0;
         state.duration_seconds = 0.0;
         drop(state);
-        if let Err(e) = self.shared.event_tx.send(PlaybackEvent::Stopped) {
-            warn!(error = %e, "Failed to send Stopped event");
-        }
+        self.shared.send_event(&PlaybackEvent::Stopped);
         Ok(())
     }
 
@@ -449,7 +420,8 @@ impl PlaybackController for PlaybackEngine {
             .get(&next_id)
             .cloned()
             .ok_or(PlaybackError::TrackNotFound(next_id))?;
-        self.start_playback(next_id, path)
+        self.start_playback(next_id, path);
+        Ok(())
     }
 
     fn previous_track(&self) -> Result<(), PlaybackError> {
@@ -467,7 +439,8 @@ impl PlaybackController for PlaybackEngine {
             .get(&prev_id)
             .cloned()
             .ok_or(PlaybackError::TrackNotFound(prev_id))?;
-        self.start_playback(prev_id, path)
+        self.start_playback(prev_id, path);
+        Ok(())
     }
 
     fn set_volume(&self, volume: f64) -> Result<(), PlaybackError> {
@@ -478,13 +451,8 @@ impl PlaybackController for PlaybackEngine {
             "Volume changed",
         );
         self.shared.state.lock().volume = clamped;
-        if let Err(e) = self
-            .shared
-            .event_tx
-            .send(PlaybackEvent::VolumeChanged { volume: clamped })
-        {
-            warn!(error = %e, "Failed to send VolumeChanged event");
-        }
+        self.shared
+            .send_event(&PlaybackEvent::VolumeChanged { volume: clamped });
         Ok(())
     }
 
@@ -508,18 +476,15 @@ impl PlaybackController for PlaybackEngine {
         } else {
             GaplessMode::Disabled
         };
-        if let Err(e) = self
-            .shared
-            .event_tx
-            .send(PlaybackEvent::GaplessEnabledChanged { enabled })
-        {
-            warn!(error = %e, "Failed to send GaplessEnabledChanged event");
-        }
+        self.shared
+            .send_event(&PlaybackEvent::GaplessEnabledChanged { enabled });
         Ok(())
     }
 
     fn subscribe(&self) -> Receiver<PlaybackEvent> {
-        self.shared.event_tx.subscribe()
+        let (tx, rx) = unbounded();
+        self.shared.event_subs.lock().push(tx);
+        rx
     }
 
     fn state(&self) -> PlaybackState {
@@ -635,44 +600,47 @@ fn read_volume(shared: &EngineShared) -> f64 {
     }
 }
 
-/// Send an error event through the broadcast channel.
-fn send_error_event(event_tx: &Sender<PlaybackEvent>, error: String) {
-    if let Err(e) = event_tx.send(PlaybackEvent::Error { error }) {
-        warn!(error = %e, "Failed to send error event");
-    }
+/// Send an error event to all subscribers.
+fn send_error_event(subs: &Mutex<Vec<Sender<PlaybackEvent>>>, error: &str) {
+    let mut subs = subs.lock();
+    subs.retain(|tx| {
+        tx.try_send(PlaybackEvent::Error {
+            error: error.to_string(),
+        })
+        .is_ok()
+    });
 }
 
 /// Attempt to reconnect the audio output after a device loss.
 ///
+/// Drops the old output before opening a new one to avoid ALSA device
+/// contention.
+///
 /// # Errors
 ///
 /// Returns `Err(())` if a new audio output cannot be opened.
-fn reconnect_device(
-    engine_shared: &Arc<EngineShared>,
-    event_tx: &Sender<PlaybackEvent>,
-) -> Result<Producer<f32>, ()> {
+fn reconnect_device(engine_shared: &Arc<EngineShared>) -> Result<Producer<f32>, ()> {
     let err_msg = "Audio device disconnected during playback".to_string();
     info!(target: "playback::engine", "Audio device lost, attempting reconnection");
-    if event_tx
-        .send(PlaybackEvent::DeviceLost { error: err_msg })
-        .is_err()
-    {
-        warn!("Failed to send DeviceLost event");
-    }
+    engine_shared.send_event(&PlaybackEvent::DeviceLost { error: err_msg });
+
+    *engine_shared.output.lock() = None;
+
     let ring_capacity = 48000 * 2;
     match AudioOutput::open(ring_capacity, &engine_shared.device_lost) {
         Ok((new_output, new_producer)) => {
             *engine_shared.device_sample_rate.lock() = new_output.sample_rate();
             *engine_shared.output.lock() = Some(new_output);
             info!(target: "playback::engine", "Audio device reconnected, resuming playback");
-            if event_tx.send(PlaybackEvent::Resumed).is_err() {
-                warn!("Failed to send Resumed event after reconnection");
-            }
+            engine_shared.send_event(&PlaybackEvent::Resumed);
             Ok(new_producer)
         }
         Err(e) => {
             error!(target: "playback::engine", error = %e, "Audio device reconnection failed");
-            send_error_event(event_tx, format!("Audio device reconnection failed: {e}"));
+            send_error_event(
+                &engine_shared.event_subs,
+                &format!("Audio device reconnection failed: {e}"),
+            );
             Err(())
         }
     }
@@ -732,18 +700,34 @@ fn maybe_downmix(batch: DecodedSamples, src_channels: usize, dst_channels: usize
     }
 }
 
+/// Loop pushing a single sample, retrying on full buffer.
+///
+/// Returns `false` if the producer is abandoned.
+fn push_sample(sample: f32, producer: &mut Producer<f32>) -> bool {
+    let mut s = sample;
+    loop {
+        match producer.push(s) {
+            Ok(()) => return true,
+            Err(Full(val)) => {
+                s = val;
+            }
+        }
+        if producer.is_abandoned() {
+            return false;
+        }
+        sleep(Duration::from_millis(1));
+    }
+}
+
 /// Push interleaved f32 samples into the ring buffer with volume scaling.
 ///
 /// Blocks by yielding the thread when the ring buffer is full, preventing
 /// sample loss and throttling the decode loop to real-time playback rate.
+/// Returns early if the producer is abandoned (all consumers dropped).
 fn push_samples(samples: &[f32], producer: &mut Producer<f32>, volume: f32) {
     for sample in samples {
-        let mut s = *sample * volume;
-        while let Err(ret) = producer.push(s) {
-            s = match ret {
-                Full(val) => val,
-            };
-            yield_now();
+        if !push_sample(*sample * volume, producer) {
+            return;
         }
     }
 }
@@ -787,11 +771,11 @@ fn process_decoded_batch(
 
 /// Try to advance to the next track in the queue after a track finishes.
 ///
-/// Opens a new `AudioOutput`, advances the queue, updates state, and
-/// spawns a new decode loop. Returns `true` if the next track was started.
+/// Advances the queue, updates state, and spawns a new decode thread
+/// (which handles its own `AudioOutput` lifecycle). Returns `true` if
+/// the next track was started.
 fn try_auto_advance(
     engine_shared: &Arc<EngineShared>,
-    event_tx: &Sender<PlaybackEvent>,
     event_to_send: &mut Option<PlaybackEvent>,
 ) -> bool {
     let next_track = match &event_to_send {
@@ -814,26 +798,6 @@ fn try_auto_advance(
 
     *engine_shared.decode_tx.lock() = None;
 
-    let ring_capacity = 48000 * 2;
-    let (output, new_producer) = match AudioOutput::open(ring_capacity, &engine_shared.device_lost)
-    {
-        Ok(pair) => pair,
-        Err(e) => {
-            send_error_event(
-                event_tx,
-                format!("Audio device unavailable for next track: {e}"),
-            );
-            return false;
-        }
-    };
-
-    let output_config = OutputConfig {
-        device_sample_rate: output.sample_rate(),
-        channels: output.channels(),
-    };
-    *engine_shared.device_sample_rate.lock() = output_config.device_sample_rate;
-    *engine_shared.output.lock() = Some(output);
-
     let _next_track_id = engine_shared.queue.next();
 
     {
@@ -854,39 +818,22 @@ fn try_auto_advance(
         "Auto-advancing to next track",
     );
 
-    if let Some(tf_event) = event_to_send.take()
-        && let Err(e) = event_tx.send(tf_event)
-    {
-        warn!(error = %e, "Failed to send TrackFinished event");
+    if let Some(tf_event) = event_to_send.take() {
+        engine_shared.send_event(&tf_event);
     }
-    if let Err(e) = event_tx.send(PlaybackEvent::TrackStarted { track_id: next_id }) {
-        warn!(error = %e, "Failed to send TrackStarted event");
-    }
+    engine_shared.send_event(&PlaybackEvent::TrackStarted { track_id: next_id });
 
     let engine_state = Arc::clone(engine_shared);
-    let event_tx_clone = event_tx.clone();
     spawn(move || {
-        run_decode_loop(
-            &next_path,
-            new_producer,
-            new_cmd_rx,
-            &engine_state,
-            &event_tx_clone,
-            next_id,
-            output_config,
-        );
+        init_decode_thread(&next_path, new_cmd_rx, &engine_state, next_id);
     });
 
     true
 }
 
 /// Attempt auto-advance or clean up playback state and emit final events.
-fn finalize_track(
-    engine_shared: &Arc<EngineShared>,
-    event_tx: &Sender<PlaybackEvent>,
-    event_to_send: &mut Option<PlaybackEvent>,
-) {
-    if try_auto_advance(engine_shared, event_tx, event_to_send) {
+fn finalize_track(engine_shared: &Arc<EngineShared>, event_to_send: &mut Option<PlaybackEvent>) {
+    if try_auto_advance(engine_shared, event_to_send) {
         return;
     }
 
@@ -912,29 +859,27 @@ fn finalize_track(
         }
     }
     *engine_shared.decode_tx.lock() = None;
-    if let Some(event) = event_to_send.take()
-        && let Err(e) = event_tx.send(event)
-    {
-        warn!(error = %e, "Failed to send playback event");
+    if let Some(event) = event_to_send.take() {
+        engine_shared.send_event(&event);
     }
-    if let Err(e) = event_tx.send(PlaybackEvent::Stopped) {
-        warn!(error = %e, "Failed to send final Stopped event");
-    }
+    engine_shared.send_event(&PlaybackEvent::Stopped);
 }
 
 /// Open a decoder for `path` and create a resampler if needed.
 ///
-/// Returns `None` on failure (error event sent via `event_tx`).
+/// Returns `None` on failure (error event sent via `engine_shared`).
 fn init_decoder(
     path: &Path,
     engine_shared: &Arc<EngineShared>,
     output: OutputConfig,
-    event_tx: &Sender<PlaybackEvent>,
 ) -> Option<DecoderCtx> {
     let decoder = match Decoder::open(path) {
         Ok(d) => d,
         Err(e) => {
-            send_error_event(event_tx, format!("Failed to open decoder: {e}"));
+            send_error_event(
+                &engine_shared.event_subs,
+                &format!("Failed to open decoder: {e}"),
+            );
             return None;
         }
     };
@@ -961,7 +906,10 @@ fn init_decoder(
         ) {
             Ok(r) => Some(r),
             Err(e) => {
-                send_error_event(event_tx, format!("Failed to create resampler: {e}"));
+                send_error_event(
+                    &engine_shared.event_subs,
+                    &format!("Failed to create resampler: {e}"),
+                );
                 return None;
             }
         }
@@ -976,6 +924,48 @@ fn init_decoder(
     })
 }
 
+/// Initialise the audio output on the decode thread, then run the decode loop.
+///
+/// Drops the previous audio output before opening a new one, keeping
+/// potentially-blocking ALSA stream operations off the main thread.
+fn init_decode_thread(
+    path: &Path,
+    cmd_rx: MpscReceiver<DecodeCommand>,
+    engine_shared: &Arc<EngineShared>,
+    track_id: i64,
+) {
+    *engine_shared.output.lock() = None;
+
+    let ring_capacity = 48000 * 2;
+    let device_lost = Arc::clone(&engine_shared.device_lost);
+    let (output, producer) = match AudioOutput::open(ring_capacity, &device_lost) {
+        Ok(pair) => pair,
+        Err(e) => {
+            send_error_event(
+                &engine_shared.event_subs,
+                &format!("Audio device unavailable: {e}"),
+            );
+            return;
+        }
+    };
+
+    let output_config = OutputConfig {
+        device_sample_rate: output.sample_rate(),
+        channels: output.channels(),
+    };
+    *engine_shared.device_sample_rate.lock() = output_config.device_sample_rate;
+    *engine_shared.output.lock() = Some(output);
+
+    run_decode_loop(
+        path,
+        producer,
+        cmd_rx,
+        engine_shared,
+        track_id,
+        output_config,
+    );
+}
+
 /// The decode loop running on a blocking thread.
 ///
 /// Optionally uses a resampler when the track sample rate differs from
@@ -987,7 +977,6 @@ fn run_decode_loop(
     mut producer: Producer<f32>,
     mut cmd_rx: MpscReceiver<DecodeCommand>,
     engine_shared: &Arc<EngineShared>,
-    event_tx: &Sender<PlaybackEvent>,
     track_id: i64,
     output: OutputConfig,
 ) {
@@ -997,7 +986,7 @@ fn run_decode_loop(
         src_channels,
         dst_channels,
         mut resampler,
-    }) = init_decoder(path, engine_shared, output, event_tx)
+    }) = init_decoder(path, engine_shared, output)
     else {
         return;
     };
@@ -1009,7 +998,7 @@ fn run_decode_loop(
     loop {
         if engine_shared.device_lost.load(Relaxed) {
             engine_shared.device_lost.store(false, Relaxed);
-            match reconnect_device(engine_shared, event_tx) {
+            match reconnect_device(engine_shared) {
                 Ok(new_producer) => producer = new_producer,
                 Err(()) => break,
             }
@@ -1023,7 +1012,7 @@ fn run_decode_loop(
         }
 
         if engine_shared.state.lock().status == PlaybackStatus::Paused {
-            yield_now();
+            sleep(Duration::from_millis(1));
             continue;
         }
 
@@ -1048,12 +1037,15 @@ fn run_decode_loop(
             }
         }
 
-        if event_to_send.is_some() {
+        if event_to_send.is_some() || producer.is_abandoned() {
             break;
         }
     }
 
-    finalize_track(engine_shared, event_tx, &mut event_to_send);
+    if producer.is_abandoned() || engine_shared.state.lock().current_track_id != Some(track_id) {
+        return;
+    }
+    finalize_track(engine_shared, &mut event_to_send);
 }
 
 /// Create a new resampler for a given sample rate pair.
@@ -1081,7 +1073,6 @@ mod tests {
     use {
         anyhow::{Result, anyhow, bail},
         parking_lot::Mutex,
-        tokio::sync::broadcast::channel,
     };
 
     use crate::playback::{
@@ -1205,12 +1196,10 @@ mod tests {
 
     #[test]
     fn try_auto_advance_returns_false_for_non_track_finished() {
-        let (event_tx, event_rx) = channel(64);
         let shared = Arc::new(EngineShared {
             state: Mutex::new(PlaybackState::default()),
             queue: PlaybackQueue::new(),
-            event_tx,
-            _event_rx: event_rx,
+            event_subs: Mutex::new(Vec::new()),
             decode_tx: Mutex::new(None),
             output: Mutex::new(None),
             track_paths: Mutex::new(HashMap::new()),
@@ -1218,20 +1207,17 @@ mod tests {
             track_sample_rate: Mutex::new(44100),
             device_lost: Arc::new(AtomicBool::new(false)),
         });
-        let (test_tx, _test_rx) = channel(64);
         let mut event = Some(Paused);
-        let result = try_auto_advance(&shared, &test_tx, &mut event);
+        let result = try_auto_advance(&shared, &mut event);
         assert!(!result, "should return false for non-TrackFinished event");
     }
 
     #[test]
     fn try_auto_advance_returns_false_when_no_upcoming_track() {
-        let (event_tx, event_rx) = channel(64);
         let shared = Arc::new(EngineShared {
             state: Mutex::new(PlaybackState::default()),
             queue: PlaybackQueue::new(),
-            event_tx,
-            _event_rx: event_rx,
+            event_subs: Mutex::new(Vec::new()),
             decode_tx: Mutex::new(None),
             output: Mutex::new(None),
             track_paths: Mutex::new(HashMap::new()),
@@ -1240,20 +1226,17 @@ mod tests {
             device_lost: Arc::new(AtomicBool::new(false)),
         });
         shared.queue.set_queue(vec![1]);
-        let (test_tx, _test_rx) = channel(64);
         let mut event = Some(TrackFinished { track_id: 1 });
-        let result = try_auto_advance(&shared, &test_tx, &mut event);
+        let result = try_auto_advance(&shared, &mut event);
         assert!(!result, "should return false when queue has only one track");
     }
 
     #[test]
     fn try_auto_advance_returns_false_when_path_not_found() {
-        let (event_tx, event_rx) = channel(64);
         let shared = Arc::new(EngineShared {
             state: Mutex::new(PlaybackState::default()),
             queue: PlaybackQueue::new(),
-            event_tx,
-            _event_rx: event_rx,
+            event_subs: Mutex::new(Vec::new()),
             decode_tx: Mutex::new(None),
             output: Mutex::new(None),
             track_paths: Mutex::new(HashMap::new()),
@@ -1262,9 +1245,8 @@ mod tests {
             device_lost: Arc::new(AtomicBool::new(false)),
         });
         shared.queue.set_queue(vec![1, 2]);
-        let (test_tx, _test_rx) = channel(64);
         let mut event = Some(TrackFinished { track_id: 1 });
-        let result = try_auto_advance(&shared, &test_tx, &mut event);
+        let result = try_auto_advance(&shared, &mut event);
         assert!(
             !result,
             "should return false when path not found for upcoming track"
