@@ -242,6 +242,11 @@ mod tests {
     };
 
     impl AppState {
+        /// Create a mock `AppState` for testing.
+        ///
+        /// # Errors
+        ///
+        /// Returns an error if the underlying mock storage cannot be initialized.
         pub fn mock() -> Result<Self> {
             static MOCK_STORAGE: LazyLock<Result<Arc<SqliteStorage>>> =
                 LazyLock::new(init_mock_storage);
