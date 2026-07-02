@@ -3,7 +3,10 @@
 
 use std::sync::{
     Arc,
-    atomic::{AtomicBool, Ordering::Relaxed},
+    atomic::{
+        AtomicBool,
+        Ordering::{Acquire, Relaxed, Release},
+    },
 };
 
 use {
@@ -37,6 +40,9 @@ pub struct AudioOutput {
     mode: OutputMode,
     /// Shared flag set by the error callback when the device is lost.
     device_lost: Arc<AtomicBool>,
+    /// Signalled by `flush()` to tell the audio callback to drain stale data
+    /// after a seek. Transitions: `true` on seek request, `false` after drain.
+    flush_flag: Arc<AtomicBool>,
 }
 
 impl AudioOutput {
@@ -60,7 +66,13 @@ impl AudioOutput {
 
         if let Some(device) = host.default_output_device() {
             let (producer, consumer) = RingBuffer::new(ring_capacity);
-            match Self::try_open_on_device(&device, consumer, Arc::clone(device_lost)) {
+            let flush_flag = Arc::new(AtomicBool::new(false));
+            match Self::try_open_on_device(
+                &device,
+                consumer,
+                Arc::clone(&flush_flag),
+                Arc::clone(device_lost),
+            ) {
                 Ok(output) => return Ok((output, producer)),
                 Err(e) => warn!(error = %e, "Default audio device failed, trying fallback devices"),
             }
@@ -80,7 +92,13 @@ impl AudioOutput {
         let mut last_err = NoDeviceAvailable;
         for device in &devices {
             let (producer, consumer) = RingBuffer::new(ring_capacity);
-            match Self::try_open_on_device(device, consumer, Arc::clone(device_lost)) {
+            let flush_flag = Arc::new(AtomicBool::new(false));
+            match Self::try_open_on_device(
+                device,
+                consumer,
+                Arc::clone(&flush_flag),
+                Arc::clone(device_lost),
+            ) {
                 Ok(output) => return Ok((output, producer)),
                 Err(e) => last_err = e,
             }
@@ -97,6 +115,7 @@ impl AudioOutput {
     fn try_open_on_device(
         device: &Device,
         consumer: Consumer<f32>,
+        flush_flag: Arc<AtomicBool>,
         device_lost: Arc<AtomicBool>,
     ) -> Result<Self, OutputError> {
         let device_id = device
@@ -114,9 +133,27 @@ impl AudioOutput {
         let config = supported.config();
 
         let stream = match sample_format {
-            F32 => build_stream::<f32>(device, &config, consumer, Arc::clone(&device_lost))?,
-            I16 => build_stream::<i16>(device, &config, consumer, Arc::clone(&device_lost))?,
-            U16 => build_stream::<u16>(device, &config, consumer, Arc::clone(&device_lost))?,
+            F32 => build_stream::<f32>(
+                device,
+                &config,
+                consumer,
+                Arc::clone(&flush_flag),
+                Arc::clone(&device_lost),
+            )?,
+            I16 => build_stream::<i16>(
+                device,
+                &config,
+                consumer,
+                Arc::clone(&flush_flag),
+                Arc::clone(&device_lost),
+            )?,
+            U16 => build_stream::<u16>(
+                device,
+                &config,
+                consumer,
+                Arc::clone(&flush_flag),
+                Arc::clone(&device_lost),
+            )?,
             fmt => {
                 return Err(StreamConfigError(format!(
                     "unsupported sample format: {fmt:?}"
@@ -136,6 +173,7 @@ impl AudioOutput {
             sample_format,
             mode,
             device_lost,
+            flush_flag,
         })
     }
 
@@ -217,6 +255,15 @@ impl AudioOutput {
             error!(error = %e, "Failed to play output stream");
         }
     }
+
+    /// Signal the audio callback to discard all buffered audio data.
+    ///
+    /// The next callback invocation will drain the ring buffer, preventing
+    /// stale pre-seek audio from reaching the output. The drain happens
+    /// on the audio thread to avoid mutex contention.
+    pub fn flush(&self) {
+        self.flush_flag.store(true, Release);
+    }
 }
 
 /// Describes an available audio output device.
@@ -237,6 +284,11 @@ pub enum OutputMode {
     Resampled,
 }
 
+/// Drain all samples from the ring buffer consumer.
+fn drain_consumer(consumer: &mut Consumer<f32>) {
+    while consumer.pop().is_ok() {}
+}
+
 /// Build a cpal output stream for the given sample type.
 ///
 /// # Errors
@@ -246,12 +298,16 @@ fn build_stream<T: SizedSample + FromSample<f32>>(
     device: &Device,
     config: &StreamConfig,
     mut consumer: Consumer<f32>,
+    flush_flag: Arc<AtomicBool>,
     device_lost: Arc<AtomicBool>,
 ) -> Result<Stream, OutputError> {
     let stream = device
         .build_output_stream(
             *config,
             move |data: &mut [T], _: &OutputCallbackInfo| {
+                if flush_flag.swap(false, Acquire) {
+                    drain_consumer(&mut consumer);
+                }
                 for sample in data.iter_mut() {
                     let s: f32 = consumer.pop().unwrap_or(0.0);
                     *sample = T::from_sample(s);

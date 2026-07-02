@@ -33,6 +33,9 @@ pub enum DecoderError {
     /// End of stream reached.
     #[error("End of stream")]
     EndOfStream,
+    /// Seek operation failed.
+    #[error("Seek error: {0}")]
+    SeekError(String),
 }
 
 /// Errors originating from the audio output subsystem.

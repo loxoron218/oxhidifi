@@ -5,7 +5,10 @@ use std::{
     env::{var, var_os},
     fs::create_dir_all,
     path::PathBuf,
-    sync::{Arc, atomic::AtomicI64},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, AtomicI64},
+    },
 };
 
 use {
@@ -56,6 +59,9 @@ pub struct AppState {
     pub toast_rx: Receiver<String>,
     /// Currently playing album ID (`-1` means none). Used by album grid overlay buttons.
     pub current_album_id: AtomicI64,
+    /// Flag set while the user is dragging the seek bar. Prevents the polling
+    /// timer from fighting the user's drag position and avoids redundant seeks.
+    pub is_seeking: Arc<AtomicBool>,
     /// Sender for navigation events (detail page navigation).
     pub navigation_tx: Sender<NavigationEvent>,
     /// Receiver for navigation events.
@@ -191,6 +197,7 @@ pub async fn run_application() -> Result<()> {
         toast_tx,
         toast_rx,
         current_album_id: AtomicI64::new(-1),
+        is_seeking: Arc::new(AtomicBool::new(false)),
         navigation_tx,
         navigation_rx,
     });
@@ -212,7 +219,10 @@ pub async fn run_application() -> Result<()> {
 mod tests {
     use std::{
         path::Path,
-        sync::{Arc, LazyLock, atomic::AtomicI64},
+        sync::{
+            Arc, LazyLock,
+            atomic::{AtomicBool, AtomicI64},
+        },
     };
 
     use {
@@ -264,6 +274,7 @@ mod tests {
                 toast_tx,
                 toast_rx,
                 current_album_id: AtomicI64::new(-1),
+                is_seeking: Arc::new(AtomicBool::new(false)),
                 navigation_tx,
                 navigation_rx,
             })

@@ -9,20 +9,23 @@ use symphonia::{
     core::{
         audio::GenericAudioBufferRef,
         codecs::{
-            CodecParameters::Audio,
+            CodecParameters,
             audio::{AudioDecoder, AudioDecoderOptions},
         },
         errors::Error::{DecodeError, IoError, ResetRequired},
-        formats::{FormatOptions, FormatReader, TrackType::Audio as TypeAudio, probe::Hint},
+        formats::{
+            FormatOptions, FormatReader, SeekMode::Accurate, SeekTo::Time as SeekTime,
+            TrackType::Audio as TypeAudio, probe::Hint,
+        },
         io::{MediaSourceStream, MediaSourceStreamOptions},
         meta::MetadataOptions,
-        units::Timestamp,
+        units::{Time, Timestamp},
     },
     default::{get_codecs, get_probe},
 };
 
 use crate::playback::DecoderError::{
-    self, DecodeError as PlaybackDecodeError, EndOfStream, OpenError, UnsupportedFormat,
+    self, DecodeError as PlaybackDecodeError, EndOfStream, OpenError, SeekError, UnsupportedFormat,
 };
 
 /// Audio parameters extracted from the decoded stream.
@@ -55,6 +58,8 @@ pub struct Decoder {
     format: Box<dyn FormatReader>,
     /// Audio codec decoder.
     codec: Box<dyn AudioDecoder>,
+    /// Audio codec parameters for decoder re-initialization after seek.
+    codec_params: CodecParameters,
     /// ID of the active audio track.
     track_id: u32,
     /// Audio parameters of the decoded stream.
@@ -90,19 +95,21 @@ impl Decoder {
             .default_track(TypeAudio)
             .ok_or_else(|| UnsupportedFormat("no audio track found".into()))?;
 
-        let codec_params = match &track.codec_params {
-            Some(Audio(p)) => p.clone(),
-            _ => {
-                return Err(UnsupportedFormat(
-                    "track has no audio codec parameters".into(),
-                ));
-            }
+        let codec_params = track
+            .codec_params
+            .clone()
+            .ok_or_else(|| UnsupportedFormat("track has no audio codec parameters".into()))?;
+
+        let Some(audio_params) = codec_params.audio() else {
+            return Err(UnsupportedFormat(
+                "track has no audio codec parameters".into(),
+            ));
         };
 
         let track_id = track.id;
 
-        let sample_rate = codec_params.sample_rate.unwrap_or(44100);
-        let channels = codec_params
+        let sample_rate = audio_params.sample_rate.unwrap_or(44100);
+        let channels = audio_params
             .channels
             .as_ref()
             .map_or(2, |c| u16::try_from(c.count()).unwrap_or(2));
@@ -124,12 +131,13 @@ impl Decoder {
 
         let dec_opts = AudioDecoderOptions::default();
         let codec = get_codecs()
-            .make_audio_decoder(&codec_params, &dec_opts)
+            .make_audio_decoder(audio_params, &dec_opts)
             .map_err(|e| PlaybackDecodeError(e.to_string()))?;
 
         Ok(Self {
             format,
             codec,
+            codec_params,
             track_id,
             params,
         })
@@ -196,6 +204,47 @@ impl Decoder {
     #[must_use]
     pub fn params(&self) -> AudioParams {
         self.params
+    }
+
+    /// Seek to a position in seconds.
+    ///
+    /// Returns the actual position seeked to (may differ slightly from
+    /// the requested position due to codec frame boundaries).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DecoderError::SeekError`] if seeking fails.
+    pub fn seek_to(&mut self, seconds: f64) -> Result<f64, DecoderError> {
+        let time = Time::try_from_secs_f64(seconds)
+            .ok_or_else(|| DecoderError::SeekError("invalid seek time".into()))?;
+
+        let seeked_to = self
+            .format
+            .seek(
+                Accurate,
+                SeekTime {
+                    time,
+                    track_id: Some(self.track_id),
+                },
+            )
+            .map_err(|e| SeekError(format!("seek failed: {e}")))?;
+
+        let Some(audio_params) = self.codec_params.audio() else {
+            return Err(SeekError("missing audio codec parameters".into()));
+        };
+        let dec_opts = AudioDecoderOptions::default();
+        self.codec = get_codecs()
+            .make_audio_decoder(audio_params, &dec_opts)
+            .map_err(|e| SeekError(format!("codec reinit failed: {e}")))?;
+
+        let actual_seconds = self
+            .format
+            .default_track(TypeAudio)
+            .and_then(|t| t.time_base)
+            .and_then(|tb| tb.calc_time(seeked_to.actual_ts))
+            .map_or(seconds, |t| t.as_secs_f64());
+
+        Ok(actual_seconds)
     }
 }
 

@@ -1,16 +1,17 @@
 //! Playback control widgets: transport buttons, seek slider, and volume control.
 
-use std::sync::Arc;
+use std::sync::{Arc, atomic::Ordering::Release};
 
 use {
     libadwaita::{
+        glib::Propagation::Proceed,
         gtk::{
             Align::{Center, End, Start},
-            Box, Button, Label,
+            Box, Button, GestureClick, Label,
             Orientation::{Horizontal, Vertical},
             Scale,
             accessible::Property::Label as PropertyLabel,
-            prelude::RangeExt,
+            prelude::{GestureSingleExt, RangeExt},
         },
         prelude::{AccessibleExtManual, BoxExt, ButtonExt, ScaleExt, WidgetExt},
     },
@@ -19,8 +20,8 @@ use {
 
 use crate::{
     app::AppState,
-    playback::engine::{MuteState::Unmuted, PlaybackController},
-    ui::player::queue::build_queue_view,
+    playback::engine::{MuteState::Unmuted, PlaybackController, PlaybackEngine},
+    ui::player::{panel::format_time, queue::build_queue_view},
 };
 
 /// Build the playback control buttons (prev, play/pause, next).
@@ -78,20 +79,25 @@ pub fn build_playback_controls(state: &Arc<AppState>) -> (Box, Button) {
     (controls, play_button)
 }
 
+/// Seek to the current scale position, clamped to track duration.
+fn seek_to_scale_value(playback: &PlaybackEngine, scale: &Scale) {
+    let s = playback.state();
+    if s.duration_seconds <= 0.0 {
+        return;
+    }
+    let value = scale.value();
+    let position = (value / 100.0) * s.duration_seconds;
+    if let Err(e) = playback.seek_to(position) {
+        error!(error = %e, "Seek failed");
+    }
+}
+
 /// Build the seek section with slider and time labels.
 ///
 /// Returns the container, seek scale, current time label, and total time label.
 #[must_use]
-pub fn build_seek_section() -> (Box, Scale, Label, Label) {
+pub fn build_seek_section(state: &Arc<AppState>) -> (Box, Scale, Label, Label) {
     let seek_box = Box::builder().orientation(Vertical).spacing(4).build();
-
-    let seek_scale = Scale::with_range(Horizontal, 0.0, 100.0, 1.0);
-    seek_scale.set_draw_value(false);
-    seek_scale.set_hexpand(true);
-    seek_scale.set_can_focus(true);
-    seek_scale.set_tooltip_text(Some("Seek through the track"));
-    seek_box.append(&seek_scale);
-
     let time_row = Box::builder().orientation(Horizontal).build();
 
     let current_time = Label::builder()
@@ -111,6 +117,52 @@ pub fn build_seek_section() -> (Box, Scale, Label, Label) {
     total_time.update_property(&[PropertyLabel("Total track duration")]);
     time_row.append(&total_time);
 
+    let seek_scale = Scale::with_range(Horizontal, 0.0, 100.0, 1.0);
+    seek_scale.set_draw_value(false);
+    seek_scale.set_hexpand(true);
+    seek_scale.set_can_focus(true);
+    seek_scale.set_tooltip_text(Some("Seek through the track"));
+
+    let is_seeking = Arc::clone(&state.is_seeking);
+    let gesture = GestureClick::new();
+    gesture.set_button(0);
+
+    let seeking_press = Arc::clone(&is_seeking);
+    gesture.connect_pressed(move |_, _, _, _| {
+        seeking_press.store(true, Release);
+    });
+
+    let seeking_release = Arc::clone(&is_seeking);
+    let playback_release = Arc::clone(&state.playback);
+    let scale_release = seek_scale.clone();
+    gesture.connect_released(move |_, _, _, _| {
+        seeking_release.store(false, Release);
+        seek_to_scale_value(&playback_release, &scale_release);
+    });
+
+    let seeking_unpaired = Arc::clone(&is_seeking);
+    let playback_unpaired = Arc::clone(&state.playback);
+    let scale_unpaired = seek_scale.clone();
+    gesture.connect_unpaired_release(move |_, _, _, _, _| {
+        seeking_unpaired.store(false, Release);
+        seek_to_scale_value(&playback_unpaired, &scale_unpaired);
+    });
+
+    seek_scale.add_controller(gesture);
+
+    let playback_prev = Arc::clone(&state.playback);
+    let time_preview = current_time.clone();
+    seek_scale.connect_change_value(move |_, _, value| {
+        let s = playback_prev.state();
+        if s.duration_seconds <= 0.0 {
+            return Proceed;
+        }
+        let position = (value / 100.0) * s.duration_seconds;
+        time_preview.set_label(&format_time(position));
+        Proceed
+    });
+
+    seek_box.append(&seek_scale);
     seek_box.append(&time_row);
     (seek_box, seek_scale, current_time, total_time)
 }

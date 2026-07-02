@@ -38,6 +38,8 @@ enum DecodeCommand {
     Stop,
     /// Device was lost — stop gracefully.
     DeviceLost,
+    /// Seek to a position in seconds.
+    Seek(f64),
     /// Pre-buffer the next track for gapless transition.
     PreloadNext {
         /// ID of the next track.
@@ -90,6 +92,22 @@ impl EngineShared {
     fn send_event(&self, event: &PlaybackEvent) {
         let mut subs = self.event_subs.lock();
         subs.retain(|tx| tx.try_send(event.clone()).is_ok());
+    }
+}
+
+impl Default for EngineShared {
+    fn default() -> Self {
+        Self {
+            state: Mutex::new(PlaybackState::default()),
+            queue: PlaybackQueue::new(),
+            event_subs: Mutex::new(Vec::new()),
+            decode_tx: Mutex::new(None),
+            output: Mutex::new(None),
+            track_paths: Mutex::new(HashMap::new()),
+            device_sample_rate: Mutex::new(44100),
+            track_sample_rate: Mutex::new(44100),
+            device_lost: Arc::new(AtomicBool::new(false)),
+        }
     }
 }
 
@@ -190,6 +208,13 @@ pub trait PlaybackController: Send + 'static {
     ///
     /// Returns [`PlaybackError`] on failure.
     fn set_gapless_enabled(&self, enabled: bool) -> Result<(), PlaybackError>;
+
+    /// Seek to a position in seconds.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PlaybackError`] if no track is playing.
+    fn seek_to(&self, position_seconds: f64) -> Result<(), PlaybackError>;
 }
 
 /// The playback engine orchestrator.
@@ -206,17 +231,7 @@ impl PlaybackEngine {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            shared: Arc::new(EngineShared {
-                state: Mutex::new(PlaybackState::default()),
-                queue: PlaybackQueue::new(),
-                event_subs: Mutex::new(Vec::new()),
-                decode_tx: Mutex::new(None),
-                output: Mutex::new(None),
-                track_paths: Mutex::new(HashMap::new()),
-                device_sample_rate: Mutex::new(44100),
-                track_sample_rate: Mutex::new(44100),
-                device_lost: Arc::new(AtomicBool::new(false)),
-            }),
+            shared: Arc::new(EngineShared::default()),
         }
     }
 
@@ -481,6 +496,23 @@ impl PlaybackController for PlaybackEngine {
         Ok(())
     }
 
+    fn seek_to(&self, position_seconds: f64) -> Result<(), PlaybackError> {
+        let clamped = {
+            let state = self.shared.state.lock();
+            position_seconds.clamp(0.0, state.duration_seconds)
+        };
+        let cmd_tx = self.shared.decode_tx.lock();
+        if let Some(tx) = cmd_tx.as_ref()
+            && tx.try_send(DecodeCommand::Seek(clamped)).is_err()
+        {}
+        drop(cmd_tx);
+        self.shared.state.lock().elapsed_seconds = clamped;
+        self.shared.send_event(&PlaybackEvent::Seeked {
+            position_seconds: clamped,
+        });
+        Ok(())
+    }
+
     fn subscribe(&self) -> Receiver<PlaybackEvent> {
         let (tx, rx) = unbounded();
         self.shared.event_subs.lock().push(tx);
@@ -530,6 +562,11 @@ pub enum PlaybackEvent {
     GaplessEnabledChanged {
         /// Whether gapless is now enabled.
         enabled: bool,
+    },
+    /// Seeked to a new position.
+    Seeked {
+        /// New position in seconds.
+        position_seconds: f64,
     },
 }
 
@@ -1008,6 +1045,12 @@ fn run_decode_loop(
 
         match cmd_rx.try_recv() {
             Ok(DecodeCommand::Stop | DecodeCommand::DeviceLost) | Err(Disconnected) => break,
+            Ok(DecodeCommand::Seek(pos)) => {
+                engine_shared.output.lock().as_ref().map(AudioOutput::flush);
+                let actual = decoder.seek_to(pos).unwrap_or(pos);
+                elapsed = actual;
+                engine_shared.state.lock().elapsed_seconds = actual;
+            }
             Err(Empty) | Ok(DecodeCommand::PreloadNext { .. }) => {}
         }
 
@@ -1064,16 +1107,9 @@ pub fn create_resampler(
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        collections::HashMap,
-        path::PathBuf,
-        sync::{Arc, atomic::AtomicBool},
-    };
+    use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
-    use {
-        anyhow::{Result, anyhow, bail},
-        parking_lot::Mutex,
-    };
+    use anyhow::{Result, anyhow, bail};
 
     use crate::playback::{
         PlaybackError::{NoDeviceAvailable, Output, QueueEmpty, TrackNotFound},
@@ -1081,12 +1117,18 @@ mod tests {
         engine::{
             EngineShared, PlaybackController, PlaybackEngine,
             PlaybackEvent::{Paused, TrackFinished},
-            PlaybackState,
             PlaybackStatus::Stopped,
             downmix, maybe_downmix, try_auto_advance,
         },
-        queue::PlaybackQueue,
     };
+
+    fn assert_approx_eq(a: f32, b: f32) {
+        assert!((a - b).abs() < f32::EPSILON, "{a} != {b}");
+    }
+
+    fn make_shared_engine() -> Arc<EngineShared> {
+        Arc::new(EngineShared::default())
+    }
 
     fn setup_queue(engine: &PlaybackEngine, track_ids: Vec<i64>) {
         let paths: HashMap<_, _> = track_ids
@@ -1196,17 +1238,7 @@ mod tests {
 
     #[test]
     fn try_auto_advance_returns_false_for_non_track_finished() {
-        let shared = Arc::new(EngineShared {
-            state: Mutex::new(PlaybackState::default()),
-            queue: PlaybackQueue::new(),
-            event_subs: Mutex::new(Vec::new()),
-            decode_tx: Mutex::new(None),
-            output: Mutex::new(None),
-            track_paths: Mutex::new(HashMap::new()),
-            device_sample_rate: Mutex::new(44100),
-            track_sample_rate: Mutex::new(44100),
-            device_lost: Arc::new(AtomicBool::new(false)),
-        });
+        let shared = make_shared_engine();
         let mut event = Some(Paused);
         let result = try_auto_advance(&shared, &mut event);
         assert!(!result, "should return false for non-TrackFinished event");
@@ -1214,17 +1246,7 @@ mod tests {
 
     #[test]
     fn try_auto_advance_returns_false_when_no_upcoming_track() {
-        let shared = Arc::new(EngineShared {
-            state: Mutex::new(PlaybackState::default()),
-            queue: PlaybackQueue::new(),
-            event_subs: Mutex::new(Vec::new()),
-            decode_tx: Mutex::new(None),
-            output: Mutex::new(None),
-            track_paths: Mutex::new(HashMap::new()),
-            device_sample_rate: Mutex::new(44100),
-            track_sample_rate: Mutex::new(44100),
-            device_lost: Arc::new(AtomicBool::new(false)),
-        });
+        let shared = make_shared_engine();
         shared.queue.set_queue(vec![1]);
         let mut event = Some(TrackFinished { track_id: 1 });
         let result = try_auto_advance(&shared, &mut event);
@@ -1233,17 +1255,7 @@ mod tests {
 
     #[test]
     fn try_auto_advance_returns_false_when_path_not_found() {
-        let shared = Arc::new(EngineShared {
-            state: Mutex::new(PlaybackState::default()),
-            queue: PlaybackQueue::new(),
-            event_subs: Mutex::new(Vec::new()),
-            decode_tx: Mutex::new(None),
-            output: Mutex::new(None),
-            track_paths: Mutex::new(HashMap::new()),
-            device_sample_rate: Mutex::new(44100),
-            track_sample_rate: Mutex::new(44100),
-            device_lost: Arc::new(AtomicBool::new(false)),
-        });
+        let shared = make_shared_engine();
         shared.queue.set_queue(vec![1, 2]);
         let mut event = Some(TrackFinished { track_id: 1 });
         let result = try_auto_advance(&shared, &mut event);
@@ -1281,24 +1293,24 @@ mod tests {
     fn downmix_downmix_stereo_to_mono_averages() {
         let samples = vec![0.8, 0.2, -0.6, -0.4];
         let result = downmix(&samples, 2, 1);
-        assert!((result[0] - 0.5).abs() < f32::EPSILON);
-        assert!((result[1] - (-0.5)).abs() < f32::EPSILON);
+        assert_approx_eq(result[0], 0.5);
+        assert_approx_eq(result[1], -0.5);
     }
 
     #[test]
     fn downmix_downmix_51_to_stereo_averages_groups() {
         let samples = vec![1.0, 0.5, 0.0, 0.0, -1.0, -0.5];
         let result = downmix(&samples, 6, 2);
-        assert!((result[0] - 0.5).abs() < f32::EPSILON);
-        assert!((result[1] - (-0.5)).abs() < f32::EPSILON);
+        assert_approx_eq(result[0], 0.5);
+        assert_approx_eq(result[1], -0.5);
     }
 
     #[test]
     fn downmix_downmix_7ch_to_3ch_distributes_evenly() {
         let samples = vec![1.0, 2.0, 10.0, 20.0, 100.0, 200.0, 0.5];
         let result = downmix(&samples, 7, 3);
-        assert!((result[0] - 1.5).abs() < f32::EPSILON);
-        assert!((result[1] - 15.0).abs() < f32::EPSILON);
+        assert_approx_eq(result[0], 1.5);
+        assert_approx_eq(result[1], 15.0);
         assert!((result[2] - 100.166_67).abs() < 0.001);
     }
 
@@ -1306,8 +1318,8 @@ mod tests {
     fn downmix_downmix_5ch_to_2ch_uneven_groups() {
         let samples = vec![1.0, 2.0, 3.0, 4.0, 5.0];
         let result = downmix(&samples, 5, 2);
-        assert!((result[0] - 1.5).abs() < f32::EPSILON);
-        assert!((result[1] - 4.0).abs() < f32::EPSILON);
+        assert_approx_eq(result[0], 1.5);
+        assert_approx_eq(result[1], 4.0);
     }
 
     #[test]

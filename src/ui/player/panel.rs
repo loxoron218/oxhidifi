@@ -6,6 +6,7 @@
 use std::{
     sync::{
         Arc,
+        atomic::Ordering::Acquire,
         mpsc::{Sender, channel},
     },
     thread::spawn,
@@ -248,7 +249,7 @@ pub fn build_player_content(state: &Arc<AppState>) -> ScrolledWindow {
     content.append(&album_label);
     content.append(&format_label);
 
-    let (seek_section, seek_scale, current_time, total_time) = build_seek_section();
+    let (seek_section, seek_scale, current_time, total_time) = build_seek_section(state);
     content.append(&seek_section);
     let (controls_section, play_button) = build_playback_controls(state);
     content.append(&controls_section);
@@ -275,6 +276,8 @@ pub fn build_player_content(state: &Arc<AppState>) -> ScrolledWindow {
 
     let (cover_tx, cover_rx) = channel::<(i64, DecodedCover)>();
     let cover_rx = Mutex::new(cover_rx);
+
+    let is_seeking = Arc::clone(&state.is_seeking);
 
     timeout_add_local(Duration::from_millis(200), move || {
         let s = poll_playback.state();
@@ -310,14 +313,17 @@ pub fn build_player_content(state: &Arc<AppState>) -> ScrolledWindow {
         drop(cover_guard);
 
         update_play_button(&poll_btn, &s);
-        if s.status != StatusStopped {
+        let playing = s.status != StatusStopped;
+        if playing {
+            total_time.set_label(&format_time(s.duration_seconds));
+        }
+        if playing && !is_seeking.load(Acquire) {
             let fraction = match s.duration_seconds {
                 d if d > 0.0 => s.elapsed_seconds / d,
                 _ => 0.0,
             };
             seek_scale.set_value(fraction * 100.0);
             current_time.set_label(&format_time(s.elapsed_seconds));
-            total_time.set_label(&format_time(s.duration_seconds));
         }
         Continue
     });
