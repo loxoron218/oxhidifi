@@ -27,7 +27,7 @@ macro_rules! album_meta_cols {
     () => {
         "(SELECT COUNT(*) FROM tracks WHERE album_id = al.id) AS track_count, (SELECT \
          COALESCE(SUM(duration), 0.0) FROM tracks WHERE album_id = al.id) AS total_duration, \
-         al.format_summary, al.lossless FROM albums al"
+         al.format_summary, al.lossless, al.format, al.bit_depth, al.sample_rate FROM albums al"
     };
 }
 
@@ -292,7 +292,8 @@ impl Storage for SqliteStorage {
     async fn insert_album(&self, album: NewAlbum) -> StorageResult<i64> {
         let row_id: (i64,) = query_as(
             "INSERT INTO albums (title, artist_id, year, genre, artwork_path, format_summary, \
-             lossless) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id",
+             lossless, format, bit_depth, sample_rate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) \
+             RETURNING id",
         )
         .bind(&album.title)
         .bind(album.artist_id)
@@ -301,6 +302,9 @@ impl Storage for SqliteStorage {
         .bind(&album.artwork_path)
         .bind(&album.format_summary)
         .bind(album.lossless)
+        .bind(&album.format)
+        .bind(album.bit_depth)
+        .bind(album.sample_rate)
         .fetch_one(&self.pool)
         .await
         .map_err(|e| Database(format!("Insert album failed: {e}")))?;

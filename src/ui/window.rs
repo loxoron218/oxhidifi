@@ -42,11 +42,18 @@ use crate::{
         AppState,
         NavigationEvent::{self, AlbumDetail, ArtistDetail, Back},
     },
-    storage::settings::ActiveTab::{Albums, Artists},
+    storage::settings::{
+        ActiveTab::{Albums, Artists},
+        ViewMode::{self, Column, Grid},
+    },
     ui::{
         detail::{album::build_album_detail, artist::build_artist_detail},
         header::build_header_controls,
-        library::{albums::build_album_grid, artists::build_artist_grid},
+        library::{
+            albums::{build_album_grid, lazy_build_album_mode},
+            artists::{build_artist_grid, lazy_build_artist_mode},
+            column_view::NarrowState,
+        },
         player::{panel::build_player_content, wire_panel_events},
         status::StatusBar,
     },
@@ -74,12 +81,14 @@ pub fn build_window(app: &Application, state: &Arc<AppState>) -> ApplicationWind
 
     load_hig_css();
 
-    let (toast_overlay, split_view, toggle_button, back_button) = build_content(state);
+    let narrow_state = NarrowState::new_shared();
+    let (toast_overlay, split_view, toggle_button, back_button) =
+        build_content(state, &narrow_state);
     window.set_content(Some(&toast_overlay));
 
     listen_for_toasts(state, &toast_overlay);
 
-    add_responsive_breakpoint(&window, &split_view);
+    add_responsive_breakpoints(&window, &split_view, &narrow_state);
 
     wire_panel_events(state, &split_view);
 
@@ -134,15 +143,33 @@ fn listen_for_toasts(state: &Arc<AppState>, toast_overlay: &ToastOverlay) {
     });
 }
 
-/// Add responsive breakpoint for narrow windows (T039).
+/// Add responsive breakpoints for narrow windows.
 ///
-/// Collapses the `OverlaySplitView` sidebar below 800px width.
-fn add_responsive_breakpoint(window: &ApplicationWindow, split_view: &OverlaySplitView) {
-    let condition = BreakpointCondition::new_length(MaxWidth, 800.0, Sp);
-    let breakpoint = Breakpoint::new(condition);
-    breakpoint.add_setter(split_view, "collapsed", Some(&true.to_value()));
+/// Collapses the `OverlaySplitView` sidebar below 800 px width and
+/// hides non‑essential columns (Format, Bit Depth, Sample Rate) below
+/// 700 px width.
+fn add_responsive_breakpoints(
+    window: &ApplicationWindow,
+    split_view: &OverlaySplitView,
+    narrow_state: &Arc<NarrowState>,
+) {
+    let sidebar_condition = BreakpointCondition::new_length(MaxWidth, 800.0, Sp);
+    let sidebar_bp = Breakpoint::new(sidebar_condition);
+    sidebar_bp.add_setter(split_view, "collapsed", Some(&true.to_value()));
+    window.add_breakpoint(sidebar_bp);
 
-    window.add_breakpoint(breakpoint);
+    let narrow_condition = BreakpointCondition::new_length(MaxWidth, 700.0, Sp);
+    let narrow_bp = Breakpoint::new(narrow_condition);
+    narrow_bp.add_setter(split_view, "collapsed", Some(&true.to_value()));
+    narrow_bp.connect_apply({
+        let ns = Arc::clone(narrow_state);
+        move |_| ns.set(true)
+    });
+    narrow_bp.connect_unapply({
+        let ns = Arc::clone(narrow_state);
+        move |_| ns.set(false)
+    });
+    window.add_breakpoint(narrow_bp);
 }
 
 /// Build the sidebar panel with player content.
@@ -165,6 +192,7 @@ fn build_sidebar(state: &Arc<AppState>, back_button: &ToggleButton) -> ToolbarVi
 fn build_content_pane(
     state: &Arc<AppState>,
     toggle_button: &ToggleButton,
+    narrow_state: &Arc<NarrowState>,
 ) -> (ToolbarView, ViewStack, Stack, Widget) {
     let content_toolbar = ToolbarView::new();
 
@@ -173,14 +201,18 @@ fn build_content_pane(
     let stack = ViewStack::new();
     stack.set_vexpand(true);
 
-    let albums_page = build_album_grid(state);
-    let albums_child =
-        stack.add_titled_with_icon(&albums_page, Some("albums"), "Albums", "view-grid-symbolic");
+    let album_grid = build_album_grid(state, narrow_state);
+    let albums_child = stack.add_titled_with_icon(
+        &album_grid.mode_stack,
+        Some("albums"),
+        "Albums",
+        "view-grid-symbolic",
+    );
     albums_child.set_icon_name(Some("view-grid-symbolic"));
 
-    let artists_page = build_artist_grid(state);
+    let artist_grid = build_artist_grid(state, narrow_state);
     let artists_child = stack.add_titled_with_icon(
-        &artists_page,
+        &artist_grid.mode_stack,
         Some("artists"),
         "Artists",
         "avatar-default-symbolic",
@@ -201,6 +233,19 @@ fn build_content_pane(
                 Albums => "albums",
                 Artists => "artists",
             });
+        }
+    });
+
+    let vm_state = Arc::clone(state);
+    let vm_album_stack = album_grid.mode_stack;
+    let vm_artist_stack = artist_grid.mode_stack;
+    let vm_nm = Arc::clone(narrow_state);
+    spawn_future_local(async move {
+        let mut rx = vm_state.view_mode_tx.subscribe();
+        while rx.changed().await.is_ok() {
+            let mode = *rx.borrow();
+            switch_mode_for_stack(&vm_state, "albums", &vm_album_stack, &vm_nm, mode).await;
+            switch_mode_for_stack(&vm_state, "artists", &vm_artist_stack, &vm_nm, mode).await;
         }
     });
 
@@ -252,6 +297,7 @@ fn build_content_pane(
 /// event wiring in `build_window`.
 fn build_content(
     state: &Arc<AppState>,
+    narrow_state: &Arc<NarrowState>,
 ) -> (ToastOverlay, OverlaySplitView, ToggleButton, ToggleButton) {
     let toast_overlay = ToastOverlay::new();
 
@@ -273,7 +319,7 @@ fn build_content(
         .build();
 
     let (content_toolbar, stack, content_area, orig_stack) =
-        build_content_pane(state, &toggle_button);
+        build_content_pane(state, &toggle_button, narrow_state);
 
     let nav_tx = state.navigation_tx.clone();
 
@@ -401,6 +447,30 @@ fn handle_navigation_event(
             }
         }
     }
+}
+
+/// Return the mode‑stack for a given tab name, or `None` if unknown.
+/// Switch the given tab's mode‑stack to `mode`, building the view
+/// lazily if it doesn't exist yet.
+async fn switch_mode_for_stack(
+    state: &Arc<AppState>,
+    tab: &str,
+    stack: &Stack,
+    narrow_state: &Arc<NarrowState>,
+    mode: ViewMode,
+) {
+    let child = match mode {
+        Grid => "grid",
+        Column => "column",
+    };
+    if stack.child_by_name(child).is_none() {
+        match tab {
+            "albums" => lazy_build_album_mode(state, stack, narrow_state, mode).await,
+            "artists" => lazy_build_artist_mode(state, stack, mode).await,
+            _ => {}
+        }
+    }
+    stack.set_visible_child_name(child);
 }
 
 #[cfg(test)]

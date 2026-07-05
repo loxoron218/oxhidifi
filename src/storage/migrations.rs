@@ -1,6 +1,6 @@
 //! `SQLite` schema migrations and index creation.
 
-use sqlx::{SqlitePool, query};
+use sqlx::{SqlitePool, query, query_as};
 
 use crate::storage::{StorageError::Database, StorageResult};
 
@@ -93,7 +93,59 @@ pub async fn run(pool: &SqlitePool) -> StorageResult<()> {
     .await
     .map_err(|e| Database(format!("Migration failed: {e}")))?;
 
+    add_album_format_columns(pool).await?;
     create_indexes(pool).await
+}
+
+/// Add format, `bit_depth`, and `sample_rate` columns to the albums table.
+///
+/// These columns are populated during scanning and used by the column view.
+///
+/// # Errors
+///
+/// Returns a storage error if any ALTER TABLE or UPDATE fails.
+async fn add_album_format_columns(pool: &SqlitePool) -> StorageResult<()> {
+    if !column_exists(pool, "format").await {
+        query("ALTER TABLE albums ADD COLUMN format TEXT NOT NULL DEFAULT ''")
+            .execute(pool)
+            .await
+            .map_err(|e| Database(format!("Migration failed: {e}")))?;
+    }
+
+    if !column_exists(pool, "bit_depth").await {
+        query("ALTER TABLE albums ADD COLUMN bit_depth INTEGER")
+            .execute(pool)
+            .await
+            .map_err(|e| Database(format!("Migration failed: {e}")))?;
+    }
+
+    if !column_exists(pool, "sample_rate").await {
+        query("ALTER TABLE albums ADD COLUMN sample_rate INTEGER")
+            .execute(pool)
+            .await
+            .map_err(|e| Database(format!("Migration failed: {e}")))?;
+    }
+
+    query(
+        "UPDATE albums SET format = COALESCE((SELECT UPPER(codec) FROM tracks WHERE \
+         tracks.album_id = albums.id LIMIT 1), format_summary), bit_depth = (SELECT bit_depth \
+         FROM tracks WHERE tracks.album_id = albums.id LIMIT 1), sample_rate = (SELECT \
+         sample_rate FROM tracks WHERE tracks.album_id = albums.id LIMIT 1) WHERE format = ''",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| Database(format!("Migration backfill failed: {e}")))?;
+
+    Ok(())
+}
+
+/// Check if a column exists in the `albums` table.
+async fn column_exists(pool: &SqlitePool, name: &str) -> bool {
+    query_as::<_, (String,)>("SELECT name FROM pragma_table_info('albums') WHERE name = ?1")
+        .bind(name)
+        .fetch_optional(pool)
+        .await
+        .is_ok_and(|r| r.is_some())
 }
 
 /// Create database indexes for query performance.

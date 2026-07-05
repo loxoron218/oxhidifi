@@ -1,9 +1,8 @@
-//! Album grid view with cover art thumbnails.
+//! Album grid/column view.
 //!
-//! Displays albums in a responsive `FlowBox` grid. Each album cell shows
-//! cover art (or a placeholder icon), title, and artist name. Clicking an
-//! album triggers playback via the `PlaybackController`.
-//! Shows an inline empty state when no albums are available.
+//! Displays albums in a responsive `FlowBox` grid (grid mode) or a
+//! sortable `GtkColumnView` (column mode). Only the *initial* mode is
+//! built at startup; the other mode is lazily built on first switch.
 
 use std::{
     collections::HashMap,
@@ -31,11 +30,12 @@ use {
             ContentFit::Cover,
             EventControllerMotion, GestureClick, Image, Label,
             Orientation::{Horizontal, Vertical},
-            Overlay, Picture, ScrolledWindow, Widget,
+            Overlay, Picture, Stack, Widget,
             pango::EllipsizeMode::End as EllipsizeEnd,
         },
         prelude::{BoxExt, ButtonExt, WidgetExt},
     },
+    tokio::join,
     tracing::{error, info},
 };
 
@@ -56,8 +56,11 @@ use crate::{
     ui::{
         decode_cover_at_size,
         library::{
-            common::{populate_grid_batched, populate_list_batched},
-            empty::{EmptyStateParams, build_empty_state, build_library_grid},
+            column_view::{NarrowState, build_album_column_view},
+            common::populate_grid_batched,
+            empty::{
+                EmptyStateParams, LibraryGrid, add_scrolled, build_empty_state, build_library_grid,
+            },
         },
     },
 };
@@ -67,36 +70,129 @@ const THUMBNAIL_SIZE: i32 = 180;
 
 /// Build the album grid view.
 ///
-/// Creates a `ScrolledWindow` containing a `FlowBox` populated with
-/// album cards loaded asynchronously from storage. Shows an inline
-/// empty state when no albums are available.
+/// Creates a `LibraryGrid` that holds both grid (`FlowBox`) and column
+/// (`ColumnView`) layouts in a `Stack`.  Data is fetched once; switching
+/// between modes is a fast `set_visible_child_name` call.
+///
+/// # Arguments
+///
+/// * `state` - Application state
+/// * `narrow_mode` - Narrow‑mode tracker for adaptive column hiding
 #[must_use]
-pub fn build_album_grid(state: &Arc<AppState>) -> ScrolledWindow {
+pub fn build_album_grid(state: &Arc<AppState>, narrow_state: &Arc<NarrowState>) -> LibraryGrid {
+    let nm = Arc::clone(narrow_state);
     build_library_grid(
         state,
         "Album library grid \u{2014} click an album to play",
-        |state, container, scrolled, mode| {
+        &nm,
+        |state, narrow_state, initial_mode| {
+            let stack = Stack::new();
+            let stack_clone = stack.clone();
             spawn_future_local(async move {
-                load_albums(&state, &container, &scrolled, mode).await;
+                populate_album_views(&state, &stack_clone, &narrow_state, initial_mode).await;
             });
+            stack
         },
     )
 }
 
-/// Load albums from storage and populate the container.
+/// Fetch album data and build **only the initial** view mode into `stack`.
 ///
-/// If no albums exist, shows an inline empty state with an "Add Folder" button.
-/// Populates either a grid (`FlowBox`) or column (`ListBox`) depending on view mode.
-async fn load_albums(
+/// Delegates to [`lazy_build_album_mode`] which handles the fetch–
+/// empty–build–set cycle.
+async fn populate_album_views(
     state: &Arc<AppState>,
-    container: &Box,
-    scrolled: &ScrolledWindow,
+    stack: &Stack,
+    narrow_state: &Arc<NarrowState>,
+    initial_mode: ViewMode,
+) {
+    lazy_build_album_mode(state, stack, narrow_state, initial_mode).await;
+}
+
+/// Build the given `mode` view (grid or column) and add it to `stack`.
+///
+/// Each mode is wrapped in its own `ScrolledWindow` so scroll positions
+/// are kept independent.  The other mode is NOT built here — it will be
+/// lazily built on first toggle via [`lazy_build_album_mode`].
+fn build_album_mode(
+    state: &Arc<AppState>,
+    stack: &Stack,
+    narrow_state: &NarrowState,
+    mode: ViewMode,
+    albums: &[Album],
+    artist_names: &HashMap<i64, String>,
+) {
+    match mode {
+        Grid => {
+            let mut overlays: Vec<Overlay> = Vec::new();
+
+            let cover_art_data: Vec<(usize, String)> = albums
+                .iter()
+                .enumerate()
+                .filter_map(|(i, album)| album.artwork_path.as_ref().map(|path| (i, path.clone())))
+                .collect();
+
+            let cards: Vec<Widget> = albums
+                .iter()
+                .map(|album| {
+                    let artist_name = artist_names
+                        .get(&album.artist_id)
+                        .map_or("Unknown Artist", String::as_str);
+                    let (card, overlay) = build_album_card(state, album, artist_name);
+                    overlays.push(overlay);
+                    card.upcast()
+                })
+                .collect();
+
+            let grid_container = Box::builder().orientation(Vertical).build();
+            let mut remaining = cards;
+            populate_grid_batched(
+                &grid_container,
+                &mut remaining,
+                50,
+                "Album library grid \u{2014} click an album to play",
+            );
+
+            load_cover_art_async(&cover_art_data, &overlays);
+
+            add_scrolled(stack, &grid_container, "grid");
+        }
+        Column => {
+            let column_view = build_album_column_view(state, albums, artist_names, narrow_state);
+            add_scrolled(stack, &column_view, "column");
+        }
+    }
+}
+
+/// Lazily build a view mode that wasn't constructed at startup.
+///
+/// Re‑fetches data from storage, builds the requested `mode` widget,
+/// adds it to `stack`, and switches to it.  This is a no‑op if the
+/// child already exists (race‑guard).
+pub async fn lazy_build_album_mode(
+    state: &Arc<AppState>,
+    stack: &Stack,
+    narrow_state: &Arc<NarrowState>,
     mode: ViewMode,
 ) {
-    let albums = match state.storage.get_all_albums().await {
+    let child_name = match mode {
+        Grid => "grid",
+        Column => "column",
+    };
+    if stack.child_by_name(child_name).is_some() {
+        stack.set_visible_child_name(child_name);
+        return;
+    }
+
+    let (albums_res, artist_names_res) = join!(
+        state.storage.get_all_albums(),
+        state.storage.get_all_artists(),
+    );
+
+    let albums = match albums_res {
         Ok(a) => a,
         Err(e) => {
-            info!(error = %e, "Failed to load albums");
+            info!(error = %e, "Failed to load albums for lazy build");
             return;
         }
     };
@@ -113,55 +209,21 @@ async fn load_albums(
                 description_label: "Add a music folder to see your albums here.",
             },
         );
-        scrolled.set_child(Some(&empty_widget));
+        stack.add_named(&empty_widget, Some("grid"));
+        stack.set_visible_child_name("grid");
         return;
     }
 
-    let artist_names: HashMap<i64, String> = match state.storage.get_all_artists().await {
+    let artist_names: HashMap<i64, String> = match artist_names_res {
         Ok(artists) => artists.into_iter().map(|a| (a.id, a.name)).collect(),
         Err(e) => {
-            info!(error = %e, "Failed to load artists");
+            info!(error = %e, "Failed to load artists for lazy build");
             HashMap::new()
         }
     };
 
-    let mut cover_art_data: Vec<(usize, String)> = Vec::new();
-    let mut overlays: Vec<Overlay> = Vec::new();
-
-    let cards: Vec<Widget> = albums
-        .iter()
-        .enumerate()
-        .map(|(i, album)| {
-            let artist_name = artist_names
-                .get(&album.artist_id)
-                .map_or("Unknown Artist", String::as_str);
-            let (card, overlay) = build_album_card(state, album, artist_name);
-            if let Some(path) = &album.artwork_path {
-                cover_art_data.push((i, path.clone()));
-            }
-            overlays.push(overlay);
-            card.upcast()
-        })
-        .collect();
-
-    let batch_size = 50;
-    let mut remaining = cards;
-    match mode {
-        Grid => populate_grid_batched(
-            container,
-            &mut remaining,
-            batch_size,
-            "Album library grid \u{2014} click an album to play",
-        ),
-        Column => populate_list_batched(
-            container,
-            &mut remaining,
-            batch_size,
-            "Album library list \u{2014} click an album to play",
-        ),
-    }
-
-    load_cover_art_async(&cover_art_data, &overlays);
+    build_album_mode(state, stack, narrow_state, mode, &albums, &artist_names);
+    stack.set_visible_child_name(child_name);
 }
 
 /// Build a placeholder cover art widget.

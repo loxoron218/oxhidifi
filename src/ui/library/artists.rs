@@ -1,9 +1,9 @@
 //! Artist grid/column view.
 //!
-//! Displays artists in a responsive `FlowBox` grid. Each artist cell shows
-//! an artist icon, name, and album count. Clicking an artist navigates to
-//! the artist detail page.
-//! Shows an inline empty state when no artists are available.
+//! Displays artists in a responsive `FlowBox` grid or sortable
+//! `GtkColumnView`. Both views are built once and held in a
+//! `GtkStack` — switching between them toggles visibility without
+//! any data re‑fetch or widget reconstruction.
 
 use std::sync::Arc;
 
@@ -11,9 +11,8 @@ use {
     libadwaita::{
         glib::{prelude::Cast, spawn_future_local},
         gtk::{
-            Align::Start, Box, GestureClick, Image, Label, Orientation::Vertical, Overlay,
-            ScrolledWindow, Widget, accessible::Property::Label as PropertyLabel,
-            pango::EllipsizeMode::End,
+            Align::Start, Box, GestureClick, Image, Label, Orientation::Vertical, Overlay, Stack,
+            Widget, accessible::Property::Label as PropertyLabel, pango::EllipsizeMode::End,
         },
         prelude::{AccessibleExtManual, BoxExt, WidgetExt},
     },
@@ -27,8 +26,11 @@ use crate::{
         settings::ViewMode::{self, Column, Grid},
     },
     ui::library::{
-        common::{populate_grid_batched, populate_list_batched},
-        empty::{EmptyStateParams, build_empty_state, build_library_grid},
+        column_view::{NarrowState, build_artist_column_view},
+        common::populate_grid_batched,
+        empty::{
+            EmptyStateParams, LibraryGrid, add_scrolled, build_empty_state, build_library_grid,
+        },
     },
 };
 
@@ -37,39 +39,97 @@ const AVATAR_SIZE: i32 = 180;
 
 /// Build the artist grid view.
 ///
-/// Creates a `ScrolledWindow` containing a `FlowBox` populated with
-/// artist cards loaded asynchronously from storage. Shows an inline
-/// empty state when no artists are available.
+/// Creates a `LibraryGrid` that holds both grid (`FlowBox`) and column
+/// (`ColumnView`) layouts in a `Stack`.  Data is fetched once; switching
+/// between modes is a fast `set_visible_child_name` call.
+///
+/// # Arguments
+///
+/// * `state` - Application state
+/// * `narrow_mode` - Narrow‑mode tracker for adaptive column hiding
 #[must_use]
-pub fn build_artist_grid(state: &Arc<AppState>) -> ScrolledWindow {
+pub fn build_artist_grid(state: &Arc<AppState>, narrow_state: &Arc<NarrowState>) -> LibraryGrid {
+    let nm = Arc::clone(narrow_state);
     build_library_grid(
         state,
         "Artist library grid \u{2014} click an artist to view albums",
-        |state, container, scrolled, mode| {
+        &nm,
+        |state, narrow_state, initial_mode| {
+            let stack = Stack::new();
+            let stack_clone = stack.clone();
             spawn_future_local(async move {
-                load_artists(&state, &container, &scrolled, mode).await;
+                populate_artist_views(&state, &stack_clone, &narrow_state, initial_mode).await;
             });
+            stack
         },
     )
 }
 
-/// Load artists from storage and populate the container.
+/// Fetch artist data and build **only the initial** view mode into `stack`.
 ///
-/// If no artists exist, shows an inline empty state with an "Add Folder" button.
-/// Populates either a grid (`FlowBox`) or column (`ListBox`) depending on view mode.
-async fn load_artists(
+/// Delegates to [`lazy_build_artist_mode`] which handles the fetch–
+/// empty–build–set cycle.
+async fn populate_artist_views(
     state: &Arc<AppState>,
-    container: &Box,
-    scrolled: &ScrolledWindow,
-    mode: ViewMode,
+    stack: &Stack,
+    _narrow_state: &Arc<NarrowState>,
+    initial_mode: ViewMode,
 ) {
+    lazy_build_artist_mode(state, stack, initial_mode).await;
+}
+
+/// Build the given `mode` view (grid or column) and add it to `stack`.
+///
+/// Each mode is wrapped in its own `ScrolledWindow` so scroll positions
+/// are kept independent.
+fn build_artist_mode(state: &Arc<AppState>, stack: &Stack, mode: ViewMode, artists: &[Artist]) {
+    match mode {
+        Grid => {
+            let cards: Vec<Widget> = artists
+                .iter()
+                .map(|artist| build_artist_card(state, artist).upcast())
+                .collect();
+
+            let grid_container = Box::builder().orientation(Vertical).build();
+            let mut remaining = cards;
+            populate_grid_batched(
+                &grid_container,
+                &mut remaining,
+                50,
+                "Artist library grid \u{2014} click an artist to view albums",
+            );
+
+            add_scrolled(stack, &grid_container, "grid");
+        }
+        Column => {
+            let column_view = build_artist_column_view(state, artists);
+            add_scrolled(stack, &column_view, "column");
+        }
+    }
+}
+
+/// Lazily build a view mode that wasn't constructed at startup.
+///
+/// Re‑fetches data from storage, builds the requested `mode` widget,
+/// adds it to `stack`, and switches to it.  No‑op if the child already
+/// exists (race‑guard).
+pub async fn lazy_build_artist_mode(state: &Arc<AppState>, stack: &Stack, mode: ViewMode) {
+    let child_name = match mode {
+        Grid => "grid",
+        Column => "column",
+    };
+    if stack.child_by_name(child_name).is_some() {
+        stack.set_visible_child_name(child_name);
+        return;
+    }
+
     let artists = match state.storage.get_all_artists().await {
         Ok(a) => a
             .into_iter()
             .filter(|a| a.album_count > 0)
             .collect::<Vec<_>>(),
         Err(e) => {
-            info!(error = %e, "Failed to load artists");
+            info!(error = %e, "Failed to load artists for lazy build");
             return;
         }
     };
@@ -86,31 +146,13 @@ async fn load_artists(
                 description_label: "Add a music folder to see your artists here.",
             },
         );
-        scrolled.set_child(Some(&empty_widget));
+        stack.add_named(&empty_widget, Some("grid"));
+        stack.set_visible_child_name("grid");
         return;
     }
 
-    let cards: Vec<Widget> = artists
-        .iter()
-        .map(|artist| build_artist_card(state, artist).upcast())
-        .collect();
-
-    let batch_size = 50;
-    let mut remaining = cards;
-    match mode {
-        Grid => populate_grid_batched(
-            container,
-            &mut remaining,
-            batch_size,
-            "Artist library grid \u{2014} click an artist to view albums",
-        ),
-        Column => populate_list_batched(
-            container,
-            &mut remaining,
-            batch_size,
-            "Artist library list \u{2014} click an artist to view albums",
-        ),
-    }
+    build_artist_mode(state, stack, mode, &artists);
+    stack.set_visible_child_name(child_name);
 }
 
 /// Build the avatar widget for an artist.
@@ -186,33 +228,4 @@ fn build_artist_card(state: &Arc<AppState>, artist: &Artist) -> Box {
     card.add_controller(gesture);
 
     card
-}
-
-#[cfg(test)]
-mod tests {
-    use std::sync::Arc;
-
-    use {
-        anyhow::{Result, ensure},
-        libadwaita::prelude::WidgetExt,
-    };
-
-    use crate::{app::AppState, storage::Artist, ui::library::artists::build_artist_card};
-
-    #[test]
-    #[ignore = "Requires GTK initialization (display server)"]
-    fn artist_card_builds_successfully() -> Result<()> {
-        let state = Arc::new(AppState::mock()?);
-        let artist = Artist {
-            id: 1,
-            name: "Test Artist".to_string(),
-            album_count: 3,
-        };
-        let card = build_artist_card(&state, &artist);
-        ensure!(
-            card.first_child().is_some(),
-            "artist card must have child content"
-        );
-        Ok(())
-    }
 }

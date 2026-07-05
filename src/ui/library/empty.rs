@@ -3,18 +3,18 @@
 //! Provides empty state components and the generic grid builder
 //! used by the album and artist grid views.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use {
     libadwaita::{
         ApplicationWindow,
-        glib::{prelude::Cast, spawn_future_local},
+        glib::spawn_future_local,
         gtk::{
-            Align::Center, Box, Button, FileDialog, Image, Label, ListBox, ListBoxRow,
-            Orientation::Vertical, ScrolledWindow, Widget,
-            accessible::Property::Label as PropertyLabel, prelude::WidgetExt,
+            Align::Center, Box, Button, FileDialog, Image, Label, Orientation::Vertical,
+            ScrolledWindow, Stack, Widget, accessible::Property::Label as PropertyLabel,
+            prelude::WidgetExt,
         },
-        prelude::{AccessibleExtManual, BoxExt, ButtonExt, FileExt},
+        prelude::{AccessibleExtManual, BoxExt, ButtonExt, FileExt, IsA},
     },
     tokio::spawn,
     tracing::info,
@@ -23,11 +23,8 @@ use {
 use crate::{
     app::AppState,
     library::scanner::LibraryScanner,
-    storage::{
-        Storage,
-        settings::ViewMode::{self, Column, Grid},
-    },
-    ui::library::common::{build_grid, build_list},
+    storage::{Storage, settings::ViewMode},
+    ui::library::column_view::NarrowState,
 };
 
 /// Parameters for building an empty state view.
@@ -44,6 +41,19 @@ pub struct EmptyStateParams {
     pub description: &'static str,
     /// Accessible label for the description.
     pub description_label: &'static str,
+}
+
+/// A built library grid view with a `Stack` holding both grid and column
+/// children, so view-mode switching only toggles visibility — no rebuild.
+///
+/// Each mode child (`"grid"` and `"column"`) is itself a `ScrolledWindow`
+/// so each mode retains its own scroll position independently.
+pub struct LibraryGrid {
+    /// `Stack` containing `"grid"` and `"column"` children.
+    /// Toggling the visible child switches modes instantly.
+    pub mode_stack: Stack,
+    /// Tracks which [`ViewMode`] this view was last built with.
+    pub current_mode: Arc<Mutex<ViewMode>>,
 }
 
 /// Build an empty state with icon, heading, description, and add-folder button.
@@ -87,147 +97,100 @@ pub fn build_empty_state(state: &Arc<AppState>, params: &EmptyStateParams) -> Bo
     container
 }
 
-/// Build a library grid view with a `FlowBox` or `ListBox` inside a `ScrolledWindow`.
+/// Build a library grid view that pre-builds both grid (`FlowBox`) and column
+/// (`ColumnView`) layouts inside a `Stack`.  The parent orchestrator toggles
+/// the stack's visible child on view‑mode change — no data re‑fetch or widget
+/// reconstruction.
 ///
-/// Spawns the given loader function asynchronously to populate the grid.
-/// Watches for library refresh signals and view mode changes, and re-renders
-/// automatically. Switches between `FlowBox` (grid) and `ListBox` (column)
-/// based on the current view mode.
+/// Spawns the given `setup_fn` function asynchronously to populate the stack.
+/// The `setup_fn` is responsible for:
 ///
-/// View mode changes only rearrange existing card widgets — they do NOT
-/// re-query the database or re-create widgets, eliminating UI freezes.
+/// 1. Creating a new `Stack`
+/// 2. Adding named children `"grid"` and `"column"` (populated asynchronously)
+/// 3. Calling `set_visible_child_name` for `initial_mode`
+/// 4. Returning the `Stack`
 ///
 /// # Arguments
 ///
 /// * `state` - Application state
 /// * `tooltip` - Tooltip text for the grid
-/// * `load_fn` - Closure that populates the container asynchronously; receives `(state,
-///   container_box, scrolled, view_mode)`. The closure must clear and rebuild `container_box`
-///   children on each call.
+/// * `narrow_mode` - Narrow‑width tracker for adaptive column hiding
+/// * `setup_fn` - Closure that builds **both** views and returns a `Stack`; receives `(state,
+///   narrow_state, initial_mode)`.  Called once at startup and again on library refresh.
 #[must_use]
 pub fn build_library_grid(
     state: &Arc<AppState>,
     _tooltip: &str,
-    load_fn: impl Fn(Arc<AppState>, Box, ScrolledWindow, ViewMode) + Clone + 'static,
-) -> ScrolledWindow {
+    narrow_state: &Arc<NarrowState>,
+    setup_fn: impl Fn(Arc<AppState>, Arc<NarrowState>, ViewMode) -> Stack + Clone + 'static,
+) -> LibraryGrid {
+    let initial_mode = *state.view_mode_tx.borrow();
+    let current_mode = Arc::new(Mutex::new(initial_mode));
+    let nm = Arc::clone(narrow_state);
+    let mode_stack = setup_fn(Arc::clone(state), nm, initial_mode);
+
+    let mut refresh_rx = state.refresh_tx.subscribe();
+    let refresh_state = Arc::clone(state);
+    let refresh_mode_stack = mode_stack.clone();
+    let refresh_setup = setup_fn;
+    let refresh_nm = Arc::clone(narrow_state);
+    let refresh_mode = Arc::clone(&current_mode);
+    spawn_future_local(async move {
+        while refresh_rx.changed().await.is_ok() {
+            let mode = *refresh_state.view_mode_tx.borrow();
+            let new_stack =
+                refresh_setup(Arc::clone(&refresh_state), Arc::clone(&refresh_nm), mode);
+            replace_stack_content(&refresh_mode_stack, &new_stack);
+            update_mode(&refresh_mode, mode);
+        }
+    });
+
+    LibraryGrid {
+        mode_stack,
+        current_mode,
+    }
+}
+
+/// Replace all children of `target` with those from `source`.
+///
+/// Children are moved from `source` to `target` preserving their page names
+/// (`"grid"` and `"column"`).  After this call `source` is empty.
+fn replace_stack_content(target: &Stack, source: &Stack) {
+    while let Some(child) = target.first_child() {
+        target.remove(&child);
+    }
+    if let Some(child) = source.child_by_name("grid") {
+        source.remove(&child);
+        target.add_named(&child, Some("grid"));
+    }
+    if let Some(child) = source.child_by_name("column") {
+        source.remove(&child);
+        target.add_named(&child, Some("column"));
+    }
+}
+
+/// Wrap `child` in a `ScrolledWindow` and add it to `stack` as a named page.
+pub fn add_scrolled(stack: &Stack, child: &impl IsA<Widget>, name: &str) {
     let scrolled = ScrolledWindow::builder()
         .vexpand(true)
         .hexpand(true)
         .build();
+    scrolled.set_child(Some(child));
+    stack.add_named(&scrolled, Some(name));
+}
 
-    let container = Box::builder().orientation(Vertical).build();
-
-    let initial_mode = *state.view_mode_tx.borrow();
-    load_fn(
-        Arc::clone(state),
-        container.clone(),
-        scrolled.clone(),
-        initial_mode,
-    );
-
-    scrolled.set_child(Some(&container));
-
-    let mut view_rx = state.view_mode_tx.subscribe();
-    let view_container = container.clone();
-    spawn_future_local(async move {
-        while view_rx.changed().await.is_ok() {
-            let mode = *view_rx.borrow();
-            switch_layout(&view_container, mode);
-        }
-    });
-
-    let mut refresh_rx = state.refresh_tx.subscribe();
-    let refresh_state = Arc::clone(state);
-    let refresh_container = container;
-    let refresh_scrolled = scrolled.clone();
-    let refresh_load = load_fn;
-    spawn_future_local(async move {
-        while refresh_rx.changed().await.is_ok() {
-            let mode = *refresh_state.view_mode_tx.borrow();
-            clear_container(&refresh_container);
-            refresh_scrolled.set_child(Some(&refresh_container));
-            refresh_load(
-                Arc::clone(&refresh_state),
-                refresh_container.clone(),
-                refresh_scrolled.clone(),
-                mode,
-            );
-        }
-    });
-
-    scrolled
+/// Update the tracked view mode, ignoring a poisoned mutex.
+fn update_mode(mode_arc: &Arc<Mutex<ViewMode>>, mode: ViewMode) {
+    if let Ok(mut m) = mode_arc.lock() {
+        *m = mode;
+    }
 }
 
 /// Remove all children from a `Box`.
-fn clear_container(container: &Box) {
+pub fn clear_container(container: &Box) {
     while let Some(child) = container.first_child() {
         container.remove(&child);
     }
-}
-
-/// Switch the layout mode without re-creating card widgets.
-///
-/// Extracts existing card widgets from the current layout child
-/// (`FlowBox` or `ListBox`), then arranges them in the new layout.
-/// For `Column` mode, each card is wrapped in a `ListBoxRow`.
-fn switch_layout(container: &Box, mode: ViewMode) {
-    let cards = extract_cards(container);
-    clear_container(container);
-
-    match mode {
-        Grid => populate_grid(container, "grid-layout", cards),
-        Column => populate_list(container, "list-layout", cards),
-    }
-}
-
-/// Extract card widgets from the current layout child of `container`.
-///
-/// Handles `FlowBox` (grid — direct children) and `ListBox` (column —
-/// `ListBoxRow` children, unwrapping to get the card inside each row).
-fn extract_cards(container: &Box) -> Vec<Widget> {
-    let Some(layout) = container.first_child() else {
-        return Vec::new();
-    };
-
-    if let Some(list) = layout.downcast_ref::<ListBox>() {
-        let mut cards = Vec::new();
-        let mut child = list.first_child();
-        while let Some(row) = &child {
-            cards.extend(row.first_child());
-            child = row.next_sibling();
-        }
-        return cards;
-    }
-
-    let mut cards = Vec::new();
-    let mut child = layout.first_child();
-    while let Some(c) = &child {
-        cards.push(c.clone());
-        child = c.next_sibling();
-    }
-    cards
-}
-
-/// Populate a `FlowBox` in grid mode with pre-built card widgets.
-pub fn populate_grid(container: &Box, tooltip: &str, cards: Vec<Widget>) {
-    let flow = build_grid(tooltip);
-    for card in cards {
-        flow.append(&card);
-    }
-    container.append(&flow);
-}
-
-/// Populate a `ListBox` in column mode with pre-built card widgets.
-pub fn populate_list(container: &Box, tooltip: &str, cards: Vec<Widget>) {
-    let list = build_list(tooltip);
-    for card in cards {
-        let row = ListBoxRow::builder()
-            .child(&card)
-            .activatable(false)
-            .build();
-        list.append(&row);
-    }
-    container.append(&list);
 }
 
 /// Build an empty state container with consistent styling.

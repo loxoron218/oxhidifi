@@ -31,6 +31,12 @@ pub struct Album {
     pub format_summary: String,
     /// Whether all tracks are lossless.
     pub lossless: bool,
+    /// Audio codec name (e.g. "FLAC", "MP3").
+    pub format: String,
+    /// Bit depth (None for lossy formats).
+    pub bit_depth: Option<i32>,
+    /// Sample rate in Hz.
+    pub sample_rate: Option<i32>,
 }
 
 /// Full artist record from the database.
@@ -88,6 +94,12 @@ pub struct NewAlbum {
     pub format_summary: String,
     /// Whether all tracks are lossless.
     pub lossless: bool,
+    /// Audio codec name (e.g. "FLAC", "MP3").
+    pub format: String,
+    /// Bit depth (None for lossy formats).
+    pub bit_depth: Option<i32>,
+    /// Sample rate in Hz.
+    pub sample_rate: Option<i32>,
 }
 
 /// Insert data for a new artist.

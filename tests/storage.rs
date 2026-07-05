@@ -100,6 +100,9 @@ mod tests {
                 artwork_path: None,
                 format_summary: "FLAC 16-bit/44.1kHz".to_string(),
                 lossless: true,
+                format: "FLAC".to_string(),
+                bit_depth: Some(16),
+                sample_rate: Some(44100),
             })
             .await?;
         let album = storage
@@ -240,6 +243,9 @@ mod tests {
                 artwork_path: None,
                 format_summary: "FLAC 24-bit/96kHz".to_string(),
                 lossless: true,
+                format: "FLAC".to_string(),
+                bit_depth: Some(24),
+                sample_rate: Some(96000),
             })
             .await?;
 

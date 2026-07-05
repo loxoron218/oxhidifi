@@ -469,6 +469,9 @@ impl<S: Storage> FsScanner<S> {
                 artwork_path,
                 format_summary,
                 lossless: metadata.lossless,
+                format: codec_upper.clone(),
+                bit_depth: metadata.bit_depth,
+                sample_rate: Some(metadata.sample_rate),
             })
             .await
             .map_err(|e| Self::map_insert_error(&e, "album"))?;

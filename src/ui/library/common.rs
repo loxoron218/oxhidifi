@@ -1,4 +1,4 @@
-//! Shared batched-population helpers for library views.
+//! Shared batched-population helpers for library grid views.
 
 use std::mem::take;
 
@@ -9,7 +9,7 @@ use libadwaita::{
     },
     gtk::{
         Align::{Center, Start},
-        Box, FlowBox, ListBox, ListBoxRow,
+        Box, FlowBox,
         SelectionMode::None,
         Widget,
     },
@@ -28,17 +28,6 @@ pub fn build_grid(tooltip: &str) -> FlowBox {
         .selection_mode(None)
         .can_focus(true)
         .tooltip_text(tooltip)
-        .build()
-}
-
-/// Build a configured `ListBox` for column-mode display.
-#[must_use]
-pub fn build_list(tooltip: &str) -> ListBox {
-    ListBox::builder()
-        .selection_mode(None)
-        .can_focus(true)
-        .tooltip_text(tooltip)
-        .css_classes(["boxed-list"])
         .build()
 }
 
@@ -61,37 +50,6 @@ pub fn populate_grid_batched(
         let count = batch_size.min(remaining.len());
         for card in remaining.drain(..count) {
             flow.append(&card);
-        }
-        if remaining.is_empty() {
-            Break
-        } else {
-            Continue
-        }
-    });
-}
-
-/// Populate a `ListBox` in column mode with batched insertion for large libraries.
-///
-/// Adds cards to the container in batches via idle callbacks, keeping the
-/// UI responsive even with 10k+ items.
-pub fn populate_list_batched(
-    container: &Box,
-    cards: &mut Vec<Widget>,
-    batch_size: usize,
-    tooltip: &str,
-) {
-    let list = build_list(tooltip);
-    container.append(&list);
-
-    let mut remaining = take(cards);
-    idle_add_local(move || {
-        let count = batch_size.min(remaining.len());
-        for card in remaining.drain(..count) {
-            let row = ListBoxRow::builder()
-                .child(&card)
-                .activatable(false)
-                .build();
-            list.append(&row);
         }
         if remaining.is_empty() {
             Break
