@@ -34,7 +34,8 @@ use {
         },
         prelude::{AdwApplicationWindowExt, WidgetExt},
     },
-    tracing::{error, info},
+    tokio::sync::watch::Sender as TokioSender,
+    tracing::{error, info, warn},
 };
 
 use crate::{
@@ -42,9 +43,13 @@ use crate::{
         AppState,
         NavigationEvent::{self, AlbumDetail, ArtistDetail, Back},
     },
-    storage::settings::{
-        ActiveTab::{Albums, Artists},
-        ViewMode::{self, Column, Grid},
+    storage::{
+        database::SqliteStorage,
+        settings::{
+            ActiveTab,
+            ActiveTab::{Albums, Artists},
+            ViewMode::{self, Column, Grid},
+        },
     },
     ui::{
         detail::{album::build_album_detail, artist::build_artist_detail},
@@ -327,6 +332,8 @@ fn build_content(
     let tab_content_area = content_area.clone();
     let tab_orig = orig_stack.clone();
     let tab_stack = stack.clone();
+    let tab_storage = Arc::clone(&state.storage);
+    let tab_active_tab_tx = state.active_tab_tx.clone();
     stack.connect_visible_child_notify(move |_| {
         if let Some(child) = tab_content_area.visible_child()
             && child == tab_orig
@@ -337,6 +344,7 @@ fn build_content(
                 tab_name = name.as_str(),
                 "Tab switched",
             );
+            persist_active_tab(&tab_storage, &tab_active_tab_tx, name.as_str());
         }
         let visible = tab_content_area.visible_child();
         let is_on_detail = visible.as_ref().is_none_or(|child| *child != tab_orig);
@@ -399,6 +407,19 @@ fn build_content(
     });
 
     (toast_overlay, split_view, toggle_button, back_button)
+}
+
+/// Save the active tab to storage and broadcast through the watch channel.
+fn persist_active_tab(storage: &SqliteStorage, active_tab_tx: &TokioSender<ActiveTab>, name: &str) {
+    let tab = if name == "artists" { Artists } else { Albums };
+    if let Err(e) = storage.set_active_tab(tab) {
+        warn!(error = %e, "Failed to save active tab");
+    }
+    active_tab_tx.send_if_modified(|current| {
+        let changed = *current != tab;
+        *current = tab;
+        changed
+    });
 }
 
 /// Handle navigation events (album/artist detail, back navigation).
