@@ -3,7 +3,7 @@
 //! Provides empty state components and the generic grid builder
 //! used by the album and artist grid views.
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use {
     libadwaita::{
@@ -16,6 +16,7 @@ use {
         },
         prelude::{AccessibleExtManual, BoxExt, ButtonExt, FileExt, IsA},
     },
+    parking_lot::Mutex,
     tokio::spawn,
     tracing::info,
 };
@@ -181,9 +182,7 @@ pub fn add_scrolled(stack: &Stack, child: &impl IsA<Widget>, name: &str) {
 
 /// Update the tracked view mode, ignoring a poisoned mutex.
 fn update_mode(mode_arc: &Arc<Mutex<ViewMode>>, mode: ViewMode) {
-    if let Ok(mut m) = mode_arc.lock() {
-        *m = mode;
-    }
+    *mode_arc.lock() = mode;
 }
 
 /// Remove all children from a `Box`.
