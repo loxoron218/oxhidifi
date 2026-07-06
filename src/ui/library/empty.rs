@@ -103,32 +103,32 @@ pub fn build_empty_state(state: &Arc<AppState>, params: &EmptyStateParams) -> Bo
 /// the stack's visible child on view‑mode change — no data re‑fetch or widget
 /// reconstruction.
 ///
-/// Spawns the given `setup_fn` function asynchronously to populate the stack.
+/// Calls `setup_fn` asynchronously to populate the stack.
 /// The `setup_fn` is responsible for:
 ///
-/// 1. Creating a new `Stack`
-/// 2. Adding named children `"grid"` and `"column"` (populated asynchronously)
-/// 3. Calling `set_visible_child_name` for `initial_mode`
-/// 4. Returning the `Stack`
+/// 1. Populating the given `Stack` with named children `"grid"` and `"column"`
+/// 2. Calling `set_visible_child_name` for `initial_mode`
 ///
 /// # Arguments
 ///
 /// * `state` - Application state
 /// * `tooltip` - Tooltip text for the grid
 /// * `narrow_mode` - Narrow‑width tracker for adaptive column hiding
-/// * `setup_fn` - Closure that builds **both** views and returns a `Stack`; receives `(state,
-///   narrow_state, initial_mode)`.  Called once at startup and again on library refresh.
+/// * `setup_fn` - Closure that populates a `Stack` with both views; receives `(&Stack, state,
+///   narrow_state, initial_mode)`.  Called once at startup and again on library refresh to
+///   re-populate in‑place.
 #[must_use]
 pub fn build_library_grid(
     state: &Arc<AppState>,
     _tooltip: &str,
     narrow_state: &Arc<NarrowState>,
-    setup_fn: impl Fn(Arc<AppState>, Arc<NarrowState>, ViewMode) -> Stack + Clone + 'static,
+    setup_fn: impl Fn(&Stack, Arc<AppState>, Arc<NarrowState>, ViewMode) + Clone + 'static,
 ) -> LibraryGrid {
     let initial_mode = *state.view_mode_tx.borrow();
     let current_mode = Arc::new(Mutex::new(initial_mode));
     let nm = Arc::clone(narrow_state);
-    let mode_stack = setup_fn(Arc::clone(state), nm, initial_mode);
+    let mode_stack = Stack::new();
+    setup_fn(&mode_stack, Arc::clone(state), nm, initial_mode);
 
     let mut refresh_rx = state.refresh_tx.subscribe();
     let refresh_state = Arc::clone(state);
@@ -139,9 +139,13 @@ pub fn build_library_grid(
     spawn_future_local(async move {
         while refresh_rx.changed().await.is_ok() {
             let mode = *refresh_state.view_mode_tx.borrow();
-            let new_stack =
-                refresh_setup(Arc::clone(&refresh_state), Arc::clone(&refresh_nm), mode);
-            replace_stack_content(&refresh_mode_stack, &new_stack);
+            clear_stack(&refresh_mode_stack);
+            refresh_setup(
+                &refresh_mode_stack,
+                Arc::clone(&refresh_state),
+                Arc::clone(&refresh_nm),
+                mode,
+            );
             update_mode(&refresh_mode, mode);
         }
     });
@@ -152,21 +156,10 @@ pub fn build_library_grid(
     }
 }
 
-/// Replace all children of `target` with those from `source`.
-///
-/// Children are moved from `source` to `target` preserving their page names
-/// (`"grid"` and `"column"`).  After this call `source` is empty.
-fn replace_stack_content(target: &Stack, source: &Stack) {
-    while let Some(child) = target.first_child() {
-        target.remove(&child);
-    }
-    if let Some(child) = source.child_by_name("grid") {
-        source.remove(&child);
-        target.add_named(&child, Some("grid"));
-    }
-    if let Some(child) = source.child_by_name("column") {
-        source.remove(&child);
-        target.add_named(&child, Some("column"));
+/// Remove all children from a `Stack`.
+fn clear_stack(stack: &Stack) {
+    while let Some(child) = stack.first_child() {
+        stack.remove(&child);
     }
 }
 

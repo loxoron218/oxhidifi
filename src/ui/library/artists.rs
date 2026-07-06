@@ -54,13 +54,11 @@ pub fn build_artist_grid(state: &Arc<AppState>, narrow_state: &Arc<NarrowState>)
         state,
         "Artist library grid \u{2014} click an artist to view albums",
         &nm,
-        |state, narrow_state, initial_mode| {
-            let stack = Stack::new();
+        |stack: &Stack, state, narrow_state, initial_mode| {
             let stack_clone = stack.clone();
             spawn_future_local(async move {
                 populate_artist_views(&state, &stack_clone, &narrow_state, initial_mode).await;
             });
-            stack
         },
     )
 }
