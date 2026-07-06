@@ -13,6 +13,7 @@ use {
         read_from_path,
     },
     thiserror::Error,
+    tracing::warn,
 };
 
 use crate::app::dirs_cache_home;
@@ -188,15 +189,30 @@ pub fn check_cache_version() {
             .map(|e| e.path())
             .filter(|p| p.is_file() && p.file_name().is_none_or(|n| n != ".version"))
         {
-            let _ = remove_file(&path);
+            remove_cache_file(&path);
         }
     }
-    let _ = write(&version_path, CACHE_VERSION);
+    if let Err(e) = write(&version_path, CACHE_VERSION) {
+        warn!(error = %e, path = %version_path.display(), "Failed to write cache version");
+    }
+}
+
+/// Remove a cached artwork file, logging on failure.
+fn remove_cache_file(path: &Path) {
+    if let Err(e) = remove_file(path) {
+        warn!(error = %e, path = %path.display(), "Failed to remove cached artwork");
+    }
 }
 
 /// Read the contents of a file to a `String`, returning `None` on error.
 fn read_to_string(path: &Path) -> Option<String> {
-    fs_read_to_string(path).ok()
+    match fs_read_to_string(path) {
+        Ok(s) => Some(s),
+        Err(e) => {
+            warn!(error = %e, path = %path.display(), "Failed to read file");
+            None
+        }
+    }
 }
 
 #[cfg(test)]
