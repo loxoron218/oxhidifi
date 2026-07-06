@@ -10,14 +10,14 @@ use std::{
     sync::{
         Arc,
         atomic::Ordering::Relaxed,
-        mpsc::{Sender, channel},
+        mpsc::{Sender, TryRecvError::Disconnected, channel},
     },
+    thread::spawn,
 };
 
 use {
     libadwaita::{
-        gdk::MemoryTexture,
-        gio::spawn_blocking,
+        gdk::{MemoryTexture, prelude::TextureExt},
         glib::{
             ControlFlow::{Break, Continue},
             idle_add_local,
@@ -54,7 +54,7 @@ use crate::{
         settings::ViewMode::{self, Column, Grid},
     },
     ui::{
-        decode_cover_at_size,
+        CoverArtCache, DecodedCover, decode_cover_raw,
         library::{
             column_view::{NarrowState, build_album_column_view},
             common::populate_grid_batched,
@@ -62,6 +62,7 @@ use crate::{
                 EmptyStateParams, LibraryGrid, add_scrolled, build_empty_state, build_library_grid,
             },
         },
+        raw_to_texture,
     },
 };
 
@@ -126,10 +127,15 @@ fn build_album_mode(
         Grid => {
             let mut overlays: Vec<Overlay> = Vec::new();
 
-            let cover_art_data: Vec<(usize, String)> = albums
+            let cover_art_data: Vec<(i64, usize, String)> = albums
                 .iter()
                 .enumerate()
-                .filter_map(|(i, album)| album.artwork_path.as_ref().map(|path| (i, path.clone())))
+                .filter_map(|(i, album)| {
+                    album
+                        .artwork_path
+                        .as_ref()
+                        .map(|path| (album.id, i, path.clone()))
+                })
                 .collect();
 
             let cards: Vec<Widget> = albums
@@ -153,7 +159,7 @@ fn build_album_mode(
                 "Album library grid \u{2014} click an album to play",
             );
 
-            load_cover_art_async(&cover_art_data, &overlays);
+            load_cover_art_async(&cover_art_data, &overlays, &state.cover_art_cache);
 
             add_scrolled(stack, &grid_container, "grid");
         }
@@ -241,24 +247,6 @@ fn build_placeholder() -> Widget {
         .upcast()
 }
 
-/// Decode an image file at thumbnail size on a background thread.
-///
-/// Returns a `MemoryTexture` suitable for painting, or `None` if the
-/// file could not be loaded or decoded.
-fn decode_cover_art(path: &str) -> Option<MemoryTexture> {
-    decode_cover_at_size(path, THUMBNAIL_SIZE)
-}
-
-/// Decode a batch of cover art images and send results through a channel.
-fn decode_batch(batch: Vec<(usize, String)>, tx: &Sender<(usize, Option<MemoryTexture>)>) {
-    for (i, path) in batch {
-        let texture = decode_cover_art(&path);
-        if let Err(e) = tx.send((i, texture)) {
-            error!(error = %e, "Failed to send cover art texture");
-        }
-    }
-}
-
 /// Apply a decoded texture to an overlay's child.
 ///
 /// If the child is already a `Picture`, updates its paintable in place.
@@ -282,37 +270,73 @@ fn apply_texture(overlay: &Overlay, texture: &MemoryTexture) {
 
 /// Load cover art images off the main thread and apply them to overlays.
 ///
-/// Splits work across multiple `gio::spawn_blocking` workers for parallel
-/// decoding. Uses `std::sync::mpsc` to send results back and
-/// `glib::idle_add_local` to apply textures on the `GLib` main thread.
-fn load_cover_art_async(cover_art_data: &[(usize, String)], overlays: &[Overlay]) {
+/// Send decoded covers from the uncached list through the channel.
+fn send_uncached_covers(
+    uncached: &[(i64, usize, String)],
+    tx: &Sender<(usize, i64, DecodedCover)>,
+) {
+    for (album_id, index, path) in uncached {
+        let Some(decoded) = decode_cover_raw(path, THUMBNAIL_SIZE) else {
+            continue;
+        };
+        if tx.send((*index, *album_id, decoded)).is_err() {
+            break;
+        }
+    }
+}
+
+/// Checks the shared [`CoverArtCache`] first; only spawns a background
+/// decode (via `std::thread::spawn`) when the texture is not yet cached
+/// and the global concurrency limit has not been reached.  Each decode
+/// writes both to the cache and, on completion, to the overlay via an
+/// [`idle_add_local`] callback.
+fn load_cover_art_async(
+    cover_art_data: &[(i64, usize, String)],
+    overlays: &[Overlay],
+    cache: &Arc<CoverArtCache>,
+) {
     if cover_art_data.is_empty() {
         return;
     }
 
-    let (tx, rx) = channel();
-    let total = cover_art_data.len();
-    let num_workers = 4.min(total);
+    let (tx, rx) = channel::<(usize, i64, DecodedCover)>();
+    let mut uncached: Vec<(i64, usize, String)> = Vec::new();
 
-    let mut paths: Vec<(usize, String)> = cover_art_data.to_vec();
-    let batch_size = total.div_ceil(num_workers);
-
-    for _ in 0..num_workers {
-        let batch: Vec<(usize, String)> = paths.drain(..batch_size.min(paths.len())).collect();
-        let tx = tx.clone();
-        spawn_blocking(move || decode_batch(batch, &tx));
+    for (album_id, index, path) in cover_art_data {
+        if let Some(texture) = cache
+            .get(*album_id)
+            .filter(|t| t.width() >= THUMBNAIL_SIZE || t.height() >= THUMBNAIL_SIZE)
+        {
+            apply_texture(&overlays[*index], &texture);
+            continue;
+        }
+        uncached.push((*album_id, *index, path.clone()));
     }
+
+    if uncached.is_empty() || !cache.try_start_batch() {
+        return;
+    }
+
+    let tx_clone = tx.clone();
+    spawn(move || send_uncached_covers(&uncached, &tx_clone));
     drop(tx);
 
     let overlays: Vec<Overlay> = overlays.to_vec();
-    let mut received = 0usize;
+    let cache_clone = Arc::clone(cache);
 
     idle_add_local(move || {
-        while let Ok((i, Some(texture))) = rx.try_recv() {
-            apply_texture(&overlays[i], &texture);
-            received += 1;
+        while let Ok((index, album_id, decoded)) = rx.try_recv() {
+            let texture = raw_to_texture(&decoded);
+            cache_clone.insert(album_id, texture.clone());
+            apply_texture(&overlays[index], &texture);
         }
-        if received < total { Continue } else { Break }
+        match rx.try_recv() {
+            Err(Disconnected) => {
+                cache_clone.finish_batch();
+                Break
+            }
+            _ => Continue,
+        }
     });
 }
 

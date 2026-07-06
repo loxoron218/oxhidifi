@@ -11,26 +11,28 @@ use std::{
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering::Relaxed},
-        mpsc::channel,
+        mpsc::{Sender, TryRecvError::Disconnected, channel},
     },
+    thread::spawn,
 };
 
 use {
     libadwaita::{
-        gio::{ListModel, ListStore, spawn_blocking},
+        gio::{ListModel, ListStore},
         glib::{
             BoxedAnyObject,
             ControlFlow::{Break, Continue},
-            Object, idle_add_local, spawn_future_local,
+            Object, WeakRef, idle_add_local, spawn_future_local,
         },
         gtk::{
             Align::Start, ColumnView, ColumnViewColumn, ContentFit::Cover, CustomSorter, Image,
             Label, ListItem, NoSelection, Picture, SignalListItemFactory, SortListModel, Widget,
             pango::EllipsizeMode::End,
         },
-        prelude::{Cast, ListItemExt, ListModelExt},
+        prelude::{Cast, ListItemExt, ListModelExt, ObjectExt},
     },
-    tokio::sync::watch::{Receiver, Sender, channel as TokioChannel},
+    parking_lot::Mutex,
+    tokio::sync::watch::{Receiver, Sender as TokioSender, channel as TokioChannel},
     tracing::debug,
 };
 
@@ -41,8 +43,9 @@ use crate::{
     },
     storage::{Album, Artist},
     ui::{
-        decode_cover_at_size,
+        CoverArtCache, DecodedCover, decode_cover_raw,
         library::models::{AlbumData, ArtistData},
+        raw_to_texture,
     },
 };
 
@@ -74,7 +77,7 @@ pub struct NarrowState {
     /// Whether the window is in narrow mode.
     narrow: AtomicBool,
     /// Channel to notify subscribers of narrow-mode changes.
-    tx: Sender<bool>,
+    tx: TokioSender<bool>,
 }
 
 impl NarrowState {
@@ -111,6 +114,9 @@ impl NarrowState {
         self.tx.subscribe()
     }
 }
+
+/// Map of album ID to pending `Picture` weak references awaiting cover art.
+type PendingCovers = HashMap<i64, Vec<WeakRef<Picture>>>;
 
 /// Create a `ColumnView` with sort model and no selection from a store.
 fn setup_column_view(store: ListStore) -> ColumnView {
@@ -162,9 +168,16 @@ pub fn build_album_column_view<S: BuildHasher>(
         store.append(&BoxedAnyObject::new(data));
     }
 
+    let album_covers: Vec<(i64, String)> = albums
+        .iter()
+        .filter_map(|a| a.artwork_path.as_ref().map(|p| (a.id, p.clone())))
+        .collect();
+
     let column_view = setup_column_view(store);
 
-    let cover_col = build_cover_column();
+    let pending_widgets = Arc::<Mutex<PendingCovers>>::default();
+
+    let cover_col = build_cover_column(&state.cover_art_cache, &pending_widgets);
     let artist_col =
         build_string_column("Artist Name", |d: &AlbumData| d.artist_name.clone(), true);
     let album_col = build_string_column("Album Name", |d: &AlbumData| d.title.clone(), true);
@@ -202,6 +215,20 @@ pub fn build_album_column_view<S: BuildHasher>(
         narrow_state,
         &[&format_col, &bit_depth_col, &sample_rate_col],
     );
+
+    let uncached_covers: Vec<(i64, String)> = album_covers
+        .iter()
+        .filter(|(id, _)| state.cover_art_cache.get(*id).is_none())
+        .cloned()
+        .collect();
+
+    if !uncached_covers.is_empty() && state.cover_art_cache.try_start_batch() {
+        start_cover_batch_decode(
+            uncached_covers,
+            Arc::clone(&state.cover_art_cache),
+            pending_widgets,
+        );
+    }
 
     column_view.upcast::<Widget>()
 }
@@ -247,8 +274,24 @@ pub fn build_artist_column_view(state: &Arc<AppState>, artists: &[Artist]) -> Wi
 }
 
 /// Build a cover art column with a 36‑px fixed‑width `Picture`.
-fn build_cover_column() -> ColumnViewColumn {
+///
+/// Performs a synchronous cache lookup on bind.  If the texture is not
+/// yet cached, the `Picture` widget is registered in `pending_widgets`
+/// so a background batch decoder can install the texture later.
+///
+/// # Arguments
+///
+/// * `cache` – Shared cover art cache (from [`AppState::cover_art_cache`]).
+/// * `pending_widgets` – Map of album ID → weak references to `Picture` widgets that still need
+///   their cover art installed.
+fn build_cover_column(
+    cache: &Arc<CoverArtCache>,
+    pending_widgets: &Arc<Mutex<PendingCovers>>,
+) -> ColumnViewColumn {
     let factory = SignalListItemFactory::new();
+
+    let cache = Arc::clone(cache);
+    let pending = Arc::clone(pending_widgets);
 
     factory.connect_setup(|_, item: &Object| {
         let picture = Picture::builder()
@@ -262,37 +305,31 @@ fn build_cover_column() -> ColumnViewColumn {
         }
     });
 
-    factory.connect_bind(|_, item: &Object| {
+    factory.connect_bind(move |_, item: &Object| {
         with_list_item_data!(item, AlbumData, list_item, data => {
             let Some(child) = list_item.child() else {
                 return;
             };
-            let Some(picture) = child.downcast_ref::<Picture>() else {
+            let Some(picture_ref) = child.downcast_ref::<Picture>() else {
                 return;
             };
 
-            let path = &data.artwork_path;
-            if path.is_empty() {
+            if data.artwork_path.is_empty() {
                 return;
             }
 
-            let picture_clone = picture.clone();
-            let decode_path = path.clone();
-            let (tx, rx) = channel();
-            spawn_blocking(move || {
-                let texture = decode_cover_at_size(&decode_path, COVER_THUMB_SIZE);
-                if let Err(e) = tx.send(texture) {
-                    debug!(error = %e, "Failed to send decoded cover texture");
-                }
-            });
+            let album_id = data.id;
 
-            idle_add_local(move || match rx.try_recv() {
-                Ok(Some(texture)) => {
-                    picture_clone.set_paintable(Some(&texture));
-                    Break
-                }
-                Ok(None) | Err(_) => Continue,
-            });
+            if let Some(texture) = cache.get(album_id) {
+                picture_ref.set_paintable(Some(&*texture));
+                return;
+            }
+
+            pending
+                .lock()
+                .entry(album_id)
+                .or_default()
+                .push(picture_ref.downgrade());
         });
     });
 
@@ -301,6 +338,66 @@ fn build_cover_column() -> ColumnViewColumn {
         .fixed_width(COVER_THUMB_SIZE + 12)
         .resizable(false)
         .build()
+}
+
+/// Send decoded covers from the album list through the channel.
+fn send_decoded_covers(albums: &[(i64, String)], tx: &Sender<(i64, DecodedCover)>) {
+    for (album_id, path) in albums {
+        let Some(decoded) = decode_cover_raw(path, COVER_THUMB_SIZE) else {
+            continue;
+        };
+        if tx.send((*album_id, decoded)).is_err() {
+            break;
+        }
+    }
+}
+
+/// Apply a decoded cover to the cache and update any waiting widgets.
+fn apply_cover_to_widgets(
+    album_id: i64,
+    decoded: &DecodedCover,
+    cover_cache: &CoverArtCache,
+    pending_widgets: &Mutex<PendingCovers>,
+) {
+    let texture = raw_to_texture(decoded);
+    cover_cache.insert(album_id, texture.clone());
+
+    if let Some(waiters) = pending_widgets.lock().remove(&album_id) {
+        for weak in waiters {
+            weak.upgrade()
+                .inspect(|pic| pic.set_paintable(Some(&texture)));
+        }
+    }
+}
+
+/// Run a background batch decoder for a list of album cover paths.
+///
+/// Spawns a single `std::thread` that sequentially decodes each uncached
+/// album cover (avoiding Glycin pool saturation).  Results are sent back
+/// to the main thread via `mpsc` channel, where an `idle_add_local`
+/// handler converts them to `MemoryTexture`, inserts them into the shared
+/// cache, and updates any waiting `Picture` widgets.
+fn start_cover_batch_decode(
+    albums: Vec<(i64, String)>,
+    cover_cache: Arc<CoverArtCache>,
+    pending_widgets: Arc<Mutex<PendingCovers>>,
+) {
+    let (tx, rx) = channel::<(i64, DecodedCover)>();
+
+    spawn(move || send_decoded_covers(&albums, &tx));
+
+    idle_add_local(move || {
+        while let Ok((album_id, decoded)) = rx.try_recv() {
+            apply_cover_to_widgets(album_id, &decoded, &cover_cache, &pending_widgets);
+        }
+        match rx.try_recv() {
+            Err(Disconnected) => {
+                cover_cache.finish_batch();
+                Break
+            }
+            _ => Continue,
+        }
+    });
 }
 
 /// Build an artist icon column with a 32‑px fixed‑width `Image`.

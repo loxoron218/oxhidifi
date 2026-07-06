@@ -23,17 +23,36 @@ use {
 };
 
 use crate::{
-    library::scanner::{FsScanner, ScanEvent, ScannerConfig},
+    library::{
+        artwork::check_cache_version,
+        scanner::{FsScanner, ScanEvent, ScannerConfig},
+    },
     playback::{engine::PlaybackEngine, output::startup_device_check},
     storage::{
         database::SqliteStorage,
         settings::{ActiveTab, ViewMode},
     },
-    ui::window::build_window,
+    ui::{CoverArtCache, window::build_window},
 };
 
 /// Application identifier for D-Bus and resource paths.
 const APP_ID: &str = "com.github.oxhidifi";
+
+/// Holds the channel pairs that are common across all `AppState` constructions.
+pub struct AppChannels {
+    /// Sender for forwarding scan events to the UI (status bar).
+    pub scan_event_tx: Sender<ScanEvent>,
+    /// Receiver for consuming scan events (cloned for each subscriber).
+    pub scan_event_rx: Receiver<ScanEvent>,
+    /// Sender for toast notifications displayed to the user.
+    pub toast_tx: Sender<String>,
+    /// Receiver for toast notifications.
+    pub toast_rx: Receiver<String>,
+    /// Sender for navigation events (detail page navigation).
+    pub navigation_tx: Sender<NavigationEvent>,
+    /// Receiver for navigation events.
+    pub navigation_rx: Receiver<NavigationEvent>,
+}
 
 /// Shared application state passed to the window.
 pub struct AppState {
@@ -66,6 +85,8 @@ pub struct AppState {
     pub navigation_tx: Sender<NavigationEvent>,
     /// Receiver for navigation events.
     pub navigation_rx: Receiver<NavigationEvent>,
+    /// Shared cache for decoded cover art textures.
+    pub cover_art_cache: Arc<CoverArtCache>,
 }
 
 impl AppState {
@@ -73,6 +94,35 @@ impl AppState {
     pub async fn send_navigation_event(&self, event: NavigationEvent) {
         if let Err(e) = self.navigation_tx.send(event).await {
             info!(error = %e, "Failed to send navigation event");
+        }
+    }
+
+    /// Construct a new `AppState` with all fields explicitly provided.
+    pub fn new(
+        playback: Arc<PlaybackEngine>,
+        storage: Arc<SqliteStorage>,
+        scanner: Arc<FsScanner<SqliteStorage>>,
+        refresh_tx: TokioSender<()>,
+        view_mode_tx: TokioSender<ViewMode>,
+        active_tab_tx: TokioSender<ActiveTab>,
+        channels: AppChannels,
+    ) -> Self {
+        Self {
+            playback,
+            storage,
+            scanner,
+            refresh_tx,
+            view_mode_tx,
+            active_tab_tx,
+            scan_event_tx: channels.scan_event_tx,
+            scan_event_rx: channels.scan_event_rx,
+            toast_tx: channels.toast_tx,
+            toast_rx: channels.toast_rx,
+            current_album_id: AtomicI64::new(-1),
+            is_seeking: Arc::new(AtomicBool::new(false)),
+            navigation_tx: channels.navigation_tx,
+            navigation_rx: channels.navigation_rx,
+            cover_art_cache: CoverArtCache::new_shared(),
         }
     }
 }
@@ -154,6 +204,8 @@ fn data_dir() -> PathBuf {
 /// Returns an error if the application cannot be built or if the storage
 /// backend fails to initialize.
 pub async fn run_application() -> Result<()> {
+    check_cache_version();
+
     let db_dir = data_dir();
     create_dir_all(&db_dir)
         .with_context(|| format!("Failed to create data directory: {}", db_dir.display()))?;
@@ -185,22 +237,24 @@ pub async fn run_application() -> Result<()> {
 
     let (navigation_tx, navigation_rx) = unbounded();
 
-    let state = Arc::new(AppState {
-        playback,
-        storage,
-        scanner,
-        refresh_tx: channel(()).0,
-        view_mode_tx: channel(initial_view_mode).0,
-        active_tab_tx: channel(initial_active_tab).0,
+    let channels = AppChannels {
         scan_event_tx,
         scan_event_rx,
         toast_tx,
         toast_rx,
-        current_album_id: AtomicI64::new(-1),
-        is_seeking: Arc::new(AtomicBool::new(false)),
         navigation_tx,
         navigation_rx,
-    });
+    };
+
+    let state = Arc::new(AppState::new(
+        playback,
+        storage,
+        scanner,
+        channel(()).0,
+        channel(initial_view_mode).0,
+        channel(initial_active_tab).0,
+        channels,
+    ));
 
     let app = Application::builder().application_id(APP_ID).build();
 
@@ -219,10 +273,7 @@ pub async fn run_application() -> Result<()> {
 mod tests {
     use std::{
         path::Path,
-        sync::{
-            Arc, LazyLock,
-            atomic::{AtomicBool, AtomicI64},
-        },
+        sync::{Arc, LazyLock},
     };
 
     use {
@@ -232,7 +283,7 @@ mod tests {
     };
 
     use crate::{
-        app::AppState,
+        app::{AppChannels, AppState},
         library::scanner::{FsScanner, ScannerConfig},
         playback::engine::PlaybackEngine,
         storage::{
@@ -263,26 +314,28 @@ mod tests {
 
             let (navigation_tx, navigation_rx) = unbounded();
 
-            Ok(Self {
-                playback: Arc::new(PlaybackEngine::new()),
-                storage,
-                scanner: Arc::new(FsScanner::new(
-                    scanner_storage,
-                    ScannerConfig::default(),
-                    scan_event_tx.clone(),
-                )),
-                refresh_tx: channel(()).0,
-                view_mode_tx: channel(Grid).0,
-                active_tab_tx: channel(Albums).0,
+            let channels = AppChannels {
                 scan_event_tx,
                 scan_event_rx,
                 toast_tx,
                 toast_rx,
-                current_album_id: AtomicI64::new(-1),
-                is_seeking: Arc::new(AtomicBool::new(false)),
                 navigation_tx,
                 navigation_rx,
-            })
+            };
+
+            Ok(Self::new(
+                Arc::new(PlaybackEngine::new()),
+                storage,
+                Arc::new(FsScanner::new(
+                    scanner_storage,
+                    ScannerConfig::default(),
+                    channels.scan_event_tx.clone(),
+                )),
+                channel(()).0,
+                channel(Grid).0,
+                channel(Albums).0,
+                channels,
+            ))
         }
     }
 

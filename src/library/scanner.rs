@@ -414,11 +414,11 @@ impl<S: Storage> FsScanner<S> {
 
     /// Try to extract and cache artwork, returning the cached path string on success.
     fn cache_extracted_artwork(
-        result: Result<Option<Vec<u8>>, ArtworkError>,
+        result: Result<Option<(Vec<u8>, String)>, ArtworkError>,
         key: &str,
     ) -> Option<String> {
         match result {
-            Ok(Some(data)) => match cache_artwork(key, &data) {
+            Ok(Some((data, ext))) => match cache_artwork(key, &data, &ext) {
                 Ok(p) => Some(p.to_string_lossy().to_string()),
                 Err(e) => {
                     error!(error = %e, "Failed to cache artwork");

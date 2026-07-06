@@ -8,6 +8,14 @@ pub mod settings;
 pub mod status;
 pub mod window;
 
+use std::{
+    collections::HashMap,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering::SeqCst},
+    },
+};
+
 use {
     libadwaita::{
         gdk::{
@@ -17,8 +25,64 @@ use {
         glib::Bytes,
         gtk::gdk_pixbuf::Pixbuf,
     },
+    parking_lot::Mutex,
     tracing::error,
 };
+
+/// Thread-safe cache for decoded cover art textures.
+///
+/// Keyed by album database ID.  Decoding is performed in a single
+/// background batch to avoid flooding the Glycin sandboxed decoder
+/// pool.  The `batch_in_progress` flag prevents multiple views from
+/// starting simultaneous decode batches.
+///
+/// Both the grid view and column view share the same cache instance
+/// so that each album cover is only decoded once per session, even
+/// when switching between view modes.
+pub struct CoverArtCache {
+    /// Map of album ID to decoded texture.
+    textures: Mutex<HashMap<i64, Arc<MemoryTexture>>>,
+    /// True while a batch decode is in progress.
+    batch_in_progress: AtomicBool,
+}
+
+impl CoverArtCache {
+    /// Create a new `CoverArtCache` wrapped in [`Arc`].
+    #[must_use]
+    pub fn new_shared() -> Arc<Self> {
+        Arc::new(Self {
+            textures: Mutex::new(HashMap::new()),
+            batch_in_progress: AtomicBool::new(false),
+        })
+    }
+
+    /// Return the cached texture for a given album ID, if available.
+    #[must_use]
+    pub fn get(&self, album_id: i64) -> Option<Arc<MemoryTexture>> {
+        self.textures.lock().get(&album_id).cloned()
+    }
+
+    /// Insert a decoded texture into the cache by album ID.
+    pub fn insert(&self, album_id: i64, texture: MemoryTexture) {
+        self.textures.lock().insert(album_id, Arc::new(texture));
+    }
+
+    /// Atomically claim the decode-batch flag.
+    ///
+    /// Returns `true` if no batch was in progress and this caller is
+    /// now responsible for the batch.  Returns `false` if a batch is
+    /// already running (another view is decoding).
+    pub fn try_start_batch(&self) -> bool {
+        self.batch_in_progress
+            .compare_exchange(false, true, SeqCst, SeqCst)
+            .is_ok()
+    }
+
+    /// Clear the batch-in-progress flag after decoding completes.
+    pub fn finish_batch(&self) {
+        self.batch_in_progress.store(false, SeqCst);
+    }
+}
 
 /// Decoded cover art as raw pixel data (Send-safe).
 pub struct DecodedCover {

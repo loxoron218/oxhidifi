@@ -1,13 +1,16 @@
 //! Artwork extraction and caching from audio files.
 
 use std::{
-    fs::{create_dir_all, write},
+    fs::{create_dir_all, read_dir, read_to_string as fs_read_to_string, remove_file, write},
     path::{Path, PathBuf},
 };
 
 use {
     lofty::{
-        error::LoftyError, file::TaggedFileExt, picture::PictureType::CoverFront, read_from_path,
+        error::LoftyError,
+        file::TaggedFileExt,
+        picture::{MimeType, PictureType::CoverFront},
+        read_from_path,
     },
     thiserror::Error,
 };
@@ -16,6 +19,12 @@ use crate::app::dirs_cache_home;
 
 /// Subdirectory for cached artwork files.
 const ARTWORK_CACHE_DIR: &str = "oxhidifi/artwork";
+
+/// File extensions to try when looking up cached artwork by key.
+const ARTWORK_EXTENSIONS: &[&str] = &["jpg", "png", "webp"];
+
+/// Current cache format version.  Bump to force re-extraction of all artwork.
+const CACHE_VERSION: &str = "2";
 
 /// Errors occurring during artwork operations.
 #[derive(Debug, Error)]
@@ -30,13 +39,14 @@ pub enum ArtworkError {
 
 /// Extract embedded artwork from an audio file.
 ///
-/// Returns the raw bytes of the first embedded picture (front cover preferred),
-/// or `None` if no picture is embedded.
+/// Returns the raw bytes and the file extension (e.g., `"jpg"`, `"png"`)
+/// of the first embedded picture (front cover preferred), or `None` if no
+/// picture is embedded.
 ///
 /// # Errors
 ///
 /// Returns [`ArtworkError`] if the file cannot be read.
-pub fn extract_artwork(path: &Path) -> Result<Option<Vec<u8>>, ArtworkError> {
+pub fn extract_artwork(path: &Path) -> Result<Option<(Vec<u8>, String)>, ArtworkError> {
     let tagged_file = read_from_path(path)?;
 
     let tag = tagged_file
@@ -57,7 +67,16 @@ pub fn extract_artwork(path: &Path) -> Result<Option<Vec<u8>>, ArtworkError> {
         .find(|p| p.pic_type() == CoverFront)
         .or_else(|| pictures.first());
 
-    picture.map(|p| Ok(p.data().to_vec())).transpose()
+    let Some(picture) = picture else {
+        return Ok(None);
+    };
+
+    let ext = picture
+        .mime_type()
+        .and_then(MimeType::ext)
+        .map_or("png".to_string(), ToString::to_string);
+
+    Ok(Some((picture.data().to_vec(), ext)))
 }
 
 /// Ensure the artwork cache directory exists.
@@ -82,14 +101,20 @@ fn ensure_artwork_cache_dir() -> Result<PathBuf, ArtworkError> {
 
 /// Cache artwork data to disk in a given cache directory and return the file path.
 ///
-/// The artwork is stored as a PNG file named `{key}.png`.
+/// The artwork is stored as `{key}.{ext}`.  The extension is detected from the
+/// embedded picture's MIME type (determined during extraction).
 ///
 /// # Errors
 ///
 /// Returns [`ArtworkError`] if the cache directory cannot be created or the
 /// file cannot be written.
-fn cache_artwork_in(cache_dir: &Path, key: &str, data: &[u8]) -> Result<PathBuf, ArtworkError> {
-    let file_path = cache_dir.join(format!("{key}.png"));
+fn cache_artwork_in(
+    cache_dir: &Path,
+    key: &str,
+    data: &[u8],
+    ext: &str,
+) -> Result<PathBuf, ArtworkError> {
+    let file_path = cache_dir.join(format!("{key}.{ext}"));
 
     write(&file_path, data).map_err(|e| {
         ArtworkError::FileNotFound(format!(
@@ -103,33 +128,75 @@ fn cache_artwork_in(cache_dir: &Path, key: &str, data: &[u8]) -> Result<PathBuf,
 
 /// Cache artwork data to disk and return the file path.
 ///
-/// The artwork is stored as a PNG file named `{key}` in the XDG cache
-/// artwork directory. The `key` should uniquely identify the album (e.g.,
-/// its database ID as a string).
+/// The artwork is stored as `{key}.{ext}` in the XDG cache artwork directory.
+/// The `ext` should be one of `"jpg"`, `"png"`, or `"webp"`, determined during
+/// extraction from the embedded picture's MIME type.
 ///
 /// # Errors
 ///
 /// Returns [`ArtworkError`] if the cache directory cannot be created or the
 /// file cannot be written.
-pub fn cache_artwork(key: &str, data: &[u8]) -> Result<PathBuf, ArtworkError> {
+pub fn cache_artwork(key: &str, data: &[u8], ext: &str) -> Result<PathBuf, ArtworkError> {
     let cache_dir = ensure_artwork_cache_dir()?;
-    cache_artwork_in(&cache_dir, key, data)
+    cache_artwork_in(&cache_dir, key, data, ext)
 }
 
 /// Check whether a cached artwork file exists for a given key in the given
 /// cache directory.
 fn has_cached_artwork_in(cache_dir: &Path, key: &str) -> bool {
-    cache_dir.join(format!("{key}.png")).exists()
+    ARTWORK_EXTENSIONS
+        .iter()
+        .any(|ext| cache_dir.join(format!("{key}.{ext}")).exists())
 }
 
 /// Get the cached artwork path for a given key, returning `None` if not cached.
+///
+/// Tries each known extension (`.jpg`, `.png`, `.webp`) to find a matching
+/// file, since the stored extension depends on the original embedded image
+/// format.
 #[must_use]
 pub fn get_cached_artwork_path(key: &str) -> Option<PathBuf> {
     let Ok(cache_dir) = ensure_artwork_cache_dir() else {
         return None;
     };
-    let file_path = cache_dir.join(format!("{key}.png"));
-    file_path.exists().then_some(file_path)
+    ARTWORK_EXTENSIONS
+        .iter()
+        .map(|ext| cache_dir.join(format!("{key}.{ext}")))
+        .find(|p| p.exists())
+}
+
+/// Check and update the artwork cache version.
+///
+/// If the stored version does not match [`CACHE_VERSION`], the artwork
+/// directory is wiped so that files are re-extracted with correctly-detected
+/// MIME extensions on the next scan.
+pub fn check_cache_version() {
+    let Ok(cache_dir) = ensure_artwork_cache_dir() else {
+        return;
+    };
+    let version_path = cache_dir.join(".version");
+
+    let needs_wipe = read_to_string(&version_path).is_none_or(|v| v.trim() != CACHE_VERSION);
+
+    if !needs_wipe {
+        return;
+    }
+
+    if let Ok(entries) = read_dir(&cache_dir) {
+        for path in entries
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.is_file() && p.file_name().is_none_or(|n| n != ".version"))
+        {
+            let _ = remove_file(&path);
+        }
+    }
+    let _ = write(&version_path, CACHE_VERSION);
+}
+
+/// Read the contents of a file to a `String`, returning `None` on error.
+fn read_to_string(path: &Path) -> Option<String> {
+    fs_read_to_string(path).ok()
 }
 
 #[cfg(test)]
@@ -177,7 +244,7 @@ mod tests {
         let key = "test-album-1";
         let data = b"fake-png-bytes";
 
-        let path = cache_artwork_in(&cache_base, key, data)?;
+        let path = cache_artwork_in(&cache_base, key, data, "png")?;
         ensure!(path.exists(), "cached file should exist");
         ensure!(read(&path)? == data, "cached data should match");
         ensure!(

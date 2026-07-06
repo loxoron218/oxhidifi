@@ -30,7 +30,7 @@ use {
             pango::EllipsizeMode::End,
             prelude::RangeExt,
         },
-        prelude::{AccessibleExtManual, BoxExt, ButtonExt},
+        prelude::{AccessibleExtManual, BoxExt, ButtonExt, TextureExt},
     },
     parking_lot::Mutex,
     tokio::runtime::Runtime,
@@ -48,7 +48,7 @@ use crate::{
     },
     storage::{Storage, database::SqliteStorage},
     ui::{
-        DecodedCover, decode_cover_raw,
+        CoverArtCache, DecodedCover, decode_cover_raw,
         detail::common::build_scroll_content,
         player::controls::{
             build_playback_controls, build_queue_section, build_seek_section, build_volume_control,
@@ -56,6 +56,12 @@ use crate::{
         raw_to_texture,
     },
 };
+
+/// Minimum texture dimension (width or height) required to use a cached
+/// cover in the player panel (displayed at 280×280).  Textures decoded
+/// at 36 px by the column view are rejected, forcing a proper‑sized
+/// decode via the async `handle_meta_update` path.
+const COVER_MIN_SIZE: i32 = 180;
 
 /// Tuple of resolved metadata: `(title, artist, album, artwork_path, format_info)`.
 type MetaResult = (String, String, String, Option<String>, String);
@@ -173,6 +179,17 @@ fn set_cover_callback(artwork: Picture, texture: MemoryTexture) -> impl FnMut() 
     }
 }
 
+/// If `track_id` has a cached cover, dispatch a one-shot idle callback to
+/// paint it onto `artwork`.  Called when the playback track or status
+/// changes.
+fn update_cover_for_track(track_id: Option<i64>, cover_cache: &CoverArtCache, artwork: &Picture) {
+    if let Some(texture) = track_id.and_then(|tid| cover_cache.get(tid))
+        && (texture.width() >= COVER_MIN_SIZE || texture.height() >= COVER_MIN_SIZE)
+    {
+        idle_add_local(set_cover_callback(artwork.clone(), (*texture).clone()));
+    }
+}
+
 /// Resolve track metadata from storage.
 ///
 /// Returns `(title, artist_name, album_name, artwork_path, format_info)`.
@@ -278,13 +295,19 @@ pub fn build_player_content(state: &Arc<AppState>) -> ScrolledWindow {
     let cover_rx = Mutex::new(cover_rx);
 
     let is_seeking = Arc::clone(&state.is_seeking);
+    let cover_cache = Arc::clone(&state.cover_art_cache);
 
     timeout_add_local(Duration::from_millis(200), move || {
         let s = poll_playback.state();
 
-        if s.current_track_id != prev_track_id || s.status != prev_status {
+        let changed = s.current_track_id != prev_track_id || s.status != prev_status;
+        if changed {
             prev_track_id = s.current_track_id;
             prev_status = s.status;
+        }
+
+        if changed {
+            update_cover_for_track(s.current_track_id, &cover_cache, &poll_artwork);
 
             handle_status_change(
                 s.status == StatusStopped,
@@ -305,10 +328,9 @@ pub fn build_player_content(state: &Arc<AppState>) -> ScrolledWindow {
         if let Ok((tid, cover)) = cover_guard.try_recv()
             && Some(tid) == s.current_track_id
         {
-            idle_add_local(set_cover_callback(
-                poll_artwork.clone(),
-                raw_to_texture(&cover),
-            ));
+            let texture = raw_to_texture(&cover);
+            cover_cache.insert(tid, texture.clone());
+            idle_add_local(set_cover_callback(poll_artwork.clone(), texture));
         }
         drop(cover_guard);
 
