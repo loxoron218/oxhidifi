@@ -15,7 +15,7 @@ use {
             Orientation::Horizontal,
             Picture, ScrolledWindow, Widget,
             accessible::Property::Label as PropertyLabel,
-            pango::EllipsizeMode::End as EllipsizeEnd,
+            pango::EllipsizeMode::End,
             prelude::{AccessibleExtManual, BoxExt, WidgetExt},
         },
     },
@@ -104,7 +104,7 @@ fn build_album_content() -> AlbumDetailContent {
 
     let title_label = Label::builder()
         .css_classes(["title-2", "heading"])
-        .ellipsize(EllipsizeEnd)
+        .ellipsize(End)
         .halign(Start)
         .build();
     title_label.update_property(&[PropertyLabel("Album title")]);
@@ -112,7 +112,7 @@ fn build_album_content() -> AlbumDetailContent {
 
     let artist_label = Label::builder()
         .css_classes(["title-4", "accent"])
-        .ellipsize(EllipsizeEnd)
+        .ellipsize(End)
         .halign(Start)
         .build();
     artist_label.update_property(&[PropertyLabel("Artist name")]);

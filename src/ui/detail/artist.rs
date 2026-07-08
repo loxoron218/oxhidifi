@@ -12,7 +12,7 @@ use {
             Orientation::{Horizontal, Vertical},
             Widget,
             accessible::Property::Label as PropertyLabel,
-            pango::EllipsizeMode::End as EllipsizeEnd,
+            pango::EllipsizeMode::End,
             prelude::{AccessibleExtManual, BoxExt},
         },
     },
@@ -38,7 +38,7 @@ pub fn build_artist_detail(
 
     let name_label = Label::builder()
         .css_classes(["title-2", "heading"])
-        .ellipsize(EllipsizeEnd)
+        .ellipsize(End)
         .halign(Start)
         .build();
     name_label.update_property(&[PropertyLabel("Artist name")]);
@@ -176,7 +176,7 @@ async fn build_album_section(
     let album_title = Label::builder()
         .label(&album.title)
         .css_classes(["title-4", "heading"])
-        .ellipsize(EllipsizeEnd)
+        .ellipsize(End)
         .halign(Start)
         .build();
     album_title.update_property(&[PropertyLabel(&format!("Album: {}", album.title))]);
