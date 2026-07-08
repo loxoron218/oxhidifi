@@ -8,7 +8,7 @@ use {
         glib::{prelude::Cast, spawn_future_local},
         gtk::{
             Align::Start,
-            Box, Image, Label, ListBox,
+            Box, Image, Label, ListBox, ListBoxRow,
             Orientation::{Horizontal, Vertical},
             Widget,
             accessible::Property::Label as PropertyLabel,
@@ -112,20 +112,45 @@ async fn populate_artist_detail(
         .await
         .unwrap_or_default();
 
+    let mut track_lists: Vec<ListBox> = Vec::new();
     for album in &albums {
         let fi = format_info_map.get(&album.id).cloned().unwrap_or_default();
-        let section = build_album_section(state, album, &fi, &nav_tx).await;
+        let (section, listbox) = build_album_section(state, album, &fi, &nav_tx).await;
+        track_lists.push(listbox);
         albums_container.append(&section);
+    }
+
+    for (i, tb) in track_lists.iter().enumerate() {
+        let others: Vec<ListBox> = track_lists
+            .iter()
+            .enumerate()
+            .filter(|(j, _)| *j != i)
+            .map(|(_, lb)| lb.clone())
+            .collect();
+        tb.connect_row_selected(move |_, row| clear_other_lists(row, &others));
+    }
+}
+
+/// When a row is selected in one album's track list, unselect all rows
+/// in the other albums' track lists to keep a single active highlight.
+fn clear_other_lists(row: Option<&ListBoxRow>, others: &[ListBox]) {
+    if row.is_none() {
+        return;
+    }
+    for other in others {
+        other.unselect_all();
     }
 }
 
 /// Build a section for a single album with its tracks.
+///
+/// Returns the section widget and the track list box for selection management.
 async fn build_album_section(
     state: &Arc<AppState>,
     album: &Album,
     format_info: &FormatInfo,
     nav_tx: &Sender<NavigationEvent>,
-) -> Box {
+) -> (Box, ListBox) {
     let section = Box::builder().orientation(Vertical).spacing(6).build();
 
     let album_header = Box::builder().orientation(Horizontal).spacing(12).build();
@@ -181,7 +206,7 @@ async fn build_album_section(
         Ok(t) => t,
         Err(e) => {
             info!(error = %e, album_id = album.id, "Failed to load tracks");
-            return section;
+            return (section, track_list);
         }
     };
 
@@ -191,7 +216,7 @@ async fn build_album_section(
     }
 
     section.append(&track_list);
-    section
+    (section, track_list)
 }
 
 #[cfg(test)]
