@@ -13,6 +13,7 @@ use std::{
 };
 
 use {
+    async_channel::Receiver,
     libadwaita::{
         gdk::{ContentProvider, DragAction},
         gio::{ListStore, prelude::ListModelExt},
@@ -40,7 +41,17 @@ use {
     tracing::error,
 };
 
-use crate::{app::AppState, playback::queue::PlaybackQueue, storage::Storage};
+use crate::{
+    app::AppState,
+    playback::{
+        engine::{
+            PlaybackController,
+            PlaybackEvent::{self, QueueChanged, TrackStarted},
+        },
+        queue::PlaybackQueue,
+    },
+    storage::Storage,
+};
 
 /// Data for a single queue entry.
 #[derive(Clone, Debug)]
@@ -85,9 +96,6 @@ fn handle_drop_value(value: &Value, queue: &PlaybackQueue, store: &ListStore, to
     let from_u = usize::try_from(from).unwrap_or(0);
     reorder_entry(queue, store, from_u, to_pos);
 }
-
-/// Refresh the store on a queue change event.
-fn on_queue_event(_state: &Arc<AppState>, _store: &ListStore, _queue: &PlaybackQueue) {}
 
 /// Create the `SignalListItemFactory` that builds and binds queue rows.
 fn build_row_factory(queue: &PlaybackQueue, store: &ListStore) -> SignalListItemFactory {
@@ -182,6 +190,23 @@ fn build_row_factory(queue: &PlaybackQueue, store: &ListStore) -> SignalListItem
     factory
 }
 
+/// Drain playback events and refresh the store on queue or track changes.
+fn poll_playback_events(
+    rx: &Receiver<PlaybackEvent>,
+    queue: &PlaybackQueue,
+    prev_tracks: &mut Vec<i64>,
+    state: &Arc<AppState>,
+    tx: &Sender<Vec<(i64, String)>>,
+) {
+    while let Ok(event) = rx.try_recv() {
+        if matches!(event, QueueChanged { .. } | TrackStarted { .. }) {
+            let current_tracks = queue.tracks();
+            prev_tracks.clone_from(&current_tracks);
+            spawn_fetch_queue_names(state, current_tracks, tx.clone());
+        }
+    }
+}
+
 /// Build the queue view using `ListView` with compact rows.
 ///
 /// Each row has a drag handle for reordering, track name, and remove button.
@@ -192,9 +217,7 @@ pub fn build_queue_view(state: &Arc<AppState>, queue: &PlaybackQueue) -> Box {
         .build();
 
     let queue = queue.clone();
-    let state_arc = Arc::clone(state);
-
-    on_queue_event(&state_arc, &store, &queue);
+    let event_sub = state.playback.subscribe();
 
     let factory = build_row_factory(&queue, &store);
 
@@ -213,17 +236,28 @@ pub fn build_queue_view(state: &Arc<AppState>, queue: &PlaybackQueue) -> Box {
 
     let poll_state = Arc::clone(state);
     let poll_store = store;
-    let poll_queue = queue.clone();
-    let mut prev_queue_len = queue.len();
+    let poll_queue = queue;
+    let mut prev_tracks = poll_queue.tracks();
+    let mut prev_current_id = poll_queue.current();
 
     let (queue_tx, queue_rx) = channel::<Vec<(i64, String)>>();
     let queue_rx = Mutex::new(queue_rx);
 
     timeout_add_local(Duration::from_millis(500), move || {
-        let current_len = poll_queue.len();
-        if current_len != prev_queue_len {
-            prev_queue_len = current_len;
-            spawn_fetch_queue_names(&poll_state, poll_queue.tracks(), queue_tx.clone());
+        poll_playback_events(
+            &event_sub,
+            &poll_queue,
+            &mut prev_tracks,
+            &poll_state,
+            &queue_tx,
+        );
+
+        let current_id = poll_queue.current();
+        let current_tracks = poll_queue.tracks();
+        if current_tracks != prev_tracks || current_id != prev_current_id {
+            prev_tracks.clone_from(&current_tracks);
+            prev_current_id = current_id;
+            spawn_fetch_queue_names(&poll_state, current_tracks, queue_tx.clone());
         }
 
         let guard = queue_rx.lock();

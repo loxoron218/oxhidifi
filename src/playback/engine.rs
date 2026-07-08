@@ -340,7 +340,9 @@ impl PlaybackController for PlaybackEngine {
             queue_len,
             "Play queue command",
         );
-        self.shared.queue.set_queue(queue);
+        self.shared.queue.set_queue(queue.clone());
+        self.shared
+            .send_event(&PlaybackEvent::QueueChanged { track_ids: queue });
         let first_id = self
             .shared
             .queue
@@ -536,6 +538,11 @@ pub enum PlaybackEvent {
     TrackFinished {
         /// ID of the finished track.
         track_id: i64,
+    },
+    /// The playback queue was replaced or modified.
+    QueueChanged {
+        /// New set of track IDs in the queue.
+        track_ids: Vec<i64>,
     },
     /// Playback was paused.
     Paused,
