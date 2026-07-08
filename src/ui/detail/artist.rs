@@ -21,7 +21,7 @@ use {
 
 use crate::{
     app::{AppState, NavigationEvent},
-    storage::{Album, Storage},
+    storage::{Album, FormatInfo, Storage},
     ui::detail::common::{build_detail_wrapper, build_scroll_content, build_track_row},
 };
 
@@ -105,8 +105,16 @@ async fn populate_artist_detail(
         }
     };
 
+    let album_ids: Vec<i64> = albums.iter().map(|a| a.id).collect();
+    let format_info_map = state
+        .storage
+        .get_albums_format_info(&album_ids)
+        .await
+        .unwrap_or_default();
+
     for album in &albums {
-        let section = build_album_section(state, album, &nav_tx).await;
+        let fi = format_info_map.get(&album.id).cloned().unwrap_or_default();
+        let section = build_album_section(state, album, &fi, &nav_tx).await;
         albums_container.append(&section);
     }
 }
@@ -115,6 +123,7 @@ async fn populate_artist_detail(
 async fn build_album_section(
     state: &Arc<AppState>,
     album: &Album,
+    format_info: &FormatInfo,
     nav_tx: &Sender<NavigationEvent>,
 ) -> Box {
     let section = Box::builder().orientation(Vertical).spacing(6).build();
@@ -151,7 +160,8 @@ async fn build_album_section(
     let album_meta = Label::builder()
         .label(format!(
             "{} tracks \u{2022} {}",
-            album.track_count, album.format_summary
+            album.track_count,
+            format_info.summary_detailed()
         ))
         .css_classes(["dim-label", "caption"])
         .halign(Start)

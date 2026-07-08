@@ -1,11 +1,11 @@
 //! `SQLite` database implementation using `sqlx` for library catalog persistence.
 
-use std::path::Path;
+use std::{collections::HashMap, path::Path};
 
 use {
     parking_lot::RwLock,
     sqlx::{
-        SqlitePool, query, query_as,
+        FromRow, QueryBuilder, SqlitePool, query, query_as,
         sqlite::{SqliteConnectOptions, SqlitePoolOptions},
     },
 };
@@ -13,7 +13,7 @@ use {
 use crate::storage::{
     Album, Artist,
     FieldUpdate::{Set, SetNull, Skip},
-    LibraryDirectory, NewAlbum, NewArtist, NewQueueEntry, NewTrack,
+    FormatInfo, LibraryDirectory, NewAlbum, NewArtist, NewQueueEntry, NewTrack,
     QueueContext::{self, Album as QueueAlbum, Artist as QueueArtist, Manual},
     QueueEntry, Storage,
     StorageError::{self, Database, InvalidPath},
@@ -61,6 +61,25 @@ macro_rules! apply_field {
             Skip => {}
         }
     };
+}
+
+impl From<FormatInfoRow> for FormatInfo {
+    fn from(row: FormatInfoRow) -> Self {
+        raw_info_to_format_info(row.formats, row.sample_rates, row.bit_depths)
+    }
+}
+
+/// Raw row from the `GROUP_CONCAT` format info query.
+#[derive(Debug, Clone, FromRow)]
+struct FormatInfoRow {
+    /// Album identifier.
+    album_id: i64,
+    /// Comma-separated distinct format/codec names.
+    formats: Option<String>,
+    /// Comma-separated distinct sample rates.
+    sample_rates: Option<String>,
+    /// Comma-separated distinct bit depths.
+    bit_depths: Option<String>,
 }
 
 /// SQLite-backed storage implementation.
@@ -335,6 +354,61 @@ impl Storage for SqliteStorage {
         .map_err(|e| Database(format!("Get all albums failed: {e}")))
     }
 
+    async fn get_album_format_info(&self, album_id: i64) -> StorageResult<FormatInfo> {
+        #[derive(Debug, Clone, FromRow)]
+        struct RawInfo {
+            formats: Option<String>,
+            sample_rates: Option<String>,
+            bit_depths: Option<String>,
+        }
+
+        let row: Option<RawInfo> = query_as(
+            "SELECT GROUP_CONCAT(DISTINCT UPPER(codec)) AS formats, GROUP_CONCAT(DISTINCT \
+             sample_rate) AS sample_rates, GROUP_CONCAT(DISTINCT bit_depth) AS bit_depths FROM \
+             tracks WHERE album_id = ?",
+        )
+        .bind(album_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| Database(format!("Get album format info failed: {e}")))?;
+
+        Ok(row.map_or_else(FormatInfo::default, |r| {
+            raw_info_to_format_info(r.formats, r.sample_rates, r.bit_depths)
+        }))
+    }
+
+    async fn get_albums_format_info(
+        &self,
+        album_ids: &[i64],
+    ) -> StorageResult<HashMap<i64, FormatInfo>> {
+        if album_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let mut builder = QueryBuilder::new(
+            "SELECT album_id, GROUP_CONCAT(DISTINCT UPPER(codec)) AS formats, \
+             GROUP_CONCAT(DISTINCT sample_rate) AS sample_rates, GROUP_CONCAT(DISTINCT bit_depth) \
+             AS bit_depths FROM tracks WHERE album_id IN (",
+        );
+
+        let mut separated = builder.separated(", ");
+        for id in album_ids {
+            separated.push_bind(id);
+        }
+        builder.push(") GROUP BY album_id");
+
+        let rows: Vec<FormatInfoRow> = builder
+            .build_query_as()
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| Database(format!("Get albums format info failed: {e}")))?;
+
+        Ok(rows
+            .into_iter()
+            .map(|r| (r.album_id, FormatInfo::from(r)))
+            .collect())
+    }
+
     async fn get_albums_by_artist(&self, artist_id: i64) -> StorageResult<Vec<Album>> {
         query_as::<_, Album>(concat!(
             "SELECT al.id, al.title, al.artist_id, al.year, al.genre, al.artwork_path, ",
@@ -581,5 +655,28 @@ impl Storage for SqliteStorage {
             results.push(tracks);
         }
         Ok(results)
+    }
+}
+
+/// Parse comma-separated format info strings into a `FormatInfo`.
+fn raw_info_to_format_info(
+    formats: Option<String>,
+    sample_rates: Option<String>,
+    bit_depths: Option<String>,
+) -> FormatInfo {
+    FormatInfo {
+        formats: formats.map_or_else(Vec::new, |s| {
+            s.split(',').map(str::trim).map(str::to_string).collect()
+        }),
+        sample_rates: sample_rates.map_or_else(Vec::new, |s| {
+            s.split(',')
+                .filter_map(|v| v.trim().parse::<i32>().ok())
+                .collect()
+        }),
+        bit_depths: bit_depths.map_or_else(Vec::new, |s| {
+            s.split(',')
+                .filter_map(|v| v.trim().parse::<i32>().ok())
+                .collect()
+        }),
     }
 }

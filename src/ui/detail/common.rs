@@ -31,7 +31,7 @@ use crate::{
         NavigationEvent::{self, Back},
     },
     playback::engine::PlaybackController,
-    storage::{Storage, Track},
+    storage::{Storage, Track, format_sample_rate_str},
 };
 
 /// Build the wrapper box with back navigation and header bar for a detail page.
@@ -167,6 +167,30 @@ pub fn build_track_row(
         .build();
     title_lbl.update_property(&[PropertyLabel(&format!("Track: {}", track.title))]);
     hbox.append(&title_lbl);
+
+    let track_format = track.audio.bit_depth.map_or_else(
+        || {
+            format!(
+                "{} {}",
+                track.audio.format,
+                format_sample_rate_str(track.audio.sample_rate)
+            )
+        },
+        |bd| {
+            format!(
+                "{} {bd}/{}",
+                track.audio.format,
+                format_sample_rate_str(track.audio.sample_rate)
+            )
+        },
+    );
+    let fmt_label = Label::builder()
+        .label(&track_format)
+        .css_classes(["dim-label", "caption"])
+        .halign(End)
+        .margin_start(12)
+        .build();
+    hbox.append(&fmt_label);
 
     let duration_label = Label::builder()
         .label(format_duration(track.duration))

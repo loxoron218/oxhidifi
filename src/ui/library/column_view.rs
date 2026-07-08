@@ -41,7 +41,7 @@ use crate::{
         AppState,
         NavigationEvent::{self, AlbumDetail, ArtistDetail},
     },
-    storage::{Album, Artist},
+    storage::{Album, Artist, FormatInfo},
     ui::{
         CoverArtCache, DecodedCover, decode_cover_raw,
         library::models::{AlbumData, ArtistData},
@@ -143,26 +143,29 @@ fn setup_column_view(store: ListStore) -> ColumnView {
 /// * `albums` – Albums to display
 /// * `artist_names` – Map of artist id → display name
 /// * `narrow_state` – Narrow‑mode tracker for adaptive hiding
+/// * `format_info` – Map of album id → distinct format info
 #[must_use]
 pub fn build_album_column_view<S: BuildHasher>(
     state: &Arc<AppState>,
     albums: &[Album],
     artist_names: &HashMap<i64, String, S>,
     narrow_state: &NarrowState,
+    format_info: &HashMap<i64, FormatInfo, S>,
 ) -> Widget {
     let store = ListStore::new::<BoxedAnyObject>();
     for album in albums {
         let artist_name = artist_names
             .get(&album.artist_id)
             .map_or("Unknown Artist", String::as_str);
+        let fi = format_info.get(&album.id).cloned().unwrap_or_default();
         let data = AlbumData {
             id: album.id,
             title: album.title.clone(),
             artist_name: artist_name.to_string(),
             year: album.year.unwrap_or(0),
-            format: album.format.clone(),
-            bit_depth: album.bit_depth.unwrap_or(0),
-            sample_rate: album.sample_rate.unwrap_or(0),
+            format: fi.formats_display(),
+            bit_depth: fi.bit_depth_display(),
+            sample_rate: fi.sample_rate_display(),
             artwork_path: album.artwork_path.clone().unwrap_or_default(),
         };
         store.append(&BoxedAnyObject::new(data));
@@ -182,18 +185,10 @@ pub fn build_album_column_view<S: BuildHasher>(
         build_string_column("Artist Name", |d: &AlbumData| d.artist_name.clone(), true);
     let album_col = build_string_column("Album Name", |d: &AlbumData| d.title.clone(), true);
     let format_col = build_string_column("Format", |d: &AlbumData| d.format.clone(), false);
-    let bit_depth_col = build_int_column(
-        "Bit Depth",
-        |d: &AlbumData| d.bit_depth,
-        default_int_format,
-        false,
-    );
-    let sample_rate_col = build_int_column(
-        "Sample Rate",
-        |d: &AlbumData| d.sample_rate,
-        sample_rate_format,
-        false,
-    );
+    let bit_depth_col =
+        build_string_column("Bit Depth", |d: &AlbumData| d.bit_depth.clone(), false);
+    let sample_rate_col =
+        build_string_column("Sample Rate", |d: &AlbumData| d.sample_rate.clone(), false);
     let year_col = build_int_column("Year", |d: &AlbumData| d.year, default_int_format, false);
 
     column_view.append_column(&cover_col);
@@ -509,15 +504,6 @@ fn default_int_format(n: i32) -> String {
     if n == 0 { String::new() } else { n.to_string() }
 }
 
-/// Format sample rate value for display, returning empty string for 0.
-fn sample_rate_format(n: i32) -> String {
-    if n == 0 {
-        String::new()
-    } else {
-        format_sample_rate_short(n)
-    }
-}
-
 /// Bind column visibility to narrow mode changes via async watcher.
 fn setup_narrow_bindings(narrow_state: &NarrowState, columns: &[&ColumnViewColumn]) {
     let cols: Vec<ColumnViewColumn> = columns.iter().copied().cloned().collect();
@@ -556,14 +542,4 @@ fn id_at_position<T: Clone + Send + 'static>(
     let item = sort_model.item(position)?;
     let boxed = item.downcast_ref::<BoxedAnyObject>()?;
     Some(get_id(&boxed.borrow::<T>()))
-}
-
-/// Format sample rate from Hz to a short kHz string (e.g. `44100` → `"44.1"`).
-#[must_use]
-fn format_sample_rate_short(hz: i32) -> String {
-    if hz % 1000 == 0 {
-        (hz / 1000).to_string()
-    } else {
-        format!("{:.1}", f64::from(hz) / 1000.0)
-    }
 }

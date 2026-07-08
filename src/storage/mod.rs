@@ -4,7 +4,7 @@ pub mod database;
 pub mod migrations;
 pub mod settings;
 
-use std::{future::Future, path::Path, result::Result};
+use std::{collections::HashMap, future::Future, path::Path, result::Result};
 
 use {sqlx::FromRow, thiserror::Error};
 
@@ -60,6 +60,123 @@ pub enum FieldUpdate<T> {
     SetNull,
     /// Set the field to the given value.
     Set(T),
+}
+
+/// Distinct format values for an album, computed from its tracks.
+#[derive(Debug, Clone, Default)]
+pub struct FormatInfo {
+    /// Distinct format/codec names (uppercased).
+    pub formats: Vec<String>,
+    /// Distinct sample rates in Hz.
+    pub sample_rates: Vec<i32>,
+    /// Distinct bit depths.
+    pub bit_depths: Vec<i32>,
+}
+
+impl FormatInfo {
+    /// Whether all tracks share the same format properties.
+    #[must_use]
+    pub fn is_uniform(&self) -> bool {
+        self.formats.len() <= 1 && self.sample_rates.len() <= 1 && self.bit_depths.len() <= 1
+    }
+
+    /// Compact summary for album **grid cards** (no units, no bullets).
+    ///
+    /// Order is always: format(s) → bit-depth(s) → sample-rate(s).
+    /// Bit depth and sample rate are joined with `/` when both present.
+    ///
+    /// Uniform lossless: `"FLAC 24/96"`
+    /// Uniform lossy:    `"MP3 44.1"`
+    /// Mixed:           `"FLAC, MP3 16, 24/44.1, 96"`
+    #[must_use]
+    pub fn summary(&self) -> String {
+        let fmt = self.formats_display();
+        let bd = self
+            .bit_depths
+            .iter()
+            .map(|&b| b.to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sr = self
+            .sample_rates
+            .iter()
+            .map(|&hz| format_sample_rate_str(hz))
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        let mut parts: Vec<String> = Vec::new();
+        if !fmt.is_empty() {
+            parts.push(fmt);
+        }
+        match (!bd.is_empty(), !sr.is_empty()) {
+            (true, true) => parts.push(format!("{bd}/{sr}")),
+            (false, true) => parts.push(sr),
+            (true, false) => parts.push(bd),
+            (false, false) => {}
+        }
+        parts.join(" ")
+    }
+
+    /// Full summary for the **detail page description** (with units, like side panel).
+    ///
+    /// Format first, then bit depth (`-bit`), then sample rate (`kHz`).
+    ///
+    /// Uniform lossless: `"FLAC \u{2022} 24-bit / 96 kHz"`
+    /// Uniform lossy:    `"MP3 \u{2022} 44.1 kHz"`
+    /// Mixed:           `"FLAC, MP3 \u{2022} 16, 24-bit / 44.1, 96 kHz"`
+    #[must_use]
+    pub fn summary_detailed(&self) -> String {
+        let mut parts: Vec<String> = Vec::new();
+        let fmt = self.formats_display();
+        if !fmt.is_empty() {
+            parts.push(fmt);
+        }
+        let bd = self.bit_depth_display();
+        if !bd.is_empty() {
+            parts.push(bd);
+        }
+        let sr = self.sample_rate_display();
+        if !sr.is_empty() {
+            parts.push(sr);
+        }
+        parts.join(" \u{2022} ")
+    }
+
+    /// Display string for the format column in column view.
+    #[must_use]
+    pub fn formats_display(&self) -> String {
+        if self.formats.is_empty() {
+            String::new()
+        } else {
+            self.formats.join(", ")
+        }
+    }
+
+    /// Display string for the sample rate column in column view.
+    #[must_use]
+    pub fn sample_rate_display(&self) -> String {
+        if self.sample_rates.is_empty() {
+            String::new()
+        } else {
+            let srs: Vec<String> = self
+                .sample_rates
+                .iter()
+                .map(|&hz| format_sample_rate_str(hz))
+                .collect();
+            format!("{} kHz", srs.join(", "))
+        }
+    }
+
+    /// Display string for the bit depth column in column view.
+    #[must_use]
+    pub fn bit_depth_display(&self) -> String {
+        if self.bit_depths.is_empty() {
+            String::new()
+        } else {
+            let bds: Vec<String> = self.bit_depths.iter().map(|&b| b.to_string()).collect();
+            format!("{}-bit", bds.join(", "))
+        }
+    }
 }
 
 /// A configured library directory.
@@ -206,6 +323,18 @@ pub trait Storage: Send + Sync + 'static {
 
     /// Get all albums.
     fn get_all_albums(&self) -> impl Future<Output = StorageResult<Vec<Album>>> + Send;
+
+    /// Get distinct format info for a single album.
+    fn get_album_format_info(
+        &self,
+        album_id: i64,
+    ) -> impl Future<Output = StorageResult<FormatInfo>> + Send;
+
+    /// Get distinct format info for multiple albums at once.
+    fn get_albums_format_info(
+        &self,
+        album_ids: &[i64],
+    ) -> impl Future<Output = StorageResult<HashMap<i64, FormatInfo>>> + Send;
 
     /// Get all albums by an artist.
     fn get_albums_by_artist(
@@ -390,4 +519,14 @@ pub struct TrackUpdate {
     pub album_id: FieldUpdate<i64>,
     /// New artist id.
     pub artist_id: FieldUpdate<i64>,
+}
+
+/// Format a sample rate in Hz to a short kHz string.
+#[must_use]
+pub fn format_sample_rate_str(hz: i32) -> String {
+    if hz % 1000 == 0 {
+        (hz / 1000).to_string()
+    } else {
+        format!("{:.1}", f64::from(hz) / 1000.0)
+    }
 }

@@ -13,12 +13,12 @@ pub struct AlbumData {
     pub artist_name: String,
     /// Release year (0 = unknown).
     pub year: i32,
-    /// Audio codec name (e.g. "FLAC", "MP3").
+    /// Audio format display (e.g. "FLAC" or "FLAC, MP3").
     pub format: String,
-    /// Bit depth (0 = N/A for lossy formats).
-    pub bit_depth: i32,
-    /// Sample rate in Hz (0 = unknown).
-    pub sample_rate: i32,
+    /// Bit depth display (e.g. "24" or "16, 24").
+    pub bit_depth: String,
+    /// Sample rate display (e.g. "96" or "44.1, 96").
+    pub sample_rate: String,
     /// Path to album artwork (empty = no artwork).
     pub artwork_path: String,
 }

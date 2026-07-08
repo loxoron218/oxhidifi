@@ -256,7 +256,14 @@ async fn populate_album_detail(
         widgets.genre_label.set_visible(false);
     }
 
-    widgets.format_label.set_label(&album.format_summary);
+    let format_info = state
+        .storage
+        .get_album_format_info(album_id)
+        .await
+        .unwrap_or_default();
+    widgets
+        .format_label
+        .set_label(&format_info.summary_detailed());
 
     let tracks = match state.storage.get_tracks_by_album(album_id).await {
         Ok(t) => t,

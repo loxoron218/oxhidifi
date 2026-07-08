@@ -50,7 +50,7 @@ use crate::{
         engine::{PlaybackController, PlaybackStatus::Playing},
     },
     storage::{
-        Album, Storage,
+        Album, FormatInfo, Storage,
         settings::ViewMode::{self, Column, Grid},
     },
     ui::{
@@ -120,6 +120,7 @@ fn build_album_mode(
     mode: ViewMode,
     albums: &[Album],
     artist_names: &HashMap<i64, String>,
+    format_info: &HashMap<i64, FormatInfo>,
 ) {
     match mode {
         Grid => {
@@ -142,7 +143,8 @@ fn build_album_mode(
                     let artist_name = artist_names
                         .get(&album.artist_id)
                         .map_or("Unknown Artist", String::as_str);
-                    let (card, overlay) = build_album_card(state, album, artist_name);
+                    let fi = format_info.get(&album.id).cloned().unwrap_or_default();
+                    let (card, overlay) = build_album_card(state, album, artist_name, &fi);
                     overlays.push(overlay);
                     card.upcast()
                 })
@@ -162,7 +164,8 @@ fn build_album_mode(
             add_scrolled(stack, &grid_container, "grid");
         }
         Column => {
-            let column_view = build_album_column_view(state, albums, artist_names, narrow_state);
+            let column_view =
+                build_album_column_view(state, albums, artist_names, narrow_state, format_info);
             add_scrolled(stack, &column_view, "column");
         }
     }
@@ -218,6 +221,13 @@ pub async fn lazy_build_album_mode(
         return;
     }
 
+    let album_ids: Vec<i64> = albums.iter().map(|a| a.id).collect();
+    let format_info = state
+        .storage
+        .get_albums_format_info(&album_ids)
+        .await
+        .unwrap_or_default();
+
     let artist_names: HashMap<i64, String> = match artist_names_res {
         Ok(artists) => artists.into_iter().map(|a| (a.id, a.name)).collect(),
         Err(e) => {
@@ -226,7 +236,15 @@ pub async fn lazy_build_album_mode(
         }
     };
 
-    build_album_mode(state, stack, narrow_state, mode, &albums, &artist_names);
+    build_album_mode(
+        state,
+        stack,
+        narrow_state,
+        mode,
+        &albums,
+        &artist_names,
+        &format_info,
+    );
     stack.set_visible_child_name(child_name);
 }
 
@@ -347,7 +365,12 @@ fn load_cover_art_async(
 ///
 /// Also returns the `Overlay` wrapping the cover art so it can be
 /// updated asynchronously after the card is added to the container.
-fn build_album_card(state: &Arc<AppState>, album: &Album, artist_name: &str) -> (Box, Overlay) {
+fn build_album_card(
+    state: &Arc<AppState>,
+    album: &Album,
+    artist_name: &str,
+    format_info: &FormatInfo,
+) -> (Box, Overlay) {
     let card = Box::builder()
         .orientation(Vertical)
         .spacing(6)
@@ -429,7 +452,7 @@ fn build_album_card(state: &Arc<AppState>, album: &Album, artist_name: &str) -> 
     let format_row = Box::builder().orientation(Horizontal).spacing(6).build();
 
     let format_label = Label::builder()
-        .label(&album.format_summary)
+        .label(format_info.summary())
         .ellipsize(EllipsizeEnd)
         .max_width_chars(14)
         .css_classes(["dim-label", "caption"])
