@@ -2,6 +2,7 @@
 
 use std::{
     fs::{create_dir_all, read_dir, read_to_string as fs_read_to_string, remove_file, write},
+    io::ErrorKind::NotFound,
     path::{Path, PathBuf},
 };
 
@@ -208,6 +209,7 @@ fn remove_cache_file(path: &Path) {
 fn read_to_string(path: &Path) -> Option<String> {
     match fs_read_to_string(path) {
         Ok(s) => Some(s),
+        Err(e) if e.kind() == NotFound => None,
         Err(e) => {
             warn!(error = %e, path = %path.display(), "Failed to read file");
             None
