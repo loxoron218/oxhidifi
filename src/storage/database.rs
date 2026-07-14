@@ -1,13 +1,16 @@
 //! `SQLite` database implementation using `sqlx` for library catalog persistence.
 
-use std::{collections::HashMap, path::Path};
+use std::{collections::HashMap, fs::write, path::Path};
 
 use {
     parking_lot::RwLock,
+    serde_json::to_string_pretty,
     sqlx::{
         FromRow, QueryBuilder, SqlitePool, query, query_as,
         sqlite::{SqliteConnectOptions, SqlitePoolOptions},
     },
+    tokio::task::spawn_blocking,
+    tracing::info,
 };
 
 use crate::storage::{
@@ -65,7 +68,11 @@ macro_rules! apply_field {
 
 impl From<FormatInfoRow> for FormatInfo {
     fn from(row: FormatInfoRow) -> Self {
-        raw_info_to_format_info(row.formats, row.sample_rates, row.bit_depths)
+        raw_info_to_format_info(
+            row.formats,
+            row.sample_rates.as_deref(),
+            row.bit_depths.as_deref(),
+        )
     }
 }
 
@@ -147,8 +154,9 @@ impl SqliteStorage {
 
         run(&pool).await?;
 
-        let settings =
-            SettingsStore::load().map_err(|e| Database(format!("Failed to load settings: {e}")))?;
+        let settings = SettingsStore::load_async()
+            .await
+            .map_err(|e| Database(format!("Failed to load settings: {e}")))?;
 
         Ok(Self {
             pool,
@@ -162,16 +170,17 @@ impl SqliteStorage {
         self.settings.read().get().view_mode
     }
 
-    /// Set the view mode and persist to disk.
+    /// Set the view mode in memory and persist to disk asynchronously.
     ///
     /// # Errors
     ///
     /// Returns an error if the settings cannot be saved.
-    pub fn set_view_mode(&self, mode: ViewMode) -> Result<(), StorageError> {
-        self.settings
-            .write()
-            .update(|s| s.view_mode = mode)
-            .map_err(|e| Database(format!("Failed to save view mode: {e}")))
+    pub async fn set_view_mode(&self, mode: ViewMode) -> Result<(), StorageError> {
+        self.settings.write().update_memory(|s| s.view_mode = mode);
+        self.save_settings_async()
+            .await
+            .map_err(|e| Database(format!("Failed to save view mode: {e}")))?;
+        Ok(())
     }
 
     /// Get whether gapless playback is enabled.
@@ -185,11 +194,14 @@ impl SqliteStorage {
     /// # Errors
     ///
     /// Returns an error if settings cannot be saved.
-    pub fn set_gapless_enabled(&self, enabled: bool) -> Result<(), StorageError> {
+    pub async fn set_gapless_enabled(&self, enabled: bool) -> Result<(), StorageError> {
         self.settings
             .write()
-            .set_gapless_enabled(enabled)
-            .map_err(|e| Database(format!("Failed to save gapless setting: {e}")))
+            .update_memory(|s| s.gapless_enabled = enabled);
+        self.save_settings_async()
+            .await
+            .map_err(|e| Database(format!("Failed to save gapless setting: {e}")))?;
+        Ok(())
     }
 
     /// Get the preferred audio device name.
@@ -203,11 +215,14 @@ impl SqliteStorage {
     /// # Errors
     ///
     /// Returns an error if settings cannot be saved.
-    pub fn set_audio_device(&self, device: Option<String>) -> Result<(), StorageError> {
+    pub async fn set_audio_device(&self, device: Option<String>) -> Result<(), StorageError> {
         self.settings
             .write()
-            .set_audio_device(device)
-            .map_err(|e| Database(format!("Failed to save audio device: {e}")))
+            .update_memory(|s| s.audio_device = device);
+        self.save_settings_async()
+            .await
+            .map_err(|e| Database(format!("Failed to save audio device: {e}")))?;
+        Ok(())
     }
 
     /// Get the active tab preference.
@@ -221,17 +236,39 @@ impl SqliteStorage {
     /// # Errors
     ///
     /// Returns an error if settings cannot be saved.
-    pub fn set_active_tab(&self, tab: ActiveTab) -> Result<(), StorageError> {
-        self.settings
-            .write()
-            .set_active_tab(tab)
-            .map_err(|e| Database(format!("Failed to save active tab: {e}")))
+    pub async fn set_active_tab(&self, tab: ActiveTab) -> Result<(), StorageError> {
+        self.settings.write().update_memory(|s| s.active_tab = tab);
+        self.save_settings_async()
+            .await
+            .map_err(|e| Database(format!("Failed to save active tab: {e}")))?;
+        Ok(())
     }
 
     /// Get the volume level from settings.
     #[must_use]
     pub fn get_settings_volume(&self) -> f64 {
         self.settings.read().get_volume()
+    }
+
+    /// Serialize settings to JSON and persist to disk via `spawn_blocking`.
+    async fn save_settings_async(&self) -> Result<(), StorageError> {
+        let (json, path) = {
+            let settings = self.settings.read();
+            let json = to_string_pretty(settings.get())
+                .map_err(|e| Database(format!("Failed to serialize settings: {e}")))?;
+            (json, settings.path().to_path_buf())
+        };
+        let path_for_error = path.clone();
+        spawn_blocking(move || write(&path, &json))
+            .await
+            .map_err(|e| Database(format!("Failed to spawn blocking write: {e}")))?
+            .map_err(|e| {
+                Database(format!(
+                    "Failed to write settings to {}: {e}",
+                    path_for_error.display()
+                ))
+            })?;
+        Ok(())
     }
 }
 
@@ -373,7 +410,11 @@ impl Storage for SqliteStorage {
         .map_err(|e| Database(format!("Get album format info failed: {e}")))?;
 
         Ok(row.map_or_else(FormatInfo::default, |r| {
-            raw_info_to_format_info(r.formats, r.sample_rates, r.bit_depths)
+            raw_info_to_format_info(
+                r.formats,
+                r.sample_rates.as_deref(),
+                r.bit_depths.as_deref(),
+            )
         }))
     }
 
@@ -656,27 +697,74 @@ impl Storage for SqliteStorage {
         }
         Ok(results)
     }
+
+    async fn get_tracks_by_albums(&self, album_ids: &[i64]) -> StorageResult<Vec<Track>> {
+        if album_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut builder = QueryBuilder::new("SELECT * FROM tracks WHERE album_id IN (");
+        let mut separated = builder.separated(", ");
+        for id in album_ids {
+            separated.push_bind(id);
+        }
+        builder.push(") ORDER BY album_id, number");
+        builder
+            .build_query_as::<Track>()
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| Database(format!("Get tracks by albums failed: {e}")))
+    }
+
+    async fn get_tracks_by_ids(&self, ids: &[i64]) -> StorageResult<Vec<Track>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut builder = QueryBuilder::new("SELECT * FROM tracks WHERE id IN (");
+        let mut separated = builder.separated(", ");
+        for id in ids {
+            separated.push_bind(id);
+        }
+        builder.push(")");
+        builder
+            .build_query_as::<Track>()
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| Database(format!("Get tracks by ids failed: {e}")))
+    }
+}
+
+/// Parse a comma-separated string of integers, logging parse failures.
+fn parse_int_list(s: &str) -> Vec<i32> {
+    s.split(',')
+        .filter_map(|v| {
+            let trimmed = v.trim();
+            match trimmed.parse::<i32>() {
+                Ok(n) => Some(n),
+                Err(e) => {
+                    info!(
+                        target: "storage::database",
+                        error = %e,
+                        value = trimmed,
+                        "Skipping unparseable integer in format info",
+                    );
+                    None
+                }
+            }
+        })
+        .collect()
 }
 
 /// Parse comma-separated format info strings into a `FormatInfo`.
 fn raw_info_to_format_info(
     formats: Option<String>,
-    sample_rates: Option<String>,
-    bit_depths: Option<String>,
+    sample_rates: Option<&str>,
+    bit_depths: Option<&str>,
 ) -> FormatInfo {
     FormatInfo {
         formats: formats.map_or_else(Vec::new, |s| {
             s.split(',').map(str::trim).map(str::to_string).collect()
         }),
-        sample_rates: sample_rates.map_or_else(Vec::new, |s| {
-            s.split(',')
-                .filter_map(|v| v.trim().parse::<i32>().ok())
-                .collect()
-        }),
-        bit_depths: bit_depths.map_or_else(Vec::new, |s| {
-            s.split(',')
-                .filter_map(|v| v.trim().parse::<i32>().ok())
-                .collect()
-        }),
+        sample_rates: sample_rates.map_or_else(Vec::new, parse_int_list),
+        bit_depths: bit_depths.map_or_else(Vec::new, parse_int_list),
     }
 }

@@ -2,29 +2,21 @@
 //!
 //! Displays the playback queue with current/upcoming sections.
 //! Uses `ListView` with compact rows. Each row has a drag handle to reorder.
+//! Subscribes to `PlaybackEvent` for fully event-driven updates.
 
 use std::{
-    sync::{
-        Arc,
-        mpsc::{Sender, channel},
-    },
-    thread::spawn,
-    time::Duration,
+    collections::HashMap,
+    sync::{Arc, Mutex},
 };
 
 use {
-    async_channel::Receiver,
+    async_channel::{Sender, unbounded},
     libadwaita::{
         gdk::{ContentProvider, DragAction},
         gio::{ListStore, prelude::ListModelExt},
         glib::{
-            BoxedAnyObject,
-            ControlFlow::{Break, Continue},
-            Value, idle_add_local,
-            prelude::StaticType,
-            timeout_add_local,
-            types::Type,
-            value::ToValue,
+            BoxedAnyObject, ControlFlow::Break, MainContext, Value, idle_add_local,
+            prelude::StaticType, types::Type, value::ToValue,
         },
         gtk::{
             Align::Start,
@@ -36,8 +28,7 @@ use {
         },
         prelude::{AccessibleExtManual, BoxExt, ButtonExt, Cast, ListItemExt, WidgetExt},
     },
-    parking_lot::Mutex,
-    tokio::runtime::Runtime,
+    tokio::spawn,
     tracing::error,
 };
 
@@ -190,20 +181,66 @@ fn build_row_factory(queue: &PlaybackQueue, store: &ListStore) -> SignalListItem
     factory
 }
 
-/// Drain playback events and refresh the store on queue or track changes.
-fn poll_playback_events(
-    rx: &Receiver<PlaybackEvent>,
-    queue: &PlaybackQueue,
-    prev_tracks: &mut Vec<i64>,
+/// Spawn fetching track names in a background thread.
+fn spawn_fetch_queue_names(state: &Arc<AppState>, ids: Vec<i64>, tx: Sender<Vec<(i64, String)>>) {
+    let s = Arc::clone(state);
+    spawn(async move {
+        let storage = &s.storage;
+        let tracks = storage.get_tracks_by_ids(&ids).await.unwrap_or_default();
+        let track_map: HashMap<i64, String> = tracks.into_iter().map(|t| (t.id, t.title)).collect();
+        let names: Vec<(i64, String)> = ids
+            .iter()
+            .map(|id| {
+                let name = track_map
+                    .get(id)
+                    .cloned()
+                    .unwrap_or_else(|| format!("Track #{id}"));
+                (*id, name)
+            })
+            .collect();
+        if tx.try_send(names).is_err() {
+            error!(target: "ui::player::queue", "Failed to send queue names");
+        }
+    });
+}
+
+/// Refresh the store from the main thread via `idle_add_local`.
+fn refresh_store_on_main(store: &ListStore, queue: &PlaybackQueue, names: &[(i64, String)]) {
+    let s = store.clone();
+    let q = queue.clone();
+    let n = names.to_vec();
+    idle_add_local(move || {
+        populate_store(&s, &q, &n);
+        Break
+    });
+}
+
+/// Handle a single playback event for queue updates.
+fn handle_queue_event(
+    event: PlaybackEvent,
     state: &Arc<AppState>,
+    store: &ListStore,
+    queue: &PlaybackQueue,
+    cache: &Arc<Mutex<Vec<(i64, String)>>>,
     tx: &Sender<Vec<(i64, String)>>,
 ) {
-    while let Ok(event) = rx.try_recv() {
-        if matches!(event, QueueChanged { .. } | TrackStarted { .. }) {
-            let current_tracks = queue.tracks();
-            prev_tracks.clone_from(&current_tracks);
-            spawn_fetch_queue_names(state, current_tracks, tx.clone());
+    match event {
+        QueueChanged { track_ids } => {
+            spawn_fetch_queue_names(state, track_ids, tx.clone());
         }
+        TrackStarted { .. } => {
+            if let Ok(guard) = cache.lock() {
+                refresh_store_on_main(store, queue, &guard);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Update the name cache from received queue names.
+fn update_name_cache(cache: &Arc<Mutex<Vec<(i64, String)>>>, names: &Vec<(i64, String)>) {
+    if let Ok(mut guard) = cache.lock() {
+        guard.clone_from(names);
     }
 }
 
@@ -217,7 +254,7 @@ pub fn build_queue_view(state: &Arc<AppState>, queue: &PlaybackQueue) -> Box {
         .build();
 
     let queue = queue.clone();
-    let event_sub = state.playback.subscribe();
+    let rx = state.playback.subscribe();
 
     let factory = build_row_factory(&queue, &store);
 
@@ -237,78 +274,32 @@ pub fn build_queue_view(state: &Arc<AppState>, queue: &PlaybackQueue) -> Box {
     let poll_state = Arc::clone(state);
     let poll_store = store;
     let poll_queue = queue;
-    let mut prev_tracks = poll_queue.tracks();
-    let mut prev_current_id = poll_queue.current();
 
-    let (queue_tx, queue_rx) = channel::<Vec<(i64, String)>>();
-    let queue_rx = Mutex::new(queue_rx);
+    let (queue_tx, queue_rx) = unbounded::<Vec<(i64, String)>>();
+    let cached_names = Arc::new(Mutex::new(Vec::<(i64, String)>::new()));
 
-    timeout_add_local(Duration::from_millis(500), move || {
-        poll_playback_events(
-            &event_sub,
-            &poll_queue,
-            &mut prev_tracks,
-            &poll_state,
-            &queue_tx,
-        );
-
-        let current_id = poll_queue.current();
-        let current_tracks = poll_queue.tracks();
-        if current_tracks != prev_tracks || current_id != prev_current_id {
-            prev_tracks.clone_from(&current_tracks);
-            prev_current_id = current_id;
-            spawn_fetch_queue_names(&poll_state, current_tracks, queue_tx.clone());
+    let ev_state = Arc::clone(&poll_state);
+    let ev_store = poll_store.clone();
+    let ev_queue = poll_queue.clone();
+    let ev_tx = queue_tx;
+    let ev_cache = Arc::clone(&cached_names);
+    MainContext::default().spawn_local(async move {
+        while let Ok(event) = rx.recv().await {
+            handle_queue_event(event, &ev_state, &ev_store, &ev_queue, &ev_cache, &ev_tx);
         }
+    });
 
-        let guard = queue_rx.lock();
-        if let Ok(names) = guard.try_recv() {
-            refresh_store_on_main(&poll_store, &poll_queue, &names);
+    let names_store = poll_store;
+    let names_queue = poll_queue;
+    let names_cache = cached_names;
+    MainContext::default().spawn_local(async move {
+        while let Ok(names) = queue_rx.recv().await {
+            update_name_cache(&names_cache, &names);
+            refresh_store_on_main(&names_store, &names_queue, &names);
         }
-        drop(guard);
-
-        Continue
     });
 
     container
-}
-
-/// Spawn fetching track names in a background thread.
-fn spawn_fetch_queue_names(state: &Arc<AppState>, ids: Vec<i64>, tx: Sender<Vec<(i64, String)>>) {
-    let s = Arc::clone(state);
-    spawn(move || {
-        let Ok(rt) = Runtime::new() else {
-            return;
-        };
-        let names = rt.block_on(fetch_track_names(&s, &ids));
-        if let Err(e) = tx.send(names) {
-            error!(error = %e, "Failed to send queue names");
-        }
-    });
-}
-
-/// Fetch display names for all track IDs concurrently.
-async fn fetch_track_names(state: &Arc<AppState>, ids: &[i64]) -> Vec<(i64, String)> {
-    let storage = &state.storage;
-    let mut names = Vec::with_capacity(ids.len());
-    for &id in ids {
-        let name = match storage.get_track(id).await {
-            Ok(Some(track)) => track.title,
-            Ok(None) | Err(_) => format!("Track #{id}"),
-        };
-        names.push((id, name));
-    }
-    names
-}
-
-/// Refresh the store from the main thread via `idle_add_local`.
-fn refresh_store_on_main(store: &ListStore, queue: &PlaybackQueue, names: &[(i64, String)]) {
-    let s = store.clone();
-    let q = queue.clone();
-    let n = names.to_vec();
-    idle_add_local(move || {
-        populate_store(&s, &q, &n);
-        Break
-    });
 }
 
 /// Populate the `ListStore` with current queue data.

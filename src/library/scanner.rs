@@ -16,11 +16,8 @@ use {
     async_channel::Sender,
     rayon::prelude::{IntoParallelRefIterator, ParallelIterator},
     tokio::{
-        spawn,
-        sync::{
-            mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel},
-            watch::{Receiver, Sender as TokioSender, channel},
-        },
+        sync::watch::{Receiver, Sender as TokioSender, channel},
+        task::{JoinError, spawn_blocking},
     },
     tracing::{error, info, warn},
 };
@@ -30,9 +27,7 @@ use crate::{
         artwork::{ArtworkError, cache_artwork, extract_artwork},
         dedup::is_supported_audio_format,
         metadata::{AudioMetadata, extract_metadata, metadata_fingerprint},
-        scanner::ScanEvent::{
-            ScanCompleted, ScanProgress, ScanStarted, TrackDiscovered, TrackSkipped,
-        },
+        scanner::ScanEvent::{ScanCompleted, ScanProgress, ScanStarted},
     },
     storage::{NewAlbum, NewArtist, NewTrack, Storage, StorageError, TrackAudio},
 };
@@ -52,6 +47,31 @@ pub struct FsScanner<S: Storage> {
 }
 
 impl<S: Storage> FsScanner<S> {
+    /// Walk a directory and extract metadata from all audio files found.
+    fn walk_and_extract(dir: &Path) -> (Vec<(PathBuf, AudioMetadata)>, u32) {
+        let files = Self::walk_directory_parallel(dir);
+        let files_found = u32::try_from(files.len()).unwrap_or(0);
+
+        let extracted: Vec<_> = files
+            .par_iter()
+            .filter_map(|path| match extract_metadata(path) {
+                Ok(metadata) => Some((path.clone(), metadata)),
+                Err(e) => {
+                    warn!(path = %path.display(), error = %e, "Failed to extract metadata");
+                    None
+                }
+            })
+            .collect();
+
+        (extracted, files_found)
+    }
+
+    /// Log a panic from the walk-and-extract task and return defaults.
+    fn on_walk_panic(e: &JoinError) -> (Vec<(PathBuf, AudioMetadata)>, u32) {
+        error!(error = %e, "Walk and metadata extraction task panicked");
+        Default::default()
+    }
+
     /// Create a new filesystem scanner.
     #[must_use]
     pub fn new(storage: Arc<S>, config: ScannerConfig, scan_event_tx: Sender<ScanEvent>) -> Self {
@@ -214,18 +234,13 @@ impl<S: Storage> FsScanner<S> {
     }
 
     /// Scan a single directory and emit events.
-    async fn scan_dir(&self, dir: &Path, event_tx: &UnboundedSender<ScanEvent>) {
+    async fn scan_dir(&self, dir: &Path) {
         info!(
             target: "library::scanner",
             directory = %dir.display(),
             "Scan started",
         );
 
-        if let Err(e) = event_tx.send(ScanStarted {
-            directory: dir.to_path_buf(),
-        }) {
-            warn!(error = %e, "Failed to send ScanStarted event");
-        }
         if let Err(e) = self
             .scan_event_tx
             .send(ScanStarted {
@@ -237,19 +252,13 @@ impl<S: Storage> FsScanner<S> {
         }
 
         let start = Instant::now();
-        let files = Self::walk_directory_parallel(dir);
-        let files_found = u32::try_from(files.len()).unwrap_or(0);
 
-        let extracted: Vec<_> = files
-            .par_iter()
-            .filter_map(|path| match extract_metadata(path) {
-                Ok(metadata) => Some((path.clone(), metadata)),
-                Err(e) => {
-                    warn!(path = %path.display(), error = %e, "Failed to extract metadata");
-                    None
-                }
-            })
-            .collect();
+        let dir_buf = dir.to_path_buf();
+        let (extracted, files_found) =
+            match spawn_blocking(move || Self::walk_and_extract(&dir_buf)).await {
+                Ok(v) => v,
+                Err(e) => Self::on_walk_panic(&e),
+            };
 
         let total = extracted.len();
 
@@ -268,7 +277,6 @@ impl<S: Storage> FsScanner<S> {
             let mut ctx = ScanContext {
                 dir,
                 files_found,
-                event_tx,
                 artist_cache: &mut artist_cache,
                 album_cache: &mut album_cache,
                 tracks_added: &mut tracks_added,
@@ -290,14 +298,6 @@ impl<S: Storage> FsScanner<S> {
             "Scan completed",
         );
 
-        if let Err(e) = event_tx.send(ScanCompleted {
-            directory: dir.to_path_buf(),
-            duration,
-            tracks_added,
-            tracks_skipped,
-        }) {
-            warn!(error = %e, "Failed to send ScanCompleted event");
-        }
         if let Err(e) = self
             .scan_event_tx
             .send(ScanCompleted {
@@ -326,15 +326,6 @@ impl<S: Storage> FsScanner<S> {
         }
 
         if (idx.is_multiple_of(100) || idx + 1 == total)
-            && let Err(e) = ctx.event_tx.send(ScanProgress {
-                directory: ctx.dir.to_path_buf(),
-                files_found: ctx.files_found,
-                files_processed: u32::try_from(idx + 1).unwrap_or(0),
-            })
-        {
-            warn!(error = %e, "Failed to send ScanProgress event");
-        }
-        if (idx.is_multiple_of(100) || idx + 1 == total)
             && let Err(e) = self
                 .scan_event_tx
                 .send(ScanProgress {
@@ -348,27 +339,16 @@ impl<S: Storage> FsScanner<S> {
         }
 
         match self
-            .process_file_cached(
-                &path,
-                metadata,
-                ctx.artist_cache,
-                ctx.album_cache,
-                ctx.event_tx,
-            )
+            .process_file_cached(&path, metadata, ctx.artist_cache, ctx.album_cache)
             .await
         {
             Ok(_) => *ctx.tracks_added += 1,
-            Err(reason) => Self::handle_skipped(reason, path, ctx.tracks_skipped, ctx.event_tx),
+            Err(reason) => Self::handle_skipped(&reason, &path, ctx.tracks_skipped),
         }
     }
 
-    /// Handle a skipped track by incrementing the counter and emitting an event.
-    fn handle_skipped(
-        reason: SkipReason,
-        path: PathBuf,
-        tracks_skipped: &mut u64,
-        event_tx: &UnboundedSender<ScanEvent>,
-    ) {
+    /// Handle a skipped track by incrementing the counter.
+    fn handle_skipped(reason: &SkipReason, path: &Path, tracks_skipped: &mut u64) {
         *tracks_skipped += 1;
         info!(
             target: "library::scanner",
@@ -376,9 +356,6 @@ impl<S: Storage> FsScanner<S> {
             skip_reason = ?reason,
             "Track skipped",
         );
-        if let Err(e) = event_tx.send(TrackSkipped { path, reason }) {
-            warn!(error = %e, "Failed to send TrackSkipped event");
-        }
     }
 
     /// Map a storage insertion error to a skip reason with logging.
@@ -514,7 +491,6 @@ impl<S: Storage> FsScanner<S> {
         metadata: AudioMetadata,
         artist_cache: &mut HashMap<String, i64>,
         album_cache: &mut HashMap<(i64, String), i64>,
-        event_tx: &UnboundedSender<ScanEvent>,
     ) -> Result<TrackInfo, SkipReason> {
         if metadata.duration <= 0.0 {
             warn!(
@@ -597,12 +573,6 @@ impl<S: Storage> FsScanner<S> {
             "Track discovered",
         );
 
-        if let Err(e) = event_tx.send(TrackDiscovered {
-            track: Box::new(track_info.clone()),
-        }) {
-            warn!(error = %e, "Failed to send TrackDiscovered event");
-        }
-
         Ok(track_info)
     }
 }
@@ -610,28 +580,17 @@ impl<S: Storage> FsScanner<S> {
 impl<S: Storage + 'static> LibraryScanner for FsScanner<S> {
     async fn scan_all(&self) -> Result<(), StorageError> {
         let dirs = self.storage.list_library_directories().await?;
-        let (event_tx, event_rx) = unbounded_channel();
-
-        let event_handle = spawn(drain_events(event_rx));
 
         for dir in &dirs {
             let path = Path::new(&dir.path);
-            self.scan_dir(path, &event_tx).await;
+            self.scan_dir(path).await;
         }
 
-        drop(event_tx);
-        drop(event_handle);
         Ok(())
     }
 
     async fn scan_directory(&self, path: &Path) -> Result<(), StorageError> {
-        let (event_tx, event_rx) = unbounded_channel();
-
-        let event_handle = spawn(drain_events(event_rx));
-
-        self.scan_dir(path, &event_tx).await;
-        drop(event_tx);
-        drop(event_handle);
+        self.scan_dir(path).await;
         Ok(())
     }
 
@@ -672,8 +631,6 @@ struct ScanContext<'a> {
     dir: &'a Path,
     /// Total files found in the directory.
     files_found: u32,
-    /// Channel for emitting scan events.
-    event_tx: &'a UnboundedSender<ScanEvent>,
     /// Cache of artist names to database IDs.
     artist_cache: &'a mut HashMap<String, i64>,
     /// Cache of (`artist_id`, `album_name`) to database IDs.
@@ -776,11 +733,6 @@ pub struct TrackInfo {
     pub artist_id: Option<i64>,
     /// Database ID of the album (after insertion).
     pub album_id: Option<i64>,
-}
-
-/// Drain events from a channel until it is closed.
-async fn drain_events(mut event_rx: UnboundedReceiver<ScanEvent>) {
-    while event_rx.recv().await.is_some() {}
 }
 
 /// Format sample rate for display in Hz.

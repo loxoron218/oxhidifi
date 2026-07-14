@@ -8,15 +8,12 @@ pub mod settings;
 pub mod status;
 pub mod window;
 
-use std::{
-    collections::HashMap,
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering::SeqCst},
-    },
-};
+use std::{collections::HashMap, sync::Arc};
+
+use crate::threading::ThreadManager;
 
 use {
+    async_channel::{Receiver, Sender, unbounded},
     libadwaita::{
         gdk::{
             MemoryFormat::{self, R8g8b8, R8g8b8a8},
@@ -29,12 +26,23 @@ use {
     tracing::error,
 };
 
+/// Request for the centralized cover decoder worker.
+pub struct ArtworkDecodeRequest {
+    /// Album database ID.
+    pub album_id: i64,
+    /// File path to the cover image.
+    pub path: String,
+    /// Target decode size (width and height).
+    pub size: i32,
+    /// Callback invoked on the worker thread with the decode result.
+    pub on_complete: Box<dyn FnOnce(i64, Option<DecodedCover>) + Send + 'static>,
+}
+
 /// Thread-safe cache for decoded cover art textures.
 ///
-/// Keyed by album database ID.  Decoding is performed in a single
-/// background batch to avoid flooding the Glycin sandboxed decoder
-/// pool.  The `batch_in_progress` flag prevents multiple views from
-/// starting simultaneous decode batches.
+/// Keyed by album database ID.  A single background worker thread
+/// processes all decode requests sequentially, preventing decoder
+/// pool saturation and duplicate work across views.
 ///
 /// Both the grid view and column view share the same cache instance
 /// so that each album cover is only decoded once per session, even
@@ -42,18 +50,57 @@ use {
 pub struct CoverArtCache {
     /// Map of album ID to decoded texture.
     textures: Mutex<HashMap<i64, Arc<MemoryTexture>>>,
-    /// True while a batch decode is in progress.
-    batch_in_progress: AtomicBool,
+    /// Channel sender for dispatching decode requests to the worker.
+    /// Wrapped in `Mutex<Option<...>>` so the channel can be closed
+    /// during shutdown, allowing the worker thread to exit.
+    request_tx: Mutex<Option<Sender<ArtworkDecodeRequest>>>,
 }
 
 impl CoverArtCache {
     /// Create a new `CoverArtCache` wrapped in [`Arc`].
+    ///
+    /// Spawns a single background thread (`"cover-decoder"`) via the
+    /// [`ThreadManager`] that processes decode requests sequentially.
     #[must_use]
-    pub fn new_shared() -> Arc<Self> {
+    pub fn new_shared(thread_manager: &ThreadManager) -> Arc<Self> {
+        let (request_tx, request_rx) = unbounded::<ArtworkDecodeRequest>();
+
+        thread_manager.spawn_named("cover-decoder", move || {
+            run_cover_decoder(&request_rx);
+        });
+
         Arc::new(Self {
             textures: Mutex::new(HashMap::new()),
-            batch_in_progress: AtomicBool::new(false),
+            request_tx: Mutex::new(Some(request_tx)),
         })
+    }
+
+    /// Send a cover decode request to the background worker.
+    pub fn request_decode(&self, request: ArtworkDecodeRequest) {
+        if let Some(tx) = self.request_tx.lock().as_ref()
+            && let Err(e) = tx.try_send(request)
+        {
+            error!(error = %e, "Failed to send cover decode request");
+        }
+    }
+
+    /// Request decoding and send the result through a channel.
+    pub fn request_decode_to_channel(
+        &self,
+        album_id: i64,
+        path: String,
+        size: i32,
+        tx: Sender<(i64, DecodedCover)>,
+        error_context: &'static str,
+    ) {
+        self.request_decode(ArtworkDecodeRequest {
+            album_id,
+            path,
+            size,
+            on_complete: Box::new(move |aid, decoded| {
+                send_channel_cover(&tx, aid, decoded, error_context);
+            }),
+        });
     }
 
     /// Return the cached texture for a given album ID, if available.
@@ -67,20 +114,13 @@ impl CoverArtCache {
         self.textures.lock().insert(album_id, Arc::new(texture));
     }
 
-    /// Atomically claim the decode-batch flag.
+    /// Drop the outgoing request sender, closing the channel.
     ///
-    /// Returns `true` if no batch was in progress and this caller is
-    /// now responsible for the batch.  Returns `false` if a batch is
-    /// already running (another view is decoding).
-    pub fn try_start_batch(&self) -> bool {
-        self.batch_in_progress
-            .compare_exchange(false, true, SeqCst, SeqCst)
-            .is_ok()
-    }
-
-    /// Clear the batch-in-progress flag after decoding completes.
-    pub fn finish_batch(&self) {
-        self.batch_in_progress.store(false, SeqCst);
+    /// This causes the background cover-decoder thread to exit its
+    /// `recv_blocking` loop, allowing `ThreadManager::shutdown` to
+    /// join it without hanging.
+    pub fn shutdown(&self) {
+        self.request_tx.lock().take();
     }
 }
 
@@ -142,4 +182,25 @@ pub fn raw_to_texture(decoded: &DecodedCover) -> MemoryTexture {
 /// Returns `None` if the file could not be loaded or decoded.
 pub fn decode_cover_at_size(path: &str, size: i32) -> Option<MemoryTexture> {
     decode_cover_raw(path, size).as_ref().map(raw_to_texture)
+}
+
+/// Run the background cover decoder loop.
+fn run_cover_decoder(rx: &Receiver<ArtworkDecodeRequest>) {
+    while let Ok(req) = rx.recv_blocking() {
+        let decoded = decode_cover_raw(&req.path, req.size);
+        (req.on_complete)(req.album_id, decoded);
+    }
+}
+
+/// Try to send decoded cover through a channel, logging on failure.
+fn send_channel_cover(
+    tx: &Sender<(i64, DecodedCover)>,
+    aid: i64,
+    decoded: Option<DecodedCover>,
+    context: &str,
+) {
+    let Some(decoded) = decoded else { return };
+    if let Err(e) = tx.try_send((aid, decoded)) {
+        error!(error = %e, "Failed to send decoded cover to {context}");
+    }
 }

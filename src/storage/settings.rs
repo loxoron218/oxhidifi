@@ -1,15 +1,15 @@
 //! XDG-based user settings persistence using `serde_json`.
 
-use std::{
-    fs::{File, create_dir_all, write},
-    io::BufReader,
-    path::PathBuf,
-};
+use std::path::{Path, PathBuf};
 
 use {
     anyhow::{Context, Result},
     serde::{Deserialize, Serialize},
-    serde_json::{from_reader, to_string_pretty},
+    serde_json::{from_str, to_string_pretty},
+    tokio::{
+        fs::{create_dir_all, read_to_string, try_exists},
+        task::spawn_blocking,
+    },
 };
 
 use crate::app::dirs_config_home;
@@ -39,9 +39,9 @@ impl SettingsStore {
     ///
     /// Returns an error if the config directory cannot be created or the file
     /// cannot be read.
-    pub fn load() -> Result<Self> {
+    pub async fn load_async() -> Result<Self> {
         let config_dir = dirs_config_home()?.join("oxhidifi");
-        create_dir_all(&config_dir).with_context(|| {
+        create_dir_all(&config_dir).await.with_context(|| {
             format!(
                 "Failed to create config directory: {}",
                 config_dir.display()
@@ -49,11 +49,11 @@ impl SettingsStore {
         })?;
 
         let settings_path = config_dir.join("settings.json");
-        let settings = if settings_path.exists() {
-            let file = File::open(&settings_path)
-                .with_context(|| format!("Failed to open settings: {}", settings_path.display()))?;
-            let reader = BufReader::new(file);
-            from_reader(reader)
+        let settings = if try_exists(&settings_path).await.unwrap_or(false) {
+            let content = read_to_string(&settings_path)
+                .await
+                .with_context(|| format!("Failed to read settings: {}", settings_path.display()))?;
+            from_str(&content)
                 .with_context(|| format!("Failed to parse settings: {}", settings_path.display()))?
         } else {
             UserSettings::default()
@@ -65,16 +65,24 @@ impl SettingsStore {
         })
     }
 
-    /// Save current settings to disk.
+    /// Synchronously update in-memory state only (no I/O).
+    pub fn update_memory(&mut self, f: impl FnOnce(&mut UserSettings)) {
+        f(&mut self.settings);
+    }
+
+    /// Serialize current settings and persist to disk via `spawn_blocking`.
     ///
     /// # Errors
     ///
-    /// Returns an error if the file cannot be written.
-    pub fn save(&self) -> Result<()> {
+    /// Returns an error if serialization or the file write fails.
+    pub async fn save_async(&self) -> Result<()> {
         let json = to_string_pretty(&self.settings).context("Failed to serialize settings")?;
-        write(&self.settings_path, &json).with_context(|| {
-            format!("Failed to write settings: {}", self.settings_path.display())
-        })?;
+        let path = self.settings_path.clone();
+        let path_for_error = path.clone();
+        let join_result = spawn_blocking(move || std::fs::write(&path, &json)).await;
+        join_result
+            .context("Failed to spawn blocking write")?
+            .with_context(|| format!("Failed to write settings: {}", path_for_error.display()))?;
         Ok(())
     }
 
@@ -89,14 +97,14 @@ impl SettingsStore {
         &mut self.settings
     }
 
-    /// Update settings and persist to disk.
+    /// Update in-memory settings and persist to disk asynchronously.
     ///
     /// # Errors
     ///
     /// Returns an error if the file cannot be written.
-    pub fn update(&mut self, f: impl FnOnce(&mut UserSettings)) -> Result<()> {
-        f(&mut self.settings);
-        self.save()
+    pub async fn update_async(&mut self, f: impl FnOnce(&mut UserSettings)) -> Result<()> {
+        self.update_memory(f);
+        self.save_async().await
     }
 
     /// Get whether gapless playback is enabled.
@@ -110,8 +118,8 @@ impl SettingsStore {
     /// # Errors
     ///
     /// Returns an error if the file cannot be written.
-    pub fn set_gapless_enabled(&mut self, enabled: bool) -> Result<()> {
-        self.update(|s| s.gapless_enabled = enabled)
+    pub async fn set_gapless_enabled_async(&mut self, enabled: bool) -> Result<()> {
+        self.update_async(|s| s.gapless_enabled = enabled).await
     }
 
     /// Get the preferred audio device name.
@@ -125,8 +133,8 @@ impl SettingsStore {
     /// # Errors
     ///
     /// Returns an error if the file cannot be written.
-    pub fn set_audio_device(&mut self, device: Option<String>) -> Result<()> {
-        self.update(|s| s.audio_device = device)
+    pub async fn set_audio_device_async(&mut self, device: Option<String>) -> Result<()> {
+        self.update_async(|s| s.audio_device = device).await
     }
 
     /// Get the active tab preference.
@@ -140,8 +148,8 @@ impl SettingsStore {
     /// # Errors
     ///
     /// Returns an error if the file cannot be written.
-    pub fn set_active_tab(&mut self, tab: ActiveTab) -> Result<()> {
-        self.update(|s| s.active_tab = tab)
+    pub async fn set_active_tab_async(&mut self, tab: ActiveTab) -> Result<()> {
+        self.update_async(|s| s.active_tab = tab).await
     }
 
     /// Get the volume level.
@@ -155,8 +163,14 @@ impl SettingsStore {
     /// # Errors
     ///
     /// Returns an error if the file cannot be written.
-    pub fn set_volume(&mut self, volume: f64) -> Result<()> {
-        self.update(|s| s.volume = volume)
+    pub async fn set_volume_async(&mut self, volume: f64) -> Result<()> {
+        self.update_async(|s| s.volume = volume).await
+    }
+
+    /// Get read access to the underlying settings path.
+    #[must_use]
+    pub fn path(&self) -> &Path {
+        &self.settings_path
     }
 }
 

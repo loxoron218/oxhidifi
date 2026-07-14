@@ -17,13 +17,17 @@
 
 use std::{
     fs::read_to_string,
-    thread::{JoinHandle, sleep, spawn},
     time::{Duration, Instant},
 };
 
 use {
     num_traits::cast::cast,
     parking_lot::Mutex,
+    tokio::{
+        spawn,
+        task::{JoinHandle, spawn_blocking},
+        time::interval,
+    },
     tracing::{info, trace, warn},
 };
 
@@ -268,21 +272,35 @@ pub fn sample_memory_once() {
     }
 }
 
-/// Spawn a background thread that samples memory usage every 30 seconds.
+/// Spawn a tokio task that samples memory usage every 30 seconds.
 ///
-/// The thread runs indefinitely until the process exits. Each sample
+/// The task runs indefinitely until the process exits. Each sample
 /// emits a `tracing::info!` event with the current RSS in MiB.
+///
+/// Periodically sample memory usage in a loop.
+async fn memory_monitor_loop() {
+    let mut interval = interval(Duration::from_secs(30));
+    interval.tick().await;
+    loop {
+        interval.tick().await;
+        sample_memory().await;
+    }
+}
+
+/// Sample memory usage in a blocking task, logging on failure.
+async fn sample_memory() {
+    if let Err(e) = spawn_blocking(sample_memory_once).await {
+        warn!(error = %e, "Memory sample task failed");
+    }
+}
+
+/// Spawn a background task that periodically samples memory usage.
 ///
 /// Returns a `JoinHandle` that can be detached or joined for controlled
 /// shutdown.
 #[must_use]
 pub fn spawn_memory_monitor() -> JoinHandle<()> {
-    spawn(|| {
-        loop {
-            sleep(Duration::from_secs(30));
-            sample_memory_once();
-        }
-    })
+    spawn(memory_monitor_loop())
 }
 
 #[cfg(test)]

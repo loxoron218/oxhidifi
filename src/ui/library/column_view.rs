@@ -8,15 +8,15 @@ use std::{
     cmp::Ordering::{self, Equal},
     collections::HashMap,
     hash::BuildHasher,
+    mem::take,
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering::Relaxed},
-        mpsc::{Sender, TryRecvError::Disconnected, channel},
     },
-    thread::spawn,
 };
 
 use {
+    async_channel::{TryRecvError::Closed, unbounded},
     libadwaita::{
         gio::{ListModel, ListStore},
         glib::{
@@ -43,7 +43,7 @@ use crate::{
     },
     storage::{Album, Artist, FormatInfo},
     ui::{
-        CoverArtCache, DecodedCover, decode_cover_raw,
+        CoverArtCache, DecodedCover,
         library::models::{AlbumData, ArtistData},
         raw_to_texture,
     },
@@ -68,6 +68,9 @@ macro_rules! with_list_item_data {
 
 /// Thumbnail size for cover art in the column view.
 const COVER_THUMB_SIZE: i32 = 36;
+
+/// Number of items to append to a `ListStore` per idle callback batch.
+const STORE_BATCH_SIZE: usize = 50;
 
 /// Tracks whether the window is in narrow‑width mode.
 ///
@@ -131,6 +134,36 @@ fn setup_column_view(store: ListStore) -> ColumnView {
         .build()
 }
 
+/// Append up to `STORE_BATCH_SIZE` items from `remaining` to the store.
+/// Returns `true` when all items have been consumed.
+fn fill_store_batch(remaining: &mut Vec<BoxedAnyObject>, store: &ListStore) -> bool {
+    for _ in 0..STORE_BATCH_SIZE {
+        let Some(data) = remaining.pop() else { break };
+        store.append(&data);
+    }
+    remaining.is_empty()
+}
+
+/// Populate a `ListStore` from `items` in batches via `idle_add_local`.
+///
+/// Each idle callback appends up to 50 items, keeping the UI responsive
+/// during large initial loads. `items` is drained and replaced empty.
+fn batched_fill_store(store: &ListStore, items: &mut Vec<BoxedAnyObject>) {
+    if items.is_empty() {
+        return;
+    }
+    items.reverse();
+    let s = store.clone();
+    let mut remaining = take(items);
+    idle_add_local(move || {
+        if fill_store_batch(&mut remaining, &s) {
+            Break
+        } else {
+            Continue
+        }
+    });
+}
+
 /// Build a fully wired `ColumnView` for albums.
 ///
 /// Columns: Cover, Artist Name, Album Name, Format, Bit Depth,
@@ -153,30 +186,8 @@ pub fn build_album_column_view<S: BuildHasher>(
     format_info: &HashMap<i64, FormatInfo, S>,
 ) -> Widget {
     let store = ListStore::new::<BoxedAnyObject>();
-    for album in albums {
-        let artist_name = artist_names
-            .get(&album.artist_id)
-            .map_or("Unknown Artist", String::as_str);
-        let fi = format_info.get(&album.id).cloned().unwrap_or_default();
-        let data = AlbumData {
-            id: album.id,
-            title: album.title.clone(),
-            artist_name: artist_name.to_string(),
-            year: album.year.unwrap_or(0),
-            format: fi.formats_display(),
-            bit_depth: fi.bit_depth_display(),
-            sample_rate: fi.sample_rate_display(),
-            artwork_path: album.artwork_path.clone().unwrap_or_default(),
-        };
-        store.append(&BoxedAnyObject::new(data));
-    }
 
-    let album_covers: Vec<(i64, String)> = albums
-        .iter()
-        .filter_map(|a| a.artwork_path.as_ref().map(|p| (a.id, p.clone())))
-        .collect();
-
-    let column_view = setup_column_view(store);
+    let column_view = setup_column_view(store.clone());
 
     let pending_widgets = Arc::<Mutex<PendingCovers>>::default();
 
@@ -211,15 +222,36 @@ pub fn build_album_column_view<S: BuildHasher>(
         &[&format_col, &bit_depth_col, &sample_rate_col],
     );
 
-    let uncached_covers: Vec<(i64, String)> = album_covers
+    let mut items: Vec<BoxedAnyObject> = albums
         .iter()
-        .filter(|(id, _)| state.cover_art_cache.get(*id).is_none())
-        .cloned()
+        .map(|album| {
+            let artist_name = artist_names
+                .get(&album.artist_id)
+                .map_or("Unknown Artist", String::as_str);
+            let fi = format_info.get(&album.id).cloned().unwrap_or_default();
+            let data = AlbumData {
+                id: album.id,
+                title: album.title.clone(),
+                artist_name: artist_name.to_string(),
+                year: album.year.unwrap_or(0),
+                format: fi.formats_display(),
+                bit_depth: fi.bit_depth_display(),
+                sample_rate: fi.sample_rate_display(),
+                artwork_path: album.artwork_path.clone().unwrap_or_default(),
+            };
+            BoxedAnyObject::new(data)
+        })
         .collect();
+    batched_fill_store(&store, &mut items);
 
-    if !uncached_covers.is_empty() && state.cover_art_cache.try_start_batch() {
+    let uncached: Vec<(i64, String)> = albums
+        .iter()
+        .filter_map(|a| a.artwork_path.as_ref().map(|p| (a.id, p.clone())))
+        .filter(|(id, _)| state.cover_art_cache.get(*id).is_none())
+        .collect();
+    if !uncached.is_empty() {
         start_cover_batch_decode(
-            uncached_covers,
+            uncached,
             Arc::clone(&state.cover_art_cache),
             pending_widgets,
         );
@@ -234,16 +266,8 @@ pub fn build_album_column_view<S: BuildHasher>(
 #[must_use]
 pub fn build_artist_column_view(state: &Arc<AppState>, artists: &[Artist]) -> Widget {
     let store = ListStore::new::<BoxedAnyObject>();
-    for artist in artists {
-        let data = ArtistData {
-            id: artist.id,
-            name: artist.name.clone(),
-            album_count: artist.album_count,
-        };
-        store.append(&BoxedAnyObject::new(data));
-    }
 
-    let column_view = setup_column_view(store);
+    let column_view = setup_column_view(store.clone());
 
     let icon_col = build_artist_icon_column();
     let name_col = build_string_column("Artist Name", |d: &ArtistData| d.name.clone(), true);
@@ -264,6 +288,18 @@ pub fn build_artist_column_view(state: &Arc<AppState>, artists: &[Artist]) -> Wi
             navigate_to_event(Arc::clone(&nav_state), ArtistDetail(artist_id));
         }
     });
+
+    let mut items: Vec<BoxedAnyObject> = artists
+        .iter()
+        .map(|artist| {
+            BoxedAnyObject::new(ArtistData {
+                id: artist.id,
+                name: artist.name.clone(),
+                album_count: artist.album_count,
+            })
+        })
+        .collect();
+    batched_fill_store(&store, &mut items);
 
     column_view.upcast::<Widget>()
 }
@@ -335,18 +371,6 @@ fn build_cover_column(
         .build()
 }
 
-/// Send decoded covers from the album list through the channel.
-fn send_decoded_covers(albums: &[(i64, String)], tx: &Sender<(i64, DecodedCover)>) {
-    for (album_id, path) in albums {
-        let Some(decoded) = decode_cover_raw(path, COVER_THUMB_SIZE) else {
-            continue;
-        };
-        if tx.send((*album_id, decoded)).is_err() {
-            break;
-        }
-    }
-}
-
 /// Apply a decoded cover to the cache and update any waiting widgets.
 fn apply_cover_to_widgets(
     album_id: i64,
@@ -365,31 +389,34 @@ fn apply_cover_to_widgets(
     }
 }
 
-/// Run a background batch decoder for a list of album cover paths.
-///
-/// Spawns a single `std::thread` that sequentially decodes each uncached
-/// album cover (avoiding Glycin pool saturation).  Results are sent back
-/// to the main thread via `mpsc` channel, where an `idle_add_local`
-/// handler converts them to `MemoryTexture`, inserts them into the shared
-/// cache, and updates any waiting `Picture` widgets.
+/// Send decode requests for a list of album cover paths to the centralized
+/// cover decoder.  Results are processed on the main thread via
+/// [`idle_add_local`] where they are inserted into the cache and applied
+/// to any waiting `Picture` widgets.
 fn start_cover_batch_decode(
     albums: Vec<(i64, String)>,
     cover_cache: Arc<CoverArtCache>,
     pending_widgets: Arc<Mutex<PendingCovers>>,
 ) {
-    let (tx, rx) = channel::<(i64, DecodedCover)>();
+    let (tx, rx) = unbounded::<(i64, DecodedCover)>();
 
-    spawn(move || send_decoded_covers(&albums, &tx));
+    for (album_id, path) in albums {
+        cover_cache.request_decode_to_channel(
+            album_id,
+            path,
+            COVER_THUMB_SIZE,
+            tx.clone(),
+            "column view",
+        );
+    }
+    drop(tx);
 
     idle_add_local(move || {
         while let Ok((album_id, decoded)) = rx.try_recv() {
             apply_cover_to_widgets(album_id, &decoded, &cover_cache, &pending_widgets);
         }
         match rx.try_recv() {
-            Err(Disconnected) => {
-                cover_cache.finish_batch();
-                Break
-            }
+            Err(Closed) => Break,
             _ => Continue,
         }
     });

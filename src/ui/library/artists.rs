@@ -9,10 +9,15 @@ use std::sync::Arc;
 
 use {
     libadwaita::{
-        glib::{prelude::Cast, spawn_future_local},
+        glib::{
+            ControlFlow::{self, Break, Continue},
+            idle_add_local,
+            prelude::Cast,
+            spawn_future_local,
+        },
         gtk::{
-            Align::Start, Box, GestureClick, Image, Label, Orientation::Vertical, Overlay, Stack,
-            Widget, accessible::Property::Label as PropertyLabel, pango::EllipsizeMode::End,
+            Align::Start, Box, FlowBox, GestureClick, Image, Label, Orientation::Vertical, Overlay,
+            Stack, Widget, accessible::Property::Label as PropertyLabel, pango::EllipsizeMode::End,
         },
         prelude::{AccessibleExtManual, BoxExt, WidgetExt},
     },
@@ -27,7 +32,7 @@ use crate::{
     },
     ui::library::{
         column_view::{NarrowState, build_artist_column_view},
-        common::populate_grid_batched,
+        common::build_grid,
         empty::{
             EmptyStateParams, LibraryGrid, add_scrolled, build_empty_state, build_library_grid,
         },
@@ -36,6 +41,9 @@ use crate::{
 
 /// Size of artist avatar icons in pixels.
 const AVATAR_SIZE: i32 = 180;
+
+/// Number of artist cards to build per idle callback batch.
+const GRID_BATCH_SIZE: usize = 10;
 
 /// Build the artist grid view.
 ///
@@ -76,6 +84,20 @@ async fn populate_artist_views(
     lazy_build_artist_mode(state, stack, initial_mode).await;
 }
 
+/// Populate up to `GRID_BATCH_SIZE` artist cards into the flow box.
+fn fill_artist_grid(artists: &mut Vec<Artist>, flow: &FlowBox, state: &Arc<AppState>) {
+    for _ in 0..GRID_BATCH_SIZE {
+        let Some(artist) = artists.pop() else { break };
+        let card = build_artist_card(state, &artist);
+        flow.append(&card.upcast::<Widget>());
+    }
+}
+
+/// Check if the artists vec is exhausted and return the appropriate `ControlFlow`.
+fn artist_done(artists: &[Artist]) -> ControlFlow {
+    if artists.is_empty() { Break } else { Continue }
+}
+
 /// Build the given `mode` view (grid or column) and add it to `stack`.
 ///
 /// Each mode is wrapped in its own `ScrolledWindow` so scroll positions
@@ -83,21 +105,18 @@ async fn populate_artist_views(
 fn build_artist_mode(state: &Arc<AppState>, stack: &Stack, mode: ViewMode, artists: &[Artist]) {
     match mode {
         Grid => {
-            let cards: Vec<Widget> = artists
-                .iter()
-                .map(|artist| build_artist_card(state, artist).upcast())
-                .collect();
-
             let grid_container = Box::builder().orientation(Vertical).build();
-            let mut remaining = cards;
-            populate_grid_batched(
-                &grid_container,
-                &mut remaining,
-                50,
-                "Artist library grid \u{2014} click an artist to view albums",
-            );
-
+            let flow = build_grid("Artist library grid \u{2014} click an artist to view albums");
+            grid_container.append(&flow);
             add_scrolled(stack, &grid_container, "grid");
+
+            let state = Arc::clone(state);
+            let mut artists: Vec<Artist> = artists.iter().rev().cloned().collect();
+
+            idle_add_local(move || {
+                fill_artist_grid(&mut artists, &flow, &state);
+                artist_done(&artists)
+            });
         }
         Column => {
             let column_view = build_artist_column_view(state, artists);

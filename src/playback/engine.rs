@@ -8,8 +8,8 @@ use std::{
         Arc,
         atomic::{AtomicBool, Ordering::Relaxed},
     },
-    thread::{sleep, spawn},
-    time::Duration,
+    thread::{Builder, JoinHandle, sleep},
+    time::{Duration, Instant},
 };
 
 use {
@@ -40,6 +40,10 @@ enum DecodeCommand {
     DeviceLost,
     /// Seek to a position in seconds.
     Seek(f64),
+    /// Pause the audio output stream.
+    Pause,
+    /// Resume the audio output stream.
+    Resume,
     /// Pre-buffer the next track for gapless transition.
     PreloadNext {
         /// ID of the next track.
@@ -75,6 +79,8 @@ struct EngineShared {
     event_subs: Mutex<Vec<Sender<PlaybackEvent>>>,
     /// Command sender for the active decode task.
     decode_tx: Mutex<Option<MpscSender<DecodeCommand>>>,
+    /// Join handle for the active decode thread.
+    decode_thread: Mutex<Option<JoinHandle<()>>>,
     /// Active audio output kept alive during playback.
     output: Mutex<Option<AudioOutput>>,
     /// Cached track ID to file path mappings (set before `play_queue`).
@@ -93,6 +99,21 @@ impl EngineShared {
         let mut subs = self.event_subs.lock();
         subs.retain(|tx| tx.try_send(event.clone()).is_ok());
     }
+
+    /// Update elapsed seconds and optionally emit a position tick.
+    fn update_elapsed(&self, elapsed: f64, last_tick: &mut Instant) {
+        let mut state = self.state.lock();
+        state.elapsed_seconds = elapsed;
+        if last_tick.elapsed() >= Duration::from_millis(200) {
+            let duration = state.duration_seconds;
+            drop(state);
+            self.send_event(&PlaybackEvent::PositionTick {
+                elapsed_seconds: elapsed,
+                duration_seconds: duration,
+            });
+            *last_tick = Instant::now();
+        }
+    }
 }
 
 impl Default for EngineShared {
@@ -102,6 +123,7 @@ impl Default for EngineShared {
             queue: PlaybackQueue::new(),
             event_subs: Mutex::new(Vec::new()),
             decode_tx: Mutex::new(None),
+            decode_thread: Mutex::new(None),
             output: Mutex::new(None),
             track_paths: Mutex::new(HashMap::new()),
             device_sample_rate: Mutex::new(44100),
@@ -256,6 +278,7 @@ impl PlaybackEngine {
         {
             let mut state = self.shared.state.lock();
             state.current_track_id = Some(track_id);
+            state.current_album_id = -1;
             state.current_path = Some(path.clone());
             state.status = PlaybackStatus::Playing;
             state.elapsed_seconds = 0.0;
@@ -277,9 +300,15 @@ impl PlaybackEngine {
         self.shared
             .send_event(&PlaybackEvent::TrackStarted { track_id });
 
-        spawn(move || {
+        let thread_name = format!("decode-{track_id}");
+        match Builder::new().name(thread_name).spawn(move || {
             init_decode_thread(&path, cmd_rx, &engine_state, track_id);
-        });
+        }) {
+            Ok(handle) => *self.shared.decode_thread.lock() = Some(handle),
+            Err(e) => {
+                error!(target: "playback::engine", error = %e, "Failed to spawn decode thread");
+            }
+        }
     }
 
     /// Stop the currently running decode task.
@@ -292,6 +321,25 @@ impl PlaybackEngine {
         if let Some(tx) = self.shared.decode_tx.lock().take() {
             drop(tx);
         }
+    }
+}
+
+/// Crate-internal helpers on `PlaybackEngine`.
+impl PlaybackEngine {
+    /// Set `current_album_id` if `track_id` matches the currently playing track.
+    ///
+    /// Both the check and the write happen under the state lock, making this
+    /// atomic w.r.t. `start_playback` / `stop`.
+    pub fn set_album_id_if_current(&self, track_id: i64, album_id: i64) {
+        let mut state = self.shared.state.lock();
+        if Some(track_id) == state.current_track_id {
+            state.current_album_id = album_id;
+        }
+    }
+
+    /// Reset `current_album_id` to `-1`.
+    pub fn reset_album_id(&self) {
+        self.shared.state.lock().current_album_id = -1;
     }
 }
 
@@ -374,30 +422,33 @@ impl PlaybackController for PlaybackEngine {
 
         let mut state = self.shared.state.lock();
         let was_paused = state.status == PlaybackStatus::Paused;
-        let event = if was_paused {
+        let (event, cmd) = if was_paused {
             state.status = PlaybackStatus::Playing;
             info!(
                 target: "playback::engine",
                 "Playback resumed",
             );
-            PlaybackEvent::Resumed
+            (PlaybackEvent::Resumed, DecodeCommand::Resume)
         } else {
             state.status = PlaybackStatus::Paused;
             info!(
                 target: "playback::engine",
                 "Playback paused",
             );
-            PlaybackEvent::Paused
+            (PlaybackEvent::Paused, DecodeCommand::Pause)
         };
-        let guard = self.shared.output.lock();
-        let output_ref = Option::as_ref(&*guard);
-        match (was_paused, output_ref) {
-            (true, Some(output)) => output.play(),
-            (false, Some(output)) => output.pause(),
-            _ => {}
-        }
         drop(state);
-        drop(guard);
+
+        let cmd_tx = self.shared.decode_tx.lock();
+        if let Some(tx) = cmd_tx.as_ref()
+            && tx.try_send(cmd).is_err()
+        {
+            error!(
+                target: "playback::engine",
+                "Failed to send pause/resume command to decode thread",
+            );
+        }
+        drop(cmd_tx);
 
         self.shared.send_event(&event);
         Ok(())
@@ -575,6 +626,13 @@ pub enum PlaybackEvent {
         /// New position in seconds.
         position_seconds: f64,
     },
+    /// Periodic position update (~200ms intervals during playback).
+    PositionTick {
+        /// Current elapsed playback time in seconds.
+        elapsed_seconds: f64,
+        /// Total track duration in seconds.
+        duration_seconds: f64,
+    },
 }
 
 /// Current state of the playback engine.
@@ -582,6 +640,8 @@ pub enum PlaybackEvent {
 pub struct PlaybackState {
     /// The currently playing track ID, if any.
     pub current_track_id: Option<i64>,
+    /// Album ID of the currently playing track (`-1` if none).
+    pub current_album_id: i64,
     /// The file path of the currently playing track, if any.
     pub current_path: Option<PathBuf>,
     /// Current playback status.
@@ -602,6 +662,7 @@ impl Default for PlaybackState {
     fn default() -> Self {
         Self {
             current_track_id: None,
+            current_album_id: -1,
             current_path: None,
             status: PlaybackStatus::Stopped,
             volume: 1.0,
@@ -847,6 +908,7 @@ fn try_auto_advance(
     {
         let mut state = engine_shared.state.lock();
         state.current_track_id = Some(next_id);
+        state.current_album_id = -1;
         state.current_path = Some(next_path.clone());
         state.status = PlaybackStatus::Playing;
         state.elapsed_seconds = 0.0;
@@ -868,9 +930,13 @@ fn try_auto_advance(
     engine_shared.send_event(&PlaybackEvent::TrackStarted { track_id: next_id });
 
     let engine_state = Arc::clone(engine_shared);
-    spawn(move || {
+    let thread_name = format!("decode-{next_id}");
+    match Builder::new().name(thread_name).spawn(move || {
         init_decode_thread(&next_path, new_cmd_rx, &engine_state, next_id);
-    });
+    }) {
+        Ok(handle) => *engine_shared.decode_thread.lock() = Some(handle),
+        Err(e) => error!(target: "playback::engine", error = %e, "Failed to spawn decode thread"),
+    }
 
     true
 }
@@ -1038,6 +1104,7 @@ fn run_decode_loop(
     let mut event_to_send = None;
     let mut elapsed: f64 = 0.0;
     let track_sample_rate_f64 = f64::from(track_sample_rate);
+    let mut last_tick = Instant::now();
 
     loop {
         if engine_shared.device_lost.load(Relaxed) {
@@ -1058,6 +1125,12 @@ fn run_decode_loop(
                 elapsed = actual;
                 engine_shared.state.lock().elapsed_seconds = actual;
             }
+            Ok(DecodeCommand::Pause) => {
+                engine_shared.output.lock().as_ref().map(AudioOutput::pause);
+            }
+            Ok(DecodeCommand::Resume) => {
+                engine_shared.output.lock().as_ref().map(AudioOutput::play);
+            }
             Err(Empty) | Ok(DecodeCommand::PreloadNext { .. }) => {}
         }
 
@@ -1075,7 +1148,7 @@ fn run_decode_loop(
                 let frame_count =
                     u32::try_from(batch.samples.len() / src_channels).unwrap_or(u32::MAX);
                 elapsed += f64::from(frame_count) / track_sample_rate_f64;
-                engine_shared.state.lock().elapsed_seconds = elapsed;
+                engine_shared.update_elapsed(elapsed, &mut last_tick);
                 let samples = maybe_downmix(batch, src_channels, dst_channels);
                 let vol = FromPrimitive::from_f64(volume).unwrap_or(0.0);
                 event_to_send = process_decoded_batch(&samples, &mut resampler, &mut producer, vol);

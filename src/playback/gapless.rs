@@ -2,13 +2,9 @@
 
 use std::path::PathBuf;
 
-use {rtrb::Consumer, tokio::sync::broadcast::Sender, tracing::warn};
+use rtrb::Consumer;
 
-use crate::playback::{
-    DecoderError,
-    decoder::Decoder,
-    engine::PlaybackEvent::{self, TrackFinished},
-};
+use crate::playback::{DecoderError, decoder::Decoder};
 
 /// State of the gapless transition engine.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -217,13 +213,6 @@ pub fn needs_reconfig(current_rate: u32, next_rate: u32) -> bool {
 /// before the next track's samples enter the buffer.
 pub fn drain_buffer(consumer: &mut Consumer<f32>) {
     while consumer.pop().is_ok() {}
-}
-
-/// Emit a track-finished event to the UI layer.
-pub fn emit_track_finished_event(event_tx: &Sender<PlaybackEvent>, track_id: i64) {
-    if let Err(e) = event_tx.send(TrackFinished { track_id }) {
-        warn!(error = %e, "Failed to send TrackFinished event");
-    }
 }
 
 #[cfg(test)]

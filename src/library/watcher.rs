@@ -7,7 +7,7 @@ use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use {
     notify::{Config, Error, Event, RecommendedWatcher, RecursiveMode::Recursive, Watcher},
-    tokio::sync::mpsc::{UnboundedSender, unbounded_channel},
+    tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel},
     tracing::{error, info, warn},
 };
 
@@ -43,23 +43,29 @@ impl<S: Storage + 'static> LibraryWatcher<S> {
     /// # Errors
     ///
     /// Returns an error if the watcher cannot be created.
-    pub fn new(scanner: Arc<FsScanner<S>>) -> Result<Self, Error> {
-        let (event_tx, _event_rx) = unbounded_channel();
+    pub fn new(
+        scanner: Arc<FsScanner<S>>,
+    ) -> Result<(Self, UnboundedReceiver<WatcherEvent>), Error> {
+        let (event_tx, event_rx) = unbounded_channel();
 
         let config = Config::default();
 
+        let cb_tx = event_tx.clone();
         let watcher = RecommendedWatcher::new(
             move |result: Result<Event, Error>| {
-                Self::handle_watcher_event(result, &event_tx);
+                Self::handle_watcher_event(result, &cb_tx);
             },
             config,
         )?;
 
-        Ok(Self {
-            watcher,
-            event_tx: unbounded_channel().0,
-            scanner,
-        })
+        Ok((
+            Self {
+                watcher,
+                event_tx,
+                scanner,
+            },
+            event_rx,
+        ))
     }
 
     /// Handle a raw watcher event and forward it through the channel.

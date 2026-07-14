@@ -27,6 +27,7 @@ use crate::{
 /// Build the playback control buttons (prev, play/pause, next).
 ///
 /// Returns the button box and the play/pause button reference for event wiring.
+#[must_use]
 pub fn build_playback_controls(state: &Arc<AppState>) -> (Box, Button) {
     let controls = Box::builder()
         .orientation(Horizontal)
@@ -168,6 +169,7 @@ pub fn build_seek_section(state: &Arc<AppState>) -> (Box, Scale, Label, Label) {
 }
 
 /// Build the volume control section.
+#[must_use]
 pub fn build_volume_control(state: &Arc<AppState>) -> Box {
     let vol_box = Box::builder().orientation(Horizontal).spacing(6).build();
 
@@ -213,6 +215,7 @@ pub fn build_volume_control(state: &Arc<AppState>) -> Box {
 }
 
 /// Build the queue section with label and queue view.
+#[must_use]
 pub fn build_queue_section(state: &Arc<AppState>) -> Box {
     let section = Box::builder().orientation(Vertical).spacing(4).build();
 

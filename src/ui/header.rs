@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 use {
     libadwaita::{
+        glib::spawn_future_local,
         gtk::{Box, Button, Orientation::Horizontal, ToggleButton},
         prelude::{BoxExt, ButtonExt, ToggleButtonExt, WidgetExt},
     },
@@ -21,6 +22,13 @@ use crate::{
     storage::settings::ViewMode::{self, Column, Grid},
     ui::settings::show_preferences_dialog,
 };
+
+/// Persist the view mode setting to storage, logging on failure.
+async fn save_view_mode(state: Arc<AppState>, mode: ViewMode) {
+    if let Err(err) = state.storage.set_view_mode(mode).await {
+        warn!(error = %err, "Failed to set view mode");
+    }
+}
 
 /// Build the view mode toggle button.
 ///
@@ -52,9 +60,8 @@ pub fn build_view_toggle(state: &Arc<AppState>, initial_mode: ViewMode) -> Toggl
         let mode = if btn.is_active() { Column } else { Grid };
         btn.set_icon_name(mode.icon_name());
         btn.set_tooltip_text(Some(mode.tooltip()));
-        if let Err(err) = state_clone.storage.set_view_mode(mode) {
-            warn!(error = %err, "Failed to set view mode");
-        }
+        let sc = Arc::clone(&state_clone);
+        spawn_future_local(save_view_mode(sc, mode));
         if let Err(e) = state_clone.view_mode_tx.send(mode) {
             warn!(error = %e, "Failed to send view mode change");
         }

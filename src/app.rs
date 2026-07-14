@@ -3,12 +3,8 @@
 
 use std::{
     env::{var, var_os},
-    fs::create_dir_all,
     path::PathBuf,
-    sync::{
-        Arc,
-        atomic::{AtomicBool, AtomicI64},
-    },
+    sync::{Arc, atomic::AtomicBool},
 };
 
 use {
@@ -16,9 +12,18 @@ use {
     async_channel::{Receiver, Sender, unbounded},
     libadwaita::{
         Application,
+        glib::spawn_future_local,
         prelude::{ApplicationExt, ApplicationExtManual, GtkWindowExt},
     },
-    tokio::sync::watch::{Sender as TokioSender, channel},
+    tokio::{
+        fs::create_dir_all,
+        spawn,
+        sync::{
+            mpsc::UnboundedReceiver,
+            watch::{Sender as TokioSender, channel},
+        },
+        task::spawn_blocking,
+    },
     tracing::info,
 };
 
@@ -26,12 +31,14 @@ use crate::{
     library::{
         artwork::check_cache_version,
         scanner::{FsScanner, ScanEvent, ScannerConfig},
+        watcher::{LibraryWatcher, WatcherEvent},
     },
     playback::{engine::PlaybackEngine, output::startup_device_check},
     storage::{
         database::SqliteStorage,
         settings::{ActiveTab, ViewMode},
     },
+    threading::ThreadManager,
     ui::{CoverArtCache, window::build_window},
 };
 
@@ -62,9 +69,9 @@ pub struct AppState {
     pub storage: Arc<SqliteStorage>,
     /// The library scanner for discovering audio files.
     pub scanner: Arc<FsScanner<SqliteStorage>>,
-    /// Signal sender to notify the UI when the library changes.
+    /// Notifies the UI when the library changes (scan complete, etc.).
     pub refresh_tx: TokioSender<()>,
-    /// Broadcasts view mode changes (grid/column) to the UI.
+    /// Broadcasts view mode changes (grid/column) to library views.
     pub view_mode_tx: TokioSender<ViewMode>,
     /// Broadcasts active tab changes (albums/artists) to the UI.
     pub active_tab_tx: TokioSender<ActiveTab>,
@@ -76,8 +83,6 @@ pub struct AppState {
     pub toast_tx: Sender<String>,
     /// Channel receiver for toast notifications.
     pub toast_rx: Receiver<String>,
-    /// Currently playing album ID (`-1` means none). Used by album grid overlay buttons.
-    pub current_album_id: AtomicI64,
     /// Flag set while the user is dragging the seek bar. Prevents the polling
     /// timer from fighting the user's drag position and avoids redundant seeks.
     pub is_seeking: Arc<AtomicBool>,
@@ -87,6 +92,8 @@ pub struct AppState {
     pub navigation_rx: Receiver<NavigationEvent>,
     /// Shared cache for decoded cover art textures.
     pub cover_art_cache: Arc<CoverArtCache>,
+    /// Thread lifecycle manager for named OS threads.
+    pub thread_manager: Arc<ThreadManager>,
 }
 
 impl AppState {
@@ -102,29 +109,38 @@ impl AppState {
         playback: Arc<PlaybackEngine>,
         storage: Arc<SqliteStorage>,
         scanner: Arc<FsScanner<SqliteStorage>>,
-        refresh_tx: TokioSender<()>,
-        view_mode_tx: TokioSender<ViewMode>,
-        active_tab_tx: TokioSender<ActiveTab>,
         channels: AppChannels,
+        broadcast: BroadcastChannels,
+        thread_manager: Arc<ThreadManager>,
     ) -> Self {
         Self {
             playback,
             storage,
             scanner,
-            refresh_tx,
-            view_mode_tx,
-            active_tab_tx,
+            refresh_tx: broadcast.refresh,
+            view_mode_tx: broadcast.view_mode,
+            active_tab_tx: broadcast.active_tab,
             scan_event_tx: channels.scan_event_tx,
             scan_event_rx: channels.scan_event_rx,
             toast_tx: channels.toast_tx,
             toast_rx: channels.toast_rx,
-            current_album_id: AtomicI64::new(-1),
             is_seeking: Arc::new(AtomicBool::new(false)),
             navigation_tx: channels.navigation_tx,
             navigation_rx: channels.navigation_rx,
-            cover_art_cache: CoverArtCache::new_shared(),
+            cover_art_cache: CoverArtCache::new_shared(&thread_manager),
+            thread_manager,
         }
     }
+}
+
+/// Holds the tokio broadcast channel senders used for UI state signals.
+pub struct BroadcastChannels {
+    /// Signal sender to notify the UI when the library changes.
+    pub refresh: TokioSender<()>,
+    /// Broadcasts view mode changes (grid/column) to the UI.
+    pub view_mode: TokioSender<ViewMode>,
+    /// Broadcasts active tab changes (albums/artists) to the UI.
+    pub active_tab: TokioSender<ActiveTab>,
 }
 
 /// Events for navigating between library views and detail pages.
@@ -194,6 +210,38 @@ fn data_dir() -> PathBuf {
         .join("oxhidifi")
 }
 
+/// Run the filesystem watcher loop in the background.
+fn spawn_watcher_loop(
+    watcher: LibraryWatcher<SqliteStorage>,
+    mut watcher_rx: UnboundedReceiver<WatcherEvent>,
+) {
+    spawn(async move {
+        while let Some(event) = watcher_rx.recv().await {
+            watcher.process_event(event).await;
+        }
+    });
+}
+
+/// Check artwork cache version and test audio device at startup.
+async fn run_startup_checks() {
+    if spawn_blocking(check_cache_version).await.is_err() {
+        info!(target: "app::startup", "Failed to check artwork cache version");
+    }
+    match spawn_blocking(startup_device_check).await {
+        Ok(Some(msg)) => {
+            info!(target: "app::startup", "No audio device at startup: {msg}");
+        }
+        Ok(None) => {}
+        Err(e) => {
+            info!(
+                target: "app::startup",
+                error = %e,
+                "Startup device check failed",
+            );
+        }
+    }
+}
+
 /// Build and run the Libadwaita application.
 ///
 /// Initializes the storage backend, playback engine, and presents the main
@@ -204,10 +252,9 @@ fn data_dir() -> PathBuf {
 /// Returns an error if the application cannot be built or if the storage
 /// backend fails to initialize.
 pub async fn run_application() -> Result<()> {
-    check_cache_version();
-
     let db_dir = data_dir();
     create_dir_all(&db_dir)
+        .await
         .with_context(|| format!("Failed to create data directory: {}", db_dir.display()))?;
 
     let db_path = db_dir.join("library.db");
@@ -219,10 +266,6 @@ pub async fn run_application() -> Result<()> {
 
     let playback = Arc::new(PlaybackEngine::new());
 
-    if let Some(msg) = startup_device_check() {
-        info!(target: "app::startup", "No audio device at startup: {msg}");
-    }
-
     let (scan_event_tx, scan_event_rx) = unbounded();
     let (toast_tx, toast_rx) = unbounded();
 
@@ -231,6 +274,12 @@ pub async fn run_application() -> Result<()> {
         ScannerConfig::default(),
         scan_event_tx.clone(),
     ));
+
+    if let Ok((watcher, watcher_rx)) = LibraryWatcher::new(Arc::clone(&scanner)) {
+        spawn_watcher_loop(watcher, watcher_rx);
+    } else {
+        info!(target: "app::startup", "Failed to create filesystem watcher");
+    }
 
     let initial_view_mode = storage.get_view_mode();
     let initial_active_tab = storage.get_active_tab();
@@ -246,25 +295,33 @@ pub async fn run_application() -> Result<()> {
         navigation_rx,
     };
 
+    let thread_manager = Arc::new(ThreadManager::new());
+
+    let broadcast = BroadcastChannels {
+        refresh: channel(()).0,
+        view_mode: channel(initial_view_mode).0,
+        active_tab: channel(initial_active_tab).0,
+    };
+
     let state = Arc::new(AppState::new(
         playback,
         storage,
         scanner,
-        channel(()).0,
-        channel(initial_view_mode).0,
-        channel(initial_active_tab).0,
         channels,
+        broadcast,
+        Arc::clone(&thread_manager),
     ));
 
     let app = Application::builder().application_id(APP_ID).build();
 
     app.connect_activate(move |app| {
-        let window = build_window(app, &state);
-        window.present();
+        build_window(app, &state).present();
+        spawn_future_local(run_startup_checks());
     });
 
     info!("Starting application");
     app.run();
+    thread_manager.shutdown();
 
     Ok(())
 }
@@ -283,13 +340,14 @@ mod tests {
     };
 
     use crate::{
-        app::{AppChannels, AppState},
+        app::{AppChannels, AppState, BroadcastChannels},
         library::scanner::{FsScanner, ScannerConfig},
         playback::engine::PlaybackEngine,
         storage::{
             database::SqliteStorage,
             settings::{ActiveTab::Albums, ViewMode::Grid},
         },
+        threading::ThreadManager,
     };
 
     impl AppState {
@@ -323,6 +381,12 @@ mod tests {
                 navigation_rx,
             };
 
+            let broadcast = BroadcastChannels {
+                refresh: channel(()).0,
+                view_mode: channel(Grid).0,
+                active_tab: channel(Albums).0,
+            };
+
             Ok(Self::new(
                 Arc::new(PlaybackEngine::new()),
                 storage,
@@ -331,10 +395,9 @@ mod tests {
                     ScannerConfig::default(),
                     channels.scan_event_tx.clone(),
                 )),
-                channel(()).0,
-                channel(Grid).0,
-                channel(Albums).0,
                 channels,
+                broadcast,
+                Arc::new(ThreadManager::new()),
             ))
         }
     }

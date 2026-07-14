@@ -2,38 +2,29 @@
 //!
 //! Displays album artwork, track title, artist, seek slider, playback
 //! controls, and volume slider. Used as the content of the sidebar pane.
+//! Subscribes to `PlaybackEvent` for fully event-driven updates.
 
-use std::{
-    sync::{
-        Arc,
-        atomic::Ordering::Acquire,
-        mpsc::{Sender, channel},
-    },
-    thread::spawn,
-    time::Duration,
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering::Acquire},
 };
 
 use {
+    async_channel::{Sender, unbounded},
     libadwaita::{
-        gdk::MemoryTexture,
-        glib::{
-            ControlFlow,
-            ControlFlow::{Break, Continue},
-            idle_add_local, timeout_add_local,
-        },
+        glib::{ControlFlow::Break, MainContext, idle_add_local},
         gtk::{
             Align::{Center, Start},
             Button,
             ContentFit::Cover,
-            Label, Picture, ScrolledWindow,
+            Label, Picture, Scale, ScrolledWindow,
             accessible::Property::Label as PropertyLabel,
             pango::EllipsizeMode::End,
             prelude::RangeExt,
         },
         prelude::{AccessibleExtManual, BoxExt, ButtonExt, TextureExt},
     },
-    parking_lot::Mutex,
-    tokio::runtime::Runtime,
+    tokio::spawn,
     tracing::error,
 };
 
@@ -41,14 +32,14 @@ use crate::{
     app::AppState,
     playback::{
         engine::{
-            PlaybackController, PlaybackState,
-            PlaybackStatus::{Playing, Stopped as StatusStopped},
+            PlaybackController, PlaybackEngine,
+            PlaybackEvent::{self, Paused, PositionTick, Resumed, Seeked, Stopped, TrackStarted},
         },
         layout::{AudioLayout, format_channel_label},
     },
     storage::{Storage, database::SqliteStorage},
     ui::{
-        CoverArtCache, DecodedCover, decode_cover_raw,
+        CoverArtCache, DecodedCover,
         detail::common::build_scroll_content,
         player::controls::{
             build_playback_controls, build_queue_section, build_seek_section, build_volume_control,
@@ -60,13 +51,31 @@ use crate::{
 /// Minimum texture dimension (width or height) required to use a cached
 /// cover in the player panel (displayed at 280×280).  Textures decoded
 /// at 36 px by the column view are rejected, forcing a proper‑sized
-/// decode via the async `handle_meta_update` path.
+/// decode via the async metadata path.
 const COVER_MIN_SIZE: i32 = 180;
 
 /// Tuple of resolved metadata: `(title, artist, album, artwork_path, format_info)`.
 type MetaResult = (String, String, String, Option<String>, String);
 
+/// Widget references for playback control updates.
+#[derive(Clone)]
+struct PlaybackWidgets {
+    /// Track title, artist, album, format labels.
+    labels: TrackLabels,
+    /// Album artwork display widget.
+    artwork_image: Picture,
+    /// Play/pause transport button.
+    play_button: Button,
+    /// Seek slider for position control.
+    seek_scale: Scale,
+    /// Label showing current playback position.
+    current_time: Label,
+    /// Label showing total track duration.
+    total_time: Label,
+}
+
 /// Labels for track metadata display.
+#[derive(Clone)]
 struct TrackLabels {
     /// Title label.
     title: Label,
@@ -85,16 +94,6 @@ pub fn format_time(seconds: f64) -> String {
     let mins = (total / 60.0).floor();
     let secs = total - (mins * 60.0);
     format!("{mins:02.0}:{secs:02.0}")
-}
-
-/// Update the play/pause button icon based on playback state.
-fn update_play_button(button: &Button, state: &PlaybackState) {
-    let icon = if state.status == Playing {
-        "media-playback-pause-symbolic"
-    } else {
-        "media-playback-start-symbolic"
-    };
-    button.set_icon_name(icon);
 }
 
 /// Update track labels or spawn metadata fetch when track or status changes.
@@ -124,69 +123,26 @@ fn handle_status_change(
     };
     let storage = Arc::clone(storage);
     let tx = meta_tx.clone();
-    spawn(move || {
-        let Ok(rt) = Runtime::new() else {
-            return;
-        };
-        let result = rt.block_on(resolve_track_metadata(&storage, track_id));
-        if let Err(e) = tx.send((track_id, result)) {
-            error!(error = %e, "Failed to send metadata");
+    spawn(async move {
+        let result = resolve_track_metadata(&storage, track_id).await;
+        if tx.try_send((track_id, result)).is_err() {
+            error!(target: "ui::player::panel", "Failed to send metadata");
         }
     });
-}
-
-/// Apply a resolved metadata result to the UI labels.
-fn handle_meta_update(
-    msg: (i64, MetaResult),
-    current_track_id: Option<i64>,
-    labels: &TrackLabels,
-    cover_tx: &Sender<(i64, DecodedCover)>,
-) {
-    let (tid, (t, ar, al, art_path, fmt)) = msg;
-    if Some(tid) != current_track_id {
-        return;
-    }
-    let title = labels.title.clone();
-    let artist = labels.artist.clone();
-    let album = labels.album.clone();
-    let format = labels.format.clone();
-    idle_add_local(move || {
-        title.set_label(&t);
-        artist.set_label(&ar);
-        album.set_label(&al);
-        format.set_label(&fmt);
-        Break
-    });
-    let Some(path) = art_path else {
-        return;
-    };
-    let tx = cover_tx.clone();
-    spawn(move || {
-        let Some(decoded) = decode_cover_raw(&path, 280) else {
-            return;
-        };
-        if let Err(e) = tx.send((tid, decoded)) {
-            error!(error = %e, "Failed to send cover art");
-        }
-    });
-}
-
-/// Build a closure that sets cover artwork on the main thread.
-fn set_cover_callback(artwork: Picture, texture: MemoryTexture) -> impl FnMut() -> ControlFlow {
-    move || {
-        artwork.set_paintable(Some(&texture));
-        Break
-    }
 }
 
 /// If `track_id` has a cached cover, dispatch a one-shot idle callback to
-/// paint it onto `artwork`.  Called when the playback track or status
-/// changes.
-fn update_cover_for_track(track_id: Option<i64>, cover_cache: &CoverArtCache, artwork: &Picture) {
+/// paint it onto `artwork`.  Called when the playback track changes.
+fn update_cover_from_cache(track_id: Option<i64>, cover_cache: &CoverArtCache, artwork: &Picture) {
     if let Some(texture) = track_id.and_then(|tid| cover_cache.get(tid))
         && (texture.width() >= COVER_MIN_SIZE || texture.height() >= COVER_MIN_SIZE)
     {
-        idle_add_local(set_cover_callback(artwork.clone(), (*texture).clone()));
+        let img = artwork.clone();
+        let tex = (*texture).clone();
+        idle_add_local(move || {
+            img.set_paintable(Some(&tex));
+            Break
+        });
     }
 }
 
@@ -252,7 +208,7 @@ async fn resolve_track_metadata(
 /// Returns a `ScrolledWindow` containing album artwork, track info,
 /// seek slider, playback controls, volume control, and queue view.
 /// Used as the content child of the sidebar's `AdwToolbarView`.
-/// Subscribes to `PlaybackEvent` to update UI when tracks change.
+/// Listens to `PlaybackEvent` stream for fully event-driven updates.
 #[must_use]
 pub fn build_player_content(state: &Arc<AppState>) -> ScrolledWindow {
     let (scroll, content) = build_scroll_content();
@@ -275,82 +231,199 @@ pub fn build_player_content(state: &Arc<AppState>) -> ScrolledWindow {
 
     scroll.set_child(Some(&content));
 
-    let poll_storage = Arc::clone(&state.storage);
-    let poll_labels = TrackLabels {
-        title: title_label,
-        artist: artist_label,
-        album: album_label,
-        format: format_label,
+    let widgets = PlaybackWidgets {
+        labels: TrackLabels {
+            title: title_label,
+            artist: artist_label,
+            album: album_label,
+            format: format_label,
+        },
+        artwork_image,
+        play_button,
+        seek_scale,
+        current_time,
+        total_time,
     };
-    let poll_artwork = artwork_image;
-    let poll_playback = Arc::clone(&state.playback);
-    let poll_btn = play_button;
-    let mut prev_track_id = state.playback.state().current_track_id;
-    let mut prev_status = state.playback.state().status;
 
-    let (meta_tx, meta_rx) = channel::<(i64, MetaResult)>();
-    let meta_rx = Mutex::new(meta_rx);
+    spawn_async_listeners(state, widgets);
+    scroll
+}
 
-    let (cover_tx, cover_rx) = channel::<(i64, DecodedCover)>();
-    let cover_rx = Mutex::new(cover_rx);
+/// Apply metadata labels to the UI via idle callback.
+fn apply_meta_labels(labels: &TrackLabels, t: &str, ar: &str, al: &str, fmt: &str) {
+    labels.title.set_label(t);
+    labels.artist.set_label(ar);
+    labels.album.set_label(al);
+    labels.format.set_label(fmt);
+}
 
+/// Process one metadata update: check track ID match, update labels, request cover.
+fn process_metadata(
+    tid: i64,
+    meta: MetaResult,
+    widgets: &PlaybackWidgets,
+    playback: &Arc<PlaybackEngine>,
+    cover_cache: &Arc<CoverArtCache>,
+    cover_tx: &Sender<(i64, DecodedCover)>,
+    cover_size: i32,
+) {
+    if Some(tid) != playback.state().current_track_id {
+        return;
+    }
+    let (t, ar, al, art_path, fmt) = meta;
+    let labels = widgets.labels.clone();
+    idle_add_local(move || {
+        apply_meta_labels(&labels, &t, &ar, &al, &fmt);
+        Break
+    });
+    if let Some(path) = art_path {
+        cover_cache.request_decode_to_channel(
+            tid,
+            path,
+            cover_size,
+            cover_tx.clone(),
+            "main thread",
+        );
+    }
+}
+
+/// Process one cover-art update: check track ID match, update texture.
+fn process_cover_art(
+    tid: i64,
+    cover: &DecodedCover,
+    widgets: &PlaybackWidgets,
+    playback: &Arc<PlaybackEngine>,
+    cover_cache: &Arc<CoverArtCache>,
+) {
+    if Some(tid) != playback.state().current_track_id {
+        return;
+    }
+    let texture = raw_to_texture(cover);
+    cover_cache.insert(tid, texture.clone());
+    let img = widgets.artwork_image.clone();
+    idle_add_local(move || {
+        img.set_paintable(Some(&texture));
+        Break
+    });
+}
+
+/// Set up async listeners for playback events, metadata, and cover art.
+fn spawn_async_listeners(state: &Arc<AppState>, widgets: PlaybackWidgets) {
+    let (meta_tx, meta_rx) = unbounded::<(i64, MetaResult)>();
+    let (cover_tx, cover_rx) = unbounded::<(i64, DecodedCover)>();
+
+    let playback = Arc::clone(&state.playback);
     let is_seeking = Arc::clone(&state.is_seeking);
     let cover_cache = Arc::clone(&state.cover_art_cache);
+    let storage = Arc::clone(&state.storage);
 
-    timeout_add_local(Duration::from_millis(200), move || {
-        let s = poll_playback.state();
-
-        let changed = s.current_track_id != prev_track_id || s.status != prev_status;
-        if changed {
-            prev_track_id = s.current_track_id;
-            prev_status = s.status;
+    let ev_rx = state.playback.subscribe();
+    let w1 = widgets.clone();
+    let p1 = Arc::clone(&playback);
+    let s1 = Arc::clone(&is_seeking);
+    let c1 = Arc::clone(&cover_cache);
+    let st1 = Arc::clone(&storage);
+    let mt1 = meta_tx;
+    MainContext::default().spawn_local(async move {
+        while let Ok(event) = ev_rx.recv().await {
+            on_playback_event(&event, &w1, &p1, &s1, &c1, &st1, &mt1);
         }
-
-        if changed {
-            update_cover_for_track(s.current_track_id, &cover_cache, &poll_artwork);
-
-            handle_status_change(
-                s.status == StatusStopped,
-                s.current_track_id,
-                &poll_labels,
-                &poll_storage,
-                &meta_tx,
-            );
-        }
-
-        let guard = meta_rx.lock();
-        while let Ok(msg) = guard.try_recv() {
-            handle_meta_update(msg, s.current_track_id, &poll_labels, &cover_tx);
-        }
-        drop(guard);
-
-        let cover_guard = cover_rx.lock();
-        if let Ok((tid, cover)) = cover_guard.try_recv()
-            && Some(tid) == s.current_track_id
-        {
-            let texture = raw_to_texture(&cover);
-            cover_cache.insert(tid, texture.clone());
-            idle_add_local(set_cover_callback(poll_artwork.clone(), texture));
-        }
-        drop(cover_guard);
-
-        update_play_button(&poll_btn, &s);
-        let playing = s.status != StatusStopped;
-        if playing {
-            total_time.set_label(&format_time(s.duration_seconds));
-        }
-        if playing && !is_seeking.load(Acquire) {
-            let fraction = match s.duration_seconds {
-                d if d > 0.0 => s.elapsed_seconds / d,
-                _ => 0.0,
-            };
-            seek_scale.set_value(fraction * 100.0);
-            current_time.set_label(&format_time(s.elapsed_seconds));
-        }
-        Continue
     });
 
-    scroll
+    let mw = widgets.clone();
+    let mp = Arc::clone(&playback);
+    let mc = Arc::clone(&cover_cache);
+    MainContext::default().spawn_local(async move {
+        while let Ok((tid, meta)) = meta_rx.recv().await {
+            process_metadata(tid, meta, &mw, &mp, &mc, &cover_tx, 280);
+        }
+    });
+
+    MainContext::default().spawn_local(async move {
+        while let Ok((tid, cover)) = cover_rx.recv().await {
+            process_cover_art(tid, &cover, &widgets, &playback, &cover_cache);
+        }
+    });
+}
+
+/// Handle a single playback event, updating UI widgets.
+fn on_playback_event(
+    event: &PlaybackEvent,
+    widgets: &PlaybackWidgets,
+    playback: &PlaybackEngine,
+    is_seeking: &AtomicBool,
+    cover_cache: &CoverArtCache,
+    storage: &Arc<SqliteStorage>,
+    meta_tx: &Sender<(i64, MetaResult)>,
+) {
+    match event {
+        TrackStarted { track_id } => {
+            update_cover_from_cache(Some(*track_id), cover_cache, &widgets.artwork_image);
+            handle_status_change(false, Some(*track_id), &widgets.labels, storage, meta_tx);
+            widgets
+                .play_button
+                .set_icon_name("media-playback-pause-symbolic");
+        }
+        Paused => {
+            widgets
+                .play_button
+                .set_icon_name("media-playback-start-symbolic");
+        }
+        Resumed => {
+            widgets
+                .play_button
+                .set_icon_name("media-playback-pause-symbolic");
+        }
+        Stopped => {
+            widgets.labels.title.set_label("No track playing");
+            widgets.labels.artist.set_label("");
+            widgets.labels.album.set_label("");
+            widgets.labels.format.set_label("");
+            widgets
+                .play_button
+                .set_icon_name("media-playback-start-symbolic");
+            widgets.total_time.set_label("00:00");
+            if !is_seeking.load(Acquire) {
+                widgets.seek_scale.set_value(0.0);
+                widgets.current_time.set_label("00:00");
+            }
+        }
+        Seeked { .. } => {
+            let s = playback.state();
+            if !is_seeking.load(Acquire) {
+                let fraction = match s.duration_seconds {
+                    d if d > 0.0 => s.elapsed_seconds / d,
+                    _ => 0.0,
+                };
+                widgets.seek_scale.set_value(fraction * 100.0);
+                widgets
+                    .current_time
+                    .set_label(&format_time(s.elapsed_seconds));
+            }
+            widgets
+                .total_time
+                .set_label(&format_time(s.duration_seconds));
+        }
+        PositionTick {
+            elapsed_seconds,
+            duration_seconds,
+        } => {
+            if !is_seeking.load(Acquire) {
+                let fraction = match *duration_seconds {
+                    d if d > 0.0 => *elapsed_seconds / d,
+                    _ => 0.0,
+                };
+                widgets.seek_scale.set_value(fraction * 100.0);
+                widgets
+                    .current_time
+                    .set_label(&format_time(*elapsed_seconds));
+            }
+            widgets
+                .total_time
+                .set_label(&format_time(*duration_seconds));
+        }
+        _ => {}
+    }
 }
 
 /// Build the album artwork placeholder.

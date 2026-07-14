@@ -29,8 +29,8 @@ use crate::{
         LibraryDirectory, Storage,
         database::SqliteStorage,
         settings::{
-            ActiveTab::{Albums, Artists},
-            ViewMode::{Column, Grid},
+            ActiveTab::{self, Albums, Artists},
+            ViewMode::{self, Column, Grid},
         },
     },
 };
@@ -76,7 +76,7 @@ async fn set_audio_device(state: &Arc<AppState>, idx: u32) {
         audio_device = name.as_deref().unwrap_or("default"),
         "Audio device selection changed",
     );
-    if let Err(e) = state.storage.set_audio_device(name) {
+    if let Err(e) = state.storage.set_audio_device(name).await {
         error!(error = %e, "Failed to save audio device selection");
     }
 }
@@ -139,6 +139,28 @@ pub fn show_preferences_dialog(state: &Arc<AppState>) {
 
     let parent: Option<&Window> = None;
     dialog.present(parent);
+}
+
+/// Build the Library > Directories page.
+/// Persist gapless playback setting, logging on failure.
+async fn save_gapless_setting(state: Arc<AppState>, enabled: bool) {
+    if let Err(e) = state.storage.set_gapless_enabled(enabled).await {
+        error!(error = %e, "Failed to save gapless setting");
+    }
+}
+
+/// Persist view mode, logging on failure.
+async fn save_view_mode_setting(state: Arc<AppState>, mode: ViewMode) {
+    if let Err(e) = state.storage.set_view_mode(mode).await {
+        error!(error = %e, "Failed to save view mode");
+    }
+}
+
+/// Persist active tab, logging on failure.
+async fn save_tab_setting(state: Arc<AppState>, tab: ActiveTab) {
+    if let Err(e) = state.storage.set_active_tab(tab).await {
+        error!(error = %e, "Failed to save active tab");
+    }
 }
 
 /// Build the Library > Directories page.
@@ -264,9 +286,7 @@ fn build_audio_page(dialog: &PreferencesDialog, state: &Arc<AppState>) {
         if let Err(e) = state_gapless.playback.set_gapless_enabled(enabled) {
             warn!(error = %e, "Failed to toggle gapless playback");
         }
-        if let Err(e) = state_gapless.storage.set_gapless_enabled(enabled) {
-            error!(error = %e, "Failed to save gapless setting");
-        }
+        spawn_future_local(save_gapless_setting(Arc::clone(&state_gapless), enabled));
     });
 
     playback_group.add(&gapless_row);
@@ -303,9 +323,7 @@ fn build_view_page(dialog: &PreferencesDialog, state: &Arc<AppState>) {
             view_mode = if matches!(mode, Grid) { "grid" } else { "column" },
             "Default view mode changed",
         );
-        if let Err(e) = state_view.storage.set_view_mode(mode) {
-            error!(error = %e, "Failed to save view mode");
-        }
+        spawn_future_local(save_view_mode_setting(Arc::clone(&state_view), mode));
     });
 
     display_group.add(&view_combo);
@@ -332,9 +350,7 @@ fn build_view_page(dialog: &PreferencesDialog, state: &Arc<AppState>) {
             active_tab = if matches!(tab, Albums) { "albums" } else { "artists" },
             "Default tab changed",
         );
-        if let Err(e) = state_tab.storage.set_active_tab(tab) {
-            error!(error = %e, "Failed to save active tab");
-        }
+        spawn_future_local(save_tab_setting(Arc::clone(&state_tab), tab));
         state_tab.active_tab_tx.send_if_modified(|current| {
             let changed = *current != tab;
             *current = tab;

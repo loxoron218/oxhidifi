@@ -1,15 +1,19 @@
 //! Album detail page with artwork, metadata, and track listing.
 
-use std::{sync::Arc, thread::spawn};
+use std::{boxed::Box, sync::Arc};
 
 use {
-    async_channel::{Sender, bounded},
+    async_channel::{Receiver, Sender, unbounded},
     libadwaita::{
-        gdk::MemoryTexture,
-        glib::{prelude::Cast, spawn_future_local},
+        glib::{
+            ControlFlow::{self, Break, Continue},
+            idle_add_local,
+            prelude::Cast,
+            spawn_future_local,
+        },
         gtk::{
             Align::Start,
-            Box,
+            Box as GtkBox,
             ContentFit::Cover,
             Label, ListBox,
             Orientation::Horizontal,
@@ -24,12 +28,16 @@ use {
 
 use crate::{
     app::{AppState, NavigationEvent},
-    storage::Storage,
+    storage::{Storage, Track},
     ui::{
-        decode_cover_at_size,
-        detail::common::{build_detail_wrapper, build_scroll_content, build_track_row},
+        ArtworkDecodeRequest, DecodedCover,
+        detail::common::{build_detail_wrapper, build_scroll_content, fill_track_list_batch},
+        raw_to_texture,
     },
 };
+
+/// Number of track rows to build per idle callback batch.
+const BATCH_SIZE: usize = 10;
 
 /// Size of the album cover artwork on the detail page in pixels.
 const DETAIL_COVER_SIZE: i32 = 320;
@@ -72,16 +80,6 @@ struct AlbumDetailWidgets<'a> {
     track_list: &'a ListBox,
 }
 
-/// Decode cover art on a background thread and send through the channel.
-///
-/// Runs inside a `spawn` closure so the decode does not block the main thread.
-fn decode_and_send_cover(tx: &Sender<Option<MemoryTexture>>, path: &str) {
-    let texture = decode_cover_at_size(path, DETAIL_COVER_SIZE);
-    if let Err(e) = tx.try_send(texture) {
-        error!(error = %e, "Failed to send decoded cover art");
-    }
-}
-
 /// Build the scrollable content area with album widgets.
 fn build_album_content() -> AlbumDetailContent {
     let (scroll, content) = build_scroll_content();
@@ -93,7 +91,7 @@ fn build_album_content() -> AlbumDetailContent {
         .build();
     artwork.update_property(&[PropertyLabel("Album artwork")]);
 
-    let artwork_wrapper = Box::builder()
+    let artwork_wrapper = GtkBox::builder()
         .orientation(Horizontal)
         .width_request(DETAIL_COVER_SIZE)
         .height_request(DETAIL_COVER_SIZE)
@@ -118,7 +116,7 @@ fn build_album_content() -> AlbumDetailContent {
     artist_label.update_property(&[PropertyLabel("Artist name")]);
     content.append(&artist_label);
 
-    let meta_box = Box::builder()
+    let meta_box = GtkBox::builder()
         .orientation(Horizontal)
         .spacing(12)
         .halign(Start)
@@ -206,6 +204,23 @@ pub fn build_album_detail(
     wrapper.upcast()
 }
 
+/// Try to send decoded cover to the main thread channel, logging on failure.
+fn try_send_cover(tx: &Sender<DecodedCover>, decoded: Option<DecodedCover>) {
+    let Some(decoded) = decoded else { return };
+    if let Err(e) = tx.try_send(decoded) {
+        error!(error = %e, "Failed to send decoded album detail cover to main thread");
+    }
+}
+
+/// Poll for decoded artwork and apply it to the picture widget.
+fn poll_artwork(rx: &Receiver<DecodedCover>, artwork: &Picture) -> ControlFlow {
+    rx.try_recv().map_or(Continue, |decoded| {
+        let texture = raw_to_texture(&decoded);
+        artwork.set_paintable(Some(&texture));
+        Break
+    })
+}
+
 /// Load album data from storage and populate the detail UI elements.
 async fn populate_album_detail(
     state: &Arc<AppState>,
@@ -227,11 +242,17 @@ async fn populate_album_detail(
 
     if let Some(path) = &album.artwork_path {
         let path = path.clone();
-        let (tx, rx) = bounded(1);
-        spawn(move || decode_and_send_cover(&tx, &path));
-        if let Ok(Some(texture)) = rx.recv().await {
-            widgets.artwork.set_paintable(Some(&texture));
-        }
+        let (tx, rx) = unbounded::<DecodedCover>();
+
+        state.cover_art_cache.request_decode(ArtworkDecodeRequest {
+            album_id,
+            path,
+            size: DETAIL_COVER_SIZE,
+            on_complete: Box::new(move |_aid, decoded| try_send_cover(&tx, decoded)),
+        });
+
+        let artwork = widgets.artwork.clone();
+        idle_add_local(move || poll_artwork(&rx, &artwork));
     }
 
     widgets.title_label.set_label(&album.title);
@@ -273,8 +294,14 @@ async fn populate_album_detail(
         }
     };
 
-    for (i, track) in tracks.iter().enumerate() {
-        let row = build_track_row(state, track, i + 1, &nav_tx);
-        widgets.track_list.append(&row);
-    }
+    let track_list = widgets.track_list.clone();
+    let mut remaining: Vec<(Track, usize)> = tracks
+        .into_iter()
+        .enumerate()
+        .map(|(i, t)| (t, i + 1))
+        .collect::<Vec<_>>();
+    remaining.reverse();
+
+    let state = Arc::clone(state);
+    idle_add_local(move || fill_track_list_batch(&mut remaining, &track_list, &state, &nav_tx));
 }

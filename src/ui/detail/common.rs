@@ -7,12 +7,13 @@ use {
     libadwaita::{
         gdk::Key,
         glib::{
+            ControlFlow::{self, Break, Continue},
             Propagation::{Proceed, Stop},
             spawn_future_local,
         },
         gtk::{
             Align::{End, Start},
-            Box, Button, EventControllerKey, GestureClick, Label, ListBoxRow,
+            Box, Button, EventControllerKey, GestureClick, Label, ListBox, ListBoxRow,
             Orientation::{Horizontal, Vertical},
             ScrolledWindow,
             accessible::Property::Label as PropertyLabel,
@@ -33,6 +34,32 @@ use crate::{
     playback::engine::PlaybackController,
     storage::{Storage, Track, format_sample_rate_str},
 };
+
+/// Number of tracks to add per batch in the detail page track list.
+const BATCH_SIZE: usize = 10;
+
+/// Append up to `BATCH_SIZE` track rows from `remaining` to the list.
+/// Call from an idle callback; returns `Continue` if more remain, `Break` when done.
+#[must_use]
+pub fn fill_track_list_batch(
+    remaining: &mut Vec<(Track, usize)>,
+    track_list: &ListBox,
+    state: &Arc<AppState>,
+    nav_tx: &Sender<NavigationEvent>,
+) -> ControlFlow {
+    for _ in 0..BATCH_SIZE {
+        let Some((track, display_num)) = remaining.pop() else {
+            break;
+        };
+        let row = build_track_row(state, &track, display_num, nav_tx);
+        track_list.append(&row);
+    }
+    if remaining.is_empty() {
+        Break
+    } else {
+        Continue
+    }
+}
 
 /// Build the wrapper box with back navigation and header bar for a detail page.
 #[must_use]

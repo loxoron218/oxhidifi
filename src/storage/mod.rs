@@ -426,6 +426,18 @@ pub trait Storage: Send + Sync + 'static {
         &self,
         hashes: &[&str],
     ) -> impl Future<Output = StorageResult<Vec<Vec<Track>>>> + Send;
+
+    /// Get tracks belonging to multiple albums in a single query.
+    fn get_tracks_by_albums(
+        &self,
+        album_ids: &[i64],
+    ) -> impl Future<Output = StorageResult<Vec<Track>>> + Send;
+
+    /// Get multiple tracks by their IDs in a single query.
+    fn get_tracks_by_ids(
+        &self,
+        ids: &[i64],
+    ) -> impl Future<Output = StorageResult<Vec<Track>>> + Send;
 }
 
 /// Error type for storage operations.

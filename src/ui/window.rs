@@ -24,6 +24,7 @@ use {
         WindowTitle,
         gdk::Display,
         glib::{
+            Propagation::Proceed,
             object::{Cast, ObjectExt},
             prelude::ToValue,
             spawn_future_local,
@@ -32,7 +33,7 @@ use {
             self, CssProvider, Stack, ToggleButton, Widget, prelude::ToggleButtonExt,
             style_context_add_provider_for_display,
         },
-        prelude::{AdwApplicationWindowExt, WidgetExt},
+        prelude::{AdwApplicationWindowExt, GtkWindowExt, WidgetExt},
     },
     tokio::sync::watch::Sender as TokioSender,
     tracing::{error, info, warn},
@@ -43,6 +44,7 @@ use crate::{
         AppState,
         NavigationEvent::{self, AlbumDetail, ArtistDetail, Back},
     },
+    playback::engine::PlaybackController,
     storage::{
         database::SqliteStorage,
         settings::{
@@ -96,6 +98,17 @@ pub fn build_window(app: &Application, state: &Arc<AppState>) -> ApplicationWind
     add_responsive_breakpoints(&window, &split_view, &narrow_state);
 
     wire_panel_events(state, &split_view);
+
+    let playback = Arc::clone(&state.playback);
+    let cover_cache = Arc::clone(&state.cover_art_cache);
+    window.connect_close_request(move |_win| {
+        info!(target: "ui::window", "Window close requested — stopping playback");
+        if let Err(e) = playback.stop() {
+            error!(error = %e, "Failed to stop playback on window close");
+        }
+        cover_cache.shutdown();
+        Proceed
+    });
 
     split_view.connect_show_sidebar_notify(move |sv| {
         let showing = sv.shows_sidebar();
@@ -409,12 +422,19 @@ fn build_content(
     (toast_overlay, split_view, toggle_button, back_button)
 }
 
-/// Save the active tab to storage and broadcast through the watch channel.
-fn persist_active_tab(storage: &SqliteStorage, active_tab_tx: &TokioSender<ActiveTab>, name: &str) {
+/// Save the active tab to storage asynchronously and broadcast through the watch channel.
+fn persist_active_tab(
+    storage: &Arc<SqliteStorage>,
+    active_tab_tx: &TokioSender<ActiveTab>,
+    name: &str,
+) {
     let tab = if name == "artists" { Artists } else { Albums };
-    if let Err(e) = storage.set_active_tab(tab) {
-        warn!(error = %e, "Failed to save active tab");
-    }
+    let s = Arc::clone(storage);
+    spawn_future_local(async move {
+        if let Err(e) = s.set_active_tab(tab).await {
+            warn!(error = %e, "Failed to save active tab");
+        }
+    });
     active_tab_tx.send_if_modified(|current| {
         let changed = *current != tab;
         *current = tab;

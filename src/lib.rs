@@ -5,4 +5,5 @@ pub mod library;
 pub mod metrics;
 pub mod playback;
 pub mod storage;
+pub mod threading;
 pub mod ui;

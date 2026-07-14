@@ -4,31 +4,23 @@
 //! sortable `GtkColumnView` (column mode). Only the *initial* mode is
 //! built at startup; the other mode is lazily built on first switch.
 
-use std::{
-    collections::HashMap,
-    path::PathBuf,
-    sync::{
-        Arc,
-        atomic::Ordering::Relaxed,
-        mpsc::{Sender, TryRecvError::Disconnected, channel},
-    },
-    thread::spawn,
-};
+use std::{boxed::Box, collections::HashMap, path::PathBuf, sync::Arc};
 
 use {
+    async_channel::{Sender, TryRecvError::Closed, unbounded},
     libadwaita::{
         gdk::{MemoryTexture, prelude::TextureExt},
         glib::{
-            ControlFlow::{Break, Continue},
+            ControlFlow::{self, Break, Continue},
             idle_add_local,
             prelude::Cast,
             spawn_future_local,
         },
         gtk::{
             Align::{Center, End, Start},
-            Box, Button,
+            Box as GtkBox, Button,
             ContentFit::Cover,
-            EventControllerMotion, GestureClick, Image, Label,
+            EventControllerMotion, FlowBox, GestureClick, Image, Label,
             Orientation::{Horizontal, Vertical},
             Overlay, Picture, Stack, Widget,
             pango::EllipsizeMode::End as EllipsizeEnd,
@@ -54,10 +46,10 @@ use crate::{
         settings::ViewMode::{self, Column, Grid},
     },
     ui::{
-        CoverArtCache, DecodedCover, decode_cover_raw,
+        ArtworkDecodeRequest, CoverArtCache, DecodedCover,
         library::{
             column_view::{NarrowState, build_album_column_view},
-            common::populate_grid_batched,
+            common::build_grid,
             empty::{
                 EmptyStateParams, LibraryGrid, add_scrolled, build_empty_state, build_library_grid,
             },
@@ -65,6 +57,9 @@ use crate::{
         raw_to_texture,
     },
 };
+
+/// Number of album cards to build per idle callback batch.
+const GRID_BATCH_SIZE: usize = 10;
 
 /// Size of album cover art thumbnails in pixels.
 const THUMBNAIL_SIZE: i32 = 180;
@@ -108,6 +103,42 @@ async fn populate_album_views(
     lazy_build_album_mode(state, stack, narrow_state, initial_mode).await;
 }
 
+/// Populate up to `GRID_BATCH_SIZE` album cards into the flow box.
+/// Returns `Continue` if more items remain, `Break` when done.
+fn fill_album_grid(
+    snapshots: &mut Vec<(Album, String, FormatInfo)>,
+    overlays: &mut Vec<Overlay>,
+    cover_art_data: &mut Vec<(i64, usize, String)>,
+    flow: &FlowBox,
+    state: &Arc<AppState>,
+    cache: &Arc<CoverArtCache>,
+) {
+    for _ in 0..GRID_BATCH_SIZE {
+        let Some((album, artist_name, fi)) = snapshots.pop() else {
+            break;
+        };
+        let index = overlays.len();
+        let (card, overlay) = build_album_card(state, &album, &artist_name, &fi);
+        if let Some(path) = &album.artwork_path {
+            cover_art_data.push((album.id, index, path.clone()));
+        }
+        overlays.push(overlay);
+        flow.append(&card.upcast::<Widget>());
+    }
+    if snapshots.is_empty() {
+        load_cover_art_async(cover_art_data, overlays, cache);
+    }
+}
+
+/// Check if the snapshots are exhausted and return the appropriate `ControlFlow`.
+fn check_done(snapshots: &[(Album, String, FormatInfo)]) -> ControlFlow {
+    if snapshots.is_empty() {
+        Break
+    } else {
+        Continue
+    }
+}
+
 /// Build the given `mode` view (grid or column) and add it to `stack`.
 ///
 /// Each mode is wrapped in its own `ScrolledWindow` so scroll positions
@@ -124,44 +155,40 @@ fn build_album_mode(
 ) {
     match mode {
         Grid => {
-            let mut overlays: Vec<Overlay> = Vec::new();
+            let grid_container = GtkBox::builder().orientation(Vertical).build();
+            let flow = build_grid("Album library grid \u{2014} click an album to play");
+            grid_container.append(&flow);
+            add_scrolled(stack, &grid_container, "grid");
 
-            let cover_art_data: Vec<(i64, usize, String)> = albums
-                .iter()
-                .enumerate()
-                .filter_map(|(i, album)| {
-                    album
-                        .artwork_path
-                        .as_ref()
-                        .map(|path| (album.id, i, path.clone()))
-                })
-                .collect();
+            let state = Arc::clone(state);
+            let cache = Arc::clone(&state.cover_art_cache);
 
-            let cards: Vec<Widget> = albums
+            let mut snapshots: Vec<(Album, String, FormatInfo)> = albums
                 .iter()
+                .rev()
                 .map(|album| {
                     let artist_name = artist_names
                         .get(&album.artist_id)
-                        .map_or("Unknown Artist", String::as_str);
+                        .map_or_else(|| "Unknown Artist".to_string(), Clone::clone);
                     let fi = format_info.get(&album.id).cloned().unwrap_or_default();
-                    let (card, overlay) = build_album_card(state, album, artist_name, &fi);
-                    overlays.push(overlay);
-                    card.upcast()
+                    (album.clone(), artist_name, fi)
                 })
                 .collect();
 
-            let grid_container = Box::builder().orientation(Vertical).build();
-            let mut remaining = cards;
-            populate_grid_batched(
-                &grid_container,
-                &mut remaining,
-                50,
-                "Album library grid \u{2014} click an album to play",
-            );
+            let mut overlays: Vec<Overlay> = Vec::new();
+            let mut cover_art_data: Vec<(i64, usize, String)> = Vec::new();
 
-            load_cover_art_async(&cover_art_data, &overlays, &state.cover_art_cache);
-
-            add_scrolled(stack, &grid_container, "grid");
+            idle_add_local(move || {
+                fill_album_grid(
+                    &mut snapshots,
+                    &mut overlays,
+                    &mut cover_art_data,
+                    &flow,
+                    &state,
+                    &cache,
+                );
+                check_done(&snapshots)
+            });
         }
         Column => {
             let column_view =
@@ -284,20 +311,20 @@ fn apply_texture(overlay: &Overlay, texture: &MemoryTexture) {
     }
 }
 
-/// Load cover art images off the main thread and apply them to overlays.
-///
-/// Send decoded covers from the uncached list through the channel.
-fn send_uncached_covers(
-    uncached: &[(i64, usize, String)],
+/// Checks the shared [`CoverArtCache`] first; sends decode requests to the
+/// centralized worker when the texture is not yet cached.  Each decoded
+/// cover is written to the cache and applied to its overlay via an
+/// [`idle_add_local`] callback.
+/// Send decoded album cover through the channel, logging on failure.
+fn try_send_album_cover(
     tx: &Sender<(usize, i64, DecodedCover)>,
+    index: usize,
+    album_id: i64,
+    decoded: Option<DecodedCover>,
 ) {
-    for (album_id, index, path) in uncached {
-        let Some(decoded) = decode_cover_raw(path, THUMBNAIL_SIZE) else {
-            continue;
-        };
-        if tx.send((*index, *album_id, decoded)).is_err() {
-            break;
-        }
+    let Some(decoded) = decoded else { return };
+    if let Err(e) = tx.try_send((index, album_id, decoded)) {
+        error!(error = %e, "Failed to send decoded album cover to main thread");
     }
 }
 
@@ -315,7 +342,7 @@ fn load_cover_art_async(
         return;
     }
 
-    let (tx, rx) = channel::<(usize, i64, DecodedCover)>();
+    let (tx, rx) = unbounded::<(usize, i64, DecodedCover)>();
     let mut uncached: Vec<(i64, usize, String)> = Vec::new();
 
     for (album_id, index, path) in cover_art_data {
@@ -329,12 +356,21 @@ fn load_cover_art_async(
         uncached.push((*album_id, *index, path.clone()));
     }
 
-    if uncached.is_empty() || !cache.try_start_batch() {
+    if uncached.is_empty() {
         return;
     }
 
-    let tx_clone = tx.clone();
-    spawn(move || send_uncached_covers(&uncached, &tx_clone));
+    for (album_id, index, path) in uncached {
+        let tx = tx.clone();
+        cache.request_decode(ArtworkDecodeRequest {
+            album_id,
+            path,
+            size: THUMBNAIL_SIZE,
+            on_complete: Box::new(move |_aid, decoded| {
+                try_send_album_cover(&tx, index, album_id, decoded);
+            }),
+        });
+    }
     drop(tx);
 
     let overlays: Vec<Overlay> = overlays.to_vec();
@@ -347,10 +383,7 @@ fn load_cover_art_async(
             apply_texture(&overlays[index], &texture);
         }
         match rx.try_recv() {
-            Err(Disconnected) => {
-                cache_clone.finish_batch();
-                Break
-            }
+            Err(Closed) => Break,
             _ => Continue,
         }
     });
@@ -370,8 +403,8 @@ fn build_album_card(
     album: &Album,
     artist_name: &str,
     format_info: &FormatInfo,
-) -> (Box, Overlay) {
-    let card = Box::builder()
+) -> (GtkBox, Overlay) {
+    let card = GtkBox::builder()
         .orientation(Vertical)
         .spacing(6)
         .css_classes(["card"])
@@ -449,7 +482,7 @@ fn build_album_card(
         .halign(Start)
         .build();
 
-    let format_row = Box::builder().orientation(Horizontal).spacing(6).build();
+    let format_row = GtkBox::builder().orientation(Horizontal).spacing(6).build();
 
     let format_label = Label::builder()
         .label(format_info.summary())
@@ -488,8 +521,8 @@ fn build_album_card(
 
 /// Determine the overlay button icon for an album based on playback state.
 fn album_play_icon(state: &AppState, album_id: i64) -> &'static str {
-    let is_current = state.current_album_id.load(Relaxed) == album_id;
     let ps = state.playback.state();
+    let is_current = ps.current_album_id == album_id;
     if is_current && ps.status == Playing {
         "media-playback-pause-symbolic"
     } else {
@@ -499,7 +532,7 @@ fn album_play_icon(state: &AppState, album_id: i64) -> &'static str {
 
 /// Toggle pause if this album is currently playing, otherwise play it.
 async fn toggle_or_play_album(state: &Arc<AppState>, album_id: i64) {
-    let is_current = state.current_album_id.load(Relaxed) == album_id;
+    let is_current = state.playback.state().current_album_id == album_id;
     if is_current {
         if let Err(e) = state.playback.toggle_pause() {
             error!(error = %e, "Failed to toggle pause");
