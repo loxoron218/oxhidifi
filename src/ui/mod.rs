@@ -50,6 +50,9 @@ pub struct ArtworkDecodeRequest {
 pub struct CoverArtCache {
     /// Map of album ID to decoded texture.
     textures: Mutex<HashMap<i64, Arc<MemoryTexture>>>,
+    /// Map of track ID to album ID, so cover lookups by `track_id` can
+    /// resolve to the correct album-level cache entry.
+    track_to_album: Mutex<HashMap<i64, i64>>,
     /// Channel sender for dispatching decode requests to the worker.
     /// Wrapped in `Mutex<Option<...>>` so the channel can be closed
     /// during shutdown, allowing the worker thread to exit.
@@ -71,6 +74,7 @@ impl CoverArtCache {
 
         Arc::new(Self {
             textures: Mutex::new(HashMap::new()),
+            track_to_album: Mutex::new(HashMap::new()),
             request_tx: Mutex::new(Some(request_tx)),
         })
     }
@@ -112,6 +116,29 @@ impl CoverArtCache {
     /// Insert a decoded texture into the cache by album ID.
     pub fn insert(&self, album_id: i64, texture: MemoryTexture) {
         self.textures.lock().insert(album_id, Arc::new(texture));
+    }
+
+    /// Record the album that a track belongs to, enabling cache lookups
+    /// by track ID to resolve to the album-level cache entry.
+    pub fn record_track_album(&self, track_id: i64, album_id: i64) {
+        self.track_to_album.lock().insert(track_id, album_id);
+    }
+
+    /// Look up a cached cover texture by track ID.
+    ///
+    /// Resolves `track_id → album_id → texture` using the recorded
+    /// track-to-album mapping.  Returns `None` if either the mapping
+    /// or the album-level texture is missing.
+    #[must_use]
+    pub fn get_by_track(&self, track_id: i64) -> Option<Arc<MemoryTexture>> {
+        let album_id = *self.track_to_album.lock().get(&track_id)?;
+        self.textures.lock().get(&album_id).cloned()
+    }
+
+    /// Return the cached album ID for a track, if previously recorded.
+    #[must_use]
+    pub fn get_album_for_track(&self, track_id: i64) -> Option<i64> {
+        self.track_to_album.lock().get(&track_id).copied()
     }
 
     /// Drop the outgoing request sender, closing the channel.

@@ -12,6 +12,7 @@ use std::sync::{
 use {
     async_channel::{Sender, unbounded},
     libadwaita::{
+        gdk::MemoryTexture,
         glib::{ControlFlow::Break, MainContext, idle_add_local},
         gtk::{
             Align::{Center, Start},
@@ -54,8 +55,8 @@ use crate::{
 /// decode via the async metadata path.
 const COVER_MIN_SIZE: i32 = 180;
 
-/// Tuple of resolved metadata: `(title, artist, album, artwork_path, format_info)`.
-type MetaResult = (String, String, String, Option<String>, String);
+/// Tuple of resolved metadata: `(title, artist, album, artwork_path, format_info, album_id)`.
+type MetaResult = (String, String, String, Option<String>, String, i64);
 
 /// Widget references for playback control updates.
 #[derive(Clone)]
@@ -131,28 +132,34 @@ fn handle_status_change(
     });
 }
 
-/// If `track_id` has a cached cover, dispatch a one-shot idle callback to
-/// paint it onto `artwork`.  Called when the playback track changes.
-fn update_cover_from_cache(track_id: Option<i64>, cover_cache: &CoverArtCache, artwork: &Picture) {
-    if let Some(texture) = track_id.and_then(|tid| cover_cache.get(tid))
-        && (texture.width() >= COVER_MIN_SIZE || texture.height() >= COVER_MIN_SIZE)
-    {
-        let img = artwork.clone();
-        let tex = (*texture).clone();
-        idle_add_local(move || {
-            img.set_paintable(Some(&tex));
-            Break
-        });
+/// If `track_id` has a cached cover large enough, paint it onto `artwork`
+/// immediately.  Called when the playback track changes.
+fn update_cover_from_cache(
+    track_id: Option<i64>,
+    cover_cache: &CoverArtCache,
+    artwork: &Picture,
+    playback: &PlaybackEngine,
+) {
+    let Some(tid) = track_id else { return };
+    if playback.state().current_track_id != Some(tid) {
+        return;
     }
+    let Some(texture) = cover_cache.get_by_track(tid) else {
+        return;
+    };
+    if texture.width() < COVER_MIN_SIZE && texture.height() < COVER_MIN_SIZE {
+        return;
+    }
+    artwork.set_paintable(Some(&*texture));
 }
 
 /// Resolve track metadata from storage.
 ///
-/// Returns `(title, artist_name, album_name, artwork_path, format_info)`.
+/// Returns `(title, artist_name, album_name, artwork_path, format_info, album_id)`.
 async fn resolve_track_metadata(
     storage: &SqliteStorage,
     track_id: i64,
-) -> (String, String, String, Option<String>, String) {
+) -> (String, String, String, Option<String>, String, i64) {
     let Ok(Some(track)) = storage.get_track(track_id).await else {
         return (
             format!("Track #{track_id}"),
@@ -160,10 +167,12 @@ async fn resolve_track_metadata(
             String::new(),
             None,
             String::new(),
+            -1,
         );
     };
 
     let title = track.title;
+    let album_id = track.audio.album_id.unwrap_or(-1);
 
     let artist_name = match track.audio.artist_id {
         Some(aid) => match storage.get_artist(aid).await {
@@ -173,12 +182,12 @@ async fn resolve_track_metadata(
         None => String::new(),
     };
 
-    let (album_name, artwork_path) = match track.audio.album_id {
-        Some(aid) => match storage.get_album(aid).await {
+    let (album_name, artwork_path) = match album_id {
+        aid if aid >= 0 => match storage.get_album(aid).await {
             Ok(Some(album)) => (album.title, album.artwork_path),
             _ => (String::new(), None),
         },
-        None => (String::new(), None),
+        _ => (String::new(), None),
     };
 
     let channel_label = format_channel_label(AudioLayout::from_count(
@@ -200,7 +209,14 @@ async fn resolve_track_metadata(
         }
     };
 
-    (title, artist_name, album_name, artwork_path, format_info)
+    (
+        title,
+        artist_name,
+        album_name,
+        artwork_path,
+        format_info,
+        album_id,
+    )
 }
 
 /// Build the player panel content area.
@@ -270,15 +286,20 @@ fn process_metadata(
     if Some(tid) != playback.state().current_track_id {
         return;
     }
-    let (t, ar, al, art_path, fmt) = meta;
-    let labels = widgets.labels.clone();
-    idle_add_local(move || {
-        apply_meta_labels(&labels, &t, &ar, &al, &fmt);
-        Break
-    });
+    let (t, ar, al, art_path, fmt, album_id) = meta;
+    apply_meta_labels(&widgets.labels, &t, &ar, &al, &fmt);
+
+    if album_id >= 0 {
+        cover_cache.record_track_album(tid, album_id);
+        if let Some(texture) = cover_cache.get(album_id) {
+            widgets.artwork_image.set_paintable(Some(&*texture));
+            return;
+        }
+    }
     if let Some(path) = art_path {
+        let key = if album_id >= 0 { album_id } else { tid };
         cover_cache.request_decode_to_channel(
-            tid,
+            key,
             path,
             cover_size,
             cover_tx.clone(),
@@ -287,24 +308,34 @@ fn process_metadata(
     }
 }
 
-/// Process one cover-art update: check track ID match, update texture.
+/// Process one cover-art update: check staleness, update texture.
 fn process_cover_art(
-    tid: i64,
+    aid: i64,
     cover: &DecodedCover,
     widgets: &PlaybackWidgets,
     playback: &Arc<PlaybackEngine>,
     cover_cache: &Arc<CoverArtCache>,
 ) {
-    if Some(tid) != playback.state().current_track_id {
+    let texture = raw_to_texture(cover);
+
+    let Some(current_tid) = playback.state().current_track_id else {
+        return;
+    };
+
+    let is_current = if aid >= 0 {
+        cover_cache.get_album_for_track(current_tid) == Some(aid)
+    } else {
+        current_tid == aid
+    };
+    if !is_current {
         return;
     }
-    let texture = raw_to_texture(cover);
-    cover_cache.insert(tid, texture.clone());
-    let img = widgets.artwork_image.clone();
-    idle_add_local(move || {
-        img.set_paintable(Some(&texture));
-        Break
-    });
+
+    if aid >= 0 {
+        cover_cache.insert(aid, texture.clone());
+    }
+
+    widgets.artwork_image.set_paintable(Some(&texture));
 }
 
 /// Set up async listeners for playback events, metadata, and cover art.
@@ -358,7 +389,13 @@ fn on_playback_event(
 ) {
     match event {
         TrackStarted { track_id } => {
-            update_cover_from_cache(Some(*track_id), cover_cache, &widgets.artwork_image);
+            widgets.artwork_image.set_paintable(None::<&MemoryTexture>);
+            update_cover_from_cache(
+                Some(*track_id),
+                cover_cache,
+                &widgets.artwork_image,
+                playback,
+            );
             handle_status_change(false, Some(*track_id), &widgets.labels, storage, meta_tx);
             widgets
                 .play_button
