@@ -58,12 +58,10 @@ impl AudioResampler {
         chunk_size: usize,
         channels: usize,
     ) -> Result<Self, ResamplerConstructionError> {
-        let sub_chunks = 4;
         let resampler = Fft::<f32>::new(
             input_rate as usize,
             output_rate as usize,
             chunk_size,
-            sub_chunks,
             channels,
             Input,
         )?;
@@ -169,12 +167,10 @@ impl AudioResampler {
         input_rate: u32,
         output_rate: u32,
     ) -> Result<(), ResamplerConstructionError> {
-        let sub_chunks = 4;
         let new_resampler = Fft::<f32>::new(
             input_rate as usize,
             output_rate as usize,
             self.chunk_size,
-            sub_chunks,
             self.channels,
             Input,
         )?;
