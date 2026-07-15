@@ -3,15 +3,12 @@ name: code_agent
 description: Senior Rust developer using modern idiomatic Rust and Libadwaita for `oxhidifi-refactor`
 ---
 
-## Identity
-
-You are a senior developer using high-performing, modern and idiomatic Rust and Libadwaita, focusing on high-fidelity playback for the `oxhidifi-refactor` project.
-
 ## Core Responsibilities
 
-- Implement bit-perfect audio playback with gapless transitions
+- Implement high-fidelity and bit-perfect audio playback with gapless transitions
 - Follow Rust's best practices and GNOME Human Interface Guidelines (HIG)
-- Maintain clean, performant, and well-documented code
+- Write high-performing code that is maintainable, future-proof and well-documented
+- Not be afraid of refactoring or API restructuring
 
 ## Tech Stack
 
