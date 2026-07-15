@@ -3,7 +3,7 @@
 //! Watches configured library directories for changes and triggers incremental
 //! scans when files are added, modified, or removed.
 
-use std::{path::PathBuf, sync::Arc, time::Duration};
+use std::{path::PathBuf, sync::Arc};
 
 use {
     notify::{Config, Error, Event, RecommendedWatcher, RecursiveMode::Recursive, Watcher},
@@ -16,15 +16,10 @@ use crate::{
     storage::Storage,
 };
 
-/// Debounce interval for filesystem events.
-const DEBOUNCE_INTERVAL: Duration = Duration::from_millis(500);
-
 /// Filesystem watcher that monitors library directories for changes.
 pub struct LibraryWatcher<S: Storage> {
     /// The underlying notify watcher.
     watcher: RecommendedWatcher,
-    /// Channel sender for watcher events.
-    event_tx: UnboundedSender<WatcherEvent>,
     /// Scanner for incremental scans.
     scanner: Arc<FsScanner<S>>,
 }
@@ -50,7 +45,7 @@ impl<S: Storage + 'static> LibraryWatcher<S> {
 
         let config = Config::default();
 
-        let cb_tx = event_tx.clone();
+        let cb_tx = event_tx;
         let watcher = RecommendedWatcher::new(
             move |result: Result<Event, Error>| {
                 Self::handle_watcher_event(result, &cb_tx);
@@ -58,14 +53,7 @@ impl<S: Storage + 'static> LibraryWatcher<S> {
             config,
         )?;
 
-        Ok((
-            Self {
-                watcher,
-                event_tx,
-                scanner,
-            },
-            event_rx,
-        ))
+        Ok((Self { watcher, scanner }, event_rx))
     }
 
     /// Handle a raw watcher event and forward it through the channel.
@@ -153,9 +141,11 @@ pub enum WatcherEvent {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
+    use std::{path::PathBuf, time::Duration};
 
-    use crate::library::watcher::{DEBOUNCE_INTERVAL, WatcherEvent::DirectoryModified};
+    use crate::library::watcher::WatcherEvent::DirectoryModified;
+
+    const DEBOUNCE_INTERVAL: Duration = Duration::from_millis(500);
 
     #[test]
     fn watcher_event_clone() {

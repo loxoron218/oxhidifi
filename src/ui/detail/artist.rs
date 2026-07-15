@@ -37,9 +37,6 @@ use crate::{
     },
 };
 
-/// Number of track rows to build per idle callback batch.
-const BATCH_SIZE: usize = 10;
-
 /// Build the artist detail page widget.
 #[must_use]
 pub fn build_artist_detail(

@@ -36,9 +36,6 @@ use crate::{
     },
 };
 
-/// Number of track rows to build per idle callback batch.
-const BATCH_SIZE: usize = 10;
-
 /// Size of the album cover artwork on the detail page in pixels.
 const DETAIL_COVER_SIZE: i32 = 320;
 

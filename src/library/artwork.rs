@@ -143,14 +143,6 @@ pub fn cache_artwork(key: &str, data: &[u8], ext: &str) -> Result<PathBuf, Artwo
     cache_artwork_in(&cache_dir, key, data, ext)
 }
 
-/// Check whether a cached artwork file exists for a given key in the given
-/// cache directory.
-fn has_cached_artwork_in(cache_dir: &Path, key: &str) -> bool {
-    ARTWORK_EXTENSIONS
-        .iter()
-        .any(|ext| cache_dir.join(format!("{key}.{ext}")).exists())
-}
-
 /// Get the cached artwork path for a given key, returning `None` if not cached.
 ///
 /// Tries each known extension (`.jpg`, `.png`, `.webp`) to find a matching
@@ -230,9 +222,13 @@ mod tests {
         tempfile::{NamedTempFile, tempdir},
     };
 
-    use crate::library::artwork::{
-        cache_artwork_in, extract_artwork, get_cached_artwork_path, has_cached_artwork_in,
-    };
+    use crate::library::artwork::{cache_artwork_in, extract_artwork, get_cached_artwork_path};
+
+    fn has_cached_artwork_in(cache_dir: &Path, key: &str) -> bool {
+        ["jpg", "png", "webp"]
+            .iter()
+            .any(|ext| cache_dir.join(format!("{key}.{ext}")).exists())
+    }
 
     #[test]
     fn extract_artwork_missing_file() -> Result<()> {

@@ -17,7 +17,7 @@ mod tests {
     };
 
     use oxhidifi_refactor::{
-        library::scanner::{FsScanner, LibraryScanner, ScannerConfig},
+        library::scanner::{FsScanner, LibraryScanner},
         playback::{engine::PlaybackEngine, output::startup_device_check},
         storage::{Storage, database::SqliteStorage},
     };
@@ -56,11 +56,7 @@ mod tests {
             );
 
             let (scan_event_tx, _scan_event_rx) = unbounded();
-            let scanner = Arc::new(FsScanner::new(
-                Arc::clone(&storage),
-                ScannerConfig::default(),
-                scan_event_tx,
-            ));
+            let scanner = Arc::new(FsScanner::new(Arc::clone(&storage), scan_event_tx));
 
             let dirs = storage
                 .list_library_directories()

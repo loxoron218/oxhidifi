@@ -5,8 +5,7 @@
 
 use std::{
     collections::HashMap,
-    fs::{DirEntry, metadata, read_dir},
-    io::Error,
+    fs::{DirEntry, read_dir},
     path::{Path, PathBuf},
     sync::Arc,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
@@ -36,8 +35,6 @@ use crate::{
 pub struct FsScanner<S: Storage> {
     /// Storage backend for persistence.
     storage: Arc<S>,
-    /// Configuration for the scanner.
-    config: ScannerConfig,
     /// Cancellation signal sender.
     cancel_tx: TokioSender<bool>,
     /// Cancellation signal receiver (cloned into scan tasks).
@@ -74,30 +71,14 @@ impl<S: Storage> FsScanner<S> {
 
     /// Create a new filesystem scanner.
     #[must_use]
-    pub fn new(storage: Arc<S>, config: ScannerConfig, scan_event_tx: Sender<ScanEvent>) -> Self {
+    pub fn new(storage: Arc<S>, scan_event_tx: Sender<ScanEvent>) -> Self {
         let (cancel_tx, cancel_rx) = channel(false);
         Self {
             storage,
-            config,
             cancel_tx,
             cancel_rx,
             scan_event_tx,
         }
-    }
-
-    /// Walk a directory recursively and collect supported audio file paths.
-    ///
-    /// # Arguments
-    ///
-    /// * `dir` - Root directory to walk
-    ///
-    /// # Returns
-    ///
-    /// A vector of paths to supported audio files.
-    fn walk_directory(dir: &Path) -> Vec<PathBuf> {
-        let mut results = Vec::new();
-        Self::walk_recursive(dir, &mut results);
-        results
     }
 
     /// Walk a directory recursively in parallel using rayon.
@@ -143,50 +124,6 @@ impl<S: Storage> FsScanner<S> {
         }
     }
 
-    /// Process a single directory entry during recursive walk.
-    fn walk_entry(entry: &DirEntry, results: &mut Vec<PathBuf>) {
-        let path = entry.path();
-        let Ok(metadata) = metadata(&path) else {
-            warn!(
-                target: "library::scanner",
-                path = %path.display(),
-                "Failed to read file metadata \u{2014} skipping corrupt or inaccessible file",
-            );
-            return;
-        };
-
-        if metadata.is_dir() {
-            Self::walk_recursive(&path, results);
-            return;
-        }
-
-        let is_audio = metadata.is_file() && is_supported_audio_format(&path);
-        if is_audio && metadata.len() == 0 {
-            warn!(
-                target: "library::scanner",
-                path = %path.display(),
-                "Skipping zero-length audio file \u{2014} file appears corrupt",
-            );
-            return;
-        }
-        if is_audio {
-            results.push(path);
-        }
-    }
-
-    /// Recursively walk a directory, collecting supported audio files.
-    fn walk_recursive(dir: &Path, results: &mut Vec<PathBuf>) {
-        let Ok(entries) = read_dir(dir) else {
-            let err = Error::last_os_error();
-            warn!(dir = %dir.display(), error = %err, "Failed to read directory");
-            return;
-        };
-
-        for entry in entries.flatten() {
-            Self::walk_entry(&entry, results);
-        }
-    }
-
     /// Check if a file should be skipped based on path uniqueness.
     ///
     /// # Errors
@@ -196,18 +133,6 @@ impl<S: Storage> FsScanner<S> {
         match self.storage.find_by_path(path).await {
             Ok(Some(_)) => Ok(true),
             Ok(None) => Ok(false),
-            Err(e) => Err(e),
-        }
-    }
-
-    /// Check if a file should be skipped based on content hash.
-    ///
-    /// # Errors
-    ///
-    /// Returns a storage error if the database lookup fails.
-    async fn check_hash_duplicate(&self, hash: &str) -> Result<bool, StorageError> {
-        match self.storage.find_by_hash(hash).await {
-            Ok(tracks) => Ok(!tracks.is_empty()),
             Err(e) => Err(e),
         }
     }
@@ -690,19 +615,6 @@ pub enum ScanEvent {
     },
 }
 
-/// Configuration for the library scanner.
-#[derive(Debug, Clone)]
-pub struct ScannerConfig {
-    /// Maximum number of concurrent metadata extractions.
-    pub max_concurrent: usize,
-}
-
-impl Default for ScannerConfig {
-    fn default() -> Self {
-        Self { max_concurrent: 4 }
-    }
-}
-
 /// Reason a track was skipped during scanning.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SkipReason {
@@ -826,7 +738,7 @@ mod tests {
         create_dir(&sub)?;
         write(sub.join("nested.flac"), b"\0")?;
 
-        let files = FsScanner::<SqliteStorage>::walk_directory(root);
+        let files = FsScanner::<SqliteStorage>::walk_directory_parallel(root);
         if files.len() != 4 {
             bail!("expected 4 audio files, got {}", files.len());
         }
@@ -836,7 +748,7 @@ mod tests {
     #[test]
     fn walk_directory_handles_empty() -> Result<()> {
         let dir = tempdir()?;
-        let files = FsScanner::<SqliteStorage>::walk_directory(dir.path());
+        let files = FsScanner::<SqliteStorage>::walk_directory_parallel(dir.path());
         if !files.is_empty() {
             bail!("expected empty directory, got {} files", files.len());
         }

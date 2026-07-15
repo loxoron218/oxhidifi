@@ -34,25 +34,12 @@ use crate::playback::{
 
 /// Commands sent to the decode task.
 enum DecodeCommand {
-    /// Stop decoding and exit the loop.
-    Stop,
-    /// Device was lost — stop gracefully.
-    DeviceLost,
     /// Seek to a position in seconds.
     Seek(f64),
     /// Pause the audio output stream.
     Pause,
     /// Resume the audio output stream.
     Resume,
-    /// Pre-buffer the next track for gapless transition.
-    PreloadNext {
-        /// ID of the next track.
-        track_id: i64,
-        /// File path of the next track.
-        path: PathBuf,
-        /// Sample rate of the next track.
-        sample_rate: u32,
-    },
 }
 
 /// Initialised decoder and resampler context for a decode loop.
@@ -1118,7 +1105,7 @@ fn run_decode_loop(
         let volume = read_volume(engine_shared);
 
         match cmd_rx.try_recv() {
-            Ok(DecodeCommand::Stop | DecodeCommand::DeviceLost) | Err(Disconnected) => break,
+            Err(Disconnected) => break,
             Ok(DecodeCommand::Seek(pos)) => {
                 engine_shared.output.lock().as_ref().map(AudioOutput::flush);
                 let actual = decoder.seek_to(pos).unwrap_or(pos);
@@ -1131,7 +1118,7 @@ fn run_decode_loop(
             Ok(DecodeCommand::Resume) => {
                 engine_shared.output.lock().as_ref().map(AudioOutput::play);
             }
-            Err(Empty) | Ok(DecodeCommand::PreloadNext { .. }) => {}
+            Err(Empty) => {}
         }
 
         if engine_shared.state.lock().status == PlaybackStatus::Paused {

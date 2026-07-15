@@ -47,8 +47,6 @@ use crate::{
 /// Data for a single queue entry.
 #[derive(Clone, Debug)]
 struct QueueItemData {
-    /// Track ID from storage.
-    track_id: i64,
     /// Display name for the track.
     name: String,
     /// Whether this is the currently playing track.
@@ -316,11 +314,7 @@ fn populate_store(store: &ListStore, queue: &PlaybackQueue, name_cache: &[(i64, 
             .find(|(id, _)| *id == track_id)
             .map_or_else(|| format!("Track #{track_id}"), |(_, n)| n.clone());
 
-        let data = QueueItemData {
-            track_id,
-            name,
-            is_current,
-        };
+        let data = QueueItemData { name, is_current };
         let boxed = BoxedAnyObject::new(data);
         store.append(&boxed);
     }

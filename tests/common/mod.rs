@@ -1,55 +1,16 @@
 //! Shared test infrastructure: fixture helpers and mock utilities.
 
 use std::{
-    fs::{File, write},
-    io::{Error, Result, Write},
-    path::{Path, PathBuf},
+    fs::File,
+    io::{Result, Write},
+    path::Path,
 };
 
-use {
-    anyhow::{Context, Result as AnyhowResult, bail},
-    tempfile::{TempDir, tempdir},
-};
+use anyhow::{Context, Result as AnyhowResult};
 
 use oxhidifi_refactor::playback::{
     decoder::Decoder, gapless::GaplessTransitioner, write_wav_header,
 };
-
-/// Creates a temporary directory for test fixtures.
-///
-/// # Errors
-///
-/// Returns an error if the OS cannot create the directory.
-pub fn create_fixture_dir() -> Result<TempDir> {
-    tempdir().map_err(Error::other)
-}
-
-/// Creates a dummy audio file at the given path for scanner testing.
-///
-/// # Errors
-///
-/// Returns an error if the file cannot be written.
-pub fn create_dummy_audio_file(dir: &Path, name: &str) -> Result<PathBuf> {
-    let path = dir.join(name);
-    write(&path, [])?;
-    Ok(path)
-}
-
-/// Creates a minimal FLAC file for testing.
-///
-/// # Errors
-///
-/// Returns an error if the file cannot be written.
-pub fn create_minimal_flac(dir: &Path, name: &str) -> Result<PathBuf> {
-    let path = dir.join(name);
-    let mut data = Vec::new();
-    data.extend_from_slice(b"fLaC");
-
-    data.extend_from_slice(&[0x00, 0x22, 0x00, 0x00]);
-    data.extend_from_slice(&[0; 34]);
-    write(&path, &data)?;
-    Ok(path)
-}
 
 /// Write a minimal WAV file with the given sample rate, channel count, and
 /// 16-bit samples.
@@ -111,21 +72,4 @@ pub fn transition_and_decode(
 #[must_use]
 pub fn leading_silence(samples: &[f32]) -> usize {
     samples.iter().take_while(|&&s| s == 0.0).count()
-}
-
-/// Assert that the maximum silence found across transitions does not exceed
-/// the threshold.
-///
-/// # Errors
-///
-/// Returns an error if `max_silence` exceeds `max_allowed`.
-pub fn assert_max_silence(
-    max_silence: usize,
-    max_allowed: usize,
-    context: &str,
-) -> AnyhowResult<()> {
-    if max_silence >= max_allowed {
-        bail!("{context}: Max silence {max_silence} samples (exceeds {max_allowed})");
-    }
-    Ok(())
 }

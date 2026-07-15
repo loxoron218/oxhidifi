@@ -30,7 +30,7 @@ use {
 use crate::{
     library::{
         artwork::check_cache_version,
-        scanner::{FsScanner, ScanEvent, ScannerConfig},
+        scanner::{FsScanner, ScanEvent},
         watcher::{LibraryWatcher, WatcherEvent},
     },
     playback::{engine::PlaybackEngine, output::startup_device_check},
@@ -269,11 +269,7 @@ pub async fn run_application() -> Result<()> {
     let (scan_event_tx, scan_event_rx) = unbounded();
     let (toast_tx, toast_rx) = unbounded();
 
-    let scanner = Arc::new(FsScanner::new(
-        Arc::clone(&storage),
-        ScannerConfig::default(),
-        scan_event_tx.clone(),
-    ));
+    let scanner = Arc::new(FsScanner::new(Arc::clone(&storage), scan_event_tx.clone()));
 
     if let Ok((watcher, watcher_rx)) = LibraryWatcher::new(Arc::clone(&scanner)) {
         spawn_watcher_loop(watcher, watcher_rx);
@@ -341,7 +337,7 @@ mod tests {
 
     use crate::{
         app::{AppChannels, AppState, BroadcastChannels},
-        library::scanner::{FsScanner, ScannerConfig},
+        library::scanner::FsScanner,
         playback::engine::PlaybackEngine,
         storage::{
             database::SqliteStorage,
@@ -392,7 +388,6 @@ mod tests {
                 storage,
                 Arc::new(FsScanner::new(
                     scanner_storage,
-                    ScannerConfig::default(),
                     channels.scan_event_tx.clone(),
                 )),
                 channels,

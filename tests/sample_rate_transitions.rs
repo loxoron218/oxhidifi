@@ -115,11 +115,11 @@ fn run_rate_pairs(pairs: &[(u32, u32)], max_silence: &mut usize) -> AnyhowResult
 
 #[cfg(test)]
 mod tests {
-    use anyhow::Result;
+    use anyhow::{Result, bail};
 
     use crate::{
-        MAX_SILENCE_SAMPLES, RATE_FAMILY_44, RATE_FAMILY_48, assert_transition,
-        common::assert_max_silence, run_rate_pairs, verify_resampler_reconfigure,
+        MAX_SILENCE_SAMPLES, RATE_FAMILY_44, RATE_FAMILY_48, assert_transition, run_rate_pairs,
+        verify_resampler_reconfigure,
     };
 
     /// Test that the resampler can be created and reconfigured between
@@ -159,7 +159,12 @@ mod tests {
             .flat_map(|r44| RATE_FAMILY_48.iter().map(move |r48| (*r44, *r48)))
             .collect();
         run_rate_pairs(&pairs, &mut max_silence_found)?;
-        assert_max_silence(max_silence_found, MAX_SILENCE_SAMPLES, "44k->48k family")?;
+        if max_silence_found >= MAX_SILENCE_SAMPLES {
+            bail!(
+                "44k->48k family: Max silence {max_silence_found} samples (exceeds \
+                 {MAX_SILENCE_SAMPLES})"
+            );
+        }
         Ok(())
     }
 
@@ -176,7 +181,12 @@ mod tests {
             .flat_map(|r48| RATE_FAMILY_44.iter().map(move |r44| (*r48, *r44)))
             .collect();
         run_rate_pairs(&pairs, &mut max_silence_found)?;
-        assert_max_silence(max_silence_found, MAX_SILENCE_SAMPLES, "48k->44k family")?;
+        if max_silence_found >= MAX_SILENCE_SAMPLES {
+            bail!(
+                "48k->44k family: Max silence {max_silence_found} samples (exceeds \
+                 {MAX_SILENCE_SAMPLES})"
+            );
+        }
         Ok(())
     }
 
@@ -198,7 +208,12 @@ mod tests {
             assert_transition(window[0], window[1], &mut max_silence_found)?;
         }
 
-        assert_max_silence(max_silence_found, MAX_SILENCE_SAMPLES, "mixed family chain")?;
+        if max_silence_found >= MAX_SILENCE_SAMPLES {
+            bail!(
+                "mixed family chain: Max silence {max_silence_found} samples (exceeds \
+                 {MAX_SILENCE_SAMPLES})"
+            );
+        }
         Ok(())
     }
 }

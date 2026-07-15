@@ -1,13 +1,5 @@
 //! Application entry point with structured logging initialization.
 
-mod app;
-mod library;
-mod metrics;
-mod playback;
-mod storage;
-mod threading;
-mod ui;
-
 use std::{fs::create_dir_all, io::stderr};
 
 use {
