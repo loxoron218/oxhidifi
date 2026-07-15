@@ -457,10 +457,8 @@ fn build_album_card(
         });
 
         let state = Arc::clone(&state_clone);
-        let btn = btn_click.clone();
         spawn_future_local(async move {
             toggle_or_play_album(&state, album_id).await;
-            btn.set_icon_name(album_play_icon(&state, album_id));
         });
     });
 
