@@ -304,7 +304,6 @@ pub fn compute_snr_db(reference: &[f32], test: &[f32]) -> f64 {
 }
 
 /// Calculate the number of samples for a given duration at a sample rate.
-#[must_use]
 fn calc_num_samples(sample_rate: u32, duration_secs: f64) -> usize {
     num_traits::NumCast::from((f64::from(sample_rate) * duration_secs).floor()).unwrap_or(0)
 }

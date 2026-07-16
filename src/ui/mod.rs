@@ -64,7 +64,6 @@ impl CoverArtCache {
     ///
     /// Spawns a single background thread (`"cover-decoder"`) via the
     /// [`ThreadManager`] that processes decode requests sequentially.
-    #[must_use]
     pub fn new_shared(thread_manager: &ThreadManager) -> Arc<Self> {
         let (request_tx, request_rx) = unbounded::<ArtworkDecodeRequest>();
 
@@ -108,7 +107,6 @@ impl CoverArtCache {
     }
 
     /// Return the cached texture for a given album ID, if available.
-    #[must_use]
     pub fn get(&self, album_id: i64) -> Option<Arc<MemoryTexture>> {
         self.textures.lock().get(&album_id).cloned()
     }
@@ -129,14 +127,12 @@ impl CoverArtCache {
     /// Resolves `track_id → album_id → texture` using the recorded
     /// track-to-album mapping.  Returns `None` if either the mapping
     /// or the album-level texture is missing.
-    #[must_use]
     pub fn get_by_track(&self, track_id: i64) -> Option<Arc<MemoryTexture>> {
         let album_id = *self.track_to_album.lock().get(&track_id)?;
         self.textures.lock().get(&album_id).cloned()
     }
 
     /// Return the cached album ID for a track, if previously recorded.
-    #[must_use]
     pub fn get_album_for_track(&self, track_id: i64) -> Option<i64> {
         self.track_to_album.lock().get(&track_id).copied()
     }

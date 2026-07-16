@@ -72,7 +72,6 @@ use crate::{
 /// containing separate `ToolbarView` panes for the sidebar and
 /// content. The sidebar is hidden by default and auto-shown on
 /// playback start.
-#[must_use]
 pub fn build_window(app: &Application, state: &Arc<AppState>) -> ApplicationWindow {
     info!(
         target: "ui::window",

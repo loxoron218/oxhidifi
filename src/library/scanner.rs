@@ -79,7 +79,6 @@ impl<S: Storage> FsScanner<S> {
     }
 
     /// Create a new filesystem scanner.
-    #[must_use]
     pub fn new(storage: Arc<S>, scan_event_tx: Sender<ScanEvent>, max_concurrent: usize) -> Self {
         let (cancel_tx, cancel_rx) = channel(false);
         Self {
@@ -595,17 +594,9 @@ impl<S: Storage + 'static> LibraryScanner for FsScanner<S> {
 /// Controls and observes library scanning.
 pub trait LibraryScanner: Send + 'static {
     /// Trigger a full scan of all configured directories.
-    ///
-    /// # Errors
-    ///
-    /// Returns a storage error if the scan cannot be initiated.
     fn scan_all(&self) -> impl Future<Output = Result<(), StorageError>> + Send;
 
     /// Trigger a scan of a specific directory.
-    ///
-    /// # Errors
-    ///
-    /// Returns a storage error if the scan cannot be initiated.
     fn scan_directory(&self, path: &Path) -> impl Future<Output = Result<(), StorageError>> + Send;
 
     /// Cancel any in-progress scan.
@@ -725,10 +716,6 @@ fn format_sample_rate(hz: i32) -> String {
 }
 
 /// Get the current UTC time as an RFC 3339 formatted string.
-///
-/// # Panics
-///
-/// Panics if the system time is before UNIX epoch (should never happen in practice).
 fn utc_now_rfc3339() -> String {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -747,10 +734,6 @@ fn utc_now_rfc3339() -> String {
 }
 
 /// Convert days since UNIX epoch to (year, month, day).
-///
-/// # Panics
-///
-/// Panics if the date calculation overflows (should not happen for reasonable dates).
 fn days_to_ymd(days: u64) -> (u64, u64, u64) {
     let z = days + 719_468;
     let era = z / 146_097;

@@ -331,13 +331,11 @@ impl DualDecoder {
     }
 
     /// Returns parameters of the active decoder, if any.
-    #[must_use]
     pub fn active_params(&self) -> Option<AudioParams> {
         self.active.as_ref().map(Decoder::params)
     }
 
     /// Returns parameters of the pre-loaded decoder, if any.
-    #[must_use]
     pub fn preloaded_params(&self) -> Option<AudioParams> {
         self.preloaded.as_ref().map(Decoder::params)
     }

@@ -40,7 +40,6 @@ const BATCH_SIZE: usize = 10;
 
 /// Append up to `BATCH_SIZE` track rows from `remaining` to the list.
 /// Call from an idle callback; returns `Continue` if more remain, `Break` when done.
-#[must_use]
 pub fn fill_track_list_batch(
     remaining: &mut Vec<(Track, usize)>,
     track_list: &ListBox,
@@ -79,7 +78,6 @@ pub fn try_send_back(tx: &Sender<NavigationEvent>) {
 }
 
 /// Set up back button and Escape key navigation.
-#[must_use]
 pub fn setup_back_navigation(widget: &impl WidgetExt, nav_tx: Sender<NavigationEvent>) -> Button {
     let back_button = Button::builder()
         .icon_name("go-previous-symbolic")

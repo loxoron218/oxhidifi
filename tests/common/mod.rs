@@ -69,7 +69,6 @@ pub fn transition_and_decode(
 }
 
 /// Count leading silence samples (consecutive zeros) in a buffer.
-#[must_use]
 pub fn leading_silence(samples: &[f32]) -> usize {
     samples.iter().take_while(|&&s| s == 0.0).count()
 }

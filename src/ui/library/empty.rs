@@ -117,7 +117,6 @@ pub fn build_empty_state(state: &Arc<AppState>, params: &EmptyStateParams) -> Bo
 /// * `setup_fn` - Closure that populates a `Stack` with both views; receives `(&Stack, state,
 ///   narrow_state, initial_mode)`.  Called once at startup and again on library refresh to
 ///   re-populate in‑place.
-#[must_use]
 pub fn build_library_grid(
     state: &Arc<AppState>,
     _tooltip: &str,

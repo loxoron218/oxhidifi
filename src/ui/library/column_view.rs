@@ -103,7 +103,6 @@ impl NarrowState {
     }
 
     /// Return the current narrow state.
-    #[must_use]
     pub fn get(&self) -> bool {
         self.narrow.load(Relaxed)
     }
@@ -112,7 +111,6 @@ impl NarrowState {
     ///
     /// The receiver will immediately yield the current value on first
     /// [`changed`](watch::Receiver::changed) call.
-    #[must_use]
     pub fn subscribe(&self) -> Receiver<bool> {
         self.tx.subscribe()
     }
@@ -177,7 +175,6 @@ fn batched_fill_store(store: &ListStore, items: &mut Vec<BoxedAnyObject>) {
 /// * `artist_names` – Map of artist id → display name
 /// * `narrow_state` – Narrow‑mode tracker for adaptive hiding
 /// * `format_info` – Map of album id → distinct format info
-#[must_use]
 pub fn build_album_column_view<S: BuildHasher>(
     state: &Arc<AppState>,
     albums: &[Album],
@@ -263,7 +260,6 @@ pub fn build_album_column_view<S: BuildHasher>(
 /// Build a fully wired `ColumnView` for artists.
 ///
 /// Columns: Artist Icon, Artist Name, Number of Albums.
-#[must_use]
 pub fn build_artist_column_view(state: &Arc<AppState>, artists: &[Artist]) -> Widget {
     let store = ListStore::new::<BoxedAnyObject>();
 

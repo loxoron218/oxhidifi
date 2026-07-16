@@ -74,7 +74,6 @@ const THUMBNAIL_SIZE: i32 = 180;
 ///
 /// * `state` - Application state
 /// * `narrow_mode` - Narrow‑mode tracker for adaptive column hiding
-#[must_use]
 pub fn build_album_grid(state: &Arc<AppState>, narrow_state: &Arc<NarrowState>) -> LibraryGrid {
     let nm = Arc::clone(narrow_state);
     build_library_grid(

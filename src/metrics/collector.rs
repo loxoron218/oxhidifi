@@ -221,7 +221,6 @@ impl UiResponse {
 ///
 /// Returns `None` if `/proc/self/status` is unavailable or cannot be parsed
 /// (e.g., on non-Linux platforms).
-#[must_use]
 pub fn read_rss_mb() -> Option<f64> {
     let status = match read_to_string("/proc/self/status") {
         Ok(s) => s,

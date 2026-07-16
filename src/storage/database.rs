@@ -165,7 +165,6 @@ impl SqliteStorage {
     }
 
     /// Get the current view mode.
-    #[must_use]
     pub fn get_view_mode(&self) -> ViewMode {
         self.settings.read().get().view_mode
     }
@@ -184,7 +183,6 @@ impl SqliteStorage {
     }
 
     /// Get whether gapless playback is enabled.
-    #[must_use]
     pub fn get_gapless_enabled(&self) -> bool {
         self.settings.read().get_gapless_enabled()
     }
@@ -205,7 +203,6 @@ impl SqliteStorage {
     }
 
     /// Get the preferred audio device name.
-    #[must_use]
     pub fn get_audio_device(&self) -> Option<String> {
         self.settings.read().get_audio_device().map(String::from)
     }
@@ -226,7 +223,6 @@ impl SqliteStorage {
     }
 
     /// Get the active tab preference.
-    #[must_use]
     pub fn get_active_tab(&self) -> ActiveTab {
         self.settings.read().get_active_tab()
     }
@@ -245,12 +241,15 @@ impl SqliteStorage {
     }
 
     /// Get the volume level from settings.
-    #[must_use]
     pub fn get_settings_volume(&self) -> f64 {
         self.settings.read().get_volume()
     }
 
     /// Serialize settings to JSON and persist to disk via `spawn_blocking`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `StorageError::Database` if JSON serialization or file writing fails.
     async fn save_settings_async(&self) -> Result<(), StorageError> {
         let (json, path) = {
             let settings = self.settings.read();
