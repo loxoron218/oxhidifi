@@ -11,7 +11,7 @@ use std::sync::Arc;
 use {
     libadwaita::{
         glib::spawn_future_local,
-        gtk::{Box, Button, Orientation::Horizontal, ToggleButton},
+        gtk::{Box, Button, Orientation::Horizontal, ToggleButton, Window},
         prelude::{BoxExt, ButtonExt, ToggleButtonExt, WidgetExt},
     },
     tracing::warn,
@@ -75,7 +75,7 @@ pub fn build_view_toggle(state: &Arc<AppState>, initial_mode: ViewMode) -> Toggl
 /// Creates a horizontal box containing the view toggle button and a
 /// gear icon button to open the preferences dialog.
 #[must_use]
-pub fn build_header_controls(state: &Arc<AppState>) -> Box {
+pub fn build_header_controls(state: &Arc<AppState>, parent: &Window) -> Box {
     let controls = Box::builder().orientation(Horizontal).spacing(6).build();
 
     let initial_mode = state.storage.get_view_mode();
@@ -91,8 +91,9 @@ pub fn build_header_controls(state: &Arc<AppState>) -> Box {
         .build();
 
     let state_prefs = Arc::clone(state);
+    let parent_clone = parent.clone();
     prefs_btn.connect_clicked(move |_| {
-        show_preferences_dialog(&state_prefs);
+        show_preferences_dialog(&state_prefs, &parent_clone);
     });
 
     controls.append(&prefs_btn);

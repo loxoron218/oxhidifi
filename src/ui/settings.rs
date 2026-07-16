@@ -129,16 +129,15 @@ fn set_preferred_device(combo: &ComboRow, devices: &[DeviceInfo], preferred: Opt
 }
 
 /// Build and present the preferences dialog.
-pub fn show_preferences_dialog(state: &Arc<AppState>) {
+pub fn show_preferences_dialog(state: &Arc<AppState>, parent: &Window) {
     let dialog = PreferencesDialog::new();
     dialog.set_search_enabled(false);
 
-    build_library_page(&dialog, state);
+    build_library_page(&dialog, state, parent);
     build_audio_page(&dialog, state);
     build_view_page(&dialog, state);
 
-    let parent: Option<&Window> = None;
-    dialog.present(parent);
+    dialog.present(Some(parent));
 }
 
 /// Build the Library > Directories page.
@@ -164,7 +163,7 @@ async fn save_tab_setting(state: Arc<AppState>, tab: ActiveTab) {
 }
 
 /// Build the Library > Directories page.
-fn build_library_page(dialog: &PreferencesDialog, state: &Arc<AppState>) {
+fn build_library_page(dialog: &PreferencesDialog, state: &Arc<AppState>, parent: &Window) {
     let page = PreferencesPage::new();
     page.set_title("Library");
     page.set_icon_name(Some("folder-music-symbolic"));
@@ -196,13 +195,14 @@ fn build_library_page(dialog: &PreferencesDialog, state: &Arc<AppState>) {
     group.add(&add_btn);
 
     let state_clone = Arc::clone(state);
+    let parent_clone = parent.clone();
     add_btn.connect_clicked(move |_| {
         let dialog = FileDialog::builder()
             .title("Select Music Directory")
             .accept_label("Select")
             .build();
         let state = Arc::clone(&state_clone);
-        dialog.select_folder(None::<&Window>, None::<&Cancellable>, move |result| {
+        dialog.select_folder(Some(&parent_clone), None::<&Cancellable>, move |result| {
             on_folder_selected(&state, result);
         });
     });

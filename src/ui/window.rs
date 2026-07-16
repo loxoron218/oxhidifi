@@ -89,7 +89,7 @@ pub fn build_window(app: &Application, state: &Arc<AppState>) -> ApplicationWind
 
     let narrow_state = NarrowState::new_shared();
     let (toast_overlay, split_view, toggle_button, back_button) =
-        build_content(state, &narrow_state);
+        build_content(state, &narrow_state, window.upcast_ref::<gtk::Window>());
     window.set_content(Some(&toast_overlay));
 
     listen_for_toasts(state, &toast_overlay);
@@ -210,6 +210,7 @@ fn build_content_pane(
     state: &Arc<AppState>,
     toggle_button: &ToggleButton,
     narrow_state: &Arc<NarrowState>,
+    parent: &gtk::Window,
 ) -> (ToolbarView, ViewStack, Stack, Widget) {
     let content_toolbar = ToolbarView::new();
 
@@ -274,7 +275,7 @@ fn build_content_pane(
         .build();
     content_header.set_title_widget(Some(&switcher));
 
-    let controls = build_header_controls(state);
+    let controls = build_header_controls(state, parent);
     content_header.pack_end(&controls);
     content_header.pack_start(toggle_button);
 
@@ -315,6 +316,7 @@ fn build_content_pane(
 fn build_content(
     state: &Arc<AppState>,
     narrow_state: &Arc<NarrowState>,
+    parent: &gtk::Window,
 ) -> (ToastOverlay, OverlaySplitView, ToggleButton, ToggleButton) {
     let toast_overlay = ToastOverlay::new();
 
@@ -336,7 +338,7 @@ fn build_content(
         .build();
 
     let (content_toolbar, stack, content_area, orig_stack) =
-        build_content_pane(state, &toggle_button, narrow_state);
+        build_content_pane(state, &toggle_button, narrow_state, parent);
 
     let nav_tx = state.navigation_tx.clone();
 

@@ -7,11 +7,10 @@ use std::sync::Arc;
 
 use {
     libadwaita::{
-        ApplicationWindow,
-        glib::spawn_future_local,
+        glib::{object::Cast, spawn_future_local},
         gtk::{
             Align::Center, Box, Button, FileDialog, Image, Label, Orientation::Vertical,
-            ScrolledWindow, Stack, Widget, accessible::Property::Label as PropertyLabel,
+            ScrolledWindow, Stack, Widget, Window, accessible::Property::Label as PropertyLabel,
             prelude::WidgetExt,
         },
         prelude::{AccessibleExtManual, BoxExt, ButtonExt, FileExt, IsA},
@@ -219,10 +218,11 @@ pub fn build_add_folder_button(state: &Arc<AppState>) -> Button {
         .build();
 
     let state_clone = Arc::clone(state);
-    add_folder_button.connect_clicked(move |_| {
+    add_folder_button.connect_clicked(move |btn| {
         let state = Arc::clone(&state_clone);
+        let parent = btn.root().and_then(|r| r.downcast::<Window>().ok());
         spawn_future_local(async move {
-            add_music_folder(&state).await;
+            add_music_folder(&state, parent.as_ref()).await;
         });
     });
 
@@ -232,16 +232,13 @@ pub fn build_add_folder_button(state: &Arc<AppState>) -> Button {
 /// Open a file chooser dialog to add a music folder.
 ///
 /// Adds the directory to storage and spawns a background scan.
-async fn add_music_folder(state: &AppState) {
+async fn add_music_folder(state: &AppState, parent: Option<&Window>) {
     let dialog = FileDialog::builder()
         .title("Select Music Folder")
         .accept_label("Add Folder")
         .build();
 
-    let folder = match dialog
-        .select_folder_future(Option::<&ApplicationWindow>::None)
-        .await
-    {
+    let folder = match dialog.select_folder_future(parent).await {
         Ok(folder) => folder,
         Err(e) => {
             info!(error = %e, "File chooser cancelled or failed");
