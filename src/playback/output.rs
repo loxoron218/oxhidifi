@@ -224,7 +224,7 @@ impl AudioOutput {
     /// Returns `true` if the device's native config matches the requested
     /// parameters.
     #[must_use]
-    pub fn supports_native(&self, sample_rate: u32, _bit_depth: u16) -> bool {
+    pub fn supports_native(&self, sample_rate: u32, _: u16) -> bool {
         self.config.sample_rate == sample_rate
     }
 

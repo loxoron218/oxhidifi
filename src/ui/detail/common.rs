@@ -44,13 +44,12 @@ pub fn fill_track_list_batch(
     remaining: &mut Vec<(Track, usize)>,
     track_list: &ListBox,
     state: &Arc<AppState>,
-    nav_tx: &Sender<NavigationEvent>,
 ) -> ControlFlow {
     for _ in 0..BATCH_SIZE {
         let Some((track, display_num)) = remaining.pop() else {
             break;
         };
-        let row = build_track_row(state, &track, display_num, nav_tx);
+        let row = build_track_row(state, &track, display_num);
         track_list.append(&row);
     }
     if remaining.is_empty() {
@@ -155,12 +154,7 @@ pub fn build_detail_header(back_button: &Button, title: &str) -> Box {
 
 /// Build a single track row with number, title, duration, and play/queue actions.
 #[must_use]
-pub fn build_track_row(
-    state: &Arc<AppState>,
-    track: &Track,
-    display_number: usize,
-    _nav_tx: &Sender<NavigationEvent>,
-) -> ListBoxRow {
+pub fn build_track_row(state: &Arc<AppState>, track: &Track, display_number: usize) -> ListBoxRow {
     let row = ListBoxRow::builder()
         .activatable(true)
         .tooltip_text("Click to play, right-click to add to queue")

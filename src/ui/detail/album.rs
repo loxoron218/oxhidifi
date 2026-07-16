@@ -172,9 +172,9 @@ fn build_album_content() -> AlbumDetailContent {
 pub fn build_album_detail(
     state: &Arc<AppState>,
     album_id: i64,
-    nav_tx: Sender<NavigationEvent>,
+    nav_tx: &Sender<NavigationEvent>,
 ) -> Widget {
-    let wrapper = build_detail_wrapper(&nav_tx, "Album");
+    let wrapper = build_detail_wrapper(nav_tx, "Album");
 
     let content = build_album_content();
     wrapper.append(&content.scroll);
@@ -193,7 +193,6 @@ pub fn build_album_detail(
                 format_label: &content.format_label,
                 track_list: &content.track_list,
             },
-            nav_tx,
         )
         .await;
     });
@@ -223,7 +222,6 @@ async fn populate_album_detail(
     state: &Arc<AppState>,
     album_id: i64,
     widgets: AlbumDetailWidgets<'_>,
-    nav_tx: Sender<NavigationEvent>,
 ) {
     let album = match state.storage.get_album(album_id).await {
         Ok(Some(a)) => a,
@@ -245,7 +243,7 @@ async fn populate_album_detail(
             album_id,
             path,
             size: DETAIL_COVER_SIZE,
-            on_complete: Box::new(move |_aid, decoded| try_send_cover(&tx, decoded)),
+            on_complete: Box::new(move |_, decoded| try_send_cover(&tx, decoded)),
         });
 
         let artwork = widgets.artwork.clone();
@@ -300,5 +298,5 @@ async fn populate_album_detail(
     remaining.reverse();
 
     let state = Arc::clone(state);
-    idle_add_local(move || fill_track_list_batch(&mut remaining, &track_list, &state, &nav_tx));
+    idle_add_local(move || fill_track_list_batch(&mut remaining, &track_list, &state));
 }

@@ -86,13 +86,22 @@ fn handle_drop_value(value: &Value, queue: &PlaybackQueue, store: &ListStore, to
     reorder_entry(queue, store, from_u, to_pos);
 }
 
+/// Remove a track from the queue at the given position, updating the store.
+/// Logs a warning if the position is out of bounds.
+fn try_remove_entry(q: &PlaybackQueue, store: &ListStore, pos: usize) {
+    store.remove(u32::try_from(pos).unwrap_or(0));
+    if q.remove(pos).is_none() {
+        error!(pos, "Failed to remove track — position out of bounds");
+    }
+}
+
 /// Create the `SignalListItemFactory` that builds and binds queue rows.
 fn build_row_factory(queue: &PlaybackQueue, store: &ListStore) -> SignalListItemFactory {
     let factory = SignalListItemFactory::new();
     let factory_queue = queue.clone();
     let factory_store = store.clone();
 
-    factory.connect_setup(move |_factory, list_item| {
+    factory.connect_setup(move |_, list_item| {
         let Some(list_item_obj) = list_item.downcast_ref::<ListItem>() else {
             return;
         };
@@ -118,7 +127,7 @@ fn build_row_factory(queue: &PlaybackQueue, store: &ListStore) -> SignalListItem
 
         let drag = DragSource::builder().actions(DragAction::MOVE).build();
         let li_drag = li.clone();
-        drag.connect_prepare(move |_src, _x, _y| {
+        drag.connect_prepare(move |_, _, _| {
             let pos = li_drag.position();
             let pos_i32 = i32::try_from(pos).unwrap_or(0);
             let value = pos_i32.to_value();
@@ -146,16 +155,14 @@ fn build_row_factory(queue: &PlaybackQueue, store: &ListStore) -> SignalListItem
         let store_remove = store_li.clone();
         remove.connect_clicked(move |_| {
             let pos = li_remove.position() as usize;
-            let q = queue_remove.clone();
-            let _entry = q.remove(pos);
-            store_remove.remove(u32::try_from(pos).unwrap_or(0));
+            try_remove_entry(&queue_remove, &store_remove, pos);
         });
 
         let drop = DropTarget::new(Type::I32, DragAction::MOVE);
         let li_drop = li;
         let queue_drop = queue_li;
         let store_drop = store_li;
-        drop.connect_drop(move |_target, value, _x, _y| {
+        drop.connect_drop(move |_, value, _, _| {
             let to_pos = li_drop.position() as usize;
             handle_drop_value(value, &queue_drop, &store_drop, to_pos);
             true
@@ -169,7 +176,7 @@ fn build_row_factory(queue: &PlaybackQueue, store: &ListStore) -> SignalListItem
         list_item_obj.set_child(Some(&container));
     });
 
-    factory.connect_bind(|_factory, list_item| {
+    factory.connect_bind(|_, list_item| {
         let Some(list_item) = list_item.downcast_ref::<ListItem>() else {
             return;
         };

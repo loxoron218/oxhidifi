@@ -112,14 +112,12 @@ pub fn build_empty_state(state: &Arc<AppState>, params: &EmptyStateParams) -> Bo
 /// # Arguments
 ///
 /// * `state` - Application state
-/// * `tooltip` - Tooltip text for the grid
 /// * `narrow_mode` - Narrow‑width tracker for adaptive column hiding
 /// * `setup_fn` - Closure that populates a `Stack` with both views; receives `(&Stack, state,
 ///   narrow_state, initial_mode)`.  Called once at startup and again on library refresh to
 ///   re-populate in‑place.
 pub fn build_library_grid(
     state: &Arc<AppState>,
-    _tooltip: &str,
     narrow_state: &Arc<NarrowState>,
     setup_fn: impl Fn(&Stack, Arc<AppState>, Arc<NarrowState>, ViewMode) + Clone + 'static,
 ) -> LibraryGrid {
@@ -191,9 +189,9 @@ pub fn clear_container(container: &Box) {
 ///
 /// # Arguments
 ///
-/// * `_state` - Application state (reserved for future use)
+/// * `state` - Application state (reserved for future use)
 #[must_use]
-pub fn build_empty_container(_state: &Arc<AppState>) -> Box {
+pub fn build_empty_container(_: &Arc<AppState>) -> Box {
     Box::builder()
         .orientation(Vertical)
         .spacing(18)

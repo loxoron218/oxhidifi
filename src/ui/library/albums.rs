@@ -78,7 +78,6 @@ pub fn build_album_grid(state: &Arc<AppState>, narrow_state: &Arc<NarrowState>) 
     let nm = Arc::clone(narrow_state);
     build_library_grid(
         state,
-        "Album library grid \u{2014} click an album to play",
         &nm,
         |stack: &Stack, state, narrow_state, initial_mode| {
             let stack_clone = stack.clone();
@@ -366,7 +365,7 @@ fn load_cover_art_async(
             album_id,
             path,
             size: THUMBNAIL_SIZE,
-            on_complete: Box::new(move |_aid, decoded| {
+            on_complete: Box::new(move |_, decoded| {
                 try_send_album_cover(&tx, index, album_id, decoded);
             }),
         });

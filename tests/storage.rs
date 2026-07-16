@@ -64,7 +64,7 @@ mod tests {
 
     #[test]
     async fn insert_and_get_artist() -> Result<()> {
-        let (storage, _dir) = test_storage().await?;
+        let (storage, dir) = test_storage().await?;
         let artist_id = storage
             .insert_artist(NewArtist {
                 name: "Test Artist".to_string(),
@@ -80,12 +80,13 @@ mod tests {
             "unexpected artist name: {}",
             artist.name
         );
+        drop(dir);
         Ok(())
     }
 
     #[test]
     async fn insert_and_get_album() -> anyhow::Result<()> {
-        let (storage, _dir) = test_storage().await?;
+        let (storage, dir) = test_storage().await?;
         let artist_id = storage
             .insert_artist(NewArtist {
                 name: "Album Artist".to_string(),
@@ -115,12 +116,13 @@ mod tests {
             "unexpected album title: {}",
             album.title
         );
+        drop(dir);
         Ok(())
     }
 
     #[test]
     async fn insert_and_get_track() -> Result<()> {
-        let (storage, _dir) = test_storage().await?;
+        let (storage, dir) = test_storage().await?;
         let track = make_track("Test Track", Path::new("/music/test.flac"), None);
         let track_id = storage.insert_track(track).await?;
         let fetched = storage
@@ -133,12 +135,13 @@ mod tests {
             "unexpected track title: {}",
             fetched.title
         );
+        drop(dir);
         Ok(())
     }
 
     #[test]
     async fn track_crud() -> Result<()> {
-        let (storage, _dir) = test_storage().await?;
+        let (storage, dir) = test_storage().await?;
         let track = make_track("CRUD Track", Path::new("/music/crud.flac"), None);
         let track_id = storage.insert_track(track).await?;
         let fetched = storage
@@ -177,12 +180,13 @@ mod tests {
             matches!(storage.get_track(track_id).await, Ok(None)),
             "track should have been deleted"
         );
+        drop(dir);
         Ok(())
     }
 
     #[test]
     async fn duplicate_detection_by_path() -> Result<()> {
-        let (storage, _dir) = test_storage().await?;
+        let (storage, dir) = test_storage().await?;
         let path = Path::new("/music/unique.flac");
         let track = make_track("Unique Path", path, None);
         storage.insert_track(track).await?;
@@ -203,12 +207,13 @@ mod tests {
             ),
             "nonexistent path should not be found"
         );
+        drop(dir);
         Ok(())
     }
 
     #[test]
     async fn duplicate_detection_by_hash() -> Result<()> {
-        let (storage, _dir) = test_storage().await?;
+        let (storage, dir) = test_storage().await?;
         let hash = "abcdef1234567890";
 
         let mut track1 = make_track("Track 1", Path::new("/music/track1.flac"), None);
@@ -221,12 +226,13 @@ mod tests {
 
         let found = storage.find_by_hash(hash).await?;
         ensure!(found.len() == 2, "expected 2 tracks, got {}", found.len());
+        drop(dir);
         Ok(())
     }
 
     #[test]
     async fn album_track_relationships() -> Result<()> {
-        let (storage, _dir) = test_storage().await?;
+        let (storage, dir) = test_storage().await?;
 
         let artist_id = storage
             .insert_artist(NewArtist {
@@ -269,12 +275,13 @@ mod tests {
 
         let albums = storage.get_albums_by_artist(artist_id).await?;
         ensure!(albums.len() == 1, "expected 1 album, got {}", albums.len());
+        drop(dir);
         Ok(())
     }
 
     #[test]
     async fn queue_operations() -> Result<()> {
-        let (storage, _dir) = test_storage().await?;
+        let (storage, dir) = test_storage().await?;
 
         let track1_id = storage
             .insert_track(make_track("Q1", Path::new("/music/q1.flac"), None))
@@ -326,12 +333,13 @@ mod tests {
         storage.clear_queue().await?;
         let entries = storage.get_queue().await?;
         ensure!(entries.is_empty(), "queue should be empty");
+        drop(dir);
         Ok(())
     }
 
     #[test]
     async fn library_directories() -> Result<()> {
-        let (storage, _dir) = test_storage().await?;
+        let (storage, dir) = test_storage().await?;
 
         storage.add_library_directory(Path::new("/music")).await?;
         storage.add_library_directory(Path::new("/audio")).await?;
@@ -343,12 +351,13 @@ mod tests {
 
         let dirs = storage.list_library_directories().await?;
         ensure!(dirs.len() == 1, "expected 1 dir, got {}", dirs.len());
+        drop(dir);
         Ok(())
     }
 
     #[test]
     async fn track_search() -> Result<()> {
-        let (storage, _dir) = test_storage().await?;
+        let (storage, dir) = test_storage().await?;
 
         storage
             .insert_track(make_track(
@@ -376,12 +385,13 @@ mod tests {
             "unexpected title: {}",
             results[0].title
         );
+        drop(dir);
         Ok(())
     }
 
     #[test]
     async fn get_all_artists() -> Result<()> {
-        let (storage, _dir) = test_storage().await?;
+        let (storage, dir) = test_storage().await?;
 
         storage
             .insert_artist(NewArtist {
@@ -396,6 +406,7 @@ mod tests {
 
         let all = storage.get_all_artists().await?;
         ensure!(all.len() == 2, "expected 2 artists, got {}", all.len());
+        drop(dir);
         Ok(())
     }
 }

@@ -100,7 +100,7 @@ pub fn build_window(app: &Application, state: &Arc<AppState>) -> ApplicationWind
 
     let playback = Arc::clone(&state.playback);
     let cover_cache = Arc::clone(&state.cover_art_cache);
-    window.connect_close_request(move |_win| {
+    window.connect_close_request(move |_| {
         info!(target: "ui::window", "Window close requested — stopping playback");
         if let Err(e) = playback.stop() {
             error!(error = %e, "Failed to stop playback on window close");
@@ -395,7 +395,7 @@ fn build_content(
         }
     });
 
-    let _sv_collapse = split_view.clone();
+    let sv_collapse = split_view.clone();
     let intended_collapse = Arc::clone(&user_wants_sidebar);
     split_view.connect_notify(Some("collapsed"), move |sv, _| {
         if sv.is_collapsed() {
@@ -418,6 +418,7 @@ fn build_content(
         }
     });
 
+    drop(sv_collapse);
     (toast_overlay, split_view, toggle_button, back_button)
 }
 
@@ -459,7 +460,7 @@ fn handle_navigation_event(
             if let Some(prev_detail) = nav_content_area.child_by_name("detail") {
                 nav_content_area.remove(&prev_detail);
             }
-            let detail = build_album_detail(nav_state, album_id, nav_tx.clone());
+            let detail = build_album_detail(nav_state, album_id, nav_tx);
             nav_content_area.add_named(&detail, Some("detail"));
             nav_content_area.set_visible_child(&detail);
         }
@@ -472,7 +473,7 @@ fn handle_navigation_event(
             if let Some(prev_detail) = nav_content_area.child_by_name("detail") {
                 nav_content_area.remove(&prev_detail);
             }
-            let detail = build_artist_detail(nav_state, artist_id, nav_tx.clone());
+            let detail = build_artist_detail(nav_state, artist_id, nav_tx);
             nav_content_area.add_named(&detail, Some("detail"));
             nav_content_area.set_visible_child(&detail);
         }
@@ -523,7 +524,8 @@ mod tests {
 
     #[test]
     fn window_builds_with_state() -> Result<()> {
-        let _state = Arc::new(AppState::mock()?);
+        let state = Arc::new(AppState::mock()?);
+        drop(state);
         Ok(())
     }
 }

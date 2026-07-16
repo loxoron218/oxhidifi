@@ -42,9 +42,9 @@ use crate::{
 pub fn build_artist_detail(
     state: &Arc<AppState>,
     artist_id: i64,
-    nav_tx: Sender<NavigationEvent>,
+    nav_tx: &Sender<NavigationEvent>,
 ) -> Widget {
-    let wrapper = build_detail_wrapper(&nav_tx, "Artist");
+    let wrapper = build_detail_wrapper(nav_tx, "Artist");
 
     let (scroll, content) = build_scroll_content();
 
@@ -77,7 +77,6 @@ pub fn build_artist_detail(
             &name_label,
             &album_count_label,
             &albums_container,
-            nav_tx,
         )
         .await;
     });
@@ -92,7 +91,6 @@ async fn populate_artist_detail(
     name_label: &Label,
     album_count_label: &Label,
     albums_container: &GtkBox,
-    nav_tx: Sender<NavigationEvent>,
 ) {
     let artist = match state.storage.get_artist(artist_id).await {
         Ok(Some(a)) => a,
@@ -137,7 +135,7 @@ async fn populate_artist_detail(
     for album in &albums {
         let fi = format_info_map.get(&album.id).cloned().unwrap_or_default();
         let tracks = tracks_by_album.remove(&album.id).unwrap_or_default();
-        let (section, listbox) = build_album_section(state, album, &fi, tracks, &nav_tx);
+        let (section, listbox) = build_album_section(state, album, &fi, tracks);
         track_lists.push(listbox);
         albums_container.append(&section);
     }
@@ -196,7 +194,6 @@ fn build_album_section(
     album: &Album,
     format_info: &FormatInfo,
     tracks: Vec<Track>,
-    nav_tx: &Sender<NavigationEvent>,
 ) -> (GtkBox, ListBox) {
     let section = GtkBox::builder().orientation(Vertical).spacing(6).build();
 
@@ -223,7 +220,7 @@ fn build_album_section(
             album_id: album.id,
             path,
             size: 60,
-            on_complete: Box::new(move |_aid, decoded| try_send_artist_cover(&tx, decoded)),
+            on_complete: Box::new(move |_, decoded| try_send_artist_cover(&tx, decoded)),
         });
 
         idle_add_local(move || poll_artist_artwork(&rx, &thumb));
@@ -273,8 +270,7 @@ fn build_album_section(
 
     let tl = track_list.clone();
     let state = Arc::clone(state);
-    let nav_tx = nav_tx.clone();
-    idle_add_local(move || fill_track_list_batch(&mut remaining_tracks, &tl, &state, &nav_tx));
+    idle_add_local(move || fill_track_list_batch(&mut remaining_tracks, &tl, &state));
 
     section.append(&track_list);
     (section, track_list)

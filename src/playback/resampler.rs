@@ -139,7 +139,7 @@ impl AudioResampler {
         self.indexing.output_offset = 0;
         self.indexing.partial_len = None;
 
-        let (_frames_in, frames_out) =
+        let (_, frames_out) =
             self.resampler
                 .process_into_buffer(&input, &mut output, Some(&self.indexing))?;
 

@@ -65,9 +65,11 @@ fn init_logging() -> Result<WorkerGuard> {
 /// Returns an error if logging initialization fails or the application
 /// cannot be built.
 fn main() -> Result<()> {
-    let _log_guard = init_logging()?;
+    let log_guard = init_logging()?;
     info!("Application starting");
 
     let rt = Runtime::new().context("Failed to create tokio runtime")?;
-    rt.block_on(run_application())
+    let result = rt.block_on(run_application());
+    drop(log_guard);
+    result
 }

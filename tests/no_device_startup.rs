@@ -55,7 +55,7 @@ mod tests {
                     .context("Failed to create in-memory storage")?,
             );
 
-            let (scan_event_tx, _scan_event_rx) = unbounded();
+            let (scan_event_tx, _) = unbounded();
             let scanner = Arc::new(FsScanner::new(Arc::clone(&storage), scan_event_tx, 4));
 
             let dirs = storage

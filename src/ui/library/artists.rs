@@ -57,29 +57,19 @@ const GRID_BATCH_SIZE: usize = 10;
 /// * `narrow_mode` - Narrow‑mode tracker for adaptive column hiding
 pub fn build_artist_grid(state: &Arc<AppState>, narrow_state: &Arc<NarrowState>) -> LibraryGrid {
     let nm = Arc::clone(narrow_state);
-    build_library_grid(
-        state,
-        "Artist library grid \u{2014} click an artist to view albums",
-        &nm,
-        |stack: &Stack, state, narrow_state, initial_mode| {
-            let stack_clone = stack.clone();
-            spawn_future_local(async move {
-                populate_artist_views(&state, &stack_clone, &narrow_state, initial_mode).await;
-            });
-        },
-    )
+    build_library_grid(state, &nm, |stack: &Stack, state, _, initial_mode| {
+        let stack_clone = stack.clone();
+        spawn_future_local(async move {
+            populate_artist_views(&state, &stack_clone, initial_mode).await;
+        });
+    })
 }
 
 /// Fetch artist data and build **only the initial** view mode into `stack`.
 ///
 /// Delegates to [`lazy_build_artist_mode`] which handles the fetch–
 /// empty–build–set cycle.
-async fn populate_artist_views(
-    state: &Arc<AppState>,
-    stack: &Stack,
-    _narrow_state: &Arc<NarrowState>,
-    initial_mode: ViewMode,
-) {
+async fn populate_artist_views(state: &Arc<AppState>, stack: &Stack, initial_mode: ViewMode) {
     lazy_build_artist_mode(state, stack, initial_mode).await;
 }
 

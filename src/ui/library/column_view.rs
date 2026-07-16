@@ -87,7 +87,7 @@ impl NarrowState {
     /// Create a new `NarrowState` wrapped in an [`Arc`].
     #[must_use]
     pub fn new_shared() -> Arc<Self> {
-        let (tx, _rx) = TokioChannel(false);
+        let (tx, _) = TokioChannel(false);
         Arc::new(Self {
             narrow: AtomicBool::new(false),
             tx,

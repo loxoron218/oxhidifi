@@ -309,7 +309,7 @@ mod tests {
 
     #[test]
     fn drain_buffer_on_empty_is_noop() {
-        let (_producer, mut consumer): (Producer<f32>, Consumer<f32>) = RingBuffer::new(16);
+        let (_, mut consumer): (Producer<f32>, Consumer<f32>) = RingBuffer::new(16);
         drain_buffer(&mut consumer);
         assert!(consumer.is_empty());
     }
@@ -329,7 +329,7 @@ mod tests {
     fn prebuffer_called_twice_returns_false_on_second() -> Result<()> {
         let mut t = GaplessTransitioner::new();
         t.start_playback(1);
-        let _result = t.prebuffer_next(1, 2, PathBuf::from("/nonexistent/file.flac"));
+        drop(t.prebuffer_next(1, 2, PathBuf::from("/nonexistent/file.flac")));
         if matches!(
             t.prebuffer_next(1, 3, PathBuf::from("/nonexistent/file2.flac")),
             Ok(true),
