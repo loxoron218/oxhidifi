@@ -7,7 +7,7 @@
 use std::{boxed::Box, collections::HashMap, path::PathBuf, sync::Arc};
 
 use {
-    async_channel::{Sender, TryRecvError::Closed, unbounded},
+    async_channel::{Sender, unbounded},
     libadwaita::{
         gdk::{MemoryTexture, prelude::TextureExt},
         glib::{
@@ -313,8 +313,8 @@ fn apply_texture(overlay: &Overlay, texture: &MemoryTexture) {
 
 /// Checks the shared [`CoverArtCache`] first; sends decode requests to the
 /// centralized worker when the texture is not yet cached.  Each decoded
-/// cover is written to the cache and applied to its overlay via an
-/// [`idle_add_local`] callback.
+/// cover is written to the cache and applied to its overlay via a
+/// [`spawn_future_local`] async task.
 /// Send decoded album cover through the channel, logging on failure.
 fn try_send_album_cover(
     tx: &Sender<(usize, i64, DecodedCover)>,
@@ -328,11 +328,12 @@ fn try_send_album_cover(
     }
 }
 
-/// Checks the shared [`CoverArtCache`] first; only spawns a background
-/// decode (via `std::thread::spawn`) when the texture is not yet cached
-/// and the global concurrency limit has not been reached.  Each decode
-/// writes both to the cache and, on completion, to the overlay via an
-/// [`idle_add_local`] callback.
+/// Checks the shared [`CoverArtCache`] first; sends decode requests to the
+/// centralized worker when the texture is not yet cached.  Each decoded
+/// cover is written to the cache and applied to its overlay via a
+/// [`spawn_future_local`] async task that stays alive until all results
+/// are received, preventing a race where the channel receiver is dropped
+/// before the background decoder finishes.
 fn load_cover_art_async(
     cover_art_data: &[(i64, usize, String)],
     overlays: &[Overlay],
@@ -376,15 +377,11 @@ fn load_cover_art_async(
     let overlays: Vec<Overlay> = overlays.to_vec();
     let cache_clone = Arc::clone(cache);
 
-    idle_add_local(move || {
-        while let Ok((index, album_id, decoded)) = rx.try_recv() {
+    spawn_future_local(async move {
+        while let Ok((index, album_id, decoded)) = rx.recv().await {
             let texture = raw_to_texture(&decoded);
             cache_clone.insert(album_id, texture.clone());
             apply_texture(&overlays[index], &texture);
-        }
-        match rx.try_recv() {
-            Err(Closed) => Break,
-            _ => Continue,
         }
     });
 }

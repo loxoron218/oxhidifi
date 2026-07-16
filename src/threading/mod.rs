@@ -4,45 +4,48 @@
 //!
 //! ```text
 //! ┌──────────────────────────────────────────────────────────────────┐
-//! │                        THREAD MODEL                             │
+//! │                        THREAD MODEL                              │
 //! ├──────────────────────────────────────────────────────────────────┤
 //! │                                                                  │
-//! │  [1] MAIN THREAD (GLib Main Context)                            │
-//! │      • GTK/Libadwaita rendering and input handling              │
-//! │      • glib::spawn_future_local — async tasks (29 calls)        │
-//! │      • MainContext::default().spawn_local — async tasks (7)     │
-//! │      • glib::idle_add_local — deferred UI updates (14 calls)    │
+//! │  [1] MAIN THREAD (GLib Main Context)                             │
+//! │      • GTK/Libadwaita rendering and input handling               │
+//! │      • glib::spawn_future_local — async tasks (29 calls)         │
+//! │      • MainContext::default().spawn_local — async tasks (7)      │
+//! │      • glib::idle_add_local — deferred UI updates (11 calls)     │
 //! │                                                                  │
-//! │  [2] TOKIO RUNTIME (multi-threaded, n_cores workers)            │
-//! │      • tokio::spawn — async tasks: metadata, scanning,          │
-//! │        events, watcher consumer                                 │
-//! │      • tokio::task::spawn_blocking — blocking I/O, device enum, │
-//! │        memory sampling, file writes                             │
-//! │      • SQLx queries (all .await on storage)                     │
+//! │  [2] TOKIO RUNTIME (multi-threaded, n_cores workers)             │
+//! │      • tokio::spawn — async tasks (6 calls): metadata, scanning, │
+//! │        events, watcher consumer                                  │
+//! │      • tokio::task::spawn_blocking — blocking I/O (7 calls),     │
+//! │        device enum, memory sampling, file writes                 │
+//! │      • SQLx queries (all .await on storage)                      │
 //! │                                                                  │
-//! │  [3] DEDICATED OS THREADS (std::thread, Builder::new().name())  │
-//! │      • Decode thread: decode → resample → rtrb push             │
-//! │        Named "decode-{track_id}" in engine.rs                   │
-//! │        JoinHandle stored in EngineShared::decode_thread         │
+//! │  [3] DEDICATED OS THREADS (std::thread, Builder::new().name())   │
+//! │      • Decode thread: decode → resample → rtrb push              │
+//! │        Named "decode-{track_id}" in engine.rs                    │
+//! │        JoinHandle stored in EngineShared::decode_thread          │
 //! │        NOT joined during operation (blocking AudioOutput::drop)  │
-//! │      • Cover decoder: single worker thread                     │
+//! │      • Cover decoder: single worker thread                       │
 //! │        Named "cover-decoder" via ThreadManager                   │
-//! │        Processes ArtworkDecodeRequest sequentially              │
-//! │      • Each thread handles AudioOutput lifecycle (blocking)     │
-//! │      • Exactly one decode thread active at a time               │
+//! │        Processes ArtworkDecodeRequest sequentially               │
+//! │        Grid results via async_channel to spawn_future_local      │
+//! │        (rx.recv().await — receiver alive until channel closes)   │
+//! │        Column/detail results via idle_add_local polling          │
+//! │      • Each thread handles AudioOutput lifecycle (blocking)      │
+//! │      • Exactly one decode thread active at a time                │
 //! │                                                                  │
-//! │  [4] CPAL AUDIO CALLBACK (OS audio thread)                      │
-//! │      • rtrb::Consumer (lock-free pop)                           │
-//! │      • AtomicBool for flush/drain signal                        │
-//! │      • NEVER holds a Mutex — real-time safety invariant         │
+//! │  [4] CPAL AUDIO CALLBACK (OS audio thread)                       │
+//! │      • rtrb::Consumer (lock-free pop)                            │
+//! │      • AtomicBool for flush/drain signal                         │
+//! │      • NEVER holds a Mutex — real-time safety invariant          │
 //! │                                                                  │
-//! │  [5] RAYON THREAD POOL (n_cores workers)                        │
-//! │      • Parallel directory walk and metadata extraction          │
-//! │      • Runs inside spawn_blocking — intentional isolation       │
+//! │  [5] RAYON THREAD POOL (n_cores workers)                         │
+//! │      • Parallel directory walk and metadata extraction           │
+//! │      • Runs inside spawn_blocking — intentional isolation        │
 //! │                                                                  │
-//! │  [6] NOTIFY WATCHER (OS thread, from notify crate)              │
-//! │      • Callback → tokio::sync::mpsc::unbounded                  │
-//! │      • Consumed by a tokio::spawn watcher task                  │
+//! │  [6] NOTIFY WATCHER (OS thread, from notify crate)               │
+//! │      • Callback → tokio::sync::mpsc::unbounded                   │
+//! │      • Consumed by a tokio::spawn watcher task                   │
 //! │                                                                  │
 //! └──────────────────────────────────────────────────────────────────┘
 //! ```
