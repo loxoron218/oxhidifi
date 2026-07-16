@@ -269,7 +269,11 @@ pub async fn run_application() -> Result<()> {
     let (scan_event_tx, scan_event_rx) = unbounded();
     let (toast_tx, toast_rx) = unbounded();
 
-    let scanner = Arc::new(FsScanner::new(Arc::clone(&storage), scan_event_tx.clone()));
+    let scanner = Arc::new(FsScanner::new(
+        Arc::clone(&storage),
+        scan_event_tx.clone(),
+        4,
+    ));
 
     if let Ok((watcher, watcher_rx)) = LibraryWatcher::new(Arc::clone(&scanner)) {
         spawn_watcher_loop(watcher, watcher_rx);
@@ -389,6 +393,7 @@ mod tests {
                 Arc::new(FsScanner::new(
                     scanner_storage,
                     channels.scan_event_tx.clone(),
+                    4,
                 )),
                 channels,
                 broadcast,

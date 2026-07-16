@@ -27,6 +27,7 @@ use {
 use crate::playback::{
     PlaybackError,
     decoder::{DecodedSamples, Decoder},
+    gapless::GaplessTransitioner,
     output::AudioOutput,
     queue::PlaybackQueue,
     resampler::AudioResampler,
@@ -40,6 +41,13 @@ enum DecodeCommand {
     Pause,
     /// Resume the audio output stream.
     Resume,
+    /// Pre-buffer the next track for gapless transition.
+    PreloadNext {
+        /// ID of the next track.
+        track_id: i64,
+        /// File path of the next track.
+        path: PathBuf,
+    },
 }
 
 /// Initialised decoder and resampler context for a decode loop.
@@ -50,8 +58,6 @@ struct DecoderCtx {
     track_sample_rate: u32,
     /// Number of channels in the source track.
     src_channels: usize,
-    /// Number of channels the output expects.
-    dst_channels: usize,
     /// Optional resampler for sample-rate conversion.
     resampler: Option<AudioResampler>,
 }
@@ -78,6 +84,8 @@ struct EngineShared {
     track_sample_rate: Mutex<u32>,
     /// Shared flag set when the audio device is lost.
     device_lost: Arc<AtomicBool>,
+    /// Gapless transitioner for seamless track transitions.
+    transitioner: Mutex<GaplessTransitioner>,
 }
 
 impl EngineShared {
@@ -116,6 +124,7 @@ impl Default for EngineShared {
             device_sample_rate: Mutex::new(44100),
             track_sample_rate: Mutex::new(44100),
             device_lost: Arc::new(AtomicBool::new(false)),
+            transitioner: Mutex::new(GaplessTransitioner::new()),
         }
     }
 }
@@ -127,6 +136,24 @@ pub enum GaplessMode {
     Enabled,
     /// Gapless playback is disabled.
     Disabled,
+}
+
+/// Mutable decode loop state updated by gapless transitions.
+struct LoopCtx {
+    /// Active audio decoder.
+    decoder: Decoder,
+    /// Optional resampler for sample-rate conversion.
+    resampler: Option<AudioResampler>,
+    /// Sample rate of the current track.
+    track_sample_rate: u32,
+    /// Number of source channels in the current track.
+    src_channels: usize,
+    /// Track sample rate as f64 (for elapsed time calculation).
+    track_sample_rate_f64: f64,
+    /// Elapsed playback time in seconds.
+    elapsed: f64,
+    /// Last tick time for position update throttling.
+    last_tick: Instant,
 }
 
 /// Mute state.
@@ -295,6 +322,18 @@ impl PlaybackEngine {
             Err(e) => {
                 error!(target: "playback::engine", error = %e, "Failed to spawn decode thread");
             }
+        }
+
+        let upcoming = self.shared.queue.upcoming();
+        if let Some(next_id) = upcoming.first().copied()
+            && let Some(next_path) = self.shared.track_paths.lock().get(&next_id).cloned()
+            && let Some(tx) = self.shared.decode_tx.lock().as_ref()
+            && let Err(e) = tx.try_send(DecodeCommand::PreloadNext {
+                track_id: next_id,
+                path: next_path,
+            })
+        {
+            warn!(target: "playback::engine", error = %e, "Failed to send PreloadNext command");
         }
     }
 
@@ -844,6 +883,55 @@ fn process_resampler(
     None
 }
 
+/// Process one decoded frame from the decoder.
+///
+/// Handles empty batches (track finished with possible gapless transition),
+/// normal decoded batches, and decode errors. Returns `true` if the caller
+/// should exit the decode loop.
+fn process_decode_frame(
+    ctx: &mut LoopCtx,
+    engine_shared: &Arc<EngineShared>,
+    event_to_send: &mut Option<PlaybackEvent>,
+    producer: &mut Producer<f32>,
+    output_cfg: OutputConfig,
+    track_id: i64,
+) -> bool {
+    let volume = FromPrimitive::from_f64(read_volume(engine_shared)).unwrap_or(0.0);
+    match ctx.decoder.decode_next() {
+        Ok(batch)
+            if batch.samples.is_empty()
+                && handle_empty_batch(
+                    engine_shared,
+                    ctx,
+                    event_to_send,
+                    output_cfg.channels as usize,
+                    output_cfg.device_sample_rate,
+                ) =>
+        {
+            false
+        }
+        Ok(batch) if batch.samples.is_empty() => {
+            *event_to_send = Some(PlaybackEvent::TrackFinished { track_id });
+            true
+        }
+        Ok(batch) => {
+            let frame_count =
+                u32::try_from(batch.samples.len() / ctx.src_channels).unwrap_or(u32::MAX);
+            ctx.elapsed += f64::from(frame_count) / ctx.track_sample_rate_f64;
+            engine_shared.update_elapsed(ctx.elapsed, &mut ctx.last_tick);
+            let samples = maybe_downmix(batch, ctx.src_channels, output_cfg.channels as usize);
+            *event_to_send = process_decoded_batch(&samples, &mut ctx.resampler, producer, volume);
+            event_to_send.is_some() || producer.is_abandoned()
+        }
+        Err(e) => {
+            *event_to_send = Some(PlaybackEvent::Error {
+                error: e.to_string(),
+            });
+            true
+        }
+    }
+}
+
 /// Processes a decoded batch, optionally resampling, and returns an event if
 /// an error occurred.
 fn process_decoded_batch(
@@ -861,6 +949,23 @@ fn process_decoded_batch(
     error.map(|e| PlaybackEvent::Error { error: e })
 }
 
+/// Send a `TrackStarted` event and attempt to preload the next track.
+fn send_track_started_and_preload_next(engine_shared: &Arc<EngineShared>, next_id: i64) {
+    engine_shared.send_event(&PlaybackEvent::TrackStarted { track_id: next_id });
+
+    let upcoming = engine_shared.queue.upcoming();
+    if let Some(next_next_id) = upcoming.first().copied()
+        && let Some(next_next_path) = engine_shared.track_paths.lock().get(&next_next_id).cloned()
+        && let Some(tx) = engine_shared.decode_tx.lock().as_ref()
+        && let Err(e) = tx.try_send(DecodeCommand::PreloadNext {
+            track_id: next_next_id,
+            path: next_next_path,
+        })
+    {
+        warn!(target: "playback::engine", error = %e, "Failed to send PreloadNext command");
+    }
+}
+
 /// Try to advance to the next track in the queue after a track finishes.
 ///
 /// Advances the queue, updates state, and spawns a new decode thread
@@ -872,14 +977,10 @@ fn try_auto_advance(
 ) -> bool {
     let next_track = match &event_to_send {
         Some(PlaybackEvent::TrackFinished { .. }) => {
-            let upcoming = engine_shared.queue.upcoming();
-            upcoming.get(1).copied().and_then(|next_id| {
-                engine_shared
-                    .track_paths
-                    .lock()
-                    .get(&next_id)
-                    .cloned()
-                    .map(|path| (next_id, path))
+            let next_id = engine_shared.queue.next();
+            next_id.and_then(|next_id| {
+                let path = engine_shared.track_paths.lock().get(&next_id).cloned()?;
+                Some((next_id, path))
             })
         }
         _ => None,
@@ -889,8 +990,6 @@ fn try_auto_advance(
     };
 
     *engine_shared.decode_tx.lock() = None;
-
-    let _next_track_id = engine_shared.queue.next();
 
     {
         let mut state = engine_shared.state.lock();
@@ -914,7 +1013,7 @@ fn try_auto_advance(
     if let Some(tf_event) = event_to_send.take() {
         engine_shared.send_event(&tf_event);
     }
-    engine_shared.send_event(&PlaybackEvent::TrackStarted { track_id: next_id });
+    send_track_started_and_preload_next(engine_shared, next_id);
 
     let engine_state = Arc::clone(engine_shared);
     let thread_name = format!("decode-{next_id}");
@@ -982,7 +1081,7 @@ fn init_decoder(
     };
     let track_sample_rate = decoder.params().sample_rate;
     let src_channels = decoder.params().channels as usize;
-    let dst_channels = output.channels as usize;
+    let out_channels = output.channels as usize;
 
     *engine_shared.track_sample_rate.lock() = track_sample_rate;
 
@@ -999,7 +1098,7 @@ fn init_decoder(
             track_sample_rate,
             output.device_sample_rate,
             1024,
-            dst_channels,
+            out_channels,
         ) {
             Ok(r) => Some(r),
             Err(e) => {
@@ -1016,7 +1115,6 @@ fn init_decoder(
         decoder,
         track_sample_rate,
         src_channels,
-        dst_channels,
         resampler,
     })
 }
@@ -1078,20 +1176,25 @@ fn run_decode_loop(
     output: OutputConfig,
 ) {
     let Some(DecoderCtx {
-        mut decoder,
+        decoder,
         track_sample_rate,
         src_channels,
-        dst_channels,
-        mut resampler,
+        resampler,
     }) = init_decoder(path, engine_shared, output)
     else {
         return;
     };
 
     let mut event_to_send = None;
-    let mut elapsed: f64 = 0.0;
-    let track_sample_rate_f64 = f64::from(track_sample_rate);
-    let mut last_tick = Instant::now();
+    let mut ctx = LoopCtx {
+        decoder,
+        resampler,
+        track_sample_rate,
+        src_channels,
+        track_sample_rate_f64: f64::from(track_sample_rate),
+        elapsed: 0.0,
+        last_tick: Instant::now(),
+    };
 
     loop {
         if engine_shared.device_lost.load(Relaxed) {
@@ -1102,23 +1205,8 @@ fn run_decode_loop(
             }
         }
 
-        let volume = read_volume(engine_shared);
-
-        match cmd_rx.try_recv() {
-            Err(Disconnected) => break,
-            Ok(DecodeCommand::Seek(pos)) => {
-                engine_shared.output.lock().as_ref().map(AudioOutput::flush);
-                let actual = decoder.seek_to(pos).unwrap_or(pos);
-                elapsed = actual;
-                engine_shared.state.lock().elapsed_seconds = actual;
-            }
-            Ok(DecodeCommand::Pause) => {
-                engine_shared.output.lock().as_ref().map(AudioOutput::pause);
-            }
-            Ok(DecodeCommand::Resume) => {
-                engine_shared.output.lock().as_ref().map(AudioOutput::play);
-            }
-            Err(Empty) => {}
+        if handle_decode_cmd(&mut cmd_rx, engine_shared, &mut ctx) {
+            break;
         }
 
         if engine_shared.state.lock().status == PlaybackStatus::Paused {
@@ -1126,28 +1214,14 @@ fn run_decode_loop(
             continue;
         }
 
-        match decoder.decode_next() {
-            Ok(batch) if batch.samples.is_empty() => {
-                event_to_send = Some(PlaybackEvent::TrackFinished { track_id });
-                break;
-            }
-            Ok(batch) => {
-                let frame_count =
-                    u32::try_from(batch.samples.len() / src_channels).unwrap_or(u32::MAX);
-                elapsed += f64::from(frame_count) / track_sample_rate_f64;
-                engine_shared.update_elapsed(elapsed, &mut last_tick);
-                let samples = maybe_downmix(batch, src_channels, dst_channels);
-                let vol = FromPrimitive::from_f64(volume).unwrap_or(0.0);
-                event_to_send = process_decoded_batch(&samples, &mut resampler, &mut producer, vol);
-            }
-            Err(e) => {
-                event_to_send = Some(PlaybackEvent::Error {
-                    error: e.to_string(),
-                });
-            }
-        }
-
-        if event_to_send.is_some() || producer.is_abandoned() {
+        if process_decode_frame(
+            &mut ctx,
+            engine_shared,
+            &mut event_to_send,
+            &mut producer,
+            output,
+            track_id,
+        ) {
             break;
         }
     }
@@ -1156,6 +1230,113 @@ fn run_decode_loop(
         return;
     }
     finalize_track(engine_shared, &mut event_to_send);
+}
+
+/// Handle a decode command from the control channel.
+///
+/// Returns `true` if the caller should exit the decode loop
+/// (channel disconnected or error).
+fn handle_decode_cmd(
+    cmd_rx: &mut MpscReceiver<DecodeCommand>,
+    engine_shared: &Arc<EngineShared>,
+    ctx: &mut LoopCtx,
+) -> bool {
+    match cmd_rx.try_recv() {
+        Err(Disconnected) => true,
+        Ok(DecodeCommand::Seek(pos)) => {
+            engine_shared.output.lock().as_ref().map(AudioOutput::flush);
+            let actual = ctx.decoder.seek_to(pos).unwrap_or(pos);
+            ctx.elapsed = actual;
+            engine_shared.state.lock().elapsed_seconds = actual;
+            false
+        }
+        Ok(DecodeCommand::Pause) => {
+            engine_shared.output.lock().as_ref().map(AudioOutput::pause);
+            false
+        }
+        Ok(DecodeCommand::Resume) => {
+            engine_shared.output.lock().as_ref().map(AudioOutput::play);
+            false
+        }
+        Ok(DecodeCommand::PreloadNext {
+            track_id: next_id,
+            path: next_path,
+            ..
+        }) => {
+            let current = engine_shared.state.lock().current_track_id;
+            if let Some(current) = current
+                && let Err(e) = engine_shared
+                    .transitioner
+                    .lock()
+                    .prebuffer_next(current, next_id, next_path)
+            {
+                warn!(target: "playback::engine", error = %e, "Failed to pre-buffer next track");
+            }
+            false
+        }
+        Err(Empty) => false,
+    }
+}
+
+/// Handle an empty decode batch (track finished).
+///
+/// Attempts a gapless transition. Returns `true` if a transition was applied
+/// and the decode loop should continue. Returns `false` if no pre-buffered
+/// track is available.
+fn handle_empty_batch(
+    engine_shared: &Arc<EngineShared>,
+    ctx: &mut LoopCtx,
+    event_to_send: &mut Option<PlaybackEvent>,
+    dst_channels: usize,
+    device_sample_rate: u32,
+) -> bool {
+    let mut transitioner = engine_shared.transitioner.lock();
+    let next_id = transitioner.next_track_id();
+    let next_decoder = transitioner.transition();
+    drop(transitioner);
+
+    let (Some(next_id), Some(next_decoder)) = (next_id, next_decoder) else {
+        return false;
+    };
+
+    let params = next_decoder.params();
+    let next_sr = params.sample_rate;
+
+    if let Some(advanced_id) = engine_shared.queue.next() {
+        debug_assert_eq!(advanced_id, next_id, "Queue advanced to unexpected track");
+    }
+    {
+        let mut state = engine_shared.state.lock();
+        state.current_track_id = Some(next_id);
+        let path = engine_shared.track_paths.lock().get(&next_id).cloned();
+        state.current_path = path;
+        state.elapsed_seconds = 0.0;
+        state.duration_seconds = params.duration_seconds;
+    }
+    *engine_shared.track_sample_rate.lock() = next_sr;
+
+    if next_sr != ctx.track_sample_rate {
+        match AudioResampler::new(next_sr, device_sample_rate, 1024, dst_channels) {
+            Ok(r) => ctx.resampler = Some(r),
+            Err(e) => {
+                *event_to_send = Some(PlaybackEvent::Error {
+                    error: format!("Resampler reconfiguration failed: {e}"),
+                });
+                return false;
+            }
+        }
+    }
+
+    ctx.decoder = next_decoder;
+    ctx.track_sample_rate = next_sr;
+    ctx.src_channels = params.channels as usize;
+    ctx.elapsed = 0.0;
+    ctx.last_tick = Instant::now();
+    ctx.track_sample_rate_f64 = f64::from(next_sr);
+
+    send_track_started_and_preload_next(engine_shared, next_id);
+
+    true
 }
 
 /// Create a new resampler for a given sample rate pair.

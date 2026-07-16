@@ -4,6 +4,7 @@
 //! extracting metadata, deduplicating tracks, and persisting results to storage.
 
 use std::{
+    cmp::max,
     collections::HashMap,
     fs::{DirEntry, read_dir},
     path::{Path, PathBuf},
@@ -13,7 +14,10 @@ use std::{
 
 use {
     async_channel::Sender,
-    rayon::prelude::{IntoParallelRefIterator, ParallelIterator},
+    rayon::{
+        iter::IndexedParallelIterator,
+        prelude::{IntoParallelRefIterator, ParallelIterator},
+    },
     tokio::{
         sync::watch::{Receiver, Sender as TokioSender, channel},
         task::{JoinError, spawn_blocking},
@@ -24,7 +28,7 @@ use {
 use crate::{
     library::{
         artwork::{ArtworkError, cache_artwork, extract_artwork},
-        dedup::is_supported_audio_format,
+        dedup::{compute_content_hash, is_supported_audio_format},
         metadata::{AudioMetadata, extract_metadata, metadata_fingerprint},
         scanner::ScanEvent::{ScanCompleted, ScanProgress, ScanStarted},
     },
@@ -35,6 +39,8 @@ use crate::{
 pub struct FsScanner<S: Storage> {
     /// Storage backend for persistence.
     storage: Arc<S>,
+    /// Maximum number of concurrent metadata extractions.
+    max_concurrent: usize,
     /// Cancellation signal sender.
     cancel_tx: TokioSender<bool>,
     /// Cancellation signal receiver (cloned into scan tasks).
@@ -45,16 +51,19 @@ pub struct FsScanner<S: Storage> {
 
 impl<S: Storage> FsScanner<S> {
     /// Walk a directory and extract metadata from all audio files found.
-    fn walk_and_extract(dir: &Path) -> (Vec<(PathBuf, AudioMetadata)>, u32) {
+    fn walk_and_extract(dir: &Path, max_concurrent: usize) -> (Vec<(PathBuf, AudioMetadata)>, u32) {
         let files = Self::walk_directory_parallel(dir);
         let files_found = u32::try_from(files.len()).unwrap_or(0);
 
+        let chunk_size = max(1, files.len() / max_concurrent);
+
         let extracted: Vec<_> = files
             .par_iter()
+            .with_min_len(chunk_size)
             .filter_map(|path| match extract_metadata(path) {
-                Ok(metadata) => Some((path.clone(), metadata)),
+                Ok(m) => Some((path.clone(), m)),
                 Err(e) => {
-                    warn!(path = %path.display(), error = %e, "Failed to extract metadata");
+                    warn!(error = %e, path = %path.display(), "Failed to extract metadata");
                     None
                 }
             })
@@ -71,10 +80,11 @@ impl<S: Storage> FsScanner<S> {
 
     /// Create a new filesystem scanner.
     #[must_use]
-    pub fn new(storage: Arc<S>, scan_event_tx: Sender<ScanEvent>) -> Self {
+    pub fn new(storage: Arc<S>, scan_event_tx: Sender<ScanEvent>, max_concurrent: usize) -> Self {
         let (cancel_tx, cancel_rx) = channel(false);
         Self {
             storage,
+            max_concurrent,
             cancel_tx,
             cancel_rx,
             scan_event_tx,
@@ -137,6 +147,18 @@ impl<S: Storage> FsScanner<S> {
         }
     }
 
+    /// Check if a file should be skipped based on content hash.
+    ///
+    /// # Errors
+    ///
+    /// Returns a storage error if the database lookup fails.
+    async fn check_hash_duplicate(&self, hash: &str) -> Result<bool, StorageError> {
+        match self.storage.find_by_hash(hash).await {
+            Ok(tracks) => Ok(!tracks.is_empty()),
+            Err(e) => Err(e),
+        }
+    }
+
     /// Check if a file should be skipped based on metadata fingerprint.
     ///
     /// # Errors
@@ -179,8 +201,9 @@ impl<S: Storage> FsScanner<S> {
         let start = Instant::now();
 
         let dir_buf = dir.to_path_buf();
+        let max_concurrent = self.max_concurrent;
         let (extracted, files_found) =
-            match spawn_blocking(move || Self::walk_and_extract(&dir_buf)).await {
+            match spawn_blocking(move || Self::walk_and_extract(&dir_buf, max_concurrent)).await {
                 Ok(v) => v,
                 Err(e) => Self::on_walk_panic(&e),
             };
@@ -387,10 +410,11 @@ impl<S: Storage> FsScanner<S> {
         metadata: &AudioMetadata,
         album_id: i64,
         artist_id: i64,
+        content_hash: Option<String>,
     ) -> TrackAudio {
         TrackAudio {
             file_path: path.to_string_lossy().to_string(),
-            content_hash: None,
+            content_hash,
             format: metadata.codec.to_uppercase(),
             sample_rate: metadata.sample_rate,
             bit_depth: metadata.bit_depth,
@@ -403,6 +427,40 @@ impl<S: Storage> FsScanner<S> {
             file_size: metadata.file_size,
             last_modified: utc_now_rfc3339(),
         }
+    }
+
+    /// Compute content hash and check for hash-based duplicates.
+    ///
+    /// # Errors
+    ///
+    /// Returns `SkipReason::CorruptFile` if hashing fails, or
+    /// `SkipReason::DuplicateByHash` if a duplicate is found.
+    async fn compute_and_check_hash(&self, path: &Path) -> Result<String, SkipReason> {
+        let path_buf = path.to_path_buf();
+        let content_hash = match spawn_blocking(move || compute_content_hash(&path_buf)).await {
+            Ok(Ok(hash)) => hash,
+            Ok(Err(e)) => {
+                warn!(error = %e, path = %path.display(), "Failed to compute content hash");
+                return Err(SkipReason::CorruptFile);
+            }
+            Err(e) => {
+                warn!(error = %e, "Hash computation task panicked");
+                return Err(SkipReason::CorruptFile);
+            }
+        };
+
+        if self
+            .check_hash_duplicate(&content_hash)
+            .await
+            .map_err(|e| {
+                warn!(error = %e, hash = %content_hash, "Failed to check hash duplicate");
+                SkipReason::CorruptFile
+            })?
+        {
+            return Err(SkipReason::DuplicateByHash);
+        }
+
+        Ok(content_hash)
     }
 
     /// Process a file using cached artist/album lookups to avoid repeated DB queries.
@@ -445,6 +503,8 @@ impl<S: Storage> FsScanner<S> {
             return Err(SkipReason::DuplicateByFingerprint);
         }
 
+        let content_hash = self.compute_and_check_hash(path).await?;
+
         let album_artist_name = metadata
             .album_artist
             .as_deref()
@@ -472,7 +532,13 @@ impl<S: Storage> FsScanner<S> {
             track_number: metadata.track_number,
             disc_number: metadata.disc_number,
             duration: metadata.duration,
-            audio: Self::build_track_audio(path, &metadata, album_id, track_artist_id),
+            audio: Self::build_track_audio(
+                path,
+                &metadata,
+                album_id,
+                track_artist_id,
+                Some(content_hash.clone()),
+            ),
         };
 
         let track_id = self.storage.insert_track(track).await.map_err(|e| {
@@ -484,7 +550,7 @@ impl<S: Storage> FsScanner<S> {
             id: track_id,
             metadata,
             path: path.to_path_buf(),
-            content_hash: None,
+            content_hash: Some(content_hash),
             artist_id: Some(track_artist_id),
             album_id: Some(album_id),
         };
