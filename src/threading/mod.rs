@@ -9,14 +9,14 @@
 //! │                                                                  │
 //! │  [1] MAIN THREAD (GLib Main Context)                             │
 //! │      • GTK/Libadwaita rendering and input handling               │
-//! │      • glib::spawn_future_local — async tasks (29 calls)         │
-//! │      • MainContext::default().spawn_local — async tasks (7)      │
-//! │      • glib::idle_add_local — deferred UI updates (11 calls)     │
+//! │      • glib::spawn_future_local — async tasks                    │
+//! │      • MainContext::default().spawn_local — async tasks          │
+//! │      • glib::idle_add_local — deferred UI updates                │
 //! │                                                                  │
 //! │  [2] TOKIO RUNTIME (multi-threaded, n_cores workers)             │
-//! │      • tokio::spawn — async tasks (6 calls): metadata, scanning, │
+//! │      • tokio::spawn — async tasks: metadata, scanning,           │
 //! │        events, watcher consumer                                  │
-//! │      • tokio::task::spawn_blocking — blocking I/O (7 calls),     │
+//! │      • tokio::task::spawn_blocking — blocking I/O,               │
 //! │        device enum, memory sampling, file writes                 │
 //! │      • SQLx queries (all .await on storage)                      │
 //! │                                                                  │
