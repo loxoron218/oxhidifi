@@ -23,7 +23,11 @@ use crate::{
     app::AppState,
     playback::{
         engine::PlaybackController,
-        output::{DeviceInfo, list_output_devices},
+        output::{
+            DeviceInfo,
+            OutputMode::{self, BitPerfect, Resampled},
+            list_output_devices,
+        },
     },
     storage::{
         LibraryDirectory, Storage,
@@ -162,6 +166,13 @@ async fn save_tab_setting(state: Arc<AppState>, tab: ActiveTab) {
     }
 }
 
+/// Persist output mode, logging on failure.
+async fn persist_output_mode(storage: Arc<SqliteStorage>, mode: OutputMode) {
+    if let Err(e) = storage.set_output_mode(mode).await {
+        warn!(error = %e, "Failed to persist output mode");
+    }
+}
+
 /// Build the Library > Directories page.
 fn build_library_page(dialog: &PreferencesDialog, state: &Arc<AppState>, parent: &Window) {
     let page = PreferencesPage::new();
@@ -250,6 +261,40 @@ fn build_audio_page(dialog: &PreferencesDialog, state: &Arc<AppState>) {
     });
 
     output_group.add(&device_combo);
+
+    let mode_model = StringList::new(&["Resampled", "BitPerfect"]);
+    let mode_combo = ComboRow::builder()
+        .title("Output Mode")
+        .subtitle(
+            "Resampled: software volume, sample rate conversion; BitPerfect: no resampling, \
+             hardware volume via ALSA mixer",
+        )
+        .model(&mode_model)
+        .build();
+    mode_combo.set_selected(match state.storage.get_output_mode() {
+        Resampled => 0,
+        BitPerfect => 1,
+    });
+
+    let state_mode = Arc::clone(state);
+    mode_combo.connect_selected_notify(move |combo| {
+        let mode = if combo.selected() == 0 {
+            Resampled
+        } else {
+            BitPerfect
+        };
+        info!(
+            target: "ui::settings",
+            output_mode = ?mode,
+            "Output mode changed",
+        );
+        if let Err(e) = state_mode.playback.set_output_mode(mode) {
+            warn!(error = %e, "Failed to set output mode");
+        }
+        spawn_future_local(persist_output_mode(Arc::clone(&state_mode.storage), mode));
+    });
+
+    output_group.add(&mode_combo);
     page.add(&output_group);
 
     let playback_group = PreferencesGroup::new();

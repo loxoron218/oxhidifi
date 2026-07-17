@@ -4,7 +4,7 @@ use std::sync::{Arc, atomic::Ordering::Release};
 
 use {
     libadwaita::{
-        glib::Propagation::Proceed,
+        glib::{Propagation::Proceed, spawn_future_local},
         gtk::{
             Align::{Center, End, Start},
             Box, Button, GestureClick, Label,
@@ -15,12 +15,16 @@ use {
         },
         prelude::{AccessibleExtManual, BoxExt, ButtonExt, ScaleExt, WidgetExt},
     },
-    tracing::error,
+    tracing::{error, warn},
 };
 
 use crate::{
     app::AppState,
-    playback::engine::{MuteState::Unmuted, PlaybackController, PlaybackEngine},
+    playback::{
+        engine::{MuteState::Unmuted, PlaybackController, PlaybackEngine},
+        output::OutputMode::{self, BitPerfect, Resampled},
+    },
+    storage::database::SqliteStorage,
     ui::player::{panel::format_time, queue::build_queue_view},
 };
 
@@ -168,9 +172,19 @@ pub fn build_seek_section(state: &Arc<AppState>) -> (Box, Scale, Label, Label) {
     (seek_box, seek_scale, current_time, total_time)
 }
 
-/// Build the volume control section.
+/// Persist a volume change to the storage backend.
+async fn persist_volume(storage: Arc<SqliteStorage>, volume: f64) {
+    if let Err(e) = storage.set_volume(volume).await {
+        warn!(error = %e, "Failed to persist volume");
+    }
+}
+
+/// Build the volume control section with an output-mode toggle button.
+///
+/// Returns the container box, the mode toggle button, and the volume scale
+/// (for event-driven visual updates by the panel).
 #[must_use]
-pub fn build_volume_control(state: &Arc<AppState>) -> Box {
+pub fn build_volume_control(state: &Arc<AppState>) -> (Box, Button, Scale) {
     let vol_box = Box::builder().orientation(Horizontal).spacing(6).build();
 
     let mute_button = Button::builder()
@@ -196,11 +210,12 @@ pub fn build_volume_control(state: &Arc<AppState>) -> Box {
     });
     vol_box.append(&mute_button);
 
+    let initial_volume = state.playback.state().volume;
     let volume_scale = Scale::with_range(Horizontal, 0.0, 1.0, 0.01);
+    volume_scale.set_value(initial_volume);
     volume_scale.set_draw_value(false);
     volume_scale.set_hexpand(true);
     volume_scale.set_can_focus(true);
-    volume_scale.set_tooltip_text(Some("Adjust volume"));
     let state_vol = Arc::clone(state);
     let vol_ref = volume_scale.clone();
     volume_scale.connect_value_changed(move |_| {
@@ -208,10 +223,67 @@ pub fn build_volume_control(state: &Arc<AppState>) -> Box {
         if let Err(e) = state_vol.playback.set_volume(value) {
             error!(error = %e, "Failed to set volume");
         }
+        spawn_future_local(persist_volume(Arc::clone(&state_vol.storage), value));
     });
     vol_box.append(&volume_scale);
 
-    vol_box
+    let initial_mode = state.playback.state().output_mode;
+    let mode_button = Button::builder()
+        .icon_name(initial_mode.icon_name())
+        .css_classes(["flat", "caption"])
+        .tooltip_text(mode_button_tooltip(initial_mode))
+        .build();
+    let state_mode = Arc::clone(state);
+    let scale_for_click = volume_scale.clone();
+    mode_button.connect_clicked(move |btn| {
+        let current_mode = state_mode.playback.state().output_mode;
+        let new_mode = match current_mode {
+            BitPerfect => Resampled,
+            Resampled => BitPerfect,
+        };
+        if let Err(e) = state_mode.playback.set_output_mode(new_mode) {
+            error!(error = %e, "Failed to toggle output mode");
+        }
+        btn.set_icon_name(new_mode.icon_name());
+        btn.set_tooltip_text(Some(mode_button_tooltip(new_mode)));
+        update_volume_scale_visual(&scale_for_click, new_mode);
+    });
+    vol_box.append(&mode_button);
+
+    update_volume_scale_visual(&volume_scale, initial_mode);
+
+    (vol_box, mode_button, volume_scale)
+}
+
+/// Update the volume scale's visual state based on the output mode.
+///
+/// In bit-perfect mode the scale is greyed out and interaction is
+/// prevented — the volume is controlled via the ALSA hardware mixer.
+pub fn update_volume_scale_visual(scale: &Scale, mode: OutputMode) {
+    match mode {
+        Resampled => {
+            scale.set_sensitive(true);
+            scale.set_tooltip_text(Some("Adjust volume"));
+        }
+        BitPerfect => {
+            scale.set_sensitive(false);
+            scale.set_tooltip_text(Some(
+                "Volume controlled via hardware mixer \u{2014} switch to Resampled for software \
+                 volume",
+            ));
+        }
+    }
+}
+
+/// Tooltip text for the mode toggle button.
+#[must_use]
+pub fn mode_button_tooltip(mode: OutputMode) -> &'static str {
+    match mode {
+        BitPerfect => {
+            "Bit-Perfect mode \u{2014} no software volume scaling, hardware volume via ALSA mixer"
+        }
+        Resampled => "Resampled mode \u{2014} software volume scaling, sample rate conversion",
+    }
 }
 
 /// Build the queue section with label and queue view.

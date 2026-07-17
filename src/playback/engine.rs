@@ -14,7 +14,6 @@ use std::{
 
 use {
     async_channel::{Receiver, Sender, unbounded},
-    num_traits::cast::FromPrimitive,
     parking_lot::Mutex,
     rtrb::{Producer, PushError::Full},
     tokio::sync::mpsc::{
@@ -28,7 +27,10 @@ use crate::playback::{
     PlaybackError,
     decoder::{DecodedSamples, Decoder},
     gapless::GaplessTransitioner,
-    output::AudioOutput,
+    output::{
+        AudioOutput,
+        OutputMode::{self, BitPerfect, Resampled},
+    },
     queue::PlaybackQueue,
     resampler::AudioResampler,
 };
@@ -237,6 +239,13 @@ pub trait PlaybackController: Send + 'static {
 
     /// Get the current playback state.
     fn state(&self) -> PlaybackState;
+
+    /// Set the output mode (resampled vs bit-perfect).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PlaybackError`] on failure.
+    fn set_output_mode(&self, mode: OutputMode) -> Result<(), PlaybackError>;
 
     /// Enable or disable gapless playback.
     ///
@@ -544,6 +553,14 @@ impl PlaybackController for PlaybackEngine {
             volume = clamped,
             "Volume changed",
         );
+        let guard = self.shared.output.lock();
+        if let Some(output) = guard.as_ref() {
+            match output.mode() {
+                BitPerfect => output.set_hardware_volume(clamped),
+                Resampled => output.set_volume_atomic(clamped),
+            }
+        }
+        drop(guard);
         self.shared.state.lock().volume = clamped;
         self.shared
             .send_event(&PlaybackEvent::VolumeChanged { volume: clamped });
@@ -551,11 +568,43 @@ impl PlaybackController for PlaybackEngine {
     }
 
     fn set_muted(&self, muted: bool) -> Result<(), PlaybackError> {
-        self.shared.state.lock().muted = if muted {
+        let vol = self.shared.state.lock().volume;
+        let new_state = if muted {
             MuteState::Muted
         } else {
             MuteState::Unmuted
         };
+        let hw_vol = if muted { 0.0 } else { vol };
+        let guard = self.shared.output.lock();
+        if let Some(output) = guard.as_ref() {
+            match output.mode() {
+                BitPerfect => output.set_hardware_volume(hw_vol),
+                Resampled => output.set_volume_atomic(hw_vol),
+            }
+        }
+        drop(guard);
+        self.shared.state.lock().muted = new_state;
+        Ok(())
+    }
+
+    fn set_output_mode(&self, mode: OutputMode) -> Result<(), PlaybackError> {
+        info!(
+            target: "playback::engine",
+            output_mode = ?mode,
+            "Output mode changed",
+        );
+
+        if let Some(output) = self.shared.output.lock().as_mut() {
+            output.set_mode(mode);
+            let current_vol = self.shared.state.lock().volume;
+            match mode {
+                Resampled => output.set_volume_atomic(current_vol),
+                BitPerfect => output.set_hardware_volume(current_vol),
+            }
+        }
+        self.shared.state.lock().output_mode = mode;
+        self.shared
+            .send_event(&PlaybackEvent::OutputModeChanged { mode });
         Ok(())
     }
 
@@ -632,6 +681,11 @@ pub enum PlaybackEvent {
         /// New volume level.
         volume: f64,
     },
+    /// Output mode changed (resampled / bit-perfect).
+    OutputModeChanged {
+        /// New output mode.
+        mode: OutputMode,
+    },
     /// Audio device was lost during playback.
     DeviceLost {
         /// Error description.
@@ -682,6 +736,8 @@ pub struct PlaybackState {
     pub duration_seconds: f64,
     /// Gapless playback mode.
     pub gapless_mode: GaplessMode,
+    /// Output mode: resampled (software volume) or bit-perfect (hardware volume).
+    pub output_mode: OutputMode,
 }
 
 impl Default for PlaybackState {
@@ -696,6 +752,7 @@ impl Default for PlaybackState {
             elapsed_seconds: 0.0,
             duration_seconds: 0.0,
             gapless_mode: GaplessMode::Enabled,
+            output_mode: Resampled,
         }
     }
 }
@@ -719,16 +776,6 @@ pub trait TrackPathResolver: Send + Sync + 'static {
     ///
     /// Returns [`PlaybackError`] if the track ID cannot be resolved.
     fn resolve(&self, track_id: i64) -> Result<PathBuf, PlaybackError>;
-}
-
-/// Read the current volume from shared state.
-fn read_volume(shared: &EngineShared) -> f64 {
-    let state = shared.state.lock();
-    if state.muted == MuteState::Muted {
-        0.0
-    } else {
-        state.volume
-    }
 }
 
 /// Send an error event to all subscribers.
@@ -759,7 +806,17 @@ fn reconnect_device(engine_shared: &Arc<EngineShared>) -> Result<Producer<f32>, 
 
     let ring_capacity = 48000 * 2;
     match AudioOutput::open(ring_capacity, &engine_shared.device_lost) {
-        Ok((new_output, new_producer)) => {
+        Ok((mut new_output, new_producer)) => {
+            let state = engine_shared.state.lock();
+            let current_vol = state.volume;
+            let mode = state.output_mode;
+            drop(state);
+            if mode == BitPerfect {
+                new_output.set_mode(mode);
+                new_output.set_hardware_volume(current_vol);
+            } else {
+                new_output.set_volume_atomic(current_vol);
+            }
             *engine_shared.device_sample_rate.lock() = new_output.sample_rate();
             *engine_shared.output.lock() = Some(new_output);
             info!(target: "playback::engine", "Audio device reconnected, resuming playback");
@@ -850,14 +907,17 @@ fn push_sample(sample: f32, producer: &mut Producer<f32>) -> bool {
     }
 }
 
-/// Push interleaved f32 samples into the ring buffer with volume scaling.
+/// Push interleaved f32 samples into the ring buffer.
+///
+/// Volume scaling is now handled by the audio callback via an atomic,
+/// so samples pass through unchanged here.
 ///
 /// Blocks by yielding the thread when the ring buffer is full, preventing
 /// sample loss and throttling the decode loop to real-time playback rate.
 /// Returns early if the producer is abandoned (all consumers dropped).
-fn push_samples(samples: &[f32], producer: &mut Producer<f32>, volume: f32) {
+fn push_samples(samples: &[f32], producer: &mut Producer<f32>) {
     for sample in samples {
-        if !push_sample(*sample * volume, producer) {
+        if !push_sample(*sample, producer) {
             return;
         }
     }
@@ -870,12 +930,11 @@ fn process_resampler(
     r: &mut AudioResampler,
     samples: &[f32],
     producer: &mut Producer<f32>,
-    volume: f32,
 ) -> Option<String> {
     r.push_input(samples);
     while r.has_pending_output() {
         match r.process() {
-            Ok(Some(output)) => push_samples(output, producer, volume),
+            Ok(Some(output)) => push_samples(output, producer),
             Ok(None) => break,
             Err(e) => return Some(format!("Resampler error: {e}")),
         }
@@ -896,7 +955,6 @@ fn process_decode_frame(
     output_cfg: OutputConfig,
     track_id: i64,
 ) -> bool {
-    let volume = FromPrimitive::from_f64(read_volume(engine_shared)).unwrap_or(0.0);
     match ctx.decoder.decode_next() {
         Ok(batch)
             if batch.samples.is_empty()
@@ -920,7 +978,7 @@ fn process_decode_frame(
             ctx.elapsed += f64::from(frame_count) / ctx.track_sample_rate_f64;
             engine_shared.update_elapsed(ctx.elapsed, &mut ctx.last_tick);
             let samples = maybe_downmix(batch, ctx.src_channels, output_cfg.channels as usize);
-            *event_to_send = process_decoded_batch(&samples, &mut ctx.resampler, producer, volume);
+            *event_to_send = process_decoded_batch(&samples, &mut ctx.resampler, producer);
             event_to_send.is_some() || producer.is_abandoned()
         }
         Err(e) => {
@@ -938,12 +996,11 @@ fn process_decoded_batch(
     samples: &[f32],
     resampler: &mut Option<AudioResampler>,
     producer: &mut Producer<f32>,
-    volume: f32,
 ) -> Option<PlaybackEvent> {
     let error = if let Some(r) = resampler {
-        process_resampler(r, samples, producer, volume)
+        process_resampler(r, samples, producer)
     } else {
-        push_samples(samples, producer, volume);
+        push_samples(samples, producer);
         None
     };
     error.map(|e| PlaybackEvent::Error { error: e })
@@ -1149,6 +1206,10 @@ fn init_decode_thread(
         channels: output.channels(),
     };
     *engine_shared.device_sample_rate.lock() = output_config.device_sample_rate;
+    let current_volume = engine_shared.state.lock().volume;
+    if output.mode() == Resampled {
+        output.set_volume_atomic(current_volume);
+    }
     *engine_shared.output.lock() = Some(output);
 
     run_decode_loop(

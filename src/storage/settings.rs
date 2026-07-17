@@ -12,7 +12,10 @@ use {
     },
 };
 
-use crate::app::dirs_config_home;
+use crate::{
+    app::dirs_config_home,
+    playback::output::OutputMode::{self, Resampled},
+};
 
 /// Active tab in the library view.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -167,6 +170,21 @@ impl SettingsStore {
         self.update_async(|s| s.volume = volume).await
     }
 
+    /// Get the output mode.
+    #[must_use]
+    pub fn get_output_mode(&self) -> OutputMode {
+        self.settings.output_mode
+    }
+
+    /// Set the output mode.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be written.
+    pub async fn set_output_mode_async(&mut self, mode: OutputMode) -> Result<()> {
+        self.update_async(|s| s.output_mode = mode).await
+    }
+
     /// Get read access to the underlying settings path.
     #[must_use]
     pub fn path(&self) -> &Path {
@@ -196,6 +214,8 @@ pub struct UserSettings {
     pub window_maximized: bool,
     /// Whether gapless playback is enabled.
     pub gapless_enabled: bool,
+    /// Output mode: resampled (software volume) or bit-perfect (hardware volume).
+    pub output_mode: OutputMode,
 }
 
 impl Default for UserSettings {
@@ -210,6 +230,7 @@ impl Default for UserSettings {
             window_height: 800,
             window_maximized: false,
             gapless_enabled: true,
+            output_mode: Resampled,
         }
     }
 }
@@ -255,10 +276,13 @@ mod tests {
         tempfile::tempdir,
     };
 
-    use crate::storage::settings::{
-        ActiveTab::Albums,
-        UserSettings,
-        ViewMode::{Column, Grid},
+    use crate::{
+        playback::output::OutputMode::Resampled,
+        storage::settings::{
+            ActiveTab::Albums,
+            UserSettings,
+            ViewMode::{Column, Grid},
+        },
     };
 
     #[test]
@@ -270,6 +294,7 @@ mod tests {
         assert_eq!(settings.active_tab, Albums);
         assert_eq!(settings.window_width, 1200);
         assert!(!settings.window_maximized);
+        assert_eq!(settings.output_mode, Resampled);
     }
 
     #[test]

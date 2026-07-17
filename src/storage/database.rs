@@ -13,16 +13,19 @@ use {
     tracing::info,
 };
 
-use crate::storage::{
-    Album, Artist,
-    FieldUpdate::{Set, SetNull, Skip},
-    FormatInfo, LibraryDirectory, NewAlbum, NewArtist, NewQueueEntry, NewTrack,
-    QueueContext::{self, Album as QueueAlbum, Artist as QueueArtist, Manual},
-    QueueEntry, Storage,
-    StorageError::{self, Database, InvalidPath},
-    StorageResult, Track, TrackUpdate,
-    migrations::run,
-    settings::{ActiveTab, SettingsStore, ViewMode},
+use crate::{
+    playback::output::OutputMode,
+    storage::{
+        Album, Artist,
+        FieldUpdate::{Set, SetNull, Skip},
+        FormatInfo, LibraryDirectory, NewAlbum, NewArtist, NewQueueEntry, NewTrack,
+        QueueContext::{self, Album as QueueAlbum, Artist as QueueArtist, Manual},
+        QueueEntry, Storage,
+        StorageError::{self, Database, InvalidPath},
+        StorageResult, Track, TrackUpdate,
+        migrations::run,
+        settings::{ActiveTab, SettingsStore, ViewMode},
+    },
 };
 
 /// Subquery fragment for album count and duration columns.
@@ -243,6 +246,39 @@ impl SqliteStorage {
     /// Get the volume level from settings.
     pub fn get_settings_volume(&self) -> f64 {
         self.settings.read().get_volume()
+    }
+
+    /// Set the volume level in memory and persist to disk asynchronously.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the settings cannot be saved.
+    pub async fn set_volume(&self, volume: f64) -> Result<(), StorageError> {
+        self.settings.write().update_memory(|s| s.volume = volume);
+        self.save_settings_async()
+            .await
+            .map_err(|e| Database(format!("Failed to save volume: {e}")))?;
+        Ok(())
+    }
+
+    /// Get the output mode from settings.
+    pub fn get_output_mode(&self) -> OutputMode {
+        self.settings.read().get_output_mode()
+    }
+
+    /// Set the output mode in memory and persist to disk asynchronously.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the settings cannot be saved.
+    pub async fn set_output_mode(&self, mode: OutputMode) -> Result<(), StorageError> {
+        self.settings
+            .write()
+            .update_memory(|s| s.output_mode = mode);
+        self.save_settings_async()
+            .await
+            .map_err(|e| Database(format!("Failed to save output mode: {e}")))?;
+        Ok(())
     }
 
     /// Serialize settings to JSON and persist to disk via `spawn_blocking`.

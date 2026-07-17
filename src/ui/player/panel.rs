@@ -23,7 +23,7 @@ use {
             pango::EllipsizeMode::End,
             prelude::RangeExt,
         },
-        prelude::{AccessibleExtManual, BoxExt, ButtonExt, TextureExt},
+        prelude::{AccessibleExtManual, BoxExt, ButtonExt, TextureExt, WidgetExt},
     },
     tokio::spawn,
     tracing::error,
@@ -34,7 +34,10 @@ use crate::{
     playback::{
         engine::{
             PlaybackController, PlaybackEngine,
-            PlaybackEvent::{self, Paused, PositionTick, Resumed, Seeked, Stopped, TrackStarted},
+            PlaybackEvent::{
+                self, OutputModeChanged, Paused, PositionTick, Resumed, Seeked, Stopped,
+                TrackStarted,
+            },
         },
         layout::{AudioLayout, format_channel_label},
     },
@@ -44,6 +47,7 @@ use crate::{
         detail::common::build_scroll_content,
         player::controls::{
             build_playback_controls, build_queue_section, build_seek_section, build_volume_control,
+            mode_button_tooltip, update_volume_scale_visual,
         },
         raw_to_texture,
     },
@@ -73,6 +77,10 @@ struct PlaybackWidgets {
     current_time: Label,
     /// Label showing total track duration.
     total_time: Label,
+    /// Output-mode toggle button (BP / RM).
+    output_mode_btn: Button,
+    /// Volume scale slider, greyed out in bit-perfect mode.
+    volume_scale: Scale,
 }
 
 /// Labels for track metadata display.
@@ -242,7 +250,8 @@ pub fn build_player_content(state: &Arc<AppState>) -> ScrolledWindow {
     content.append(&seek_section);
     let (controls_section, play_button) = build_playback_controls(state);
     content.append(&controls_section);
-    content.append(&build_volume_control(state));
+    let (vol_section, mode_btn, vol_scale) = build_volume_control(state);
+    content.append(&vol_section);
     content.append(&build_queue_section(state));
 
     scroll.set_child(Some(&content));
@@ -259,6 +268,8 @@ pub fn build_player_content(state: &Arc<AppState>) -> ScrolledWindow {
         seek_scale,
         current_time,
         total_time,
+        output_mode_btn: mode_btn,
+        volume_scale: vol_scale,
     };
 
     spawn_async_listeners(state, widgets);
@@ -458,6 +469,13 @@ fn on_playback_event(
             widgets
                 .total_time
                 .set_label(&format_time(*duration_seconds));
+        }
+        OutputModeChanged { mode } => {
+            widgets.output_mode_btn.set_icon_name(mode.icon_name());
+            widgets
+                .output_mode_btn
+                .set_tooltip_text(Some(mode_button_tooltip(*mode)));
+            update_volume_scale_visual(&widgets.volume_scale, *mode);
         }
         _ => {}
     }
