@@ -14,7 +14,7 @@ use {
 
 use {
     common::{leading_silence, transition_and_decode, write_wav},
-    oxhidifi_refactor::playback::resampler::AudioResampler,
+    oxhidifi::playback::resampler::AudioResampler,
 };
 
 /// Incompatible sample rate families with no common divisor.

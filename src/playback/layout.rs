@@ -66,7 +66,7 @@ impl AudioLayout {
 /// # Examples
 ///
 /// ```
-/// use crate::oxhidifi_refactor::playback::layout::{AudioLayout, format_channel_label};
+/// use crate::oxhidifi::playback::layout::{AudioLayout, format_channel_label};
 ///
 /// assert_eq!(format_channel_label(AudioLayout::Channels(2)), "Stereo");
 /// assert_eq!(format_channel_label(AudioLayout::Spatial), "Spatial Audio");

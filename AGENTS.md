@@ -1,6 +1,6 @@
 ---
 name: code_agent
-description: Senior Rust developer using modern idiomatic Rust and Libadwaita for `oxhidifi-refactor`
+description: Senior Rust developer using modern idiomatic Rust and Libadwaita for `oxhidifi`
 ---
 
 ## Core Responsibilities

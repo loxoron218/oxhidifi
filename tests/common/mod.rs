@@ -8,9 +8,7 @@ use std::{
 
 use anyhow::{Context, Result as AnyhowResult};
 
-use oxhidifi_refactor::playback::{
-    decoder::Decoder, gapless::GaplessTransitioner, write_wav_header,
-};
+use oxhidifi::playback::{decoder::Decoder, gapless::GaplessTransitioner, write_wav_header};
 
 /// Write a minimal WAV file with the given sample rate, channel count, and
 /// 16-bit samples.

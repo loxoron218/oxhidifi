@@ -7,7 +7,7 @@
 
 use anyhow::{Context, Result, bail};
 
-use oxhidifi_refactor::playback::resampler::{
+use oxhidifi::playback::resampler::{
     AudioResampler, compute_snr_db, generate_impulse, generate_pink_noise, generate_silence,
     generate_sine,
 };

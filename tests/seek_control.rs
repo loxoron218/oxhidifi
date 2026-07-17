@@ -8,7 +8,7 @@
 mod tests {
     use anyhow::{Result, bail};
 
-    use oxhidifi_refactor::playback::{
+    use oxhidifi::playback::{
         PlaybackError::{QueueEmpty, TrackNotFound},
         engine::{
             MuteState::{Muted, Unmuted},
@@ -18,7 +18,7 @@ mod tests {
         queue::PlaybackQueue,
     };
 
-    use oxhidifi_refactor::ui::player::panel::format_time;
+    use oxhidifi::ui::player::panel::format_time;
 
     #[test]
     fn seek_slider_range_is_valid() {

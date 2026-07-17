@@ -2,7 +2,7 @@
 
 use criterion::{Criterion, criterion_group, criterion_main};
 
-use oxhidifi_refactor::playback::resampler::AudioResampler;
+use oxhidifi::playback::resampler::AudioResampler;
 
 /// Drain all pending output from a resampler.
 fn drain_resampler(resampler: &mut AudioResampler) {

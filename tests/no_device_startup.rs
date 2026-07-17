@@ -16,7 +16,7 @@ mod tests {
         tracing::info,
     };
 
-    use oxhidifi_refactor::{
+    use oxhidifi::{
         library::scanner::{FsScanner, LibraryScanner},
         playback::{engine::PlaybackEngine, output::startup_device_check},
         storage::{Storage, database::SqliteStorage},

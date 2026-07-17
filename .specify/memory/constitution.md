@@ -21,7 +21,7 @@
     - 2026-05-22: Original adoption date estimated from feature branch creation
 -->
 
-# oxhidifi-refactor Constitution
+# oxhidifi Constitution
 
 ## Core Principles
 

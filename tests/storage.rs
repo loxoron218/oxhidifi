@@ -7,7 +7,7 @@ use {
     tempfile::{TempDir, tempdir},
 };
 
-use oxhidifi_refactor::storage::{NewTrack, TrackAudio, database::SqliteStorage};
+use oxhidifi::storage::{NewTrack, TrackAudio, database::SqliteStorage};
 
 /// Create a temporary `SqliteStorage` instance for testing.
 ///
@@ -56,7 +56,7 @@ mod tests {
         tokio::test,
     };
 
-    use oxhidifi_refactor::storage::{
+    use oxhidifi::storage::{
         NewAlbum, NewArtist, NewQueueEntry, QueueContext, Storage, TrackUpdate,
     };
 
