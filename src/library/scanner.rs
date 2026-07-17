@@ -51,7 +51,11 @@ pub struct FsScanner<S: Storage> {
 
 impl<S: Storage> FsScanner<S> {
     /// Walk a directory and extract metadata from all audio files found.
-    fn walk_and_extract(dir: &Path, max_concurrent: usize) -> (Vec<(PathBuf, AudioMetadata)>, u32) {
+    fn walk_and_extract(
+        dir: &Path,
+        max_concurrent: usize,
+        skip_hashing: bool,
+    ) -> (Vec<(PathBuf, AudioMetadata, Option<String>)>, u32) {
         let files = Self::walk_directory_parallel(dir);
         let files_found = u32::try_from(files.len()).unwrap_or(0);
 
@@ -60,20 +64,45 @@ impl<S: Storage> FsScanner<S> {
         let extracted: Vec<_> = files
             .par_iter()
             .with_min_len(chunk_size)
-            .filter_map(|path| match extract_metadata(path) {
-                Ok(m) => Some((path.clone(), m)),
-                Err(e) => {
-                    warn!(error = %e, path = %path.display(), "Failed to extract metadata");
-                    None
-                }
-            })
+            .filter_map(|path| Self::extract_one(path, skip_hashing))
             .collect();
 
         (extracted, files_found)
     }
 
+    /// Extract metadata and content hash from a single file path.
+    fn extract_one(
+        path: &Path,
+        skip_hashing: bool,
+    ) -> Option<(PathBuf, AudioMetadata, Option<String>)> {
+        let metadata = extract_metadata(path).map_or_else(
+            |e| {
+                warn!(error = %e, path = %path.display(), "Failed to extract metadata");
+                None
+            },
+            Some,
+        )?;
+        let content_hash = if skip_hashing {
+            None
+        } else {
+            Self::try_compute_hash(path)
+        };
+        Some((path.to_path_buf(), metadata, content_hash))
+    }
+
+    /// Compute content hash for a file, logging on failure.
+    fn try_compute_hash(path: &Path) -> Option<String> {
+        compute_content_hash(path).map_or_else(
+            |e| {
+                warn!(error = %e, path = %path.display(), "Failed to compute content hash");
+                None
+            },
+            Some,
+        )
+    }
+
     /// Log a panic from the walk-and-extract task and return defaults.
-    fn on_walk_panic(e: &JoinError) -> (Vec<(PathBuf, AudioMetadata)>, u32) {
+    fn on_walk_panic(e: &JoinError) -> (Vec<(PathBuf, AudioMetadata, Option<String>)>, u32) {
         error!(error = %e, "Walk and metadata extraction task panicked");
         Default::default()
     }
@@ -199,28 +228,31 @@ impl<S: Storage> FsScanner<S> {
 
         let start = Instant::now();
 
-        let dir_buf = dir.to_path_buf();
-        let max_concurrent = self.max_concurrent;
-        let (extracted, files_found) =
-            match spawn_blocking(move || Self::walk_and_extract(&dir_buf, max_concurrent)).await {
-                Ok(v) => v,
-                Err(e) => Self::on_walk_panic(&e),
-            };
-
-        let total = extracted.len();
-
-        let mut artist_cache: HashMap<String, i64> = HashMap::new();
-        let mut album_cache: HashMap<(i64, String), i64> = HashMap::new();
-
         let artists = self.storage.get_all_artists().await.unwrap_or_default();
+        let skip_hashing = artists.is_empty();
+        let mut artist_cache: HashMap<String, i64> = HashMap::with_capacity(artists.len());
         for a in &artists {
             artist_cache.insert(a.name.to_lowercase(), a.id);
         }
+        let mut album_cache: HashMap<(i64, String), i64> = HashMap::new();
+
+        let dir_buf = dir.to_path_buf();
+        let max_concurrent = self.max_concurrent;
+        let (extracted, files_found) = match spawn_blocking(move || {
+            Self::walk_and_extract(&dir_buf, max_concurrent, skip_hashing)
+        })
+        .await
+        {
+            Ok(v) => v,
+            Err(e) => Self::on_walk_panic(&e),
+        };
+
+        let total = extracted.len();
 
         let mut tracks_added: u64 = 0;
         let mut tracks_skipped: u64 = 0;
 
-        for (idx, (path, metadata)) in extracted.into_iter().enumerate() {
+        for (idx, (path, metadata, content_hash)) in extracted.into_iter().enumerate() {
             let mut ctx = ScanContext {
                 dir,
                 files_found,
@@ -229,7 +261,7 @@ impl<S: Storage> FsScanner<S> {
                 tracks_added: &mut tracks_added,
                 tracks_skipped: &mut tracks_skipped,
             };
-            self.process_scan_item(idx, total, path, metadata, &mut ctx)
+            self.process_scan_item(idx, total, path, metadata, content_hash, &mut ctx)
                 .await;
         }
 
@@ -266,6 +298,7 @@ impl<S: Storage> FsScanner<S> {
         total: usize,
         path: PathBuf,
         metadata: AudioMetadata,
+        content_hash: Option<String>,
         ctx: &mut ScanContext<'_>,
     ) {
         if *self.cancel_rx.borrow() {
@@ -286,12 +319,40 @@ impl<S: Storage> FsScanner<S> {
         }
 
         match self
-            .process_file_cached(&path, metadata, ctx.artist_cache, ctx.album_cache)
+            .process_file_cached(
+                &path,
+                metadata,
+                content_hash,
+                ctx.artist_cache,
+                ctx.album_cache,
+            )
             .await
         {
             Ok(_) => *ctx.tracks_added += 1,
             Err(reason) => Self::handle_skipped(&reason, &path, ctx.tracks_skipped),
         }
+    }
+
+    /// Log and return a skip reason for hash duplicate check failure.
+    fn on_hash_check_error(e: &StorageError) -> SkipReason {
+        warn!(error = %e, "Failed to check hash duplicate");
+        SkipReason::CorruptFile
+    }
+
+    /// Check a pre-computed hash for duplicates.
+    ///
+    /// # Errors
+    ///
+    /// Returns `SkipReason::DuplicateByHash` if a duplicate is found.
+    async fn check_precomputed_hash(&self, hash: &str) -> Result<(), SkipReason> {
+        if self
+            .check_hash_duplicate(hash)
+            .await
+            .map_err(|e| Self::on_hash_check_error(&e))?
+        {
+            return Err(SkipReason::DuplicateByHash);
+        }
+        Ok(())
     }
 
     /// Handle a skipped track by incrementing the counter.
@@ -428,40 +489,6 @@ impl<S: Storage> FsScanner<S> {
         }
     }
 
-    /// Compute content hash and check for hash-based duplicates.
-    ///
-    /// # Errors
-    ///
-    /// Returns `SkipReason::CorruptFile` if hashing fails, or
-    /// `SkipReason::DuplicateByHash` if a duplicate is found.
-    async fn compute_and_check_hash(&self, path: &Path) -> Result<String, SkipReason> {
-        let path_buf = path.to_path_buf();
-        let content_hash = match spawn_blocking(move || compute_content_hash(&path_buf)).await {
-            Ok(Ok(hash)) => hash,
-            Ok(Err(e)) => {
-                warn!(error = %e, path = %path.display(), "Failed to compute content hash");
-                return Err(SkipReason::CorruptFile);
-            }
-            Err(e) => {
-                warn!(error = %e, "Hash computation task panicked");
-                return Err(SkipReason::CorruptFile);
-            }
-        };
-
-        if self
-            .check_hash_duplicate(&content_hash)
-            .await
-            .map_err(|e| {
-                warn!(error = %e, hash = %content_hash, "Failed to check hash duplicate");
-                SkipReason::CorruptFile
-            })?
-        {
-            return Err(SkipReason::DuplicateByHash);
-        }
-
-        Ok(content_hash)
-    }
-
     /// Process a file using cached artist/album lookups to avoid repeated DB queries.
     ///
     /// # Errors
@@ -471,6 +498,7 @@ impl<S: Storage> FsScanner<S> {
         &self,
         path: &Path,
         metadata: AudioMetadata,
+        content_hash: Option<String>,
         artist_cache: &mut HashMap<String, i64>,
         album_cache: &mut HashMap<(i64, String), i64>,
     ) -> Result<TrackInfo, SkipReason> {
@@ -502,7 +530,13 @@ impl<S: Storage> FsScanner<S> {
             return Err(SkipReason::DuplicateByFingerprint);
         }
 
-        let content_hash = self.compute_and_check_hash(path).await?;
+        let content_hash = match &content_hash {
+            Some(h) => {
+                self.check_precomputed_hash(h).await?;
+                Some(h.clone())
+            }
+            None => None,
+        };
 
         let album_artist_name = metadata
             .album_artist
@@ -536,7 +570,7 @@ impl<S: Storage> FsScanner<S> {
                 &metadata,
                 album_id,
                 track_artist_id,
-                Some(content_hash.clone()),
+                content_hash.clone(),
             ),
         };
 
@@ -549,7 +583,7 @@ impl<S: Storage> FsScanner<S> {
             id: track_id,
             metadata,
             path: path.to_path_buf(),
-            content_hash: Some(content_hash),
+            content_hash,
             artist_id: Some(track_artist_id),
             album_id: Some(album_id),
         };
