@@ -14,6 +14,7 @@ use {
     async_channel::{Receiver, Sender, unbounded},
     libadwaita::{OverlaySplitView, glib::MainContext},
     tokio::spawn,
+    tracing::error,
 };
 
 use crate::{
@@ -32,8 +33,8 @@ fn spawn_fetch_album_id(storage: Arc<SqliteStorage>, track_id: i64, tx: Sender<(
             Ok(Some(track)) => track.audio.album_id.unwrap_or(-1),
             _ => -1,
         };
-        if tx.try_send((track_id, album_id)).is_err() {
-            tracing::error!(target: "ui::player::mod", "Failed to send album id");
+        if let Err(e) = tx.try_send((track_id, album_id)) {
+            error!(error = %e, "Failed to send album id");
         }
     });
 }

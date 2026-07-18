@@ -17,7 +17,7 @@ use {
     },
     parking_lot::Mutex,
     tokio::spawn,
-    tracing::info,
+    tracing::{info, warn},
 };
 
 use crate::{
@@ -241,7 +241,7 @@ async fn add_music_folder(state: &AppState, parent: Option<&Window>) {
     let folder = match dialog.select_folder_future(parent).await {
         Ok(folder) => folder,
         Err(e) => {
-            info!(error = %e, "File chooser cancelled or failed");
+            warn!(error = %e, "File chooser cancelled or failed");
             return;
         }
     };
@@ -252,7 +252,7 @@ async fn add_music_folder(state: &AppState, parent: Option<&Window>) {
     };
 
     if let Err(e) = state.storage.add_library_directory(&path).await {
-        info!(error = %e, path = %path.display(), "Failed to add library directory");
+        warn!(error = %e, path = %path.display(), "Failed to add library directory");
         return;
     }
 
@@ -263,12 +263,12 @@ async fn add_music_folder(state: &AppState, parent: Option<&Window>) {
     let refresh_tx = state.refresh_tx.clone();
     spawn(async move {
         if let Err(e) = scanner.scan_directory(&scan_path).await {
-            info!(error = %e, path = %scan_path.display(), "Failed to scan directory");
+            warn!(error = %e, path = %scan_path.display(), "Failed to scan directory");
             return;
         }
         info!(path = %scan_path.display(), "Scan completed");
         if let Err(e) = refresh_tx.send(()) {
-            info!(error = %e, "Failed to send refresh signal");
+            warn!(error = %e, "Failed to send refresh signal");
         }
     });
 }

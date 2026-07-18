@@ -23,7 +23,7 @@ use {
             prelude::{AccessibleExtManual, BoxExt, WidgetExt},
         },
     },
-    tracing::{error, info},
+    tracing::{error, info, warn},
 };
 
 use crate::{
@@ -230,7 +230,7 @@ async fn populate_album_detail(
             return;
         }
         Err(e) => {
-            info!(error = %e, album_id, "Failed to load album");
+            warn!(error = %e, album_id, "Failed to load album");
             return;
         }
     };
@@ -284,7 +284,7 @@ async fn populate_album_detail(
     let tracks = match state.storage.get_tracks_by_album(album_id).await {
         Ok(t) => t,
         Err(e) => {
-            info!(error = %e, album_id, "Failed to load album tracks");
+            warn!(error = %e, album_id, "Failed to load album tracks");
             return;
         }
     };

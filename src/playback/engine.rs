@@ -314,7 +314,6 @@ impl PlaybackEngine {
         *self.shared.decode_tx.lock() = Some(cmd_tx);
 
         info!(
-            target: "playback::engine",
             track_id,
             path = %path.display(),
             "Playback started",
@@ -329,7 +328,7 @@ impl PlaybackEngine {
         }) {
             Ok(handle) => *self.shared.decode_thread.lock() = Some(handle),
             Err(e) => {
-                error!(target: "playback::engine", error = %e, "Failed to spawn decode thread");
+                error!(error = %e, "Failed to spawn decode thread");
             }
         }
 
@@ -342,7 +341,7 @@ impl PlaybackEngine {
                 path: next_path,
             })
         {
-            warn!(target: "playback::engine", error = %e, "Failed to send PreloadNext command");
+            warn!(error = %e, "Failed to send PreloadNext command");
         }
     }
 
@@ -393,18 +392,10 @@ impl PlaybackController for PlaybackEngine {
             .get(&track_id)
             .cloned()
             .ok_or_else(|| {
-                warn!(
-                    target: "playback::engine",
-                    track_id,
-                    "Track not found for playback",
-                );
+                warn!(track_id, "Track not found for playback",);
                 PlaybackError::TrackNotFound(track_id)
             })?;
-        info!(
-            target: "playback::engine",
-            track_id,
-            "Play track command",
-        );
+        info!(track_id, "Play track command",);
         self.start_playback(track_id, path);
         Ok(())
     }
@@ -412,17 +403,13 @@ impl PlaybackController for PlaybackEngine {
     fn play_queue(&self, queue: Vec<i64>) -> Result<(), PlaybackError> {
         if queue.is_empty() {
             warn!(
-                target: "playback::engine",
-                "Play queue command with empty queue",
+                queue_len = queue.len(),
+                "Play queue command with empty queue"
             );
             return Err(PlaybackError::QueueEmpty);
         }
         let queue_len = queue.len();
-        info!(
-            target: "playback::engine",
-            queue_len,
-            "Play queue command",
-        );
+        info!(queue_len, "Play queue command",);
         self.shared.queue.set_queue(queue.clone());
         self.shared
             .send_event(&PlaybackEvent::QueueChanged { track_ids: queue });
@@ -448,40 +435,29 @@ impl PlaybackController for PlaybackEngine {
             state.status != PlaybackStatus::Stopped
         };
         if !is_playing {
-            info!(
-                target: "playback::engine",
-                "Toggle pause ignored — not playing",
-            );
+            info!("Toggle pause ignored — not playing");
             return Ok(());
         }
 
         let mut state = self.shared.state.lock();
         let was_paused = state.status == PlaybackStatus::Paused;
+        let track_id = state.current_track_id;
         let (event, cmd) = if was_paused {
             state.status = PlaybackStatus::Playing;
-            info!(
-                target: "playback::engine",
-                "Playback resumed",
-            );
+            info!(track_id, "Playback resumed");
             (PlaybackEvent::Resumed, DecodeCommand::Resume)
         } else {
             state.status = PlaybackStatus::Paused;
-            info!(
-                target: "playback::engine",
-                "Playback paused",
-            );
+            info!(track_id, "Playback paused");
             (PlaybackEvent::Paused, DecodeCommand::Pause)
         };
         drop(state);
 
         let cmd_tx = self.shared.decode_tx.lock();
         if let Some(tx) = cmd_tx.as_ref()
-            && tx.try_send(cmd).is_err()
+            && let Err(e) = tx.try_send(cmd)
         {
-            error!(
-                target: "playback::engine",
-                "Failed to send pause/resume command to decode thread",
-            );
+            error!(error = %e, "Failed to send pause/resume command to decode thread");
         }
         drop(cmd_tx);
 
@@ -491,11 +467,7 @@ impl PlaybackController for PlaybackEngine {
 
     fn stop(&self) -> Result<(), PlaybackError> {
         let current_track = self.shared.state.lock().current_track_id;
-        info!(
-            target: "playback::engine",
-            track_id = current_track,
-            "Playback stopped",
-        );
+        info!(track_id = current_track, "Playback stopped",);
         self.stop_decode_task();
         let mut state = self.shared.state.lock();
         state.status = PlaybackStatus::Stopped;
@@ -510,10 +482,7 @@ impl PlaybackController for PlaybackEngine {
 
     fn next_track(&self) -> Result<(), PlaybackError> {
         let next_id = self.shared.queue.next().ok_or_else(|| {
-            info!(
-                target: "playback::engine",
-                "Next track failed — queue empty",
-            );
+            info!("Next track failed — queue empty");
             PlaybackError::QueueEmpty
         })?;
         let path = self
@@ -529,10 +498,7 @@ impl PlaybackController for PlaybackEngine {
 
     fn previous_track(&self) -> Result<(), PlaybackError> {
         let prev_id = self.shared.queue.previous().ok_or_else(|| {
-            info!(
-                target: "playback::engine",
-                "Previous track failed — queue empty",
-            );
+            info!("Previous track failed — queue empty");
             PlaybackError::QueueEmpty
         })?;
         let path = self
@@ -548,11 +514,7 @@ impl PlaybackController for PlaybackEngine {
 
     fn set_volume(&self, volume: f64) -> Result<(), PlaybackError> {
         let clamped = volume.clamp(0.0, 1.0);
-        info!(
-            target: "playback::engine",
-            volume = clamped,
-            "Volume changed",
-        );
+        info!(volume = clamped, "Volume changed",);
         let guard = self.shared.output.lock();
         if let Some(output) = guard.as_ref() {
             match output.mode() {
@@ -589,7 +551,6 @@ impl PlaybackController for PlaybackEngine {
 
     fn set_output_mode(&self, mode: OutputMode) -> Result<(), PlaybackError> {
         info!(
-            target: "playback::engine",
             output_mode = ?mode,
             "Output mode changed",
         );
@@ -609,11 +570,7 @@ impl PlaybackController for PlaybackEngine {
     }
 
     fn set_gapless_enabled(&self, enabled: bool) -> Result<(), PlaybackError> {
-        info!(
-            target: "playback::engine",
-            enabled,
-            "Gapless playback toggled",
-        );
+        info!(enabled, "Gapless playback toggled",);
         self.shared.state.lock().gapless_mode = if enabled {
             GaplessMode::Enabled
         } else {
@@ -799,7 +756,7 @@ fn send_error_event(subs: &Mutex<Vec<Sender<PlaybackEvent>>>, error: &str) {
 /// Returns `Err(())` if a new audio output cannot be opened.
 fn reconnect_device(engine_shared: &Arc<EngineShared>) -> Result<Producer<f32>, ()> {
     let err_msg = "Audio device disconnected during playback".to_string();
-    info!(target: "playback::engine", "Audio device lost, attempting reconnection");
+    warn!(error = %err_msg, "Audio device lost, attempting reconnection");
     engine_shared.send_event(&PlaybackEvent::DeviceLost { error: err_msg });
 
     *engine_shared.output.lock() = None;
@@ -817,14 +774,18 @@ fn reconnect_device(engine_shared: &Arc<EngineShared>) -> Result<Producer<f32>, 
             } else {
                 new_output.set_volume_atomic(current_vol);
             }
-            *engine_shared.device_sample_rate.lock() = new_output.sample_rate();
+            let sr = new_output.sample_rate();
+            *engine_shared.device_sample_rate.lock() = sr;
             *engine_shared.output.lock() = Some(new_output);
-            info!(target: "playback::engine", "Audio device reconnected, resuming playback");
+            info!(
+                sample_rate = sr,
+                "Audio device reconnected, resuming playback"
+            );
             engine_shared.send_event(&PlaybackEvent::Resumed);
             Ok(new_producer)
         }
         Err(e) => {
-            error!(target: "playback::engine", error = %e, "Audio device reconnection failed");
+            error!(error = %e, "Audio device reconnection failed");
             send_error_event(
                 &engine_shared.event_subs,
                 &format!("Audio device reconnection failed: {e}"),
@@ -1019,7 +980,7 @@ fn send_track_started_and_preload_next(engine_shared: &Arc<EngineShared>, next_i
             path: next_next_path,
         })
     {
-        warn!(target: "playback::engine", error = %e, "Failed to send PreloadNext command");
+        warn!(error = %e, "Failed to send PreloadNext command");
     }
 }
 
@@ -1061,11 +1022,7 @@ fn try_auto_advance(
     let (new_cmd_tx, new_cmd_rx) = MpscChannel(4);
     *engine_shared.decode_tx.lock() = Some(new_cmd_tx);
 
-    info!(
-        target: "playback::engine",
-        next_id,
-        "Auto-advancing to next track",
-    );
+    info!(next_id, "Auto-advancing to next track",);
 
     if let Some(tf_event) = event_to_send.take() {
         engine_shared.send_event(&tf_event);
@@ -1078,7 +1035,7 @@ fn try_auto_advance(
         init_decode_thread(&next_path, new_cmd_rx, &engine_state, next_id);
     }) {
         Ok(handle) => *engine_shared.decode_thread.lock() = Some(handle),
-        Err(e) => error!(target: "playback::engine", error = %e, "Failed to spawn decode thread"),
+        Err(e) => error!(error = %e, "Failed to spawn decode thread"),
     }
 
     true
@@ -1105,10 +1062,7 @@ fn finalize_track(engine_shared: &Arc<EngineShared>, event_to_send: &mut Option<
                 .as_ref()
                 .is_some_and(|e| matches!(e, PlaybackEvent::TrackFinished { .. }))
         {
-            info!(
-                target: "playback::engine",
-                "Playback finished — queue empty, entering idle state",
-            );
+            info!("Playback finished — queue empty, entering idle state");
         }
     }
     *engine_shared.decode_tx.lock() = None;
@@ -1331,7 +1285,7 @@ fn handle_decode_cmd(
                     .lock()
                     .prebuffer_next(current, next_id, next_path)
             {
-                warn!(target: "playback::engine", error = %e, "Failed to pre-buffer next track");
+                warn!(error = %e, "Failed to pre-buffer next track");
             }
             false
         }

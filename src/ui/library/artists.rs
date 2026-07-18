@@ -21,7 +21,7 @@ use {
         },
         prelude::{AccessibleExtManual, BoxExt, WidgetExt},
     },
-    tracing::info,
+    tracing::warn,
 };
 
 use crate::{
@@ -135,7 +135,7 @@ pub async fn lazy_build_artist_mode(state: &Arc<AppState>, stack: &Stack, mode: 
             .filter(|a| a.album_count > 0)
             .collect::<Vec<_>>(),
         Err(e) => {
-            info!(error = %e, "Failed to load artists for lazy build");
+            warn!(error = %e, "Failed to load artists for lazy build");
             return;
         }
     };

@@ -23,7 +23,7 @@ use {
         prelude::ButtonExt,
     },
     num_traits::NumCast,
-    tracing::{error, info},
+    tracing::{error, info, warn},
 };
 
 use crate::{
@@ -277,7 +277,7 @@ async fn play_single_track(state: &Arc<AppState>, track_id: i64) {
         Some(aid) => match state.storage.get_tracks_by_album(aid).await {
             Ok(t) => t,
             Err(e) => {
-                info!(error = %e, album_id = aid, "Failed to fetch album tracks");
+                warn!(error = %e, album_id = aid, "Failed to fetch album tracks");
                 vec![track]
             }
         },
@@ -298,7 +298,7 @@ async fn play_single_track(state: &Arc<AppState>, track_id: i64) {
     state.playback.set_track_paths(track_paths);
 
     if let Err(e) = state.playback.play_queue(ordered) {
-        info!(error = %e, track_id, "Failed to play track");
+        warn!(error = %e, track_id, "Failed to play track");
     }
 }
 

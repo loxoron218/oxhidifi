@@ -13,7 +13,7 @@ mod tests {
         anyhow::{Context, Result, ensure},
         async_channel::unbounded,
         tokio::runtime::Runtime,
-        tracing::info,
+        tracing::warn,
     };
 
     use oxhidifi::{
@@ -26,7 +26,7 @@ mod tests {
         let Some(e) = startup_device_check() else {
             return;
         };
-        info!(error = %e, "startup_device_check returned");
+        warn!(error = %e, "startup_device_check returned");
     }
 
     #[test]

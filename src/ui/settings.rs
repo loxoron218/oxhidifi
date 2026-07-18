@@ -41,11 +41,7 @@ use crate::{
 
 /// Remove a library directory by ID in a background task.
 fn spawn_remove_directory(storage: &Arc<SqliteStorage>, dir_id: i64) {
-    info!(
-        target: "ui::settings",
-        dir_id,
-        "Library directory removed",
-    );
+    info!(dir_id, "Library directory removed",);
     let storage = Arc::clone(storage);
     spawn_future_local(async move {
         if let Err(e) = storage.remove_library_directory(dir_id).await {
@@ -76,7 +72,6 @@ async fn set_audio_device(state: &Arc<AppState>, idx: u32) {
         return;
     }
     info!(
-        target: "ui::settings",
         audio_device = name.as_deref().unwrap_or("default"),
         "Audio device selection changed",
     );
@@ -238,9 +233,16 @@ fn build_audio_page(dialog: &PreferencesDialog, state: &Arc<AppState>) {
     let state_devices = Arc::clone(state);
     let combo = device_combo.clone();
     spawn_future_local(async move {
-        let Ok(Ok(devices)) = spawn_blocking(list_output_devices).await else {
-            warn!("Failed to enumerate audio devices");
-            return;
+        let devices = match spawn_blocking(list_output_devices).await {
+            Ok(Ok(devices)) => devices,
+            Ok(Err(e)) => {
+                warn!(error = %e, "Failed to enumerate audio devices");
+                return;
+            }
+            Err(e) => {
+                warn!(error = ?e, "Failed to enumerate audio devices");
+                return;
+            }
         };
 
         let names: Vec<&str> = devices.iter().map(|d| d.name.as_str()).collect();
@@ -284,7 +286,6 @@ fn build_audio_page(dialog: &PreferencesDialog, state: &Arc<AppState>) {
             BitPerfect
         };
         info!(
-            target: "ui::settings",
             output_mode = ?mode,
             "Output mode changed",
         );
@@ -297,6 +298,13 @@ fn build_audio_page(dialog: &PreferencesDialog, state: &Arc<AppState>) {
     output_group.add(&mode_combo);
     page.add(&output_group);
 
+    build_playback_group(&page, state);
+
+    dialog.add(&page);
+}
+
+/// Build the Playback preferences group.
+fn build_playback_group(page: &PreferencesPage, state: &Arc<AppState>) {
     let playback_group = PreferencesGroup::new();
     playback_group.set_title("Playback");
     playback_group.set_description(Some("Playback behavior"));
@@ -336,8 +344,6 @@ fn build_audio_page(dialog: &PreferencesDialog, state: &Arc<AppState>) {
 
     playback_group.add(&gapless_row);
     page.add(&playback_group);
-
-    dialog.add(&page);
 }
 
 /// Build the View > Display page.
@@ -364,8 +370,11 @@ fn build_view_page(dialog: &PreferencesDialog, state: &Arc<AppState>) {
     view_combo.connect_selected_notify(move |combo| {
         let mode = if combo.selected() == 0 { Grid } else { Column };
         info!(
-            target: "ui::settings",
-            view_mode = if matches!(mode, Grid) { "grid" } else { "column" },
+            view_mode = if matches!(mode, Grid) {
+                "grid"
+            } else {
+                "column"
+            },
             "Default view mode changed",
         );
         spawn_future_local(save_view_mode_setting(Arc::clone(&state_view), mode));
@@ -391,8 +400,11 @@ fn build_view_page(dialog: &PreferencesDialog, state: &Arc<AppState>) {
             Artists
         };
         info!(
-            target: "ui::settings",
-            active_tab = if matches!(tab, Albums) { "albums" } else { "artists" },
+            active_tab = if matches!(tab, Albums) {
+                "albums"
+            } else {
+                "artists"
+            },
             "Default tab changed",
         );
         spawn_future_local(save_tab_setting(Arc::clone(&state_tab), tab));

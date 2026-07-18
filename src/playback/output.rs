@@ -354,11 +354,11 @@ impl AudioOutput {
         let card = alsa_card_name(device_id);
         match AlsaVolumeControl::new(&card) {
             Ok(ctl) => {
-                info!(target: "playback::output", card = %card, "ALSA hardware volume control initialised");
+                info!(card = %card, "ALSA hardware volume control initialised");
                 Some(ctl)
             }
             Err(e) => {
-                warn!(target: "playback::output", error = %e, "Failed to initialise ALSA volume control, falling back to no volume scaling");
+                warn!(error = %e, "Failed to initialise ALSA volume control, falling back to no volume scaling");
                 None
             }
         }
@@ -373,7 +373,7 @@ impl AudioOutput {
             return;
         };
         if let Err(e) = ctl.set_volume(volume) {
-            warn!(target: "playback::output", error = %e, "Hardware volume control failed");
+            warn!(error = %e, "Hardware volume control failed");
         }
     }
 

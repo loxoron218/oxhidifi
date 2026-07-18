@@ -10,7 +10,7 @@ use {
         sqlite::{SqliteConnectOptions, SqlitePoolOptions},
     },
     tokio::task::spawn_blocking,
-    tracing::info,
+    tracing::warn,
 };
 
 use crate::{
@@ -776,8 +776,7 @@ fn parse_int_list(s: &str) -> Vec<i32> {
             match trimmed.parse::<i32>() {
                 Ok(n) => Some(n),
                 Err(e) => {
-                    info!(
-                        target: "storage::database",
+                    warn!(
                         error = %e,
                         value = trimmed,
                         "Skipping unparseable integer in format info",

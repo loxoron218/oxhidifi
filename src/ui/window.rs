@@ -73,10 +73,7 @@ use crate::{
 /// content. The sidebar is hidden by default and auto-shown on
 /// playback start.
 pub fn build_window(app: &Application, state: &Arc<AppState>) -> ApplicationWindow {
-    info!(
-        target: "ui::window",
-        "Building main application window",
-    );
+    info!("Building main application window");
 
     let window = ApplicationWindow::builder()
         .application(app)
@@ -101,7 +98,7 @@ pub fn build_window(app: &Application, state: &Arc<AppState>) -> ApplicationWind
     let playback = Arc::clone(&state.playback);
     let cover_cache = Arc::clone(&state.cover_art_cache);
     window.connect_close_request(move |_| {
-        info!(target: "ui::window", "Window close requested — stopping playback");
+        info!("Window close requested — stopping playback");
         if let Err(e) = playback.stop() {
             error!(error = %e, "Failed to stop playback on window close");
         }
@@ -111,11 +108,7 @@ pub fn build_window(app: &Application, state: &Arc<AppState>) -> ApplicationWind
 
     split_view.connect_show_sidebar_notify(move |sv| {
         let showing = sv.shows_sidebar();
-        info!(
-            target: "ui::window",
-            showing,
-            "Sidebar visibility changed",
-        );
+        info!(showing, "Sidebar visibility changed",);
         toggle_button.set_visible(!showing);
         toggle_button.set_active(showing);
         back_button.set_visible(showing);
@@ -353,11 +346,7 @@ fn build_content(
             && child == tab_orig
             && let Some(name) = tab_stack.visible_child_name()
         {
-            info!(
-                target: "ui::window",
-                tab_name = name.as_str(),
-                "Tab switched",
-            );
+            info!(tab_name = name.as_str(), "Tab switched",);
             persist_active_tab(&tab_storage, &tab_active_tab_tx, name.as_str());
         }
         let visible = tab_content_area.visible_child();
@@ -454,11 +443,7 @@ fn handle_navigation_event(
 ) {
     match event {
         AlbumDetail(album_id) => {
-            info!(
-                target: "ui::window",
-                album_id,
-                "Navigating to album detail",
-            );
+            info!(album_id, "Navigating to album detail",);
             if let Some(prev_detail) = nav_content_area.child_by_name("detail") {
                 nav_content_area.remove(&prev_detail);
             }
@@ -467,11 +452,7 @@ fn handle_navigation_event(
             nav_content_area.set_visible_child(&detail);
         }
         ArtistDetail(artist_id) => {
-            info!(
-                target: "ui::window",
-                artist_id,
-                "Navigating to artist detail",
-            );
+            info!(artist_id, "Navigating to artist detail",);
             if let Some(prev_detail) = nav_content_area.child_by_name("detail") {
                 nav_content_area.remove(&prev_detail);
             }
@@ -480,10 +461,7 @@ fn handle_navigation_event(
             nav_content_area.set_visible_child(&detail);
         }
         Back => {
-            info!(
-                target: "ui::window",
-                "Navigating back to library view",
-            );
+            info!("Navigating back to library view");
             nav_content_area.set_visible_child(orig_stack);
             if let Some(prev_detail) = nav_content_area.child_by_name("detail") {
                 nav_content_area.remove(&prev_detail);

@@ -149,7 +149,7 @@ impl ThreadManager {
     /// Join a single thread handle, logging on panic.
     fn join_quietly(handle: JoinHandle<()>) {
         if let Err(e) = handle.join() {
-            error!("Thread panicked: {e:?}");
+            error!(error = ?e, "Thread panicked");
         }
     }
 }

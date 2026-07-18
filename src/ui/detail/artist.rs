@@ -24,7 +24,7 @@ use {
         },
     },
     tokio::join,
-    tracing::{error, info},
+    tracing::{error, info, warn},
 };
 
 use crate::{
@@ -95,11 +95,11 @@ async fn populate_artist_detail(
     let artist = match state.storage.get_artist(artist_id).await {
         Ok(Some(a)) => a,
         Ok(None) => {
-            info!(target: "ui::detail::artist", artist_id, "Artist not found");
+            info!(artist_id, "Artist not found");
             return;
         }
         Err(e) => {
-            info!(target: "ui::detail::artist", error = %e, artist_id, "Failed to load artist");
+            warn!(error = %e, artist_id, "Failed to load artist");
             return;
         }
     };
@@ -110,7 +110,7 @@ async fn populate_artist_detail(
     let albums = match state.storage.get_albums_by_artist(artist_id).await {
         Ok(a) => a,
         Err(e) => {
-            info!(target: "ui::detail::artist", error = %e, artist_id, "Failed to load artist albums");
+            warn!(error = %e, artist_id, "Failed to load artist albums");
             return;
         }
     };

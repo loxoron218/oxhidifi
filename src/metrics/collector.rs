@@ -28,7 +28,7 @@ use {
         task::{JoinHandle, spawn_blocking},
         time::interval,
     },
-    tracing::{info, trace, warn},
+    tracing::{info, warn},
 };
 
 /// Playback latency threshold in milliseconds (SC-001: < 3,000 ms).
@@ -75,14 +75,9 @@ impl PanelReveal {
             return;
         };
         let reveal_ms = start.elapsed().as_secs_f64() * 1000.0;
-        info!(
-            target: "metrics.panel_reveal",
-            reveal_ms,
-            "Panel reveal",
-        );
+        info!(reveal_ms, "Panel reveal",);
         if reveal_ms >= PANEL_REVEAL_THRESHOLD_MS {
             warn!(
-                target: "metrics.panel_reveal",
                 reveal_ms,
                 threshold_ms = PANEL_REVEAL_THRESHOLD_MS,
                 "Panel reveal exceeded threshold",
@@ -127,15 +122,9 @@ impl PlaybackLatency {
             return;
         };
         let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
-        info!(
-            target: "metrics.playback_latency",
-            latency_ms,
-            track_id,
-            "Playback latency",
-        );
+        info!(latency_ms, track_id, "Playback latency",);
         if latency_ms >= PLAYBACK_LATENCY_THRESHOLD_MS {
             warn!(
-                target: "metrics.playback_latency",
                 latency_ms,
                 track_id,
                 threshold_ms = PLAYBACK_LATENCY_THRESHOLD_MS,
@@ -168,15 +157,11 @@ impl ScanThroughput {
             cast::<u64, f64>(files_total).unwrap_or(0.0)
         };
         info!(
-            target: "metrics.scan_throughput",
             files_per_second,
-            files_total,
-            duration_seconds,
-            "Scan throughput",
+            files_total, duration_seconds, "Scan throughput",
         );
         if files_per_second < SCAN_THROUGHPUT_MIN_FPS {
             warn!(
-                target: "metrics.scan_throughput",
                 files_per_second,
                 files_total,
                 duration_seconds,
@@ -198,15 +183,9 @@ impl UiResponse {
     /// threshold (100 ms).
     pub fn record(action: &'static str, duration: Duration) {
         let response_ms = duration.as_secs_f64() * 1000.0;
-        info!(
-            target: "metrics.ui_response",
-            response_ms,
-            action,
-            "UI response",
-        );
+        info!(response_ms, action, "UI response",);
         if response_ms >= UI_RESPONSE_THRESHOLD_MS {
             warn!(
-                target: "metrics.ui_response",
                 response_ms,
                 action,
                 threshold_ms = UI_RESPONSE_THRESHOLD_MS,
@@ -225,7 +204,7 @@ pub fn read_rss_mb() -> Option<f64> {
     let status = match read_to_string("/proc/self/status") {
         Ok(s) => s,
         Err(e) => {
-            trace!(target: "metrics", error = %e, "Failed to read /proc/self/status");
+            warn!(error = %e, "Failed to read /proc/self/status");
             return None;
         }
     };
@@ -239,7 +218,7 @@ pub fn read_rss_mb() -> Option<f64> {
         let kb: f64 = match kb_str.trim().parse() {
             Ok(v) => v,
             Err(e) => {
-                trace!(target: "metrics", error = %e, value = %kb_str.trim(), "Failed to parse VmRSS value");
+                warn!(error = %e, value = %kb_str.trim(), "Failed to parse VmRSS value");
                 return None;
             }
         };
@@ -255,14 +234,9 @@ pub fn read_rss_mb() -> Option<f64> {
 /// is exceeded.
 pub fn sample_memory_once() {
     if let Some(rss_mb) = read_rss_mb() {
-        info!(
-            target: "metrics.memory",
-            rss_mb,
-            "Steady-state memory",
-        );
+        info!(rss_mb, "Steady-state memory",);
         if rss_mb > MEMORY_TARGET_MB {
             warn!(
-                target: "metrics.memory",
                 rss_mb,
                 target_mb = MEMORY_TARGET_MB,
                 "Memory usage above engineering target",

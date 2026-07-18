@@ -28,7 +28,7 @@ use {
         prelude::{BoxExt, ButtonExt, WidgetExt},
     },
     tokio::join,
-    tracing::{error, info},
+    tracing::{error, info, warn},
 };
 
 use crate::{
@@ -224,7 +224,7 @@ pub async fn lazy_build_album_mode(
     let albums = match albums_res {
         Ok(a) => a,
         Err(e) => {
-            info!(error = %e, "Failed to load albums for lazy build");
+            warn!(error = %e, "Failed to load albums for lazy build");
             return;
         }
     };
@@ -256,7 +256,7 @@ pub async fn lazy_build_album_mode(
     let artist_names: HashMap<i64, String> = match artist_names_res {
         Ok(artists) => artists.into_iter().map(|a| (a.id, a.name)).collect(),
         Err(e) => {
-            info!(error = %e, "Failed to load artists for lazy build");
+            warn!(error = %e, "Failed to load artists for lazy build");
             HashMap::new()
         }
     };
@@ -543,7 +543,7 @@ async fn play_album(state: &Arc<AppState>, album_id: i64) {
     let tracks = match state.storage.get_tracks_by_album(album_id).await {
         Ok(t) => t,
         Err(e) => {
-            info!(error = %e, album_id, "Failed to fetch album tracks");
+            warn!(error = %e, album_id, "Failed to fetch album tracks");
             return;
         }
     };
@@ -563,7 +563,7 @@ async fn play_album(state: &Arc<AppState>, album_id: i64) {
 
     if let Err(e) = state.playback.play_queue(track_ids) {
         let error_str = e.to_string();
-        info!(error = %error_str, album_id, "Failed to start album playback");
+        warn!(error = %error_str, album_id, "Failed to start album playback");
         let msg = match &e {
             PlaybackNoDeviceAvailable
             | PlaybackDeviceDisconnected
@@ -573,7 +573,7 @@ async fn play_album(state: &Arc<AppState>, album_id: i64) {
             _ => &error_str,
         };
         if let Err(e) = state.toast_tx.send(msg.into()).await {
-            info!(error = %e, "Failed to enqueue toast notification");
+            warn!(error = %e, "Failed to enqueue toast notification");
         }
     }
 }

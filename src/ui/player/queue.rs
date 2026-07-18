@@ -29,7 +29,7 @@ use {
         prelude::{AccessibleExtManual, BoxExt, ButtonExt, Cast, ListItemExt, WidgetExt},
     },
     tokio::spawn,
-    tracing::error,
+    tracing::{error, warn},
 };
 
 use crate::{
@@ -91,7 +91,7 @@ fn handle_drop_value(value: &Value, queue: &PlaybackQueue, store: &ListStore, to
 fn try_remove_entry(q: &PlaybackQueue, store: &ListStore, pos: usize) {
     store.remove(u32::try_from(pos).unwrap_or(0));
     if q.remove(pos).is_none() {
-        error!(pos, "Failed to remove track — position out of bounds");
+        warn!(pos, "Failed to remove track — position out of bounds");
     }
 }
 
@@ -203,8 +203,8 @@ fn spawn_fetch_queue_names(state: &Arc<AppState>, ids: Vec<i64>, tx: Sender<Vec<
                 (*id, name)
             })
             .collect();
-        if tx.try_send(names).is_err() {
-            error!(target: "ui::player::queue", "Failed to send queue names");
+        if let Err(e) = tx.try_send(names) {
+            error!(error = %e, "Failed to send queue names");
         }
     });
 }

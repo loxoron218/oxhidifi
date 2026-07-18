@@ -134,8 +134,8 @@ fn handle_status_change(
     let tx = meta_tx.clone();
     spawn(async move {
         let result = resolve_track_metadata(&storage, track_id).await;
-        if tx.try_send((track_id, result)).is_err() {
-            error!(target: "ui::player::panel", "Failed to send metadata");
+        if let Err(e) = tx.try_send((track_id, result)) {
+            error!(error = %e, "Failed to send metadata");
         }
     });
 }

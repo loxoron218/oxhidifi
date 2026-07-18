@@ -24,7 +24,7 @@ use {
         },
         task::spawn_blocking,
     },
-    tracing::info,
+    tracing::{info, warn},
 };
 
 use crate::{
@@ -100,7 +100,7 @@ impl AppState {
     /// Send a navigation event and log on failure.
     pub async fn send_navigation_event(&self, event: NavigationEvent) {
         if let Err(e) = self.navigation_tx.send(event).await {
-            info!(error = %e, "Failed to send navigation event");
+            warn!(error = %e, "Failed to send navigation event");
         }
     }
 
@@ -224,17 +224,16 @@ fn spawn_watcher_loop(
 
 /// Check artwork cache version and test audio device at startup.
 async fn run_startup_checks() {
-    if spawn_blocking(check_cache_version).await.is_err() {
-        info!(target: "app::startup", "Failed to check artwork cache version");
+    if let Err(e) = spawn_blocking(check_cache_version).await {
+        warn!(error = %e, "Failed to check artwork cache version");
     }
     match spawn_blocking(startup_device_check).await {
         Ok(Some(msg)) => {
-            info!(target: "app::startup", "No audio device at startup: {msg}");
+            info!(msg, "No audio device at startup");
         }
         Ok(None) => {}
         Err(e) => {
-            info!(
-                target: "app::startup",
+            warn!(
                 error = %e,
                 "Startup device check failed",
             );
@@ -275,10 +274,9 @@ pub async fn run_application() -> Result<()> {
         4,
     ));
 
-    if let Ok((watcher, watcher_rx)) = LibraryWatcher::new(Arc::clone(&scanner)) {
-        spawn_watcher_loop(watcher, watcher_rx);
-    } else {
-        info!(target: "app::startup", "Failed to create filesystem watcher");
+    match LibraryWatcher::new(Arc::clone(&scanner)) {
+        Ok((watcher, watcher_rx)) => spawn_watcher_loop(watcher, watcher_rx),
+        Err(e) => warn!(error = %e, "Failed to create filesystem watcher"),
     }
 
     let initial_view_mode = storage.get_view_mode();

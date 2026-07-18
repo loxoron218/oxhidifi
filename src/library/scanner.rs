@@ -211,7 +211,6 @@ impl<S: Storage> FsScanner<S> {
     /// Scan a single directory and emit events.
     async fn scan_dir(&self, dir: &Path) {
         info!(
-            target: "library::scanner",
             directory = %dir.display(),
             "Scan started",
         );
@@ -268,7 +267,6 @@ impl<S: Storage> FsScanner<S> {
         let duration = start.elapsed();
         let duration_seconds = duration.as_secs_f64();
         info!(
-            target: "library::scanner",
             directory = %dir.display(),
             tracks_added,
             tracks_skipped,
@@ -359,7 +357,6 @@ impl<S: Storage> FsScanner<S> {
     fn handle_skipped(reason: &SkipReason, path: &Path, tracks_skipped: &mut u64) {
         *tracks_skipped += 1;
         info!(
-            target: "library::scanner",
             path = %path.display(),
             skip_reason = ?reason,
             "Track skipped",
@@ -504,7 +501,6 @@ impl<S: Storage> FsScanner<S> {
     ) -> Result<TrackInfo, SkipReason> {
         if metadata.duration <= 0.0 {
             warn!(
-                target: "library::scanner",
                 path = %path.display(),
                 duration = metadata.duration,
                 "Skipping file with zero or negative duration \u{2014} corrupt audio data",
@@ -589,7 +585,6 @@ impl<S: Storage> FsScanner<S> {
         };
 
         info!(
-            target: "library::scanner",
             track_id,
             album_id,
             artist_id = track_artist_id,

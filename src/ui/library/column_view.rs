@@ -33,7 +33,7 @@ use {
     },
     parking_lot::Mutex,
     tokio::sync::watch::{Receiver, Sender as TokioSender, channel as TokioChannel},
-    tracing::debug,
+    tracing::warn,
 };
 
 use crate::{
@@ -98,7 +98,7 @@ impl NarrowState {
     pub fn set(&self, val: bool) {
         self.narrow.store(val, Relaxed);
         if let Err(e) = self.tx.send(val) {
-            debug!(error = %e, "No narrow state subscribers");
+            warn!(error = %e, "No narrow state subscribers");
         }
     }
 
