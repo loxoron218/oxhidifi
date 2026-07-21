@@ -148,9 +148,13 @@ fn handle_empty_batch(
     let params = next_decoder.params();
     let next_sr = params.sample_rate;
 
-    if let Some(advanced_id) = engine_shared.queue.next() {
-        debug_assert_eq!(advanced_id, next_id, "Queue advanced to unexpected track");
+    if engine_shared.queue.peek_next() != Some(next_id) {
+        return None;
     }
+    debug_assert!(
+        engine_shared.queue.next().is_some(),
+        "peek_next confirmed a track exists for the pre-buffered transition"
+    );
     {
         let mut state = engine_shared.state.lock();
         state.current_track_id = Some(next_id);

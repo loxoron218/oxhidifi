@@ -73,6 +73,15 @@ impl PlaybackQueue {
             .map(|idx| adjust_index_after_move(idx, from, to));
     }
 
+    /// Get the next track ID without advancing.
+    #[must_use]
+    pub fn peek_next(&self) -> Option<i64> {
+        let inner = self.inner.lock();
+        let idx = inner.current_index?;
+        let next = idx + 1;
+        (next < inner.tracks.len()).then(|| inner.tracks[next])
+    }
+
     /// Advance to the next track, returning its ID.
     ///
     /// Returns `None` if there is no next track.
