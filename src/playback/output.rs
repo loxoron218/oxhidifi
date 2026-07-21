@@ -46,6 +46,11 @@ struct AlsaVolumeControl {
 #[cfg(target_os = "linux")]
 impl AlsaVolumeControl {
     /// Open an ALSA mixer for `card_name` and find the Master/PCM element.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error string if the mixer cannot be opened or neither
+    /// "Master" nor "PCM" element is found.
     fn new(card_name: &str) -> Result<Self, String> {
         let mixer = Mixer::new(card_name, false)
             .map_err(|e| format!("Failed to open ALSA mixer '{card_name}': {e}"))?;
@@ -75,6 +80,11 @@ impl AlsaVolumeControl {
     ///
     /// Maps `volume` (0.0–1.0) to the ALSA mixer's integer range
     /// and applies it to all channels.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error string if the mixer element is not found or the
+    /// volume cannot be applied.
     fn set_volume(&self, volume: f64) -> Result<(), String> {
         let selem = self
             .mixer
@@ -197,6 +207,10 @@ impl AudioOutput {
     /// # Returns
     ///
     /// A tuple of [`Output`] and [`Producer<f32>`] on success.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OutputError`] if the device cannot be opened.
     fn try_open_device(
         device: &Device,
         ring_capacity: usize,
