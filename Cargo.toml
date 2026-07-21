@@ -4,7 +4,7 @@ name = "oxhidifi"
 version = "0.1.0"
 
 [dependencies]
-anyhow = { version = "1.0.103", default-features = false }
+anyhow = { version = "1.0.104", default-features = false }
 async-channel = { version = "2.5.0", features = ["std"] }
 cpal = { version = "0.18.1", default-features = false }
 #crossbeam = { version = "0.8.4", default-features = false }
@@ -23,8 +23,8 @@ rayon = { version = "1.12.0", default-features = false }
 #regex = { version = "1.12.3", default-features = false }
 rtrb = { version = "0.3.4", default-features = false }
 rubato = { version = "4.0.0", features = ["fft_resampler"] }
-serde = { version = "1.0.228", default-features = false }
-serde_json = { version = "1.0.150", default-features = false }
+serde = { version = "1.0.229", default-features = false }
+serde_json = { version = "1.0.151", default-features = false }
 sha2 = { version = "0.11.0", default-features = false }
 sqlx = { version = "0.9.0", default-features = false, features = [
     "macros",
@@ -32,8 +32,8 @@ sqlx = { version = "0.9.0", default-features = false, features = [
     "sqlite",
 ] }
 symphonia = { version = "0.6.0", default-features = false, features = ["all"] }
-thiserror = { version = "2.0.18", default-features = false }
-tokio = { version = "1.53.0", default-features = false, features = [
+thiserror = { version = "2.0.19", default-features = false }
+tokio = { version = "1.53.1", default-features = false, features = [
     "macros",
     "rt-multi-thread",
 ] }
