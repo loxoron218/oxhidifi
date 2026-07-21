@@ -277,9 +277,16 @@ async fn populate_album_detail(
         .get_album_format_info(album_id)
         .await
         .unwrap_or_default();
-    widgets
-        .format_label
-        .set_label(&format_info.summary_detailed());
+    widgets.format_label.set_label(&format!(
+        "{} {}\u{2022} {}",
+        album.track_count,
+        if album.track_count == 1 {
+            "track "
+        } else {
+            "tracks "
+        },
+        format_info.summary_detailed(),
+    ));
 
     let tracks = match state.storage.get_tracks_by_album(album_id).await {
         Ok(t) => t,

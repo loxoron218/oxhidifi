@@ -4,9 +4,11 @@ pub mod database;
 pub mod migrations;
 pub mod settings;
 
-use std::{collections::HashMap, future::Future, path::Path, result::Result};
+use std::{borrow::Cow, collections::HashMap, future::Future, path::Path, result::Result};
 
 use {sqlx::FromRow, thiserror::Error};
+
+use crate::playback::layout::{AudioLayout, format_channel_label};
 
 /// Full album record from the database.
 #[derive(Debug, Clone, FromRow)]
@@ -71,6 +73,8 @@ pub struct FormatInfo {
     pub sample_rates: Vec<i32>,
     /// Distinct bit depths.
     pub bit_depths: Vec<i32>,
+    /// Distinct channel counts.
+    pub channels: Vec<i32>,
 }
 
 impl FormatInfo {
@@ -117,13 +121,15 @@ impl FormatInfo {
         parts.join(" ")
     }
 
-    /// Full summary for the **detail page description** (with units, like side panel).
+    /// Full summary for **detail pages** (with units and channels, matches side panel).
     ///
-    /// Format first, then bit depth (`-bit`), then sample rate (`kHz`).
+    /// Format first, then bit depth + sample rate grouped with ` / ` when both
+    /// present, then channel label. Sample rates always show one decimal place
+    /// to match the side panel (e.g. `96.0 kHz`).
     ///
-    /// Uniform lossless: `"FLAC \u{2022} 24-bit / 96 kHz"`
-    /// Uniform lossy:    `"MP3 \u{2022} 44.1 kHz"`
-    /// Mixed:           `"FLAC, MP3 \u{2022} 16, 24-bit / 44.1, 96 kHz"`
+    /// Uniform lossless: `"FLAC \u{2022} 24-bit / 96.0 kHz \u{2022} Stereo"`
+    /// Uniform lossy:    `"MP3 \u{2022} 44.1 kHz \u{2022} Stereo"`
+    /// Mixed:           `"FLAC, MP3 \u{2022} 16, 24-bit / 44.1, 96.0 kHz \u{2022} Stereo"`
     #[must_use]
     pub fn summary_detailed(&self) -> String {
         let mut parts: Vec<String> = Vec::new();
@@ -132,12 +138,17 @@ impl FormatInfo {
             parts.push(fmt);
         }
         let bd = self.bit_depth_display();
-        if !bd.is_empty() {
-            parts.push(bd);
-        }
         let sr = self.sample_rate_display();
-        if !sr.is_empty() {
-            parts.push(sr);
+        match (!bd.is_empty(), !sr.is_empty()) {
+            (true, true) => parts.push(format!("{bd} / {sr}")),
+            (true, false) => parts.push(bd),
+            (false, true) => parts.push(sr),
+            (false, false) => {}
+        }
+        if !self.channels.is_empty() {
+            let ch: Vec<Cow<'static, str>> =
+                self.channels.iter().copied().map(fmt_channel).collect();
+            parts.push(ch.join(", "));
         }
         parts.join(" \u{2022} ")
     }
@@ -152,7 +163,8 @@ impl FormatInfo {
         }
     }
 
-    /// Display string for the sample rate column in column view.
+    /// Display string for sample rates. Always shows one decimal place
+    /// (e.g. `96.0 kHz`) to match the side panel formatting.
     #[must_use]
     pub fn sample_rate_display(&self) -> String {
         if self.sample_rates.is_empty() {
@@ -161,7 +173,7 @@ impl FormatInfo {
             let srs: Vec<String> = self
                 .sample_rates
                 .iter()
-                .map(|&hz| format_sample_rate_str(hz))
+                .map(|&hz| format!("{:.1}", f64::from(hz) / 1000.0))
                 .collect();
             format!("{} kHz", srs.join(", "))
         }
@@ -531,6 +543,12 @@ pub struct TrackUpdate {
     pub album_id: FieldUpdate<i64>,
     /// New artist id.
     pub artist_id: FieldUpdate<i64>,
+}
+
+/// Format a channel count to a human-readable label.
+#[must_use]
+fn fmt_channel(c: i32) -> Cow<'static, str> {
+    format_channel_label(AudioLayout::from_count(u32::try_from(c).unwrap_or(0)))
 }
 
 /// Format a sample rate in Hz to a short kHz string.

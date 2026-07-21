@@ -75,6 +75,7 @@ impl From<FormatInfoRow> for FormatInfo {
             row.formats,
             row.sample_rates.as_deref(),
             row.bit_depths.as_deref(),
+            row.channels.as_deref(),
         )
     }
 }
@@ -90,6 +91,8 @@ struct FormatInfoRow {
     sample_rates: Option<String>,
     /// Comma-separated distinct bit depths.
     bit_depths: Option<String>,
+    /// Comma-separated distinct channel counts.
+    channels: Option<String>,
 }
 
 /// SQLite-backed storage implementation.
@@ -432,12 +435,13 @@ impl Storage for SqliteStorage {
             formats: Option<String>,
             sample_rates: Option<String>,
             bit_depths: Option<String>,
+            channels: Option<String>,
         }
 
         let row: Option<RawInfo> = query_as(
             "SELECT GROUP_CONCAT(DISTINCT UPPER(codec)) AS formats, GROUP_CONCAT(DISTINCT \
-             sample_rate) AS sample_rates, GROUP_CONCAT(DISTINCT bit_depth) AS bit_depths FROM \
-             tracks WHERE album_id = ?",
+             sample_rate) AS sample_rates, GROUP_CONCAT(DISTINCT bit_depth) AS bit_depths, \
+             GROUP_CONCAT(DISTINCT channels) AS channels FROM tracks WHERE album_id = ?",
         )
         .bind(album_id)
         .fetch_optional(&self.pool)
@@ -449,6 +453,7 @@ impl Storage for SqliteStorage {
                 r.formats,
                 r.sample_rates.as_deref(),
                 r.bit_depths.as_deref(),
+                r.channels.as_deref(),
             )
         }))
     }
@@ -464,7 +469,8 @@ impl Storage for SqliteStorage {
         let mut builder = QueryBuilder::new(
             "SELECT album_id, GROUP_CONCAT(DISTINCT UPPER(codec)) AS formats, \
              GROUP_CONCAT(DISTINCT sample_rate) AS sample_rates, GROUP_CONCAT(DISTINCT bit_depth) \
-             AS bit_depths FROM tracks WHERE album_id IN (",
+             AS bit_depths, GROUP_CONCAT(DISTINCT channels) AS channels FROM tracks WHERE \
+             album_id IN (",
         );
 
         let mut separated = builder.separated(", ");
@@ -793,6 +799,7 @@ fn raw_info_to_format_info(
     formats: Option<String>,
     sample_rates: Option<&str>,
     bit_depths: Option<&str>,
+    channels: Option<&str>,
 ) -> FormatInfo {
     FormatInfo {
         formats: formats.map_or_else(Vec::new, |s| {
@@ -800,5 +807,6 @@ fn raw_info_to_format_info(
         }),
         sample_rates: sample_rates.map_or_else(Vec::new, parse_int_list),
         bit_depths: bit_depths.map_or_else(Vec::new, parse_int_list),
+        channels: channels.map_or_else(Vec::new, parse_int_list),
     }
 }
