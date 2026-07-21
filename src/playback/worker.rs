@@ -98,7 +98,7 @@ fn run_decode_loop(
     mut producer: Producer<f32>,
     mut cmd_rx: MpscReceiver<DecodeCommand>,
     engine_shared: &Arc<EngineShared>,
-    track_id: i64,
+    mut track_id: i64,
     output: OutputConfig,
 ) -> Option<(i64, PathBuf)> {
     let DecoderCtx {
@@ -143,7 +143,7 @@ fn run_decode_loop(
             &mut event_to_send,
             &mut producer,
             output,
-            track_id,
+            &mut track_id,
         ) {
             break;
         }

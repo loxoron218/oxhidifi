@@ -227,6 +227,26 @@ pub fn handle_decode_cmd(
     }
 }
 
+/// Send a `PreloadNext` command for the upcoming track after a gapless
+/// transition, if any.
+fn preload_next_upcoming(engine_shared: &Arc<EngineShared>) {
+    let next_id = engine_shared.queue.upcoming().first().copied();
+    let next_path = next_id.and_then(|id| engine_shared.track_paths.lock().get(&id).cloned());
+    let Some((next_next_id, next_next_path)) = next_id.zip(next_path) else {
+        return;
+    };
+    let cmd = PreloadNext {
+        track_id: next_next_id,
+        path: next_next_path,
+    };
+    let guard = engine_shared.decode_tx.lock();
+    if let Some(tx) = guard.as_ref()
+        && let Err(e) = tx.try_send(cmd)
+    {
+        warn!(error = %e, "Failed to send PreloadNext command");
+    }
+}
+
 /// Process one decoded frame from the decoder.
 ///
 /// Handles empty batches (track finished with possible gapless transition),
@@ -238,37 +258,30 @@ pub fn process_decode_frame(
     event_to_send: &mut Option<PlaybackEvent>,
     producer: &mut Producer<f32>,
     output_cfg: OutputConfig,
-    track_id: i64,
+    track_id: &mut i64,
 ) -> bool {
     match ctx.decoder.decode_next() {
-        Ok(batch) if batch.samples.is_empty() => handle_empty_batch(
-            engine_shared,
-            ctx,
-            output_cfg.channels as usize,
-            output_cfg.device_sample_rate,
-        )
-        .map_or_else(
-            || {
-                *event_to_send = Some(TrackFinished { track_id });
-                true
-            },
-            |new_id| {
-                engine_shared.send_event(&TrackStarted { track_id: new_id });
-                let upcoming = engine_shared.queue.upcoming();
-                if let Some(next_next_id) = upcoming.first().copied()
-                    && let Some(next_next_path) =
-                        engine_shared.track_paths.lock().get(&next_next_id).cloned()
-                    && let Some(tx) = engine_shared.decode_tx.lock().as_ref()
-                    && let Err(e) = tx.try_send(DecodeCommand::PreloadNext {
-                        track_id: next_next_id,
-                        path: next_next_path,
-                    })
-                {
-                    warn!(error = %e, "Failed to send PreloadNext command");
+        Ok(batch) if batch.samples.is_empty() => {
+            match handle_empty_batch(
+                engine_shared,
+                ctx,
+                output_cfg.channels as usize,
+                output_cfg.device_sample_rate,
+            ) {
+                None => {
+                    *event_to_send = Some(TrackFinished {
+                        track_id: *track_id,
+                    });
+                    true
                 }
-                false
-            },
-        ),
+                Some(new_id) => {
+                    *track_id = new_id;
+                    engine_shared.send_event(&TrackStarted { track_id: new_id });
+                    preload_next_upcoming(engine_shared);
+                    false
+                }
+            }
+        }
         Ok(batch) => {
             let frame_count =
                 u32::try_from(batch.samples.len() / ctx.src_channels).unwrap_or(u32::MAX);
