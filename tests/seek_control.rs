@@ -10,9 +10,10 @@ mod tests {
 
     use oxhidifi::playback::{
         PlaybackError::{QueueEmpty, TrackNotFound},
+        control::PlaybackController,
         engine::{
             MuteState::{Muted, Unmuted},
-            PlaybackController, PlaybackEngine,
+            PlaybackEngine,
             PlaybackStatus::Stopped,
         },
         queue::PlaybackQueue,

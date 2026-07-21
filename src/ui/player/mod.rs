@@ -19,9 +19,9 @@ use {
 
 use crate::{
     app::AppState,
-    playback::engine::{
-        PlaybackController,
-        PlaybackEvent::{self, Stopped, TrackFinished, TrackStarted},
+    playback::{
+        control::PlaybackController,
+        engine::PlaybackEvent::{self, Stopped, TrackFinished, TrackStarted},
     },
     storage::{Storage, database::SqliteStorage},
 };

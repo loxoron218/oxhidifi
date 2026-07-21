@@ -35,10 +35,8 @@ use {
 use crate::{
     app::AppState,
     playback::{
-        engine::{
-            PlaybackController,
-            PlaybackEvent::{self, QueueChanged, TrackStarted},
-        },
+        control::PlaybackController,
+        engine::PlaybackEvent::{self, QueueChanged, TrackStarted},
         queue::PlaybackQueue,
     },
     storage::Storage,

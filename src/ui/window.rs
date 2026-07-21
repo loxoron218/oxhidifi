@@ -44,7 +44,7 @@ use crate::{
         AppState,
         NavigationEvent::{self, AlbumDetail, ArtistDetail, Back},
     },
-    playback::engine::PlaybackController,
+    playback::control::PlaybackController,
     storage::{
         database::SqliteStorage,
         settings::{

@@ -21,7 +21,8 @@ use {
 use crate::{
     app::AppState,
     playback::{
-        engine::{MuteState::Unmuted, PlaybackController, PlaybackEngine},
+        control::PlaybackController,
+        engine::{MuteState::Unmuted, PlaybackEngine},
         output::OutputMode::{self, BitPerfect, Resampled},
     },
     storage::database::SqliteStorage,

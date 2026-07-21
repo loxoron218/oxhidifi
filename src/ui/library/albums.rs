@@ -39,7 +39,8 @@ use crate::{
             DeviceDisconnected as PlaybackDeviceDisconnected,
             NoDeviceAvailable as PlaybackNoDeviceAvailable, Output,
         },
-        engine::{PlaybackController, PlaybackStatus::Playing},
+        control::PlaybackController,
+        engine::PlaybackStatus::Playing,
     },
     storage::{
         Album, FormatInfo, Storage,

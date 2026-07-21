@@ -22,7 +22,7 @@ use {
 use crate::{
     app::AppState,
     playback::{
-        engine::PlaybackController,
+        control::PlaybackController,
         output::{
             DeviceInfo,
             OutputMode::{self, BitPerfect, Resampled},

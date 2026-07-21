@@ -1,12 +1,17 @@
 //! Audio playback pipeline: decoder, resampler, output, queue, gapless transitions.
 
+pub mod channel;
+pub mod control;
 pub mod decoder;
 pub mod engine;
 pub mod gapless;
 pub mod layout;
 pub mod output;
+pub mod pipeline;
 pub mod queue;
 pub mod resampler;
+pub mod track_transition;
+pub mod worker;
 
 use std::{
     io::{Result, Write},

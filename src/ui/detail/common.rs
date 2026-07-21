@@ -31,7 +31,7 @@ use crate::{
         AppState,
         NavigationEvent::{self, Back},
     },
-    playback::engine::PlaybackController,
+    playback::control::PlaybackController,
     storage::{Storage, Track, format_sample_rate_str},
 };
 

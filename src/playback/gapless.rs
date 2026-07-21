@@ -6,6 +6,15 @@ use rtrb::Consumer;
 
 use crate::playback::{DecoderError, decoder::Decoder};
 
+/// Gapless playback mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GaplessMode {
+    /// Gapless playback is enabled.
+    Enabled,
+    /// Gapless playback is disabled.
+    Disabled,
+}
+
 /// State of the gapless transition engine.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GaplessState {

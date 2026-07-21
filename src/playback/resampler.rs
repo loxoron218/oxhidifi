@@ -389,6 +389,20 @@ pub fn generate_impulse(
     samples
 }
 
+/// Create a new resampler for a given sample rate pair.
+///
+/// # Errors
+///
+/// Returns a descriptive error string if the resampler cannot be created.
+pub fn create_resampler(
+    input_rate: u32,
+    output_rate: u32,
+    channels: usize,
+) -> Result<AudioResampler, String> {
+    AudioResampler::new(input_rate, output_rate, 1024, channels)
+        .map_err(|e| format!("Failed to create resampler: {e}"))
+}
+
 #[cfg(test)]
 mod tests {
     use std::f64::consts::SQRT_2;

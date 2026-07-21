@@ -32,8 +32,9 @@ use {
 use crate::{
     app::AppState,
     playback::{
+        control::PlaybackController,
         engine::{
-            PlaybackController, PlaybackEngine,
+            PlaybackEngine,
             PlaybackEvent::{
                 self, OutputModeChanged, Paused, PositionTick, Resumed, Seeked, Stopped,
                 TrackStarted,
