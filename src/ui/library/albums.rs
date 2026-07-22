@@ -17,8 +17,8 @@ use {
             spawn_future_local,
         },
         gtk::{
-            Align::{Center, End, Start},
-            Box as GtkBox, Button,
+            Align::{End, Start},
+            Box as GtkBox,
             ContentFit::Cover,
             EventControllerMotion, FlowBox, GestureClick, Image, Label,
             Orientation::{Horizontal, Vertical},
@@ -47,7 +47,7 @@ use crate::{
         settings::ViewMode::{self, Column, Grid},
     },
     ui::{
-        ArtworkDecodeRequest, CoverArtCache, DecodedCover,
+        ArtworkDecodeRequest, CoverArtCache, DecodedCover, build_album_play_button,
         library::{
             column_view::{NarrowState, build_album_column_view},
             common::build_grid,
@@ -419,12 +419,7 @@ fn build_album_card(
     overlay.set_child(Some(&cover_art));
     overlay.set_css_classes(&["cover-overlay"]);
 
-    let play_button = Button::builder()
-        .icon_name("media-playback-start-symbolic")
-        .css_classes(["circular", "osd"])
-        .halign(Center)
-        .valign(Center)
-        .build();
+    let play_button = build_album_play_button();
     play_button.set_visible(false);
 
     overlay.add_overlay(&play_button);
@@ -514,7 +509,8 @@ fn build_album_card(
 }
 
 /// Determine the overlay button icon for an album based on playback state.
-fn album_play_icon(state: &AppState, album_id: i64) -> &'static str {
+#[must_use]
+pub fn album_play_icon(state: &AppState, album_id: i64) -> &'static str {
     let ps = state.playback.state();
     let is_current = ps.current_album_id == album_id;
     if is_current && ps.status == Playing {
@@ -525,7 +521,7 @@ fn album_play_icon(state: &AppState, album_id: i64) -> &'static str {
 }
 
 /// Toggle pause if this album is currently playing, otherwise play it.
-async fn toggle_or_play_album(state: &Arc<AppState>, album_id: i64) {
+pub async fn toggle_or_play_album(state: &Arc<AppState>, album_id: i64) {
     let is_current = state.playback.state().current_album_id == album_id;
     if is_current {
         if let Err(e) = state.playback.toggle_pause() {

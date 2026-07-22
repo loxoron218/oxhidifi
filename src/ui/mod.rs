@@ -20,7 +20,7 @@ use {
             MemoryTexture,
         },
         glib::Bytes,
-        gtk::gdk_pixbuf::Pixbuf,
+        gtk::{Align::Center, Button, gdk_pixbuf::Pixbuf},
     },
     parking_lot::Mutex,
     tracing::error,
@@ -205,6 +205,17 @@ pub fn raw_to_texture(decoded: &DecodedCover) -> MemoryTexture {
 /// Returns `None` if the file could not be loaded or decoded.
 pub fn decode_cover_at_size(path: &str, size: i32) -> Option<MemoryTexture> {
     decode_cover_raw(path, size).as_ref().map(raw_to_texture)
+}
+
+/// Build a circular OSD play button for album overlays.
+#[must_use]
+pub fn build_album_play_button() -> Button {
+    Button::builder()
+        .icon_name("media-playback-start-symbolic")
+        .css_classes(["circular", "osd"])
+        .halign(Center)
+        .valign(Center)
+        .build()
 }
 
 /// Run the background cover decoder loop.

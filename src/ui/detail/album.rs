@@ -7,20 +7,20 @@ use {
     libadwaita::{
         glib::{
             ControlFlow::{self, Break, Continue},
-            idle_add_local,
+            MainContext, idle_add_local,
             prelude::Cast,
             spawn_future_local,
         },
         gtk::{
             Align::Start,
-            Box as GtkBox,
+            Box as GtkBox, Button,
             ContentFit::Cover,
             Label, ListBox,
             Orientation::Horizontal,
-            Picture, ScrolledWindow, Widget,
+            Overlay, Picture, ScrolledWindow, Widget,
             accessible::Property::Label as PropertyLabel,
             pango::EllipsizeMode::End,
-            prelude::{AccessibleExtManual, BoxExt, WidgetExt},
+            prelude::{AccessibleExtManual, BoxExt, ButtonExt, WidgetExt},
         },
     },
     tracing::{error, info, warn},
@@ -28,10 +28,12 @@ use {
 
 use crate::{
     app::{AppState, NavigationEvent},
+    playback::control::PlaybackController,
     storage::{Storage, Track},
     ui::{
-        ArtworkDecodeRequest, DecodedCover,
+        ArtworkDecodeRequest, DecodedCover, build_album_play_button,
         detail::common::{build_detail_wrapper, build_scroll_content, fill_track_list_batch},
+        library::albums::{album_play_icon, toggle_or_play_album},
         raw_to_texture,
     },
 };
@@ -45,6 +47,8 @@ struct AlbumDetailContent {
     scroll: ScrolledWindow,
     /// Album artwork display.
     artwork: Picture,
+    /// Play/pause button overlaid on the artwork.
+    play_button: Button,
     /// Album title label.
     title_label: Label,
     /// Artist name label.
@@ -95,7 +99,15 @@ fn build_album_content() -> AlbumDetailContent {
         .halign(Start)
         .build();
     artwork_wrapper.append(&artwork);
-    content.append(&artwork_wrapper);
+
+    let overlay = Overlay::new();
+    overlay.set_child(Some(&artwork_wrapper));
+    overlay.set_css_classes(&["cover-overlay"]);
+    overlay.set_halign(Start);
+
+    let play_button = build_album_play_button();
+    overlay.add_overlay(&play_button);
+    content.append(&overlay);
 
     let title_label = Label::builder()
         .css_classes(["title-2", "heading"])
@@ -158,6 +170,7 @@ fn build_album_content() -> AlbumDetailContent {
     AlbumDetailContent {
         scroll,
         artwork,
+        play_button,
         title_label,
         artist_label,
         year_label,
@@ -179,6 +192,39 @@ pub fn build_album_detail(
     let content = build_album_content();
     wrapper.append(&content.scroll);
 
+    content
+        .play_button
+        .set_icon_name(album_play_icon(state, album_id));
+    let click_state = Arc::clone(state);
+    let click_aid = album_id;
+    let click_btn = content.play_button.clone();
+    content.play_button.connect_clicked(move |_| {
+        let icon = album_play_icon(&click_state, click_aid);
+        click_btn.set_icon_name(if icon == "media-playback-pause-symbolic" {
+            "media-playback-start-symbolic"
+        } else {
+            "media-playback-pause-symbolic"
+        });
+
+        let s = Arc::clone(&click_state);
+        let aid = click_aid;
+        spawn_future_local(async move {
+            toggle_or_play_album(&s, aid).await;
+        });
+    });
+
+    let ev_rx = state.playback.subscribe();
+    let ev_btn = content.play_button.clone();
+    let ev_state = Arc::clone(state);
+    let ev_aid = album_id;
+    MainContext::default().spawn_local(async move {
+        while let Ok(_event) = ev_rx.recv().await {
+            let icon = album_play_icon(&ev_state, ev_aid);
+            let btn = ev_btn.clone();
+            idle_add_local(move || update_detail_play_button(&btn, icon));
+        }
+    });
+
     let sc = Arc::clone(state);
     spawn_future_local(async move {
         populate_album_detail(
@@ -198,6 +244,12 @@ pub fn build_album_detail(
     });
 
     wrapper.upcast()
+}
+
+/// Update the detail page play button icon via idle callback.
+fn update_detail_play_button(btn: &Button, icon: &'static str) -> ControlFlow {
+    btn.set_icon_name(icon);
+    Break
 }
 
 /// Try to send decoded cover to the main thread channel, logging on failure.
