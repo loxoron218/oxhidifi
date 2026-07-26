@@ -30,10 +30,10 @@ use {
             spawn_future_local,
         },
         gtk::{
-            self, CssProvider, Stack, ToggleButton, Widget, prelude::ToggleButtonExt,
-            style_context_add_provider_for_display,
+            Button, CssProvider, STYLE_PROVIDER_PRIORITY_APPLICATION, Stack, ToggleButton, Widget,
+            Window, prelude::ToggleButtonExt, style_context_add_provider_for_display,
         },
-        prelude::{AdwApplicationWindowExt, GtkWindowExt, WidgetExt},
+        prelude::{AdwApplicationWindowExt, ButtonExt, GtkWindowExt, WidgetExt},
     },
     tokio::sync::watch::Sender as TokioSender,
     tracing::{error, info, warn},
@@ -85,8 +85,8 @@ pub fn build_window(app: &Application, state: &Arc<AppState>) -> ApplicationWind
     load_hig_css();
 
     let narrow_state = NarrowState::new_shared();
-    let (toast_overlay, split_view, toggle_button, back_button) =
-        build_content(state, &narrow_state, window.upcast_ref::<gtk::Window>());
+    let (toast_overlay, split_view, toggle_button, back_button, close_button) =
+        build_content(state, &narrow_state, window.upcast_ref::<Window>());
     window.set_content(Some(&toast_overlay));
 
     listen_for_toasts(state, &toast_overlay);
@@ -115,6 +115,16 @@ pub fn build_window(app: &Application, state: &Arc<AppState>) -> ApplicationWind
         back_button.set_active(showing);
     });
 
+    let window_close = window.clone();
+    close_button.connect_clicked(move |_| {
+        window_close.close();
+    });
+
+    split_view
+        .bind_property("collapsed", &close_button, "visible")
+        .sync_create()
+        .build();
+
     window
 }
 
@@ -137,7 +147,7 @@ fn load_hig_css() {
     style_context_add_provider_for_display(
         &display,
         &provider,
-        gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
+        STYLE_PROVIDER_PRIORITY_APPLICATION,
     );
 }
 
@@ -183,19 +193,29 @@ fn add_responsive_breakpoints(
 }
 
 /// Build the sidebar panel with player content.
-fn build_sidebar(state: &Arc<AppState>, back_button: &ToggleButton) -> ToolbarView {
+///
+/// Returns the `ToolbarView` and a close button that is shown in
+/// collapsed mode (see `build_window`).
+fn build_sidebar(state: &Arc<AppState>, back_button: &ToggleButton) -> (ToolbarView, Button) {
     let sidebar_toolbar = ToolbarView::new();
+
+    let close_button = Button::builder()
+        .icon_name("window-close-symbolic")
+        .tooltip_text("Close application")
+        .css_classes(["flat"])
+        .build();
 
     let sidebar_header = HeaderBar::new();
     sidebar_header.set_title_widget(Some(&WindowTitle::new("Now Playing", "")));
     sidebar_header.pack_start(back_button);
+    sidebar_header.pack_end(&close_button);
 
     sidebar_toolbar.add_top_bar(&sidebar_header);
 
     let player_content = build_player_content(state);
     sidebar_toolbar.set_content(Some(&player_content));
 
-    sidebar_toolbar
+    (sidebar_toolbar, close_button)
 }
 
 /// Build the content pane with library views and controls.
@@ -203,7 +223,7 @@ fn build_content_pane(
     state: &Arc<AppState>,
     toggle_button: &ToggleButton,
     narrow_state: &Arc<NarrowState>,
-    parent: &gtk::Window,
+    parent: &Window,
 ) -> (ToolbarView, ViewStack, Stack, Widget) {
     let content_toolbar = ToolbarView::new();
 
@@ -309,8 +329,14 @@ fn build_content_pane(
 fn build_content(
     state: &Arc<AppState>,
     narrow_state: &Arc<NarrowState>,
-    parent: &gtk::Window,
-) -> (ToastOverlay, OverlaySplitView, ToggleButton, ToggleButton) {
+    parent: &Window,
+) -> (
+    ToastOverlay,
+    OverlaySplitView,
+    ToggleButton,
+    ToggleButton,
+    Button,
+) {
     let toast_overlay = ToastOverlay::new();
 
     let back_button = ToggleButton::builder()
@@ -321,7 +347,7 @@ fn build_content(
         .build();
     back_button.set_visible(false);
 
-    let sidebar_toolbar = build_sidebar(state, &back_button);
+    let (sidebar_toolbar, close_button) = build_sidebar(state, &back_button);
 
     let toggle_button = ToggleButton::builder()
         .icon_name("view-dual-symbolic")
@@ -410,7 +436,13 @@ fn build_content(
     });
 
     drop(sv_collapse);
-    (toast_overlay, split_view, toggle_button, back_button)
+    (
+        toast_overlay,
+        split_view,
+        toggle_button,
+        back_button,
+        close_button,
+    )
 }
 
 /// Save the active tab to storage asynchronously and broadcast through the watch channel.
