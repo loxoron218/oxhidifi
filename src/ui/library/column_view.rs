@@ -81,16 +81,19 @@ pub struct NarrowState {
     narrow: AtomicBool,
     /// Channel to notify subscribers of narrow-mode changes.
     tx: TokioSender<bool>,
+    /// Kept alive so [`send`] never fails when no external subscribers exist.
+    rx: Receiver<bool>,
 }
 
 impl NarrowState {
     /// Create a new `NarrowState` wrapped in an [`Arc`].
     #[must_use]
     pub fn new_shared() -> Arc<Self> {
-        let (tx, _) = TokioChannel(false);
+        let (tx, rx) = TokioChannel(false);
         Arc::new(Self {
             narrow: AtomicBool::new(false),
             tx,
+            rx,
         })
     }
 
@@ -112,7 +115,7 @@ impl NarrowState {
     /// The receiver will immediately yield the current value on first
     /// [`changed`](watch::Receiver::changed) call.
     pub fn subscribe(&self) -> Receiver<bool> {
-        self.tx.subscribe()
+        self.rx.clone()
     }
 }
 
