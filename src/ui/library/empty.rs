@@ -220,13 +220,25 @@ pub fn build_add_folder_button(state: &Arc<AppState>) -> Button {
     let state_clone = Arc::clone(state);
     add_folder_button.connect_clicked(move |btn| {
         let state = Arc::clone(&state_clone);
-        let parent = btn.root().and_then(|r| r.downcast::<Window>().ok());
+        let parent = parent_window(btn);
         spawn_future_local(async move {
             add_music_folder(&state, parent.as_ref()).await;
         });
     });
 
     add_folder_button
+}
+
+/// Get the parent window from a button's root widget.
+fn parent_window(btn: &Button) -> Option<Window> {
+    let r = btn.root()?;
+    r.downcast::<Window>().map_or_else(
+        |_| {
+            warn!("Button has no parent window");
+            None
+        },
+        Some,
+    )
 }
 
 /// Open a file chooser dialog to add a music folder.
