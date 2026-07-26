@@ -6,7 +6,7 @@
 
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, PoisonError},
 };
 
 use {
@@ -229,6 +229,11 @@ fn handle_queue_event(
 ) {
     match event {
         QueueChanged { track_ids } => {
+            refresh_store_on_main(
+                store,
+                queue,
+                &cache.lock().unwrap_or_else(PoisonError::into_inner),
+            );
             spawn_fetch_queue_names(state, track_ids, tx.clone());
         }
         TrackStarted { .. } => {

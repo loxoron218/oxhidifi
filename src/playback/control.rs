@@ -20,7 +20,7 @@ use crate::playback::{
     },
     gapless::GaplessMode::{Disabled, Enabled},
     output::OutputMode::{self, BitPerfect, Resampled},
-    worker,
+    worker::{start_playback, stop_decode_task},
 };
 
 /// Trait for controlling playback, consumed by the UI layer.
@@ -38,6 +38,16 @@ pub trait PlaybackController: Send + 'static {
     ///
     /// Returns [`PlaybackError`] if playback cannot start.
     fn play_queue(&self, queue: Vec<i64>) -> Result<(), PlaybackError>;
+
+    /// Play a list of track IDs starting from `start_index`.
+    ///
+    /// The full queue is set in the given order, but playback begins at
+    /// the track at `start_index`, enabling previous-track navigation.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PlaybackError`] if playback cannot start.
+    fn play_at(&self, queue: Vec<i64>, start_index: usize) -> Result<(), PlaybackError>;
 
     /// Toggle between play and pause.
     ///
@@ -122,7 +132,37 @@ impl PlaybackController for PlaybackEngine {
                 TrackNotFound(track_id)
             })?;
         info!(track_id, "Play track command",);
-        worker::start_playback(&self.shared, track_id, path);
+        start_playback(&self.shared, track_id, path);
+        Ok(())
+    }
+
+    fn play_at(&self, queue: Vec<i64>, start_index: usize) -> Result<(), PlaybackError> {
+        if queue.is_empty() {
+            warn!(queue_len = queue.len(), "Play at command with empty queue");
+            return Err(QueueEmpty);
+        }
+        if start_index >= queue.len() {
+            warn!(
+                start_index,
+                queue_len = queue.len(),
+                "Start index out of bounds"
+            );
+            return Err(QueueEmpty);
+        }
+        let queue_len = queue.len();
+        info!(queue_len, start_index, "Play at command",);
+        self.shared.queue.set_queue(queue.clone());
+        self.shared.queue.set_current_index(start_index);
+        self.shared.send_event(&QueueChanged { track_ids: queue });
+        let play_id = self.shared.queue.current().ok_or(QueueEmpty)?;
+        let path = self
+            .shared
+            .track_paths
+            .lock()
+            .get(&play_id)
+            .cloned()
+            .ok_or(TrackNotFound(play_id))?;
+        start_playback(&self.shared, play_id, path);
         Ok(())
     }
 
@@ -146,7 +186,7 @@ impl PlaybackController for PlaybackEngine {
             .get(&first_id)
             .cloned()
             .ok_or(TrackNotFound(first_id))?;
-        worker::start_playback(&self.shared, first_id, path);
+        start_playback(&self.shared, first_id, path);
         Ok(())
     }
 
@@ -189,7 +229,7 @@ impl PlaybackController for PlaybackEngine {
     fn stop(&self) -> Result<(), PlaybackError> {
         let current_track = self.shared.state.lock().current_track_id;
         info!(track_id = current_track, "Playback stopped",);
-        worker::stop_decode_task(&self.shared);
+        stop_decode_task(&self.shared);
         let mut state = self.shared.state.lock();
         state.status = StatusStopped;
         state.current_track_id = None;
@@ -213,7 +253,7 @@ impl PlaybackController for PlaybackEngine {
             .get(&next_id)
             .cloned()
             .ok_or(TrackNotFound(next_id))?;
-        worker::start_playback(&self.shared, next_id, path);
+        start_playback(&self.shared, next_id, path);
         Ok(())
     }
 
@@ -229,7 +269,7 @@ impl PlaybackController for PlaybackEngine {
             .get(&prev_id)
             .cloned()
             .ok_or(TrackNotFound(prev_id))?;
-        worker::start_playback(&self.shared, prev_id, path);
+        start_playback(&self.shared, prev_id, path);
         Ok(())
     }
 

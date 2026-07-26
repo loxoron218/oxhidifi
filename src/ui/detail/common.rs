@@ -264,8 +264,8 @@ fn spawn_playback(state: &Arc<AppState>, track_id: i64) {
 /// Play a track in its album context.
 ///
 /// When the track belongs to an album, queues the entire album in
-/// track-number order with the clicked track first. Otherwise plays
-/// the track individually.
+/// track-number order with playback starting at the clicked track.
+/// Otherwise plays the track individually.
 async fn play_single_track(state: &Arc<AppState>, track_id: i64) {
     let Ok(Some(track)) = state.storage.get_track(track_id).await else {
         info!(track_id, "Track not found");
@@ -285,11 +285,7 @@ async fn play_single_track(state: &Arc<AppState>, track_id: i64) {
     };
 
     let clicked_idx = tracks.iter().position(|t| t.id == track_id).unwrap_or(0);
-    let ordered: Vec<i64> = tracks[clicked_idx..]
-        .iter()
-        .chain(tracks[..clicked_idx].iter())
-        .map(|t| t.id)
-        .collect();
+    let ordered: Vec<i64> = tracks.iter().map(|t| t.id).collect();
 
     let track_paths: HashMap<i64, PathBuf> = tracks
         .iter()
@@ -297,7 +293,7 @@ async fn play_single_track(state: &Arc<AppState>, track_id: i64) {
         .collect();
     state.playback.set_track_paths(track_paths);
 
-    if let Err(e) = state.playback.play_queue(ordered) {
+    if let Err(e) = state.playback.play_at(ordered, clicked_idx) {
         warn!(error = %e, track_id, "Failed to play track");
     }
 }

@@ -34,6 +34,20 @@ impl PlaybackQueue {
         };
     }
 
+    /// Set the current index to `index`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `index` is out of bounds.
+    pub fn set_current_index(&self, index: usize) {
+        let mut inner = self.inner.lock();
+        assert!(
+            index < inner.tracks.len(),
+            "set_current_index out of bounds"
+        );
+        inner.current_index = Some(index);
+    }
+
     /// Append a track to the end of the queue.
     pub fn append(&self, track_id: i64) {
         let mut inner = self.inner.lock();
