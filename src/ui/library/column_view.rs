@@ -531,6 +531,7 @@ fn default_int_format(n: i32) -> String {
 fn setup_narrow_bindings(narrow_state: &NarrowState, columns: &[&ColumnViewColumn]) {
     let cols: Vec<ColumnViewColumn> = columns.iter().copied().cloned().collect();
     let mut rx = narrow_state.subscribe();
+    set_columns_visibility(&cols, *rx.borrow());
     spawn_future_local(async move {
         while rx.changed().await.is_ok() {
             set_columns_visibility(&cols, *rx.borrow());
