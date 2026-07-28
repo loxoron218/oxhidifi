@@ -29,14 +29,7 @@ use crate::{
             list_output_devices,
         },
     },
-    storage::{
-        LibraryDirectory, Storage,
-        database::SqliteStorage,
-        settings::{
-            ActiveTab::{self, Albums, Artists},
-            ViewMode::{self, Column, Grid},
-        },
-    },
+    storage::{LibraryDirectory, Storage, database::SqliteStorage},
 };
 
 /// Remove a library directory by ID in a background task.
@@ -138,7 +131,7 @@ pub fn show_preferences_dialog(state: &Arc<AppState>, parent: &Window) {
 
     build_library_page(&dialog, state, parent);
     build_audio_page(&dialog, state);
-    build_view_page(&dialog, state);
+    build_view_page(&dialog);
 
     dialog.present(Some(parent));
 }
@@ -148,20 +141,6 @@ pub fn show_preferences_dialog(state: &Arc<AppState>, parent: &Window) {
 async fn save_gapless_setting(state: Arc<AppState>, enabled: bool) {
     if let Err(e) = state.storage.set_gapless_enabled(enabled).await {
         error!(error = %e, "Failed to save gapless setting");
-    }
-}
-
-/// Persist view mode, logging on failure.
-async fn save_view_mode_setting(state: Arc<AppState>, mode: ViewMode) {
-    if let Err(e) = state.storage.set_view_mode(mode).await {
-        error!(error = %e, "Failed to save view mode");
-    }
-}
-
-/// Persist active tab, logging on failure.
-async fn save_tab_setting(state: Arc<AppState>, tab: ActiveTab) {
-    if let Err(e) = state.storage.set_active_tab(tab).await {
-        error!(error = %e, "Failed to save active tab");
     }
 }
 
@@ -355,75 +334,10 @@ fn build_playback_group(page: &PreferencesPage, state: &Arc<AppState>) {
 }
 
 /// Build the View > Display page.
-fn build_view_page(dialog: &PreferencesDialog, state: &Arc<AppState>) {
+fn build_view_page(dialog: &PreferencesDialog) {
     let page = PreferencesPage::new();
     page.set_title("View");
     page.set_icon_name(Some("preferences-desktop-display-symbolic"));
 
-    let display_group = PreferencesGroup::new();
-    display_group.set_title("Display");
-    display_group.set_description(Some("Default view preferences"));
-
-    let view_model = StringList::new(&["Grid", "Column"]);
-    let view_combo = ComboRow::builder()
-        .title("Default View")
-        .model(&view_model)
-        .build();
-    view_combo.set_selected(match state.storage.get_view_mode() {
-        Grid => 0,
-        Column => 1,
-    });
-
-    let state_view = Arc::clone(state);
-    view_combo.connect_selected_notify(move |combo| {
-        let mode = if combo.selected() == 0 { Grid } else { Column };
-        info!(
-            view_mode = if matches!(mode, Grid) {
-                "grid"
-            } else {
-                "column"
-            },
-            "Default view mode changed",
-        );
-        spawn_future_local(save_view_mode_setting(Arc::clone(&state_view), mode));
-    });
-
-    display_group.add(&view_combo);
-
-    let tab_model = StringList::new(&["Albums", "Artists"]);
-    let tab_combo = ComboRow::builder()
-        .title("Default Tab")
-        .model(&tab_model)
-        .build();
-    tab_combo.set_selected(match state.storage.get_active_tab() {
-        Albums => 0,
-        Artists => 1,
-    });
-
-    let state_tab = Arc::clone(state);
-    tab_combo.connect_selected_notify(move |combo| {
-        let tab = if combo.selected() == 0 {
-            Albums
-        } else {
-            Artists
-        };
-        info!(
-            active_tab = if matches!(tab, Albums) {
-                "albums"
-            } else {
-                "artists"
-            },
-            "Default tab changed",
-        );
-        spawn_future_local(save_tab_setting(Arc::clone(&state_tab), tab));
-        state_tab.active_tab_tx.send_if_modified(|current| {
-            let changed = *current != tab;
-            *current = tab;
-            changed
-        });
-    });
-
-    display_group.add(&tab_combo);
-    page.add(&display_group);
     dialog.add(&page);
 }
