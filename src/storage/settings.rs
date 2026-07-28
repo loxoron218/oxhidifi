@@ -196,8 +196,6 @@ impl SettingsStore {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct UserSettings {
-    /// Configured library directory paths.
-    pub library_directories: Vec<String>,
     /// Preferred audio output device name (None = default).
     pub audio_device: Option<String>,
     /// Playback volume (0.0–1.0).
@@ -221,7 +219,6 @@ pub struct UserSettings {
 impl Default for UserSettings {
     fn default() -> Self {
         Self {
-            library_directories: Vec::new(),
             audio_device: None,
             volume: 0.8,
             view_mode: ViewMode::Grid,
@@ -288,7 +285,6 @@ mod tests {
     #[test]
     fn settings_defaults() {
         let settings = UserSettings::default();
-        assert!(settings.library_directories.is_empty());
         assert!((settings.volume - 0.8).abs() < f64::EPSILON);
         assert_eq!(settings.view_mode, Grid);
         assert_eq!(settings.active_tab, Albums);
@@ -303,7 +299,6 @@ mod tests {
         let settings_path = dir.path().join("settings.json");
 
         let original = UserSettings {
-            library_directories: vec!["/music".to_string()],
             volume: 0.5,
             view_mode: Column,
             ..UserSettings::default()
@@ -324,7 +319,6 @@ mod tests {
             return;
         };
 
-        assert_eq!(restored.library_directories, original.library_directories);
         assert!((restored.volume - 0.5).abs() < f64::EPSILON);
         assert_eq!(restored.view_mode, Column);
     }
