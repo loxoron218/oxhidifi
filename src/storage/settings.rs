@@ -265,7 +265,7 @@ impl Default for UserSettings {
     fn default() -> Self {
         Self {
             audio_device: None,
-            volume: 0.8,
+            volume: 1.0,
             view_mode: ViewMode::Grid,
             active_tab: ActiveTab::Albums,
             window_width: 1200,
@@ -335,7 +335,7 @@ mod tests {
     #[test]
     fn settings_defaults() {
         let settings = UserSettings::default();
-        assert!((settings.volume - 0.8).abs() < f64::EPSILON);
+        assert!((settings.volume - 1.0).abs() < f64::EPSILON);
         assert_eq!(settings.view_mode, Grid);
         assert_eq!(settings.active_tab, Albums);
         assert_eq!(settings.window_width, 1200);
