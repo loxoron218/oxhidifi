@@ -230,7 +230,7 @@ pub fn build_album_detail(
     let ev_state = Arc::clone(state);
     let ev_aid = album_id;
     MainContext::default().spawn_local(async move {
-        while let Ok(_event) = ev_rx.recv().await {
+        while ev_rx.recv().await.is_ok() {
             let icon = album_play_icon(&ev_state, ev_aid);
             let btn = ev_btn.clone();
             idle_add_local(move || update_detail_play_button(&btn, icon));

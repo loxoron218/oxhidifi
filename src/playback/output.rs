@@ -107,12 +107,12 @@ struct AlsaVolumeControl;
 #[cfg(not(target_os = "linux"))]
 impl AlsaVolumeControl {
     /// Open an ALSA mixer — always fails on non-Linux.
-    fn new(_card_name: &str) -> Result<Self, String> {
+    fn new(_: &str) -> Result<Self, String> {
         Err("ALSA is only available on Linux".to_string())
     }
 
     /// Set the hardware playback volume — always fails on non-Linux.
-    fn set_volume(&self, _volume: f64) -> Result<(), String> {
+    fn set_volume(&self, _: f64) -> Result<(), String> {
         Err("ALSA is only available on Linux".to_string())
     }
 }
