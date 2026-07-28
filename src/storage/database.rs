@@ -1,6 +1,10 @@
 //! `SQLite` database implementation using `sqlx` for library catalog persistence.
 
-use std::{collections::HashMap, fs::write, path::Path};
+use std::{
+    collections::HashMap,
+    fs::write,
+    path::{Path, PathBuf},
+};
 
 use {
     parking_lot::RwLock,
@@ -307,6 +311,50 @@ impl SqliteStorage {
                 ))
             })?;
         Ok(())
+    }
+
+    /// Get the last playback session data from settings.
+    pub fn get_last_session(&self) -> (Vec<i64>, Option<usize>, Option<i64>, f64, f64) {
+        self.settings.read().get_last_session()
+    }
+
+    /// Persist the current playback session to settings.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the settings file cannot be written.
+    pub async fn set_last_session(
+        &self,
+        queue: Vec<i64>,
+        queue_index: Option<usize>,
+        track_id: Option<i64>,
+        position: f64,
+        duration: f64,
+    ) -> Result<(), StorageError> {
+        self.settings.write().update_memory(|s| {
+            s.last_queue = queue;
+            s.last_queue_index = queue_index;
+            s.last_track_id = track_id;
+            s.last_position = position;
+            s.last_duration = duration;
+        });
+        self.save_settings_async()
+            .await
+            .map_err(|e| Database(format!("Failed to save session: {e}")))?;
+        Ok(())
+    }
+
+    /// Load file paths for a list of track IDs.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StorageError::Database`] if the query fails.
+    pub async fn get_track_paths(&self, ids: &[i64]) -> StorageResult<HashMap<i64, PathBuf>> {
+        let tracks = self.get_tracks_by_ids(ids).await?;
+        Ok(tracks
+            .into_iter()
+            .map(|t| (t.id, PathBuf::from(t.audio.file_path)))
+            .collect())
     }
 }
 

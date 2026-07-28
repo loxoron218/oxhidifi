@@ -9,6 +9,7 @@ use crate::playback::{
     PlaybackError::{self, QueueEmpty, TrackNotFound},
     engine::{
         DecodeCommand::{Pause, Resume, Seek},
+        EngineShared,
         MuteState::{Muted, Unmuted},
         PlaybackEngine,
         PlaybackEvent::{
@@ -191,38 +192,32 @@ impl PlaybackController for PlaybackEngine {
     }
 
     fn toggle_pause(&self) -> Result<(), PlaybackError> {
-        let is_playing = {
-            let state = self.shared.state.lock();
-            state.status != StatusStopped
-        };
-        if !is_playing {
-            info!("Toggle pause ignored — not playing");
+        if self.shared.state.lock().status != StatusStopped {
+            toggle_play_pause(&self.shared);
             return Ok(());
         }
 
-        let mut state = self.shared.state.lock();
-        let was_paused = state.status == StatusPaused;
-        let track_id = state.current_track_id;
-        let (event, cmd) = if was_paused {
-            state.status = Playing;
-            info!(track_id, "Playback resumed");
-            (Resumed, Resume)
-        } else {
-            state.status = StatusPaused;
-            info!(track_id, "Playback paused");
-            (Paused, Pause)
+        let (tid, saved_position, saved_duration) = {
+            let s = self.shared.state.lock();
+            (s.current_track_id, s.elapsed_seconds, s.duration_seconds)
         };
-        drop(state);
 
-        let cmd_tx = self.shared.decode_tx.lock();
-        if let Some(tx) = cmd_tx.as_ref()
-            && let Err(e) = tx.try_send(cmd)
-        {
-            error!(error = %e, "Failed to send pause/resume command to decode thread");
+        let Some(tid) = tid else {
+            info!("Toggle pause ignored — not playing");
+            return Ok(());
+        };
+
+        info!(track_id = tid, "Resuming playback from saved session");
+        self.play_track(tid)?;
+
+        if saved_duration > 0.0 {
+            self.shared.state.lock().duration_seconds = saved_duration;
         }
-        drop(cmd_tx);
 
-        self.shared.send_event(&event);
+        if saved_position > 0.0 {
+            self.seek_to(saved_position)?;
+        }
+
         Ok(())
     }
 
@@ -357,4 +352,31 @@ impl PlaybackController for PlaybackEngine {
     fn state(&self) -> PlaybackState {
         self.shared.state.lock().clone()
     }
+}
+
+/// Toggle between playing and paused states when playback is active.
+fn toggle_play_pause(shared: &EngineShared) {
+    let mut state = shared.state.lock();
+    let was_paused = state.status == StatusPaused;
+    let tid = state.current_track_id;
+    let (event, cmd) = if was_paused {
+        state.status = Playing;
+        info!(track_id = tid, "Playback resumed");
+        (Resumed, Resume)
+    } else {
+        state.status = StatusPaused;
+        info!(track_id = tid, "Playback paused");
+        (Paused, Pause)
+    };
+    drop(state);
+
+    let cmd_tx = shared.decode_tx.lock();
+    if let Some(tx) = cmd_tx.as_ref()
+        && let Err(e) = tx.try_send(cmd)
+    {
+        error!(error = %e, "Failed to send pause/resume command to decode thread");
+    }
+    drop(cmd_tx);
+
+    shared.send_event(&event);
 }

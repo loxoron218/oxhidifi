@@ -95,14 +95,31 @@ pub fn build_window(app: &Application, state: &Arc<AppState>) -> ApplicationWind
 
     wire_panel_events(state, &split_view);
 
-    let playback = Arc::clone(&state.playback);
-    let cover_cache = Arc::clone(&state.cover_art_cache);
+    let close_state = Arc::clone(state);
     window.connect_close_request(move |_| {
-        info!("Window close requested — stopping playback");
-        if let Err(e) = playback.stop() {
+        info!("Window close requested — persisting session");
+
+        let s = close_state.playback.state();
+        let queue_tracks = close_state.playback.queue().tracks();
+        let queue_index = close_state.playback.queue().current_index();
+        let storage = Arc::clone(&close_state.storage);
+        spawn_future_local(async move {
+            storage
+                .set_last_session(
+                    queue_tracks,
+                    queue_index,
+                    s.current_track_id,
+                    s.elapsed_seconds,
+                    s.duration_seconds,
+                )
+                .await
+                .unwrap_or_else(|e| warn!(error = %e, "Failed to persist session on close"));
+        });
+
+        if let Err(e) = close_state.playback.stop() {
             error!(error = %e, "Failed to stop playback on window close");
         }
-        cover_cache.shutdown();
+        close_state.cover_art_cache.shutdown();
         Proceed
     });
 

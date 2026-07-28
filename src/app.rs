@@ -12,7 +12,7 @@ use {
     async_channel::{Receiver, Sender, unbounded},
     libadwaita::{
         Application,
-        glib::spawn_future_local,
+        glib::{ControlFlow::Break, idle_add_local, spawn_future_local},
         prelude::{ApplicationExt, ApplicationExtManual, GtkWindowExt},
     },
     tokio::{
@@ -33,7 +33,14 @@ use crate::{
         scanner::{FsScanner, ScanEvent},
         watcher::{LibraryWatcher, WatcherEvent},
     },
-    playback::{engine::PlaybackEngine, output::startup_device_check},
+    playback::{
+        control::PlaybackController,
+        engine::{
+            PlaybackEngine,
+            PlaybackEvent::{Paused, PositionTick, QueueChanged, TrackStarted},
+        },
+        output::startup_device_check,
+    },
     storage::{
         database::SqliteStorage,
         settings::{ActiveTab, ViewMode},
@@ -241,6 +248,30 @@ async fn run_startup_checks() {
     }
 }
 
+/// Emit playback events on startup to reflect the restored session in the UI.
+fn emit_session_events(state: &AppState) {
+    let track_ids = state.playback.queue().tracks();
+    if track_ids.is_empty() {
+        return;
+    }
+
+    state
+        .playback
+        .shared
+        .send_event(&QueueChanged { track_ids });
+
+    let s = state.playback.state();
+    let Some(track_id) = s.current_track_id else {
+        return;
+    };
+    state.playback.shared.send_event(&TrackStarted { track_id });
+    state.playback.shared.send_event(&Paused);
+    state.playback.shared.send_event(&PositionTick {
+        elapsed_seconds: s.elapsed_seconds,
+        duration_seconds: s.duration_seconds,
+    });
+}
+
 /// Build and run the Libadwaita application.
 ///
 /// Initializes the storage backend, playback engine, and presents the main
@@ -264,6 +295,36 @@ pub async fn run_application() -> Result<()> {
     );
 
     let playback = Arc::new(PlaybackEngine::new());
+
+    if let Err(e) = playback.set_volume(storage.get_settings_volume()) {
+        warn!(error = %e, "Failed to apply persisted volume");
+    }
+    if let Err(e) = playback.set_output_mode(storage.get_output_mode()) {
+        warn!(error = %e, "Failed to apply persisted output mode");
+    }
+
+    let (last_queue, last_index, last_track_id, last_position, last_duration) =
+        storage.get_last_session();
+    if !last_queue.is_empty() {
+        let paths = storage
+            .get_track_paths(&last_queue)
+            .await
+            .unwrap_or_default();
+        playback.set_track_paths(paths);
+
+        let queue = playback.queue();
+        queue.set_queue(last_queue);
+        if let Some(idx) = last_index
+            && idx < queue.len()
+        {
+            queue.set_current_index(idx);
+        }
+
+        let mut ps = playback.shared.state.lock();
+        ps.current_track_id = last_track_id;
+        ps.elapsed_seconds = last_position;
+        ps.duration_seconds = last_duration;
+    }
 
     let (scan_event_tx, scan_event_rx) = unbounded();
     let (toast_tx, toast_rx) = unbounded();
@@ -312,9 +373,16 @@ pub async fn run_application() -> Result<()> {
 
     let app = Application::builder().application_id(APP_ID).build();
 
+    let startup_state = Arc::clone(&state);
     app.connect_activate(move |app| {
-        build_window(app, &state).present();
+        build_window(app, &startup_state).present();
         spawn_future_local(run_startup_checks());
+
+        let ss = Arc::clone(&startup_state);
+        idle_add_local(move || {
+            emit_session_events(&ss);
+            Break
+        });
     });
 
     info!("Starting application");

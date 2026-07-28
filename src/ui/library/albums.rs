@@ -348,7 +348,7 @@ fn load_cover_art_async(
     for (album_id, index, path) in cover_art_data {
         if let Some(texture) = cache
             .get(*album_id)
-            .filter(|t| t.width() >= THUMBNAIL_SIZE || t.height() >= THUMBNAIL_SIZE)
+            .filter(|t| t.width() == THUMBNAIL_SIZE && t.height() == THUMBNAIL_SIZE)
         {
             apply_texture(&overlays[*index], &texture);
             continue;

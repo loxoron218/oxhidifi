@@ -185,6 +185,41 @@ impl SettingsStore {
         self.update_async(|s| s.output_mode = mode).await
     }
 
+    /// Get the last playback session data.
+    #[must_use]
+    pub fn get_last_session(&self) -> (Vec<i64>, Option<usize>, Option<i64>, f64, f64) {
+        (
+            self.settings.last_queue.clone(),
+            self.settings.last_queue_index,
+            self.settings.last_track_id,
+            self.settings.last_position,
+            self.settings.last_duration,
+        )
+    }
+
+    /// Set the last playback session data.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be written.
+    pub async fn set_last_session(
+        &mut self,
+        queue: Vec<i64>,
+        queue_index: Option<usize>,
+        track_id: Option<i64>,
+        position: f64,
+        duration: f64,
+    ) -> Result<()> {
+        self.update_async(|s| {
+            s.last_queue = queue;
+            s.last_queue_index = queue_index;
+            s.last_track_id = track_id;
+            s.last_position = position;
+            s.last_duration = duration;
+        })
+        .await
+    }
+
     /// Get read access to the underlying settings path.
     #[must_use]
     pub fn path(&self) -> &Path {
@@ -214,6 +249,16 @@ pub struct UserSettings {
     pub gapless_enabled: bool,
     /// Output mode: resampled (software volume) or bit-perfect (hardware volume).
     pub output_mode: OutputMode,
+    /// Track IDs from the last playback session (for queue restoration).
+    pub last_queue: Vec<i64>,
+    /// Index into `last_queue` for the track that was playing.
+    pub last_queue_index: Option<usize>,
+    /// Track ID that was playing when the session ended.
+    pub last_track_id: Option<i64>,
+    /// Elapsed seconds in the last track.
+    pub last_position: f64,
+    /// Duration of the last track (for validation).
+    pub last_duration: f64,
 }
 
 impl Default for UserSettings {
@@ -228,6 +273,11 @@ impl Default for UserSettings {
             window_maximized: false,
             gapless_enabled: true,
             output_mode: Resampled,
+            last_queue: Vec::new(),
+            last_queue_index: None,
+            last_track_id: None,
+            last_position: 0.0,
+            last_duration: 0.0,
         }
     }
 }

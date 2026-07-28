@@ -133,6 +133,12 @@ impl PlaybackQueue {
         inner.current_index.map(|idx| inner.tracks[idx])
     }
 
+    /// Get the index of the currently playing track.
+    #[must_use]
+    pub fn current_index(&self) -> Option<usize> {
+        self.inner.lock().current_index
+    }
+
     /// Get the track IDs of upcoming tracks (after the current one).
     #[must_use]
     pub fn upcoming(&self) -> Vec<i64> {

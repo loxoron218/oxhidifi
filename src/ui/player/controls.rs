@@ -245,6 +245,7 @@ pub fn build_volume_control(state: &Arc<AppState>) -> (Box, Button, Scale) {
         if let Err(e) = state_mode.playback.set_output_mode(new_mode) {
             error!(error = %e, "Failed to toggle output mode");
         }
+        persist_toggle_output_mode(Arc::clone(&state_mode.storage), new_mode);
         btn.set_icon_name(new_mode.icon_name());
         btn.set_tooltip_text(Some(mode_button_tooltip(new_mode)));
         update_volume_scale_visual(&scale_for_click, new_mode);
@@ -274,6 +275,15 @@ pub fn update_volume_scale_visual(scale: &Scale, mode: OutputMode) {
             ));
         }
     }
+}
+
+/// Persist the output mode toggled from the side panel.
+fn persist_toggle_output_mode(storage: Arc<SqliteStorage>, mode: OutputMode) {
+    spawn_future_local(async move {
+        if let Err(e) = storage.set_output_mode(mode).await {
+            warn!(error = %e, "Failed to persist output mode");
+        }
+    });
 }
 
 /// Tooltip text for the mode toggle button.
