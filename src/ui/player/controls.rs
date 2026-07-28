@@ -44,6 +44,7 @@ pub fn build_playback_controls(state: &Arc<AppState>) -> (Box, Button) {
         .icon_name("media-skip-backward-symbolic")
         .css_classes(["flat"])
         .tooltip_text("Previous track")
+        .can_focus(true)
         .build();
     prev_button.update_property(&[PropertyLabel("Previous track")]);
     let state_prev = Arc::clone(state);
@@ -58,6 +59,7 @@ pub fn build_playback_controls(state: &Arc<AppState>) -> (Box, Button) {
         .icon_name("media-playback-start-symbolic")
         .css_classes(["suggested-action", "circular"])
         .tooltip_text("Play or pause")
+        .can_focus(true)
         .build();
     play_button.update_property(&[PropertyLabel("Play or pause")]);
     let state_play = Arc::clone(state);
@@ -72,6 +74,7 @@ pub fn build_playback_controls(state: &Arc<AppState>) -> (Box, Button) {
         .icon_name("media-skip-forward-symbolic")
         .css_classes(["flat"])
         .tooltip_text("Next track")
+        .can_focus(true)
         .build();
     next_button.update_property(&[PropertyLabel("Next track")]);
     let state_next = Arc::clone(state);
@@ -154,6 +157,7 @@ pub fn build_seek_section(state: &Arc<AppState>) -> (Box, Scale, Label, Label) {
         seek_to_scale_value(&playback_unpaired, &scale_unpaired);
     });
 
+    seek_scale.update_property(&[PropertyLabel("Seek through the track")]);
     seek_scale.add_controller(gesture);
 
     let playback_prev = Arc::clone(&state.playback);
@@ -192,6 +196,7 @@ pub fn build_volume_control(state: &Arc<AppState>) -> (Box, Button, Scale) {
         .icon_name("audio-volume-high-symbolic")
         .css_classes(["flat"])
         .tooltip_text("Mute or unmute")
+        .can_focus(true)
         .build();
     mute_button.update_property(&[PropertyLabel("Mute or unmute")]);
     let state_mute = Arc::clone(state);
@@ -217,6 +222,7 @@ pub fn build_volume_control(state: &Arc<AppState>) -> (Box, Button, Scale) {
     volume_scale.set_draw_value(false);
     volume_scale.set_hexpand(true);
     volume_scale.set_can_focus(true);
+    volume_scale.update_property(&[PropertyLabel("Adjust volume")]);
     let state_vol = Arc::clone(state);
     let vol_ref = volume_scale.clone();
     volume_scale.connect_value_changed(move |_| {
@@ -233,7 +239,9 @@ pub fn build_volume_control(state: &Arc<AppState>) -> (Box, Button, Scale) {
         .icon_name(initial_mode.icon_name())
         .css_classes(["flat", "caption"])
         .tooltip_text(mode_button_tooltip(initial_mode))
+        .can_focus(true)
         .build();
+    mode_button.update_property(&[PropertyLabel(mode_button_tooltip(initial_mode))]);
     let state_mode = Arc::clone(state);
     let scale_for_click = volume_scale.clone();
     mode_button.connect_clicked(move |btn| {
@@ -248,6 +256,7 @@ pub fn build_volume_control(state: &Arc<AppState>) -> (Box, Button, Scale) {
         persist_toggle_output_mode(Arc::clone(&state_mode.storage), new_mode);
         btn.set_icon_name(new_mode.icon_name());
         btn.set_tooltip_text(Some(mode_button_tooltip(new_mode)));
+        btn.update_property(&[PropertyLabel(mode_button_tooltip(new_mode))]);
         update_volume_scale_visual(&scale_for_click, new_mode);
     });
     vol_box.append(&mode_button);
@@ -266,6 +275,7 @@ pub fn update_volume_scale_visual(scale: &Scale, mode: OutputMode) {
         Resampled => {
             scale.set_sensitive(true);
             scale.set_tooltip_text(Some("Adjust volume"));
+            scale.update_property(&[PropertyLabel("Adjust volume")]);
         }
         BitPerfect => {
             scale.set_sensitive(false);
@@ -273,6 +283,9 @@ pub fn update_volume_scale_visual(scale: &Scale, mode: OutputMode) {
                 "Volume controlled via hardware mixer \u{2014} switch to Resampled for software \
                  volume",
             ));
+            scale.update_property(&[PropertyLabel(
+                "Volume controlled via hardware mixer, switch to Resampled for software volume",
+            )]);
         }
     }
 }

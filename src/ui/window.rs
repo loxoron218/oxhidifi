@@ -31,9 +31,12 @@ use {
         },
         gtk::{
             Button, CssProvider, STYLE_PROVIDER_PRIORITY_APPLICATION, Stack, ToggleButton, Widget,
-            Window, prelude::ToggleButtonExt, style_context_add_provider_for_display,
+            Window, accessible::Property::Label, prelude::ToggleButtonExt,
+            style_context_add_provider_for_display,
         },
-        prelude::{AdwApplicationWindowExt, ButtonExt, GtkWindowExt, WidgetExt},
+        prelude::{
+            AccessibleExtManual, AdwApplicationWindowExt, ButtonExt, GtkWindowExt, WidgetExt,
+        },
     },
     tokio::sync::watch::Sender as TokioSender,
     tracing::{error, info, warn},
@@ -220,7 +223,9 @@ fn build_sidebar(state: &Arc<AppState>, back_button: &ToggleButton) -> (ToolbarV
         .icon_name("window-close-symbolic")
         .tooltip_text("Close application")
         .css_classes(["flat"])
+        .can_focus(true)
         .build();
+    close_button.update_property(&[Label("Close application")]);
 
     let sidebar_header = HeaderBar::new();
     sidebar_header.set_title_widget(Some(&WindowTitle::new("Now Playing", "")));
@@ -303,6 +308,7 @@ fn build_content_pane(
         .can_focus(true)
         .tooltip_text("Switch between Albums and Artists views")
         .build();
+    switcher.update_property(&[Label("Switch between Albums and Artists views")]);
     content_header.set_title_widget(Some(&switcher));
 
     let controls = build_header_controls(state, parent);
@@ -325,6 +331,7 @@ fn build_content_pane(
         .can_focus(true)
         .tooltip_text("Switch between Albums and Artists views")
         .build();
+    switcher_bar.update_property(&[Label("Switch between Albums and Artists views")]);
     content_toolbar.add_bottom_bar(&switcher_bar);
 
     let status_bar = StatusBar::new(state);
@@ -361,7 +368,9 @@ fn build_content(
         .css_classes(["flat"])
         .tooltip_text("Hide player panel")
         .active(true)
+        .can_focus(true)
         .build();
+    back_button.update_property(&[Label("Hide player panel")]);
     back_button.set_visible(false);
 
     let (sidebar_toolbar, close_button) = build_sidebar(state, &back_button);
@@ -371,7 +380,9 @@ fn build_content(
         .tooltip_text("Toggle player panel")
         .active(false)
         .css_classes(["flat"])
+        .can_focus(true)
         .build();
+    toggle_button.update_property(&[Label("Toggle player panel")]);
 
     let (content_toolbar, stack, content_area, orig_stack) =
         build_content_pane(state, &toggle_button, narrow_state, parent);
@@ -408,6 +419,7 @@ fn build_content(
         .pin_sidebar(true)
         .tooltip_text("Player panel — toggle with button in header")
         .build();
+    split_view.update_property(&[Label("Main player panel with sidebar and content area")]);
 
     let user_wants_sidebar = Arc::new(AtomicBool::new(false));
 

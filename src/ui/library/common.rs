@@ -12,14 +12,15 @@ use libadwaita::{
         Box, FlowBox,
         SelectionMode::None,
         Widget,
+        accessible::Property::Label,
     },
-    prelude::BoxExt,
+    prelude::{AccessibleExtManual, BoxExt},
 };
 
 /// Build a configured `FlowBox` for grid-mode display.
 #[must_use]
 pub fn build_grid(tooltip: &str) -> FlowBox {
-    FlowBox::builder()
+    let flow = FlowBox::builder()
         .min_children_per_line(2)
         .valign(Start)
         .halign(Center)
@@ -28,7 +29,9 @@ pub fn build_grid(tooltip: &str) -> FlowBox {
         .selection_mode(None)
         .can_focus(true)
         .tooltip_text(tooltip)
-        .build()
+        .build();
+    flow.update_property(&[Label(tooltip)]);
+    flow
 }
 
 /// Populate a `FlowBox` in grid mode with batched insertion for large libraries.

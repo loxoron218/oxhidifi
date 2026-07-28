@@ -27,9 +27,9 @@ use {
         gtk::{
             Align::Start, ColumnView, ColumnViewColumn, ContentFit::Cover, CustomSorter, Image,
             Label, ListItem, NoSelection, Picture, SignalListItemFactory, SortListModel, Widget,
-            pango::EllipsizeMode::End,
+            accessible::Property::Label as PropertyLabel, pango::EllipsizeMode::End,
         },
-        prelude::{Cast, ListItemExt, ListModelExt, ObjectExt},
+        prelude::{AccessibleExtManual, Cast, ListItemExt, ListModelExt, ObjectExt},
     },
     parking_lot::Mutex,
     tokio::sync::watch::{Receiver, Sender as TokioSender, channel as TokioChannel},
@@ -128,11 +128,13 @@ fn setup_column_view(store: ListStore) -> ColumnView {
     let sort_model = SortListModel::new(Some(model), None::<CustomSorter>);
     let selection = NoSelection::new(Some(sort_model));
 
-    ColumnView::builder()
+    let column_view = ColumnView::builder()
         .model(&selection)
         .hexpand(true)
         .vexpand(true)
-        .build()
+        .build();
+    column_view.update_property(&[PropertyLabel("Album library")]);
+    column_view
 }
 
 /// Append up to `STORE_BATCH_SIZE` items from `remaining` to the store.
@@ -330,6 +332,7 @@ fn build_cover_column(
             .height_request(COVER_THUMB_SIZE)
             .css_classes(["album-cover", "dim-label"])
             .build();
+        picture.update_property(&[PropertyLabel("Album cover art")]);
         if let Some(list_item) = item.downcast_ref::<ListItem>() {
             list_item.set_child(Some(&picture.upcast::<Widget>()));
         }
@@ -364,6 +367,7 @@ fn build_cover_column(
     });
 
     ColumnViewColumn::builder()
+        .title("Cover")
         .factory(&factory)
         .fixed_width(COVER_THUMB_SIZE + 12)
         .resizable(false)
@@ -433,12 +437,14 @@ fn build_artist_icon_column() -> ColumnViewColumn {
             .height_request(32)
             .css_classes(["artist-avatar", "dim-label"])
             .build();
+        image.update_property(&[PropertyLabel("Artist icon")]);
         if let Some(list_item) = item.downcast_ref::<ListItem>() {
             list_item.set_child(Some(&image.upcast::<Widget>()));
         }
     });
 
     ColumnViewColumn::builder()
+        .title("Icon")
         .factory(&factory)
         .fixed_width(44)
         .resizable(false)

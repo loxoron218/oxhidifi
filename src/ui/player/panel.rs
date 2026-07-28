@@ -280,9 +280,13 @@ pub fn build_player_content(state: &Arc<AppState>) -> ScrolledWindow {
 /// Apply metadata labels to the UI via idle callback.
 fn apply_meta_labels(labels: &TrackLabels, t: &str, ar: &str, al: &str, fmt: &str) {
     labels.title.set_label(t);
+    labels.title.update_property(&[PropertyLabel(t)]);
     labels.artist.set_label(ar);
+    labels.artist.update_property(&[PropertyLabel(ar)]);
     labels.album.set_label(al);
+    labels.album.update_property(&[PropertyLabel(al)]);
     labels.format.set_label(fmt);
+    labels.format.update_property(&[PropertyLabel(fmt)]);
 }
 
 /// Process one metadata update: check track ID match, update labels, request cover.
@@ -425,9 +429,16 @@ fn on_playback_event(
         }
         Stopped => {
             widgets.labels.title.set_label("No track playing");
+            widgets
+                .labels
+                .title
+                .update_property(&[PropertyLabel("No track playing")]);
             widgets.labels.artist.set_label("");
+            widgets.labels.artist.update_property(&[PropertyLabel("")]);
             widgets.labels.album.set_label("");
+            widgets.labels.album.update_property(&[PropertyLabel("")]);
             widgets.labels.format.set_label("");
+            widgets.labels.format.update_property(&[PropertyLabel("")]);
             widgets
                 .play_button
                 .set_icon_name("media-playback-start-symbolic");
@@ -476,6 +487,9 @@ fn on_playback_event(
             widgets
                 .output_mode_btn
                 .set_tooltip_text(Some(mode_button_tooltip(*mode)));
+            widgets
+                .output_mode_btn
+                .update_property(&[PropertyLabel(mode_button_tooltip(*mode))]);
             update_volume_scale_visual(&widgets.volume_scale, *mode);
         }
         _ => {}

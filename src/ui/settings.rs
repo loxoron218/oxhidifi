@@ -9,11 +9,11 @@ use {
         SwitchRow,
         gio::{Cancellable, File, spawn_blocking},
         glib::{Error, spawn_future_local},
-        gtk::{Adjustment, Button, FileDialog, StringList, Window},
+        gtk::{Adjustment, Button, FileDialog, StringList, Window, accessible::Property::Label},
         prelude::{
-            ActionRowExt, AdwDialogExt, ButtonExt, ComboRowExt, FileExt, ObjectExt,
-            PreferencesDialogExt, PreferencesGroupExt, PreferencesPageExt, PreferencesRowExt,
-            WidgetExt,
+            AccessibleExtManual, ActionRowExt, AdwDialogExt, ButtonExt, ComboRowExt, FileExt,
+            ObjectExt, PreferencesDialogExt, PreferencesGroupExt, PreferencesPageExt,
+            PreferencesRowExt, WidgetExt,
         },
     },
     tracing::{error, info, warn},
@@ -92,8 +92,12 @@ fn add_directory_row(
         .build();
     let remove_btn = Button::builder()
         .label("Remove")
+        .use_underline(true)
         .css_classes(["destructive-action", "flat"])
+        .tooltip_text("Remove this directory from the library")
+        .can_focus(true)
         .build();
+    remove_btn.update_property(&[Label("Remove directory")]);
     row.add_suffix(&remove_btn);
     row.set_activatable_widget(Some(&remove_btn));
 
@@ -196,8 +200,12 @@ fn build_library_page(dialog: &PreferencesDialog, state: &Arc<AppState>, parent:
 
     let add_btn = Button::builder()
         .label("Add Directory")
+        .use_underline(true)
         .css_classes(["suggested-action"])
+        .tooltip_text("Add a new music directory to scan")
+        .can_focus(true)
         .build();
+    add_btn.update_property(&[Label("Add Directory")]);
     group.add(&add_btn);
 
     let state_clone = Arc::clone(state);

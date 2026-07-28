@@ -68,6 +68,7 @@ impl StatusBar {
             .hexpand(false)
             .halign(End)
             .show_text(false)
+            .tooltip_text("Progress of music library scanning")
             .build();
         progress_bar.update_property(&[PropertyLabel("Scanning progress")]);
 
@@ -94,6 +95,7 @@ impl StatusBar {
     /// Update the status text.
     pub fn set_status(&self, text: &str) {
         self.status_label.set_label(text);
+        self.status_label.update_property(&[PropertyLabel(text)]);
     }
 
     /// Show scanning progress.
@@ -156,7 +158,9 @@ impl StatusBar {
                     || directory.display().to_string(),
                     |n| n.to_string_lossy().to_string(),
                 );
-                status_label.set_label(&format!("Scanning \u{201c}{name}\u{201d}..."));
+                let text = format!("Scanning \u{201c}{name}\u{201d}...");
+                status_label.set_label(&text);
+                status_label.update_property(&[PropertyLabel(&text)]);
                 progress_bar.set_visible(true);
                 progress_bar.set_fraction(0.0);
             }
@@ -167,23 +171,26 @@ impl StatusBar {
             } => {
                 let fraction = f64::from(files_processed) / f64::from(files_found.max(1));
                 progress_bar.set_fraction(fraction);
-                status_label.set_label(&format!(
-                    "Scanning... {files_processed}/{files_found} files"
-                ));
+                let text = format!("Scanning... {files_processed}/{files_found} files");
+                status_label.set_label(&text);
+                status_label.update_property(&[PropertyLabel(&text)]);
             }
             ScanCompleted {
                 tracks_added,
                 tracks_skipped,
                 ..
             } => {
-                status_label.set_label(&format!(
-                    "Scan complete: {tracks_added} tracks added, {tracks_skipped} skipped"
-                ));
+                let text =
+                    format!("Scan complete: {tracks_added} tracks added, {tracks_skipped} skipped");
+                status_label.set_label(&text);
+                status_label.update_property(&[PropertyLabel(&text)]);
                 progress_bar.set_fraction(1.0);
                 progress_bar.set_visible(false);
             }
             ScanError { error, .. } => {
-                status_label.set_label(&format!("Scan error: {error}"));
+                let text = format!("Scan error: {error}");
+                status_label.set_label(&text);
+                status_label.update_property(&[PropertyLabel(&text)]);
                 progress_bar.set_visible(false);
             }
             _ => {}

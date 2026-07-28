@@ -11,8 +11,10 @@ use std::sync::Arc;
 use {
     libadwaita::{
         glib::spawn_future_local,
-        gtk::{Box, Button, Orientation::Horizontal, ToggleButton, Window},
-        prelude::{BoxExt, ButtonExt, ToggleButtonExt, WidgetExt},
+        gtk::{
+            Box, Button, Orientation::Horizontal, ToggleButton, Window, accessible::Property::Label,
+        },
+        prelude::{AccessibleExtManual, BoxExt, ButtonExt, ToggleButtonExt, WidgetExt},
     },
     tracing::warn,
 };
@@ -54,6 +56,7 @@ pub fn build_view_toggle(state: &Arc<AppState>, initial_mode: ViewMode) -> Toggl
         .can_focus(true)
         .css_classes(["flat"])
         .build();
+    toggle.update_property(&[Label(initial_mode.tooltip())]);
 
     let state_clone = Arc::clone(state);
     toggle.connect_toggled(move |btn| {
@@ -89,6 +92,7 @@ pub fn build_header_controls(state: &Arc<AppState>, parent: &Window) -> Box {
         .css_classes(["flat"])
         .can_focus(true)
         .build();
+    prefs_btn.update_property(&[Label("Preferences")]);
 
     let state_prefs = Arc::clone(state);
     let parent_clone = parent.clone();

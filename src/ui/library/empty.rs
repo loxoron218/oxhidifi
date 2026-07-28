@@ -212,10 +212,12 @@ pub fn build_empty_container(_: &Arc<AppState>) -> Box {
 pub fn build_add_folder_button(state: &Arc<AppState>) -> Button {
     let add_folder_button = Button::builder()
         .label("Add Music Folder")
+        .use_underline(true)
         .css_classes(["suggested-action"])
         .can_focus(true)
         .tooltip_text("Open a file chooser to select your music folder")
         .build();
+    add_folder_button.update_property(&[PropertyLabel("Add Music Folder")]);
 
     let state_clone = Arc::clone(state);
     add_folder_button.connect_clicked(move |btn| {

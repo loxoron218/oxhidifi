@@ -120,6 +120,7 @@ fn build_row_factory(queue: &PlaybackQueue, store: &ListStore) -> SignalListItem
             .icon_name("list-drag-handle-symbolic")
             .css_classes(["flat"])
             .tooltip_text("Drag to reorder")
+            .can_focus(true)
             .build();
         handle.update_property(&[PropertyLabel("Drag handle")]);
 
@@ -145,6 +146,7 @@ fn build_row_factory(queue: &PlaybackQueue, store: &ListStore) -> SignalListItem
             .icon_name("window-close-symbolic")
             .css_classes(["flat"])
             .tooltip_text("Remove from queue")
+            .can_focus(true)
             .build();
         remove.update_property(&[PropertyLabel("Remove from queue")]);
 
@@ -274,6 +276,7 @@ pub fn build_queue_view(state: &Arc<AppState>, queue: &PlaybackQueue) -> Box {
         .show_separators(true)
         .can_focus(true)
         .build();
+    list_view.update_property(&[PropertyLabel("Playback queue list")]);
 
     let container = Box::builder().orientation(Vertical).spacing(4).build();
 

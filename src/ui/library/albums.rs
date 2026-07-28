@@ -23,9 +23,10 @@ use {
             EventControllerMotion, FlowBox, GestureClick, Image, Label,
             Orientation::{Horizontal, Vertical},
             Overlay, Picture, Stack, Widget,
+            accessible::Property::Label as PropertyLabel,
             pango::EllipsizeMode::End as EllipsizeEnd,
         },
-        prelude::{BoxExt, ButtonExt, WidgetExt},
+        prelude::{AccessibleExtManual, BoxExt, ButtonExt, WidgetExt},
     },
     tokio::join,
     tracing::{error, info, warn},
@@ -279,14 +280,15 @@ pub async fn lazy_build_album_mode(
 /// Returns an `Image` with a generic audio icon. Used as the initial
 /// state before async cover art loading completes.
 fn build_placeholder() -> Widget {
-    Image::builder()
+    let placeholder = Image::builder()
         .icon_name("audio-x-generic-symbolic")
         .pixel_size(THUMBNAIL_SIZE / 2)
         .width_request(THUMBNAIL_SIZE)
         .height_request(THUMBNAIL_SIZE)
         .css_classes(["album-cover", "dim-label"])
-        .build()
-        .upcast()
+        .build();
+    placeholder.update_property(&[PropertyLabel("Album cover placeholder")]);
+    placeholder.upcast()
 }
 
 /// Apply a decoded texture to an overlay's child.
@@ -306,6 +308,7 @@ fn apply_texture(overlay: &Overlay, texture: &MemoryTexture) {
             .height_request(THUMBNAIL_SIZE)
             .css_classes(["album-cover"])
             .build();
+        picture.update_property(&[PropertyLabel("Album cover art")]);
         overlay.set_child(Some(&picture));
     }
 }
@@ -462,6 +465,7 @@ fn build_album_card(
         .css_classes(["heading", "title"])
         .halign(Start)
         .build();
+    title_label.update_property(&[PropertyLabel(&format!("Album: {}", album.title))]);
 
     let artist_label = Label::builder()
         .label(artist_name)
@@ -470,6 +474,7 @@ fn build_album_card(
         .css_classes(["dim-label", "caption"])
         .halign(Start)
         .build();
+    artist_label.update_property(&[PropertyLabel(&format!("Artist: {artist_name}"))]);
 
     let format_row = GtkBox::builder().orientation(Horizontal).spacing(6).build();
 
@@ -480,6 +485,7 @@ fn build_album_card(
         .css_classes(["dim-label", "caption"])
         .halign(Start)
         .build();
+    format_label.update_property(&[PropertyLabel(&format!("Format: {}", format_info.summary()))]);
     format_label.set_hexpand(true);
 
     let year_label = Label::builder()
@@ -487,6 +493,7 @@ fn build_album_card(
         .css_classes(["dim-label", "caption"])
         .halign(End)
         .build();
+    year_label.update_property(&[PropertyLabel("Release year")]);
 
     format_row.append(&format_label);
     format_row.append(&year_label);

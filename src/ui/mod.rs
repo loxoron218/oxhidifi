@@ -10,8 +10,6 @@ pub mod window;
 
 use std::{collections::HashMap, sync::Arc};
 
-use crate::threading::ThreadManager;
-
 use {
     async_channel::{Receiver, Sender, unbounded},
     libadwaita::{
@@ -20,11 +18,14 @@ use {
             MemoryTexture,
         },
         glib::Bytes,
-        gtk::{Align::Center, Button, gdk_pixbuf::Pixbuf},
+        gtk::{Align::Center, Button, accessible::Property::Label, gdk_pixbuf::Pixbuf},
+        prelude::AccessibleExtManual,
     },
     parking_lot::Mutex,
     tracing::error,
 };
+
+use crate::threading::ThreadManager;
 
 /// Request for the centralized cover decoder worker.
 pub struct ArtworkDecodeRequest {
@@ -210,12 +211,16 @@ pub fn decode_cover_at_size(path: &str, size: i32) -> Option<MemoryTexture> {
 /// Build a circular OSD play button for album overlays.
 #[must_use]
 pub fn build_album_play_button() -> Button {
-    Button::builder()
+    let btn = Button::builder()
         .icon_name("media-playback-start-symbolic")
         .css_classes(["circular", "osd"])
         .halign(Center)
         .valign(Center)
-        .build()
+        .tooltip_text("Play or pause album")
+        .can_focus(true)
+        .build();
+    btn.update_property(&[Label("Play or pause album")]);
+    btn
 }
 
 /// Run the background cover decoder loop.

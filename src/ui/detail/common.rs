@@ -63,6 +63,7 @@ pub fn fill_track_list_batch(
 #[must_use]
 pub fn build_detail_wrapper(nav_tx: &Sender<NavigationEvent>, title: &str) -> Box {
     let wrapper = Box::builder().orientation(Vertical).can_focus(true).build();
+    wrapper.update_property(&[PropertyLabel(&format!("{title} detail page"))]);
     let back_button = setup_back_navigation(&wrapper, nav_tx.clone());
     let header_bar = build_detail_header(&back_button, title);
     wrapper.append(&header_bar);
@@ -82,6 +83,7 @@ pub fn setup_back_navigation(widget: &impl WidgetExt, nav_tx: Sender<NavigationE
         .icon_name("go-previous-symbolic")
         .tooltip_text("Back to library")
         .css_classes(["flat"])
+        .can_focus(true)
         .build();
     back_button.update_property(&[PropertyLabel("Back to library")]);
 
@@ -157,6 +159,7 @@ pub fn build_detail_header(back_button: &Button, title: &str) -> Box {
 pub fn build_track_row(state: &Arc<AppState>, track: &Track, display_number: usize) -> ListBoxRow {
     let row = ListBoxRow::builder()
         .activatable(true)
+        .can_focus(true)
         .tooltip_text("Click to play, right-click to add to queue")
         .build();
 
@@ -209,6 +212,9 @@ pub fn build_track_row(state: &Arc<AppState>, track: &Track, display_number: usi
         .halign(End)
         .margin_start(12)
         .build();
+    fmt_label.update_property(&[PropertyLabel(&format!(
+        "Track {display_number} format: {track_format}"
+    ))]);
     hbox.append(&fmt_label);
 
     let duration_label = Label::builder()
@@ -216,9 +222,17 @@ pub fn build_track_row(state: &Arc<AppState>, track: &Track, display_number: usi
         .css_classes(["dim-label", "caption"])
         .halign(End)
         .build();
+    duration_label.update_property(&[PropertyLabel(&format!(
+        "Track {display_number} duration: {}",
+        format_duration(track.duration)
+    ))]);
     hbox.append(&duration_label);
 
     row.set_child(Some(&hbox));
+    row.update_property(&[PropertyLabel(&format!(
+        "Track {display_number}: {}",
+        track.title
+    ))]);
 
     let sc = Arc::clone(state);
     let tid = track.id;
