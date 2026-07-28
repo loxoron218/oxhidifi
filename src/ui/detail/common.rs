@@ -163,6 +163,20 @@ pub fn build_track_row(state: &Arc<AppState>, track: &Track, display_number: usi
         .tooltip_text("Click to play, right-click to add to queue")
         .build();
 
+    let hbox = build_track_content(track, display_number);
+    row.set_child(Some(&hbox));
+    row.update_property(&[PropertyLabel(&format!(
+        "Track {display_number}: {}",
+        track.title
+    ))]);
+
+    attach_track_controllers(&row, state, track.id);
+
+    row
+}
+
+/// Build the hbox containing track number, title, format, and duration labels.
+fn build_track_content(track: &Track, display_number: usize) -> Box {
     let hbox = Box::builder()
         .orientation(Horizontal)
         .spacing(12)
@@ -209,33 +223,41 @@ pub fn build_track_row(state: &Arc<AppState>, track: &Track, display_number: usi
     let fmt_label = Label::builder()
         .label(&track_format)
         .css_classes(["dim-label", "caption"])
-        .halign(End)
-        .margin_start(12)
+        .width_chars(13)
+        .xalign(0.0)
         .build();
     fmt_label.update_property(&[PropertyLabel(&format!(
         "Track {display_number} format: {track_format}"
     ))]);
-    hbox.append(&fmt_label);
 
     let duration_label = Label::builder()
         .label(format_duration(track.duration))
         .css_classes(["dim-label", "caption"])
-        .halign(End)
+        .width_chars(5)
+        .xalign(0.0)
         .build();
     duration_label.update_property(&[PropertyLabel(&format!(
         "Track {display_number} duration: {}",
         format_duration(track.duration)
     ))]);
-    hbox.append(&duration_label);
 
-    row.set_child(Some(&hbox));
-    row.update_property(&[PropertyLabel(&format!(
-        "Track {display_number}: {}",
-        track.title
-    ))]);
+    let meta_box = Box::builder()
+        .orientation(Horizontal)
+        .spacing(6)
+        .halign(End)
+        .margin_start(12)
+        .build();
+    meta_box.append(&fmt_label);
+    meta_box.append(&duration_label);
+    hbox.append(&meta_box);
 
+    hbox
+}
+
+/// Attaches play-on-click, keyboard-play, and queue-on-right-click controllers.
+fn attach_track_controllers(row: &ListBoxRow, state: &Arc<AppState>, track_id: i64) {
     let sc = Arc::clone(state);
-    let tid = track.id;
+    let tid = track_id;
     let click = GestureClick::new();
     click.connect_released(move |_, _, _, _| {
         spawn_playback(&sc, tid);
@@ -243,7 +265,7 @@ pub fn build_track_row(state: &Arc<AppState>, track: &Track, display_number: usi
     row.add_controller(click);
 
     let sc_kb = Arc::clone(state);
-    let tid_kb = track.id;
+    let tid_kb = track_id;
     let key_controller = EventControllerKey::new();
     key_controller.connect_key_pressed(move |_, key, _, _| {
         if key == Key::Return || key == Key::KP_Enter {
@@ -256,15 +278,13 @@ pub fn build_track_row(state: &Arc<AppState>, track: &Track, display_number: usi
     row.add_controller(key_controller);
 
     let sc2 = Arc::clone(state);
-    let tid2 = track.id;
+    let tid2 = track_id;
     let right_click = GestureClick::new();
     right_click.set_button(3);
     right_click.connect_released(move |_, _, _, _| {
         sc2.playback.queue().append(tid2);
     });
     row.add_controller(right_click);
-
-    row
 }
 
 /// Spawns playback of the track with the given ID.
