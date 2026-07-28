@@ -125,6 +125,21 @@ impl SettingsStore {
         self.update_async(|s| s.gapless_enabled = enabled).await
     }
 
+    /// Get whether album labels are shown under cover art.
+    #[must_use]
+    pub fn get_show_album_labels(&self) -> bool {
+        self.settings.show_album_labels
+    }
+
+    /// Set whether album labels are shown under cover art.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be written.
+    pub async fn set_show_album_labels_async(&mut self, enabled: bool) -> Result<()> {
+        self.update_async(|s| s.show_album_labels = enabled).await
+    }
+
     /// Get the preferred audio device name.
     #[must_use]
     pub fn get_audio_device(&self) -> Option<&str> {
@@ -247,6 +262,8 @@ pub struct UserSettings {
     pub window_maximized: bool,
     /// Whether gapless playback is enabled.
     pub gapless_enabled: bool,
+    /// Whether to show album title/artist/format labels under cover art.
+    pub show_album_labels: bool,
     /// Output mode: resampled (software volume) or bit-perfect (hardware volume).
     pub output_mode: OutputMode,
     /// Track IDs from the last playback session (for queue restoration).
@@ -272,6 +289,7 @@ impl Default for UserSettings {
             window_height: 800,
             window_maximized: false,
             gapless_enabled: true,
+            show_album_labels: true,
             output_mode: Resampled,
             last_queue: Vec::new(),
             last_queue_index: None,

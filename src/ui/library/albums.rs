@@ -516,6 +516,12 @@ fn build_album_card(
     card.append(&artist_label);
     card.append(&format_row);
 
+    if !state.storage.get_show_album_labels() {
+        title_label.set_visible(false);
+        artist_label.set_visible(false);
+        format_row.set_visible(false);
+    }
+
     let gesture = GestureClick::new();
     let state_clone = Arc::clone(state);
     gesture.connect_released(move |_, _, _, _| {

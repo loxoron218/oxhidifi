@@ -212,6 +212,26 @@ impl SqliteStorage {
         Ok(())
     }
 
+    /// Get whether album labels are shown under cover art.
+    pub fn get_show_album_labels(&self) -> bool {
+        self.settings.read().get_show_album_labels()
+    }
+
+    /// Set whether album labels are shown under cover art.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if settings cannot be saved.
+    pub async fn set_show_album_labels(&self, enabled: bool) -> Result<(), StorageError> {
+        self.settings
+            .write()
+            .update_memory(|s| s.show_album_labels = enabled);
+        self.save_settings_async()
+            .await
+            .map_err(|e| Database(format!("Failed to save album labels setting: {e}")))?;
+        Ok(())
+    }
+
     /// Get the preferred audio device name.
     pub fn get_audio_device(&self) -> Option<String> {
         self.settings.read().get_audio_device().map(String::from)
