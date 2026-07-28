@@ -130,7 +130,6 @@ impl FormatInfo {
     /// Uniform lossless: `"FLAC \u{2022} 24-bit / 96.0 kHz \u{2022} Stereo"`
     /// Uniform lossy:    `"MP3 \u{2022} 44.1 kHz \u{2022} Stereo"`
     /// Mixed:           `"FLAC, MP3 \u{2022} 16, 24-bit / 44.1, 96.0 kHz \u{2022} Stereo"`
-    #[must_use]
     pub fn summary_detailed(&self) -> String {
         let mut parts: Vec<String> = Vec::new();
         let fmt = self.formats_display();
@@ -546,7 +545,6 @@ pub struct TrackUpdate {
 }
 
 /// Format a channel count to a human-readable label.
-#[must_use]
 fn fmt_channel(c: i32) -> Cow<'static, str> {
     format_channel_label(AudioLayout::from_count(u32::try_from(c).unwrap_or(0)))
 }
