@@ -16,7 +16,7 @@ use {
             Box as GtkBox, Button,
             ContentFit::Cover,
             Label, ListBox,
-            Orientation::Horizontal,
+            Orientation::{Horizontal, Vertical},
             Overlay, Picture, ScrolledWindow, Widget,
             accessible::Property::Label as PropertyLabel,
             pango::EllipsizeMode::End,
@@ -57,6 +57,8 @@ struct AlbumDetailContent {
     year_label: Label,
     /// Genre label.
     genre_label: Label,
+    /// Track count label.
+    tracks_label: Label,
     /// Format summary label.
     format_label: Label,
     /// Track listing container.
@@ -75,7 +77,9 @@ struct AlbumDetailWidgets<'a> {
     year_label: &'a Label,
     /// Genre label.
     genre_label: &'a Label,
-    /// Format summary label (sample rate, bit depth, etc.).
+    /// Track count label.
+    tracks_label: &'a Label,
+    /// Format summary label.
     format_label: &'a Label,
     /// Track listing container.
     track_list: &'a ListBox,
@@ -126,8 +130,8 @@ fn build_album_content() -> AlbumDetailContent {
     content.append(&artist_label);
 
     let meta_box = GtkBox::builder()
-        .orientation(Horizontal)
-        .spacing(12)
+        .orientation(Vertical)
+        .spacing(6)
         .halign(Start)
         .build();
 
@@ -144,6 +148,13 @@ fn build_album_content() -> AlbumDetailContent {
         .build();
     genre_label.update_property(&[PropertyLabel("Genre")]);
     meta_box.append(&genre_label);
+
+    let tracks_label = Label::builder()
+        .css_classes(["dim-label", "caption"])
+        .halign(Start)
+        .build();
+    tracks_label.update_property(&[PropertyLabel("Track count")]);
+    meta_box.append(&tracks_label);
 
     let format_label = Label::builder()
         .css_classes(["dim-label", "caption"])
@@ -175,6 +186,7 @@ fn build_album_content() -> AlbumDetailContent {
         artist_label,
         year_label,
         genre_label,
+        tracks_label,
         format_label,
         track_list,
     }
@@ -236,6 +248,7 @@ pub fn build_album_detail(
                 artist_label: &content.artist_label,
                 year_label: &content.year_label,
                 genre_label: &content.genre_label,
+                tracks_label: &content.tracks_label,
                 format_label: &content.format_label,
                 track_list: &content.track_list,
             },
@@ -324,21 +337,29 @@ async fn populate_album_detail(
         widgets.genre_label.set_visible(false);
     }
 
+    widgets.tracks_label.set_label(&format!(
+        "{} {}",
+        album.track_count,
+        if album.track_count == 1 {
+            "track"
+        } else {
+            "tracks"
+        },
+    ));
+    widgets.tracks_label.set_visible(true);
+
     let format_info = state
         .storage
         .get_album_format_info(album_id)
         .await
         .unwrap_or_default();
-    widgets.format_label.set_label(&format!(
-        "{} {}\u{2022} {}",
-        album.track_count,
-        if album.track_count == 1 {
-            "track "
-        } else {
-            "tracks "
-        },
-        format_info.summary_detailed(),
-    ));
+    let summary = format_info.summary_detailed();
+    if summary.is_empty() {
+        widgets.format_label.set_visible(false);
+    } else {
+        widgets.format_label.set_label(&summary);
+        widgets.format_label.set_visible(true);
+    }
 
     let tracks = match state.storage.get_tracks_by_album(album_id).await {
         Ok(t) => t,
