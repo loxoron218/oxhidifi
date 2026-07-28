@@ -51,7 +51,7 @@ use crate::{
         ArtworkDecodeRequest, CoverArtCache, DecodedCover, build_album_play_button,
         library::{
             column_view::{NarrowState, build_album_column_view},
-            common::build_grid,
+            common::{build_grid, setup_flowbox_keyboard_nav},
             empty::{
                 EmptyStateParams, LibraryGrid, add_scrolled, build_empty_state, build_library_grid,
             },
@@ -159,6 +159,9 @@ fn build_album_mode(
             let flow = build_grid("Album library grid \u{2014} click an album to play");
             grid_container.append(&flow);
             add_scrolled(stack, &grid_container, "grid");
+
+            let album_ids: Vec<i64> = albums.iter().map(|a| a.id).collect();
+            setup_flowbox_keyboard_nav(&flow, state, album_ids, AlbumDetail);
 
             let state = Arc::clone(state);
             let cache = Arc::clone(&state.cover_art_cache);
@@ -388,34 +391,8 @@ fn load_cover_art_async(
     });
 }
 
-/// Build a single album card widget.
-///
-/// Returns a `Box` containing a vertical layout with cover art,
-/// title, artist, format summary, and year labels. Uses
-/// `GestureClick` for click handling instead of `Button` to avoid
-/// theme-inflated natural sizing from the `card` CSS class.
-///
-/// Also returns the `Overlay` wrapping the cover art so it can be
-/// updated asynchronously after the card is added to the container.
-fn build_album_card(
-    state: &Arc<AppState>,
-    album: &Album,
-    artist_name: &str,
-    format_info: &FormatInfo,
-) -> (GtkBox, Overlay) {
-    let card = GtkBox::builder()
-        .orientation(Vertical)
-        .spacing(6)
-        .css_classes(["card"])
-        .can_focus(true)
-        .tooltip_text(format!(
-            "Play \u{201c}{}\u{201d} by album artist",
-            album.title
-        ))
-        .build();
-
-    let album_id = album.id;
-
+/// Build the cover art overlay with hover play button for an album card.
+fn build_card_overlay(state: &Arc<AppState>, album_id: i64) -> Overlay {
     let cover_art = build_placeholder();
 
     let overlay = Overlay::new();
@@ -455,6 +432,43 @@ fn build_album_card(
             toggle_or_play_album(&state, album_id).await;
         });
     });
+
+    overlay
+}
+
+/// Build a single album card widget.
+///
+/// Returns a `Box` containing a vertical layout with cover art,
+/// title, artist, format summary, and year labels. Uses
+/// `GestureClick` for click handling instead of `Button` to avoid
+/// theme-inflated natural sizing from the `card` CSS class.
+///
+/// Also returns the `Overlay` wrapping the cover art so it can be
+/// updated asynchronously after the card is added to the container.
+fn build_album_card(
+    state: &Arc<AppState>,
+    album: &Album,
+    artist_name: &str,
+    format_info: &FormatInfo,
+) -> (GtkBox, Overlay) {
+    let card = GtkBox::builder()
+        .orientation(Vertical)
+        .spacing(6)
+        .css_classes(["card"])
+        .can_focus(true)
+        .tooltip_text(format!(
+            "Play \u{201c}{}\u{201d} by album artist",
+            album.title
+        ))
+        .build();
+    card.update_property(&[PropertyLabel(&format!(
+        "Play \u{201c}{}\u{201d} by album artist",
+        album.title
+    ))]);
+
+    let album_id = album.id;
+
+    let overlay = build_card_overlay(state, album_id);
 
     card.append(&overlay.clone().upcast::<Widget>());
 

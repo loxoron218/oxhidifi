@@ -32,7 +32,7 @@ use crate::{
     },
     ui::library::{
         column_view::{NarrowState, build_artist_column_view},
-        common::build_grid,
+        common::{build_grid, setup_flowbox_keyboard_nav},
         empty::{
             EmptyStateParams, LibraryGrid, add_scrolled, build_empty_state, build_library_grid,
         },
@@ -98,6 +98,9 @@ fn build_artist_mode(state: &Arc<AppState>, stack: &Stack, mode: ViewMode, artis
             let flow = build_grid("Artist library grid \u{2014} click an artist to view albums");
             grid_container.append(&flow);
             add_scrolled(stack, &grid_container, "grid");
+
+            let artist_ids: Vec<i64> = artists.iter().map(|a| a.id).collect();
+            setup_flowbox_keyboard_nav(&flow, state, artist_ids, ArtistDetail);
 
             let state = Arc::clone(state);
             let mut artists: Vec<Artist> = artists.iter().rev().cloned().collect();
@@ -189,6 +192,7 @@ fn build_artist_card(state: &Arc<AppState>, artist: &Artist) -> Box {
         .can_focus(true)
         .tooltip_text(format!("View albums by {}", artist.name))
         .build();
+    card.update_property(&[PropertyLabel(&format!("View albums by {}", artist.name))]);
 
     let avatar = build_artist_avatar();
 
