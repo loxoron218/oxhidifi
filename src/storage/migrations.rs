@@ -186,3 +186,123 @@ async fn create_indexes(pool: &SqlitePool) -> StorageResult<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use {
+        anyhow::{Result, ensure},
+        sqlx::{
+            SqlitePool, query_as,
+            sqlite::{SqliteConnectOptions, SqlitePoolOptions},
+        },
+        tempfile::{TempDir, tempdir},
+        tokio::test,
+    };
+
+    use crate::storage::migrations::{
+        add_album_format_columns, column_exists, create_indexes, run,
+    };
+
+    async fn test_pool() -> Result<(SqlitePool, TempDir)> {
+        let dir = tempdir()?;
+        let path = dir.path().join("test.db");
+        let opts = SqliteConnectOptions::new()
+            .filename(&path)
+            .create_if_missing(true);
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(opts)
+            .await?;
+        Ok((pool, dir))
+    }
+
+    async fn table_names(pool: &SqlitePool, kind: &str) -> Result<Vec<String>> {
+        let rows: Vec<(String,)> = query_as(
+            "SELECT name FROM sqlite_master WHERE type = ?1 AND name NOT LIKE 'sqlite_%' ORDER BY \
+             name",
+        )
+        .bind(kind)
+        .fetch_all(pool)
+        .await?;
+        Ok(rows.into_iter().map(|(name,)| name).collect())
+    }
+
+    #[test]
+    async fn run_creates_tables_and_is_idempotent() -> Result<()> {
+        let (pool, _dir) = test_pool().await?;
+        run(&pool).await?;
+        run(&pool).await?;
+        let tables = table_names(&pool, "table").await?;
+        ensure!(
+            [
+                "artists",
+                "albums",
+                "tracks",
+                "library_directories",
+                "playback_queue"
+            ]
+            .into_iter()
+            .all(|t| tables.contains(&t.to_string())),
+            "expected all tables to be created"
+        );
+        Ok(())
+    }
+
+    #[test]
+    async fn column_exists_detects_columns() -> Result<()> {
+        let (pool, _dir) = test_pool().await?;
+        run(&pool).await?;
+        ensure!(
+            column_exists(&pool, "title").await,
+            "expected real column to exist"
+        );
+        ensure!(
+            !column_exists(&pool, "garbage_column").await,
+            "garbage column should not exist"
+        );
+        Ok(())
+    }
+
+    #[test]
+    async fn add_album_format_columns_is_idempotent() -> Result<()> {
+        let (pool, _dir) = test_pool().await?;
+        run(&pool).await?;
+        add_album_format_columns(&pool).await?;
+        ensure!(
+            column_exists(&pool, "format").await,
+            "missing format column"
+        );
+        ensure!(
+            column_exists(&pool, "bit_depth").await,
+            "missing bit_depth column"
+        );
+        ensure!(
+            column_exists(&pool, "sample_rate").await,
+            "missing sample_rate column"
+        );
+        add_album_format_columns(&pool).await?;
+        Ok(())
+    }
+
+    #[test]
+    async fn create_indexes_creates_all_indexes() -> Result<()> {
+        let (pool, _dir) = test_pool().await?;
+        run(&pool).await?;
+        create_indexes(&pool).await?;
+        let indexes = table_names(&pool, "index").await?;
+        ensure!(
+            [
+                "idx_track_album_id",
+                "idx_track_artist_id",
+                "idx_track_file_path",
+                "idx_track_content_hash",
+                "idx_album_artist_id",
+                "idx_queue_position",
+            ]
+            .into_iter()
+            .all(|i| indexes.contains(&i.to_string())),
+            "expected all indexes to be created"
+        );
+        Ok(())
+    }
+}

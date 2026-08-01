@@ -226,17 +226,21 @@ pub fn drain_buffer(consumer: &mut Consumer<f32>) {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
+    use std::{io::Write, path::PathBuf};
 
     use {
-        anyhow::{Result, bail},
+        anyhow::{Result, bail, ensure},
         num_traits::NumCast,
         rtrb::{Consumer, Producer, RingBuffer},
+        tempfile::NamedTempFile,
     };
 
-    use crate::playback::gapless::{
-        GaplessState::{Idle, Playing},
-        GaplessTransitioner, drain_buffer, needs_reconfig,
+    use crate::playback::{
+        gapless::{
+            GaplessState::{Idle, Playing},
+            GaplessTransitioner, drain_buffer, needs_reconfig,
+        },
+        write_wav_header,
     };
 
     #[test]
@@ -368,5 +372,27 @@ mod tests {
         assert!(needs_reconfig(192_000, 44100));
         assert!(!needs_reconfig(44100, 44100));
         assert!(needs_reconfig(48000, 44100));
+    }
+
+    #[test]
+    fn set_enabled_clears_prebuffer_preserves_playing_and_toggles() -> Result<()> {
+        let mut tmp = NamedTempFile::new()?;
+        write_wav_header(tmp.as_file_mut(), 1, 44100, 16, 2)?;
+        tmp.write_all(&[0u8, 0u8])?;
+        let mut t = GaplessTransitioner::new();
+        let prebuffered = t.prebuffer_next(1, 2, tmp.path().to_path_buf())?;
+        ensure!(prebuffered, "prebuffer failed");
+        t.set_enabled(false);
+        ensure!(!t.is_enabled(), "expected disabled");
+        ensure!(t.state() == Idle, "PreBuffered should reset to Idle");
+        ensure!(t.next_track_id().is_none(), "expected no next id");
+        ensure!(t.next_sample_rate().is_none(), "expected no next rate");
+
+        t.start_playback(1);
+        let playing = Playing { track_id: 1 };
+        ensure!(t.state() == playing, "playing state should be preserved");
+        t.set_enabled(true);
+        ensure!(t.is_enabled(), "expected re-enabled");
+        Ok(())
     }
 }

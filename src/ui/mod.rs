@@ -243,3 +243,35 @@ fn send_channel_cover(
         error!(error = %e, "Failed to send decoded cover to {context}");
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use parking_lot::Mutex;
+
+    use crate::ui::CoverArtCache;
+
+    fn make_cache() -> CoverArtCache {
+        CoverArtCache {
+            textures: Mutex::new(HashMap::new()),
+            track_to_album: Mutex::new(HashMap::new()),
+            request_tx: Mutex::new(None),
+        }
+    }
+
+    #[test]
+    fn get_by_track_unmapped_returns_none() {
+        let cache = make_cache();
+        assert!(cache.get_by_track(1).is_none());
+        assert!(cache.get_album_for_track(1).is_none());
+    }
+
+    #[test]
+    fn record_track_album_round_trip() {
+        let cache = make_cache();
+        assert!(cache.get_album_for_track(10).is_none());
+        cache.record_track_album(10, 100);
+        assert_eq!(cache.get_album_for_track(10), Some(100));
+    }
+}

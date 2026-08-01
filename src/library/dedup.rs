@@ -101,10 +101,18 @@ pub fn is_supported_audio_format(path: &Path) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
+    use std::{
+        io::Write,
+        path::{Path, PathBuf},
+    };
+
+    use {
+        anyhow::{Result, bail, ensure},
+        tempfile::NamedTempFile,
+    };
 
     use crate::library::{
-        dedup::{create_fingerprint, is_supported_audio_format},
+        dedup::{compute_content_hash, create_fingerprint, is_supported_audio_format},
         metadata::tests::{test_metadata, test_metadata_defaults},
     };
 
@@ -145,5 +153,26 @@ mod tests {
         assert!(fp.contains("unknown_artist"));
         assert!(fp.contains("unknown_album"));
         assert!(fp.contains("unknown_track"));
+    }
+
+    #[test]
+    fn compute_content_hash_matches_known_digest() -> Result<()> {
+        let mut tmp = NamedTempFile::new()?;
+        tmp.write_all(b"hello world")?;
+        let hash = compute_content_hash(tmp.path())?;
+        ensure!(
+            hash == "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9",
+            "unexpected digest: {hash}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn compute_content_hash_missing_file_errors() -> Result<()> {
+        let result = compute_content_hash(Path::new("/nonexistent/file.flac"));
+        if result.is_ok() {
+            bail!("expected error for missing file");
+        }
+        Ok(())
     }
 }

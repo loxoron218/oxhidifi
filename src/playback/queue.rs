@@ -221,7 +221,9 @@ fn adjust_index_after_move(idx: usize, from: usize, to: usize) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use crate::playback::queue::PlaybackQueue;
+    use crate::playback::queue::{
+        PlaybackQueue, adjust_index_after_move, adjust_index_after_remove,
+    };
 
     fn three_track_queue() -> PlaybackQueue {
         let q = PlaybackQueue::new();
@@ -289,5 +291,89 @@ mod tests {
         q.clear();
         assert!(q.is_empty());
         assert!(q.current().is_none());
+    }
+
+    #[test]
+    fn set_current_index_updates_current() {
+        let q = three_track_queue();
+        q.set_current_index(1);
+        assert_eq!(q.current(), Some(20));
+        assert_eq!(q.current_index(), Some(1));
+    }
+
+    #[test]
+    fn peek_next_returns_upcoming_without_advancing() {
+        let q = three_track_queue();
+        assert_eq!(q.peek_next(), Some(20));
+        assert_eq!(q.peek_next(), Some(20));
+        assert_eq!(q.current_index(), Some(0));
+    }
+
+    #[test]
+    fn peek_next_none_at_end_or_single_track() {
+        let q = three_track_queue();
+        q.set_current_index(2);
+        assert!(q.peek_next().is_none());
+
+        let single = PlaybackQueue::new();
+        single.set_queue(vec![42]);
+        assert!(single.peek_next().is_none());
+    }
+
+    #[test]
+    fn move_track_moving_current_updates_index_to_target() {
+        let q = three_track_queue();
+        q.move_track(0, 2);
+        assert_eq!(q.current(), Some(10));
+        assert_eq!(q.current_index(), Some(2));
+    }
+
+    #[test]
+    fn move_track_moving_before_current_decrements_index() {
+        let q = three_track_queue();
+        q.set_current_index(2);
+        q.move_track(0, 2);
+        assert_eq!(q.current(), Some(30));
+        assert_eq!(q.current_index(), Some(1));
+    }
+
+    #[test]
+    fn move_track_moving_after_current_increments_index() {
+        let q = three_track_queue();
+        q.move_track(2, 0);
+        assert_eq!(q.current(), Some(10));
+        assert_eq!(q.current_index(), Some(1));
+    }
+
+    #[test]
+    fn adjust_index_after_remove_all_cases() {
+        assert_eq!(adjust_index_after_remove(0, 0, 0), None);
+        assert_eq!(adjust_index_after_remove(2, 1, 3), Some(1));
+        assert_eq!(adjust_index_after_remove(2, 2, 2), Some(1));
+        assert_eq!(adjust_index_after_remove(0, 1, 3), Some(0));
+    }
+
+    #[test]
+    fn adjust_index_after_move_all_cases() {
+        assert_eq!(adjust_index_after_move(1, 1, 3), 3);
+        assert_eq!(adjust_index_after_move(3, 1, 3), 2);
+        assert_eq!(adjust_index_after_move(0, 2, 0), 1);
+        assert_eq!(adjust_index_after_move(0, 1, 2), 0);
+    }
+
+    #[test]
+    fn remove_out_of_bounds_returns_none() {
+        let q = three_track_queue();
+        assert!(q.remove(3).is_none());
+        assert_eq!(q.len(), 3);
+    }
+
+    #[test]
+    fn remove_at_end_clamps_index() {
+        let q = three_track_queue();
+        q.set_current_index(2);
+        assert_eq!(q.remove(2), Some(30));
+        assert_eq!(q.current(), Some(20));
+        assert_eq!(q.current_index(), Some(1));
     }
 }

@@ -303,3 +303,91 @@ pub fn process_decode_frame(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{io::Write, path::PathBuf, sync::Arc, time::Instant};
+
+    use {
+        anyhow::{Result, ensure},
+        rtrb::{Consumer, RingBuffer},
+        tempfile::NamedTempFile,
+        tokio::sync::mpsc::channel,
+    };
+
+    use crate::playback::{
+        decoder::Decoder,
+        engine::{DecodeCommand::PreloadNext, EngineShared},
+        pipeline::{
+            LoopCtx, handle_decode_cmd, preload_next_upcoming, process_decoded_batch, push_samples,
+        },
+        write_wav_header,
+    };
+
+    fn pop_all(consumer: &mut Consumer<f32>) -> Vec<f32> {
+        let mut out = Vec::new();
+        while let Ok(s) = consumer.pop() {
+            out.push(s);
+        }
+        out
+    }
+
+    #[test]
+    fn push_samples_and_process_decoded_batch() {
+        let (mut producer, mut consumer) = RingBuffer::<f32>::new(64);
+        push_samples(&[1.0, 2.0, 3.0], &mut producer);
+        assert_eq!(pop_all(&mut consumer), vec![1.0, 2.0, 3.0]);
+
+        let result = process_decoded_batch(&[0.5, -0.5], &mut None, &mut producer);
+        assert!(result.is_none());
+        assert_eq!(pop_all(&mut consumer), vec![0.5, -0.5]);
+    }
+
+    #[test]
+    fn handle_decode_cmd_cases() -> Result<()> {
+        let shared = Arc::new(EngineShared::default());
+        shared.state.lock().current_track_id = Some(1);
+        let (tx, mut rx) = channel(8);
+        let mut tmp = NamedTempFile::new()?;
+        write_wav_header(tmp.as_file_mut(), 1, 44100, 16, 2)?;
+        tmp.write_all(&[0u8, 0u8])?;
+        let decoder = Decoder::open(tmp.path())?;
+        let sr = decoder.params().sample_rate;
+        let mut ctx = LoopCtx {
+            decoder,
+            resampler: None,
+            track_sample_rate: sr,
+            src_channels: 1,
+            track_sample_rate_f64: f64::from(sr),
+            elapsed: 0.0,
+            last_tick: Instant::now(),
+        };
+        let exit = handle_decode_cmd(&mut rx, &shared, &mut ctx);
+        ensure!(!exit, "empty channel must not exit");
+        tx.try_send(PreloadNext {
+            track_id: 2,
+            path: PathBuf::from("/nonexistent/next.flac"),
+        })?;
+        let exit = handle_decode_cmd(&mut rx, &shared, &mut ctx);
+        ensure!(!exit, "missing file must not exit");
+        drop(tx);
+        let exit = handle_decode_cmd(&mut rx, &shared, &mut ctx);
+        ensure!(exit, "disconnected channel must exit");
+        Ok(())
+    }
+
+    #[test]
+    fn preload_next_upcoming_sends_command() {
+        let shared = Arc::new(EngineShared::default());
+        shared.queue.set_queue(vec![1, 2]);
+        shared
+            .track_paths
+            .lock()
+            .insert(2, PathBuf::from("/music/two.flac"));
+        let (tx, mut rx) = channel(8);
+        *shared.decode_tx.lock() = Some(tx);
+        preload_next_upcoming(&shared);
+        let cmd = rx.try_recv();
+        assert!(matches!(cmd, Ok(PreloadNext { track_id: 2, .. })));
+    }
+}

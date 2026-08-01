@@ -143,7 +143,17 @@ pub enum WatcherEvent {
 mod tests {
     use std::{path::PathBuf, time::Duration};
 
-    use crate::library::watcher::WatcherEvent::DirectoryModified;
+    use tokio::sync::mpsc::unbounded_channel;
+
+    use notify::{Error, ErrorKind, Event, EventKind, event::CreateKind::File};
+
+    use crate::{
+        library::watcher::{
+            LibraryWatcher,
+            WatcherEvent::{DirectoryModified, Error as WatcherError},
+        },
+        storage::database::SqliteStorage,
+    };
 
     const DEBOUNCE_INTERVAL: Duration = Duration::from_millis(500);
 
@@ -160,5 +170,32 @@ mod tests {
     fn debounce_interval_is_reasonable() {
         assert!(DEBOUNCE_INTERVAL.as_millis() >= 100);
         assert!(DEBOUNCE_INTERVAL.as_millis() <= 2000);
+    }
+
+    #[test]
+    fn handle_watcher_event_forwards_modified() {
+        let (tx, mut rx) = unbounded_channel();
+        let mut event = Event::new(EventKind::Create(File));
+        event.paths.push(PathBuf::from("/music/new.flac"));
+        LibraryWatcher::<SqliteStorage>::handle_watcher_event(Ok(event), &tx);
+        assert_eq!(
+            rx.try_recv(),
+            Ok(DirectoryModified {
+                path: PathBuf::from("/music/new.flac"),
+            })
+        );
+    }
+
+    #[test]
+    fn handle_watcher_event_forwards_error() {
+        let (tx, mut rx) = unbounded_channel();
+        let err = Error::new(ErrorKind::Generic("watcher failure".to_string()));
+        LibraryWatcher::<SqliteStorage>::handle_watcher_event(Err(err), &tx);
+        assert_eq!(
+            rx.try_recv(),
+            Ok(WatcherError {
+                error: "watcher failure".to_string(),
+            })
+        );
     }
 }

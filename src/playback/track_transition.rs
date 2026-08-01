@@ -91,18 +91,31 @@ pub fn finalize_track(
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use std::{path::PathBuf, sync::Arc};
+
+    use anyhow::{Result, ensure};
 
     use crate::playback::{
         engine::{
             EngineShared,
             PlaybackEvent::{Paused, TrackFinished},
+            PlaybackStatus::{Playing, Stopped},
         },
-        track_transition::try_auto_advance,
+        track_transition::{finalize_track, try_auto_advance},
     };
 
     fn make_shared_engine() -> Arc<EngineShared> {
         Arc::new(EngineShared::default())
+    }
+
+    fn two_track_shared_engine() -> Arc<EngineShared> {
+        let shared = make_shared_engine();
+        shared.queue.set_queue(vec![1, 2]);
+        shared
+            .track_paths
+            .lock()
+            .insert(2, PathBuf::from("/music/two.flac"));
+        shared
     }
 
     #[test]
@@ -138,5 +151,66 @@ mod tests {
             result.is_none(),
             "should return None when path not found for upcoming track"
         );
+    }
+
+    #[test]
+    fn try_auto_advance_success_path() -> Result<()> {
+        let shared = two_track_shared_engine();
+        let mut event = Some(TrackFinished { track_id: 1 });
+        let result = try_auto_advance(&shared, &mut event);
+        ensure!(
+            result == Some((2, PathBuf::from("/music/two.flac"))),
+            "expected next track info"
+        );
+        ensure!(event.is_none(), "TrackFinished event should be sent");
+        {
+            let state = shared.state.lock();
+            ensure!(
+                state.current_track_id == Some(2),
+                "state should point at next track"
+            );
+            ensure!(state.status == Playing, "state should be Playing");
+            ensure!(state.elapsed_seconds == 0.0, "elapsed should reset");
+            drop(state);
+        }
+        ensure!(shared.queue.current() == Some(2), "queue should advance");
+        Ok(())
+    }
+
+    #[test]
+    fn finalize_track_auto_advances() -> Result<()> {
+        let shared = two_track_shared_engine();
+        let mut event = Some(TrackFinished { track_id: 1 });
+        let result = finalize_track(&shared, &mut event);
+        ensure!(
+            result == Some((2, PathBuf::from("/music/two.flac"))),
+            "expected auto-advance result"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn finalize_track_stops_when_no_next() -> Result<()> {
+        let shared = make_shared_engine();
+        shared.queue.set_queue(vec![1]);
+        shared.state.lock().current_track_id = Some(1);
+        let mut event = Some(TrackFinished { track_id: 1 });
+        let result = finalize_track(&shared, &mut event);
+        ensure!(result.is_none(), "expected playback to stop");
+        {
+            let state = shared.state.lock();
+            ensure!(state.status == Stopped, "state should be Stopped");
+            ensure!(
+                state.current_track_id.is_none(),
+                "current track should clear"
+            );
+            ensure!(state.current_path.is_none(), "current path should clear");
+            drop(state);
+        }
+        ensure!(
+            shared.decode_tx.lock().is_none(),
+            "decode_tx should be cleared"
+        );
+        Ok(())
     }
 }

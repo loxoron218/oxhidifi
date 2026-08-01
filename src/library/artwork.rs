@@ -222,7 +222,9 @@ mod tests {
         tempfile::{NamedTempFile, tempdir},
     };
 
-    use crate::library::artwork::{cache_artwork_in, extract_artwork, get_cached_artwork_path};
+    use crate::library::artwork::{
+        cache_artwork_in, extract_artwork, get_cached_artwork_path, read_to_string,
+    };
 
     fn has_cached_artwork_in(cache_dir: &Path, key: &str) -> bool {
         ["jpg", "png", "webp"]
@@ -272,5 +274,32 @@ mod tests {
     fn get_cached_artwork_missing_returns_none() {
         let path = get_cached_artwork_path("nonexistent-key");
         assert!(path.is_none());
+    }
+
+    #[test]
+    fn read_to_string_missing_file_returns_none() {
+        let result = read_to_string(Path::new("/nonexistent/file.txt"));
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn read_to_string_returns_content() -> Result<()> {
+        let mut tmp = NamedTempFile::new()?;
+        tmp.write_all(b"cached version 2")?;
+        let result = read_to_string(tmp.path());
+        ensure!(
+            result.as_deref() == Some("cached version 2"),
+            "expected file content"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn read_to_string_invalid_utf8_returns_none() -> Result<()> {
+        let mut tmp = NamedTempFile::new()?;
+        tmp.write_all(&[0xff, 0xfe, 0xfd])?;
+        let result = read_to_string(tmp.path());
+        ensure!(result.is_none(), "invalid UTF-8 should return None");
+        Ok(())
     }
 }
