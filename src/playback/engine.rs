@@ -394,4 +394,46 @@ mod tests {
         let engine = PlaybackEngine::new();
         assert!(matches!(engine.previous_track(), Err(QueueEmpty)));
     }
+
+    #[test]
+    fn play_at_empty_queue_returns_queue_empty() {
+        let engine = PlaybackEngine::new();
+        assert!(matches!(engine.play_at(vec![], 0), Err(QueueEmpty)));
+    }
+
+    #[test]
+    fn play_at_out_of_bounds_index_returns_queue_empty() {
+        let engine = PlaybackEngine::new();
+        assert!(matches!(engine.play_at(vec![1, 2, 3], 3), Err(QueueEmpty)));
+        assert!(matches!(engine.play_at(vec![1, 2, 3], 9), Err(QueueEmpty)));
+    }
+
+    #[test]
+    fn play_at_valid_sets_current_index() -> Result<()> {
+        let engine = PlaybackEngine::new();
+        setup_queue(&engine, vec![1, 2, 3]);
+        match engine.play_at(vec![1, 2, 3], 1) {
+            Ok(()) | Err(NoDeviceAvailable | Output(_)) => {}
+            Err(e) => bail!("unexpected error: {e}"),
+        }
+        if engine.queue().current_index() != Some(1) {
+            bail!("current index should be 1 after play_at");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn seek_to_clamps_elapsed_to_duration() -> Result<()> {
+        let engine = PlaybackEngine::new();
+        engine.shared.state.lock().duration_seconds = 200.0;
+        engine.seek_to(500.0).map_err(|e| anyhow!("{e}"))?;
+        if (engine.state().elapsed_seconds - 200.0).abs() >= f64::EPSILON {
+            bail!("elapsed should be clamped to the track duration");
+        }
+        engine.seek_to(-5.0).map_err(|e| anyhow!("{e}"))?;
+        if engine.state().elapsed_seconds.abs() >= f64::EPSILON {
+            bail!("elapsed should be clamped to zero");
+        }
+        Ok(())
+    }
 }

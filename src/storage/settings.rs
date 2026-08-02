@@ -337,15 +337,15 @@ mod tests {
     };
 
     use {
-        serde_json::{from_reader, to_string_pretty},
+        serde_json::{from_reader, from_str, to_string_pretty},
         tempfile::tempdir,
     };
 
     use crate::{
-        playback::output::OutputMode::Resampled,
+        playback::output::OutputMode::{BitPerfect, Resampled},
         storage::settings::{
-            ActiveTab::Albums,
-            UserSettings,
+            ActiveTab::{Albums, Artists},
+            SettingsStore, UserSettings,
             ViewMode::{Column, Grid},
         },
     };
@@ -389,5 +389,91 @@ mod tests {
 
         assert!((restored.volume - 0.5).abs() < f64::EPSILON);
         assert_eq!(restored.view_mode, Column);
+    }
+
+    #[test]
+    fn show_album_labels_defaults_and_round_trips() {
+        let Ok(dir) = tempdir() else { return };
+        let mut store = SettingsStore {
+            settings_path: dir.path().join("settings.json"),
+            settings: UserSettings::default(),
+        };
+        assert!(
+            store.get_show_album_labels(),
+            "album labels should default to visible"
+        );
+        store.update_memory(|s| s.show_album_labels = false);
+        assert!(
+            !store.get_show_album_labels(),
+            "album labels should reflect update_memory"
+        );
+        store.update_memory(|s| s.show_album_labels = true);
+        assert!(
+            store.get_show_album_labels(),
+            "album labels should be re-enabled"
+        );
+    }
+
+    #[test]
+    fn last_session_round_trips() {
+        let Ok(dir) = tempdir() else { return };
+        let mut store = SettingsStore {
+            settings_path: dir.path().join("settings.json"),
+            settings: UserSettings::default(),
+        };
+
+        let (queue, index, track, position, duration) = store.get_last_session();
+        assert!(queue.is_empty(), "default session queue should be empty");
+        assert_eq!(index, None);
+        assert_eq!(track, None);
+        assert!((position - 0.0).abs() < f64::EPSILON);
+        assert!((duration - 0.0).abs() < f64::EPSILON);
+
+        store.update_memory(|s| {
+            s.last_queue = vec![10, 20, 30];
+            s.last_queue_index = Some(1);
+            s.last_track_id = Some(20);
+            s.last_position = 42.5;
+            s.last_duration = 200.0;
+        });
+
+        let (queue, index, track, position, duration) = store.get_last_session();
+        assert_eq!(queue, vec![10, 20, 30]);
+        assert_eq!(index, Some(1));
+        assert_eq!(track, Some(20));
+        assert!((position - 42.5).abs() < f64::EPSILON);
+        assert!((duration - 200.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn active_tab_round_trips() {
+        let Ok(dir) = tempdir() else { return };
+        let mut store = SettingsStore {
+            settings_path: dir.path().join("settings.json"),
+            settings: UserSettings::default(),
+        };
+        assert_eq!(store.get_active_tab(), Albums);
+        store.update_memory(|s| s.active_tab = Artists);
+        assert_eq!(store.get_active_tab(), Artists);
+    }
+
+    #[test]
+    fn output_mode_round_trips_through_user_settings() {
+        let original = UserSettings {
+            output_mode: BitPerfect,
+            ..UserSettings::default()
+        };
+        let Ok(json) = to_string_pretty(&original) else {
+            return;
+        };
+        assert!(
+            json.contains("\"bit_perfect\""),
+            "output_mode should serialize with snake_case tag"
+        );
+        let Ok(restored) = from_str::<UserSettings>(&json) else {
+            return;
+        };
+        assert_eq!(restored.output_mode, BitPerfect);
+        assert_eq!(restored.output_mode, original.output_mode);
     }
 }

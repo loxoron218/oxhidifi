@@ -628,9 +628,11 @@ pub fn list_output_devices() -> Result<Vec<DeviceInfo>, OutputError> {
 /// and `supports_native` method are verified directly.
 #[cfg(test)]
 mod tests {
+    use serde_json::{from_str, to_string};
+
     use crate::playback::output::{
-        OutputMode::{BitPerfect, Resampled},
-        list_output_devices,
+        OutputMode::{self, BitPerfect, Resampled},
+        alsa_card_name, list_output_devices,
     };
 
     #[test]
@@ -679,5 +681,39 @@ mod tests {
         assert_eq!(BitPerfect, BitPerfect);
         assert_eq!(Resampled, Resampled);
         assert_ne!(BitPerfect, Resampled);
+    }
+
+    #[test]
+    fn alsa_card_name_strips_pcm_device_index() {
+        assert_eq!(alsa_card_name("hw:0,0"), "hw:0");
+        assert_eq!(alsa_card_name("hw:1,3"), "hw:1");
+        assert_eq!(alsa_card_name("hw:0"), "hw:0");
+    }
+
+    #[test]
+    fn alsa_card_name_passes_through_simple_ids() {
+        assert_eq!(alsa_card_name("default"), "default");
+        assert_eq!(alsa_card_name("usb"), "usb");
+    }
+
+    #[test]
+    fn output_mode_serde_round_trip() {
+        let Ok(json) = to_string(&BitPerfect) else {
+            return;
+        };
+        assert_eq!(json, "\"bit_perfect\"", "bit_perfect uses snake_case tag");
+        let Ok(restored) = from_str::<OutputMode>(&json) else {
+            return;
+        };
+        assert_eq!(restored, BitPerfect);
+
+        let Ok(json) = to_string(&Resampled) else {
+            return;
+        };
+        assert_eq!(json, "\"resampled\"", "resampled uses snake_case tag");
+        let Ok(restored) = from_str::<OutputMode>(&json) else {
+            return;
+        };
+        assert_eq!(restored, Resampled);
     }
 }

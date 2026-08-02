@@ -576,3 +576,41 @@ fn id_at_position<T: Clone + Send + 'static>(
     let boxed = item.downcast_ref::<BoxedAnyObject>()?;
     Some(get_id(&boxed.borrow::<T>()))
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::ui::library::column_view::{NarrowState, default_int_format};
+
+    #[test]
+    fn narrow_state_defaults_false() {
+        let state = NarrowState::new_shared();
+        assert!(!state.get(), "narrow state should default to false");
+    }
+
+    #[test]
+    fn narrow_state_set_and_get() {
+        let state = NarrowState::new_shared();
+        state.set(true);
+        assert!(state.get(), "narrow state should reflect set(true)");
+        state.set(false);
+        assert!(!state.get(), "narrow state should reflect set(false)");
+    }
+
+    #[test]
+    fn narrow_state_subscriber_receives_changes() {
+        let state = NarrowState::new_shared();
+        let rx = state.subscribe();
+        assert!(!*rx.borrow(), "subscriber should see the initial value");
+        state.set(true);
+        assert!(*rx.borrow(), "subscriber should see the new value");
+        state.set(false);
+        assert!(!*rx.borrow(), "subscriber should see the toggled value");
+    }
+
+    #[test]
+    fn default_int_format_omits_zero() {
+        assert_eq!(default_int_format(0), "");
+        assert_eq!(default_int_format(12), "12");
+        assert_eq!(default_int_format(2008), "2008");
+    }
+}

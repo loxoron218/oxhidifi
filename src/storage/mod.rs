@@ -558,3 +558,65 @@ pub fn format_sample_rate_str(hz: i32) -> String {
         format!("{:.1}", f64::from(hz) / 1000.0)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::storage::{FormatInfo, format_sample_rate_str};
+
+    fn flac_24_96() -> FormatInfo {
+        FormatInfo {
+            formats: vec!["FLAC".to_string()],
+            sample_rates: vec![96_000],
+            bit_depths: vec![24],
+            channels: vec![2],
+        }
+    }
+
+    fn mixed_audio() -> FormatInfo {
+        FormatInfo {
+            formats: vec!["FLAC".to_string(), "MP3".to_string()],
+            sample_rates: vec![44_100, 96_000],
+            bit_depths: vec![16, 24],
+            channels: vec![2],
+        }
+    }
+
+    #[test]
+    fn format_summary_uniform_lossless() {
+        assert_eq!(flac_24_96().summary(), "FLAC 24/96");
+    }
+
+    #[test]
+    fn format_summary_mixed() {
+        assert_eq!(mixed_audio().summary(), "FLAC, MP3 16, 24/44.1, 96");
+    }
+
+    #[test]
+    fn format_summary_detailed_units_and_channels() {
+        assert_eq!(
+            flac_24_96().summary_detailed(),
+            "FLAC \u{2022} 24-bit / 96.0 kHz \u{2022} Stereo"
+        );
+    }
+
+    #[test]
+    fn format_is_uniform() {
+        assert!(
+            flac_24_96().is_uniform(),
+            "single format properties are uniform"
+        );
+        assert!(
+            !mixed_audio().is_uniform(),
+            "mixed format properties are not uniform"
+        );
+        assert!(FormatInfo::default().is_uniform(), "empty info is uniform");
+    }
+
+    #[test]
+    fn format_sample_rate_strings() {
+        assert_eq!(format_sample_rate_str(44_100), "44.1");
+        assert_eq!(format_sample_rate_str(96_000), "96");
+        assert_eq!(format_sample_rate_str(48_000), "48");
+        assert_eq!(format_sample_rate_str(192_000), "192");
+    }
+}
