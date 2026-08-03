@@ -32,7 +32,7 @@ use crate::{
         NavigationEvent::{self, Back},
     },
     playback::control::PlaybackController,
-    storage::{Storage, Track, format_sample_rate_str},
+    storage::{Storage, formats::format_sample_rate_str, records::Track},
 };
 
 /// Number of tracks to add per batch in the detail page track list.

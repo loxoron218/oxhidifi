@@ -15,18 +15,18 @@ use {
 
 use crate::playback::{
     decoder::Decoder,
+    devices::OutputMode::{BitPerfect, Resampled},
     engine::{
         DecodeCommand::{self, PreloadNext},
         EngineShared,
+    },
+    output::AudioOutput,
+    pipeline::{LoopCtx, OutputConfig, handle_decode_cmd, process_decode_frame},
+    resampler::{AudioResampler, create_resampler},
+    state::{
         PlaybackEvent::{DeviceLost, Resumed, TrackStarted},
         PlaybackStatus::{Paused, Playing},
     },
-    output::{
-        AudioOutput,
-        OutputMode::{BitPerfect, Resampled},
-    },
-    pipeline::{LoopCtx, OutputConfig, handle_decode_cmd, process_decode_frame},
-    resampler::{AudioResampler, create_resampler},
     track_transition::finalize_track,
 };
 

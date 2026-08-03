@@ -23,13 +23,13 @@ use crate::{
     app::AppState,
     playback::{
         control::PlaybackController,
-        output::{
+        devices::{
             DeviceInfo,
             OutputMode::{self, BitPerfect, Resampled},
             list_output_devices,
         },
     },
-    storage::{LibraryDirectory, Storage, database::SqliteStorage},
+    storage::{Storage, database::SqliteStorage, records::LibraryDirectory},
 };
 
 /// Remove a library directory by ID in a background task.

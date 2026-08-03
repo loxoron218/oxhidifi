@@ -27,15 +27,17 @@ use {
 use crate::{
     app::{AppState, NavigationEvent::ArtistDetail},
     storage::{
-        Artist, Storage,
+        Storage,
+        records::Artist,
         settings::ViewMode::{self, Column, Grid},
     },
     ui::library::{
-        column_view::{NarrowState, build_artist_column_view},
+        column_view::build_artist_column_view,
         common::{build_grid, setup_flowbox_keyboard_nav},
         empty::{
             EmptyStateParams, LibraryGrid, add_scrolled, build_empty_state, build_library_grid,
         },
+        narrow_state::NarrowState,
     },
 };
 

@@ -18,16 +18,20 @@ use {
 };
 
 use crate::{
-    playback::output::OutputMode,
+    playback::devices::OutputMode,
     storage::{
-        Album, Artist,
-        FieldUpdate::{Set, SetNull, Skip},
-        FormatInfo, LibraryDirectory, NewAlbum, NewArtist, NewQueueEntry, NewTrack,
-        QueueContext::{self, Album as QueueAlbum, Artist as QueueArtist, Manual},
-        QueueEntry, Storage,
+        Storage,
         StorageError::{self, Database, InvalidPath},
-        StorageResult, Track, TrackUpdate,
+        StorageResult,
+        formats::FormatInfo,
         migrations::run,
+        records::{
+            Album, Artist,
+            FieldUpdate::{Set, SetNull, Skip},
+            LibraryDirectory, NewAlbum, NewArtist, NewQueueEntry, NewTrack,
+            QueueContext::{self, Album as QueueAlbum, Artist as QueueArtist, Manual},
+            QueueEntry, Track, TrackUpdate,
+        },
         settings::{ActiveTab, SettingsStore, ViewMode},
     },
 };

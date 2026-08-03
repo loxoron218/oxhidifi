@@ -7,7 +7,10 @@ use {
     tempfile::{TempDir, tempdir},
 };
 
-use oxhidifi::storage::{NewTrack, TrackAudio, database::SqliteStorage};
+use oxhidifi::storage::{
+    database::SqliteStorage,
+    records::{NewTrack, TrackAudio},
+};
 
 /// Create a temporary `SqliteStorage` instance for testing.
 ///
@@ -57,7 +60,8 @@ mod tests {
     };
 
     use oxhidifi::storage::{
-        NewAlbum, NewArtist, NewQueueEntry, QueueContext, Storage, TrackUpdate,
+        Storage,
+        records::{NewAlbum, NewArtist, NewQueueEntry, QueueContext, TrackUpdate},
     };
 
     use crate::{make_track, test_storage};

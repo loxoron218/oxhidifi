@@ -22,8 +22,9 @@ use crate::{
     app::AppState,
     playback::{
         control::PlaybackController,
-        engine::{MuteState::Unmuted, PlaybackEngine},
-        output::OutputMode::{self, BitPerfect, Resampled},
+        devices::OutputMode::{self, BitPerfect, Resampled},
+        engine::PlaybackEngine,
+        state::MuteState::Unmuted,
     },
     storage::database::SqliteStorage,
     ui::player::{panel::format_time, queue::build_queue_view},

@@ -24,7 +24,7 @@ use crate::{
     app::AppState,
     library::scanner::LibraryScanner,
     storage::{Storage, settings::ViewMode},
-    ui::library::column_view::NarrowState,
+    ui::library::narrow_state::NarrowState,
 };
 
 /// Parameters for building an empty state view.

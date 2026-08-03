@@ -4,10 +4,12 @@ use std::{path::PathBuf, sync::Arc};
 
 use tracing::info;
 
-use crate::playback::engine::{
-    EngineShared,
-    PlaybackEvent::{self, Stopped, TrackFinished},
-    PlaybackStatus::{Playing, Stopped as StatusStopped},
+use crate::playback::{
+    engine::EngineShared,
+    state::{
+        PlaybackEvent::{self, Stopped, TrackFinished},
+        PlaybackStatus::{Playing, Stopped as StatusStopped},
+    },
 };
 
 /// Try to advance to the next track in the queue after a track finishes.
@@ -96,8 +98,8 @@ mod tests {
     use anyhow::{Result, ensure};
 
     use crate::playback::{
-        engine::{
-            EngineShared,
+        engine::EngineShared,
+        state::{
             PlaybackEvent::{Paused, TrackFinished},
             PlaybackStatus::{Playing, Stopped},
         },

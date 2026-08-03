@@ -18,7 +18,7 @@ mod tests {
 
     use oxhidifi::{
         library::scanner::{FsScanner, LibraryScanner},
-        playback::{engine::PlaybackEngine, output::startup_device_check},
+        playback::{devices::startup_device_check, engine::PlaybackEngine},
         storage::{Storage, database::SqliteStorage},
     };
 

@@ -11,12 +11,12 @@ mod tests {
     use oxhidifi::playback::{
         PlaybackError::{QueueEmpty, TrackNotFound},
         control::PlaybackController,
-        engine::{
+        engine::PlaybackEngine,
+        queue::PlaybackQueue,
+        state::{
             MuteState::{Muted, Unmuted},
-            PlaybackEngine,
             PlaybackStatus::Stopped,
         },
-        queue::PlaybackQueue,
     };
 
     use oxhidifi::ui::player::panel::format_time;

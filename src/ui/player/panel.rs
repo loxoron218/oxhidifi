@@ -33,14 +33,11 @@ use crate::{
     app::AppState,
     playback::{
         control::PlaybackController,
-        engine::{
-            PlaybackEngine,
-            PlaybackEvent::{
-                self, OutputModeChanged, Paused, PositionTick, Resumed, Seeked, Stopped,
-                TrackStarted,
-            },
-        },
+        engine::PlaybackEngine,
         layout::{AudioLayout, format_channel_label},
+        state::PlaybackEvent::{
+            self, OutputModeChanged, Paused, PositionTick, Resumed, Seeked, Stopped, TrackStarted,
+        },
     },
     storage::{Storage, database::SqliteStorage},
     ui::{

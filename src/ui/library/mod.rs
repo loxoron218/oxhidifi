@@ -4,6 +4,8 @@
 pub mod albums;
 pub mod artists;
 pub mod column_view;
+pub mod columns;
 pub mod common;
 pub mod empty;
 pub mod models;
+pub mod narrow_state;

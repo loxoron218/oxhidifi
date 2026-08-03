@@ -14,7 +14,7 @@ use {
 
 use crate::{
     app::dirs_config_home,
-    playback::output::OutputMode::{self, Resampled},
+    playback::devices::OutputMode::{self, Resampled},
 };
 
 /// Active tab in the library view.
@@ -342,7 +342,7 @@ mod tests {
     };
 
     use crate::{
-        playback::output::OutputMode::{BitPerfect, Resampled},
+        playback::devices::OutputMode::{BitPerfect, Resampled},
         storage::settings::{
             ActiveTab::{Albums, Artists},
             SettingsStore, UserSettings,

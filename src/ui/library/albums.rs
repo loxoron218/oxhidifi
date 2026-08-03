@@ -41,20 +41,23 @@ use crate::{
             NoDeviceAvailable as PlaybackNoDeviceAvailable, Output,
         },
         control::PlaybackController,
-        engine::PlaybackStatus::Playing,
+        state::PlaybackStatus::Playing,
     },
     storage::{
-        Album, FormatInfo, Storage,
+        Storage,
+        formats::FormatInfo,
+        records::Album,
         settings::ViewMode::{self, Column, Grid},
     },
     ui::{
         ArtworkDecodeRequest, CoverArtCache, DecodedCover, build_album_play_button,
         library::{
-            column_view::{NarrowState, build_album_column_view},
+            column_view::build_album_column_view,
             common::{build_grid, setup_flowbox_keyboard_nav},
             empty::{
                 EmptyStateParams, LibraryGrid, add_scrolled, build_empty_state, build_library_grid,
             },
+            narrow_state::NarrowState,
         },
         raw_to_texture,
     },

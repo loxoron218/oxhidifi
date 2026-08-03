@@ -35,11 +35,9 @@ use crate::{
     },
     playback::{
         control::PlaybackController,
-        engine::{
-            PlaybackEngine,
-            PlaybackEvent::{Paused, PositionTick, QueueChanged, TrackStarted},
-        },
-        output::startup_device_check,
+        devices::startup_device_check,
+        engine::PlaybackEngine,
+        state::PlaybackEvent::{Paused, PositionTick, QueueChanged, TrackStarted},
     },
     storage::{
         database::SqliteStorage,

@@ -32,7 +32,10 @@ use crate::{
         metadata::{AudioMetadata, extract_metadata, metadata_fingerprint},
         scanner::ScanEvent::{ScanCompleted, ScanProgress, ScanStarted},
     },
-    storage::{NewAlbum, NewArtist, NewTrack, Storage, StorageError, TrackAudio},
+    storage::{
+        Storage, StorageError,
+        records::{NewAlbum, NewArtist, NewTrack, TrackAudio},
+    },
 };
 
 /// Filesystem-based library scanner with storage integration.

@@ -29,7 +29,11 @@ use {
 
 use crate::{
     app::{AppState, NavigationEvent},
-    storage::{Album, FormatInfo, Storage, Track},
+    storage::{
+        Storage,
+        formats::FormatInfo,
+        records::{Album, Track},
+    },
     ui::{
         ArtworkDecodeRequest, DecodedCover,
         detail::common::{build_detail_wrapper, build_scroll_content, fill_track_list_batch},

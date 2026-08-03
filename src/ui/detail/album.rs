@@ -29,7 +29,7 @@ use {
 use crate::{
     app::{AppState, NavigationEvent},
     playback::control::PlaybackController,
-    storage::{Storage, Track},
+    storage::{Storage, records::Track},
     ui::{
         ArtworkDecodeRequest, DecodedCover, build_album_play_button,
         detail::common::{build_detail_wrapper, build_scroll_content, fill_track_list_batch},

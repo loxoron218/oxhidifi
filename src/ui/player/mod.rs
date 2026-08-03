@@ -21,7 +21,7 @@ use crate::{
     app::AppState,
     playback::{
         control::PlaybackController,
-        engine::PlaybackEvent::{self, Stopped, TrackFinished, TrackStarted},
+        state::PlaybackEvent::{self, Stopped, TrackFinished, TrackStarted},
     },
     storage::{Storage, database::SqliteStorage},
 };
@@ -105,7 +105,7 @@ fn spawn_album_id_listener(rx: Receiver<(i64, i64)>, state: Arc<AppState>) {
 
 #[cfg(test)]
 mod tests {
-    use crate::playback::engine::{
+    use crate::playback::state::{
         PlaybackState,
         PlaybackStatus::{Playing, Stopped},
     };

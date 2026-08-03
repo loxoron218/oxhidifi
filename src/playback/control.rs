@@ -7,11 +7,14 @@ use {
 
 use crate::playback::{
     PlaybackError::{self, QueueEmpty, TrackNotFound},
+    devices::OutputMode::{self, BitPerfect, Resampled},
     engine::{
         DecodeCommand::{Pause, Resume, Seek},
-        EngineShared,
+        EngineShared, PlaybackEngine,
+    },
+    gapless::GaplessMode::{Disabled, Enabled},
+    state::{
         MuteState::{Muted, Unmuted},
-        PlaybackEngine,
         PlaybackEvent::{
             self, GaplessEnabledChanged, OutputModeChanged, Paused, QueueChanged, Resumed, Seeked,
             Stopped, VolumeChanged,
@@ -19,8 +22,6 @@ use crate::playback::{
         PlaybackState,
         PlaybackStatus::{Paused as StatusPaused, Playing, Stopped as StatusStopped},
     },
-    gapless::GaplessMode::{Disabled, Enabled},
-    output::OutputMode::{self, BitPerfect, Resampled},
     worker::{start_playback, stop_decode_task},
 };
 

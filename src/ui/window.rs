@@ -62,7 +62,7 @@ use crate::{
         library::{
             albums::{build_album_grid, lazy_build_album_mode},
             artists::{build_artist_grid, lazy_build_artist_mode},
-            column_view::NarrowState,
+            narrow_state::NarrowState,
         },
         player::{panel::build_player_content, wire_panel_events},
         status::StatusBar,

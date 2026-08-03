@@ -22,10 +22,10 @@ use crate::playback::{
     engine::{
         DecodeCommand::{self, Pause, PreloadNext, Resume, Seek},
         EngineShared,
-        PlaybackEvent::{self, Error, TrackFinished, TrackStarted},
     },
     output::AudioOutput,
     resampler::{AudioResampler, create_resampler},
+    state::PlaybackEvent::{self, Error, TrackFinished, TrackStarted},
 };
 
 /// Mutable decode loop state updated by gapless transitions.
