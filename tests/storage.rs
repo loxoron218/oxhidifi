@@ -413,4 +413,24 @@ mod tests {
         drop(dir);
         Ok(())
     }
+
+    #[test]
+    async fn settings_setter_round_trips_in_memory() -> Result<()> {
+        let (storage, dir) = test_storage().await?;
+
+        storage.set_volume(1.0).await?;
+        ensure!((storage.get_settings_volume() - 1.0).abs() < f64::EPSILON);
+        storage.set_volume(0.5).await?;
+        ensure!((storage.get_settings_volume() - 0.5).abs() < f64::EPSILON);
+        storage.set_volume(0.0).await?;
+        ensure!((storage.get_settings_volume() - 0.0).abs() < f64::EPSILON);
+
+        storage.set_gapless_enabled(false).await?;
+        ensure!(!storage.get_gapless_enabled());
+        storage.set_gapless_enabled(true).await?;
+        ensure!(storage.get_gapless_enabled());
+
+        drop(dir);
+        Ok(())
+    }
 }

@@ -19,7 +19,7 @@ use crate::{playback::queue::PlaybackQueue, ui::player::queue::QueueItemData};
 
 /// Reorder an item within both the queue model and the `ListStore`.
 fn reorder_entry(queue: &PlaybackQueue, store: &ListStore, from: usize, to: usize) {
-    if from == to {
+    if from == to || from >= queue.len() || to >= queue.len() {
         return;
     }
     queue.move_track(from, to);
@@ -53,9 +53,14 @@ fn handle_drop_value(value: &Value, queue: &PlaybackQueue, store: &ListStore, to
 /// Remove a track from the queue at the given position, updating the store.
 /// Logs a warning if the position is out of bounds.
 fn try_remove_entry(q: &PlaybackQueue, store: &ListStore, pos: usize) {
-    store.remove(u32::try_from(pos).unwrap_or(0));
     if q.remove(pos).is_none() {
         warn!(pos, "Failed to remove track — position out of bounds");
+        return;
+    }
+    if let Ok(index) = u32::try_from(pos)
+        && index < store.n_items()
+    {
+        store.remove(index);
     }
 }
 
@@ -201,7 +206,10 @@ mod tests {
 
     use crate::{
         playback::queue::PlaybackQueue,
-        ui::player::{queue::populate_store, queue_row::try_remove_entry},
+        ui::player::{
+            queue::populate_store,
+            queue_row::{reorder_entry, try_remove_entry},
+        },
     };
 
     fn make_store() -> ListStore {
@@ -235,6 +243,35 @@ mod tests {
         try_remove_entry(&queue, &store, 5);
         ensure!(store.n_items() == 2);
         ensure!(queue.len() == 2);
+        Ok(())
+    }
+
+    #[test]
+    fn try_remove_entry_shorter_store_skips_oob_removal() -> Result<()> {
+        let (queue, store) = queue_and_store();
+        store.remove(0);
+        ensure!(store.n_items() == 1);
+        try_remove_entry(&queue, &store, 1);
+        ensure!(store.n_items() == 1);
+        ensure!(queue.len() == 1);
+        Ok(())
+    }
+
+    #[test]
+    fn reorder_entry_out_of_bounds_is_noop() -> Result<()> {
+        let (queue, store) = queue_and_store();
+        reorder_entry(&queue, &store, 5, 0);
+        ensure!(queue.tracks() == vec![10, 20]);
+        ensure!(store.n_items() == 2);
+        Ok(())
+    }
+
+    #[test]
+    fn reorder_entry_swaps_in_queue_and_store() -> Result<()> {
+        let (queue, store) = queue_and_store();
+        reorder_entry(&queue, &store, 0, 1);
+        ensure!(queue.tracks() == vec![20, 10]);
+        ensure!(store.n_items() == 2);
         Ok(())
     }
 }

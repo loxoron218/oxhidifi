@@ -1,6 +1,9 @@
 //! XDG-based user settings persistence using `serde_json`.
 
-use std::path::{Path, PathBuf};
+use std::{
+    fs::write,
+    path::{Path, PathBuf},
+};
 
 use {
     anyhow::{Context, Result},
@@ -8,6 +11,7 @@ use {
     serde_json::{from_str, to_string_pretty},
     tokio::{
         fs::{create_dir_all, read_to_string, try_exists},
+        runtime::Handle,
         task::spawn_blocking,
     },
 };
@@ -27,7 +31,7 @@ pub enum ActiveTab {
 }
 
 /// Manages persistent user settings stored as JSON.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SettingsStore {
     /// Path to the settings JSON file.
     settings_path: PathBuf,
@@ -75,6 +79,9 @@ impl SettingsStore {
 
     /// Serialize current settings and persist to disk via `spawn_blocking`.
     ///
+    /// Writes synchronously as a fallback when no Tokio runtime is active on
+    /// the current thread, avoiding a panic in contexts without a reactor.
+    ///
     /// # Errors
     ///
     /// Returns an error if serialization or the file write fails.
@@ -82,10 +89,15 @@ impl SettingsStore {
         let json = to_string_pretty(&self.settings).context("Failed to serialize settings")?;
         let path = self.settings_path.clone();
         let path_for_error = path.clone();
-        let join_result = spawn_blocking(move || std::fs::write(&path, &json)).await;
-        join_result
-            .context("Failed to spawn blocking write")?
-            .with_context(|| format!("Failed to write settings: {}", path_for_error.display()))?;
+        let write_error = || format!("Failed to write settings: {}", path_for_error.display());
+        if Handle::try_current().is_ok() {
+            spawn_blocking(move || write(&path, &json))
+                .await
+                .context("Failed to spawn blocking write")?
+                .with_context(write_error)?;
+        } else {
+            write(&path, &json).with_context(write_error)?;
+        }
         Ok(())
     }
 
@@ -332,13 +344,23 @@ impl ViewMode {
 #[cfg(test)]
 mod tests {
     use std::{
-        fs::{File, write},
+        fs::{File, read_to_string, write},
+        future::Future,
         io::BufReader,
+        path::Path,
+        task::{
+            Context,
+            Poll::{Pending, Ready},
+            Waker,
+        },
+        thread::yield_now,
     };
 
     use {
+        anyhow::{Result, bail, ensure},
         serde_json::{from_reader, from_str, to_string_pretty},
-        tempfile::tempdir,
+        tempfile::{TempDir, tempdir},
+        tokio::runtime::Runtime,
     };
 
     use crate::{
@@ -349,6 +371,34 @@ mod tests {
             ViewMode::{Column, Grid},
         },
     };
+
+    fn store_in(dir: &Path) -> SettingsStore {
+        SettingsStore {
+            settings_path: dir.join("settings.json"),
+            settings: UserSettings {
+                volume: 0.5,
+                ..UserSettings::default()
+            },
+        }
+    }
+
+    fn read_volume(dir: &TempDir) -> Result<f64> {
+        let content = read_to_string(dir.path().join("settings.json"))?;
+        let restored: UserSettings = from_str(&content)?;
+        Ok(restored.volume)
+    }
+
+    fn block_on_without_tokio<R>(future: impl Future<Output = R>) -> R {
+        let waker = Waker::noop();
+        let mut context = Context::from_waker(waker);
+        let mut future = Box::pin(future);
+        loop {
+            match future.as_mut().poll(&mut context) {
+                Ready(output) => return output,
+                Pending => yield_now(),
+            }
+        }
+    }
 
     #[test]
     fn settings_defaults() {
@@ -475,5 +525,55 @@ mod tests {
         };
         assert_eq!(restored.output_mode, BitPerfect);
         assert_eq!(restored.output_mode, original.output_mode);
+    }
+
+    #[test]
+    fn save_async_persists_file_under_runtime() -> Result<()> {
+        let rt = Runtime::new()?;
+        let dir = tempdir()?;
+        let store = store_in(dir.path());
+        rt.block_on(store.save_async())?;
+        ensure!((read_volume(&dir)? - 0.5).abs() < f64::EPSILON);
+        Ok(())
+    }
+
+    #[test]
+    fn save_async_persists_file_without_runtime() -> Result<()> {
+        let dir = tempdir()?;
+        let store = store_in(dir.path());
+        block_on_without_tokio(store.save_async())?;
+        ensure!((read_volume(&dir)? - 0.5).abs() < f64::EPSILON);
+        Ok(())
+    }
+
+    #[test]
+    fn update_async_persists_mutated_settings() -> Result<()> {
+        let rt = Runtime::new()?;
+        let dir = tempdir()?;
+        let mut store = store_in(dir.path());
+        rt.block_on(store.update_async(|s| s.volume = 0.25))?;
+        ensure!((read_volume(&dir)? - 0.25).abs() < f64::EPSILON);
+        ensure!((store.get_volume() - 0.25).abs() < f64::EPSILON);
+        Ok(())
+    }
+
+    #[test]
+    fn save_async_error_includes_settings_path() -> Result<()> {
+        let dir = tempdir()?;
+        let store = SettingsStore {
+            settings_path: dir.path().join("missing").join("settings.json"),
+            settings: UserSettings::default(),
+        };
+        let err = block_on_without_tokio(store.save_async());
+        let message = match err {
+            Ok(()) => bail!("expected save to fail for a missing directory"),
+            Err(e) => e.to_string(),
+        };
+        ensure!(message.contains("settings.json"), "message was: {message}");
+        ensure!(
+            message.contains("Failed to write settings"),
+            "message was: {message}"
+        );
+        Ok(())
     }
 }

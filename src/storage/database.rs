@@ -2,18 +2,15 @@
 
 use std::{
     collections::HashMap,
-    fs::write,
     path::{Path, PathBuf},
 };
 
 use {
     parking_lot::RwLock,
-    serde_json::to_string_pretty,
     sqlx::{
         FromRow, QueryBuilder, SqlitePool, query, query_as,
         sqlite::{SqliteConnectOptions, SqlitePoolOptions},
     },
-    tokio::task::spawn_blocking,
     tracing::warn,
 };
 
@@ -312,28 +309,21 @@ impl SqliteStorage {
         Ok(())
     }
 
-    /// Serialize settings to JSON and persist to disk via `spawn_blocking`.
+    /// Persist the in-memory settings to disk.
+    ///
+    /// Delegates to [`SettingsStore::save_async`], which writes via
+    /// `spawn_blocking` when a Tokio runtime is active and falls back to a
+    /// synchronous write otherwise.
     ///
     /// # Errors
     ///
-    /// Returns `StorageError::Database` if JSON serialization or file writing fails.
+    /// Returns `StorageError::Database` if serialization or the file write fails.
     async fn save_settings_async(&self) -> Result<(), StorageError> {
-        let (json, path) = {
-            let settings = self.settings.read();
-            let json = to_string_pretty(settings.get())
-                .map_err(|e| Database(format!("Failed to serialize settings: {e}")))?;
-            (json, settings.path().to_path_buf())
-        };
-        let path_for_error = path.clone();
-        spawn_blocking(move || write(&path, &json))
+        let settings = self.settings.read().clone();
+        settings
+            .save_async()
             .await
-            .map_err(|e| Database(format!("Failed to spawn blocking write: {e}")))?
-            .map_err(|e| {
-                Database(format!(
-                    "Failed to write settings to {}: {e}",
-                    path_for_error.display()
-                ))
-            })?;
+            .map_err(|e| Database(e.to_string()))?;
         Ok(())
     }
 
