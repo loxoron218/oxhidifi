@@ -12,24 +12,15 @@ use std::{
 use {
     async_channel::{Sender, unbounded},
     libadwaita::{
-        gdk::{ContentProvider, DragAction},
-        gio::{ListStore, prelude::ListModelExt},
+        gio::ListStore,
         glib::{
-            BoxedAnyObject, ControlFlow::Break, MainContext, Value, idle_add_local,
-            prelude::StaticType, types::Type, value::ToValue,
+            BoxedAnyObject, ControlFlow::Break, MainContext, idle_add_local, prelude::StaticType,
         },
-        gtk::{
-            Align::Start,
-            Box, Button, DragSource, DropTarget, Label, ListItem, ListView, NoSelection,
-            Orientation::{Horizontal, Vertical},
-            SignalListItemFactory,
-            accessible::Property::Label as PropertyLabel,
-            pango::EllipsizeMode::End,
-        },
-        prelude::{AccessibleExtManual, BoxExt, ButtonExt, Cast, ListItemExt, WidgetExt},
+        gtk::{Box, ListView, NoSelection, Orientation::Vertical, accessible::Property::Label},
+        prelude::{AccessibleExtManual, BoxExt},
     },
     tokio::spawn,
-    tracing::{error, warn},
+    tracing::error,
 };
 
 use crate::{
@@ -40,150 +31,16 @@ use crate::{
         state::PlaybackEvent::{self, QueueChanged, TrackStarted},
     },
     storage::Storage,
+    ui::player::queue_row::build_row_factory,
 };
 
 /// Data for a single queue entry.
 #[derive(Clone, Debug)]
-struct QueueItemData {
+pub struct QueueItemData {
     /// Display name for the track.
-    name: String,
+    pub name: String,
     /// Whether this is the currently playing track.
-    is_current: bool,
-}
-
-/// Reorder an item within both the queue model and the `ListStore`.
-fn reorder_entry(queue: &PlaybackQueue, store: &ListStore, from: usize, to: usize) {
-    if from == to {
-        return;
-    }
-    queue.move_track(from, to);
-    let Ok(from_u32) = u32::try_from(from) else {
-        return;
-    };
-    let Some(item) = store.item(from_u32) else {
-        return;
-    };
-    store.remove(from_u32);
-    let adjusted_pos = if to > from { to - 1 } else { to };
-    let Ok(adjusted_u32) = u32::try_from(adjusted_pos) else {
-        return;
-    };
-    store.insert(adjusted_u32, &item);
-}
-
-/// Process a drop value for reordering.
-fn handle_drop_value(value: &Value, queue: &PlaybackQueue, store: &ListStore, to_pos: usize) {
-    let from = match value.get::<i32>() {
-        Ok(v) => v,
-        Err(e) => {
-            error!(error = %e, "Failed to get drop value");
-            return;
-        }
-    };
-    let from_u = usize::try_from(from).unwrap_or(0);
-    reorder_entry(queue, store, from_u, to_pos);
-}
-
-/// Remove a track from the queue at the given position, updating the store.
-/// Logs a warning if the position is out of bounds.
-fn try_remove_entry(q: &PlaybackQueue, store: &ListStore, pos: usize) {
-    store.remove(u32::try_from(pos).unwrap_or(0));
-    if q.remove(pos).is_none() {
-        warn!(pos, "Failed to remove track — position out of bounds");
-    }
-}
-
-/// Create the `SignalListItemFactory` that builds and binds queue rows.
-fn build_row_factory(queue: &PlaybackQueue, store: &ListStore) -> SignalListItemFactory {
-    let factory = SignalListItemFactory::new();
-    let factory_queue = queue.clone();
-    let factory_store = store.clone();
-
-    factory.connect_setup(move |_, list_item| {
-        let Some(list_item_obj) = list_item.downcast_ref::<ListItem>() else {
-            return;
-        };
-        let li = list_item_obj.clone();
-        let queue_li = factory_queue.clone();
-        let store_li = factory_store.clone();
-
-        let container = Box::builder()
-            .orientation(Horizontal)
-            .spacing(6)
-            .margin_top(3)
-            .margin_bottom(3)
-            .margin_start(6)
-            .margin_end(6)
-            .build();
-
-        let handle = Button::builder()
-            .icon_name("list-drag-handle-symbolic")
-            .css_classes(["flat"])
-            .tooltip_text("Drag to reorder")
-            .can_focus(true)
-            .build();
-        handle.update_property(&[PropertyLabel("Drag handle")]);
-
-        let drag = DragSource::builder().actions(DragAction::MOVE).build();
-        let li_drag = li.clone();
-        drag.connect_prepare(move |_, _, _| {
-            let pos = li_drag.position();
-            let pos_i32 = i32::try_from(pos).unwrap_or(0);
-            let value = pos_i32.to_value();
-            Some(ContentProvider::for_value(&value))
-        });
-        handle.add_controller(drag);
-
-        let label = Label::builder()
-            .ellipsize(End)
-            .max_width_chars(25)
-            .halign(Start)
-            .hexpand(true)
-            .build();
-        label.update_property(&[PropertyLabel("Track name in queue")]);
-
-        let remove = Button::builder()
-            .icon_name("window-close-symbolic")
-            .css_classes(["flat"])
-            .tooltip_text("Remove from queue")
-            .can_focus(true)
-            .build();
-        remove.update_property(&[PropertyLabel("Remove from queue")]);
-
-        let li_remove = li.clone();
-        let queue_remove = queue_li.clone();
-        let store_remove = store_li.clone();
-        remove.connect_clicked(move |_| {
-            let pos = li_remove.position() as usize;
-            try_remove_entry(&queue_remove, &store_remove, pos);
-        });
-
-        let drop = DropTarget::new(Type::I32, DragAction::MOVE);
-        let li_drop = li;
-        let queue_drop = queue_li;
-        let store_drop = store_li;
-        drop.connect_drop(move |_, value, _, _| {
-            let to_pos = li_drop.position() as usize;
-            handle_drop_value(value, &queue_drop, &store_drop, to_pos);
-            true
-        });
-
-        container.append(&handle);
-        container.append(&label);
-        container.append(&remove);
-        container.add_controller(drop);
-
-        list_item_obj.set_child(Some(&container));
-    });
-
-    factory.connect_bind(|_, list_item| {
-        let Some(list_item) = list_item.downcast_ref::<ListItem>() else {
-            return;
-        };
-        bind_row(list_item);
-    });
-
-    factory
+    pub is_current: bool,
 }
 
 /// Spawn fetching track names in a background thread.
@@ -276,7 +133,7 @@ pub fn build_queue_view(state: &Arc<AppState>, queue: &PlaybackQueue) -> Box {
         .show_separators(true)
         .can_focus(true)
         .build();
-    list_view.update_property(&[PropertyLabel("Playback queue list")]);
+    list_view.update_property(&[Label("Playback queue list")]);
 
     let container = Box::builder().orientation(Vertical).spacing(4).build();
 
@@ -314,7 +171,7 @@ pub fn build_queue_view(state: &Arc<AppState>, queue: &PlaybackQueue) -> Box {
 }
 
 /// Populate the `ListStore` with current queue data.
-fn populate_store(store: &ListStore, queue: &PlaybackQueue, name_cache: &[(i64, String)]) {
+pub fn populate_store(store: &ListStore, queue: &PlaybackQueue, name_cache: &[(i64, String)]) {
     store.remove_all();
 
     let current_id = queue.current();
@@ -333,41 +190,6 @@ fn populate_store(store: &ListStore, queue: &PlaybackQueue, name_cache: &[(i64, 
     }
 }
 
-/// Bind data to a row widget (called when item data changes).
-fn bind_row(list_item: &ListItem) {
-    let Some(item) = list_item.item() else {
-        return;
-    };
-    let Some(boxed) = item.downcast_ref::<BoxedAnyObject>() else {
-        return;
-    };
-    let data = boxed.borrow::<QueueItemData>();
-
-    let Some(child) = list_item.child() else {
-        return;
-    };
-    let Some(container) = child.downcast_ref::<Box>() else {
-        return;
-    };
-    let Some(handle) = container.first_child() else {
-        return;
-    };
-    let Some(label_widget) = handle.next_sibling() else {
-        return;
-    };
-    let Some(label) = label_widget.downcast_ref::<Label>() else {
-        return;
-    };
-
-    label.set_label(&data.name);
-
-    let mut classes: Vec<&str> = vec![];
-    if data.is_current {
-        classes.push("heading");
-    }
-    label.set_css_classes(&classes);
-}
-
 #[cfg(test)]
 mod tests {
     use std::sync::{Arc, Mutex, PoisonError};
@@ -383,7 +205,7 @@ mod tests {
 
     use crate::{
         playback::queue::PlaybackQueue,
-        ui::player::queue::{QueueItemData, populate_store, try_remove_entry, update_name_cache},
+        ui::player::queue::{QueueItemData, populate_store, update_name_cache},
     };
 
     fn make_store() -> ListStore {
@@ -399,15 +221,6 @@ mod tests {
         };
         let data = boxed.borrow::<QueueItemData>();
         Some((data.name.clone(), data.is_current))
-    }
-
-    fn queue_and_store() -> (PlaybackQueue, ListStore) {
-        let queue = PlaybackQueue::new();
-        queue.set_queue(vec![10, 20]);
-        let store = make_store();
-        let names = vec![(10, "Alpha".to_string()), (20, "Beta".to_string())];
-        populate_store(&store, &queue, &names);
-        (queue, store)
     }
 
     #[test]
@@ -457,25 +270,6 @@ mod tests {
         let store = make_store();
         populate_store(&store, &queue, &[]);
         ensure!(item_data(&store, 0) == Some(("Track #42".to_string(), true)));
-        Ok(())
-    }
-
-    #[test]
-    fn try_remove_entry_removes_in_bounds() -> Result<()> {
-        let (queue, store) = queue_and_store();
-        try_remove_entry(&queue, &store, 0);
-        ensure!(store.n_items() == 1);
-        ensure!(queue.len() == 1);
-        ensure!(queue.current() == Some(20));
-        Ok(())
-    }
-
-    #[test]
-    fn try_remove_entry_out_of_bounds_is_noop() -> Result<()> {
-        let (queue, store) = queue_and_store();
-        try_remove_entry(&queue, &store, 5);
-        ensure!(store.n_items() == 2);
-        ensure!(queue.len() == 2);
         Ok(())
     }
 }

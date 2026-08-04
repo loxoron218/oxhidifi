@@ -5,8 +5,13 @@ pub mod header;
 pub mod library;
 pub mod player;
 pub mod settings;
+pub mod settings_audio;
+pub mod settings_library;
+pub mod settings_view;
 pub mod status;
 pub mod window;
+pub mod window_navigation;
+pub mod window_panes;
 
 use std::{collections::HashMap, sync::Arc};
 

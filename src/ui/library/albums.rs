@@ -4,45 +4,25 @@
 //! sortable `GtkColumnView` (column mode). Only the *initial* mode is
 //! built at startup; the other mode is lazily built on first switch.
 
-use std::{boxed::Box, collections::HashMap, path::PathBuf, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
 use {
-    async_channel::{Sender, unbounded},
     libadwaita::{
-        gdk::{MemoryTexture, prelude::TextureExt},
         glib::{
             ControlFlow::{self, Break, Continue},
             idle_add_local,
             prelude::Cast,
             spawn_future_local,
         },
-        gtk::{
-            Align::{End, Start},
-            Box as GtkBox,
-            ContentFit::Cover,
-            EventControllerMotion, FlowBox, GestureClick, Image, Label,
-            Orientation::{Horizontal, Vertical},
-            Overlay, Picture, Stack, Widget,
-            accessible::Property::Label as PropertyLabel,
-            pango::EllipsizeMode::End as EllipsizeEnd,
-        },
-        prelude::{AccessibleExtManual, BoxExt, ButtonExt, WidgetExt},
+        gtk::{Box, FlowBox, Orientation::Vertical, Overlay, Stack, Widget},
+        prelude::BoxExt,
     },
     tokio::join,
-    tracing::{error, info, warn},
+    tracing::warn,
 };
 
 use crate::{
     app::{AppState, NavigationEvent::AlbumDetail},
-    playback::{
-        OutputError::{DeviceDisconnected, NoDeviceAvailable},
-        PlaybackError::{
-            DeviceDisconnected as PlaybackDeviceDisconnected,
-            NoDeviceAvailable as PlaybackNoDeviceAvailable, Output,
-        },
-        control::PlaybackController,
-        state::PlaybackStatus::Playing,
-    },
     storage::{
         Storage,
         formats::FormatInfo,
@@ -50,8 +30,9 @@ use crate::{
         settings::ViewMode::{self, Column, Grid},
     },
     ui::{
-        ArtworkDecodeRequest, CoverArtCache, DecodedCover, build_album_play_button,
+        CoverArtCache,
         library::{
+            album_card::{build_album_card, load_cover_art_async},
             column_view::build_album_column_view,
             common::{build_grid, setup_flowbox_keyboard_nav},
             empty::{
@@ -59,15 +40,11 @@ use crate::{
             },
             narrow_state::NarrowState,
         },
-        raw_to_texture,
     },
 };
 
 /// Number of album cards to build per idle callback batch.
 const GRID_BATCH_SIZE: usize = 10;
-
-/// Size of album cover art thumbnails in pixels.
-const THUMBNAIL_SIZE: i32 = 180;
 
 /// Build the album grid view.
 ///
@@ -158,7 +135,7 @@ fn build_album_mode(
 ) {
     match mode {
         Grid => {
-            let grid_container = GtkBox::builder().orientation(Vertical).build();
+            let grid_container = Box::builder().orientation(Vertical).build();
             let flow = build_grid("Album library grid \u{2014} click an album to play");
             grid_container.append(&flow);
             add_scrolled(stack, &grid_container, "grid");
@@ -281,335 +258,10 @@ pub async fn lazy_build_album_mode(
     stack.set_visible_child_name(child_name);
 }
 
-/// Build a placeholder cover art widget.
-///
-/// Returns an `Image` with a generic audio icon. Used as the initial
-/// state before async cover art loading completes.
-fn build_placeholder() -> Widget {
-    let placeholder = Image::builder()
-        .icon_name("audio-x-generic-symbolic")
-        .pixel_size(THUMBNAIL_SIZE / 2)
-        .width_request(THUMBNAIL_SIZE)
-        .height_request(THUMBNAIL_SIZE)
-        .css_classes(["album-cover", "dim-label"])
-        .build();
-    placeholder.update_property(&[PropertyLabel("Album cover placeholder")]);
-    placeholder.upcast()
-}
-
-/// Apply a decoded texture to an overlay's child.
-///
-/// If the child is already a `Picture`, updates its paintable in place.
-/// Otherwise replaces the child with a new `Picture`.
-fn apply_texture(overlay: &Overlay, texture: &MemoryTexture) {
-    let updated = overlay.child().and_then(|c| {
-        c.downcast_ref::<Picture>()
-            .map(|p| p.set_paintable(Some(texture)))
-    });
-    if updated.is_none() {
-        let picture = Picture::builder()
-            .paintable(texture)
-            .content_fit(Cover)
-            .width_request(THUMBNAIL_SIZE)
-            .height_request(THUMBNAIL_SIZE)
-            .css_classes(["album-cover"])
-            .build();
-        picture.update_property(&[PropertyLabel("Album cover art")]);
-        overlay.set_child(Some(&picture));
-    }
-}
-
-/// Checks the shared [`CoverArtCache`] first; sends decode requests to the
-/// centralized worker when the texture is not yet cached.  Each decoded
-/// cover is written to the cache and applied to its overlay via a
-/// [`spawn_future_local`] async task.
-/// Send decoded album cover through the channel, logging on failure.
-fn try_send_album_cover(
-    tx: &Sender<(usize, i64, DecodedCover)>,
-    index: usize,
-    album_id: i64,
-    decoded: Option<DecodedCover>,
-) {
-    let Some(decoded) = decoded else { return };
-    if let Err(e) = tx.try_send((index, album_id, decoded)) {
-        error!(error = %e, "Failed to send decoded album cover to main thread");
-    }
-}
-
-/// Checks the shared [`CoverArtCache`] first; sends decode requests to the
-/// centralized worker when the texture is not yet cached.  Each decoded
-/// cover is written to the cache and applied to its overlay via a
-/// [`spawn_future_local`] async task that stays alive until all results
-/// are received, preventing a race where the channel receiver is dropped
-/// before the background decoder finishes.
-fn load_cover_art_async(
-    cover_art_data: &[(i64, usize, String)],
-    overlays: &[Overlay],
-    cache: &Arc<CoverArtCache>,
-) {
-    if cover_art_data.is_empty() {
-        return;
-    }
-
-    let (tx, rx) = unbounded::<(usize, i64, DecodedCover)>();
-    let mut uncached: Vec<(i64, usize, String)> = Vec::new();
-
-    for (album_id, index, path) in cover_art_data {
-        if let Some(texture) = cache
-            .get(*album_id)
-            .filter(|t| t.width() == THUMBNAIL_SIZE && t.height() == THUMBNAIL_SIZE)
-        {
-            apply_texture(&overlays[*index], &texture);
-            continue;
-        }
-        uncached.push((*album_id, *index, path.clone()));
-    }
-
-    if uncached.is_empty() {
-        return;
-    }
-
-    for (album_id, index, path) in uncached {
-        let tx = tx.clone();
-        cache.request_decode(ArtworkDecodeRequest {
-            album_id,
-            path,
-            size: THUMBNAIL_SIZE,
-            on_complete: Box::new(move |_, decoded| {
-                try_send_album_cover(&tx, index, album_id, decoded);
-            }),
-        });
-    }
-    drop(tx);
-
-    let overlays: Vec<Overlay> = overlays.to_vec();
-    let cache_clone = Arc::clone(cache);
-
-    spawn_future_local(async move {
-        while let Ok((index, album_id, decoded)) = rx.recv().await {
-            let texture = raw_to_texture(&decoded);
-            cache_clone.insert(album_id, texture.clone());
-            apply_texture(&overlays[index], &texture);
-        }
-    });
-}
-
-/// Build the cover art overlay with hover play button for an album card.
-fn build_card_overlay(state: &Arc<AppState>, album_id: i64) -> Overlay {
-    let cover_art = build_placeholder();
-
-    let overlay = Overlay::new();
-    overlay.set_child(Some(&cover_art));
-    overlay.set_css_classes(&["cover-overlay"]);
-
-    let play_button = build_album_play_button();
-    play_button.set_visible(false);
-
-    overlay.add_overlay(&play_button);
-
-    let motion_ctrl = EventControllerMotion::new();
-    let btn_show = play_button.clone();
-    let state_enter = Arc::clone(state);
-    motion_ctrl.connect_enter(move |_, _, _| {
-        btn_show.set_icon_name(album_play_icon(&state_enter, album_id));
-        btn_show.set_visible(true);
-    });
-    let btn_hide = play_button.clone();
-    motion_ctrl.connect_leave(move |_| {
-        btn_hide.set_visible(false);
-    });
-    overlay.add_controller(motion_ctrl);
-
-    let state_clone = Arc::clone(state);
-    let btn_click = play_button.clone();
-    play_button.connect_clicked(move |_| {
-        let icon = album_play_icon(&state_clone, album_id);
-        btn_click.set_icon_name(if icon == "media-playback-pause-symbolic" {
-            "media-playback-start-symbolic"
-        } else {
-            "media-playback-pause-symbolic"
-        });
-
-        let state = Arc::clone(&state_clone);
-        spawn_future_local(async move {
-            toggle_or_play_album(&state, album_id).await;
-        });
-    });
-
-    overlay
-}
-
-/// Build a single album card widget.
-///
-/// Returns a `Box` containing a vertical layout with cover art,
-/// title, artist, format summary, and year labels. Uses
-/// `GestureClick` for click handling instead of `Button` to avoid
-/// theme-inflated natural sizing from the `card` CSS class.
-///
-/// Also returns the `Overlay` wrapping the cover art so it can be
-/// updated asynchronously after the card is added to the container.
-fn build_album_card(
-    state: &Arc<AppState>,
-    album: &Album,
-    artist_name: &str,
-    format_info: &FormatInfo,
-) -> (GtkBox, Overlay) {
-    let card = GtkBox::builder()
-        .orientation(Vertical)
-        .spacing(6)
-        .css_classes(["card"])
-        .can_focus(true)
-        .tooltip_text(format!(
-            "Play \u{201c}{}\u{201d} by album artist",
-            album.title
-        ))
-        .build();
-    card.update_property(&[PropertyLabel(&format!(
-        "Play \u{201c}{}\u{201d} by album artist",
-        album.title
-    ))]);
-
-    let album_id = album.id;
-
-    let overlay = build_card_overlay(state, album_id);
-
-    card.append(&overlay.clone().upcast::<Widget>());
-
-    let title_label = Label::builder()
-        .label(&album.title)
-        .ellipsize(EllipsizeEnd)
-        .max_width_chars(20)
-        .css_classes(["heading", "title"])
-        .halign(Start)
-        .build();
-    title_label.update_property(&[PropertyLabel(&format!("Album: {}", album.title))]);
-
-    let artist_label = Label::builder()
-        .label(artist_name)
-        .ellipsize(EllipsizeEnd)
-        .max_width_chars(20)
-        .css_classes(["dim-label", "caption"])
-        .halign(Start)
-        .build();
-    artist_label.update_property(&[PropertyLabel(&format!("Artist: {artist_name}"))]);
-
-    let format_row = GtkBox::builder().orientation(Horizontal).spacing(6).build();
-
-    let format_label = Label::builder()
-        .label(format_info.summary())
-        .ellipsize(EllipsizeEnd)
-        .max_width_chars(14)
-        .css_classes(["dim-label", "caption"])
-        .halign(Start)
-        .build();
-    format_label.update_property(&[PropertyLabel(&format!("Format: {}", format_info.summary()))]);
-    format_label.set_hexpand(true);
-
-    let year_label = Label::builder()
-        .label(album.year.map_or(String::new(), |y| y.to_string()))
-        .css_classes(["dim-label", "caption"])
-        .halign(End)
-        .build();
-    year_label.update_property(&[PropertyLabel("Release year")]);
-
-    format_row.append(&format_label);
-    format_row.append(&year_label);
-
-    card.append(&title_label);
-    card.append(&artist_label);
-    card.append(&format_row);
-
-    if !state.storage.get_show_album_labels() {
-        title_label.set_visible(false);
-        artist_label.set_visible(false);
-        format_row.set_visible(false);
-    }
-
-    let gesture = GestureClick::new();
-    let state_clone = Arc::clone(state);
-    gesture.connect_released(move |_, _, _, _| {
-        let state = Arc::clone(&state_clone);
-        spawn_future_local(async move {
-            state.send_navigation_event(AlbumDetail(album_id)).await;
-        });
-    });
-    card.add_controller(gesture);
-
-    (card, overlay)
-}
-
-/// Determine the overlay button icon for an album based on playback state.
-#[must_use]
-pub fn album_play_icon(state: &AppState, album_id: i64) -> &'static str {
-    let ps = state.playback.state();
-    let is_current = ps.current_album_id == album_id;
-    if is_current && ps.status == Playing {
-        "media-playback-pause-symbolic"
-    } else {
-        "media-playback-start-symbolic"
-    }
-}
-
-/// Toggle pause if this album is currently playing, otherwise play it.
-pub async fn toggle_or_play_album(state: &Arc<AppState>, album_id: i64) {
-    let is_current = state.playback.state().current_album_id == album_id;
-    if is_current {
-        if let Err(e) = state.playback.toggle_pause() {
-            error!(error = %e, "Failed to toggle pause");
-        }
-    } else {
-        play_album(state, album_id).await;
-    }
-}
-
-/// Play all tracks in an album by queueing them and starting playback.
-///
-/// Fetches tracks ordered by track number, queues them, and calls
-/// `play_queue` on the playback controller.
-async fn play_album(state: &Arc<AppState>, album_id: i64) {
-    let tracks = match state.storage.get_tracks_by_album(album_id).await {
-        Ok(t) => t,
-        Err(e) => {
-            warn!(error = %e, album_id, "Failed to fetch album tracks");
-            return;
-        }
-    };
-
-    if tracks.is_empty() {
-        info!(album_id, "Album has no tracks");
-        return;
-    }
-
-    let track_paths: HashMap<i64, PathBuf> = tracks
-        .iter()
-        .map(|t| (t.id, PathBuf::from(&t.audio.file_path)))
-        .collect();
-    let track_ids: Vec<i64> = tracks.iter().map(|t| t.id).collect();
-
-    state.playback.set_track_paths(track_paths);
-
-    if let Err(e) = state.playback.play_queue(track_ids) {
-        let error_str = e.to_string();
-        warn!(error = %error_str, album_id, "Failed to start album playback");
-        let msg = match &e {
-            PlaybackNoDeviceAvailable
-            | PlaybackDeviceDisconnected
-            | Output(NoDeviceAvailable | DeviceDisconnected(_)) => {
-                "No audio device available. Check your audio output."
-            }
-            _ => &error_str,
-        };
-        if let Err(e) = state.toast_tx.send(msg.into()).await {
-            warn!(error = %e, "Failed to enqueue toast notification");
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use {
         anyhow::{Result, ensure},
-        async_channel::unbounded,
         libadwaita::{
             glib::ControlFlow::{Break, Continue},
             gtk::{self, test},
@@ -617,14 +269,8 @@ mod tests {
     };
 
     use crate::{
-        app::AppState,
-        playback::state::PlaybackStatus::Playing,
         storage::{formats::FormatInfo, records::Album},
-        ui::{
-            DecodedCover,
-            library::albums::{album_play_icon, check_done, try_send_album_cover},
-            tests::mock_decoded_cover,
-        },
+        ui::library::albums::check_done,
     };
 
     fn mock_album(id: i64) -> Album {
@@ -656,39 +302,6 @@ mod tests {
     fn check_done_continues_with_remaining_snapshots() -> Result<()> {
         let snapshots = vec![(mock_album(1), "Artist".into(), FormatInfo::default())];
         ensure!(check_done(&snapshots) == Continue);
-        Ok(())
-    }
-
-    #[test]
-    fn album_play_icon_stopped_shows_start_icon() -> Result<()> {
-        let state = AppState::mock()?;
-        ensure!(album_play_icon(&state, 1) == "media-playback-start-symbolic");
-        Ok(())
-    }
-
-    #[test]
-    fn album_play_icon_playing_current_shows_pause_icon() -> Result<()> {
-        let state = AppState::mock()?;
-        state.playback.shared.state.lock().current_album_id = 42;
-        state.playback.shared.state.lock().status = Playing;
-        ensure!(album_play_icon(&state, 42) == "media-playback-pause-symbolic");
-        ensure!(album_play_icon(&state, 1) == "media-playback-start-symbolic");
-        Ok(())
-    }
-
-    #[test]
-    fn try_send_album_cover_none_is_noop() -> Result<()> {
-        let (tx, rx) = unbounded::<(usize, i64, DecodedCover)>();
-        try_send_album_cover(&tx, 0, 1, None);
-        ensure!(rx.try_recv().is_err());
-        Ok(())
-    }
-
-    #[test]
-    fn try_send_album_cover_forwards_decoded() -> Result<()> {
-        let (tx, rx) = unbounded::<(usize, i64, DecodedCover)>();
-        try_send_album_cover(&tx, 3, 9, Some(mock_decoded_cover()));
-        ensure!(matches!(rx.try_recv(), Ok((3, 9, _))));
         Ok(())
     }
 }

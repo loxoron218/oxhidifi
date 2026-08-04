@@ -7,6 +7,7 @@
 pub mod controls;
 pub mod panel;
 pub mod queue;
+pub mod queue_row;
 
 use std::sync::Arc;
 
