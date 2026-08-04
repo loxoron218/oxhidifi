@@ -343,7 +343,52 @@ pub fn format_duration(seconds: f64) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::ui::detail::common::format_duration;
+    use std::sync::Arc;
+
+    use {
+        anyhow::{Result, ensure},
+        async_channel::unbounded,
+        libadwaita::{
+            gio::prelude::ListModelExt,
+            gtk::{self, prelude::ListBoxRowExt, test},
+            prelude::WidgetExt,
+        },
+    };
+
+    use crate::{
+        app::{
+            AppState,
+            NavigationEvent::{self, Back},
+        },
+        storage::records::{Track, TrackAudio},
+        ui::detail::common::{build_track_row, format_duration, try_send_back},
+    };
+
+    fn mock_track() -> Track {
+        Track {
+            id: 1,
+            title: "Song".into(),
+            number: Some(1),
+            disc_number: Some(1),
+            duration: 200.0,
+            audio: TrackAudio {
+                file_path: "/tmp/song.flac".into(),
+                content_hash: None,
+                format: "FLAC".into(),
+                sample_rate: 96000,
+                bit_depth: Some(24),
+                channels: 2,
+                codec: "FLAC".into(),
+                lossless: true,
+                bitrate: None,
+                album_id: Some(1),
+                artist_id: Some(1),
+                file_size: 1000,
+                last_modified: String::new(),
+            },
+            created_at: String::new(),
+        }
+    }
 
     #[test]
     fn format_duration_zero() {
@@ -363,5 +408,22 @@ mod tests {
     #[test]
     fn format_duration_negative_treated_as_zero() {
         assert_eq!(format_duration(-5.0), "0:00");
+    }
+
+    #[test]
+    fn try_send_back_forwards_back_event() -> Result<()> {
+        let (tx, rx) = unbounded::<NavigationEvent>();
+        try_send_back(&tx);
+        ensure!(matches!(rx.try_recv(), Ok(Back)));
+        Ok(())
+    }
+
+    #[test]
+    fn build_track_row_attaches_controllers_and_content() -> Result<()> {
+        let state = Arc::new(AppState::mock()?);
+        let row = build_track_row(&state, &mock_track(), 1);
+        ensure!(row.observe_controllers().n_items() == 3);
+        ensure!(row.child().is_some());
+        Ok(())
     }
 }

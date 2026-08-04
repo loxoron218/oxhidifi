@@ -204,13 +204,15 @@ mod tests {
 
     use {
         anyhow::{Result, ensure},
-        libadwaita::prelude::WidgetExt,
+        libadwaita::{
+            gtk::{self, test},
+            prelude::WidgetExt,
+        },
     };
 
     use crate::{app::AppState, ui::status::StatusBar};
 
     #[test]
-    #[ignore = "Requires GTK initialization (display server)"]
     fn status_bar_creates_with_root_widget() -> Result<()> {
         let state = Arc::new(AppState::mock()?);
         let status_bar = StatusBar::new(&state);
@@ -219,7 +221,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Requires GTK initialization (display server)"]
     fn status_bar_label_updates() -> Result<()> {
         let state = Arc::new(AppState::mock()?);
         let status_bar = StatusBar::new(&state);

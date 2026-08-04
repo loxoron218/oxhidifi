@@ -330,3 +330,41 @@ pub fn build_queue_section(state: &Arc<AppState>) -> Box {
 
     section
 }
+
+#[cfg(test)]
+mod tests {
+    use {
+        anyhow::{Result, ensure},
+        libadwaita::{
+            gtk::{self, Orientation::Horizontal, Scale, test},
+            prelude::WidgetExt,
+        },
+    };
+
+    use crate::{
+        playback::devices::OutputMode::{BitPerfect, Resampled},
+        ui::player::controls::{mode_button_tooltip, update_volume_scale_visual},
+    };
+
+    #[test]
+    fn mode_button_tooltip_matches_mode() -> Result<()> {
+        let bit_perfect = mode_button_tooltip(BitPerfect);
+        ensure!(bit_perfect.contains("Bit-Perfect"));
+        let resampled = mode_button_tooltip(Resampled);
+        ensure!(resampled.contains("Resampled"));
+        ensure!(bit_perfect != resampled);
+        Ok(())
+    }
+
+    #[test]
+    fn update_volume_scale_visual_toggles_sensitivity() -> Result<()> {
+        let scale = Scale::with_range(Horizontal, 0.0, 1.0, 0.01);
+        update_volume_scale_visual(&scale, Resampled);
+        ensure!(scale.is_sensitive());
+        update_volume_scale_visual(&scale, BitPerfect);
+        ensure!(!scale.is_sensitive());
+        update_volume_scale_visual(&scale, Resampled);
+        ensure!(scale.is_sensitive());
+        Ok(())
+    }
+}

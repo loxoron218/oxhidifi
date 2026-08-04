@@ -105,16 +105,36 @@ fn spawn_album_id_listener(rx: Receiver<(i64, i64)>, state: Arc<AppState>) {
 
 #[cfg(test)]
 mod tests {
-    use crate::playback::state::{
-        PlaybackState,
-        PlaybackStatus::{Playing, Stopped},
+    use std::sync::Arc;
+
+    use {
+        anyhow::{Result, ensure},
+        async_channel::{Sender, unbounded},
+        libadwaita::{
+            OverlaySplitView,
+            gtk::{self, test},
+        },
+        tokio::runtime::Runtime,
+    };
+
+    use crate::{
+        app::AppState,
+        playback::{
+            control::PlaybackController,
+            state::{
+                PlaybackEvent::{QueueChanged, Stopped, TrackFinished, TrackStarted},
+                PlaybackState,
+                PlaybackStatus::{Playing, Stopped as StatusStopped},
+            },
+        },
+        ui::player::handle_panel_event,
     };
 
     #[test]
     fn empty_state_implies_queue_empty() {
         let state = PlaybackState::default();
         assert!(state.current_track_id.is_none());
-        assert_eq!(state.status, Stopped);
+        assert_eq!(state.status, StatusStopped);
     }
 
     #[test]
@@ -125,5 +145,76 @@ mod tests {
             ..Default::default()
         };
         assert!(state.current_track_id.is_some());
+    }
+
+    fn make_split_view() -> OverlaySplitView {
+        OverlaySplitView::new()
+    }
+
+    fn make_album_tx() -> Sender<(i64, i64)> {
+        unbounded::<(i64, i64)>().0
+    }
+
+    #[test]
+    fn handle_panel_event_stopped_hides_sidebar() -> Result<()> {
+        let state = Arc::new(AppState::mock()?);
+        state.playback.shared.state.lock().current_album_id = 7;
+        let split_view = make_split_view();
+        split_view.set_show_sidebar(true);
+        let album_tx = make_album_tx();
+        handle_panel_event(&Stopped, &state, &split_view, &album_tx);
+        ensure!(!split_view.shows_sidebar());
+        ensure!(state.playback.state().current_album_id == -1);
+        Ok(())
+    }
+
+    #[test]
+    fn handle_panel_event_track_finished_hides_when_queue_empty() -> Result<()> {
+        let state = Arc::new(AppState::mock()?);
+        let split_view = make_split_view();
+        split_view.set_show_sidebar(true);
+        let album_tx = make_album_tx();
+        handle_panel_event(
+            &TrackFinished { track_id: 1 },
+            &state,
+            &split_view,
+            &album_tx,
+        );
+        ensure!(!split_view.shows_sidebar());
+        Ok(())
+    }
+
+    #[test]
+    fn handle_panel_event_queue_changed_leaves_sidebar() -> Result<()> {
+        let state = Arc::new(AppState::mock()?);
+        let split_view = make_split_view();
+        split_view.set_show_sidebar(false);
+        let album_tx = make_album_tx();
+        handle_panel_event(
+            &QueueChanged { track_ids: vec![1] },
+            &state,
+            &split_view,
+            &album_tx,
+        );
+        ensure!(!split_view.shows_sidebar());
+        Ok(())
+    }
+
+    #[test]
+    fn handle_panel_event_track_started_shows_sidebar() -> Result<()> {
+        let rt = Runtime::new()?;
+        let guard = rt.enter();
+        let state = Arc::new(AppState::mock()?);
+        let split_view = make_split_view();
+        let album_tx = make_album_tx();
+        handle_panel_event(
+            &TrackStarted { track_id: 1 },
+            &state,
+            &split_view,
+            &album_tx,
+        );
+        ensure!(split_view.shows_sidebar());
+        drop(guard);
+        Ok(())
     }
 }

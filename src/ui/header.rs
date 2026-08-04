@@ -107,7 +107,21 @@ pub fn build_header_controls(state: &Arc<AppState>, parent: &Window) -> Box {
 
 #[cfg(test)]
 mod tests {
-    use crate::storage::settings::ViewMode::{Column, Grid};
+    use std::sync::Arc;
+
+    use {
+        anyhow::{Result, ensure},
+        libadwaita::{
+            gtk::{self, test},
+            prelude::{ButtonExt, ToggleButtonExt},
+        },
+    };
+
+    use crate::{
+        app::AppState,
+        storage::settings::ViewMode::{Column, Grid},
+        ui::header::build_view_toggle,
+    };
 
     #[test]
     fn view_mode_icon_names() {
@@ -119,5 +133,35 @@ mod tests {
     fn view_mode_tooltips() {
         assert_eq!(Grid.tooltip(), "Switch to column view");
         assert_eq!(Column.tooltip(), "Switch to grid view");
+    }
+
+    #[test]
+    fn build_view_toggle_column_starts_active() -> Result<()> {
+        let state = Arc::new(AppState::mock()?);
+        let toggle = build_view_toggle(&state, Column);
+        ensure!(toggle.is_active());
+        ensure!(toggle.icon_name().as_deref() == Some("view-list-symbolic"));
+        Ok(())
+    }
+
+    #[test]
+    fn build_view_toggle_grid_starts_inactive() -> Result<()> {
+        let state = Arc::new(AppState::mock()?);
+        let toggle = build_view_toggle(&state, Grid);
+        ensure!(!toggle.is_active());
+        ensure!(toggle.icon_name().as_deref() == Some("view-grid-symbolic"));
+        Ok(())
+    }
+
+    #[test]
+    fn deactivating_view_toggle_sends_grid_mode() -> Result<()> {
+        let state = Arc::new(AppState::mock()?);
+        let mut rx = state.view_mode_tx.subscribe();
+        state.view_mode_tx.send(Column)?;
+        let toggle = build_view_toggle(&state, Column);
+        toggle.set_active(false);
+        ensure!(*rx.borrow_and_update() == Grid);
+        ensure!(toggle.icon_name().as_deref() == Some("view-grid-symbolic"));
+        Ok(())
     }
 }

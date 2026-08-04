@@ -248,9 +248,18 @@ fn send_channel_cover(
 mod tests {
     use std::collections::HashMap;
 
-    use parking_lot::Mutex;
+    use {
+        anyhow::{Result, ensure},
+        async_channel::{Sender, unbounded},
+        libadwaita::{
+            gdk::MemoryFormat::R8g8b8a8,
+            gtk::{self, test},
+            prelude::{ButtonExt, WidgetExt},
+        },
+        parking_lot::Mutex,
+    };
 
-    use crate::ui::CoverArtCache;
+    use crate::ui::{CoverArtCache, DecodedCover, build_album_play_button, send_channel_cover};
 
     fn make_cache() -> CoverArtCache {
         CoverArtCache {
@@ -258,6 +267,54 @@ mod tests {
             track_to_album: Mutex::new(HashMap::new()),
             request_tx: Mutex::new(None),
         }
+    }
+
+    /// Build a minimal decoded cover for channel-send tests.
+    #[must_use]
+    pub fn mock_decoded_cover() -> DecodedCover {
+        DecodedCover {
+            width: 2,
+            height: 2,
+            rowstride: 8,
+            format: R8g8b8a8,
+            data: vec![0; 16],
+        }
+    }
+
+    /// Verify that a cover-send helper ignores a `None` decode result.
+    ///
+    /// # Arguments
+    ///
+    /// * `send` - The `try_send`-style helper under test
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the channel received a value after sending `None`.
+    pub fn cover_send_none_is_noop(
+        send: fn(&Sender<DecodedCover>, Option<DecodedCover>),
+    ) -> Result<()> {
+        let (tx, rx) = unbounded::<DecodedCover>();
+        send(&tx, None);
+        ensure!(rx.try_recv().is_err());
+        Ok(())
+    }
+
+    /// Verify that a cover-send helper forwards a decoded cover through its channel.
+    ///
+    /// # Arguments
+    ///
+    /// * `send` - The `try_send`-style helper under test
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the channel received no value after sending a cover.
+    pub fn cover_send_forwards_decoded(
+        send: fn(&Sender<DecodedCover>, Option<DecodedCover>),
+    ) -> Result<()> {
+        let (tx, rx) = unbounded::<DecodedCover>();
+        send(&tx, Some(mock_decoded_cover()));
+        ensure!(rx.try_recv().is_ok());
+        Ok(())
     }
 
     #[test]
@@ -273,5 +330,29 @@ mod tests {
         assert!(cache.get_album_for_track(10).is_none());
         cache.record_track_album(10, 100);
         assert_eq!(cache.get_album_for_track(10), Some(100));
+    }
+
+    #[test]
+    fn build_album_play_button_sets_icon_and_tooltip() -> Result<()> {
+        let button = build_album_play_button();
+        ensure!(button.icon_name().as_deref() == Some("media-playback-start-symbolic"));
+        ensure!(button.tooltip_text().as_deref() == Some("Play or pause album"));
+        Ok(())
+    }
+
+    #[test]
+    fn send_channel_cover_none_is_noop() -> Result<()> {
+        let (tx, rx) = unbounded::<(i64, DecodedCover)>();
+        send_channel_cover(&tx, 1, None, "test");
+        ensure!(rx.try_recv().is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn send_channel_cover_forwards_decoded() -> Result<()> {
+        let (tx, rx) = unbounded::<(i64, DecodedCover)>();
+        send_channel_cover(&tx, 7, Some(mock_decoded_cover()), "test");
+        ensure!(matches!(rx.try_recv(), Ok((7, _))));
+        Ok(())
     }
 }

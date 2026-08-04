@@ -380,3 +380,39 @@ async fn populate_album_detail(
     let state = Arc::clone(state);
     idle_add_local(move || fill_track_list_batch(&mut remaining, &track_list, &state));
 }
+
+#[cfg(test)]
+mod tests {
+    use {
+        anyhow::{Result, ensure},
+        libadwaita::{
+            glib::ControlFlow::Break,
+            gtk::{self, Button, test},
+            prelude::ButtonExt,
+        },
+    };
+
+    use crate::ui::{
+        detail::album::{try_send_cover, update_detail_play_button},
+        tests::{cover_send_forwards_decoded, cover_send_none_is_noop},
+    };
+
+    #[test]
+    fn try_send_cover_none_is_noop() -> Result<()> {
+        cover_send_none_is_noop(try_send_cover)
+    }
+
+    #[test]
+    fn try_send_cover_forwards_decoded() -> Result<()> {
+        cover_send_forwards_decoded(try_send_cover)
+    }
+
+    #[test]
+    fn update_detail_play_button_sets_icon() -> Result<()> {
+        let button = Button::new();
+        let flow = update_detail_play_button(&button, "media-playback-pause-symbolic");
+        ensure!(flow == Break);
+        ensure!(button.icon_name().as_deref() == Some("media-playback-pause-symbolic"));
+        Ok(())
+    }
+}

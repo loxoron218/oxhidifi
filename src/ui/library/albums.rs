@@ -604,3 +604,91 @@ async fn play_album(state: &Arc<AppState>, album_id: i64) {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use {
+        anyhow::{Result, ensure},
+        async_channel::unbounded,
+        libadwaita::{
+            glib::ControlFlow::{Break, Continue},
+            gtk::{self, test},
+        },
+    };
+
+    use crate::{
+        app::AppState,
+        playback::state::PlaybackStatus::Playing,
+        storage::{formats::FormatInfo, records::Album},
+        ui::{
+            DecodedCover,
+            library::albums::{album_play_icon, check_done, try_send_album_cover},
+            tests::mock_decoded_cover,
+        },
+    };
+
+    fn mock_album(id: i64) -> Album {
+        Album {
+            id,
+            title: "Album".into(),
+            artist_id: 1,
+            year: Some(2020),
+            genre: None,
+            artwork_path: None,
+            track_count: 10,
+            total_duration: 300.0,
+            format_summary: String::new(),
+            lossless: true,
+            format: "FLAC".into(),
+            bit_depth: Some(24),
+            sample_rate: Some(96000),
+        }
+    }
+
+    #[test]
+    fn check_done_breaks_when_snapshots_exhausted() -> Result<()> {
+        let snapshots: Vec<(Album, String, FormatInfo)> = Vec::new();
+        ensure!(check_done(&snapshots) == Break);
+        Ok(())
+    }
+
+    #[test]
+    fn check_done_continues_with_remaining_snapshots() -> Result<()> {
+        let snapshots = vec![(mock_album(1), "Artist".into(), FormatInfo::default())];
+        ensure!(check_done(&snapshots) == Continue);
+        Ok(())
+    }
+
+    #[test]
+    fn album_play_icon_stopped_shows_start_icon() -> Result<()> {
+        let state = AppState::mock()?;
+        ensure!(album_play_icon(&state, 1) == "media-playback-start-symbolic");
+        Ok(())
+    }
+
+    #[test]
+    fn album_play_icon_playing_current_shows_pause_icon() -> Result<()> {
+        let state = AppState::mock()?;
+        state.playback.shared.state.lock().current_album_id = 42;
+        state.playback.shared.state.lock().status = Playing;
+        ensure!(album_play_icon(&state, 42) == "media-playback-pause-symbolic");
+        ensure!(album_play_icon(&state, 1) == "media-playback-start-symbolic");
+        Ok(())
+    }
+
+    #[test]
+    fn try_send_album_cover_none_is_noop() -> Result<()> {
+        let (tx, rx) = unbounded::<(usize, i64, DecodedCover)>();
+        try_send_album_cover(&tx, 0, 1, None);
+        ensure!(rx.try_recv().is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn try_send_album_cover_forwards_decoded() -> Result<()> {
+        let (tx, rx) = unbounded::<(usize, i64, DecodedCover)>();
+        try_send_album_cover(&tx, 3, 9, Some(mock_decoded_cover()));
+        ensure!(matches!(rx.try_recv(), Ok((3, 9, _))));
+        Ok(())
+    }
+}

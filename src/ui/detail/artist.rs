@@ -282,14 +282,58 @@ fn build_album_section(
 
 #[cfg(test)]
 mod tests {
-    use anyhow::Result;
+    use std::slice::from_ref;
 
-    use crate::app::AppState;
+    use {
+        anyhow::{Result, ensure},
+        libadwaita::gtk::{self, ListBox, ListBoxRow, test},
+    };
+
+    use crate::ui::{
+        detail::artist::{clear_other_lists, try_send_artist_cover},
+        tests::{cover_send_forwards_decoded, cover_send_none_is_noop},
+    };
 
     #[test]
-    #[ignore = "Requires GTK initialization (display server)"]
-    fn artist_detail_builds_with_state() -> Result<()> {
-        AppState::mock()?;
+    fn clear_other_lists_keeps_active_selection() -> Result<()> {
+        let active = ListBox::new();
+        let other = ListBox::new();
+        let active_row = ListBoxRow::new();
+        let other_row = ListBoxRow::new();
+        active.append(&active_row);
+        other.append(&other_row);
+        active.select_row(Some(&active_row));
+        other.select_row(Some(&other_row));
+        ensure!(active.selected_row().is_some());
+        ensure!(other.selected_row().is_some());
+
+        clear_other_lists(Some(&active_row), from_ref(&other));
+
+        ensure!(active.selected_row().is_some());
+        ensure!(other.selected_row().is_none());
         Ok(())
+    }
+
+    #[test]
+    fn clear_other_lists_none_row_is_noop() -> Result<()> {
+        let other = ListBox::new();
+        let other_row = ListBoxRow::new();
+        other.append(&other_row);
+        other.select_row(Some(&other_row));
+
+        clear_other_lists(None, from_ref(&other));
+
+        ensure!(other.selected_row().is_some());
+        Ok(())
+    }
+
+    #[test]
+    fn try_send_artist_cover_none_is_noop() -> Result<()> {
+        cover_send_none_is_noop(try_send_artist_cover)
+    }
+
+    #[test]
+    fn try_send_artist_cover_forwards_decoded() -> Result<()> {
+        cover_send_forwards_decoded(try_send_artist_cover)
     }
 }

@@ -120,3 +120,65 @@ pub fn populate_grid_batched(
         }
     });
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use {
+        anyhow::{Result, ensure},
+        libadwaita::{
+            gio::prelude::ListModelExt,
+            glib::MainContext,
+            gtk::{self, test},
+            prelude::WidgetExt,
+        },
+    };
+
+    use crate::{
+        app::{AppState, NavigationEvent::AlbumDetail},
+        ui::library::common::{
+            activate_focused_card_by_index, build_grid, setup_flowbox_keyboard_nav,
+        },
+    };
+
+    #[test]
+    fn build_grid_sets_tooltip() -> Result<()> {
+        let flow = build_grid("Album library grid");
+        ensure!(flow.tooltip_text().as_deref() == Some("Album library grid"));
+        Ok(())
+    }
+
+    #[test]
+    fn setup_flowbox_keyboard_nav_attaches_key_controller() -> Result<()> {
+        let state = Arc::new(AppState::mock()?);
+        let flow = build_grid("grid");
+        setup_flowbox_keyboard_nav(&flow, &state, vec![1, 2], AlbumDetail);
+        ensure!(flow.observe_controllers().n_items() > 0);
+        Ok(())
+    }
+
+    #[test]
+    fn activate_focused_card_by_index_sends_album_detail() -> Result<()> {
+        let state = Arc::new(AppState::mock()?);
+        activate_focused_card_by_index(&state, &[7, 8], 1, AlbumDetail);
+        let mut received = state.navigation_rx.try_recv();
+        let mut attempts = 0;
+        while received.is_err() && attempts < 32 {
+            MainContext::default().iteration(false);
+            received = state.navigation_rx.try_recv();
+            attempts += 1;
+        }
+        ensure!(matches!(received, Ok(AlbumDetail(8))));
+        Ok(())
+    }
+
+    #[test]
+    fn activate_focused_card_by_index_out_of_bounds_is_noop() -> Result<()> {
+        let state = Arc::new(AppState::mock()?);
+        activate_focused_card_by_index(&state, &[7], 5, AlbumDetail);
+        MainContext::default().iteration(false);
+        ensure!(state.navigation_rx.try_recv().is_err());
+        Ok(())
+    }
+}

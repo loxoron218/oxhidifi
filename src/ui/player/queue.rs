@@ -370,7 +370,45 @@ fn bind_row(list_item: &ListItem) {
 
 #[cfg(test)]
 mod tests {
-    use crate::playback::queue::PlaybackQueue;
+    use std::sync::{Arc, Mutex, PoisonError};
+
+    use {
+        anyhow::{Result, ensure},
+        libadwaita::{
+            gio::{ListStore, prelude::ListModelExt},
+            glib::{BoxedAnyObject, object::Cast, prelude::StaticType},
+            gtk::{self, test},
+        },
+    };
+
+    use crate::{
+        playback::queue::PlaybackQueue,
+        ui::player::queue::{QueueItemData, populate_store, try_remove_entry, update_name_cache},
+    };
+
+    fn make_store() -> ListStore {
+        ListStore::builder()
+            .item_type(BoxedAnyObject::static_type())
+            .build()
+    }
+
+    fn item_data(store: &ListStore, index: u32) -> Option<(String, bool)> {
+        let item = store.item(index)?;
+        let Ok(boxed) = item.downcast::<BoxedAnyObject>() else {
+            return None;
+        };
+        let data = boxed.borrow::<QueueItemData>();
+        Some((data.name.clone(), data.is_current))
+    }
+
+    fn queue_and_store() -> (PlaybackQueue, ListStore) {
+        let queue = PlaybackQueue::new();
+        queue.set_queue(vec![10, 20]);
+        let store = make_store();
+        let names = vec![(10, "Alpha".to_string()), (20, "Beta".to_string())];
+        populate_store(&store, &queue, &names);
+        (queue, store)
+    }
 
     #[test]
     fn queue_starts_empty() {
@@ -383,5 +421,61 @@ mod tests {
         let q = PlaybackQueue::new();
         q.set_queue(vec![1, 2, 3]);
         assert_eq!(q.tracks(), vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn update_name_cache_replaces_entries() -> Result<()> {
+        let cache = Arc::new(Mutex::new(vec![(1, "Old".to_string())]));
+        let names = vec![(2, "New".to_string())];
+        update_name_cache(&cache, &names);
+        let replaced = {
+            let guard = cache.lock().unwrap_or_else(PoisonError::into_inner);
+            *guard == vec![(2, "New".to_string())]
+        };
+        ensure!(replaced);
+        Ok(())
+    }
+
+    #[test]
+    fn populate_store_sets_names_and_current() -> Result<()> {
+        let queue = PlaybackQueue::new();
+        queue.set_queue(vec![10, 20]);
+        queue.set_current_index(1);
+        let store = make_store();
+        let names = vec![(10, "Alpha".to_string()), (20, "Beta".to_string())];
+        populate_store(&store, &queue, &names);
+        ensure!(store.n_items() == 2);
+        ensure!(item_data(&store, 0) == Some(("Alpha".to_string(), false)));
+        ensure!(item_data(&store, 1) == Some(("Beta".to_string(), true)));
+        Ok(())
+    }
+
+    #[test]
+    fn populate_store_falls_back_to_track_id() -> Result<()> {
+        let queue = PlaybackQueue::new();
+        queue.set_queue(vec![42]);
+        let store = make_store();
+        populate_store(&store, &queue, &[]);
+        ensure!(item_data(&store, 0) == Some(("Track #42".to_string(), true)));
+        Ok(())
+    }
+
+    #[test]
+    fn try_remove_entry_removes_in_bounds() -> Result<()> {
+        let (queue, store) = queue_and_store();
+        try_remove_entry(&queue, &store, 0);
+        ensure!(store.n_items() == 1);
+        ensure!(queue.len() == 1);
+        ensure!(queue.current() == Some(20));
+        Ok(())
+    }
+
+    #[test]
+    fn try_remove_entry_out_of_bounds_is_noop() -> Result<()> {
+        let (queue, store) = queue_and_store();
+        try_remove_entry(&queue, &store, 5);
+        ensure!(store.n_items() == 2);
+        ensure!(queue.len() == 2);
+        Ok(())
     }
 }

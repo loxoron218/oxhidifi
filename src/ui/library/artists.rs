@@ -241,3 +241,31 @@ fn build_artist_card(state: &Arc<AppState>, artist: &Artist) -> Box {
 
     card
 }
+
+#[cfg(test)]
+mod tests {
+    use {
+        anyhow::{Result, ensure},
+        libadwaita::glib::ControlFlow::{Break, Continue},
+    };
+
+    use crate::{storage::records::Artist, ui::library::artists::artist_done};
+
+    #[test]
+    fn artist_done_breaks_when_artists_exhausted() -> Result<()> {
+        let artists: Vec<Artist> = Vec::new();
+        ensure!(artist_done(&artists) == Break);
+        Ok(())
+    }
+
+    #[test]
+    fn artist_done_continues_with_remaining_artists() -> Result<()> {
+        let artists = vec![Artist {
+            id: 1,
+            name: "Artist".into(),
+            album_count: 3,
+        }];
+        ensure!(artist_done(&artists) == Continue);
+        Ok(())
+    }
+}

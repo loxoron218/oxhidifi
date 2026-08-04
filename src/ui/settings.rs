@@ -372,3 +372,65 @@ fn build_view_page(dialog: &PreferencesDialog, state: &Arc<AppState>) {
 
     dialog.add(&page);
 }
+
+#[cfg(test)]
+mod tests {
+    use {
+        anyhow::{Result, ensure},
+        libadwaita::{
+            ComboRow,
+            gtk::{self, StringList, test},
+            prelude::ComboRowExt,
+        },
+    };
+
+    use crate::{playback::devices::DeviceInfo, ui::settings::set_preferred_device};
+
+    fn mock_devices() -> Vec<DeviceInfo> {
+        vec![
+            DeviceInfo {
+                id: "pipewire".into(),
+                name: "PipeWire".into(),
+            },
+            DeviceInfo {
+                id: "hdmi".into(),
+                name: "HDMI".into(),
+            },
+        ]
+    }
+
+    fn combo_with_devices() -> ComboRow {
+        let combo = ComboRow::new();
+        let model = StringList::new(&["PipeWire", "HDMI"]);
+        combo.set_model(Some(&model));
+        combo
+    }
+
+    #[test]
+    fn set_preferred_device_selects_matching_index() -> Result<()> {
+        let combo = combo_with_devices();
+        let preferred = "HDMI".to_string();
+        set_preferred_device(&combo, &mock_devices(), Some(&preferred));
+        ensure!(combo.selected() == 1);
+        Ok(())
+    }
+
+    #[test]
+    fn set_preferred_device_leaves_default_on_no_match() -> Result<()> {
+        let combo = combo_with_devices();
+        let before = combo.selected();
+        let preferred = "Missing".to_string();
+        set_preferred_device(&combo, &mock_devices(), Some(&preferred));
+        ensure!(combo.selected() == before);
+        Ok(())
+    }
+
+    #[test]
+    fn set_preferred_device_none_leaves_default() -> Result<()> {
+        let combo = combo_with_devices();
+        let before = combo.selected();
+        set_preferred_device(&combo, &mock_devices(), None);
+        ensure!(combo.selected() == before);
+        Ok(())
+    }
+}

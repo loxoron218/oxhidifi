@@ -286,3 +286,34 @@ async fn add_music_folder(state: &AppState, parent: Option<&Window>) {
         }
     });
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use {
+        anyhow::{Result, ensure},
+        libadwaita::gtk::{self, Button, test},
+        parking_lot::Mutex,
+    };
+
+    use crate::{
+        storage::settings::ViewMode::{Column, Grid},
+        ui::library::empty::{parent_window, update_mode},
+    };
+
+    #[test]
+    fn parent_window_none_when_unattached() -> Result<()> {
+        let button = Button::new();
+        ensure!(parent_window(&button).is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn update_mode_sets_mutex_value() -> Result<()> {
+        let mode = Arc::new(Mutex::new(Grid));
+        update_mode(&mode, Column);
+        ensure!(*mode.lock() == Column);
+        Ok(())
+    }
+}
