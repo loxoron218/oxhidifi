@@ -4,10 +4,7 @@
 //! Uses `ListView` with compact rows. Each row has a drag handle to reorder.
 //! Subscribes to `PlaybackEvent` for fully event-driven updates.
 
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex, PoisonError},
-};
+use std::{collections::HashMap, sync::Arc};
 
 use {
     async_channel::{Sender, unbounded},
@@ -19,6 +16,7 @@ use {
         gtk::{Box, ListView, NoSelection, Orientation::Vertical, accessible::Property::Label},
         prelude::{AccessibleExtManual, BoxExt},
     },
+    parking_lot::Mutex,
     tokio::spawn,
     tracing::error,
 };
@@ -88,17 +86,11 @@ fn handle_queue_event(
 ) {
     match event {
         QueueChanged { track_ids } => {
-            refresh_store_on_main(
-                store,
-                queue,
-                &cache.lock().unwrap_or_else(PoisonError::into_inner),
-            );
+            refresh_store_on_main(store, queue, &cache.lock());
             spawn_fetch_queue_names(state, track_ids, tx.clone());
         }
         TrackStarted { .. } => {
-            if let Ok(guard) = cache.lock() {
-                refresh_store_on_main(store, queue, &guard);
-            }
+            refresh_store_on_main(store, queue, &cache.lock());
         }
         _ => {}
     }
@@ -106,9 +98,7 @@ fn handle_queue_event(
 
 /// Update the name cache from received queue names.
 fn update_name_cache(cache: &Arc<Mutex<Vec<(i64, String)>>>, names: &Vec<(i64, String)>) {
-    if let Ok(mut guard) = cache.lock() {
-        guard.clone_from(names);
-    }
+    cache.lock().clone_from(names);
 }
 
 /// Build the queue view using `ListView` with compact rows.
@@ -192,7 +182,7 @@ pub fn populate_store(store: &ListStore, queue: &PlaybackQueue, name_cache: &[(i
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Arc, Mutex, PoisonError};
+    use std::sync::Arc;
 
     use {
         anyhow::{Result, ensure},
@@ -201,6 +191,7 @@ mod tests {
             glib::{BoxedAnyObject, object::Cast, prelude::StaticType},
             gtk::{self, test},
         },
+        parking_lot::Mutex,
     };
 
     use crate::{
@@ -241,11 +232,7 @@ mod tests {
         let cache = Arc::new(Mutex::new(vec![(1, "Old".to_string())]));
         let names = vec![(2, "New".to_string())];
         update_name_cache(&cache, &names);
-        let replaced = {
-            let guard = cache.lock().unwrap_or_else(PoisonError::into_inner);
-            *guard == vec![(2, "New".to_string())]
-        };
-        ensure!(replaced);
+        ensure!(*cache.lock() == vec![(2, "New".to_string())]);
         Ok(())
     }
 
