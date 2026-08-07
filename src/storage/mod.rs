@@ -5,6 +5,8 @@ pub mod formats;
 pub mod migrations;
 pub mod records;
 pub mod settings;
+pub mod sort_rules;
+pub mod user_settings;
 
 use std::{collections::HashMap, future::Future, path::Path, result::Result};
 

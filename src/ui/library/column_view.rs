@@ -4,7 +4,7 @@
 //! The two builder functions return a fully wired `GtkColumnView` with
 //! column-specific factories, sorters, and click‑to‑navigate handling.
 
-use std::{collections::HashMap, hash::BuildHasher, mem::take, sync::Arc};
+use std::{mem::take, sync::Arc};
 
 use {
     libadwaita::{
@@ -25,12 +25,8 @@ use {
 
 use crate::{
     app::{
-        AppState,
+        AppState, CachedAlbumData, CachedArtistData,
         NavigationEvent::{self, AlbumDetail, ArtistDetail},
-    },
-    storage::{
-        formats::FormatInfo,
-        records::{Album, Artist},
     },
     ui::library::{
         columns::{
@@ -40,6 +36,7 @@ use crate::{
         models::{AlbumData, ArtistData},
         narrow_state::NarrowState,
     },
+    zoom::list_cover_size,
 };
 
 /// Number of items to append to a `ListStore` per idle callback batch.
@@ -60,34 +57,68 @@ fn setup_column_view(store: ListStore) -> ColumnView {
     column_view
 }
 
-/// Append up to `STORE_BATCH_SIZE` items from `remaining` to the store.
-/// Returns `true` when all items have been consumed.
-fn fill_store_batch(remaining: &mut Vec<BoxedAnyObject>, store: &ListStore) -> bool {
+/// Append up to `STORE_BATCH_SIZE` album items to the store, constructing
+/// each item inside the idle callback.
+///
+/// Building the `BoxedAnyObject` items (title/artist/format string
+/// allocations) is the dominant main-thread cost of the column view, so it
+/// is spread across idle callbacks like the grid card population instead of
+/// being done synchronously for the whole library. Returns `true` when all
+/// indices have been consumed. Artwork paths for uncached covers are
+/// collected into `covers` for a single decode dispatch once the store is
+/// filled.
+fn fill_album_store_batch(
+    store: &ListStore,
+    cached: &CachedAlbumData,
+    remaining: &mut Vec<usize>,
+    covers: &mut Vec<(i64, String)>,
+) -> bool {
     for _ in 0..STORE_BATCH_SIZE {
-        let Some(data) = remaining.pop() else { break };
-        store.append(&data);
+        let Some(idx) = remaining.pop() else { break };
+        let album = &cached.albums[idx];
+        let artist_name = cached
+            .artist_names
+            .get(&album.artist_id)
+            .map_or("Unknown Artist", String::as_str);
+        let fi = cached
+            .format_info
+            .get(&album.id)
+            .cloned()
+            .unwrap_or_default();
+        if let Some(path) = &album.artwork_path {
+            covers.push((album.id, path.clone()));
+        }
+        let data = AlbumData {
+            id: album.id,
+            title: album.title.clone(),
+            artist_name: artist_name.to_string(),
+            year: album.year.unwrap_or(0),
+            format: fi.formats_display(),
+            bit_depth: fi.bit_depth_display(),
+            sample_rate: fi.sample_rate_display(),
+            artwork_path: album.artwork_path.clone().unwrap_or_default(),
+        };
+        store.append(&BoxedAnyObject::new(data));
     }
     remaining.is_empty()
 }
 
-/// Populate a `ListStore` from `items` in batches via `idle_add_local`.
-///
-/// Each idle callback appends up to 50 items, keeping the UI responsive
-/// during large initial loads. `items` is drained and replaced empty.
-fn batched_fill_store(store: &ListStore, items: &mut Vec<BoxedAnyObject>) {
-    if items.is_empty() {
-        return;
+/// Append up to `STORE_BATCH_SIZE` artist items to the store per idle callback.
+fn fill_artist_store_batch(
+    store: &ListStore,
+    cached: &CachedArtistData,
+    remaining: &mut Vec<usize>,
+) -> bool {
+    for _ in 0..STORE_BATCH_SIZE {
+        let Some(idx) = remaining.pop() else { break };
+        let artist = &cached.artists[idx];
+        store.append(&BoxedAnyObject::new(ArtistData {
+            id: artist.id,
+            name: artist.name.clone(),
+            album_count: artist.album_count,
+        }));
     }
-    items.reverse();
-    let s = store.clone();
-    let mut remaining = take(items);
-    idle_add_local(move || {
-        if fill_store_batch(&mut remaining, &s) {
-            Break
-        } else {
-            Continue
-        }
-    });
+    remaining.is_empty()
 }
 
 /// Build a fully wired `ColumnView` for albums.
@@ -98,17 +129,15 @@ fn batched_fill_store(store: &ListStore, items: &mut Vec<BoxedAnyObject>) {
 ///
 /// # Arguments
 ///
-/// * `state` – Application state (for navigation)
-/// * `albums` – Albums to display
-/// * `artist_names` – Map of artist id → display name
-/// * `narrow_state` – Narrow‑mode tracker for adaptive hiding
-/// * `format_info` – Map of album id → distinct format info
-pub fn build_album_column_view<S: BuildHasher>(
+/// * `state` - Application state (for navigation)
+/// * `cached` - Shared album data (albums, artist names, format info)
+/// * `narrow_state` - Narrow-mode tracker for adaptive column hiding
+/// * `indices` - Display order of `cached.albums`
+pub fn build_album_column_view(
     state: &Arc<AppState>,
-    albums: &[Album],
-    artist_names: &HashMap<i64, String, S>,
+    cached: &CachedAlbumData,
     narrow_state: &NarrowState,
-    format_info: &HashMap<i64, FormatInfo, S>,
+    indices: &[usize],
 ) -> Widget {
     let store = ListStore::new::<BoxedAnyObject>();
 
@@ -116,7 +145,8 @@ pub fn build_album_column_view<S: BuildHasher>(
 
     let pending_widgets = Arc::<Mutex<PendingCovers>>::default();
 
-    let cover_col = build_cover_column(&state.cover_art_cache, &pending_widgets);
+    let cover_size = list_cover_size(state.storage.get_list_zoom_level());
+    let cover_col = build_cover_column(cover_size, &state.cover_art_cache, &pending_widgets);
     let artist_col =
         build_string_column("Artist Name", |d: &AlbumData| d.artist_name.clone(), true);
     let album_col = build_string_column("Album Name", |d: &AlbumData| d.title.clone(), true);
@@ -147,48 +177,65 @@ pub fn build_album_column_view<S: BuildHasher>(
         &[&format_col, &bit_depth_col, &sample_rate_col],
     );
 
-    let mut items: Vec<BoxedAnyObject> = albums
-        .iter()
-        .map(|album| {
-            let artist_name = artist_names
-                .get(&album.artist_id)
-                .map_or("Unknown Artist", String::as_str);
-            let fi = format_info.get(&album.id).cloned().unwrap_or_default();
-            let data = AlbumData {
-                id: album.id,
-                title: album.title.clone(),
-                artist_name: artist_name.to_string(),
-                year: album.year.unwrap_or(0),
-                format: fi.formats_display(),
-                bit_depth: fi.bit_depth_display(),
-                sample_rate: fi.sample_rate_display(),
-                artwork_path: album.artwork_path.clone().unwrap_or_default(),
-            };
-            BoxedAnyObject::new(data)
-        })
-        .collect();
-    batched_fill_store(&store, &mut items);
+    let cached_owned = CachedAlbumData {
+        albums: Arc::clone(&cached.albums),
+        artist_names: Arc::clone(&cached.artist_names),
+        format_info: Arc::clone(&cached.format_info),
+    };
+    let state_owned = Arc::clone(state);
+    let store_fill = store;
+    let mut remaining: Vec<usize> = indices.to_vec();
+    remaining.reverse();
+    let mut covers: Vec<(i64, String)> = Vec::new();
+    idle_add_local(move || {
+        if fill_album_store_batch(&store_fill, &cached_owned, &mut remaining, &mut covers) {
+            dispatch_column_covers(&state_owned, &pending_widgets, cover_size, &mut covers);
+            Break
+        } else {
+            Continue
+        }
+    });
 
-    let uncached: Vec<(i64, String)> = albums
-        .iter()
-        .filter_map(|a| a.artwork_path.as_ref().map(|p| (a.id, p.clone())))
-        .filter(|(id, _)| state.cover_art_cache.get(*id).is_none())
+    column_view.upcast::<Widget>()
+}
+
+/// Dispatch decode requests for the covers collected while filling the
+/// album column store, skipping albums that already have a cached texture.
+fn dispatch_column_covers(
+    state: &Arc<AppState>,
+    pending_widgets: &Arc<Mutex<PendingCovers>>,
+    cover_size: i32,
+    covers: &mut Vec<(i64, String)>,
+) {
+    let uncached: Vec<(i64, String)> = take(covers)
+        .into_iter()
+        .filter(|(id, _)| !state.cover_art_cache.has_any(*id))
         .collect();
     if !uncached.is_empty() {
         start_cover_batch_decode(
+            state,
             uncached,
+            cover_size,
             Arc::clone(&state.cover_art_cache),
-            pending_widgets,
+            Arc::clone(pending_widgets),
         );
     }
-
-    column_view.upcast::<Widget>()
 }
 
 /// Build a fully wired `ColumnView` for artists.
 ///
 /// Columns: Artist Icon, Artist Name, Number of Albums.
-pub fn build_artist_column_view(state: &Arc<AppState>, artists: &[Artist]) -> Widget {
+///
+/// # Arguments
+///
+/// * `state` - Application state (for navigation)
+/// * `cached` - Shared artist data
+/// * `indices` - Display order of `cached.artists`
+pub fn build_artist_column_view(
+    state: &Arc<AppState>,
+    cached: &CachedArtistData,
+    indices: &[usize],
+) -> Widget {
     let store = ListStore::new::<BoxedAnyObject>();
 
     let column_view = setup_column_view(store.clone());
@@ -213,17 +260,19 @@ pub fn build_artist_column_view(state: &Arc<AppState>, artists: &[Artist]) -> Wi
         }
     });
 
-    let mut items: Vec<BoxedAnyObject> = artists
-        .iter()
-        .map(|artist| {
-            BoxedAnyObject::new(ArtistData {
-                id: artist.id,
-                name: artist.name.clone(),
-                album_count: artist.album_count,
-            })
-        })
-        .collect();
-    batched_fill_store(&store, &mut items);
+    let cached_owned = CachedArtistData {
+        artists: Arc::clone(&cached.artists),
+    };
+    let store_fill = store;
+    let mut remaining: Vec<usize> = indices.to_vec();
+    remaining.reverse();
+    idle_add_local(move || {
+        if fill_artist_store_batch(&store_fill, &cached_owned, &mut remaining) {
+            Break
+        } else {
+            Continue
+        }
+    });
 
     column_view.upcast::<Widget>()
 }

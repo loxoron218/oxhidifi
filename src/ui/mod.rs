@@ -8,12 +8,16 @@ pub mod settings;
 pub mod settings_audio;
 pub mod settings_library;
 pub mod settings_view;
+pub mod sort_list;
 pub mod status;
 pub mod window;
 pub mod window_navigation;
 pub mod window_panes;
 
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::{Arc, Weak},
+};
 
 use {
     async_channel::{Receiver, Sender, unbounded},
@@ -30,7 +34,23 @@ use {
     tracing::error,
 };
 
-use crate::threading::ThreadManager;
+use crate::{threading::ThreadManager, zoom::GRID_ZOOM_MAX};
+
+/// Maximum number of decoded sizes retained per album.
+///
+/// Covers every grid zoom level (0–[`GRID_ZOOM_MAX`]) so a full zoom sweep
+/// never re-decodes a size that was already decoded this session — repeated
+/// zoom toggling stops re-dispatching after the first sweep. Column-view
+/// list sizes are smaller and evicted by grid covers, which is acceptable:
+/// grid/list switches are rare, and a re-decode on switch is bounded.
+const MAX_SIZES_PER_ALBUM: usize = GRID_ZOOM_MAX as usize + 1;
+
+/// Number of worker threads decoding cover art.
+///
+/// Decode requests only originate from debounced user actions (zoom or
+/// sort rebuilds), so the queue stays bounded; a small pool keeps each
+/// full-grid re-decode wave well below the latency of a single thread.
+const COVER_DECODER_THREADS: usize = 3;
 
 /// Request for the centralized cover decoder worker.
 pub struct ArtworkDecodeRequest {
@@ -46,19 +66,24 @@ pub struct ArtworkDecodeRequest {
 
 /// Thread-safe cache for decoded cover art textures.
 ///
-/// Keyed by album database ID.  A single background worker thread
-/// processes all decode requests sequentially, preventing decoder
-/// pool saturation and duplicate work across views.
+/// Keyed by `(album_id, size)` so that covers decoded at different
+/// zoom levels or view sizes are independently cached.  A small fixed
+/// pool of background worker threads processes decode requests
+/// concurrently, preventing a full-grid re-decode wave from blocking
+/// the UI for seconds on large libraries.
 ///
-/// Both the grid view and column view share the same cache instance
-/// so that each album cover is only decoded once per session, even
-/// when switching between view modes.
+/// Both the grid view and column view share the same cache instance,
+/// and texture lookups without a specific size (e.g. the player panel)
+/// return any cached size for the album.
 pub struct CoverArtCache {
-    /// Map of album ID to decoded texture.
-    textures: Mutex<HashMap<i64, Arc<MemoryTexture>>>,
+    /// Guarded cache state: decoded textures and per-album size indices.
+    inner: Mutex<CoverCacheInner>,
     /// Map of track ID to album ID, so cover lookups by `track_id` can
     /// resolve to the correct album-level cache entry.
     track_to_album: Mutex<HashMap<i64, i64>>,
+    /// `(album_id, size)` keys with a decode request queued or in flight,
+    /// so rapid zoom toggling never dispatches the same album×size twice.
+    in_flight: Mutex<HashSet<(i64, i32)>>,
     /// Channel sender for dispatching decode requests to the worker.
     /// Wrapped in `Mutex<Option<...>>` so the channel can be closed
     /// during shutdown, allowing the worker thread to exit.
@@ -68,38 +93,78 @@ pub struct CoverArtCache {
 impl CoverArtCache {
     /// Create a new `CoverArtCache` wrapped in [`Arc`].
     ///
-    /// Spawns a single background thread (`"cover-decoder"`) via the
-    /// [`ThreadManager`] that processes decode requests sequentially.
+    /// Spawns a pool of [`COVER_DECODER_THREADS`] background threads
+    /// (`"cover-decoder-{i}"`) via the [`ThreadManager`] that process
+    /// decode requests concurrently.
     pub fn new_shared(thread_manager: &ThreadManager) -> Arc<Self> {
         let (request_tx, request_rx) = unbounded::<ArtworkDecodeRequest>();
 
-        thread_manager.spawn_named("cover-decoder", move || {
-            run_cover_decoder(&request_rx);
-        });
+        for i in 0..COVER_DECODER_THREADS {
+            spawn_cover_decoder(thread_manager, i, request_rx.clone());
+        }
 
-        Arc::new(Self {
-            textures: Mutex::new(HashMap::new()),
+        Arc::new(Self::with_sender(Some(request_tx)))
+    }
+
+    /// Build an empty cache around an optional request sender.
+    ///
+    /// `new_shared` spawns the decoder pool and passes its sender; tests
+    /// pass `None` to construct a cache without any worker threads.
+    fn with_sender(request_tx: Option<Sender<ArtworkDecodeRequest>>) -> Self {
+        Self {
+            inner: Mutex::new(CoverCacheInner {
+                textures: HashMap::new(),
+                sizes: HashMap::new(),
+            }),
             track_to_album: Mutex::new(HashMap::new()),
-            request_tx: Mutex::new(Some(request_tx)),
-        })
+            in_flight: Mutex::new(HashSet::new()),
+            request_tx: Mutex::new(request_tx),
+        }
     }
 
     /// Send a cover decode request to the background worker.
-    pub fn request_decode(&self, request: ArtworkDecodeRequest) {
+    ///
+    /// Coalesces duplicate `(album_id, size)` requests: while a decode for
+    /// that key is queued or in flight, later requests are dropped. The key
+    /// is released when the decode completes (or if the send fails), so
+    /// rapid zoom toggling never queues the same cover twice yet a later
+    /// zoom to the same size can still re-decode after eviction.
+    pub fn request_decode(self: &Arc<Self>, request: ArtworkDecodeRequest) {
+        let key = (request.album_id, request.size);
+        if !self.in_flight.lock().insert(key) {
+            return;
+        }
+        let weak = Arc::downgrade(self);
+        let on_complete = request.on_complete;
+        let size = request.size;
+        let request = ArtworkDecodeRequest {
+            album_id: request.album_id,
+            path: request.path,
+            size,
+            on_complete: Box::new(move |aid, decoded| {
+                release_in_flight(&weak, aid, size);
+                on_complete(aid, decoded);
+            }),
+        };
         if let Some(tx) = self.request_tx.lock().as_ref()
             && let Err(e) = tx.try_send(request)
         {
+            self.in_flight.lock().remove(&key);
             error!(error = %e, "Failed to send cover decode request");
         }
     }
 
     /// Request decoding and send the result through a channel.
+    ///
+    /// The requested `size` is sent alongside the decoded cover so callers
+    /// can key the cache by the requested size rather than the actual
+    /// decoded width, which may differ for non-square artwork.
     pub fn request_decode_to_channel(
-        &self,
+        self: &Arc<Self>,
         album_id: i64,
         path: String,
         size: i32,
-        tx: Sender<(i64, DecodedCover)>,
+        tx: Sender<(i64, i32, DecodedCover)>,
         error_context: &'static str,
     ) {
         self.request_decode(ArtworkDecodeRequest {
@@ -107,19 +172,46 @@ impl CoverArtCache {
             path,
             size,
             on_complete: Box::new(move |aid, decoded| {
-                send_channel_cover(&tx, aid, decoded, error_context);
+                send_channel_cover(&tx, aid, size, decoded, error_context);
             }),
         });
     }
 
-    /// Return the cached texture for a given album ID, if available.
-    pub fn get(&self, album_id: i64) -> Option<Arc<MemoryTexture>> {
-        self.textures.lock().get(&album_id).cloned()
+    /// Return the cached texture for a given album ID at a specific size.
+    pub fn get(&self, album_id: i64, size: i32) -> Option<Arc<MemoryTexture>> {
+        self.inner.lock().textures.get(&(album_id, size)).cloned()
     }
 
-    /// Insert a decoded texture into the cache by album ID.
-    pub fn insert(&self, album_id: i64, texture: MemoryTexture) {
-        self.textures.lock().insert(album_id, Arc::new(texture));
+    /// Return a cached texture for an album at the most recently stored size.
+    pub fn get_any(&self, album_id: i64) -> Option<Arc<MemoryTexture>> {
+        let inner = self.inner.lock();
+        let size = *inner.sizes.get(&album_id)?.last()?;
+        inner.textures.get(&(album_id, size)).cloned()
+    }
+
+    /// Check whether any texture is cached for the given album.
+    pub fn has_any(&self, album_id: i64) -> bool {
+        self.inner.lock().sizes.contains_key(&album_id)
+    }
+
+    /// Insert a decoded texture into the cache by album ID and size.
+    ///
+    /// The size is recorded as the most recent for the album; if the album
+    /// already has [`MAX_SIZES_PER_ALBUM`] sizes, the oldest is evicted.
+    pub fn insert(&self, album_id: i64, size: i32, texture: MemoryTexture) {
+        let mut inner = self.inner.lock();
+        inner.textures.insert((album_id, size), Arc::new(texture));
+        let sizes = inner.sizes.entry(album_id).or_default();
+        if let Some(pos) = sizes.iter().position(|&s| s == size) {
+            sizes.remove(pos);
+        }
+        sizes.push(size);
+        let evicted: Vec<i32> = sizes
+            .drain(..sizes.len().saturating_sub(MAX_SIZES_PER_ALBUM))
+            .collect();
+        for old in evicted {
+            inner.textures.remove(&(album_id, old));
+        }
     }
 
     /// Record the album that a track belongs to, enabling cache lookups
@@ -130,12 +222,12 @@ impl CoverArtCache {
 
     /// Look up a cached cover texture by track ID.
     ///
-    /// Resolves `track_id → album_id → texture` using the recorded
-    /// track-to-album mapping.  Returns `None` if either the mapping
-    /// or the album-level texture is missing.
+    /// Resolves `track_id → album_id` using the recorded track-to-album
+    /// mapping, then returns any cached texture for that album.
+    /// Returns `None` if either the mapping or any texture is missing.
     pub fn get_by_track(&self, track_id: i64) -> Option<Arc<MemoryTexture>> {
         let album_id = *self.track_to_album.lock().get(&track_id)?;
-        self.textures.lock().get(&album_id).cloned()
+        self.get_any(album_id)
     }
 
     /// Return the cached album ID for a track, if previously recorded.
@@ -145,12 +237,23 @@ impl CoverArtCache {
 
     /// Drop the outgoing request sender, closing the channel.
     ///
-    /// This causes the background cover-decoder thread to exit its
-    /// `recv_blocking` loop, allowing `ThreadManager::shutdown` to
-    /// join it without hanging.
+    /// This causes the background cover-decoder threads to exit their
+    /// `recv_blocking` loops, allowing `ThreadManager::shutdown` to
+    /// join them without hanging.
     pub fn shutdown(&self) {
         self.request_tx.lock().take();
     }
+}
+
+/// Inner state of the cover art cache, guarded by a single mutex.
+///
+/// `textures` and `sizes` live under one lock so that eviction can remove
+/// from both without cross-lock ordering or a consistency window.
+struct CoverCacheInner {
+    /// Map of `(album_id, size)` to decoded texture.
+    textures: HashMap<(i64, i32), Arc<MemoryTexture>>,
+    /// Map of album ID to the sizes currently cached, oldest first.
+    sizes: HashMap<i64, Vec<i32>>,
 }
 
 /// Decoded cover art as raw pixel data (Send-safe).
@@ -165,6 +268,14 @@ pub struct DecodedCover {
     pub format: MemoryFormat,
     /// Raw pixel data.
     pub data: Vec<u8>,
+}
+
+/// Remove an `(album_id, size)` key from the in-flight dedup set once its
+/// decode completes. No-op when the cache was dropped (shutdown).
+fn release_in_flight(cache: &Weak<CoverArtCache>, album_id: i64, size: i32) {
+    if let Some(cache) = cache.upgrade() {
+        cache.in_flight.lock().remove(&(album_id, size));
+    }
 }
 
 /// Decode an image file at a given size into raw pixel data.
@@ -228,7 +339,22 @@ pub fn build_album_play_button() -> Button {
     btn
 }
 
-/// Run the background cover decoder loop.
+/// Spawn one named cover decoder worker thread.
+fn spawn_cover_decoder(
+    thread_manager: &ThreadManager,
+    index: usize,
+    rx: Receiver<ArtworkDecodeRequest>,
+) {
+    thread_manager.spawn_named(&format!("cover-decoder-{index}"), move || {
+        run_cover_decoder(&rx);
+    });
+}
+
+/// Run a background cover decoder loop.
+///
+/// Consumes decode requests from the shared receiver until the channel
+/// is closed (during shutdown).  Each worker owns its own receiver
+/// clone; requests are distributed across the pool by the channel.
 fn run_cover_decoder(rx: &Receiver<ArtworkDecodeRequest>) {
     while let Ok(req) = rx.recv_blocking() {
         let decoded = decode_cover_raw(&req.path, req.size);
@@ -238,40 +364,39 @@ fn run_cover_decoder(rx: &Receiver<ArtworkDecodeRequest>) {
 
 /// Try to send decoded cover through a channel, logging on failure.
 fn send_channel_cover(
-    tx: &Sender<(i64, DecodedCover)>,
+    tx: &Sender<(i64, i32, DecodedCover)>,
     aid: i64,
+    size: i32,
     decoded: Option<DecodedCover>,
     context: &str,
 ) {
     let Some(decoded) = decoded else { return };
-    if let Err(e) = tx.try_send((aid, decoded)) {
+    if let Err(e) = tx.try_send((aid, size, decoded)) {
         error!(error = %e, "Failed to send decoded cover to {context}");
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    use std::sync::Arc;
 
     use {
-        anyhow::{Result, ensure},
+        anyhow::{Error, Result, ensure},
         async_channel::{Sender, unbounded},
         libadwaita::{
             gdk::MemoryFormat::R8g8b8a8,
             gtk::{self, test},
             prelude::{ButtonExt, WidgetExt},
         },
-        parking_lot::Mutex,
     };
 
-    use crate::ui::{CoverArtCache, DecodedCover, build_album_play_button, send_channel_cover};
+    use crate::ui::{
+        ArtworkDecodeRequest, CoverArtCache, DecodedCover, build_album_play_button, raw_to_texture,
+        send_channel_cover,
+    };
 
     fn make_cache() -> CoverArtCache {
-        CoverArtCache {
-            textures: Mutex::new(HashMap::new()),
-            track_to_album: Mutex::new(HashMap::new()),
-            request_tx: Mutex::new(None),
-        }
+        CoverArtCache::with_sender(None)
     }
 
     /// Build a minimal decoded cover for channel-send tests.
@@ -347,17 +472,156 @@ mod tests {
 
     #[test]
     fn send_channel_cover_none_is_noop() -> Result<()> {
-        let (tx, rx) = unbounded::<(i64, DecodedCover)>();
-        send_channel_cover(&tx, 1, None, "test");
+        let (tx, rx) = unbounded::<(i64, i32, DecodedCover)>();
+        send_channel_cover(&tx, 1, 64, None, "test");
         ensure!(rx.try_recv().is_err());
         Ok(())
     }
 
     #[test]
     fn send_channel_cover_forwards_decoded() -> Result<()> {
-        let (tx, rx) = unbounded::<(i64, DecodedCover)>();
-        send_channel_cover(&tx, 7, Some(mock_decoded_cover()), "test");
-        ensure!(matches!(rx.try_recv(), Ok((7, _))));
+        let (tx, rx) = unbounded::<(i64, i32, DecodedCover)>();
+        send_channel_cover(&tx, 7, 64, Some(mock_decoded_cover()), "test");
+        ensure!(matches!(rx.try_recv(), Ok((7, 64, _))));
+        Ok(())
+    }
+
+    #[test]
+    fn insert_get_round_trips_by_size() -> Result<()> {
+        let cache = make_cache();
+        ensure!(cache.get(1, 180).is_none(), "missing size must return None");
+        cache.insert(1, 180, raw_to_texture(&mock_decoded_cover()));
+        cache.insert(1, 240, raw_to_texture(&mock_decoded_cover()));
+        ensure!(cache.get(1, 180).is_some(), "inserted size must be cached");
+        ensure!(cache.get(1, 240).is_some(), "each size must be cached");
+        ensure!(
+            cache.get(1, 120).is_none(),
+            "a size that was never inserted must return None"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn get_any_returns_most_recent_size() -> Result<()> {
+        let cache = make_cache();
+        ensure!(cache.get_any(1).is_none(), "empty cache must return None");
+        cache.insert(1, 180, raw_to_texture(&mock_decoded_cover()));
+        cache.insert(1, 240, raw_to_texture(&mock_decoded_cover()));
+        let texture = cache.get_any(1);
+        ensure!(texture.is_some(), "get_any must find a cached size");
+        ensure!(
+            texture == cache.get(1, 240),
+            "get_any must return the most recently inserted size"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn has_any_reflects_cached_sizes() -> Result<()> {
+        let cache = make_cache();
+        ensure!(!cache.has_any(1), "empty cache must report no sizes");
+        cache.insert(1, 180, raw_to_texture(&mock_decoded_cover()));
+        ensure!(cache.has_any(1), "cached album must report a size");
+        ensure!(!cache.has_any(2), "other albums must stay uncached");
+        Ok(())
+    }
+
+    #[test]
+    fn eviction_keeps_only_newest_sizes() -> Result<()> {
+        let cache = make_cache();
+        for size in [120, 150, 180, 210, 240, 32] {
+            cache.insert(1, size, raw_to_texture(&mock_decoded_cover()));
+        }
+        ensure!(
+            cache.get(1, 120).is_none(),
+            "the oldest size must be evicted past MAX_SIZES_PER_ALBUM"
+        );
+        ensure!(
+            cache.get(1, 150).is_some(),
+            "the second-oldest size must survive eviction"
+        );
+        ensure!(
+            cache.get(1, 32).is_some(),
+            "the newest size must survive eviction"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn reinserting_same_size_does_not_count_twice() -> Result<()> {
+        let cache = make_cache();
+        cache.insert(1, 180, raw_to_texture(&mock_decoded_cover()));
+        cache.insert(1, 120, raw_to_texture(&mock_decoded_cover()));
+        cache.insert(1, 180, raw_to_texture(&mock_decoded_cover()));
+        cache.insert(1, 210, raw_to_texture(&mock_decoded_cover()));
+        cache.insert(1, 240, raw_to_texture(&mock_decoded_cover()));
+        cache.insert(1, 32, raw_to_texture(&mock_decoded_cover()));
+        ensure!(
+            cache.get(1, 120).is_some(),
+            "a re-inserted size must not count twice and evict an earlier size"
+        );
+        ensure!(
+            cache.get(1, 180).is_some(),
+            "the re-inserted size must still be cached"
+        );
+        ensure!(
+            cache.get_any(1) == cache.get(1, 32),
+            "the most recent insertion must win get_any"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn get_by_track_resolves_any_cached_size() -> Result<()> {
+        let cache = make_cache();
+        ensure!(
+            cache.get_by_track(10).is_none(),
+            "unmapped track must return None"
+        );
+        cache.record_track_album(10, 100);
+        ensure!(
+            cache.get_by_track(10).is_none(),
+            "a mapped track without a cached cover must return None"
+        );
+        cache.insert(100, 240, raw_to_texture(&mock_decoded_cover()));
+        ensure!(
+            cache.get_by_track(10).is_some(),
+            "a mapped track must resolve to a cached cover"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn request_decode_dedups_in_flight_requests() -> Result<()> {
+        let (tx, rx) = unbounded::<ArtworkDecodeRequest>();
+        let cache = Arc::new(CoverArtCache::with_sender(Some(tx)));
+
+        let request = |path: &str| ArtworkDecodeRequest {
+            album_id: 1,
+            path: path.to_string(),
+            size: 180,
+            on_complete: Box::new(|_, _| {}),
+        };
+
+        cache.request_decode(request("a.jpg"));
+        cache.request_decode(request("a.jpg"));
+        ensure!(
+            rx.len() == 1,
+            "a duplicate (album, size) request must be dropped while in flight"
+        );
+
+        let queued = rx.try_recv().map_err(Error::msg)?;
+        (queued.on_complete)(1, None);
+        ensure!(
+            cache.in_flight.lock().is_empty(),
+            "completing a decode must release its in-flight key"
+        );
+
+        cache.request_decode(request("b.jpg"));
+        ensure!(
+            rx.len() == 1,
+            "a new request after completion must be accepted"
+        );
         Ok(())
     }
 }

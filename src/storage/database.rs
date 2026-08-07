@@ -2,19 +2,31 @@
 
 use std::{
     collections::HashMap,
+    fs::write,
     path::{Path, PathBuf},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, AtomicU64, Ordering::Relaxed},
+    },
 };
 
 use {
-    parking_lot::RwLock,
+    parking_lot::{Mutex, RwLock},
+    serde_json::to_string_pretty,
     sqlx::{
         FromRow, QueryBuilder, SqlitePool, query, query_as,
         sqlite::{SqliteConnectOptions, SqlitePoolOptions},
+    },
+    tokio::{
+        spawn,
+        task::spawn_blocking,
+        time::{Duration, Instant, sleep},
     },
     tracing::warn,
 };
 
 use crate::{
+    app::dirs_config_home,
     playback::devices::OutputMode,
     storage::{
         Storage,
@@ -30,6 +42,7 @@ use crate::{
             QueueEntry, Track, TrackUpdate,
         },
         settings::{ActiveTab, SettingsStore, ViewMode},
+        sort_rules::{AlbumSortItem, ArtistSortItem},
     },
 };
 
@@ -106,6 +119,19 @@ pub struct SqliteStorage {
     pool: SqlitePool,
     /// User settings store.
     settings: RwLock<SettingsStore>,
+    /// Monotonically increasing sequence number for settings save requests.
+    /// Used by the debounce logic to determine which request is the latest.
+    last_save_seq: AtomicU64,
+    /// Tracks the `(sequence, Instant)` of the most recent settings-save
+    /// request so that concurrent callers can debounce correctly without
+    /// losing the final write.
+    last_save_req: Mutex<(u64, Instant)>,
+    /// Set while a settings write is in flight, guaranteeing that at most
+    /// one `spawn_blocking` disk write runs at a time.
+    write_in_flight: AtomicBool,
+    /// Set when a save request arrived while a write was in flight; the
+    /// completing writer re-runs so the newest in-memory state always lands.
+    write_pending: AtomicBool,
 }
 
 impl SqliteStorage {
@@ -147,12 +173,33 @@ impl SqliteStorage {
 
     /// Create a new `SqliteStorage` with a connection pool to the given database path.
     ///
-    /// Runs migrations on connect.
+    /// Runs migrations on connect and loads settings from the default XDG
+    /// config path.
     ///
     /// # Errors
     ///
     /// Returns an error if the pool cannot be created or migrations fail.
     pub async fn connect(database_path: &Path) -> StorageResult<Self> {
+        let settings_path = dirs_config_home()
+            .map_err(|e| Database(format!("Failed to resolve config dir: {e}")))?
+            .join("oxhidifi")
+            .join("settings.json");
+        Self::connect_with_settings_path(database_path, &settings_path).await
+    }
+
+    /// Create a new `SqliteStorage` with a connection pool to the given database
+    /// path and a custom settings file path.
+    ///
+    /// Runs migrations on connect. The settings path seam lets tests target a
+    /// temporary directory instead of the user's real config.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the pool cannot be created or migrations fail.
+    pub async fn connect_with_settings_path(
+        database_path: &Path,
+        settings_path: &Path,
+    ) -> StorageResult<Self> {
         let opts = SqliteConnectOptions::new()
             .filename(database_path)
             .create_if_missing(true);
@@ -165,13 +212,17 @@ impl SqliteStorage {
 
         run(&pool).await?;
 
-        let settings = SettingsStore::load_async()
+        let settings = SettingsStore::load_from_path(settings_path)
             .await
             .map_err(|e| Database(format!("Failed to load settings: {e}")))?;
 
         Ok(Self {
             pool,
             settings: RwLock::new(settings),
+            last_save_seq: AtomicU64::new(0),
+            last_save_req: Mutex::new((0, Instant::now())),
+            write_in_flight: AtomicBool::new(false),
+            write_pending: AtomicBool::new(false),
         })
     }
 
@@ -271,6 +322,66 @@ impl SqliteStorage {
         Ok(())
     }
 
+    /// Get the albums sort configuration.
+    pub fn get_albums_sort(&self) -> Vec<AlbumSortItem> {
+        self.settings.read().get().albums_sort.clone()
+    }
+
+    /// Set the albums sort configuration in memory.
+    ///
+    /// The debounced disk write is triggered via [`Self::save_settings`],
+    /// which runs in the background so callers are not blocked.
+    pub fn set_albums_sort_memory(&self, items: Vec<AlbumSortItem>) {
+        self.settings
+            .write()
+            .update_memory(|s| s.albums_sort = items);
+    }
+
+    /// Get the artists sort configuration.
+    pub fn get_artists_sort(&self) -> Vec<ArtistSortItem> {
+        self.settings.read().get().artists_sort.clone()
+    }
+
+    /// Set the artists sort configuration in memory.
+    ///
+    /// The debounced disk write is triggered via [`Self::save_settings`],
+    /// which runs in the background so callers are not blocked.
+    pub fn set_artists_sort_memory(&self, items: Vec<ArtistSortItem>) {
+        self.settings
+            .write()
+            .update_memory(|s| s.artists_sort = items);
+    }
+
+    /// Get the grid zoom level.
+    pub fn get_grid_zoom_level(&self) -> u8 {
+        self.settings.read().get().grid_zoom_level
+    }
+
+    /// Set the grid zoom level in memory.
+    ///
+    /// The debounced disk write is triggered via [`Self::save_settings`],
+    /// which runs in the background so callers are not blocked.
+    pub fn set_grid_zoom_level_memory(&self, level: u8) {
+        self.settings
+            .write()
+            .update_memory(|s| s.grid_zoom_level = level);
+    }
+
+    /// Get the list zoom level.
+    pub fn get_list_zoom_level(&self) -> u8 {
+        self.settings.read().get().list_zoom_level
+    }
+
+    /// Set the list zoom level in memory.
+    ///
+    /// The debounced disk write is triggered via [`Self::save_settings`],
+    /// which runs in the background so callers are not blocked.
+    pub fn set_list_zoom_level_memory(&self, level: u8) {
+        self.settings
+            .write()
+            .update_memory(|s| s.list_zoom_level = level);
+    }
+
     /// Get the volume level from settings.
     pub fn get_settings_volume(&self) -> f64 {
         self.settings.read().get_volume()
@@ -309,22 +420,68 @@ impl SqliteStorage {
         Ok(())
     }
 
-    /// Persist the in-memory settings to disk.
-    ///
-    /// Delegates to [`SettingsStore::save_async`], which writes via
-    /// `spawn_blocking` when a Tokio runtime is active and falls back to a
-    /// synchronous write otherwise.
+    /// Wait until 100 ms have elapsed since the most recent save request,
+    /// or bail early if a newer request supersedes `my_seq`.
+    /// Returns `true` when this caller should proceed with the write.
+    async fn debounce_save(&self, my_seq: u64) -> bool {
+        loop {
+            let (latest_seq, latest_time) = *self.last_save_req.lock();
+            let elapsed = latest_time.elapsed();
+            match Duration::from_millis(100).checked_sub(elapsed) {
+                Some(remaining) => sleep(remaining).await,
+                None => return latest_seq == my_seq,
+            }
+        }
+    }
+
+    /// Debounce a settings save and write it to disk, draining any request
+    /// that arrives while the write is in flight.
     ///
     /// # Errors
     ///
     /// Returns `StorageError::Database` if serialization or the file write fails.
     async fn save_settings_async(&self) -> Result<(), StorageError> {
-        let settings = self.settings.read().clone();
-        settings
-            .save_async()
+        drain_settings_saves(self).await
+    }
+
+    /// Serialize the current in-memory settings and write them to disk.
+    ///
+    /// # Errors
+    ///
+    /// Returns `StorageError::Database` if serialization or the file write fails.
+    async fn write_settings_to_disk(&self) -> Result<(), StorageError> {
+        let json = to_string_pretty(self.settings.read().get())
+            .map_err(|e| Database(format!("Failed to serialize settings: {e}")))?;
+        let path = self.settings.read().path().to_path_buf();
+        let path_for_error = path.clone();
+        spawn_blocking(move || write(&path, &json))
             .await
-            .map_err(|e| Database(e.to_string()))?;
-        Ok(())
+            .map_err(|e| Database(e.to_string()))?
+            .map_err(|e| {
+                Database(format!(
+                    "Failed to write settings {}: {e}",
+                    path_for_error.display()
+                ))
+            })
+    }
+
+    /// Schedule a debounced settings write to disk in the background.
+    ///
+    /// In-memory settings are committed synchronously by the `*_memory`
+    /// setters; this method coalesces rapid changes into a single disk
+    /// write.  Errors are logged on the background task.
+    pub fn save_settings(self: &Arc<Self>) {
+        let me = Arc::clone(self);
+        spawn(async move {
+            Self::persist_settings(&me).await;
+        });
+    }
+
+    /// Write settings to disk with a debounce, logging any failure.
+    async fn persist_settings(storage: &Self) {
+        if let Err(e) = storage.save_settings_async().await {
+            warn!(error = %e, "Failed to persist settings");
+        }
     }
 
     /// Get the last playback session data from settings.
@@ -332,12 +489,17 @@ impl SqliteStorage {
         self.settings.read().get_last_session()
     }
 
-    /// Persist the current playback session to settings.
+    /// Persist the current playback session to settings synchronously.
+    ///
+    /// Used on window close, where the write must complete before the
+    /// process exits. Bypasses the debounced async save, which may be
+    /// dropped once the main loop stops before the debounce window
+    /// elapses.
     ///
     /// # Errors
     ///
     /// Returns an error if the settings file cannot be written.
-    pub async fn set_last_session(
+    pub fn set_last_session(
         &self,
         queue: Vec<i64>,
         queue_index: Option<usize>,
@@ -352,10 +514,10 @@ impl SqliteStorage {
             s.last_position = position;
             s.last_duration = duration;
         });
-        self.save_settings_async()
-            .await
-            .map_err(|e| Database(format!("Failed to save session: {e}")))?;
-        Ok(())
+        self.settings
+            .read()
+            .save_sync()
+            .map_err(|e| Database(format!("Failed to save session: {e}")))
     }
 
     /// Load file paths for a list of track IDs.
@@ -836,6 +998,46 @@ impl Storage for SqliteStorage {
     }
 }
 
+/// Keep writing settings to disk until no further request is pending.
+///
+/// Debounces by waiting for a 100 ms quiet period after the most recent
+/// request: if a newer request arrives during the wait, this pass bails and
+/// lets the newer request drive the write, so the *last* change in a burst
+/// always persists.
+///
+/// Writes are serialized through [`SqliteStorage::write_in_flight`]: at most
+/// one disk write runs at a time. A request that arrives mid-write marks
+/// [`SqliteStorage::write_pending`] and the completing pass drains it, so the
+/// newest in-memory state always lands without concurrent writers racing.
+/// Free function so the loop body stays below the clippy nesting threshold
+/// (a method would add an extra level).
+///
+/// # Errors
+///
+/// Returns `StorageError::Database` if serialization or the file write fails.
+async fn drain_settings_saves(storage: &SqliteStorage) -> Result<(), StorageError> {
+    loop {
+        let my_seq = storage.last_save_seq.fetch_add(1, Relaxed);
+        *storage.last_save_req.lock() = (my_seq, Instant::now());
+
+        if !storage.debounce_save(my_seq).await {
+            return Ok(());
+        }
+
+        if storage.write_in_flight.swap(true, Relaxed) {
+            storage.write_pending.store(true, Relaxed);
+            return Ok(());
+        }
+
+        let result = storage.write_settings_to_disk().await;
+        storage.write_in_flight.store(false, Relaxed);
+        if storage.write_pending.swap(false, Relaxed) {
+            continue;
+        }
+        return result;
+    }
+}
+
 /// Parse a comma-separated string of integers, logging parse failures.
 fn parse_int_list(s: &str) -> Vec<i32> {
     s.split(',')
@@ -870,5 +1072,185 @@ fn raw_info_to_format_info(
         sample_rates: sample_rates.map_or_else(Vec::new, parse_int_list),
         bit_depths: bit_depths.map_or_else(Vec::new, parse_int_list),
         channels: channels.map_or_else(Vec::new, parse_int_list),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        fs::{read_to_string, remove_dir_all, write},
+        path::Path,
+        sync::{Arc, atomic::Ordering::Relaxed},
+    };
+
+    use {
+        anyhow::{Context, Result, bail, ensure},
+        serde_json::from_str,
+        tempfile::{TempDir, tempdir},
+        tokio::{
+            test,
+            time::{Duration, sleep, timeout},
+        },
+    };
+
+    use crate::storage::{
+        StorageError::Database,
+        database::SqliteStorage,
+        sort_rules::{
+            AlbumSortCriteria::{BitDepth, Title},
+            AlbumSortItem,
+            ArtistSortCriteria::Name,
+            ArtistSortItem,
+            SortOrder::{Ascending, Descending},
+        },
+        user_settings::UserSettings,
+    };
+
+    async fn storage_in(dir: &TempDir) -> Result<SqliteStorage> {
+        let db = dir.path().join("library.db");
+        let settings = dir.path().join("settings.json");
+        SqliteStorage::connect_with_settings_path(&db, &settings)
+            .await
+            .context("storage should connect")
+    }
+
+    async fn wait_for_quiet_write(path: &Path, storage: &SqliteStorage) {
+        while !path.exists()
+            || storage.write_in_flight.load(Relaxed)
+            || storage.write_pending.load(Relaxed)
+        {
+            sleep(Duration::from_millis(10)).await;
+        }
+    }
+
+    async fn await_write_drain(storage: &SqliteStorage) -> Result<()> {
+        let path = storage.settings.read().path().to_path_buf();
+        timeout(Duration::from_secs(2), wait_for_quiet_write(&path, storage))
+            .await
+            .context("settings write should drain")
+    }
+
+    fn burst_zoom_saves(storage: &Arc<SqliteStorage>) {
+        for level in 0..10 {
+            storage.set_grid_zoom_level_memory(level);
+            storage.save_settings();
+        }
+    }
+
+    fn read_grid_zoom(dir: &TempDir) -> Result<u8> {
+        let content = read_to_string(dir.path().join("settings.json"))?;
+        let restored: UserSettings = from_str(&content)?;
+        Ok(restored.grid_zoom_level)
+    }
+
+    #[test]
+    async fn save_settings_persists_latest_value() -> Result<()> {
+        let dir = tempdir()?;
+        let storage = Arc::new(storage_in(&dir).await?);
+
+        storage.set_grid_zoom_level_memory(3);
+        storage.save_settings();
+
+        await_write_drain(&storage).await?;
+        ensure!(
+            read_grid_zoom(&dir)? == 3,
+            "latest in-memory value must persist"
+        );
+        Ok(())
+    }
+
+    #[test]
+    async fn burst_saves_coalesce_to_latest_value() -> Result<()> {
+        let dir = tempdir()?;
+        let storage = Arc::new(storage_in(&dir).await?);
+
+        burst_zoom_saves(&storage);
+
+        await_write_drain(&storage).await?;
+        ensure!(read_grid_zoom(&dir)? == 9, "newest burst value must win");
+        Ok(())
+    }
+
+    #[test]
+    async fn save_error_includes_settings_path() -> Result<()> {
+        let dir = tempdir()?;
+        let settings_dir = dir.path().join("settings_dir");
+        let settings = settings_dir.join("settings.json");
+        let db = dir.path().join("library.db");
+        let storage = SqliteStorage::connect_with_settings_path(&db, &settings)
+            .await
+            .context("storage should connect")?;
+
+        remove_dir_all(&settings_dir)?;
+        write(&settings_dir, b"x")?;
+
+        let message = match storage.save_settings_async().await {
+            Err(Database(m)) => m,
+            other => bail!("expected Database error, got {other:?}"),
+        };
+        ensure!(message.contains("settings.json"), "message was: {message}");
+        ensure!(
+            message.contains("Failed to write settings"),
+            "message was: {message}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    async fn albums_sort_memory_round_trips() -> Result<()> {
+        let dir = tempdir()?;
+        let storage = storage_in(&dir).await?;
+
+        let items = vec![
+            AlbumSortItem {
+                criteria: Title,
+                order: Descending,
+            },
+            AlbumSortItem {
+                criteria: BitDepth,
+                order: Ascending,
+            },
+        ];
+        storage.set_albums_sort_memory(items.clone());
+        ensure!(
+            storage.get_albums_sort() == items,
+            "albums sort must round-trip through the memory setters"
+        );
+        Ok(())
+    }
+
+    #[test]
+    async fn artists_sort_memory_round_trips() -> Result<()> {
+        let dir = tempdir()?;
+        let storage = storage_in(&dir).await?;
+
+        let items = vec![ArtistSortItem {
+            criteria: Name,
+            order: Descending,
+        }];
+        storage.set_artists_sort_memory(items.clone());
+        ensure!(
+            storage.get_artists_sort() == items,
+            "artists sort must round-trip through the memory setters"
+        );
+        Ok(())
+    }
+
+    #[test]
+    async fn zoom_levels_memory_round_trip() -> Result<()> {
+        let dir = tempdir()?;
+        let storage = storage_in(&dir).await?;
+
+        storage.set_grid_zoom_level_memory(3);
+        storage.set_list_zoom_level_memory(2);
+        ensure!(
+            storage.get_grid_zoom_level() == 3,
+            "grid zoom must round-trip through the memory setter"
+        );
+        ensure!(
+            storage.get_list_zoom_level() == 2,
+            "list zoom must round-trip through the memory setter"
+        );
+        Ok(())
     }
 }

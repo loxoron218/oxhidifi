@@ -3,7 +3,7 @@
 //! Provides empty state components and the generic grid builder
 //! used by the album and artist grid views.
 
-use std::sync::Arc;
+use std::sync::{Arc, atomic::Ordering::Relaxed};
 
 use {
     libadwaita::{
@@ -135,6 +135,10 @@ pub fn build_library_grid(
     spawn_future_local(async move {
         while refresh_rx.changed().await.is_ok() {
             let mode = *refresh_state.view_mode_tx.borrow();
+            *refresh_state.album_grid.cache.lock() = None;
+            *refresh_state.artist_grid.cache.lock() = None;
+            refresh_state.album_grid.generation.fetch_add(1, Relaxed);
+            refresh_state.artist_grid.generation.fetch_add(1, Relaxed);
             clear_stack(&refresh_mode_stack);
             refresh_setup(
                 &refresh_mode_stack,

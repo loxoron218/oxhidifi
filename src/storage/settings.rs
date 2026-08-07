@@ -9,16 +9,12 @@ use {
     anyhow::{Context, Result},
     serde::{Deserialize, Serialize},
     serde_json::{from_str, to_string_pretty},
-    tokio::{
-        fs::{create_dir_all, read_to_string, try_exists},
-        runtime::Handle,
-        task::spawn_blocking,
-    },
+    tokio::fs::{create_dir_all, read_to_string, rename, try_exists},
+    tracing::warn,
 };
 
 use crate::{
-    app::dirs_config_home,
-    playback::devices::OutputMode::{self, Resampled},
+    app::dirs_config_home, playback::devices::OutputMode, storage::user_settings::UserSettings,
 };
 
 /// Active tab in the library view.
@@ -42,32 +38,35 @@ pub struct SettingsStore {
 impl SettingsStore {
     /// Load settings from the XDG config path, creating defaults if missing.
     ///
+    /// A malformed or unreadable settings file falls back to defaults rather
+    /// than failing the whole load.
+    ///
     /// # Errors
     ///
-    /// Returns an error if the config directory cannot be created or the file
-    /// cannot be read.
+    /// Returns an error if the config directory cannot be created.
     pub async fn load_async() -> Result<Self> {
-        let config_dir = dirs_config_home()?.join("oxhidifi");
-        create_dir_all(&config_dir).await.with_context(|| {
-            format!(
+        let settings_path = dirs_config_home()?.join("oxhidifi").join("settings.json");
+        Self::load_from_path(&settings_path).await
+    }
+
+    /// Load settings from an explicit settings file path, creating the parent
+    /// directory and falling back to defaults for a missing or malformed file.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the settings parent directory cannot be created.
+    pub async fn load_from_path(settings_path: &Path) -> Result<Self> {
+        if let Some(config_dir) = settings_path.parent() {
+            create_dir_all(config_dir).await.context(format!(
                 "Failed to create config directory: {}",
                 config_dir.display()
-            )
-        })?;
+            ))?;
+        }
 
-        let settings_path = config_dir.join("settings.json");
-        let settings = if try_exists(&settings_path).await.unwrap_or(false) {
-            let content = read_to_string(&settings_path)
-                .await
-                .with_context(|| format!("Failed to read settings: {}", settings_path.display()))?;
-            from_str(&content)
-                .with_context(|| format!("Failed to parse settings: {}", settings_path.display()))?
-        } else {
-            UserSettings::default()
-        };
+        let settings = load_settings_with_fallback(settings_path).await?;
 
         Ok(Self {
-            settings_path,
+            settings_path: settings_path.to_path_buf(),
             settings,
         })
     }
@@ -77,27 +76,20 @@ impl SettingsStore {
         f(&mut self.settings);
     }
 
-    /// Serialize current settings and persist to disk via `spawn_blocking`.
+    /// Serialize current settings and write to disk synchronously.
     ///
-    /// Writes synchronously as a fallback when no Tokio runtime is active on
-    /// the current thread, avoiding a panic in contexts without a reactor.
+    /// Bypasses the async write path so the write is guaranteed to complete
+    /// before the caller returns (e.g. on window close, when the process
+    /// exits before a debounced async save would finish).
     ///
     /// # Errors
     ///
     /// Returns an error if serialization or the file write fails.
-    pub async fn save_async(&self) -> Result<()> {
+    pub fn save_sync(&self) -> Result<()> {
         let json = to_string_pretty(&self.settings).context("Failed to serialize settings")?;
-        let path = self.settings_path.clone();
-        let path_for_error = path.clone();
-        let write_error = || format!("Failed to write settings: {}", path_for_error.display());
-        if Handle::try_current().is_ok() {
-            spawn_blocking(move || write(&path, &json))
-                .await
-                .context("Failed to spawn blocking write")?
-                .with_context(write_error)?;
-        } else {
-            write(&path, &json).with_context(write_error)?;
-        }
+        write(&self.settings_path, &json).with_context(|| {
+            format!("Failed to write settings: {}", self.settings_path.display())
+        })?;
         Ok(())
     }
 
@@ -107,34 +99,10 @@ impl SettingsStore {
         &self.settings
     }
 
-    /// Get a mutable reference to the current settings.
-    pub fn get_mut(&mut self) -> &mut UserSettings {
-        &mut self.settings
-    }
-
-    /// Update in-memory settings and persist to disk asynchronously.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the file cannot be written.
-    pub async fn update_async(&mut self, f: impl FnOnce(&mut UserSettings)) -> Result<()> {
-        self.update_memory(f);
-        self.save_async().await
-    }
-
     /// Get whether gapless playback is enabled.
     #[must_use]
     pub fn get_gapless_enabled(&self) -> bool {
         self.settings.gapless_enabled
-    }
-
-    /// Set whether gapless playback is enabled.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the file cannot be written.
-    pub async fn set_gapless_enabled_async(&mut self, enabled: bool) -> Result<()> {
-        self.update_async(|s| s.gapless_enabled = enabled).await
     }
 
     /// Get whether album labels are shown under cover art.
@@ -143,28 +111,10 @@ impl SettingsStore {
         self.settings.show_album_labels
     }
 
-    /// Set whether album labels are shown under cover art.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the file cannot be written.
-    pub async fn set_show_album_labels_async(&mut self, enabled: bool) -> Result<()> {
-        self.update_async(|s| s.show_album_labels = enabled).await
-    }
-
     /// Get the preferred audio device name.
     #[must_use]
     pub fn get_audio_device(&self) -> Option<&str> {
         self.settings.audio_device.as_deref()
-    }
-
-    /// Set the preferred audio device name.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the file cannot be written.
-    pub async fn set_audio_device_async(&mut self, device: Option<String>) -> Result<()> {
-        self.update_async(|s| s.audio_device = device).await
     }
 
     /// Get the active tab preference.
@@ -173,43 +123,16 @@ impl SettingsStore {
         self.settings.active_tab
     }
 
-    /// Set the active tab preference.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the file cannot be written.
-    pub async fn set_active_tab_async(&mut self, tab: ActiveTab) -> Result<()> {
-        self.update_async(|s| s.active_tab = tab).await
-    }
-
     /// Get the volume level.
     #[must_use]
     pub fn get_volume(&self) -> f64 {
         self.settings.volume
     }
 
-    /// Set the volume level.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the file cannot be written.
-    pub async fn set_volume_async(&mut self, volume: f64) -> Result<()> {
-        self.update_async(|s| s.volume = volume).await
-    }
-
     /// Get the output mode.
     #[must_use]
     pub fn get_output_mode(&self) -> OutputMode {
         self.settings.output_mode
-    }
-
-    /// Set the output mode.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the file cannot be written.
-    pub async fn set_output_mode_async(&mut self, mode: OutputMode) -> Result<()> {
-        self.update_async(|s| s.output_mode = mode).await
     }
 
     /// Get the last playback session data.
@@ -224,91 +147,10 @@ impl SettingsStore {
         )
     }
 
-    /// Set the last playback session data.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the file cannot be written.
-    pub async fn set_last_session(
-        &mut self,
-        queue: Vec<i64>,
-        queue_index: Option<usize>,
-        track_id: Option<i64>,
-        position: f64,
-        duration: f64,
-    ) -> Result<()> {
-        self.update_async(|s| {
-            s.last_queue = queue;
-            s.last_queue_index = queue_index;
-            s.last_track_id = track_id;
-            s.last_position = position;
-            s.last_duration = duration;
-        })
-        .await
-    }
-
     /// Get read access to the underlying settings path.
     #[must_use]
     pub fn path(&self) -> &Path {
         &self.settings_path
-    }
-}
-
-/// Persistent user settings stored as JSON at XDG config path.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct UserSettings {
-    /// Preferred audio output device name (None = default).
-    pub audio_device: Option<String>,
-    /// Playback volume (0.0–1.0).
-    pub volume: f64,
-    /// Current view mode preference.
-    pub view_mode: ViewMode,
-    /// Last active tab.
-    pub active_tab: ActiveTab,
-    /// Stored window width.
-    pub window_width: i32,
-    /// Stored window height.
-    pub window_height: i32,
-    /// Whether window is maximized.
-    pub window_maximized: bool,
-    /// Whether gapless playback is enabled.
-    pub gapless_enabled: bool,
-    /// Whether to show album title/artist/format labels under cover art.
-    pub show_album_labels: bool,
-    /// Output mode: resampled (software volume) or bit-perfect (hardware volume).
-    pub output_mode: OutputMode,
-    /// Track IDs from the last playback session (for queue restoration).
-    pub last_queue: Vec<i64>,
-    /// Index into `last_queue` for the track that was playing.
-    pub last_queue_index: Option<usize>,
-    /// Track ID that was playing when the session ended.
-    pub last_track_id: Option<i64>,
-    /// Elapsed seconds in the last track.
-    pub last_position: f64,
-    /// Duration of the last track (for validation).
-    pub last_duration: f64,
-}
-
-impl Default for UserSettings {
-    fn default() -> Self {
-        Self {
-            audio_device: None,
-            volume: 1.0,
-            view_mode: ViewMode::Grid,
-            active_tab: ActiveTab::Albums,
-            window_width: 1200,
-            window_height: 800,
-            window_maximized: false,
-            gapless_enabled: true,
-            show_album_labels: true,
-            output_mode: Resampled,
-            last_queue: Vec::new(),
-            last_queue_index: None,
-            last_track_id: None,
-            last_position: 0.0,
-            last_duration: 0.0,
-        }
     }
 }
 
@@ -341,34 +183,70 @@ impl ViewMode {
     }
 }
 
+/// Try to load settings from file, falling back to defaults on parse error.
+async fn load_settings_with_fallback(settings_path: &Path) -> Result<UserSettings> {
+    if try_exists(settings_path).await.unwrap_or(false) {
+        let content = read_to_string(settings_path)
+            .await
+            .with_context(|| format!("Failed to read settings: {}", settings_path.display()))?;
+        match from_str(&content) {
+            Ok(settings) => Ok(settings),
+            Err(e) => {
+                warn!(
+                    error = %e,
+                    path = %settings_path.display(),
+                    "Failed to parse settings, falling back to defaults",
+                );
+                backup_corrupt_settings(settings_path).await;
+                Ok(UserSettings::default())
+            }
+        }
+    } else {
+        Ok(UserSettings::default())
+    }
+}
+
+/// Preserve a corrupt settings file before defaults overwrite it.
+///
+/// The fallback above returns defaults, which the next save writes back over
+/// the corrupt file — destroying any recoverable data. Renaming the file out
+/// of the way first keeps it for manual recovery. Best‑effort: a failed
+/// rename only logs, never fails the load.
+async fn backup_corrupt_settings(settings_path: &Path) {
+    let backup_path = settings_path.with_extension("json.corrupt");
+    if let Err(e) = rename(settings_path, &backup_path).await {
+        warn!(
+            error = %e,
+            path = %backup_path.display(),
+            "Failed to back up corrupt settings file",
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::{
         fs::{File, read_to_string, write},
-        future::Future,
         io::BufReader,
         path::Path,
-        task::{
-            Context,
-            Poll::{Pending, Ready},
-            Waker,
-        },
-        thread::yield_now,
     };
 
     use {
         anyhow::{Result, bail, ensure},
         serde_json::{from_reader, from_str, to_string_pretty},
         tempfile::{TempDir, tempdir},
-        tokio::runtime::Runtime,
+        tokio::test as tokio_test,
     };
 
     use crate::{
         playback::devices::OutputMode::{BitPerfect, Resampled},
-        storage::settings::{
-            ActiveTab::{Albums, Artists},
-            SettingsStore, UserSettings,
-            ViewMode::{Column, Grid},
+        storage::{
+            settings::{
+                ActiveTab::{Albums, Artists},
+                SettingsStore,
+                ViewMode::{Column, Grid},
+            },
+            user_settings::UserSettings,
         },
     };
 
@@ -386,18 +264,6 @@ mod tests {
         let content = read_to_string(dir.path().join("settings.json"))?;
         let restored: UserSettings = from_str(&content)?;
         Ok(restored.volume)
-    }
-
-    fn block_on_without_tokio<R>(future: impl Future<Output = R>) -> R {
-        let waker = Waker::noop();
-        let mut context = Context::from_waker(waker);
-        let mut future = Box::pin(future);
-        loop {
-            match future.as_mut().poll(&mut context) {
-                Ready(output) => return output,
-                Pending => yield_now(),
-            }
-        }
     }
 
     #[test]
@@ -528,44 +394,22 @@ mod tests {
     }
 
     #[test]
-    fn save_async_persists_file_under_runtime() -> Result<()> {
-        let rt = Runtime::new()?;
+    fn save_sync_persists_file() -> Result<()> {
         let dir = tempdir()?;
         let store = store_in(dir.path());
-        rt.block_on(store.save_async())?;
+        store.save_sync()?;
         ensure!((read_volume(&dir)? - 0.5).abs() < f64::EPSILON);
         Ok(())
     }
 
     #[test]
-    fn save_async_persists_file_without_runtime() -> Result<()> {
-        let dir = tempdir()?;
-        let store = store_in(dir.path());
-        block_on_without_tokio(store.save_async())?;
-        ensure!((read_volume(&dir)? - 0.5).abs() < f64::EPSILON);
-        Ok(())
-    }
-
-    #[test]
-    fn update_async_persists_mutated_settings() -> Result<()> {
-        let rt = Runtime::new()?;
-        let dir = tempdir()?;
-        let mut store = store_in(dir.path());
-        rt.block_on(store.update_async(|s| s.volume = 0.25))?;
-        ensure!((read_volume(&dir)? - 0.25).abs() < f64::EPSILON);
-        ensure!((store.get_volume() - 0.25).abs() < f64::EPSILON);
-        Ok(())
-    }
-
-    #[test]
-    fn save_async_error_includes_settings_path() -> Result<()> {
+    fn save_sync_error_includes_settings_path() -> Result<()> {
         let dir = tempdir()?;
         let store = SettingsStore {
             settings_path: dir.path().join("missing").join("settings.json"),
             settings: UserSettings::default(),
         };
-        let err = block_on_without_tokio(store.save_async());
-        let message = match err {
+        let message = match store.save_sync() {
             Ok(()) => bail!("expected save to fail for a missing directory"),
             Err(e) => e.to_string(),
         };
@@ -573,6 +417,80 @@ mod tests {
         ensure!(
             message.contains("Failed to write settings"),
             "message was: {message}"
+        );
+        Ok(())
+    }
+
+    #[tokio_test]
+    async fn load_from_path_creates_parent_dir_and_returns_defaults() -> Result<()> {
+        let dir = tempdir()?;
+        let settings_path = dir.path().join("nested").join("settings.json");
+        let store = SettingsStore::load_from_path(&settings_path).await?;
+        ensure!(
+            dir.path().join("nested").is_dir(),
+            "load_from_path must create the settings parent directory"
+        );
+        ensure!(store.path() == settings_path);
+        ensure!(
+            (store.get_volume() - 1.0).abs() < f64::EPSILON,
+            "a missing file must yield default settings"
+        );
+        Ok(())
+    }
+
+    #[tokio_test]
+    async fn load_from_path_round_trips_valid_file() -> Result<()> {
+        let dir = tempdir()?;
+        let settings_path = dir.path().join("settings.json");
+        let original = UserSettings {
+            volume: 0.75,
+            ..UserSettings::default()
+        };
+        write(&settings_path, to_string_pretty(&original)?)?;
+
+        let store = SettingsStore::load_from_path(&settings_path).await?;
+        ensure!(
+            (store.get_volume() - 0.75).abs() < f64::EPSILON,
+            "loaded volume must match the file contents"
+        );
+        Ok(())
+    }
+
+    #[tokio_test]
+    async fn load_from_path_falls_back_to_defaults_on_corrupt_file() -> Result<()> {
+        let dir = tempdir()?;
+        let settings_path = dir.path().join("settings.json");
+        write(&settings_path, "{ this is not valid json")?;
+
+        let store = SettingsStore::load_from_path(&settings_path).await?;
+        ensure!(
+            (store.get_volume() - 1.0).abs() < f64::EPSILON,
+            "a corrupt file must fall back to defaults instead of failing the load"
+        );
+        Ok(())
+    }
+
+    #[tokio_test]
+    async fn load_from_path_backs_up_corrupt_file_before_defaults() -> Result<()> {
+        let dir = tempdir()?;
+        let settings_path = dir.path().join("settings.json");
+        let corrupt = "{ this is not valid json";
+        write(&settings_path, corrupt)?;
+
+        SettingsStore::load_from_path(&settings_path).await?;
+
+        ensure!(
+            !settings_path.exists(),
+            "the corrupt file must be renamed out of the way"
+        );
+        let backup_path = settings_path.with_extension("json.corrupt");
+        ensure!(
+            backup_path.exists(),
+            "the corrupt file must be preserved as a backup"
+        );
+        ensure!(
+            read_to_string(&backup_path)? == corrupt,
+            "the backup must retain the original corrupt contents"
         );
         Ok(())
     }

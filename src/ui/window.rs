@@ -27,7 +27,7 @@ use {
         },
         prelude::{AdwApplicationWindowExt, ButtonExt, GtkWindowExt, WidgetExt},
     },
-    tracing::{error, info, warn},
+    tracing::{error, info},
 };
 
 use crate::{
@@ -74,19 +74,16 @@ pub fn build_window(app: &Application, state: &Arc<AppState>) -> ApplicationWind
         let s = close_state.playback.state();
         let queue_tracks = close_state.playback.queue().tracks();
         let queue_index = close_state.playback.queue().current_index();
-        let storage = Arc::clone(&close_state.storage);
-        spawn_future_local(async move {
-            storage
-                .set_last_session(
-                    queue_tracks,
-                    queue_index,
-                    s.current_track_id,
-                    s.elapsed_seconds,
-                    s.duration_seconds,
-                )
-                .await
-                .unwrap_or_else(|e| warn!(error = %e, "Failed to persist session on close"));
-        });
+
+        if let Err(e) = close_state.storage.set_last_session(
+            queue_tracks,
+            queue_index,
+            s.current_track_id,
+            s.elapsed_seconds,
+            s.duration_seconds,
+        ) {
+            error!(error = %e, "Failed to persist session on close");
+        }
 
         if let Err(e) = close_state.playback.stop() {
             error!(error = %e, "Failed to stop playback on window close");

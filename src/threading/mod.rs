@@ -3,51 +3,51 @@
 //! # Thread Model
 //!
 //! ```text
-//! ┌──────────────────────────────────────────────────────────────────┐
-//! │                        THREAD MODEL                              │
-//! ├──────────────────────────────────────────────────────────────────┤
-//! │                                                                  │
-//! │  [1] MAIN THREAD (GLib Main Context)                             │
-//! │      • GTK/Libadwaita rendering and input handling               │
-//! │      • glib::spawn_future_local — async tasks                    │
-//! │      • MainContext::default().spawn_local — async tasks          │
-//! │      • glib::idle_add_local — deferred UI updates                │
-//! │                                                                  │
-//! │  [2] TOKIO RUNTIME (multi-threaded, n_cores workers)             │
-//! │      • tokio::spawn — async tasks: metadata, scanning,           │
-//! │        events, watcher consumer                                  │
-//! │      • tokio::task::spawn_blocking — blocking I/O,               │
-//! │        device enum, memory sampling, file writes                 │
-//! │      • SQLx queries (all .await on storage)                      │
-//! │                                                                  │
-//! │  [3] DEDICATED OS THREADS (std::thread, Builder::new().name())   │
-//! │      • Decode thread: decode → resample → rtrb push              │
-//! │        Named "decode-{track_id}" in engine.rs                    │
-//! │        JoinHandle stored in EngineShared::decode_thread          │
-//! │        NOT joined during operation (blocking AudioOutput::drop)  │
-//! │      • Cover decoder: single worker thread                       │
-//! │        Named "cover-decoder" via ThreadManager                   │
-//! │        Processes ArtworkDecodeRequest sequentially               │
-//! │        Grid results via async_channel to spawn_future_local      │
-//! │        (rx.recv().await — receiver alive until channel closes)   │
-//! │        Column/detail results via idle_add_local polling          │
-//! │      • Each thread handles AudioOutput lifecycle (blocking)      │
-//! │      • Exactly one decode thread active at a time                │
-//! │                                                                  │
-//! │  [4] CPAL AUDIO CALLBACK (OS audio thread)                       │
-//! │      • rtrb::Consumer (lock-free pop)                            │
-//! │      • AtomicBool for flush/drain signal                         │
-//! │      • NEVER holds a Mutex — real-time safety invariant          │
-//! │                                                                  │
-//! │  [5] RAYON THREAD POOL (n_cores workers)                         │
-//! │      • Parallel directory walk and metadata extraction           │
-//! │      • Runs inside spawn_blocking — intentional isolation        │
-//! │                                                                  │
-//! │  [6] NOTIFY WATCHER (OS thread, from notify crate)               │
-//! │      • Callback → tokio::sync::mpsc::unbounded                   │
-//! │      • Consumed by a tokio::spawn watcher task                   │
-//! │                                                                  │
-//! └──────────────────────────────────────────────────────────────────┘
+//! ┌────────────────────────────────────────────────────────────────────┐
+//! │                        THREAD MODEL                                │
+//! ├────────────────────────────────────────────────────────────────────┤
+//! │                                                                    │
+//! │  [1] MAIN THREAD (GLib Main Context)                               │
+//! │      • GTK/Libadwaita rendering and input handling                 │
+//! │      • glib::spawn_future_local — async tasks                      │
+//! │      • MainContext::default().spawn_local — async tasks            │
+//! │      • glib::idle_add_local — deferred UI updates                  │
+//! │                                                                    │
+//! │  [2] TOKIO RUNTIME (multi-threaded, n_cores workers)               │
+//! │      • tokio::spawn — async tasks: metadata, scanning,             │
+//! │        events, watcher consumer                                    │
+//! │      • tokio::task::spawn_blocking — blocking I/O,                 │
+//! │        device enum, memory sampling, file writes                   │
+//! │      • SQLx queries (all .await on storage)                        │
+//! │                                                                    │
+//! │  [3] DEDICATED OS THREADS (std::thread, Builder::new().name())     │
+//! │      • Decode thread: decode → resample → rtrb push                │
+//! │        Named "decode-{track_id}" in engine.rs                      │
+//! │        JoinHandle stored in EngineShared::decode_thread            │
+//! │        NOT joined during operation (blocking AudioOutput::drop)    │
+//! │      • Cover decoder: pool of COVER_DECODER_THREADS worker threads │
+//! │        Named "cover-decoder-{i}" via ThreadManager                 │
+//! │        Process ArtworkDecodeRequest concurrently                   │
+//! │        Grid results via async_channel to spawn_future_local        │
+//! │        (rx.recv().await — receiver alive until channel closes)     │
+//! │        Column/detail results via idle_add_local polling            │
+//! │      • Each thread handles AudioOutput lifecycle (blocking)        │
+//! │      • Exactly one decode thread active at a time                  │
+//! │                                                                    │
+//! │  [4] CPAL AUDIO CALLBACK (OS audio thread)                         │
+//! │      • rtrb::Consumer (lock-free pop)                              │
+//! │      • AtomicBool for flush/drain signal                           │
+//! │      • NEVER holds a Mutex — real-time safety invariant            │
+//! │                                                                    │
+//! │  [5] RAYON THREAD POOL (n_cores workers)                           │
+//! │      • Parallel directory walk and metadata extraction             │
+//! │      • Runs inside spawn_blocking — intentional isolation          │
+//! │                                                                    │
+//! │  [6] NOTIFY WATCHER (OS thread, from notify crate)                 │
+//! │      • Callback → tokio::sync::mpsc::unbounded                     │
+//! │      • Consumed by a tokio::spawn watcher task                     │
+//! │                                                                    │
+//! └────────────────────────────────────────────────────────────────────┘
 //! ```
 //!
 //! # Channel Topology
@@ -58,7 +58,7 @@
 //! Engine ───────async_channel::unbounded ───────> PlaybackEvent subscribers
 //! Scanner ──────async_channel::unbounded ───────> UI status bar (ScanEvent)
 //! App ──────────async_channel::unbounded ───────> UI (toasts, navigation)
-//! CoverArtCache ──async_channel::unbounded ─────> Cover decoder thread
+//! CoverArtCache ──async_channel::unbounded ─────> Cover decoder pool
 //! Tokio task ────async_channel::unbounded ──────> GLib MainContext (results)
 //! Notify ────────tokio::sync::mpsc::unbounded ──> Tokio watcher task
 //! App ───────────tokio::sync::watch (1) ───────> UI (view_mode, active_tab,
@@ -70,7 +70,7 @@
 //! # Shutdown Sequence
 //!
 //! 1. `GLib` main loop exits (`app.run()` returns)
-//! 2. `ThreadManager::shutdown()` joins the cover decoder thread
+//! 2. `ThreadManager::shutdown()` joins the cover decoder threads
 //! 3. `decode_tx` (command sender) dropped — decode thread sees channel disconnect and exits the
 //!    decode loop
 //! 4. `AudioOutput::drop()` runs inside the decode thread (blocking ALSA close). The decode thread
@@ -96,7 +96,7 @@ use {parking_lot::Mutex, tracing::error};
 /// Manages named OS thread lifecycle.
 ///
 /// Provides named thread spawning and `JoinHandle` tracking for
-/// graceful shutdown. Used for the cover decoder thread in
+/// graceful shutdown. Used for the cover decoder worker pool in
 /// `CoverArtCache::new_shared`.
 ///
 /// The decode thread (`engine.rs`) is intentionally NOT managed here

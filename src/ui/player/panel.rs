@@ -293,7 +293,7 @@ fn process_metadata(
     widgets: &PlaybackWidgets,
     playback: &Arc<PlaybackEngine>,
     cover_cache: &Arc<CoverArtCache>,
-    cover_tx: &Sender<(i64, DecodedCover)>,
+    cover_tx: &Sender<(i64, i32, DecodedCover)>,
     cover_size: i32,
 ) {
     if Some(tid) != playback.state().current_track_id {
@@ -304,7 +304,7 @@ fn process_metadata(
 
     if album_id >= 0 {
         cover_cache.record_track_album(tid, album_id);
-        if let Some(texture) = cover_cache.get(album_id) {
+        if let Some(texture) = cover_cache.get_any(album_id) {
             widgets.artwork_image.set_paintable(Some(&*texture));
             return;
         }
@@ -324,6 +324,7 @@ fn process_metadata(
 /// Process one cover-art update: check staleness, update texture.
 fn process_cover_art(
     aid: i64,
+    size: i32,
     cover: &DecodedCover,
     widgets: &PlaybackWidgets,
     playback: &Arc<PlaybackEngine>,
@@ -345,7 +346,7 @@ fn process_cover_art(
     }
 
     if aid >= 0 {
-        cover_cache.insert(aid, texture.clone());
+        cover_cache.insert(aid, size, texture.clone());
     }
 
     widgets.artwork_image.set_paintable(Some(&texture));
@@ -354,7 +355,7 @@ fn process_cover_art(
 /// Set up async listeners for playback events, metadata, and cover art.
 fn spawn_async_listeners(state: &Arc<AppState>, widgets: PlaybackWidgets) {
     let (meta_tx, meta_rx) = unbounded::<(i64, MetaResult)>();
-    let (cover_tx, cover_rx) = unbounded::<(i64, DecodedCover)>();
+    let (cover_tx, cover_rx) = unbounded::<(i64, i32, DecodedCover)>();
 
     let playback = Arc::clone(&state.playback);
     let is_seeking = Arc::clone(&state.is_seeking);
@@ -384,8 +385,8 @@ fn spawn_async_listeners(state: &Arc<AppState>, widgets: PlaybackWidgets) {
     });
 
     MainContext::default().spawn_local(async move {
-        while let Ok((tid, cover)) = cover_rx.recv().await {
-            process_cover_art(tid, &cover, &widgets, &playback, &cover_cache);
+        while let Ok((tid, size, cover)) = cover_rx.recv().await {
+            process_cover_art(tid, size, &cover, &widgets, &playback, &cover_cache);
         }
     });
 }

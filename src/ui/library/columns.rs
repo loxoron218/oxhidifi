@@ -7,11 +7,15 @@ use std::{
 };
 
 use {
-    async_channel::{TryRecvError::Closed, unbounded},
+    async_channel::{
+        Receiver,
+        TryRecvError::{Closed, Empty},
+        unbounded,
+    },
     libadwaita::{
         glib::{
             BoxedAnyObject,
-            ControlFlow::{Break, Continue},
+            ControlFlow::{self, Break, Continue},
             Object, WeakRef, idle_add_local,
         },
         gtk::{
@@ -24,7 +28,15 @@ use {
     parking_lot::Mutex,
 };
 
-use crate::ui::{CoverArtCache, DecodedCover, library::models::AlbumData, raw_to_texture};
+use crate::{
+    app::AppState,
+    ui::{
+        CoverArtCache, DecodedCover,
+        library::{common::GRID_BATCH_SIZE, models::AlbumData},
+        raw_to_texture,
+    },
+    zoom::list_cover_size,
+};
 
 /// Unwrap a `ListItem` and extract a `Ref<T>` from its `BoxedAnyObject`.
 macro_rules! with_list_item_data {
@@ -43,13 +55,11 @@ macro_rules! with_list_item_data {
     }};
 }
 
-/// Thumbnail size for cover art in the column view.
-const COVER_THUMB_SIZE: i32 = 36;
-
 /// Map of album ID to pending `Picture` weak references awaiting cover art.
 pub type PendingCovers = HashMap<i64, Vec<WeakRef<Picture>>>;
 
-/// Build a cover art column with a 36‑px fixed‑width `Picture`.
+/// Build a cover art column with a fixed‑width `Picture` sized per the
+/// list zoom level.
 ///
 /// Performs a synchronous cache lookup on bind.  If the texture is not
 /// yet cached, the `Picture` widget is registered in `pending_widgets`
@@ -57,10 +67,12 @@ pub type PendingCovers = HashMap<i64, Vec<WeakRef<Picture>>>;
 ///
 /// # Arguments
 ///
+/// * `cover_size` – Cover art size in pixels (derived from the list zoom level).
 /// * `cache` – Shared cover art cache (from [`AppState::cover_art_cache`]).
 /// * `pending_widgets` – Map of album ID → weak references to `Picture` widgets that still need
 ///   their cover art installed.
 pub fn build_cover_column(
+    cover_size: i32,
     cache: &Arc<CoverArtCache>,
     pending_widgets: &Arc<Mutex<PendingCovers>>,
 ) -> ColumnViewColumn {
@@ -69,11 +81,11 @@ pub fn build_cover_column(
     let cache = Arc::clone(cache);
     let pending = Arc::clone(pending_widgets);
 
-    factory.connect_setup(|_, item: &Object| {
+    factory.connect_setup(move |_, item: &Object| {
         let picture = Picture::builder()
             .content_fit(Cover)
-            .width_request(COVER_THUMB_SIZE)
-            .height_request(COVER_THUMB_SIZE)
+            .width_request(cover_size)
+            .height_request(cover_size)
             .css_classes(["album-cover", "dim-label"])
             .build();
         picture.update_property(&[PropertyLabel("Album cover art")]);
@@ -97,7 +109,7 @@ pub fn build_cover_column(
 
             let album_id = data.id;
 
-            if let Some(texture) = cache.get(album_id) {
+            if let Some(texture) = cache.get_any(album_id) {
                 picture_ref.set_paintable(Some(&*texture));
                 return;
             }
@@ -113,20 +125,29 @@ pub fn build_cover_column(
     ColumnViewColumn::builder()
         .title("Cover")
         .factory(&factory)
-        .fixed_width(COVER_THUMB_SIZE + 12)
+        .fixed_width(cover_size + 12)
         .resizable(false)
         .build()
 }
 
 /// Apply a decoded cover to the cache and update any waiting widgets.
+///
+/// Skips results for a list-zoom size that is no longer current — the column
+/// view is rebuilt on a zoom change and dispatches its own decode wave, so a
+/// stale result must not allocate a texture or evict a useful cache entry.
 fn apply_cover_to_widgets(
+    state: &AppState,
     album_id: i64,
+    size: i32,
     decoded: &DecodedCover,
     cover_cache: &CoverArtCache,
     pending_widgets: &Mutex<PendingCovers>,
 ) {
+    if size != list_cover_size(state.storage.get_list_zoom_level()) {
+        return;
+    }
     let texture = raw_to_texture(decoded);
-    cover_cache.insert(album_id, texture.clone());
+    cover_cache.insert(album_id, size, texture.clone());
 
     if let Some(waiters) = pending_widgets.lock().remove(&album_id) {
         for weak in waiters {
@@ -140,33 +161,55 @@ fn apply_cover_to_widgets(
 /// cover decoder.  Results are processed on the main thread via
 /// [`idle_add_local`] where they are inserted into the cache and applied
 /// to any waiting `Picture` widgets.
+///
+/// Each idle pass drains at most [`GRID_BATCH_SIZE`] results so a decode
+/// wave cannot monopolize a single main-thread iteration.
 pub fn start_cover_batch_decode(
+    state: &Arc<AppState>,
     albums: Vec<(i64, String)>,
+    size: i32,
     cover_cache: Arc<CoverArtCache>,
     pending_widgets: Arc<Mutex<PendingCovers>>,
 ) {
-    let (tx, rx) = unbounded::<(i64, DecodedCover)>();
+    let (tx, rx) = unbounded::<(i64, i32, DecodedCover)>();
 
     for (album_id, path) in albums {
-        cover_cache.request_decode_to_channel(
-            album_id,
-            path,
-            COVER_THUMB_SIZE,
-            tx.clone(),
-            "column view",
-        );
+        cover_cache.request_decode_to_channel(album_id, path, size, tx.clone(), "column view");
     }
     drop(tx);
 
-    idle_add_local(move || {
-        while let Ok((album_id, decoded)) = rx.try_recv() {
-            apply_cover_to_widgets(album_id, &decoded, &cover_cache, &pending_widgets);
-        }
+    let state = Arc::clone(state);
+    idle_add_local(move || drain_cover_batch(&rx, &state, &cover_cache, &pending_widgets));
+}
+
+/// Drain up to [`GRID_BATCH_SIZE`] decoded covers into the cache and any
+/// waiting `Picture` widgets, so a decode wave cannot monopolize a single
+/// main-thread iteration.
+fn drain_cover_batch(
+    rx: &Receiver<(i64, i32, DecodedCover)>,
+    state: &AppState,
+    cover_cache: &CoverArtCache,
+    pending_widgets: &Mutex<PendingCovers>,
+) -> ControlFlow {
+    let mut processed = 0;
+    while processed < GRID_BATCH_SIZE {
         match rx.try_recv() {
-            Err(Closed) => Break,
-            _ => Continue,
+            Ok((album_id, size, decoded)) => {
+                apply_cover_to_widgets(
+                    state,
+                    album_id,
+                    size,
+                    &decoded,
+                    cover_cache,
+                    pending_widgets,
+                );
+                processed += 1;
+            }
+            Err(Closed) => return Break,
+            Err(Empty) => return Continue,
         }
-    });
+    }
+    Continue
 }
 
 /// Build an artist icon column with a 32‑px fixed‑width `Image`.

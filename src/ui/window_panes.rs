@@ -6,6 +6,7 @@ use std::sync::{
 };
 
 use {
+    async_channel::Sender,
     libadwaita::{
         HeaderBar, OverlaySplitView, ToastOverlay, ToolbarView, ViewStack, ViewSwitcher,
         ViewSwitcherBar,
@@ -21,13 +22,13 @@ use {
         },
         prelude::{AccessibleExtManual, WidgetExt},
     },
-    tracing::{error, info},
+    tracing::{error, info, warn},
 };
 
 use crate::{
     app::{AppState, NavigationEvent::Back},
     storage::settings::{
-        ActiveTab::{Albums, Artists},
+        ActiveTab::{self, Albums, Artists},
         ViewMode::{self, Column, Grid},
     },
     ui::{
@@ -71,6 +72,58 @@ fn build_sidebar(state: &Arc<AppState>, back_button: &ToggleButton) -> (ToolbarV
     (sidebar_toolbar, close_button)
 }
 
+/// Show the destination tab and reconcile its grid with the current mode.
+///
+/// Hidden tabs are no longer rebuilt on view-mode changes (only the active
+/// tab is), so switching here lazily builds the current mode child when it
+/// is missing. When the mode child already exists, only a pending sort/zoom
+/// change (`dirty`) triggers a rebuild.
+async fn handle_tab_switch(
+    stack: &ViewStack,
+    state: &Arc<AppState>,
+    tab: ActiveTab,
+    album_stack: &Stack,
+    artist_stack: &Stack,
+    narrow_state: &Arc<NarrowState>,
+) {
+    stack.set_visible_child_name(match tab {
+        Albums => "albums",
+        Artists => "artists",
+    });
+    let mode = *state.view_mode_tx.borrow();
+    let child_name = match mode {
+        Grid => "grid",
+        Column => "column",
+    };
+    let (mode_stack, dirty, rebuild_tx) = match tab {
+        Albums => (album_stack, &state.album_grid.dirty, &state.albums_sort_tx),
+        Artists => (
+            artist_stack,
+            &state.artist_grid.dirty,
+            &state.artists_sort_tx,
+        ),
+    };
+    let was_dirty = dirty.swap(false, Relaxed);
+    if mode_stack.child_by_name(child_name).is_some() {
+        if was_dirty {
+            signal_grid_rebuild(rebuild_tx);
+        }
+        return;
+    }
+    match tab {
+        Albums => lazy_build_album_mode(state, album_stack, narrow_state, mode).await,
+        Artists => lazy_build_artist_mode(state, artist_stack, mode).await,
+    }
+}
+
+/// Signal a library grid to rebuild after a tab switch so it reflects
+/// sort or zoom changes that arrived while the tab was hidden.
+fn signal_grid_rebuild(tx: &Sender<()>) {
+    if let Err(e) = tx.try_send(()) {
+        warn!(error = %e, "Failed to signal grid rebuild after tab switch");
+    }
+}
+
 /// Build the content pane with library views and controls.
 fn build_content_pane(
     state: &Arc<AppState>,
@@ -110,13 +163,21 @@ fn build_content_pane(
 
     let mut tab_rx = state.active_tab_tx.subscribe();
     let active_tab_stack = stack.clone();
+    let tab_state = Arc::clone(state);
+    let tab_album_stack = album_grid.mode_stack.clone();
+    let tab_artist_stack = artist_grid.mode_stack.clone();
+    let tab_nm = Arc::clone(narrow_state);
     spawn_future_local(async move {
         while tab_rx.changed().await.is_ok() {
-            let tab = *tab_rx.borrow();
-            active_tab_stack.set_visible_child_name(match tab {
-                Albums => "albums",
-                Artists => "artists",
-            });
+            handle_tab_switch(
+                &active_tab_stack,
+                &tab_state,
+                *tab_rx.borrow(),
+                &tab_album_stack,
+                &tab_artist_stack,
+                &tab_nm,
+            )
+            .await;
         }
     });
 
@@ -127,9 +188,14 @@ fn build_content_pane(
     spawn_future_local(async move {
         let mut rx = vm_state.view_mode_tx.subscribe();
         while rx.changed().await.is_ok() {
-            let mode = *rx.borrow();
-            switch_mode_for_stack(&vm_state, "albums", &vm_album_stack, &vm_nm, mode).await;
-            switch_mode_for_stack(&vm_state, "artists", &vm_artist_stack, &vm_nm, mode).await;
+            switch_mode_for_active_tab(
+                &vm_state,
+                *rx.borrow(),
+                &vm_album_stack,
+                &vm_artist_stack,
+                &vm_nm,
+            )
+            .await;
         }
     });
 
@@ -303,6 +369,26 @@ pub fn build_content(
         back_button,
         close_button,
     )
+}
+
+/// Switch the currently active tab's mode stack to `mode`, building the
+/// view lazily if it doesn't exist yet.
+///
+/// Hidden tabs are skipped — they reconcile their mode when activated via
+/// [`handle_tab_switch`], so toggling modes never builds a view the user
+/// is not looking at.
+async fn switch_mode_for_active_tab(
+    state: &Arc<AppState>,
+    mode: ViewMode,
+    album_stack: &Stack,
+    artist_stack: &Stack,
+    narrow_state: &Arc<NarrowState>,
+) {
+    let (stack, name) = match *state.active_tab_tx.borrow() {
+        Albums => (album_stack, "albums"),
+        Artists => (artist_stack, "artists"),
+    };
+    switch_mode_for_stack(state, name, stack, narrow_state, mode).await;
 }
 
 /// Return the mode‑stack for a given tab name, or `None` if unknown.

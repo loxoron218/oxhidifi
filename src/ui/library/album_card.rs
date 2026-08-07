@@ -5,7 +5,7 @@ use std::{boxed::Box, sync::Arc};
 use {
     async_channel::{Sender, unbounded},
     libadwaita::{
-        gdk::{MemoryTexture, prelude::TextureExt},
+        gdk::MemoryTexture,
         glib::{prelude::Cast, spawn_future_local},
         gtk::{
             Align::{End, Start},
@@ -30,21 +30,20 @@ use crate::{
         library::album_playback::{album_play_icon, toggle_or_play_album},
         raw_to_texture,
     },
+    zoom::grid_cover_size,
 };
-
-/// Size of album cover art thumbnails in pixels.
-const THUMBNAIL_SIZE: i32 = 180;
 
 /// Build a placeholder cover art widget.
 ///
 /// Returns an `Image` with a generic audio icon. Used as the initial
 /// state before async cover art loading completes.
-fn build_placeholder() -> Widget {
+#[must_use]
+pub fn build_placeholder(size: i32) -> Widget {
     let placeholder = Image::builder()
         .icon_name("audio-x-generic-symbolic")
-        .pixel_size(THUMBNAIL_SIZE / 2)
-        .width_request(THUMBNAIL_SIZE)
-        .height_request(THUMBNAIL_SIZE)
+        .pixel_size(size / 2)
+        .width_request(size)
+        .height_request(size)
         .css_classes(["album-cover", "dim-label"])
         .build();
     placeholder.update_property(&[PropertyLabel("Album cover placeholder")]);
@@ -55,7 +54,7 @@ fn build_placeholder() -> Widget {
 ///
 /// If the child is already a `Picture`, updates its paintable in place.
 /// Otherwise replaces the child with a new `Picture`.
-fn apply_texture(overlay: &Overlay, texture: &MemoryTexture) {
+fn apply_texture(overlay: &Overlay, texture: &MemoryTexture, size: i32) {
     let updated = overlay.child().and_then(|c| {
         c.downcast_ref::<Picture>()
             .map(|p| p.set_paintable(Some(texture)))
@@ -64,12 +63,31 @@ fn apply_texture(overlay: &Overlay, texture: &MemoryTexture) {
         let picture = Picture::builder()
             .paintable(texture)
             .content_fit(Cover)
-            .width_request(THUMBNAIL_SIZE)
-            .height_request(THUMBNAIL_SIZE)
+            .width_request(size)
+            .height_request(size)
             .css_classes(["album-cover"])
             .build();
         picture.update_property(&[PropertyLabel("Album cover art")]);
         overlay.set_child(Some(&picture));
+    }
+}
+
+/// Resolve a single card's cover widget to `size`.
+///
+/// Applies a cached texture for the size immediately, or swaps a decoded
+/// `Picture` for a placeholder when the size is not yet cached, so a card
+/// never shows a texture decoded at a stale size. Does not dispatch new
+/// decode requests — the caller defers those to the debounced path.
+pub fn resolve_cover_widget(cache: &CoverArtCache, overlay: &Overlay, album_id: i64, size: i32) {
+    if let Some(texture) = cache.get(album_id, size) {
+        apply_texture(overlay, &texture, size);
+        return;
+    }
+    if overlay
+        .child()
+        .is_some_and(|child| child.downcast_ref::<Picture>().is_some())
+    {
+        overlay.set_child(Some(&build_placeholder(size)));
     }
 }
 
@@ -93,9 +111,11 @@ fn try_send_album_cover(
 /// are received, preventing a race where the channel receiver is dropped
 /// before the background decoder finishes.
 pub fn load_cover_art_async(
+    state: &Arc<AppState>,
     cover_art_data: &[(i64, usize, String)],
     overlays: &[Overlay],
     cache: &Arc<CoverArtCache>,
+    size: i32,
 ) {
     if cover_art_data.is_empty() {
         return;
@@ -105,11 +125,11 @@ pub fn load_cover_art_async(
     let mut uncached: Vec<(i64, usize, String)> = Vec::new();
 
     for (album_id, index, path) in cover_art_data {
-        if let Some(texture) = cache
-            .get(*album_id)
-            .filter(|t| t.width() == THUMBNAIL_SIZE && t.height() == THUMBNAIL_SIZE)
-        {
-            apply_texture(&overlays[*index], &texture);
+        if *index >= overlays.len() {
+            continue;
+        }
+        if let Some(texture) = cache.get(*album_id, size) {
+            apply_texture(&overlays[*index], &texture, size);
             continue;
         }
         uncached.push((*album_id, *index, path.clone()));
@@ -124,7 +144,7 @@ pub fn load_cover_art_async(
         cache.request_decode(ArtworkDecodeRequest {
             album_id,
             path,
-            size: THUMBNAIL_SIZE,
+            size,
             on_complete: Box::new(move |_, decoded| {
                 try_send_album_cover(&tx, index, album_id, decoded);
             }),
@@ -134,19 +154,62 @@ pub fn load_cover_art_async(
 
     let overlays: Vec<Overlay> = overlays.to_vec();
     let cache_clone = Arc::clone(cache);
+    let state = Arc::clone(state);
 
     spawn_future_local(async move {
         while let Ok((index, album_id, decoded)) = rx.recv().await {
-            let texture = raw_to_texture(&decoded);
-            cache_clone.insert(album_id, texture.clone());
-            apply_texture(&overlays[index], &texture);
+            apply_decoded_cover_if_current(
+                &state,
+                &cache_clone,
+                &overlays,
+                index,
+                album_id,
+                &decoded,
+                size,
+            );
         }
     });
 }
 
+/// Insert a decoded cover into the cache and apply it to its card, skipping
+/// sizes superseded by a newer zoom *before* allocating a texture, so stale
+/// decodes never do main-thread texture work or churn the cache.
+fn apply_decoded_cover_if_current(
+    state: &Arc<AppState>,
+    cache: &CoverArtCache,
+    overlays: &[Overlay],
+    index: usize,
+    album_id: i64,
+    decoded: &DecodedCover,
+    size: i32,
+) {
+    if size != grid_cover_size(state.storage.get_grid_zoom_level()) {
+        return;
+    }
+    let texture = raw_to_texture(decoded);
+    cache.insert(album_id, size, texture.clone());
+    apply_decoded_cover(state, overlays, index, &texture, size);
+}
+
+/// Apply a decoded cover to its card, skipping sizes superseded by a newer
+/// zoom. The caller already skipped stale sizes before creating the texture
+/// (see `load_cover_art_async`); this guards against a size that became
+/// stale between the guard and the widget apply.
+fn apply_decoded_cover(
+    state: &Arc<AppState>,
+    overlays: &[Overlay],
+    index: usize,
+    texture: &MemoryTexture,
+    size: i32,
+) {
+    if size == grid_cover_size(state.storage.get_grid_zoom_level()) && index < overlays.len() {
+        apply_texture(&overlays[index], texture, size);
+    }
+}
+
 /// Build the cover art overlay with hover play button for an album card.
-fn build_card_overlay(state: &Arc<AppState>, album_id: i64) -> Overlay {
-    let cover_art = build_placeholder();
+fn build_card_overlay(state: &Arc<AppState>, album_id: i64, size: i32) -> Overlay {
+    let cover_art = build_placeholder(size);
 
     let overlay = Overlay::new();
     overlay.set_child(Some(&cover_art));
@@ -197,13 +260,23 @@ fn build_card_overlay(state: &Arc<AppState>, album_id: i64) -> Overlay {
 /// theme-inflated natural sizing from the `card` CSS class.
 ///
 /// Also returns the `Overlay` wrapping the cover art so it can be
-/// updated asynchronously after the card is added to the container.
+/// resized in place on zoom changes and updated asynchronously after
+/// the card is added to the container.
+///
+/// # Arguments
+///
+/// * `state` - Application state
+/// * `album` - Album data
+/// * `artist_name` - Display name of the album artist
+/// * `format_info` - Format summary for the album
+/// * `size` - Cover art size in pixels (derived from the grid zoom level)
 #[must_use]
 pub fn build_album_card(
     state: &Arc<AppState>,
     album: &Album,
     artist_name: &str,
     format_info: &FormatInfo,
+    size: i32,
 ) -> (GtkBox, Overlay) {
     let card = GtkBox::builder()
         .orientation(Vertical)
@@ -222,7 +295,7 @@ pub fn build_album_card(
 
     let album_id = album.id;
 
-    let overlay = build_card_overlay(state, album_id);
+    let overlay = build_card_overlay(state, album_id, size);
 
     card.append(&overlay.clone().upcast::<Widget>());
 
