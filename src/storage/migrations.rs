@@ -195,7 +195,6 @@ mod tests {
             SqlitePool, query_as,
             sqlite::{SqliteConnectOptions, SqlitePoolOptions},
         },
-        tempfile::{TempDir, tempdir},
         tokio::test,
     };
 
@@ -203,17 +202,15 @@ mod tests {
         add_album_format_columns, column_exists, create_indexes, run,
     };
 
-    async fn test_pool() -> Result<(SqlitePool, TempDir)> {
-        let dir = tempdir()?;
-        let path = dir.path().join("test.db");
+    async fn test_pool() -> Result<SqlitePool> {
         let opts = SqliteConnectOptions::new()
-            .filename(&path)
+            .in_memory(true)
             .create_if_missing(true);
         let pool = SqlitePoolOptions::new()
             .max_connections(1)
             .connect_with(opts)
             .await?;
-        Ok((pool, dir))
+        Ok(pool)
     }
 
     async fn table_names(pool: &SqlitePool, kind: &str) -> Result<Vec<String>> {
@@ -229,7 +226,7 @@ mod tests {
 
     #[test]
     async fn run_creates_tables_and_is_idempotent() -> Result<()> {
-        let (pool, _dir) = test_pool().await?;
+        let pool = test_pool().await?;
         run(&pool).await?;
         run(&pool).await?;
         let tables = table_names(&pool, "table").await?;
@@ -250,7 +247,7 @@ mod tests {
 
     #[test]
     async fn column_exists_detects_columns() -> Result<()> {
-        let (pool, _dir) = test_pool().await?;
+        let pool = test_pool().await?;
         run(&pool).await?;
         ensure!(
             column_exists(&pool, "title").await,
@@ -265,7 +262,7 @@ mod tests {
 
     #[test]
     async fn add_album_format_columns_is_idempotent() -> Result<()> {
-        let (pool, _dir) = test_pool().await?;
+        let pool = test_pool().await?;
         run(&pool).await?;
         add_album_format_columns(&pool).await?;
         ensure!(
@@ -286,7 +283,7 @@ mod tests {
 
     #[test]
     async fn create_indexes_creates_all_indexes() -> Result<()> {
-        let (pool, _dir) = test_pool().await?;
+        let pool = test_pool().await?;
         run(&pool).await?;
         create_indexes(&pool).await?;
         let indexes = table_names(&pool, "index").await?;
