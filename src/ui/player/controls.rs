@@ -4,7 +4,7 @@ use std::sync::{Arc, atomic::Ordering::Release};
 
 use {
     libadwaita::{
-        glib::{Propagation::Proceed, spawn_future_local},
+        glib::Propagation::Proceed,
         gtk::{
             Align::{Center, End, Start},
             Box, Button, GestureClick, Label,
@@ -15,7 +15,7 @@ use {
         },
         prelude::{AccessibleExtManual, BoxExt, ButtonExt, ScaleExt, WidgetExt},
     },
-    tracing::{error, warn},
+    tracing::error,
 };
 
 use crate::{
@@ -178,13 +178,6 @@ pub fn build_seek_section(state: &Arc<AppState>) -> (Box, Scale, Label, Label) {
     (seek_box, seek_scale, current_time, total_time)
 }
 
-/// Persist a volume change to the storage backend.
-async fn persist_volume(storage: Arc<SqliteStorage>, volume: f64) {
-    if let Err(e) = storage.set_volume(volume).await {
-        warn!(error = %e, "Failed to persist volume");
-    }
-}
-
 /// Build the volume control section with an output-mode toggle button.
 ///
 /// Returns the container box, the mode toggle button, and the volume scale
@@ -231,7 +224,8 @@ pub fn build_volume_control(state: &Arc<AppState>) -> (Box, Button, Scale) {
         if let Err(e) = state_vol.playback.set_volume(value) {
             error!(error = %e, "Failed to set volume");
         }
-        spawn_future_local(persist_volume(Arc::clone(&state_vol.storage), value));
+        state_vol.storage.set_volume_memory(value);
+        state_vol.storage.save_settings();
     });
     vol_box.append(&volume_scale);
 
@@ -254,7 +248,7 @@ pub fn build_volume_control(state: &Arc<AppState>) -> (Box, Button, Scale) {
         if let Err(e) = state_mode.playback.set_output_mode(new_mode) {
             error!(error = %e, "Failed to toggle output mode");
         }
-        persist_toggle_output_mode(Arc::clone(&state_mode.storage), new_mode);
+        persist_toggle_output_mode(&state_mode.storage, new_mode);
         btn.set_icon_name(new_mode.icon_name());
         btn.set_tooltip_text(Some(mode_button_tooltip(new_mode)));
         btn.update_property(&[PropertyLabel(mode_button_tooltip(new_mode))]);
@@ -292,12 +286,9 @@ pub fn update_volume_scale_visual(scale: &Scale, mode: OutputMode) {
 }
 
 /// Persist the output mode toggled from the side panel.
-fn persist_toggle_output_mode(storage: Arc<SqliteStorage>, mode: OutputMode) {
-    spawn_future_local(async move {
-        if let Err(e) = storage.set_output_mode(mode).await {
-            warn!(error = %e, "Failed to persist output mode");
-        }
-    });
+fn persist_toggle_output_mode(storage: &Arc<SqliteStorage>, mode: OutputMode) {
+    storage.set_output_mode_memory(mode);
+    storage.save_settings();
 }
 
 /// Tooltip text for the mode toggle button.

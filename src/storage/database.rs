@@ -400,6 +400,14 @@ impl SqliteStorage {
         Ok(())
     }
 
+    /// Set the volume level in memory only.
+    ///
+    /// The debounced disk write is triggered via [`Self::save_settings`],
+    /// which runs in the background so callers are not blocked.
+    pub fn set_volume_memory(&self, volume: f64) {
+        self.settings.write().update_memory(|s| s.volume = volume);
+    }
+
     /// Get the output mode from settings.
     pub fn get_output_mode(&self) -> OutputMode {
         self.settings.read().get_output_mode()
@@ -418,6 +426,16 @@ impl SqliteStorage {
             .await
             .map_err(|e| Database(format!("Failed to save output mode: {e}")))?;
         Ok(())
+    }
+
+    /// Set the output mode in memory only.
+    ///
+    /// The debounced disk write is triggered via [`Self::save_settings`],
+    /// which runs in the background so callers are not blocked.
+    pub fn set_output_mode_memory(&self, mode: OutputMode) {
+        self.settings
+            .write()
+            .update_memory(|s| s.output_mode = mode);
     }
 
     /// Wait until 100 ms have elapsed since the most recent save request,
@@ -1093,17 +1111,20 @@ mod tests {
         },
     };
 
-    use crate::storage::{
-        StorageError::Database,
-        database::SqliteStorage,
-        sort_rules::{
-            AlbumSortCriteria::{BitDepth, Title},
-            AlbumSortItem,
-            ArtistSortCriteria::Name,
-            ArtistSortItem,
-            SortOrder::{Ascending, Descending},
+    use crate::{
+        playback::devices::OutputMode::BitPerfect,
+        storage::{
+            StorageError::Database,
+            database::SqliteStorage,
+            sort_rules::{
+                AlbumSortCriteria::{BitDepth, Title},
+                AlbumSortItem,
+                ArtistSortCriteria::Name,
+                ArtistSortItem,
+                SortOrder::{Ascending, Descending},
+            },
+            user_settings::UserSettings,
         },
-        user_settings::UserSettings,
     };
 
     async fn storage_in(dir: &TempDir) -> Result<SqliteStorage> {
@@ -1250,6 +1271,32 @@ mod tests {
         ensure!(
             storage.get_list_zoom_level() == 2,
             "list zoom must round-trip through the memory setter"
+        );
+        Ok(())
+    }
+
+    #[test]
+    async fn volume_memory_round_trip() -> Result<()> {
+        let dir = tempdir()?;
+        let storage = storage_in(&dir).await?;
+
+        storage.set_volume_memory(0.42);
+        ensure!(
+            (storage.get_settings_volume() - 0.42).abs() < f64::EPSILON,
+            "volume must round-trip through the memory setter"
+        );
+        Ok(())
+    }
+
+    #[test]
+    async fn output_mode_memory_round_trip() -> Result<()> {
+        let dir = tempdir()?;
+        let storage = storage_in(&dir).await?;
+
+        storage.set_output_mode_memory(BitPerfect);
+        ensure!(
+            storage.get_output_mode() == BitPerfect,
+            "output mode must round-trip through the memory setter"
         );
         Ok(())
     }
