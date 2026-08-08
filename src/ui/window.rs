@@ -17,17 +17,17 @@ use {
         LengthUnit::Sp,
         OverlaySplitView, Toast, ToastOverlay,
         ToastPriority::Normal,
-        gdk::Display,
+        gdk::{Display, Key},
         glib::{
             ControlFlow::Break,
-            Propagation::Proceed,
+            Propagation::{Proceed, Stop},
             idle_add_local,
             object::{Cast, ObjectExt},
             spawn_future_local,
         },
         gtk::{
-            CssProvider, STYLE_PROVIDER_PRIORITY_APPLICATION, Window, prelude::ToggleButtonExt,
-            style_context_add_provider_for_display,
+            CssProvider, EventControllerKey, STYLE_PROVIDER_PRIORITY_APPLICATION, Window,
+            prelude::ToggleButtonExt, style_context_add_provider_for_display,
         },
         prelude::{AdwApplicationWindowExt, ButtonExt, GtkWindowExt, WidgetExt},
     },
@@ -100,6 +100,19 @@ impl CollapseScheduler {
     }
 }
 
+/// Hide the sidebar when Escape is pressed and the sidebar is shown.
+///
+/// Returns `true` when the key was handled (sidebar was visible and got
+/// hidden), so the caller can stop propagation.
+fn handle_escape_key(split_view: &OverlaySplitView) -> bool {
+    if split_view.shows_sidebar() {
+        split_view.set_show_sidebar(false);
+        true
+    } else {
+        false
+    }
+}
+
 /// Build the main application window.
 ///
 /// Creates an `AdwApplicationWindow` with `AdwOverlaySplitView`
@@ -128,6 +141,17 @@ pub fn build_window(app: &Application, state: &Arc<AppState>) -> ApplicationWind
     add_responsive_breakpoints(&window, &split_view, &narrow_state);
 
     wire_panel_events(state, &split_view);
+
+    let esc_split = split_view.clone();
+    let esc_controller = EventControllerKey::new();
+    esc_controller.connect_key_pressed(move |_, key, _, _| {
+        if key == Key::Escape && handle_escape_key(&esc_split) {
+            Stop
+        } else {
+            Proceed
+        }
+    });
+    window.add_controller(esc_controller);
 
     window.connect_close_request(|_| {
         info!("Window close requested — session persists during application shutdown");
@@ -256,13 +280,43 @@ mod tests {
         },
     };
 
-    use crate::{app::AppState, ui::window::CollapseScheduler};
+    use crate::{
+        app::AppState,
+        ui::window::{CollapseScheduler, handle_escape_key},
+    };
 
     fn pump_main_context() {
         let mut iterations = 0;
         while MainContext::default().iteration(false) && iterations < 1000 {
             iterations += 1;
         }
+    }
+
+    #[test]
+    fn escape_key_hides_shown_sidebar() -> Result<()> {
+        let split_view = OverlaySplitView::new();
+        split_view.set_show_sidebar(true);
+        ensure!(
+            handle_escape_key(&split_view),
+            "Escape on a shown sidebar must be handled"
+        );
+        ensure!(
+            !split_view.shows_sidebar(),
+            "Escape must hide the shown sidebar"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn escape_key_ignores_hidden_sidebar() -> Result<()> {
+        let split_view = OverlaySplitView::new();
+        split_view.set_show_sidebar(false);
+        ensure!(
+            !handle_escape_key(&split_view),
+            "Escape with a hidden sidebar must not be handled"
+        );
+        ensure!(!split_view.shows_sidebar());
+        Ok(())
     }
 
     #[test]
