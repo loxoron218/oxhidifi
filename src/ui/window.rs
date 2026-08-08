@@ -27,12 +27,11 @@ use {
         },
         prelude::{AdwApplicationWindowExt, ButtonExt, GtkWindowExt, WidgetExt},
     },
-    tracing::{error, info},
+    tracing::info,
 };
 
 use crate::{
     app::AppState,
-    playback::control::PlaybackController,
     ui::{
         library::narrow_state::NarrowState, player::wire_panel_events, window_panes::build_content,
     },
@@ -67,28 +66,8 @@ pub fn build_window(app: &Application, state: &Arc<AppState>) -> ApplicationWind
 
     wire_panel_events(state, &split_view);
 
-    let close_state = Arc::clone(state);
-    window.connect_close_request(move |_| {
-        info!("Window close requested — persisting session");
-
-        let s = close_state.playback.state();
-        let queue_tracks = close_state.playback.queue().tracks();
-        let queue_index = close_state.playback.queue().current_index();
-
-        if let Err(e) = close_state.storage.set_last_session(
-            queue_tracks,
-            queue_index,
-            s.current_track_id,
-            s.elapsed_seconds,
-            s.duration_seconds,
-        ) {
-            error!(error = %e, "Failed to persist session on close");
-        }
-
-        if let Err(e) = close_state.playback.stop() {
-            error!(error = %e, "Failed to stop playback on window close");
-        }
-        close_state.cover_art_cache.shutdown();
+    window.connect_close_request(|_| {
+        info!("Window close requested — session persists during application shutdown");
         Proceed
     });
 

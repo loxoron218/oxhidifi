@@ -20,7 +20,14 @@ use {
         prelude::{ApplicationExt, ApplicationExtManual, GtkWindowExt},
     },
     parking_lot::Mutex,
-    tokio::{fs::create_dir_all, spawn, sync::mpsc::UnboundedReceiver, task::spawn_blocking},
+    tokio::{
+        fs::create_dir_all,
+        select,
+        signal::unix::{SignalKind, signal},
+        spawn,
+        sync::mpsc::UnboundedReceiver,
+        task::spawn_blocking,
+    },
     tracing::{info, warn},
 };
 
@@ -438,6 +445,77 @@ fn emit_session_events(state: &AppState) {
     });
 }
 
+/// Persist the playback session and stop playback during application shutdown.
+///
+/// Runs after the `GLib` main loop returns so the session is durable before
+/// the process exits. The session is snapshotted before
+/// [`PlaybackController::stop`] clears the playback state.
+fn persist_session_on_shutdown(state: &AppState) {
+    let s = state.playback.state();
+    let queue_tracks = state.playback.queue().tracks();
+    let queue_index = state.playback.queue().current_index();
+
+    if let Err(e) = state.storage.set_last_session(
+        queue_tracks,
+        queue_index,
+        s.current_track_id,
+        s.elapsed_seconds,
+        s.duration_seconds,
+    ) {
+        warn!(error = %e, "Failed to persist session on shutdown");
+    }
+
+    if let Err(e) = state.playback.stop() {
+        warn!(error = %e, "Failed to stop playback on shutdown");
+    }
+    state.cover_art_cache.shutdown();
+}
+
+/// Register SIGINT/SIGTERM handlers that trigger a graceful application quit.
+///
+/// Pressing `Ctrl+C` in the terminal delivers SIGINT, which by default
+/// terminates the process before the session is persisted. This function
+/// awaits the signals on a tokio task and notifies the `GLib` main thread via
+/// `quit_tx`, which then calls [`Application::quit`] so `app.run()` returns
+/// and the shutdown persistence in [`run_application`] runs.
+fn spawn_signal_handlers(quit_tx: Sender<()>) {
+    spawn(async move {
+        let mut sigint = match signal(SignalKind::interrupt()) {
+            Ok(s) => s,
+            Err(e) => {
+                warn!(error = %e, "Failed to register SIGINT handler");
+                return;
+            }
+        };
+        let mut sigterm = match signal(SignalKind::terminate()) {
+            Ok(s) => s,
+            Err(e) => {
+                warn!(error = %e, "Failed to register SIGTERM handler");
+                return;
+            }
+        };
+
+        select! {
+            _ = sigint.recv() => info!("SIGINT received, quitting gracefully"),
+            _ = sigterm.recv() => info!("SIGTERM received, quitting gracefully"),
+        }
+
+        if let Err(e) = quit_tx.send(()).await {
+            warn!(error = %e, "Failed to notify main thread of shutdown signal");
+        }
+    });
+}
+
+/// Dispatch an application-quit request on the `GLib` main thread.
+///
+/// `Application` is not `Send`, so the signal task cannot call [`Application::quit`]
+/// directly; instead it sends on the channel this future awaits.
+async fn dispatch_quit_on_main(app: Application, quit_rx: Receiver<()>) {
+    if quit_rx.recv().await.is_ok() {
+        app.quit();
+    }
+}
+
 /// Build and run the Libadwaita application.
 ///
 /// Initializes the storage backend, playback engine, and presents the main
@@ -535,10 +613,16 @@ pub async fn run_application() -> Result<()> {
 
     let app = Application::builder().application_id(APP_ID).build();
 
+    let (quit_tx, quit_rx) = unbounded();
+
     let startup_state = Arc::clone(&state);
     app.connect_activate(move |app| {
         build_window(app, &startup_state).present();
         spawn_future_local(run_startup_checks());
+
+        let quit_app = app.clone();
+        let quit_rx = quit_rx.clone();
+        spawn_future_local(dispatch_quit_on_main(quit_app, quit_rx));
 
         let ss = Arc::clone(&startup_state);
         idle_add_local(move || {
@@ -548,7 +632,14 @@ pub async fn run_application() -> Result<()> {
     });
 
     info!("Starting application");
+    spawn_signal_handlers(quit_tx);
     app.run();
+
+    let shutdown_state = Arc::clone(&state);
+    if let Err(e) = spawn_blocking(move || persist_session_on_shutdown(&shutdown_state)).await {
+        warn!(error = %e, "Session persistence task panicked");
+    }
+
     thread_manager.shutdown();
 
     Ok(())
@@ -564,15 +655,32 @@ mod tests {
     };
 
     use {
-        anyhow::{Context, Result, anyhow},
+        anyhow::{Context, Result, anyhow, ensure},
         async_channel::unbounded,
+        libadwaita::{
+            Application,
+            glib::ExitCode,
+            gtk::{self, test as gtk_test},
+            prelude::ApplicationExtManual,
+        },
+        tempfile::{TempDir, tempdir},
         tokio::runtime::Runtime,
     };
 
     use crate::{
-        app::{AppChannels, AppState, build_broadcast_channels},
+        app::{
+            APP_ID, AppChannels, AppState, build_broadcast_channels, dispatch_quit_on_main,
+            emit_session_events, persist_session_on_shutdown,
+        },
         library::scanner::FsScanner,
-        playback::engine::PlaybackEngine,
+        playback::{
+            control::PlaybackController,
+            engine::PlaybackEngine,
+            state::{
+                PlaybackEvent::{Paused, PositionTick, QueueChanged, TrackStarted},
+                PlaybackStatus::Stopped,
+            },
+        },
         storage::{
             database::SqliteStorage,
             settings::{ActiveTab::Albums, ViewMode::Grid},
@@ -595,37 +703,51 @@ mod tests {
                 .map(Arc::clone)
                 .map_err(|e| anyhow!("{e:#}"))?;
 
-            let scanner_storage = Arc::clone(&storage);
-
-            let (scan_event_tx, scan_event_rx) = unbounded();
-            let (toast_tx, toast_rx) = unbounded();
-
-            let (navigation_tx, navigation_rx) = unbounded();
-
-            let channels = AppChannels {
-                scan_event_tx,
-                scan_event_rx,
-                toast_tx,
-                toast_rx,
-                navigation_tx,
-                navigation_rx,
-            };
-
-            let broadcast = build_broadcast_channels(Grid, Albums);
-
-            Ok(Self::new(
-                Arc::new(PlaybackEngine::new()),
-                storage,
-                Arc::new(FsScanner::new(
-                    scanner_storage,
-                    channels.scan_event_tx.clone(),
-                    4,
-                )),
-                channels,
-                broadcast,
-                Arc::new(ThreadManager::new()),
-            ))
+            Ok(build_app_state(storage))
         }
+    }
+
+    fn build_app_state(storage: Arc<SqliteStorage>) -> AppState {
+        let scanner_storage = Arc::clone(&storage);
+
+        let (scan_event_tx, scan_event_rx) = unbounded();
+        let (toast_tx, toast_rx) = unbounded();
+
+        let (navigation_tx, navigation_rx) = unbounded();
+
+        let channels = AppChannels {
+            scan_event_tx,
+            scan_event_rx,
+            toast_tx,
+            toast_rx,
+            navigation_tx,
+            navigation_rx,
+        };
+
+        let broadcast = build_broadcast_channels(Grid, Albums);
+
+        AppState::new(
+            Arc::new(PlaybackEngine::new()),
+            storage,
+            Arc::new(FsScanner::new(
+                scanner_storage,
+                channels.scan_event_tx.clone(),
+                4,
+            )),
+            channels,
+            broadcast,
+            Arc::new(ThreadManager::new()),
+        )
+    }
+
+    async fn fresh_storage(dir: &Path) -> Result<Arc<SqliteStorage>> {
+        let db = dir.join("library.db");
+        let settings = dir.join("settings.json");
+        Ok(Arc::new(
+            SqliteStorage::connect_with_settings_path(&db, &settings)
+                .await
+                .context("Failed to create fresh storage")?,
+        ))
     }
 
     fn init_mock_storage() -> Result<Arc<SqliteStorage>> {
@@ -640,5 +762,135 @@ mod tests {
         SqliteStorage::connect_with_settings_path(db, &settings)
             .await
             .context("Failed to create mock storage")
+    }
+
+    fn setup_session(state: &AppState) {
+        state.playback.queue().set_queue(vec![10, 20, 30]);
+        state.playback.queue().set_current_index(1);
+        let mut s = state.playback.shared.state.lock();
+        s.current_track_id = Some(20);
+        s.elapsed_seconds = 42.5;
+        s.duration_seconds = 200.0;
+    }
+
+    fn fresh_state(rt: &Runtime) -> Result<(TempDir, Arc<SqliteStorage>, AppState)> {
+        let dir = tempdir()?;
+        let storage = rt.block_on(fresh_storage(dir.path()))?;
+        let state = build_app_state(Arc::clone(&storage));
+        Ok((dir, storage, state))
+    }
+
+    fn assert_session_persisted(storage: &Arc<SqliteStorage>) -> Result<()> {
+        let (queue, index, track, position, duration) = storage.get_last_session();
+        ensure!(queue == vec![10, 20, 30], "queue should be persisted");
+        ensure!(index == Some(1), "index should be persisted");
+        ensure!(track == Some(20), "track should be persisted");
+        ensure!(
+            (position - 42.5).abs() < f64::EPSILON,
+            "position should be persisted"
+        );
+        ensure!(
+            (duration - 200.0).abs() < f64::EPSILON,
+            "duration should be persisted"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn persist_session_on_shutdown_writes_current_session() -> Result<()> {
+        let rt = Runtime::new().context("Failed to create tokio runtime")?;
+        let (_, storage, state) = fresh_state(&rt)?;
+        setup_session(&state);
+
+        persist_session_on_shutdown(&state);
+
+        assert_session_persisted(&storage)?;
+        ensure!(
+            state.playback.state().status == Stopped,
+            "playback should be stopped after shutdown"
+        );
+        Ok(())
+    }
+    #[test]
+    fn persist_session_on_shutdown_with_empty_queue_is_harmless() -> Result<()> {
+        let rt = Runtime::new().context("Failed to create tokio runtime")?;
+        let (_, storage, state) = fresh_state(&rt)?;
+
+        persist_session_on_shutdown(&state);
+
+        let (queue, index, track, position, duration) = storage.get_last_session();
+        ensure!(queue.is_empty(), "queue should remain empty");
+        ensure!(index.is_none(), "index should be None");
+        ensure!(track.is_none(), "track should be None");
+        ensure!(
+            (position - 0.0).abs() < f64::EPSILON,
+            "position should be zero"
+        );
+        ensure!(
+            (duration - 0.0).abs() < f64::EPSILON,
+            "duration should be zero"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn persist_session_survives_storage_reload() -> Result<()> {
+        let rt = Runtime::new().context("Failed to create tokio runtime")?;
+        let (dir, _, state) = fresh_state(&rt)?;
+        setup_session(&state);
+
+        persist_session_on_shutdown(&state);
+        drop(state);
+
+        let reloaded = rt.block_on(fresh_storage(dir.path()))?;
+        assert_session_persisted(&reloaded)?;
+        Ok(())
+    }
+
+    #[test]
+    fn emit_session_events_broadcasts_restored_session() -> Result<()> {
+        let state = AppState::mock()?;
+        setup_session(&state);
+
+        let (tx, rx) = unbounded();
+        state.playback.shared.event_subs.lock().push(tx);
+
+        emit_session_events(&state);
+
+        ensure!(matches!(
+            rx.try_recv()?,
+            QueueChanged { track_ids } if track_ids == vec![10, 20, 30]
+        ));
+        ensure!(matches!(
+            rx.try_recv()?,
+            TrackStarted { track_id } if track_id == 20
+        ));
+        ensure!(matches!(rx.try_recv()?, Paused));
+        ensure!(matches!(
+            rx.try_recv()?,
+            PositionTick {
+                elapsed_seconds,
+                duration_seconds,
+            } if (elapsed_seconds - 42.5).abs() < f64::EPSILON
+                && (duration_seconds - 200.0).abs() < f64::EPSILON
+        ));
+        Ok(())
+    }
+
+    #[gtk_test]
+    async fn dispatch_quit_on_main_requests_application_quit() -> Result<()> {
+        let app = Application::builder().application_id(APP_ID).build();
+        let (quit_tx, quit_rx) = unbounded();
+        quit_tx
+            .try_send(())
+            .context("Failed to send quit request")?;
+
+        dispatch_quit_on_main(app.clone(), quit_rx).await;
+
+        ensure!(
+            app.run() == ExitCode::new(1),
+            "run() should return 1 immediately once quit was requested"
+        );
+        Ok(())
     }
 }
