@@ -168,8 +168,8 @@ pub fn build_album_grid(state: &Arc<AppState>, narrow_state: &Arc<NarrowState>) 
         state.albums_sort_rx.clone(),
         state.albums_zoom_rx.clone(),
         move || {
-            if *preview_state.active_tab_tx.borrow() == Albums
-                && *preview_state.view_mode_tx.borrow() == Grid
+            if preview_state.active_tab.borrow() == Albums
+                && preview_state.view_mode.borrow() == Grid
                 && preview_state.album_grid.ready.load(Relaxed)
             {
                 apply_album_resize(&preview_state, &preview_stack);
@@ -204,9 +204,9 @@ async fn rebuild_album_current_mode(
     zoom_fired: bool,
 ) {
     let action = decide_rebuild(
-        *state.active_tab_tx.borrow(),
+        state.active_tab.borrow(),
         Albums,
-        *state.view_mode_tx.borrow(),
+        state.view_mode.borrow(),
         sort_fired,
         zoom_fired,
         state.album_grid.ready.load(Relaxed),

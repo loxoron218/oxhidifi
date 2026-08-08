@@ -5,42 +5,37 @@ use std::sync::{
     atomic::{AtomicBool, Ordering::Relaxed},
 };
 
-use {
-    tokio::sync::watch::{Receiver, Sender as TokioSender, channel as TokioChannel},
-    tracing::warn,
-};
+use async_channel::Receiver;
+
+use crate::ui::signal::ValueSignal;
 
 /// Tracks whether the window is in narrow‑width mode.
 ///
 /// Created via [`NarrowState::new_shared`] and shared via [`Arc`].
-/// Subscribe to changes with [`NarrowState::subscribe`].
+/// Subscribe to changes with [`NarrowState::subscribe`]. Subscribers receive
+/// updates through an `async_channel`, which wakes the `GLib` main context
+/// reliably when awaited in a `spawn_future_local`.
 pub struct NarrowState {
     /// Whether the window is in narrow mode.
     narrow: AtomicBool,
-    /// Channel to notify subscribers of narrow-mode changes.
-    tx: TokioSender<bool>,
-    /// Kept alive so [`send`] never fails when no external subscribers exist.
-    rx: Receiver<bool>,
+    /// Signals subscribers of narrow-mode changes.
+    narrow_signal: ValueSignal<bool>,
 }
 
 impl NarrowState {
     /// Create a new `NarrowState` wrapped in an [`Arc`].
     #[must_use]
     pub fn new_shared() -> Arc<Self> {
-        let (tx, rx) = TokioChannel(false);
         Arc::new(Self {
             narrow: AtomicBool::new(false),
-            tx,
-            rx,
+            narrow_signal: ValueSignal::new(false),
         })
     }
 
     /// Set the narrow state and notify all subscribers.
     pub fn set(&self, val: bool) {
         self.narrow.store(val, Relaxed);
-        if let Err(e) = self.tx.send(val) {
-            warn!(error = %e, "No narrow state subscribers");
-        }
+        self.narrow_signal.send(val);
     }
 
     /// Return the current narrow state.
@@ -50,15 +45,19 @@ impl NarrowState {
 
     /// Subscribe to narrow state changes.
     ///
-    /// The receiver will immediately yield the current value on first
-    /// [`changed`](watch::Receiver::changed) call.
+    /// Returns an `async_channel` receiver that yields the new value on every
+    /// change; the current value is available synchronously via
+    /// [`NarrowState::get`].
+    #[must_use]
     pub fn subscribe(&self) -> Receiver<bool> {
-        self.rx.clone()
+        self.narrow_signal.subscribe()
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use anyhow::{Result, ensure};
+
     use crate::ui::library::narrow_state::NarrowState;
 
     #[test]
@@ -77,13 +76,14 @@ mod tests {
     }
 
     #[test]
-    fn narrow_state_subscriber_receives_changes() {
+    fn narrow_state_subscriber_receives_changes() -> Result<()> {
         let state = NarrowState::new_shared();
         let rx = state.subscribe();
-        assert!(!*rx.borrow(), "subscriber should see the initial value");
+        ensure!(!state.get(), "subscriber should see the initial value");
         state.set(true);
-        assert!(*rx.borrow(), "subscriber should see the new value");
+        ensure!(matches!(rx.try_recv(), Ok(true)));
         state.set(false);
-        assert!(!*rx.borrow(), "subscriber should see the toggled value");
+        ensure!(matches!(rx.try_recv(), Ok(false)));
+        Ok(())
     }
 }

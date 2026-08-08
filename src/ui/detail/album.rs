@@ -1,18 +1,22 @@
 //! Album detail page orchestration: artwork, metadata, and track listing.
 
-use std::{boxed::Box, sync::Arc};
+use std::{boxed::Box, sync::Arc, time::Duration};
 
 use {
-    async_channel::{Receiver, Sender, unbounded},
+    async_channel::{
+        Receiver, Sender,
+        TryRecvError::{Closed, Empty},
+        unbounded,
+    },
     libadwaita::{
         glib::{
             ControlFlow::{self, Break, Continue},
-            MainContext, idle_add_local,
+            idle_add_local,
             prelude::Cast,
-            spawn_future_local,
+            spawn_future_local, timeout_add_local,
         },
         gtk::{
-            Button, Picture, Widget,
+            Picture, Widget,
             prelude::{BoxExt, ButtonExt, WidgetExt},
         },
     },
@@ -21,7 +25,6 @@ use {
 
 use crate::{
     app::{AppState, NavigationEvent},
-    playback::control::PlaybackController,
     storage::{Storage, records::Track},
     ui::{
         ArtworkDecodeRequest, DecodedCover,
@@ -67,16 +70,16 @@ pub fn build_album_detail(
         });
     });
 
-    let ev_rx = state.playback.subscribe();
     let ev_btn = content.play_button.clone();
     let ev_state = Arc::clone(state);
     let ev_aid = album_id;
-    MainContext::default().spawn_local(async move {
-        while ev_rx.recv().await.is_ok() {
-            let icon = album_play_icon(&ev_state, ev_aid);
-            let btn = ev_btn.clone();
-            idle_add_local(move || update_detail_play_button(&btn, icon));
+    let wrapper_alive = wrapper.clone();
+    timeout_add_local(Duration::from_millis(200), move || {
+        if wrapper_alive.parent().is_none() {
+            return Break;
         }
+        ev_btn.set_icon_name(album_play_icon(&ev_state, ev_aid));
+        Continue
     });
 
     let sc = Arc::clone(state);
@@ -101,10 +104,17 @@ pub fn build_album_detail(
     wrapper.upcast()
 }
 
-/// Update the detail page play button icon via idle callback.
-fn update_detail_play_button(btn: &Button, icon: &'static str) -> ControlFlow {
-    btn.set_icon_name(icon);
-    Break
+/// Poll for decoded artwork and apply it to the picture widget.
+fn poll_artwork(rx: &Receiver<DecodedCover>, artwork: &Picture) -> ControlFlow {
+    match rx.try_recv() {
+        Ok(decoded) => {
+            let texture = raw_to_texture(&decoded);
+            artwork.set_paintable(Some(&texture));
+            Break
+        }
+        Err(Empty) => Continue,
+        Err(Closed) => Break,
+    }
 }
 
 /// Try to send decoded cover to the main thread channel, logging on failure.
@@ -113,15 +123,6 @@ fn try_send_cover(tx: &Sender<DecodedCover>, decoded: Option<DecodedCover>) {
     if let Err(e) = tx.try_send(decoded) {
         error!(error = %e, "Failed to send decoded album detail cover to main thread");
     }
-}
-
-/// Poll for decoded artwork and apply it to the picture widget.
-fn poll_artwork(rx: &Receiver<DecodedCover>, artwork: &Picture) -> ControlFlow {
-    rx.try_recv().map_or(Continue, |decoded| {
-        let texture = raw_to_texture(&decoded);
-        artwork.set_paintable(Some(&texture));
-        Break
-    })
 }
 
 /// Load album data from storage and populate the detail UI elements.
@@ -226,17 +227,18 @@ async fn populate_album_detail(
 #[cfg(test)]
 mod tests {
     use {
-        anyhow::{Result, ensure},
+        anyhow::{Result, anyhow, ensure},
+        async_channel::unbounded,
         libadwaita::{
-            glib::ControlFlow::Break,
-            gtk::{self, Button, test},
-            prelude::ButtonExt,
+            glib::ControlFlow::{Break, Continue},
+            gtk::{self, Picture, test},
         },
     };
 
     use crate::ui::{
-        detail::album::{try_send_cover, update_detail_play_button},
-        tests::{cover_send_forwards_decoded, cover_send_none_is_noop},
+        DecodedCover,
+        detail::album::{poll_artwork, try_send_cover},
+        tests::{cover_send_forwards_decoded, cover_send_none_is_noop, mock_decoded_cover},
     };
 
     #[test]
@@ -250,11 +252,29 @@ mod tests {
     }
 
     #[test]
-    fn update_detail_play_button_sets_icon() -> Result<()> {
-        let button = Button::new();
-        let flow = update_detail_play_button(&button, "media-playback-pause-symbolic");
-        ensure!(flow == Break);
-        ensure!(button.icon_name().as_deref() == Some("media-playback-pause-symbolic"));
+    fn poll_artwork_breaks_on_decoded_cover() -> Result<()> {
+        let (tx, rx) = unbounded::<DecodedCover>();
+        let artwork = Picture::new();
+        tx.try_send(mock_decoded_cover())
+            .map_err(|e| anyhow!("{e}"))?;
+        ensure!(poll_artwork(&rx, &artwork) == Break);
+        Ok(())
+    }
+
+    #[test]
+    fn poll_artwork_continues_while_waiting() -> Result<()> {
+        let (_tx, rx) = unbounded::<DecodedCover>();
+        let artwork = Picture::new();
+        ensure!(poll_artwork(&rx, &artwork) == Continue);
+        Ok(())
+    }
+
+    #[test]
+    fn poll_artwork_breaks_on_closed_channel() -> Result<()> {
+        let (tx, rx) = unbounded::<DecodedCover>();
+        drop(tx);
+        let artwork = Picture::new();
+        ensure!(poll_artwork(&rx, &artwork) == Break);
         Ok(())
     }
 }

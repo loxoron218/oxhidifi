@@ -133,8 +133,8 @@ pub fn build_artist_grid(state: &Arc<AppState>, narrow_state: &Arc<NarrowState>)
         state.artists_sort_rx.clone(),
         state.artists_zoom_rx.clone(),
         move || {
-            if *preview_state.active_tab_tx.borrow() == Artists
-                && *preview_state.view_mode_tx.borrow() == Grid
+            if preview_state.active_tab.borrow() == Artists
+                && preview_state.view_mode.borrow() == Grid
                 && preview_state.artist_grid.ready.load(Relaxed)
             {
                 resize_artist_grid(&preview_state, &preview_stack);
@@ -161,9 +161,9 @@ async fn rebuild_artist_current_mode(
     zoom_fired: bool,
 ) {
     let action = decide_rebuild(
-        *state.active_tab_tx.borrow(),
+        state.active_tab.borrow(),
         Artists,
-        *state.view_mode_tx.borrow(),
+        state.view_mode.borrow(),
         sort_fired,
         zoom_fired,
         state.artist_grid.ready.load(Relaxed),

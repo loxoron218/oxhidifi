@@ -506,10 +506,10 @@ pub fn take_stale_mode_child(
     tab: ActiveTab,
     mode_stack: &Stack,
 ) -> Option<ViewMode> {
-    if *state.active_tab_tx.borrow() != tab {
+    if state.active_tab.borrow() != tab {
         return None;
     }
-    let mode = *state.view_mode_tx.borrow();
+    let mode = state.view_mode.borrow();
     let child_name = match mode {
         Grid => "grid",
         Column => "column",

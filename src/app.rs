@@ -20,15 +20,7 @@ use {
         prelude::{ApplicationExt, ApplicationExtManual, GtkWindowExt},
     },
     parking_lot::Mutex,
-    tokio::{
-        fs::create_dir_all,
-        spawn,
-        sync::{
-            mpsc::UnboundedReceiver,
-            watch::{Sender as TokioSender, channel},
-        },
-        task::spawn_blocking,
-    },
+    tokio::{fs::create_dir_all, spawn, sync::mpsc::UnboundedReceiver, task::spawn_blocking},
     tracing::{info, warn},
 };
 
@@ -52,7 +44,7 @@ use crate::{
         sort_rules::{AlbumSortItem, ArtistSortItem},
     },
     threading::ThreadManager,
-    ui::{CoverArtCache, window::build_window},
+    ui::{CoverArtCache, signal::ValueSignal, window::build_window},
 };
 
 /// Application identifier for D-Bus and resource paths.
@@ -83,11 +75,11 @@ pub struct AppState {
     /// The library scanner for discovering audio files.
     pub scanner: Arc<FsScanner<SqliteStorage>>,
     /// Notifies the UI when the library changes (scan complete, etc.).
-    pub refresh_tx: TokioSender<()>,
-    /// Broadcasts view mode changes (grid/column) to library views.
-    pub view_mode_tx: TokioSender<ViewMode>,
-    /// Broadcasts active tab changes (albums/artists) to the UI.
-    pub active_tab_tx: TokioSender<ActiveTab>,
+    pub refresh: ValueSignal<()>,
+    /// Notifies the UI of view mode changes (grid/column).
+    pub view_mode: ValueSignal<ViewMode>,
+    /// Notifies the UI of active tab changes (albums/artists).
+    pub active_tab: ValueSignal<ActiveTab>,
     /// Broadcasts album sort configuration changes to the album grid.
     /// Uses `async_channel` (not `tokio::sync`) so the `spawn_future_local`
     /// subscriber is woken reliably by the `GLib` main context — see the
@@ -162,9 +154,9 @@ impl AppState {
             playback,
             storage,
             scanner,
-            refresh_tx: broadcast.refresh,
-            view_mode_tx: broadcast.view_mode,
-            active_tab_tx: broadcast.active_tab,
+            refresh: broadcast.refresh,
+            view_mode: broadcast.view_mode,
+            active_tab: broadcast.active_tab,
             albums_sort_tx: broadcast.albums_sort,
             albums_sort_rx: broadcast.albums_sort_rx,
             artists_sort_tx: broadcast.artists_sort,
@@ -189,14 +181,14 @@ impl AppState {
     }
 }
 
-/// Holds the tokio broadcast channel senders used for UI state signals.
+/// Holds the UI state signal channels used for UI synchronization.
 pub struct BroadcastChannels {
-    /// Signal sender to notify the UI when the library changes.
-    pub refresh: TokioSender<()>,
+    /// Signal to notify the UI when the library changes.
+    pub refresh: ValueSignal<()>,
     /// Broadcasts view mode changes (grid/column) to the UI.
-    pub view_mode: TokioSender<ViewMode>,
+    pub view_mode: ValueSignal<ViewMode>,
     /// Broadcasts active tab changes (albums/artists) to the UI.
-    pub active_tab: TokioSender<ActiveTab>,
+    pub active_tab: ValueSignal<ActiveTab>,
     /// Broadcasts album sort configuration changes to the album grid.
     pub albums_sort: Sender<()>,
     /// Receiver clone for [`Self::albums_sort`] (grid listeners subscribe here).
@@ -310,8 +302,8 @@ pub struct SortMemo<C> {
 /// Build the app's broadcast channel set with the given initial UI state.
 ///
 /// Shared by `main` and the test mock so both construct their channels
-/// identically. `view_mode`/`active_tab` seed the respective watch senders
-/// with the state the UI should present on startup.
+/// identically. `view_mode`/`active_tab` seed the respective channels with
+/// the state the UI should present on startup.
 fn build_broadcast_channels(
     initial_view_mode: ViewMode,
     initial_active_tab: ActiveTab,
@@ -321,9 +313,9 @@ fn build_broadcast_channels(
     let (albums_zoom, albums_zoom_rx) = unbounded();
     let (artists_zoom, artists_zoom_rx) = unbounded();
     BroadcastChannels {
-        refresh: channel(()).0,
-        view_mode: channel(initial_view_mode).0,
-        active_tab: channel(initial_active_tab).0,
+        refresh: ValueSignal::new(()),
+        view_mode: ValueSignal::new(initial_view_mode),
+        active_tab: ValueSignal::new(initial_active_tab),
         albums_sort,
         albums_sort_rx,
         artists_sort,

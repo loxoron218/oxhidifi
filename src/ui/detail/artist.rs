@@ -3,7 +3,11 @@
 use std::{boxed::Box, collections::HashMap, sync::Arc};
 
 use {
-    async_channel::{Receiver, Sender, unbounded},
+    async_channel::{
+        Receiver, Sender,
+        TryRecvError::{Closed, Empty},
+        unbounded,
+    },
     libadwaita::{
         glib::{
             ControlFlow::{self, Break, Continue},
@@ -180,11 +184,15 @@ fn try_send_artist_cover(tx: &Sender<DecodedCover>, decoded: Option<DecodedCover
 
 /// Poll for decoded artwork and apply it to the thumb picture widget.
 fn poll_artist_artwork(rx: &Receiver<DecodedCover>, thumb: &Picture) -> ControlFlow {
-    rx.try_recv().map_or(Continue, |decoded| {
-        let texture = raw_to_texture(&decoded);
-        thumb.set_paintable(Some(&texture));
-        Break
-    })
+    match rx.try_recv() {
+        Ok(decoded) => {
+            let texture = raw_to_texture(&decoded);
+            thumb.set_paintable(Some(&texture));
+            Break
+        }
+        Err(Empty) => Continue,
+        Err(Closed) => Break,
+    }
 }
 
 /// Build a section for a single album in the artist detail page.

@@ -8,6 +8,7 @@ pub mod settings;
 pub mod settings_audio;
 pub mod settings_library;
 pub mod settings_view;
+pub mod signal;
 pub mod sort_list;
 pub mod status;
 pub mod window;

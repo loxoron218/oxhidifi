@@ -8,7 +8,6 @@ use {
         glib::spawn_future_local,
         gtk::{Stack, Widget},
     },
-    tokio::sync::watch::Sender as TokioSender,
     tracing::{info, warn},
 };
 
@@ -24,13 +23,16 @@ use crate::{
             ActiveTab::{Albums, Artists},
         },
     },
-    ui::detail::{album::build_album_detail, artist::build_artist_detail},
+    ui::{
+        detail::{album::build_album_detail, artist::build_artist_detail},
+        signal::ValueSignal,
+    },
 };
 
-/// Save the active tab to storage asynchronously and broadcast through the watch channel.
+/// Save the active tab to storage asynchronously and notify subscribers.
 pub fn persist_active_tab(
     storage: &Arc<SqliteStorage>,
-    active_tab_tx: &TokioSender<ActiveTab>,
+    active_tab: &ValueSignal<ActiveTab>,
     name: &str,
 ) {
     let tab = if name == "artists" { Artists } else { Albums };
@@ -40,11 +42,7 @@ pub fn persist_active_tab(
             warn!(error = %e, "Failed to save active tab");
         }
     });
-    active_tab_tx.send_if_modified(|current| {
-        let changed = *current != tab;
-        *current = tab;
-        changed
-    });
+    active_tab.send(tab);
 }
 
 /// Handle navigation events (album/artist detail, back navigation).
@@ -108,19 +106,22 @@ mod tests {
     #[test]
     fn persist_active_tab_maps_artists() -> Result<()> {
         let state = Arc::new(AppState::mock()?);
-        let mut rx = state.active_tab_tx.subscribe();
-        persist_active_tab(&state.storage, &state.active_tab_tx, "artists");
-        ensure!(*rx.borrow_and_update() == Artists);
+        let rx = state.active_tab.subscribe();
+        persist_active_tab(&state.storage, &state.active_tab, "artists");
+        ensure!(state.active_tab.borrow() == Artists);
+        ensure!(matches!(rx.try_recv(), Ok(Artists)));
         Ok(())
     }
 
     #[test]
     fn persist_active_tab_maps_albums() -> Result<()> {
         let state = Arc::new(AppState::mock()?);
-        let mut rx = state.active_tab_tx.subscribe();
-        state.active_tab_tx.send(Artists)?;
-        persist_active_tab(&state.storage, &state.active_tab_tx, "albums");
-        ensure!(*rx.borrow_and_update() == Albums);
+        let rx = state.active_tab.subscribe();
+        state.active_tab.send(Artists);
+        persist_active_tab(&state.storage, &state.active_tab, "albums");
+        ensure!(state.active_tab.borrow() == Albums);
+        ensure!(matches!(rx.try_recv(), Ok(Artists)));
+        ensure!(matches!(rx.try_recv(), Ok(Albums)));
         Ok(())
     }
 

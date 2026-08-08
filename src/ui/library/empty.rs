@@ -120,21 +120,21 @@ pub fn build_library_grid(
     narrow_state: &Arc<NarrowState>,
     setup_fn: impl Fn(&Stack, Arc<AppState>, Arc<NarrowState>, ViewMode) + Clone + 'static,
 ) -> LibraryGrid {
-    let initial_mode = *state.view_mode_tx.borrow();
+    let initial_mode = state.view_mode.borrow();
     let current_mode = Arc::new(Mutex::new(initial_mode));
     let nm = Arc::clone(narrow_state);
     let mode_stack = Stack::new();
     setup_fn(&mode_stack, Arc::clone(state), nm, initial_mode);
 
-    let mut refresh_rx = state.refresh_tx.subscribe();
+    let refresh_rx = state.refresh.subscribe();
     let refresh_state = Arc::clone(state);
     let refresh_mode_stack = mode_stack.clone();
     let refresh_setup = setup_fn;
     let refresh_nm = Arc::clone(narrow_state);
     let refresh_mode = Arc::clone(&current_mode);
     spawn_future_local(async move {
-        while refresh_rx.changed().await.is_ok() {
-            let mode = *refresh_state.view_mode_tx.borrow();
+        while refresh_rx.recv().await.is_ok() {
+            let mode = refresh_state.view_mode.borrow();
             *refresh_state.album_grid.cache.lock() = None;
             *refresh_state.artist_grid.cache.lock() = None;
             refresh_state.album_grid.generation.fetch_add(1, Relaxed);
@@ -278,16 +278,14 @@ async fn add_music_folder(state: &AppState, parent: Option<&Window>) {
 
     let scanner = Arc::clone(&state.scanner);
     let scan_path = path.clone();
-    let refresh_tx = state.refresh_tx.clone();
+    let refresh = state.refresh.clone();
     spawn(async move {
         if let Err(e) = scanner.scan_directory(&scan_path).await {
             warn!(error = %e, path = %scan_path.display(), "Failed to scan directory");
             return;
         }
         info!(path = %scan_path.display(), "Scan completed");
-        if let Err(e) = refresh_tx.send(()) {
-            warn!(error = %e, "Failed to send refresh signal");
-        }
+        refresh.publish();
     });
 }
 

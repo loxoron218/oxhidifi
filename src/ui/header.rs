@@ -79,9 +79,7 @@ pub fn build_view_toggle(state: &Arc<AppState>) -> SplitButton {
         btn.set_tooltip_text(Some(mode.tooltip()));
         let sc = Arc::clone(&state_clone);
         spawn_future_local(save_view_mode(sc, mode));
-        if let Err(e) = state_clone.view_mode_tx.send(mode) {
-            warn!(error = %e, "Failed to send view mode change");
-        }
+        state_clone.view_mode.send(mode);
     });
 
     subscribe_view_updates(state, &split_btn, &albums_sort, &artists_sort);
@@ -273,9 +271,8 @@ fn subscribe_view_updates(
     let s = Arc::clone(state);
     let btn = split_btn.clone();
     spawn_future_local(async move {
-        let mut vm_rx = s.view_mode_tx.subscribe();
-        while vm_rx.changed().await.is_ok() {
-            let mode = *vm_rx.borrow();
+        let vm_rx = s.view_mode.subscribe();
+        while let Ok(mode) = vm_rx.recv().await {
             btn.set_icon_name(mode.icon_name());
             btn.set_tooltip_text(Some(mode.tooltip()));
         }
@@ -285,9 +282,9 @@ fn subscribe_view_updates(
     let albums_sort_btn = albums_sort.clone();
     let artists_sort_btn = artists_sort.clone();
     spawn_future_local(async move {
-        let mut tab_rx = s2.active_tab_tx.subscribe();
-        while tab_rx.changed().await.is_ok() {
-            let is_albums = *tab_rx.borrow() == Albums;
+        let tab_rx = s2.active_tab.subscribe();
+        while let Ok(tab) = tab_rx.recv().await {
+            let is_albums = tab == Albums;
             albums_sort_btn.set_visible(is_albums);
             artists_sort_btn.set_visible(!is_albums);
         }

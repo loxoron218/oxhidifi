@@ -21,9 +21,7 @@ async fn save_album_labels_setting(state: Arc<AppState>, enabled: bool) {
     if let Err(e) = state.storage.set_show_album_labels(enabled).await {
         warn!(error = %e, "Failed to save album labels setting");
     }
-    if let Err(e) = state.refresh_tx.send(()) {
-        warn!(error = %e, "Failed to send refresh signal");
-    }
+    state.refresh.publish();
 }
 
 /// Build the View > Display page.

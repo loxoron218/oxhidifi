@@ -90,7 +90,7 @@ async fn handle_tab_switch(
         Albums => "albums",
         Artists => "artists",
     });
-    let mode = *state.view_mode_tx.borrow();
+    let mode = state.view_mode.borrow();
     let child_name = match mode {
         Grid => "grid",
         Column => "column",
@@ -161,18 +161,18 @@ fn build_content_pane(
         Albums => {}
     }
 
-    let mut tab_rx = state.active_tab_tx.subscribe();
+    let tab_rx = state.active_tab.subscribe();
     let active_tab_stack = stack.clone();
     let tab_state = Arc::clone(state);
     let tab_album_stack = album_grid.mode_stack.clone();
     let tab_artist_stack = artist_grid.mode_stack.clone();
     let tab_nm = Arc::clone(narrow_state);
     spawn_future_local(async move {
-        while tab_rx.changed().await.is_ok() {
+        while let Ok(tab) = tab_rx.recv().await {
             handle_tab_switch(
                 &active_tab_stack,
                 &tab_state,
-                *tab_rx.borrow(),
+                tab,
                 &tab_album_stack,
                 &tab_artist_stack,
                 &tab_nm,
@@ -186,16 +186,10 @@ fn build_content_pane(
     let vm_artist_stack = artist_grid.mode_stack;
     let vm_nm = Arc::clone(narrow_state);
     spawn_future_local(async move {
-        let mut rx = vm_state.view_mode_tx.subscribe();
-        while rx.changed().await.is_ok() {
-            switch_mode_for_active_tab(
-                &vm_state,
-                *rx.borrow(),
-                &vm_album_stack,
-                &vm_artist_stack,
-                &vm_nm,
-            )
-            .await;
+        let rx = vm_state.view_mode.subscribe();
+        while let Ok(mode) = rx.recv().await {
+            switch_mode_for_active_tab(&vm_state, mode, &vm_album_stack, &vm_artist_stack, &vm_nm)
+                .await;
         }
     });
 
@@ -291,14 +285,14 @@ pub fn build_content(
     let tab_orig = orig_stack.clone();
     let tab_stack = stack.clone();
     let tab_storage = Arc::clone(&state.storage);
-    let tab_active_tab_tx = state.active_tab_tx.clone();
+    let tab_active_tab = state.active_tab.clone();
     stack.connect_visible_child_notify(move |_| {
         if let Some(child) = tab_content_area.visible_child()
             && child == tab_orig
             && let Some(name) = tab_stack.visible_child_name()
         {
             info!(tab_name = name.as_str(), "Tab switched",);
-            persist_active_tab(&tab_storage, &tab_active_tab_tx, name.as_str());
+            persist_active_tab(&tab_storage, &tab_active_tab, name.as_str());
         }
         let visible = tab_content_area.visible_child();
         let is_on_detail = visible.as_ref().is_none_or(|child| *child != tab_orig);
@@ -384,7 +378,7 @@ async fn switch_mode_for_active_tab(
     artist_stack: &Stack,
     narrow_state: &Arc<NarrowState>,
 ) {
-    let (stack, name) = match *state.active_tab_tx.borrow() {
+    let (stack, name) = match state.active_tab.borrow() {
         Albums => (album_stack, "albums"),
         Artists => (artist_stack, "artists"),
     };
