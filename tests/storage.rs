@@ -20,7 +20,8 @@ use oxhidifi::storage::{
 async fn test_storage() -> Result<(SqliteStorage, TempDir)> {
     let dir = tempdir().context("failed to create temp dir")?;
     let db_path = dir.path().join("test.db");
-    let storage = SqliteStorage::connect(&db_path)
+    let settings_path = dir.path().join("settings.json");
+    let storage = SqliteStorage::connect_with_settings_path(&db_path, &settings_path)
         .await
         .context("failed to connect to storage")?;
     Ok((storage, dir))

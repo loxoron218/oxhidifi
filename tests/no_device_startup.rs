@@ -47,10 +47,12 @@ mod tests {
     #[test]
     fn library_scanning_works_without_device() -> Result<()> {
         let rt = Runtime::new().context("Failed to create tokio runtime")?;
+        let dir = tempfile::tempdir().context("Failed to create temp dir")?;
+        let settings_path = dir.path().join("settings.json");
 
         rt.block_on(async {
             let storage = Arc::new(
-                SqliteStorage::connect(Path::new(":memory:"))
+                SqliteStorage::connect_with_settings_path(Path::new(":memory:"), &settings_path)
                     .await
                     .context("Failed to create in-memory storage")?,
             );
