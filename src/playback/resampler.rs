@@ -59,15 +59,15 @@ impl AudioResampler {
         channels: usize,
     ) -> Result<Self, ResamplerConstructionError> {
         let resampler = Fft::<f32>::new(
-            input_rate as usize,
-            output_rate as usize,
+            usize::try_from(input_rate).unwrap_or(0),
+            usize::try_from(output_rate).unwrap_or(0),
             chunk_size,
             channels,
             Input,
         )?;
 
         let output_frames_max = resampler.output_frames_max();
-        let output_buf = vec![0.0_f32; output_frames_max * channels];
+        let output_buf = vec![0.0_f32; output_frames_max.saturating_mul(channels)];
 
         let indexing = Indexing {
             input_offset: 0,
@@ -107,19 +107,27 @@ impl AudioResampler {
     /// mismatch).
     pub fn process(&mut self) -> Result<Option<&[f32]>, ResampleError> {
         let input_frames_needed = self.resampler.input_frames_next();
-        let needed_samples = input_frames_needed * self.channels;
+        let needed_samples = input_frames_needed.saturating_mul(self.channels);
 
         if self.input_accum.len() < needed_samples {
             return Ok(None);
         }
 
-        let output_capacity = self.output_buf.len() / self.channels;
+        let output_capacity = self
+            .output_buf
+            .len()
+            .checked_div(self.channels)
+            .unwrap_or(0);
 
-        let Ok(input) = InterleavedSlice::new(
-            &self.input_accum[..needed_samples],
-            self.channels,
-            input_frames_needed,
-        ) else {
+        let Some(input_slice) = self.input_accum.get(..needed_samples) else {
+            return Err(InsufficientInputBufferSize {
+                expected: needed_samples,
+                actual: self.input_accum.len(),
+            });
+        };
+
+        let Ok(input) = InterleavedSlice::new(input_slice, self.channels, input_frames_needed)
+        else {
             return Err(InsufficientInputBufferSize {
                 expected: needed_samples,
                 actual: self.input_accum.len(),
@@ -131,7 +139,11 @@ impl AudioResampler {
         else {
             return Err(InsufficientOutputBufferSize {
                 expected: output_capacity,
-                actual: self.output_buf.len() / self.channels,
+                actual: self
+                    .output_buf
+                    .len()
+                    .checked_div(self.channels)
+                    .unwrap_or(0),
             });
         };
 
@@ -143,13 +155,20 @@ impl AudioResampler {
             self.resampler
                 .process_into_buffer(&input, &mut output, Some(&self.indexing))?;
 
-        let consumed = input_frames_needed * self.channels;
+        let consumed = input_frames_needed.saturating_mul(self.channels);
         self.input_accum.copy_within(consumed.., 0);
-        self.input_accum.truncate(self.input_accum.len() - consumed);
+        self.input_accum
+            .truncate(self.input_accum.len().saturating_sub(consumed));
 
-        let out_samples = frames_out * self.channels;
+        let out_samples = frames_out.saturating_mul(self.channels);
 
-        Ok(Some(&self.output_buf[..out_samples]))
+        let Some(output) = self.output_buf.get(..out_samples) else {
+            return Err(InsufficientOutputBufferSize {
+                expected: out_samples,
+                actual: self.output_buf.len(),
+            });
+        };
+        Ok(Some(output))
     }
 
     /// Reset the resampler with new sample rate parameters.
@@ -168,15 +187,15 @@ impl AudioResampler {
         output_rate: u32,
     ) -> Result<(), ResamplerConstructionError> {
         let new_resampler = Fft::<f32>::new(
-            input_rate as usize,
-            output_rate as usize,
+            usize::try_from(input_rate).unwrap_or(0),
+            usize::try_from(output_rate).unwrap_or(0),
             self.chunk_size,
             self.channels,
             Input,
         )?;
 
         let output_frames_max = new_resampler.output_frames_max();
-        self.output_buf = vec![0.0_f32; output_frames_max * self.channels];
+        self.output_buf = vec![0.0_f32; output_frames_max.saturating_mul(self.channels)];
 
         self.resampler = new_resampler;
         self.input_rate = input_rate;
@@ -200,25 +219,25 @@ impl AudioResampler {
 
     /// Input sample rate in Hz.
     #[must_use]
-    pub fn input_rate(&self) -> u32 {
+    pub const fn input_rate(&self) -> u32 {
         self.input_rate
     }
 
     /// Output sample rate in Hz.
     #[must_use]
-    pub fn output_rate(&self) -> u32 {
+    pub const fn output_rate(&self) -> u32 {
         self.output_rate
     }
 
     /// Number of audio channels.
     #[must_use]
-    pub fn channels(&self) -> usize {
+    pub const fn channels(&self) -> usize {
         self.channels
     }
 
     /// Fixed input chunk size in frames.
     #[must_use]
-    pub fn chunk_size(&self) -> usize {
+    pub const fn chunk_size(&self) -> usize {
         self.chunk_size
     }
 
@@ -242,14 +261,21 @@ impl AudioResampler {
 
     /// Number of accumulated input frames.
     #[must_use]
-    pub fn accum_frames(&self) -> usize {
-        self.input_accum.len() / self.channels
+    pub const fn accum_frames(&self) -> usize {
+        match self.input_accum.len().checked_div(self.channels) {
+            Some(frames) => frames,
+            None => 0,
+        }
     }
 
     /// Returns `true` if enough input has been accumulated to process a chunk.
     #[must_use]
     pub fn has_pending_output(&self) -> bool {
-        self.input_accum.len() >= self.resampler.input_frames_next() * self.channels
+        self.input_accum.len()
+            >= self
+                .resampler
+                .input_frames_next()
+                .saturating_mul(self.channels)
     }
 }
 
@@ -308,6 +334,26 @@ fn calc_num_samples(sample_rate: u32, duration_secs: f64) -> usize {
     num_traits::NumCast::from((f64::from(sample_rate) * duration_secs).floor()).unwrap_or(0)
 }
 
+/// Allocate an interleaved f32 sample buffer for a duration at a sample rate.
+///
+/// # Arguments
+///
+/// * `sample_rate` - Sample rate in Hz.
+/// * `duration_secs` - Buffer duration in seconds.
+/// * `channels` - Number of interleaved channels.
+///
+/// # Returns
+///
+/// A `(frame_count, buffer)` pair where `frame_count` is the number of frames and
+/// `buffer` is pre-allocated for `frame_count * channels` interleaved samples.
+fn allocate_samples(sample_rate: u32, duration_secs: f64, channels: usize) -> (usize, Vec<f32>) {
+    let num_samples = calc_num_samples(sample_rate, duration_secs);
+    (
+        num_samples,
+        Vec::with_capacity(num_samples.saturating_mul(channels)),
+    )
+}
+
 /// Generate a sine wave tone at the given frequency.
 ///
 /// Returns interleaved samples for the given number of channels.
@@ -319,8 +365,7 @@ pub fn generate_sine(
     amplitude: f32,
     channels: usize,
 ) -> Vec<f32> {
-    let num_samples = calc_num_samples(sample_rate, duration_secs);
-    let mut samples = Vec::with_capacity(num_samples * channels);
+    let (num_samples, mut samples) = allocate_samples(sample_rate, duration_secs, channels);
     for i in 0..num_samples {
         let t: f64 = num_traits::NumCast::from(i).unwrap_or(0.0) / f64::from(sample_rate);
         let sin_val: f32 =
@@ -337,7 +382,7 @@ pub fn generate_sine(
 #[must_use]
 pub fn generate_silence(sample_rate: u32, duration_secs: f64, channels: usize) -> Vec<f32> {
     let num_samples = calc_num_samples(sample_rate, duration_secs);
-    vec![0.0_f32; num_samples * channels]
+    vec![0.0_f32; num_samples.saturating_mul(channels)]
 }
 
 /// Generate pink noise with a deterministic LCG-based approach.
@@ -348,8 +393,7 @@ pub fn generate_pink_noise(
     amplitude: f32,
     channels: usize,
 ) -> Vec<f32> {
-    let num_samples = calc_num_samples(sample_rate, duration_secs);
-    let mut samples = Vec::with_capacity(num_samples * channels);
+    let (num_samples, mut samples) = allocate_samples(sample_rate, duration_secs, channels);
     let octaves = 16;
     let mut white_buf = vec![0.0_f32; octaves];
     let mut pink = 0.0_f32;
@@ -360,8 +404,11 @@ pub fn generate_pink_noise(
         state = state.wrapping_mul(1_103_515_245).wrapping_add(12_345);
         let white_f32: f32 = num_traits::NumCast::from(f64::from(state) / norm).unwrap_or(0.0);
         let white = white_f32.mul_add(2.0_f32, -1.0_f32) * amplitude;
-        pink += white - white_buf[i % octaves];
-        white_buf[i % octaves] = white;
+        let Some(slot) = white_buf.get_mut(i % octaves) else {
+            continue;
+        };
+        pink += white - *slot;
+        *slot = white;
         let value = pink / 16.0_f32;
         for _ in 0..channels {
             samples.push(value);
@@ -380,12 +427,13 @@ pub fn generate_impulse(
 ) -> Vec<f32> {
     let position_samples: usize =
         num_traits::NumCast::from((f64::from(sample_rate) * position_secs).floor()).unwrap_or(0);
-    let total_samples = position_samples + 1;
-    let mut samples = vec![0.0_f32; total_samples * channels];
-    let offset = position_samples * channels;
-    for c in 0..channels {
-        samples[offset + c] = amplitude;
-    }
+    let total_samples = position_samples.saturating_add(1);
+    let mut samples = vec![0.0_f32; total_samples.saturating_mul(channels)];
+    let offset = position_samples.saturating_mul(channels);
+    let Some(impulse) = samples.get_mut(offset..offset.saturating_add(channels)) else {
+        return samples;
+    };
+    impulse.fill(amplitude);
     samples
 }
 

@@ -177,7 +177,7 @@ fn handle_empty_batch(
 
     ctx.decoder = next_decoder;
     ctx.track_sample_rate = next_sr;
-    ctx.src_channels = params.channels as usize;
+    ctx.src_channels = usize::from(params.channels);
     ctx.elapsed = 0.0;
     ctx.last_tick = Instant::now();
     ctx.track_sample_rate_f64 = f64::from(next_sr);
@@ -269,7 +269,7 @@ pub fn process_decode_frame(
             match handle_empty_batch(
                 engine_shared,
                 ctx,
-                output_cfg.channels as usize,
+                usize::from(output_cfg.channels),
                 output_cfg.device_sample_rate,
             ) {
                 None => {
@@ -287,11 +287,17 @@ pub fn process_decode_frame(
             }
         }
         Ok(batch) => {
-            let frame_count =
-                u32::try_from(batch.samples.len() / ctx.src_channels).unwrap_or(u32::MAX);
+            let frame_count = u32::try_from(
+                batch
+                    .samples
+                    .len()
+                    .checked_div(ctx.src_channels)
+                    .unwrap_or(0),
+            )
+            .unwrap_or(u32::MAX);
             ctx.elapsed += f64::from(frame_count) / ctx.track_sample_rate_f64;
             engine_shared.update_elapsed(ctx.elapsed, &mut ctx.last_tick);
-            let samples = maybe_downmix(batch, ctx.src_channels, output_cfg.channels as usize);
+            let samples = maybe_downmix(batch, ctx.src_channels, usize::from(output_cfg.channels));
             *event_to_send = process_decoded_batch(&samples, &mut ctx.resampler, producer);
             event_to_send.is_some() || producer.is_abandoned()
         }

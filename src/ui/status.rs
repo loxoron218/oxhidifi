@@ -88,7 +88,7 @@ impl StatusBar {
 
     /// Get a reference to the root widget.
     #[must_use]
-    pub fn widget(&self) -> &Box {
+    pub const fn widget(&self) -> &Box {
         &self.root
     }
 
@@ -134,67 +134,66 @@ impl StatusBar {
         let status_label = self.status_label.clone();
         let progress_bar = self.progress_bar.clone();
 
-        spawn_future_local(async move {
-            Self::run_scan_event_loop(rx, &status_label, &progress_bar).await;
-        });
+        run_scan_event_loop(rx, status_label, progress_bar);
     }
+}
 
-    /// Run the scan event loop, processing events until the channel closes.
-    async fn run_scan_event_loop(
-        rx: Receiver<ScanEvent>,
-        status_label: &Label,
-        progress_bar: &ProgressBar,
-    ) {
+/// Run the scan event loop, processing events until the channel closes.
+///
+/// Runs on the `GLib` main context via a local future so the widgets are
+/// only ever touched on the main thread.
+fn run_scan_event_loop(rx: Receiver<ScanEvent>, status_label: Label, progress_bar: ProgressBar) {
+    spawn_future_local(async move {
         while let Ok(event) = rx.recv().await {
-            Self::handle_scan_event(status_label, progress_bar, event);
+            handle_scan_event(&status_label, &progress_bar, event);
         }
-    }
+    });
+}
 
-    /// Apply a single scan event to the status bar widgets.
-    fn handle_scan_event(status_label: &Label, progress_bar: &ProgressBar, event: ScanEvent) {
-        match event {
-            ScanStarted { directory } => {
-                let name = directory.file_name().map_or_else(
-                    || directory.display().to_string(),
-                    |n| n.to_string_lossy().to_string(),
-                );
-                let text = format!("Scanning \u{201c}{name}\u{201d}...");
-                status_label.set_label(&text);
-                status_label.update_property(&[PropertyLabel(&text)]);
-                progress_bar.set_visible(true);
-                progress_bar.set_fraction(0.0);
-            }
-            ScanProgress {
-                files_found,
-                files_processed,
-                ..
-            } => {
-                let fraction = f64::from(files_processed) / f64::from(files_found.max(1));
-                progress_bar.set_fraction(fraction);
-                let text = format!("Scanning... {files_processed}/{files_found} files");
-                status_label.set_label(&text);
-                status_label.update_property(&[PropertyLabel(&text)]);
-            }
-            ScanCompleted {
-                tracks_added,
-                tracks_skipped,
-                ..
-            } => {
-                let text =
-                    format!("Scan complete: {tracks_added} tracks added, {tracks_skipped} skipped");
-                status_label.set_label(&text);
-                status_label.update_property(&[PropertyLabel(&text)]);
-                progress_bar.set_fraction(1.0);
-                progress_bar.set_visible(false);
-            }
-            ScanError { error, .. } => {
-                let text = format!("Scan error: {error}");
-                status_label.set_label(&text);
-                status_label.update_property(&[PropertyLabel(&text)]);
-                progress_bar.set_visible(false);
-            }
-            _ => {}
+/// Apply a single scan event to the status bar widgets.
+fn handle_scan_event(status_label: &Label, progress_bar: &ProgressBar, event: ScanEvent) {
+    match event {
+        ScanStarted { directory } => {
+            let name = directory.file_name().map_or_else(
+                || directory.display().to_string(),
+                |n| n.to_string_lossy().to_string(),
+            );
+            let text = format!("Scanning \u{201c}{name}\u{201d}...");
+            status_label.set_label(&text);
+            status_label.update_property(&[PropertyLabel(&text)]);
+            progress_bar.set_visible(true);
+            progress_bar.set_fraction(0.0);
         }
+        ScanProgress {
+            files_found,
+            files_processed,
+            ..
+        } => {
+            let fraction = f64::from(files_processed) / f64::from(files_found.max(1));
+            progress_bar.set_fraction(fraction);
+            let text = format!("Scanning... {files_processed}/{files_found} files");
+            status_label.set_label(&text);
+            status_label.update_property(&[PropertyLabel(&text)]);
+        }
+        ScanCompleted {
+            tracks_added,
+            tracks_skipped,
+            ..
+        } => {
+            let text =
+                format!("Scan complete: {tracks_added} tracks added, {tracks_skipped} skipped");
+            status_label.set_label(&text);
+            status_label.update_property(&[PropertyLabel(&text)]);
+            progress_bar.set_fraction(1.0);
+            progress_bar.set_visible(false);
+        }
+        ScanError { error, .. } => {
+            let text = format!("Scan error: {error}");
+            status_label.set_label(&text);
+            status_label.update_property(&[PropertyLabel(&text)]);
+            progress_bar.set_visible(false);
+        }
+        _ => {}
     }
 }
 

@@ -18,7 +18,7 @@ use oxhidifi::playback::{decoder::Decoder, gapless::GaplessTransitioner, write_w
 /// Returns an error if the file cannot be created or written to.
 pub fn write_wav(path: &Path, channels: u16, sample_rate: u32, samples: &[i16]) -> Result<()> {
     let mut f = File::create(path)?;
-    let data_size = u32::try_from(samples.len()).unwrap_or(0) * 2;
+    let data_size = u32::try_from(samples.len()).unwrap_or(0).saturating_mul(2);
     write_wav_header(&mut f, channels, sample_rate, 16, data_size)?;
     for s in samples {
         f.write_all(&s.to_le_bytes())?;

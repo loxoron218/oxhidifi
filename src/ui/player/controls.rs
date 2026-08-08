@@ -293,7 +293,7 @@ fn persist_toggle_output_mode(storage: &Arc<SqliteStorage>, mode: OutputMode) {
 
 /// Tooltip text for the mode toggle button.
 #[must_use]
-pub fn mode_button_tooltip(mode: OutputMode) -> &'static str {
+pub const fn mode_button_tooltip(mode: OutputMode) -> &'static str {
     match mode {
         BitPerfect => {
             "Bit-Perfect mode \u{2014} no software volume scaling, hardware volume via ALSA mixer"

@@ -319,9 +319,11 @@ mod tests {
             entries.len()
         );
         ensure!(
-            entries[0].track_id == track1_id,
-            "expected track_id {track1_id} in queue, got {}",
-            entries[0].track_id
+            entries
+                .first()
+                .is_some_and(|entry| entry.track_id == track1_id),
+            "expected track_id {track1_id} in queue, got {:?}",
+            entries.first().map(|entry| entry.track_id)
         );
 
         storage
@@ -352,7 +354,8 @@ mod tests {
         let dirs = storage.list_library_directories().await?;
         ensure!(dirs.len() == 2, "expected 2 dirs, got {}", dirs.len());
 
-        storage.remove_library_directory(dirs[0].id).await?;
+        let directory = dirs.first().context("expected a library directory")?;
+        storage.remove_library_directory(directory.id).await?;
 
         let dirs = storage.list_library_directories().await?;
         ensure!(dirs.len() == 1, "expected 1 dir, got {}", dirs.len());
@@ -386,9 +389,11 @@ mod tests {
             results.len()
         );
         ensure!(
-            results[0].title == "Bohemian Rhapsody",
-            "unexpected title: {}",
-            results[0].title
+            results
+                .first()
+                .is_some_and(|track| track.title == "Bohemian Rhapsody"),
+            "unexpected title: {:?}",
+            results.first().map(|track| &track.title)
         );
         drop(dir);
         Ok(())

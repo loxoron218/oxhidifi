@@ -45,6 +45,23 @@ use crate::{
     },
 };
 
+/// Data loaded from storage for the artist detail page.
+///
+/// Kept free of widget handles so the fetch future stays `Send`; the widgets
+/// are populated separately via [`apply_artist_detail`].
+struct ArtistDetailData {
+    /// Artist display name.
+    name: String,
+    /// Number of albums in the artist's discography.
+    album_count: i32,
+    /// Albums by this artist, in display order.
+    albums: Vec<Album>,
+    /// Per-album format info keyed by album ID.
+    format_info_map: HashMap<i64, FormatInfo>,
+    /// Per-album tracks keyed by album ID.
+    tracks_by_album: HashMap<i64, Vec<Track>>,
+}
+
 /// Build the artist detail page widget.
 #[must_use]
 pub fn build_artist_detail(
@@ -79,47 +96,43 @@ pub fn build_artist_detail(
 
     let sc = Arc::clone(state);
     spawn_future_local(async move {
-        populate_artist_detail(
-            &sc,
-            artist_id,
-            &name_label,
-            &album_count_label,
-            &albums_container,
-        )
-        .await;
+        if let Some(data) = fetch_artist_detail(&sc, artist_id).await {
+            apply_artist_detail(
+                &name_label,
+                &album_count_label,
+                &albums_container,
+                &sc,
+                data,
+            );
+        }
     });
 
     wrapper.upcast()
 }
 
-/// Load artist data from storage and populate the detail UI.
-async fn populate_artist_detail(
-    state: &Arc<AppState>,
-    artist_id: i64,
-    name_label: &Label,
-    album_count_label: &Label,
-    albums_container: &GtkBox,
-) {
+/// Load artist detail data from storage.
+///
+/// Fetches the artist record, albums, format info, and tracks.  Widget updates
+/// are applied separately via [`apply_artist_detail`], keeping this future
+/// `Send`.
+async fn fetch_artist_detail(state: &Arc<AppState>, artist_id: i64) -> Option<ArtistDetailData> {
     let artist = match state.storage.get_artist(artist_id).await {
         Ok(Some(a)) => a,
         Ok(None) => {
             info!(artist_id, "Artist not found");
-            return;
+            return None;
         }
         Err(e) => {
             warn!(error = %e, artist_id, "Failed to load artist");
-            return;
+            return None;
         }
     };
-
-    name_label.set_label(&artist.name);
-    album_count_label.set_label(&format!("{} albums", artist.album_count));
 
     let albums = match state.storage.get_albums_by_artist(artist_id).await {
         Ok(a) => a,
         Err(e) => {
             warn!(error = %e, artist_id, "Failed to load artist albums");
-            return;
+            return None;
         }
     };
 
@@ -139,9 +152,34 @@ async fn populate_artist_detail(
             .push(track.clone());
     }
 
+    Some(ArtistDetailData {
+        name: artist.name,
+        album_count: artist.album_count,
+        albums,
+        format_info_map,
+        tracks_by_album,
+    })
+}
+
+/// Apply artist detail data to the detail page widgets.
+fn apply_artist_detail(
+    name_label: &Label,
+    album_count_label: &Label,
+    albums_container: &GtkBox,
+    state: &Arc<AppState>,
+    data: ArtistDetailData,
+) {
+    name_label.set_label(&data.name);
+    album_count_label.set_label(&format!("{} albums", data.album_count));
+
+    let mut tracks_by_album = data.tracks_by_album;
     let mut track_lists: Vec<ListBox> = Vec::new();
-    for album in &albums {
-        let fi = format_info_map.get(&album.id).cloned().unwrap_or_default();
+    for album in &data.albums {
+        let fi = data
+            .format_info_map
+            .get(&album.id)
+            .cloned()
+            .unwrap_or_default();
         let tracks = tracks_by_album.remove(&album.id).unwrap_or_default();
         let (section, listbox) = build_album_section(state, album, &fi, tracks);
         track_lists.push(listbox);
@@ -276,7 +314,7 @@ fn build_album_section(
     let mut remaining_tracks: Vec<(Track, usize)> = tracks
         .into_iter()
         .enumerate()
-        .map(|(i, t)| (t, i + 1))
+        .map(|(i, t)| (t, i.saturating_add(1)))
         .collect();
     remaining_tracks.reverse();
 

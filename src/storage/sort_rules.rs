@@ -15,7 +15,7 @@ macro_rules! impl_criteria_helpers {
         impl $ty {
             /// Numeric discriminator used as a compact widget identifier.
             #[must_use]
-            pub fn discriminator(&self) -> u8 {
+            pub const fn discriminator(&self) -> u8 {
                 match self {
                     $(Self::$variant => $disc,)+
                 }
@@ -23,7 +23,7 @@ macro_rules! impl_criteria_helpers {
 
             /// Recover a variant from its numeric discriminator.
             #[must_use]
-            pub fn from_discriminator(d: u8) -> Option<Self> {
+            pub const fn from_discriminator(d: u8) -> Option<Self> {
                 match d {
                     $($disc => Some(Self::$variant),)+
                     _ => None,
@@ -267,8 +267,8 @@ mod tests {
             vec![Name, AlbumCount],
             "default artist sort priority must be name, then album count"
         );
-        assert_eq!(sort[0].order, Ascending);
-        assert_eq!(sort[1].order, Descending);
+        let orders: Vec<_> = sort.iter().map(|item| item.order).collect();
+        assert_eq!(orders, vec![Ascending, Descending]);
     }
 
     #[test]

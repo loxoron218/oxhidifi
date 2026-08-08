@@ -4,7 +4,6 @@
 //! extracting metadata, deduplicating tracks, and persisting results to storage.
 
 use std::{
-    cmp::max,
     collections::HashMap,
     fs::{DirEntry, read_dir},
     path::{Path, PathBuf},
@@ -62,7 +61,7 @@ impl<S: Storage> FsScanner<S> {
         let files = Self::walk_directory_parallel(dir);
         let files_found = u32::try_from(files.len()).unwrap_or(0);
 
-        let chunk_size = max(1, files.len() / max_concurrent);
+        let chunk_size = files.len().checked_div(max_concurrent).unwrap_or(0).max(1);
 
         let extracted: Vec<_> = files
             .par_iter()
@@ -306,13 +305,14 @@ impl<S: Storage> FsScanner<S> {
             return;
         }
 
-        if (idx.is_multiple_of(100) || idx + 1 == total)
+        let next_idx = idx.checked_add(1);
+        if (idx.is_multiple_of(100) || next_idx == Some(total))
             && let Err(e) = self
                 .scan_event_tx
                 .send(ScanProgress {
                     directory: ctx.dir.to_path_buf(),
                     files_found: ctx.files_found,
-                    files_processed: u32::try_from(idx + 1).unwrap_or(0),
+                    files_processed: u32::try_from(next_idx.unwrap_or(0)).unwrap_or(0),
                 })
                 .await
         {
@@ -329,7 +329,7 @@ impl<S: Storage> FsScanner<S> {
             )
             .await
         {
-            Ok(_) => *ctx.tracks_added += 1,
+            Ok(_) => *ctx.tracks_added = ctx.tracks_added.saturating_add(1),
             Err(reason) => Self::handle_skipped(&reason, &path, ctx.tracks_skipped),
         }
     }
@@ -358,7 +358,7 @@ impl<S: Storage> FsScanner<S> {
 
     /// Handle a skipped track by incrementing the counter.
     fn handle_skipped(reason: &SkipReason, path: &Path, tracks_skipped: &mut u64) {
-        *tracks_skipped += 1;
+        *tracks_skipped = tracks_skipped.saturating_add(1);
         info!(
             path = %path.display(),
             skip_reason = ?reason,
@@ -766,17 +766,36 @@ fn utc_now_rfc3339() -> String {
 }
 
 /// Convert days since UNIX epoch to (year, month, day).
-fn days_to_ymd(days: u64) -> (u64, u64, u64) {
-    let z = days + 719_468;
+///
+/// `days` is bounded by wall-clock time (`secs / 86_400`, ~2×10⁴ today), so no
+/// intermediate in the Hinnant algorithm can overflow for any reachable input;
+/// the `wrapping_*` arithmetic is deliberate to avoid debug/release divergence.
+const fn days_to_ymd(days: u64) -> (u64, u64, u64) {
+    let z = days.wrapping_add(719_468);
     let era = z / 146_097;
-    let doe = z - era * 146_097;
-    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-    let y = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y = if m <= 2 { y + 1 } else { y };
+    let doe = z.wrapping_sub(era.wrapping_mul(146_097));
+    let yoe = (doe
+        .wrapping_sub(doe / 1460)
+        .wrapping_add(doe / 36_524)
+        .wrapping_sub(doe / 146_096))
+        / 365;
+    let y = yoe.wrapping_add(era.wrapping_mul(400));
+    let doy = doe.wrapping_sub(
+        365_u64
+            .wrapping_mul(yoe)
+            .wrapping_add(yoe / 4)
+            .wrapping_sub(yoe / 100),
+    );
+    let mp = (5_u64.wrapping_mul(doy).wrapping_add(2)) / 153;
+    let d = doy
+        .wrapping_sub((153_u64.wrapping_mul(mp).wrapping_add(2)) / 5)
+        .wrapping_add(1);
+    let m = if mp < 10 {
+        mp.wrapping_add(3)
+    } else {
+        mp.wrapping_sub(9)
+    };
+    let y = if m <= 2 { y.wrapping_add(1) } else { y };
     (y, m, d)
 }
 

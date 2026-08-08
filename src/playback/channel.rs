@@ -7,14 +7,22 @@ use crate::playback::decoder::DecodedSamples;
 /// Downmix interleaved frames from `src_channels` to fewer `dst_channels`
 /// by averaging channel groups.
 fn downsample_frames(samples: &[f32], src_channels: usize, dst_channels: usize) -> Vec<f32> {
-    let frames = samples.len() / src_channels;
-    let mut out = Vec::with_capacity(frames * dst_channels);
+    let frames = samples.len().checked_div(src_channels).unwrap_or(0);
+    let mut out = Vec::with_capacity(frames.saturating_mul(dst_channels));
     for frame in samples.chunks_exact(src_channels) {
         for out_ch in 0..dst_channels {
-            let start_ch = (out_ch * src_channels) / dst_channels;
-            let end_ch = ((out_ch + 1) * src_channels) / dst_channels;
-            let count = u8::try_from(end_ch - start_ch).unwrap_or(1);
-            out.push(frame[start_ch..end_ch].iter().sum::<f32>() / f32::from(count));
+            let start_ch = out_ch
+                .saturating_mul(src_channels)
+                .checked_div(dst_channels)
+                .unwrap_or(0);
+            let end_ch = out_ch
+                .saturating_add(1)
+                .saturating_mul(src_channels)
+                .checked_div(dst_channels)
+                .unwrap_or(0);
+            let group_len = end_ch.saturating_sub(start_ch);
+            let count = u8::try_from(group_len).unwrap_or(1);
+            out.push(frame.iter().skip(start_ch).take(group_len).sum::<f32>() / f32::from(count));
         }
     }
     out
@@ -23,9 +31,9 @@ fn downsample_frames(samples: &[f32], src_channels: usize, dst_channels: usize) 
 /// Upmix interleaved frames from `src_channels` to more `dst_channels` by
 /// padding extra channels with silence.
 fn upsample_frames(samples: &[f32], src_channels: usize, dst_channels: usize) -> Vec<f32> {
-    let pad = dst_channels - src_channels;
-    let frames = samples.len() / src_channels;
-    let mut out = Vec::with_capacity(frames * dst_channels);
+    let pad = dst_channels.saturating_sub(src_channels);
+    let frames = samples.len().checked_div(src_channels).unwrap_or(0);
+    let mut out = Vec::with_capacity(frames.saturating_mul(dst_channels));
     for frame in samples.chunks_exact(src_channels) {
         out.extend_from_slice(frame);
         out.extend(repeat_n(0.0, pad));
@@ -66,8 +74,18 @@ mod tests {
         decoder::{AudioParams, DecodedSamples},
     };
 
-    fn assert_approx_eq(a: f32, b: f32) {
-        assert!((a - b).abs() < f32::EPSILON, "{a} != {b}");
+    fn assert_samples_close(actual: &[f32], expected: &[f32], tolerance: f32) {
+        assert_eq!(
+            actual.len(),
+            expected.len(),
+            "length mismatch: {actual:?} != {expected:?}"
+        );
+        for (a, b) in actual.iter().zip(expected) {
+            assert!(
+                (a - b).abs() < tolerance,
+                "{a} != {b} (tolerance {tolerance})"
+            );
+        }
     }
 
     #[test]
@@ -98,33 +116,28 @@ mod tests {
     fn downmix_downmix_stereo_to_mono_averages() {
         let samples = vec![0.8, 0.2, -0.6, -0.4];
         let result = downmix(&samples, 2, 1);
-        assert_approx_eq(result[0], 0.5);
-        assert_approx_eq(result[1], -0.5);
+        assert_samples_close(&result, &[0.5, -0.5], f32::EPSILON);
     }
 
     #[test]
     fn downmix_downmix_51_to_stereo_averages_groups() {
         let samples = vec![1.0, 0.5, 0.0, 0.0, -1.0, -0.5];
         let result = downmix(&samples, 6, 2);
-        assert_approx_eq(result[0], 0.5);
-        assert_approx_eq(result[1], -0.5);
+        assert_samples_close(&result, &[0.5, -0.5], f32::EPSILON);
     }
 
     #[test]
     fn downmix_downmix_7ch_to_3ch_distributes_evenly() {
         let samples = vec![1.0, 2.0, 10.0, 20.0, 100.0, 200.0, 0.5];
         let result = downmix(&samples, 7, 3);
-        assert_approx_eq(result[0], 1.5);
-        assert_approx_eq(result[1], 15.0);
-        assert!((result[2] - 100.166_67).abs() < 0.001);
+        assert_samples_close(&result, &[1.5, 15.0, 100.166_67], 0.001);
     }
 
     #[test]
     fn downmix_downmix_5ch_to_2ch_uneven_groups() {
         let samples = vec![1.0, 2.0, 3.0, 4.0, 5.0];
         let result = downmix(&samples, 5, 2);
-        assert_approx_eq(result[0], 1.5);
-        assert_approx_eq(result[1], 4.0);
+        assert_samples_close(&result, &[1.5, 4.0], f32::EPSILON);
     }
 
     #[test]
@@ -153,7 +166,7 @@ mod tests {
         };
         let result = maybe_downmix(batch, 2, 1);
         assert_eq!(result.len(), 1);
-        assert!((result[0] - 0.5).abs() < f32::EPSILON);
+        assert_samples_close(&result, &[0.5], f32::EPSILON);
     }
 
     #[test]
@@ -161,10 +174,7 @@ mod tests {
         let samples = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
         let result = downmix(&samples, 4, 2);
         assert_eq!(result.len(), 4);
-        assert!((result[0] - 1.5).abs() < f32::EPSILON);
-        assert!((result[1] - 3.5).abs() < f32::EPSILON);
-        assert!((result[2] - 5.5).abs() < f32::EPSILON);
-        assert!((result[3] - 7.5).abs() < f32::EPSILON);
+        assert_samples_close(&result, &[1.5, 3.5, 5.5, 7.5], f32::EPSILON);
     }
 
     #[test]

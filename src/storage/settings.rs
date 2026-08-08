@@ -18,7 +18,7 @@ use crate::{
 };
 
 /// Active tab in the library view.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ActiveTab {
     /// Albums tab.
     Albums,
@@ -95,19 +95,19 @@ impl SettingsStore {
 
     /// Get a reference to the current settings.
     #[must_use]
-    pub fn get(&self) -> &UserSettings {
+    pub const fn get(&self) -> &UserSettings {
         &self.settings
     }
 
     /// Get whether gapless playback is enabled.
     #[must_use]
-    pub fn get_gapless_enabled(&self) -> bool {
+    pub const fn get_gapless_enabled(&self) -> bool {
         self.settings.gapless_enabled
     }
 
     /// Get whether album labels are shown under cover art.
     #[must_use]
-    pub fn get_show_album_labels(&self) -> bool {
+    pub const fn get_show_album_labels(&self) -> bool {
         self.settings.show_album_labels
     }
 
@@ -119,19 +119,19 @@ impl SettingsStore {
 
     /// Get the active tab preference.
     #[must_use]
-    pub fn get_active_tab(&self) -> ActiveTab {
+    pub const fn get_active_tab(&self) -> ActiveTab {
         self.settings.active_tab
     }
 
     /// Get the volume level.
     #[must_use]
-    pub fn get_volume(&self) -> f64 {
+    pub const fn get_volume(&self) -> f64 {
         self.settings.volume
     }
 
     /// Get the output mode.
     #[must_use]
-    pub fn get_output_mode(&self) -> OutputMode {
+    pub const fn get_output_mode(&self) -> OutputMode {
         self.settings.output_mode
     }
 
@@ -155,7 +155,7 @@ impl SettingsStore {
 }
 
 /// User-facing view mode preference.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ViewMode {
     /// Grid layout.
     Grid,

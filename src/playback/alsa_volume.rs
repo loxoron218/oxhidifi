@@ -69,9 +69,10 @@ impl AlsaVolumeControl {
             .mixer
             .find_selem(&self.selem_id)
             .ok_or_else(|| "Mixer element not found".to_string())?;
-        let range: i32 = (self.max_volume - self.min_volume).try_into().unwrap_or(0);
+        let range: i32 =
+            i32::try_from(self.max_volume.saturating_sub(self.min_volume)).unwrap_or(0);
         let offset = FromPrimitive::from_f64((volume * f64::from(range)).round()).unwrap_or(0);
-        let value = self.min_volume + offset;
+        let value = self.min_volume.saturating_add(i64::from(offset));
         selem
             .set_playback_volume_all(value)
             .map_err(|e| format!("Failed to set ALSA volume: {e}"))?;

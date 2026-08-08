@@ -125,7 +125,7 @@ pub fn build_cover_column(
     ColumnViewColumn::builder()
         .title("Cover")
         .factory(&factory)
-        .fixed_width(cover_size + 12)
+        .fixed_width(cover_size.saturating_add(12))
         .resizable(false)
         .build()
 }
@@ -149,7 +149,8 @@ fn apply_cover_to_widgets(
     let texture = raw_to_texture(decoded);
     cover_cache.insert(album_id, size, texture.clone());
 
-    if let Some(waiters) = pending_widgets.lock().remove(&album_id) {
+    let waiters = pending_widgets.lock().remove(&album_id);
+    if let Some(waiters) = waiters {
         for weak in waiters {
             weak.upgrade()
                 .inspect(|pic| pic.set_paintable(Some(&texture)));
@@ -157,10 +158,10 @@ fn apply_cover_to_widgets(
     }
 }
 
-/// Send decode requests for a list of album cover paths to the centralized
-/// cover decoder.  Results are processed on the main thread via
-/// [`idle_add_local`] where they are inserted into the cache and applied
-/// to any waiting `Picture` widgets.
+/// Send decode requests for album cover paths to the centralized decoder.
+///
+/// Results are processed on the main thread via [`idle_add_local`], inserted
+/// into the cache, and applied to any waiting `Picture` widgets.
 ///
 /// Each idle pass drains at most [`GRID_BATCH_SIZE`] results so a decode
 /// wave cannot monopolize a single main-thread iteration.
@@ -203,7 +204,7 @@ fn drain_cover_batch(
                     cover_cache,
                     pending_widgets,
                 );
-                processed += 1;
+                processed = processed.saturating_add(1);
             }
             Err(Closed) => return Break,
             Err(Empty) => return Continue,

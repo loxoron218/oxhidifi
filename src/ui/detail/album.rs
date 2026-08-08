@@ -25,7 +25,10 @@ use {
 
 use crate::{
     app::{AppState, NavigationEvent},
-    storage::{Storage, records::Track},
+    storage::{
+        Storage,
+        records::{Album, Track},
+    },
     ui::{
         ArtworkDecodeRequest, DecodedCover,
         detail::{
@@ -36,6 +39,23 @@ use crate::{
         raw_to_texture,
     },
 };
+
+/// Data loaded from storage for the album detail page.
+///
+/// Kept free of widget handles so the fetch future stays `Send`; the widgets
+/// are populated separately via [`apply_album_detail`].
+struct AlbumDetailData {
+    /// The album record.
+    album: Album,
+    /// Resolved artist display name.
+    artist_name: String,
+    /// Detailed format summary text for the album.
+    format_summary: String,
+    /// Tracks belonging to the album, in display order.
+    tracks: Vec<Track>,
+    /// Receiver for the decoded cover artwork, if the album has embedded art.
+    cover_rx: Option<Receiver<DecodedCover>>,
+}
 
 /// Build the album detail page widget.
 #[must_use]
@@ -84,21 +104,22 @@ pub fn build_album_detail(
 
     let sc = Arc::clone(state);
     spawn_future_local(async move {
-        populate_album_detail(
-            &sc,
-            album_id,
-            AlbumDetailWidgets {
-                artwork: &content.artwork,
-                title_label: &content.title_label,
-                artist_label: &content.artist_label,
-                year_label: &content.year_label,
-                genre_label: &content.genre_label,
-                tracks_label: &content.tracks_label,
-                format_label: &content.format_label,
-                track_list: &content.track_list,
-            },
-        )
-        .await;
+        if let Some(data) = fetch_album_detail(&sc, album_id).await {
+            apply_album_detail(
+                &AlbumDetailWidgets {
+                    artwork: &content.artwork,
+                    title_label: &content.title_label,
+                    artist_label: &content.artist_label,
+                    year_label: &content.year_label,
+                    genre_label: &content.genre_label,
+                    tracks_label: &content.tracks_label,
+                    format_label: &content.format_label,
+                    track_list: &content.track_list,
+                },
+                &sc,
+                data,
+            );
+        }
     });
 
     wrapper.upcast()
@@ -125,25 +146,25 @@ fn try_send_cover(tx: &Sender<DecodedCover>, decoded: Option<DecodedCover>) {
     }
 }
 
-/// Load album data from storage and populate the detail UI elements.
-async fn populate_album_detail(
-    state: &Arc<AppState>,
-    album_id: i64,
-    widgets: AlbumDetailWidgets<'_>,
-) {
+/// Load album detail data from storage.
+///
+/// Fetches the album record, artist name, format summary, and tracks, and
+/// issues an artwork decode request.  Widget updates are applied separately
+/// via [`apply_album_detail`], keeping this future `Send`.
+async fn fetch_album_detail(state: &Arc<AppState>, album_id: i64) -> Option<AlbumDetailData> {
     let album = match state.storage.get_album(album_id).await {
         Ok(Some(a)) => a,
         Ok(None) => {
             info!(album_id, "Album not found");
-            return;
+            return None;
         }
         Err(e) => {
             warn!(error = %e, album_id, "Failed to load album");
-            return;
+            return None;
         }
     };
 
-    if let Some(path) = &album.artwork_path {
+    let cover_rx = album.artwork_path.as_ref().map(|path| {
         let path = path.clone();
         let (tx, rx) = unbounded::<DecodedCover>();
 
@@ -154,26 +175,60 @@ async fn populate_album_detail(
             on_complete: Box::new(move |_, decoded| try_send_cover(&tx, decoded)),
         });
 
-        let artwork = widgets.artwork.clone();
-        idle_add_local(move || poll_artwork(&rx, &artwork));
-    }
-
-    widgets.title_label.set_label(&album.title);
+        rx
+    });
 
     let artist_name = match state.storage.get_artist(album.artist_id).await {
         Ok(Some(a)) => a.name,
         _ => "Unknown Artist".to_string(),
     };
-    widgets.artist_label.set_label(&artist_name);
 
-    if let Some(year) = album.year {
+    let format_summary = state
+        .storage
+        .get_album_format_info(album_id)
+        .await
+        .unwrap_or_default()
+        .summary_detailed();
+
+    let tracks = match state.storage.get_tracks_by_album(album_id).await {
+        Ok(t) => t,
+        Err(e) => {
+            warn!(error = %e, album_id, "Failed to load album tracks");
+            return None;
+        }
+    };
+
+    Some(AlbumDetailData {
+        album,
+        artist_name,
+        format_summary,
+        tracks,
+        cover_rx,
+    })
+}
+
+/// Apply album detail data to the detail page widgets.
+fn apply_album_detail(
+    widgets: &AlbumDetailWidgets<'_>,
+    state: &Arc<AppState>,
+    data: AlbumDetailData,
+) {
+    if let Some(rx) = data.cover_rx {
+        let artwork = widgets.artwork.clone();
+        idle_add_local(move || poll_artwork(&rx, &artwork));
+    }
+
+    widgets.title_label.set_label(&data.album.title);
+    widgets.artist_label.set_label(&data.artist_name);
+
+    if let Some(year) = data.album.year {
         widgets.year_label.set_label(&year.to_string());
         widgets.year_label.set_visible(true);
     } else {
         widgets.year_label.set_visible(false);
     }
 
-    if let Some(genre) = &album.genre {
+    if let Some(genre) = &data.album.genre {
         widgets.genre_label.set_label(genre);
         widgets.genre_label.set_visible(true);
     } else {
@@ -182,8 +237,8 @@ async fn populate_album_detail(
 
     widgets.tracks_label.set_label(&format!(
         "{} {}",
-        album.track_count,
-        if album.track_count == 1 {
+        data.album.track_count,
+        if data.album.track_count == 1 {
             "track"
         } else {
             "tracks"
@@ -191,32 +246,19 @@ async fn populate_album_detail(
     ));
     widgets.tracks_label.set_visible(true);
 
-    let format_info = state
-        .storage
-        .get_album_format_info(album_id)
-        .await
-        .unwrap_or_default();
-    let summary = format_info.summary_detailed();
-    if summary.is_empty() {
+    if data.format_summary.is_empty() {
         widgets.format_label.set_visible(false);
     } else {
-        widgets.format_label.set_label(&summary);
+        widgets.format_label.set_label(&data.format_summary);
         widgets.format_label.set_visible(true);
     }
 
-    let tracks = match state.storage.get_tracks_by_album(album_id).await {
-        Ok(t) => t,
-        Err(e) => {
-            warn!(error = %e, album_id, "Failed to load album tracks");
-            return;
-        }
-    };
-
     let track_list = widgets.track_list.clone();
-    let mut remaining: Vec<(Track, usize)> = tracks
+    let mut remaining: Vec<(Track, usize)> = data
+        .tracks
         .into_iter()
         .enumerate()
-        .map(|(i, t)| (t, i + 1))
+        .map(|(i, t)| (t, i.saturating_add(1)))
         .collect::<Vec<_>>();
     remaining.reverse();
 

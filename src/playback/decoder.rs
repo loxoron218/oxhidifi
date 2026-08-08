@@ -162,7 +162,7 @@ impl Decoder {
     }
 
     /// Return an empty sample batch with the current audio params.
-    fn empty_samples(&self) -> DecodedSamples {
+    const fn empty_samples(&self) -> DecodedSamples {
         DecodedSamples {
             samples: Vec::new(),
             params: self.params,
@@ -202,7 +202,7 @@ impl Decoder {
 
     /// Returns the audio parameters of the decoded stream.
     #[must_use]
-    pub fn params(&self) -> AudioParams {
+    pub const fn params(&self) -> AudioParams {
         self.params
     }
 
@@ -266,7 +266,7 @@ pub struct DualDecoder {
 impl DualDecoder {
     /// Create a new dual-decoder with no active or pre-loaded decoders.
     #[must_use]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             active: None,
             preloaded: None,
@@ -342,19 +342,19 @@ impl DualDecoder {
 
     /// Returns `true` if a pre-loaded decoder is ready.
     #[must_use]
-    pub fn has_preloaded(&self) -> bool {
+    pub const fn has_preloaded(&self) -> bool {
         self.preloaded.is_some()
     }
 
     /// Returns the ID of the pre-loaded track, if any.
     #[must_use]
-    pub fn preloaded_track_id(&self) -> Option<i64> {
+    pub const fn preloaded_track_id(&self) -> Option<i64> {
         self.preloaded_track_id
     }
 
     /// Returns `true` if the active decoder is present.
     #[must_use]
-    pub fn is_active(&self) -> bool {
+    pub const fn is_active(&self) -> bool {
         self.active.is_some()
     }
 

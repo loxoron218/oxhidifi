@@ -509,11 +509,45 @@ fn spawn_signal_handlers(quit_tx: Sender<()>) {
 /// Dispatch an application-quit request on the `GLib` main thread.
 ///
 /// `Application` is not `Send`, so the signal task cannot call [`Application::quit`]
-/// directly; instead it sends on the channel this future awaits.
-async fn dispatch_quit_on_main(app: Application, quit_rx: Receiver<()>) {
-    if quit_rx.recv().await.is_ok() {
-        app.quit();
-    }
+/// directly; instead it sends on the channel this future awaits.  Spawns a
+/// local future on the `GLib` main context so the app object is only ever
+/// touched on the main thread.
+fn dispatch_quit_on_main(app: Application, quit_rx: Receiver<()>) {
+    spawn_future_local(async move {
+        if quit_rx.recv().await.is_ok() {
+            app.quit();
+        }
+    });
+}
+
+/// Build, configure, and run the Libadwaita application to completion.
+///
+/// Kept separate from [`run_application`] so the non-`Send` [`Application`]
+/// handle never enters the async future's captured state.
+fn run_gtk_application(state: &Arc<AppState>) {
+    let app = Application::builder().application_id(APP_ID).build();
+
+    let (quit_tx, quit_rx) = unbounded();
+
+    let startup_state = Arc::clone(state);
+    app.connect_activate(move |app| {
+        build_window(app, &startup_state).present();
+        spawn_future_local(run_startup_checks());
+
+        let quit_app = app.clone();
+        let quit_rx = quit_rx.clone();
+        dispatch_quit_on_main(quit_app, quit_rx);
+
+        let ss = Arc::clone(&startup_state);
+        idle_add_local(move || {
+            emit_session_events(&ss);
+            Break
+        });
+    });
+
+    info!("Starting application");
+    spawn_signal_handlers(quit_tx);
+    app.run();
 }
 
 /// Build and run the Libadwaita application.
@@ -611,29 +645,9 @@ pub async fn run_application() -> Result<()> {
         Arc::clone(&thread_manager),
     ));
 
-    let app = Application::builder().application_id(APP_ID).build();
-
-    let (quit_tx, quit_rx) = unbounded();
-
-    let startup_state = Arc::clone(&state);
-    app.connect_activate(move |app| {
-        build_window(app, &startup_state).present();
-        spawn_future_local(run_startup_checks());
-
-        let quit_app = app.clone();
-        let quit_rx = quit_rx.clone();
-        spawn_future_local(dispatch_quit_on_main(quit_app, quit_rx));
-
-        let ss = Arc::clone(&startup_state);
-        idle_add_local(move || {
-            emit_session_events(&ss);
-            Break
-        });
-    });
-
-    info!("Starting application");
-    spawn_signal_handlers(quit_tx);
-    app.run();
+    {
+        run_gtk_application(&state);
+    }
 
     let shutdown_state = Arc::clone(&state);
     if let Err(e) = spawn_blocking(move || persist_session_on_shutdown(&shutdown_state)).await {
@@ -885,7 +899,7 @@ mod tests {
             .try_send(())
             .context("Failed to send quit request")?;
 
-        dispatch_quit_on_main(app.clone(), quit_rx).await;
+        dispatch_quit_on_main(app.clone(), quit_rx);
 
         ensure!(
             app.run() == ExitCode::new(1),

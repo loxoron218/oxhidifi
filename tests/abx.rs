@@ -65,19 +65,19 @@ fn binomial_probability(k: u32, n: u32, p: f64) -> f64 {
         return 0.0;
     }
     let combinations = binomial_coefficient(n, k);
-    combinations * p.powi(k.cast_signed()) * (1.0 - p).powi((n - k).cast_signed())
+    combinations * p.powi(k.cast_signed()) * (1.0 - p).powi(n.saturating_sub(k).cast_signed())
 }
 
 /// Compute binomial coefficient C(n, k) using an iterative method to
 /// avoid overflow.
 fn binomial_coefficient(n: u32, k: u32) -> f64 {
-    let k = k.min(n - k);
+    let k = k.min(n.saturating_sub(k));
     if k == 0 {
         return 1.0;
     }
     let mut result = 1.0_f64;
     for i in 1..=k {
-        result = result * f64::from(n - k + i) / f64::from(i);
+        result = result * f64::from(n.saturating_sub(k).saturating_add(i)) / f64::from(i);
     }
     result
 }
@@ -129,7 +129,13 @@ pub fn run_abx_trial(
     }
 
     let min_len = reference.len().min(buffered.len());
-    let snr_db = compute_snr_db(&reference[..min_len], &buffered[..min_len]);
+    let Some(reference) = reference.get(..min_len) else {
+        bail!("failed to truncate reference to {min_len} samples");
+    };
+    let Some(buffered) = buffered.get(..min_len) else {
+        bail!("failed to truncate buffered to {min_len} samples");
+    };
+    let snr_db = compute_snr_db(reference, buffered);
 
     Ok(AbxTrial {
         stimulus,

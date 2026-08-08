@@ -20,7 +20,7 @@ pub struct FormatInfo {
 impl FormatInfo {
     /// Whether all tracks share the same format properties.
     #[must_use]
-    pub fn is_uniform(&self) -> bool {
+    pub const fn is_uniform(&self) -> bool {
         self.formats.len() <= 1 && self.sample_rates.len() <= 1 && self.bit_depths.len() <= 1
     }
 

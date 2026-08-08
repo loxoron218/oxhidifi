@@ -3,7 +3,10 @@
 //! Provides empty state components and the generic grid builder
 //! used by the album and artist grid views.
 
-use std::sync::{Arc, atomic::Ordering::Relaxed};
+use std::{
+    path::PathBuf,
+    sync::{Arc, atomic::Ordering::Relaxed},
+};
 
 use {
     libadwaita::{
@@ -22,9 +25,9 @@ use {
 
 use crate::{
     app::AppState,
-    library::scanner::LibraryScanner,
-    storage::{Storage, settings::ViewMode},
-    ui::library::narrow_state::NarrowState,
+    library::scanner::{FsScanner, LibraryScanner},
+    storage::{Storage, database::SqliteStorage, settings::ViewMode},
+    ui::{library::narrow_state::NarrowState, signal::ValueSignal},
 };
 
 /// Parameters for building an empty state view.
@@ -97,10 +100,11 @@ pub fn build_empty_state(state: &Arc<AppState>, params: &EmptyStateParams) -> Bo
     container
 }
 
-/// Build a library grid view that pre-builds both grid (`FlowBox`) and column
-/// (`ColumnView`) layouts inside a `Stack`.  The parent orchestrator toggles
-/// the stack's visible child on view‑mode change — no data re‑fetch or widget
-/// reconstruction.
+/// Build a library grid view that pre-builds both the grid (`FlowBox`) and
+/// column (`ColumnView`) layouts inside a `Stack`.
+///
+/// The parent orchestrator toggles the stack's visible child on view‑mode
+/// change — no data re‑fetch or widget reconstruction.
 ///
 /// Calls `setup_fn` asynchronously to populate the stack.
 /// The `setup_fn` is responsible for:
@@ -227,9 +231,7 @@ pub fn build_add_folder_button(state: &Arc<AppState>) -> Button {
     add_folder_button.connect_clicked(move |btn| {
         let state = Arc::clone(&state_clone);
         let parent = parent_window(btn);
-        spawn_future_local(async move {
-            add_music_folder(&state, parent.as_ref()).await;
-        });
+        add_music_folder(state, parent);
     });
 
     add_folder_button
@@ -249,44 +251,55 @@ fn parent_window(btn: &Button) -> Option<Window> {
 
 /// Open a file chooser dialog to add a music folder.
 ///
-/// Adds the directory to storage and spawns a background scan.
-async fn add_music_folder(state: &AppState, parent: Option<&Window>) {
-    let dialog = FileDialog::builder()
-        .title("Select Music Folder")
-        .accept_label("Add Folder")
-        .build();
+/// Adds the directory to storage and spawns a background scan.  Runs on the
+/// `GLib` main context via a local future so the dialog and widgets are only
+/// touched on the main thread.
+fn add_music_folder(state: Arc<AppState>, parent: Option<Window>) {
+    spawn_future_local(async move {
+        let dialog = FileDialog::builder()
+            .title("Select Music Folder")
+            .accept_label("Add Folder")
+            .build();
 
-    let folder = match dialog.select_folder_future(parent).await {
-        Ok(folder) => folder,
-        Err(e) => {
-            warn!(error = %e, "File chooser cancelled or failed");
+        let folder = match dialog.select_folder_future(parent.as_ref()).await {
+            Ok(folder) => folder,
+            Err(e) => {
+                warn!(error = %e, "File chooser cancelled or failed");
+                return;
+            }
+        };
+
+        let Some(path) = folder.path() else {
+            info!("No folder path selected");
+            return;
+        };
+
+        if let Err(e) = state.storage.add_library_directory(&path).await {
+            warn!(error = %e, path = %path.display(), "Failed to add library directory");
             return;
         }
-    };
 
-    let Some(path) = folder.path() else {
-        info!("No folder path selected");
-        return;
-    };
+        info!(path = %path.display(), "Added library directory, spawning background scan");
 
-    if let Err(e) = state.storage.add_library_directory(&path).await {
-        warn!(error = %e, path = %path.display(), "Failed to add library directory");
+        let scanner = Arc::clone(&state.scanner);
+        let scan_path = path.clone();
+        let refresh = state.refresh.clone();
+        spawn(scan_directory_and_refresh(scanner, scan_path, refresh));
+    });
+}
+
+/// Scan a library directory in the background and publish a library refresh.
+async fn scan_directory_and_refresh(
+    scanner: Arc<FsScanner<SqliteStorage>>,
+    path: PathBuf,
+    refresh: ValueSignal<()>,
+) {
+    if let Err(e) = scanner.scan_directory(&path).await {
+        warn!(error = %e, path = %path.display(), "Failed to scan directory");
         return;
     }
-
-    info!(path = %path.display(), "Added library directory, spawning background scan");
-
-    let scanner = Arc::clone(&state.scanner);
-    let scan_path = path.clone();
-    let refresh = state.refresh.clone();
-    spawn(async move {
-        if let Err(e) = scanner.scan_directory(&scan_path).await {
-            warn!(error = %e, path = %scan_path.display(), "Failed to scan directory");
-            return;
-        }
-        info!(path = %scan_path.display(), "Scan completed");
-        refresh.publish();
-    });
+    info!(path = %path.display(), "Scan completed");
+    refresh.publish();
 }
 
 #[cfg(test)]

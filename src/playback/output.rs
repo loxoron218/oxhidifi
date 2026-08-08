@@ -231,25 +231,25 @@ impl AudioOutput {
 
     /// Returns the stream sample rate.
     #[must_use]
-    pub fn sample_rate(&self) -> u32 {
+    pub const fn sample_rate(&self) -> u32 {
         self.config.sample_rate
     }
 
     /// Returns the number of output channels.
     #[must_use]
-    pub fn channels(&self) -> u16 {
+    pub const fn channels(&self) -> u16 {
         self.config.channels
     }
 
     /// Returns the sample format of the output stream.
     #[must_use]
-    pub fn sample_format(&self) -> SampleFormat {
+    pub const fn sample_format(&self) -> SampleFormat {
         self.sample_format
     }
 
     /// Returns the current output mode.
     #[must_use]
-    pub fn mode(&self) -> OutputMode {
+    pub const fn mode(&self) -> OutputMode {
         self.mode
     }
 
@@ -318,7 +318,7 @@ impl AudioOutput {
     /// Returns `true` if the device's native config matches the requested
     /// parameters.
     #[must_use]
-    pub fn supports_native(&self, sample_rate: u32, _: u16) -> bool {
+    pub const fn supports_native(&self, sample_rate: u32, _: u16) -> bool {
         self.config.sample_rate == sample_rate
     }
 
@@ -326,7 +326,7 @@ impl AudioOutput {
     ///
     /// Returns `true` if the device supports the given sample rate natively.
     #[must_use]
-    pub fn supports_sample_rate(&self, sample_rate: u32) -> bool {
+    pub const fn supports_sample_rate(&self, sample_rate: u32) -> bool {
         sample_rate == self.config.sample_rate
     }
 

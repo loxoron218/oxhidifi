@@ -78,10 +78,16 @@ fn cmp_artists(a: &Artist, b: &Artist, item: &ArtistSortItem) -> Ordering {
 fn sorted_artist_indices(artists: &[Artist], sort_items: &[ArtistSortItem]) -> Vec<usize> {
     let mut indices: Vec<usize> = (0..artists.len()).collect();
     indices.sort_unstable_by(|&a, &b| {
+        let Some(a_artist) = artists.get(a) else {
+            return Equal;
+        };
+        let Some(b_artist) = artists.get(b) else {
+            return Equal;
+        };
         sort_items
             .iter()
             .find_map(|item| {
-                let cmp = cmp_artists(&artists[a], &artists[b], item);
+                let cmp = cmp_artists(a_artist, b_artist, item);
                 (cmp != Equal).then_some(cmp)
             })
             .unwrap_or(Equal)
@@ -117,10 +123,7 @@ pub fn build_artist_grid(state: &Arc<AppState>, narrow_state: &Arc<NarrowState>)
     let nm = Arc::clone(narrow_state);
     let populate =
         |stack: &Stack, state: Arc<AppState>, _: Arc<NarrowState>, initial_mode: ViewMode| {
-            let sc = stack.clone();
-            spawn_future_local(async move {
-                lazy_build_artist_mode(&state, &sc, initial_mode).await;
-            });
+            lazy_build_artist_mode(&state, stack, initial_mode);
         };
     let lg = build_library_grid(state, &nm, populate);
 
@@ -140,8 +143,8 @@ pub fn build_artist_grid(state: &Arc<AppState>, narrow_state: &Arc<NarrowState>)
                 resize_artist_grid(&preview_state, &preview_stack);
             }
         },
-        async move |sort_fired, zoom_fired| {
-            rebuild_artist_current_mode(&grid_state, &grid_stack, sort_fired, zoom_fired).await;
+        move |sort_fired, zoom_fired| {
+            rebuild_artist_current_mode(&grid_state, &grid_stack, sort_fired, zoom_fired);
         },
     );
 
@@ -154,7 +157,7 @@ pub fn build_artist_grid(state: &Arc<AppState>, narrow_state: &Arc<NarrowState>)
 /// scroll position preserved). Sort changes — or any state that invalidates
 /// the current cards — fall back to a full rebuild from the in-memory cache.
 /// When the tab is hidden, marks the grid dirty so it is rebuilt on switch.
-async fn rebuild_artist_current_mode(
+fn rebuild_artist_current_mode(
     state: &Arc<AppState>,
     mode_stack: &Stack,
     sort_fired: bool,
@@ -183,7 +186,7 @@ async fn rebuild_artist_current_mode(
         clear_mode_children(mode_stack);
     }
     state.artist_grid.dirty.store(false, Relaxed);
-    lazy_build_artist_mode(state, mode_stack, mode).await;
+    lazy_build_artist_mode(state, mode_stack, mode);
 }
 
 /// Resize the live artist grid's cards to the current zoom level in place.
@@ -228,7 +231,10 @@ fn fill_artist_grid(
         state,
         remaining,
         |idx, size| {
-            let (card, overlay) = build_artist_card(state, &cached.artists[idx], size);
+            let Some(artist) = cached.artists.get(idx) else {
+                return;
+            };
+            let (card, overlay) = build_artist_card(state, artist, size);
             overlays.push(overlay);
             flow.append(&card.upcast::<Widget>());
         },
@@ -272,7 +278,10 @@ fn build_artist_mode(
             grid_container.append(&flow);
             add_scrolled(stack, &grid_container, "grid");
 
-            let artist_ids: Vec<i64> = indices.iter().map(|&i| cached.artists[i].id).collect();
+            let artist_ids: Vec<i64> = indices
+                .iter()
+                .filter_map(|&i| cached.artists.get(i).map(|artist| artist.id))
+                .collect();
             setup_flowbox_keyboard_nav(&flow, state, artist_ids, ArtistDetail);
 
             let cached_owned = CachedArtistData {
@@ -329,8 +338,10 @@ fn show_artists_empty(state: &Arc<AppState>, stack: &Stack) {
 ///
 /// Re‑fetches data from storage, builds the requested `mode` widget,
 /// adds it to `stack`, and switches to it.  No‑op if the child already
-/// exists (race‑guard).
-pub async fn lazy_build_artist_mode(state: &Arc<AppState>, stack: &Stack, mode: ViewMode) {
+/// exists (race‑guard).  The synchronous front half runs the race‑guard
+/// and cached‑build checks; the storage re‑fetch and widget construction
+/// run in a local future on the `GLib` main context.
+pub fn lazy_build_artist_mode(state: &Arc<AppState>, stack: &Stack, mode: ViewMode) {
     let child_name = match mode {
         Grid => "grid",
         Column => "column",
@@ -354,41 +365,45 @@ pub async fn lazy_build_artist_mode(state: &Arc<AppState>, stack: &Stack, mode: 
         return;
     }
 
-    let my_gen = state.artist_grid.generation.load(Relaxed);
-    let artists = match state.storage.get_all_artists().await {
-        Ok(a) => a
-            .into_iter()
-            .filter(|a| a.album_count > 0)
-            .collect::<Vec<_>>(),
-        Err(e) => {
-            warn!(error = %e, "Failed to load artists for lazy build");
+    let state = Arc::clone(state);
+    let stack = stack.clone();
+    spawn_future_local(async move {
+        let my_gen = state.artist_grid.generation.load(Relaxed);
+        let artists = match state.storage.get_all_artists().await {
+            Ok(a) => a
+                .into_iter()
+                .filter(|a| a.album_count > 0)
+                .collect::<Vec<_>>(),
+            Err(e) => {
+                warn!(error = %e, "Failed to load artists for lazy build");
+                return;
+            }
+        };
+
+        if state.artist_grid.generation.load(Relaxed) != my_gen {
             return;
         }
-    };
+        if stack.child_by_name(child_name).is_some() {
+            stack.set_visible_child_name(child_name);
+            return;
+        }
 
-    if state.artist_grid.generation.load(Relaxed) != my_gen {
-        return;
-    }
-    if stack.child_by_name(child_name).is_some() {
-        stack.set_visible_child_name(child_name);
-        return;
-    }
+        if artists.is_empty() {
+            *state.artist_grid.cache.lock() = Some(CachedArtistData {
+                artists: Arc::new(artists),
+            });
+            show_artists_empty(&state, &stack);
+            return;
+        }
 
-    if artists.is_empty() {
-        *state.artist_grid.cache.lock() = Some(CachedArtistData {
+        let cached = CachedArtistData {
             artists: Arc::new(artists),
-        });
-        show_artists_empty(state, stack);
-        return;
-    }
-
-    let cached = CachedArtistData {
-        artists: Arc::new(artists),
-    };
-    let indices = artist_sort_indices(state, &cached);
-    build_artist_mode(state, stack, mode, &cached, &indices);
-    *state.artist_grid.cache.lock() = Some(cached);
-    stack.set_visible_child_name(child_name);
+        };
+        let indices = artist_sort_indices(&state, &cached);
+        build_artist_mode(&state, &stack, mode, &cached, &indices);
+        *state.artist_grid.cache.lock() = Some(cached);
+        stack.set_visible_child_name(child_name);
+    });
 }
 
 /// Build the avatar widget for an artist.

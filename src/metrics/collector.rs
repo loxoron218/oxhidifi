@@ -55,7 +55,7 @@ pub struct PanelReveal {
 impl PanelReveal {
     /// Create a new `PanelReveal` collector.
     #[must_use]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             inner: Mutex::new(None),
         }
@@ -102,7 +102,7 @@ pub struct PlaybackLatency {
 impl PlaybackLatency {
     /// Create a new `PlaybackLatency` collector.
     #[must_use]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             inner: Mutex::new(None),
         }

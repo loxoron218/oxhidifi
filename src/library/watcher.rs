@@ -125,7 +125,7 @@ impl<S: Storage + 'static> LibraryWatcher<S> {
 }
 
 /// Events emitted by the filesystem watcher.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WatcherEvent {
     /// A directory was modified (files added/removed/changed).
     DirectoryModified {

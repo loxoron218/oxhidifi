@@ -76,7 +76,7 @@ pub fn extract_artwork(path: &Path) -> Result<Option<(Vec<u8>, String)>, Artwork
     let ext = picture
         .mime_type()
         .and_then(MimeType::ext)
-        .map_or("png".to_string(), ToString::to_string);
+        .map_or_else(|| "png".to_string(), ToString::to_string);
 
     Ok(Some((picture.data().to_vec(), ext)))
 }

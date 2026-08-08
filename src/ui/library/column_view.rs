@@ -75,7 +75,9 @@ fn fill_album_store_batch(
 ) -> bool {
     for _ in 0..STORE_BATCH_SIZE {
         let Some(idx) = remaining.pop() else { break };
-        let album = &cached.albums[idx];
+        let Some(album) = cached.albums.get(idx) else {
+            continue;
+        };
         let artist_name = cached
             .artist_names
             .get(&album.artist_id)
@@ -111,7 +113,9 @@ fn fill_artist_store_batch(
 ) -> bool {
     for _ in 0..STORE_BATCH_SIZE {
         let Some(idx) = remaining.pop() else { break };
-        let artist = &cached.artists[idx];
+        let Some(artist) = cached.artists.get(idx) else {
+            continue;
+        };
         store.append(&BoxedAnyObject::new(ArtistData {
             id: artist.id,
             name: artist.name.clone(),

@@ -78,7 +78,7 @@ fn build_sidebar(state: &Arc<AppState>, back_button: &ToggleButton) -> (ToolbarV
 /// tab is), so switching here lazily builds the current mode child when it
 /// is missing. When the mode child already exists, only a pending sort/zoom
 /// change (`dirty`) triggers a rebuild.
-async fn handle_tab_switch(
+fn handle_tab_switch(
     stack: &ViewStack,
     state: &Arc<AppState>,
     tab: ActiveTab,
@@ -111,8 +111,8 @@ async fn handle_tab_switch(
         return;
     }
     match tab {
-        Albums => lazy_build_album_mode(state, album_stack, narrow_state, mode).await,
-        Artists => lazy_build_artist_mode(state, artist_stack, mode).await,
+        Albums => lazy_build_album_mode(state, album_stack, narrow_state, mode),
+        Artists => lazy_build_artist_mode(state, artist_stack, mode),
     }
 }
 
@@ -176,8 +176,7 @@ fn build_content_pane(
                 &tab_album_stack,
                 &tab_artist_stack,
                 &tab_nm,
-            )
-            .await;
+            );
         }
     });
 
@@ -188,8 +187,7 @@ fn build_content_pane(
     spawn_future_local(async move {
         let rx = vm_state.view_mode.subscribe();
         while let Ok(mode) = rx.recv().await {
-            switch_mode_for_active_tab(&vm_state, mode, &vm_album_stack, &vm_artist_stack, &vm_nm)
-                .await;
+            switch_mode_for_active_tab(&vm_state, mode, &vm_album_stack, &vm_artist_stack, &vm_nm);
         }
     });
 
@@ -371,7 +369,7 @@ pub fn build_content(
 /// Hidden tabs are skipped — they reconcile their mode when activated via
 /// [`handle_tab_switch`], so toggling modes never builds a view the user
 /// is not looking at.
-async fn switch_mode_for_active_tab(
+fn switch_mode_for_active_tab(
     state: &Arc<AppState>,
     mode: ViewMode,
     album_stack: &Stack,
@@ -382,13 +380,13 @@ async fn switch_mode_for_active_tab(
         Albums => (album_stack, "albums"),
         Artists => (artist_stack, "artists"),
     };
-    switch_mode_for_stack(state, name, stack, narrow_state, mode).await;
+    switch_mode_for_stack(state, name, stack, narrow_state, mode);
 }
 
 /// Return the mode‑stack for a given tab name, or `None` if unknown.
 /// Switch the given tab's mode‑stack to `mode`, building the view
 /// lazily if it doesn't exist yet.
-async fn switch_mode_for_stack(
+fn switch_mode_for_stack(
     state: &Arc<AppState>,
     tab: &str,
     stack: &Stack,
@@ -401,8 +399,8 @@ async fn switch_mode_for_stack(
     };
     if stack.child_by_name(child).is_none() {
         match tab {
-            "albums" => lazy_build_album_mode(state, stack, narrow_state, mode).await,
-            "artists" => lazy_build_artist_mode(state, stack, mode).await,
+            "albums" => lazy_build_album_mode(state, stack, narrow_state, mode),
+            "artists" => lazy_build_artist_mode(state, stack, mode),
             _ => {}
         }
     }

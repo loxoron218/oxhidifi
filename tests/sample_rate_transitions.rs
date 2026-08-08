@@ -204,8 +204,8 @@ mod tests {
         let chain: Vec<u32> = vec![44_100, 48_000, 96_000, 176_400, 192_000, 44_100];
         let mut max_silence_found = 0usize;
 
-        for window in chain.windows(2) {
-            assert_transition(window[0], window[1], &mut max_silence_found)?;
+        for (from, to) in chain.iter().zip(chain.iter().skip(1)) {
+            assert_transition(*from, *to, &mut max_silence_found)?;
         }
 
         if max_silence_found >= MAX_SILENCE_SAMPLES {

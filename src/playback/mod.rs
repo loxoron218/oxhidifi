@@ -101,7 +101,7 @@ pub fn write_wav_header<W: Write>(
     bits_per_sample: u16,
     data_size: u32,
 ) -> Result<()> {
-    let riff_size = 36u32 + data_size;
+    let riff_size = 36u32.saturating_add(data_size);
 
     writer.write_all(b"RIFF")?;
     writer.write_all(&riff_size.to_le_bytes())?;
@@ -112,9 +112,12 @@ pub fn write_wav_header<W: Write>(
     writer.write_all(&channels.to_le_bytes())?;
     writer.write_all(&sample_rate.to_le_bytes())?;
     writer.write_all(
-        &(sample_rate * u32::from(channels) * u32::from(bits_per_sample / 8)).to_le_bytes(),
+        &sample_rate
+            .saturating_mul(u32::from(channels))
+            .saturating_mul(u32::from(bits_per_sample / 8))
+            .to_le_bytes(),
     )?;
-    writer.write_all(&(channels * (bits_per_sample / 8)).to_le_bytes())?;
+    writer.write_all(&channels.saturating_mul(bits_per_sample / 8).to_le_bytes())?;
     writer.write_all(&bits_per_sample.to_le_bytes())?;
     writer.write_all(b"data")?;
     writer.write_all(&data_size.to_le_bytes())?;

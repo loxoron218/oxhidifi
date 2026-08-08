@@ -20,8 +20,8 @@ fn create_test_wavs(count: usize) -> AnyhowResult<Vec<NamedTempFile>> {
     let mut files = Vec::with_capacity(count);
     for i in 0..count {
         let tmp = NamedTempFile::new().context("Failed to create temp WAV file")?;
-        let value = i16::try_from((i + 1) * 1000).unwrap_or(1000);
-        let samples = vec![value, -value];
+        let value = i16::try_from(i.saturating_add(1).saturating_mul(1000)).unwrap_or(1000);
+        let samples = vec![value, value.saturating_neg()];
         write_wav(tmp.path(), 1, 44100, &samples)?;
         files.push(tmp);
     }
@@ -75,17 +75,17 @@ mod tests {
         let wavs = create_test_wavs(5)?;
         let transition_count = 100;
         let sample_rate = 44100u32;
-        let max_silence_samples = (sample_rate as usize * 5) / 1000;
+        let max_silence_samples = (usize::try_from(sample_rate).unwrap_or(0) * 5) / 1000;
         let mut max_silence_found = 0usize;
         let mut underrun_count = 0u64;
 
-        for iter in 0..transition_count {
-            let samples = transition_and_decode(
-                wavs[iter % wavs.len()].path(),
-                wavs[(iter + 1) % wavs.len()].path(),
-                1001,
-                1002,
-            )?;
+        for (wav, next_wav) in wavs
+            .iter()
+            .cycle()
+            .zip(wavs.iter().cycle().skip(1))
+            .take(transition_count)
+        {
+            let samples = transition_and_decode(wav.path(), next_wav.path(), 1001, 1002)?;
             let leading = leading_silence(&samples);
             max_silence_found = max_silence_found.max(leading);
             underrun_count += u64::from(underrun_detected(&samples));
@@ -113,17 +113,16 @@ mod tests {
         let transition_count = 100;
         let mut total_underruns = 0u64;
 
-        for i in 0..transition_count {
+        for (i, (wav, next_wav)) in wavs
+            .iter()
+            .cycle()
+            .zip(wavs.iter().cycle().skip(1))
+            .take(transition_count)
+            .enumerate()
+        {
             let track_id = i64::try_from(i)?;
             let next_id = track_id + 1;
-            let wav_idx = i % wavs.len();
-            let next_wav_idx = (wav_idx + 1) % wavs.len();
-            let samples = transition_and_decode(
-                wavs[wav_idx].path(),
-                wavs[next_wav_idx].path(),
-                track_id,
-                next_id,
-            )?;
+            let samples = transition_and_decode(wav.path(), next_wav.path(), track_id, next_id)?;
             verify_samples_nonempty_and_silence(&samples, i)?;
             total_underruns += u64::from(underrun_detected(&samples));
         }

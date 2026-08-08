@@ -848,7 +848,7 @@ impl Storage for SqliteStorage {
                 .await
                 .map_err(|e| Database(format!("Queue max failed: {e}")))?;
 
-        let next_pos = max_pos.map_or(0, |(p,)| p + 1);
+        let next_pos = max_pos.map_or(0, |(p,)| p.saturating_add(1));
 
         let (context_type, context_id) = match context {
             Some(QueueAlbum(id)) => (Some("album".to_string()), Some(id)),

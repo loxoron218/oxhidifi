@@ -104,9 +104,10 @@ fn try_send_album_cover(
     }
 }
 
-/// Checks the shared [`CoverArtCache`] first; sends decode requests to the
-/// centralized worker when the texture is not yet cached.  Each decoded
-/// cover is written to the cache and applied to its overlay via a
+/// Check the shared [`CoverArtCache`] and dispatch decode requests for
+/// missing covers to the centralized decoder.
+///
+/// Each decoded cover is written to the cache and applied to its overlay via a
 /// [`spawn_future_local`] async task that stays alive until all results
 /// are received, preventing a race where the channel receiver is dropped
 /// before the background decoder finishes.
@@ -125,11 +126,11 @@ pub fn load_cover_art_async(
     let mut uncached: Vec<(i64, usize, String)> = Vec::new();
 
     for (album_id, index, path) in cover_art_data {
-        if *index >= overlays.len() {
+        let Some(overlay) = overlays.get(*index) else {
             continue;
-        }
+        };
         if let Some(texture) = cache.get(*album_id, size) {
-            apply_texture(&overlays[*index], &texture, size);
+            apply_texture(overlay, &texture, size);
             continue;
         }
         uncached.push((*album_id, *index, path.clone()));
@@ -202,8 +203,10 @@ fn apply_decoded_cover(
     texture: &MemoryTexture,
     size: i32,
 ) {
-    if size == grid_cover_size(state.storage.get_grid_zoom_level()) && index < overlays.len() {
-        apply_texture(&overlays[index], texture, size);
+    if size == grid_cover_size(state.storage.get_grid_zoom_level())
+        && let Some(overlay) = overlays.get(index)
+    {
+        apply_texture(overlay, texture, size);
     }
 }
 

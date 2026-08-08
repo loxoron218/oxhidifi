@@ -110,10 +110,16 @@ fn sorted_album_indices(
 ) -> Vec<usize> {
     let mut indices: Vec<usize> = (0..albums.len()).collect();
     indices.sort_unstable_by(|&a, &b| {
+        let Some(a_album) = albums.get(a) else {
+            return Equal;
+        };
+        let Some(b_album) = albums.get(b) else {
+            return Equal;
+        };
         sort_items
             .iter()
             .find_map(|item| {
-                let cmp = cmp_albums(&albums[a], &albums[b], item, artist_names);
+                let cmp = cmp_albums(a_album, b_album, item, artist_names);
                 (cmp != Equal).then_some(cmp)
             })
             .unwrap_or(Equal)
@@ -151,10 +157,7 @@ pub fn build_album_grid(state: &Arc<AppState>, narrow_state: &Arc<NarrowState>) 
         state,
         &nm,
         |stack: &Stack, state, narrow_state, initial_mode| {
-            let stack_clone = stack.clone();
-            spawn_future_local(async move {
-                lazy_build_album_mode(&state, &stack_clone, &narrow_state, initial_mode).await;
-            });
+            lazy_build_album_mode(&state, stack, &narrow_state, initial_mode);
         },
     );
 
@@ -175,15 +178,14 @@ pub fn build_album_grid(state: &Arc<AppState>, narrow_state: &Arc<NarrowState>) 
                 apply_album_resize(&preview_state, &preview_stack);
             }
         },
-        async move |sort_fired, zoom_fired| {
+        move |sort_fired, zoom_fired| {
             rebuild_album_current_mode(
                 &grid_state,
                 &grid_stack,
                 &grid_narrow,
                 sort_fired,
                 zoom_fired,
-            )
-            .await;
+            );
         },
     );
 
@@ -196,7 +198,7 @@ pub fn build_album_grid(state: &Arc<AppState>, narrow_state: &Arc<NarrowState>) 
 /// scroll position preserved). Sort changes — or any state that invalidates
 /// the current cards — fall back to a full rebuild from the in-memory cache.
 /// When the tab is hidden, marks the grid dirty so it is rebuilt on switch.
-async fn rebuild_album_current_mode(
+fn rebuild_album_current_mode(
     state: &Arc<AppState>,
     mode_stack: &Stack,
     narrow_state: &Arc<NarrowState>,
@@ -226,7 +228,7 @@ async fn rebuild_album_current_mode(
         clear_mode_children(mode_stack);
     }
     state.album_grid.dirty.store(false, Relaxed);
-    lazy_build_album_mode(state, mode_stack, narrow_state, mode).await;
+    lazy_build_album_mode(state, mode_stack, narrow_state, mode);
 }
 
 /// Snapshot the album grid's cover state for an in-place zoom resize.
@@ -357,7 +359,9 @@ fn fill_album_grid(
         state,
         remaining,
         |idx, size| {
-            let album = &cached.albums[idx];
+            let Some(album) = cached.albums.get(idx) else {
+                return;
+            };
             let index = overlays.len();
             let artist_name = cached
                 .artist_names
@@ -428,7 +432,10 @@ fn build_album_mode(
             grid_container.append(&flow);
             add_scrolled(stack, &grid_container, "grid");
 
-            let album_ids: Vec<i64> = indices.iter().map(|&i| cached.albums[i].id).collect();
+            let album_ids: Vec<i64> = indices
+                .iter()
+                .filter_map(|&i| cached.albums.get(i).map(|album| album.id))
+                .collect();
             setup_flowbox_keyboard_nav(&flow, state, album_ids, AlbumDetail);
 
             let cached_owned = CachedAlbumData {
@@ -469,8 +476,10 @@ fn build_album_mode(
 ///
 /// Re‑fetches data from storage, builds the requested `mode` widget,
 /// adds it to `stack`, and switches to it.  This is a no‑op if the
-/// child already exists (race‑guard).
-pub async fn lazy_build_album_mode(
+/// child already exists (race‑guard).  The synchronous front half runs
+/// the race‑guard and cached‑build checks; the storage re‑fetch and
+/// widget construction run in a local future on the `GLib` main context.
+pub fn lazy_build_album_mode(
     state: &Arc<AppState>,
     stack: &Stack,
     narrow_state: &Arc<NarrowState>,
@@ -499,21 +508,69 @@ pub async fn lazy_build_album_mode(
         return;
     }
 
-    let my_gen = state.album_grid.generation.load(Relaxed);
-    let (albums_res, artist_names_res) = join!(
-        state.storage.get_all_albums(),
-        state.storage.get_all_artists(),
-    );
+    let state = Arc::clone(state);
+    let stack = stack.clone();
+    let narrow_state = Arc::clone(narrow_state);
+    spawn_future_local(async move {
+        let my_gen = state.album_grid.generation.load(Relaxed);
+        let (albums_res, artist_names_res) = join!(
+            state.storage.get_all_albums(),
+            state.storage.get_all_artists(),
+        );
 
-    let albums = match albums_res {
-        Ok(a) => a,
-        Err(e) => {
-            warn!(error = %e, "Failed to load albums for lazy build");
-            return;
-        }
+        let albums = match albums_res {
+            Ok(a) => a,
+            Err(e) => {
+                warn!(error = %e, "Failed to load albums for lazy build");
+                return;
+            }
+        };
+
+        let artist_names: HashMap<i64, String> = match artist_names_res {
+            Ok(artists) => artists.into_iter().map(|a| (a.id, a.name)).collect(),
+            Err(e) => {
+                warn!(error = %e, "Failed to load artists for lazy build");
+                HashMap::new()
+            }
+        };
+
+        let format_info = if albums.is_empty() {
+            HashMap::new()
+        } else {
+            let album_ids: Vec<i64> = albums.iter().map(|a| a.id).collect();
+            state
+                .storage
+                .get_albums_format_info(&album_ids)
+                .await
+                .unwrap_or_default()
+        };
+
+        let cached = CachedAlbumData {
+            albums: Arc::new(albums),
+            artist_names: Arc::new(artist_names),
+            format_info: Arc::new(format_info),
+        };
+        finish_lazy_album_build(&state, &stack, &narrow_state, mode, my_gen, cached);
+    });
+}
+
+/// Complete a lazy album-mode build from already-fetched data.
+///
+/// Applies the generation and child-existence race guards, then either shows
+/// the empty state or builds the mode widget from the fetched data.
+fn finish_lazy_album_build(
+    state: &Arc<AppState>,
+    stack: &Stack,
+    narrow_state: &Arc<NarrowState>,
+    mode: ViewMode,
+    my_gen: u64,
+    data: CachedAlbumData,
+) {
+    let child_name = match mode {
+        Grid => "grid",
+        Column => "column",
     };
-
-    if albums.is_empty() {
+    if data.albums.is_empty() {
         if state.album_grid.generation.load(Relaxed) != my_gen {
             return;
         }
@@ -522,20 +579,13 @@ pub async fn lazy_build_album_mode(
             return;
         }
         *state.album_grid.cache.lock() = Some(CachedAlbumData {
-            albums: Arc::new(albums),
+            albums: data.albums,
             artist_names: Arc::new(HashMap::new()),
             format_info: Arc::new(HashMap::new()),
         });
         show_albums_empty(state, stack);
         return;
     }
-
-    let album_ids: Vec<i64> = albums.iter().map(|a| a.id).collect();
-    let format_info = state
-        .storage
-        .get_albums_format_info(&album_ids)
-        .await
-        .unwrap_or_default();
 
     if state.album_grid.generation.load(Relaxed) != my_gen {
         return;
@@ -545,22 +595,9 @@ pub async fn lazy_build_album_mode(
         return;
     }
 
-    let artist_names: HashMap<i64, String> = match artist_names_res {
-        Ok(artists) => artists.into_iter().map(|a| (a.id, a.name)).collect(),
-        Err(e) => {
-            warn!(error = %e, "Failed to load artists for lazy build");
-            HashMap::new()
-        }
-    };
-
-    let cached = CachedAlbumData {
-        albums: Arc::new(albums),
-        artist_names: Arc::new(artist_names),
-        format_info: Arc::new(format_info),
-    };
-    let indices = album_sort_indices(state, &cached);
-    build_album_mode(state, stack, narrow_state, mode, &cached, &indices);
-    *state.album_grid.cache.lock() = Some(cached);
+    let indices = album_sort_indices(state, &data);
+    build_album_mode(state, stack, narrow_state, mode, &data, &indices);
+    *state.album_grid.cache.lock() = Some(data);
     stack.set_visible_child_name(child_name);
 }
 

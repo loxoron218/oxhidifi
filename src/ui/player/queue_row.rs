@@ -30,7 +30,7 @@ fn reorder_entry(queue: &PlaybackQueue, store: &ListStore, from: usize, to: usiz
         return;
     };
     store.remove(from_u32);
-    let adjusted_pos = if to > from { to - 1 } else { to };
+    let adjusted_pos = if to > from { to.saturating_sub(1) } else { to };
     let Ok(adjusted_u32) = u32::try_from(adjusted_pos) else {
         return;
     };
@@ -126,7 +126,7 @@ pub fn build_row_factory(queue: &PlaybackQueue, store: &ListStore) -> SignalList
         let queue_remove = queue_li.clone();
         let store_remove = store_li.clone();
         remove.connect_clicked(move |_| {
-            let pos = li_remove.position() as usize;
+            let pos = usize::try_from(li_remove.position()).unwrap_or(0);
             try_remove_entry(&queue_remove, &store_remove, pos);
         });
 
@@ -135,7 +135,7 @@ pub fn build_row_factory(queue: &PlaybackQueue, store: &ListStore) -> SignalList
         let queue_drop = queue_li;
         let store_drop = store_li;
         drop.connect_drop(move |_, value, _, _| {
-            let to_pos = li_drop.position() as usize;
+            let to_pos = usize::try_from(li_drop.position()).unwrap_or(0);
             handle_drop_value(value, &queue_drop, &store_drop, to_pos);
             true
         });

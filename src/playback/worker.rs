@@ -58,8 +58,8 @@ fn init_decoder(
         }
     };
     let track_sample_rate = decoder.params().sample_rate;
-    let src_channels = decoder.params().channels as usize;
-    let out_channels = output.channels as usize;
+    let src_channels = usize::from(decoder.params().channels);
+    let out_channels = usize::from(output.channels);
 
     *engine_shared.track_sample_rate.lock() = track_sample_rate;
 
@@ -274,7 +274,8 @@ fn reconnect_device(engine_shared: &Arc<EngineShared>) -> Option<Producer<f32>> 
 /// handles that to keep potentially-blocking `Stream::drop` off the
 /// main thread.
 pub fn stop_decode_task(shared: &EngineShared) {
-    if let Some(tx) = shared.decode_tx.lock().take() {
+    let decode_tx = shared.decode_tx.lock().take();
+    if let Some(tx) = decode_tx {
         drop(tx);
     }
 }

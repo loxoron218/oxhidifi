@@ -92,8 +92,8 @@ impl PlaybackQueue {
     pub fn peek_next(&self) -> Option<i64> {
         let inner = self.inner.lock();
         let idx = inner.current_index?;
-        let next = idx + 1;
-        (next < inner.tracks.len()).then(|| inner.tracks[next])
+        let next = idx.checked_add(1)?;
+        inner.tracks.get(next).copied()
     }
 
     /// Advance to the next track, returning its ID.
@@ -102,12 +102,11 @@ impl PlaybackQueue {
     #[must_use]
     pub fn next(&self) -> Option<i64> {
         let mut inner = self.inner.lock();
-        let idx = inner.current_index?;
-        let next = idx + 1;
-        (next < inner.tracks.len()).then(|| {
-            inner.current_index = Some(next);
-            inner.tracks[next]
-        })
+        let next = inner.current_index.and_then(|idx| idx.checked_add(1))?;
+        let id = inner.tracks.get(next).copied()?;
+        inner.current_index = Some(next);
+        drop(inner);
+        Some(id)
     }
 
     /// Move to the previous track, returning its ID.
@@ -116,21 +115,19 @@ impl PlaybackQueue {
     #[must_use]
     pub fn previous(&self) -> Option<i64> {
         let mut inner = self.inner.lock();
-        let idx = inner.current_index?;
-        let result = (idx > 0).then(|| {
-            let prev = idx - 1;
-            inner.current_index = Some(prev);
-            inner.tracks[prev]
-        });
+        let prev = inner.current_index.and_then(|idx| idx.checked_sub(1))?;
+        let id = inner.tracks.get(prev).copied()?;
+        inner.current_index = Some(prev);
         drop(inner);
-        result
+        Some(id)
     }
 
     /// Get the ID of the currently playing track.
     #[must_use]
     pub fn current(&self) -> Option<i64> {
         let inner = self.inner.lock();
-        inner.current_index.map(|idx| inner.tracks[idx])
+        let idx = inner.current_index?;
+        inner.tracks.get(idx).copied()
     }
 
     /// Get the index of the currently playing track.
@@ -143,10 +140,11 @@ impl PlaybackQueue {
     #[must_use]
     pub fn upcoming(&self) -> Vec<i64> {
         let inner = self.inner.lock();
-        match inner.current_index {
-            Some(idx) if idx + 1 < inner.tracks.len() => inner.tracks[idx + 1..].to_vec(),
-            _ => Vec::new(),
-        }
+        inner
+            .current_index
+            .and_then(|idx| idx.checked_add(1))
+            .and_then(|next| inner.tracks.get(next..))
+            .map_or_else(Vec::new, ToOwned::to_owned)
     }
 
     /// Get all track IDs in the queue.
@@ -194,26 +192,29 @@ struct PlaybackQueueInner {
 }
 
 /// Adjust current index after removing a track at `position`.
-fn adjust_index_after_remove(idx: usize, position: usize, len: usize) -> Option<usize> {
+const fn adjust_index_after_remove(idx: usize, position: usize, len: usize) -> Option<usize> {
     if len == 0 {
         None
     } else if idx > position {
-        Some(idx - 1)
+        Some(idx.saturating_sub(1))
     } else if idx >= len {
-        Some(len - 1)
+        Some(len.saturating_sub(1))
     } else {
         Some(idx)
     }
 }
 
 /// Adjust current index after moving a track from `from` to `to`.
-fn adjust_index_after_move(idx: usize, from: usize, to: usize) -> usize {
+const fn adjust_index_after_move(idx: usize, from: usize, to: usize) -> usize {
     if idx == from {
         to
     } else if from < idx && to >= idx {
-        idx - 1
+        idx.saturating_sub(1)
     } else if from > idx && to <= idx {
-        idx + 1
+        match idx.checked_add(1) {
+            Some(next) => next,
+            None => idx,
+        }
     } else {
         idx
     }

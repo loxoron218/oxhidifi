@@ -61,7 +61,10 @@ pub fn compute_content_hash(path: &Path) -> Result<String, DedupError> {
         if bytes_read == 0 {
             break;
         }
-        hasher.update(&buffer[..bytes_read]);
+        let Some(chunk) = buffer.get(..bytes_read) else {
+            continue;
+        };
+        hasher.update(chunk);
     }
 
     Ok(encode(hasher.finalize()))

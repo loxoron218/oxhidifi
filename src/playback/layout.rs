@@ -39,7 +39,7 @@ pub enum AudioLayout {
 impl AudioLayout {
     /// Construct from a raw channel count when no spatial metadata is available.
     #[must_use]
-    pub fn from_count(channels: u32) -> Self {
+    pub const fn from_count(channels: u32) -> Self {
         Self::Channels(channels)
     }
 
@@ -53,7 +53,9 @@ impl AudioLayout {
                 surround,
                 lfe,
                 height,
-            } => u32::from(surround) + u32::from(lfe) + u32::from(height),
+            } => u32::from(surround)
+                .saturating_add(u32::from(lfe))
+                .saturating_add(u32::from(height)),
         }
     }
 }

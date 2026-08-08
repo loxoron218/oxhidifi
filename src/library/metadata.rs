@@ -233,7 +233,7 @@ fn extract_disc_number(tagged_file: &TaggedFile) -> Option<i32> {
 }
 
 /// Get a human-readable codec name from the file type.
-fn codec_name(file_type: FileType) -> &'static str {
+const fn codec_name(file_type: FileType) -> &'static str {
     match file_type {
         Flac => "flac",
         Mpeg => "mp3",

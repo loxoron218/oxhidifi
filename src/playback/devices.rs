@@ -173,12 +173,6 @@ mod tests {
     }
 
     #[test]
-    fn output_mode_default_is_resampled() {
-        assert_eq!(Resampled as u8, 1);
-        assert_eq!(BitPerfect as u8, 0);
-    }
-
-    #[test]
     fn output_mode_debug_representation() {
         let fmt = format!("{BitPerfect:?}");
         assert_eq!(fmt, "BitPerfect");

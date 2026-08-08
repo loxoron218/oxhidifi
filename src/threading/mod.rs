@@ -112,7 +112,7 @@ pub struct ThreadManager {
 impl ThreadManager {
     /// Create a new empty `ThreadManager`.
     #[must_use]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             handles: Mutex::new(Vec::new()),
         }

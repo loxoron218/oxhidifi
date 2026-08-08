@@ -55,7 +55,7 @@ pub struct GaplessTransitioner {
 impl GaplessTransitioner {
     /// Create a new idle transitioner with gapless enabled by default.
     #[must_use]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             state: GaplessState::Idle,
             preloaded_decoder: None,
@@ -79,7 +79,7 @@ impl GaplessTransitioner {
 
     /// Check whether gapless transitions are enabled.
     #[must_use]
-    pub fn is_enabled(&self) -> bool {
+    pub const fn is_enabled(&self) -> bool {
         self.enabled
     }
 
@@ -153,7 +153,7 @@ impl GaplessTransitioner {
 
     /// Get the sample rate of the next pre-buffered track, if known.
     #[must_use]
-    pub fn next_sample_rate(&self) -> Option<u32> {
+    pub const fn next_sample_rate(&self) -> Option<u32> {
         match self.state {
             GaplessState::PreBuffered {
                 next_sample_rate, ..
@@ -164,7 +164,7 @@ impl GaplessTransitioner {
 
     /// Get the ID of the next pre-buffered track, if any.
     #[must_use]
-    pub fn next_track_id(&self) -> Option<i64> {
+    pub const fn next_track_id(&self) -> Option<i64> {
         match self.state {
             GaplessState::PreBuffered { next_track_id, .. } => Some(next_track_id),
             _ => None,
@@ -173,7 +173,7 @@ impl GaplessTransitioner {
 
     /// Get the current transition state.
     #[must_use]
-    pub fn state(&self) -> GaplessState {
+    pub const fn state(&self) -> GaplessState {
         self.state
     }
 
@@ -187,13 +187,13 @@ impl GaplessTransitioner {
     /// Returns `true` if a next track has been pre-buffered and is ready
     /// for a gapless transition.
     #[must_use]
-    pub fn is_ready(&self) -> bool {
+    pub const fn is_ready(&self) -> bool {
         matches!(self.state, GaplessState::PreBuffered { .. })
     }
 
     /// Returns `true` if currently playing a track.
     #[must_use]
-    pub fn is_playing(&self) -> bool {
+    pub const fn is_playing(&self) -> bool {
         matches!(
             self.state,
             GaplessState::Playing { .. } | GaplessState::PreBuffered { .. }
@@ -212,7 +212,7 @@ impl Default for GaplessTransitioner {
 ///
 /// Returns `true` if the two sample rates differ.
 #[must_use]
-pub fn needs_reconfig(current_rate: u32, next_rate: u32) -> bool {
+pub const fn needs_reconfig(current_rate: u32, next_rate: u32) -> bool {
     current_rate != next_rate
 }
 

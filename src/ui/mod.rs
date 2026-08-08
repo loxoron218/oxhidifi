@@ -44,7 +44,7 @@ use crate::{threading::ThreadManager, zoom::GRID_ZOOM_MAX};
 /// zoom toggling stops re-dispatching after the first sweep. Column-view
 /// list sizes are smaller and evicted by grid covers, which is acceptable:
 /// grid/list switches are rare, and a re-decode on switch is bounded.
-const MAX_SIZES_PER_ALBUM: usize = GRID_ZOOM_MAX as usize + 1;
+const MAX_SIZES_PER_ALBUM: u8 = GRID_ZOOM_MAX + 1;
 
 /// Number of worker threads decoding cover art.
 ///
@@ -208,7 +208,7 @@ impl CoverArtCache {
         }
         sizes.push(size);
         let evicted: Vec<i32> = sizes
-            .drain(..sizes.len().saturating_sub(MAX_SIZES_PER_ALBUM))
+            .drain(..sizes.len().saturating_sub(usize::from(MAX_SIZES_PER_ALBUM)))
             .collect();
         for old in evicted {
             inner.textures.remove(&(album_id, old));
@@ -297,7 +297,7 @@ pub fn decode_cover_raw(path: &str, size: i32) -> Option<DecodedCover> {
     Some(DecodedCover {
         width: pixbuf.width(),
         height: pixbuf.height(),
-        rowstride: pixbuf.rowstride().cast_unsigned() as usize,
+        rowstride: usize::try_from(pixbuf.rowstride().cast_unsigned()).unwrap_or(0),
         format,
         data: bytes.to_vec(),
     })

@@ -25,16 +25,16 @@ pub const DEFAULT_LIST_ZOOM: u8 = 1;
 ///
 /// Level 0 → 120, 1 → 150, 2 → 180 (default), 3 → 210, 4 → 240.
 #[must_use]
-pub const fn grid_cover_size(level: u8) -> i32 {
-    120 + (level as i32) * 30
+pub fn grid_cover_size(level: u8) -> i32 {
+    120_i32.saturating_add(i32::from(level).saturating_mul(30))
 }
 
 /// Map a list zoom level to cover art size in pixels.
 ///
 /// Level 0 → 32, 1 → 48 (default), 2 → 64.
 #[must_use]
-pub const fn list_cover_size(level: u8) -> i32 {
-    32 + (level as i32) * 16
+pub fn list_cover_size(level: u8) -> i32 {
+    32_i32.saturating_add(i32::from(level).saturating_mul(16))
 }
 
 #[cfg(test)]

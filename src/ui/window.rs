@@ -286,9 +286,9 @@ mod tests {
     };
 
     fn pump_main_context() {
-        let mut iterations = 0;
+        let mut iterations: usize = 0;
         while MainContext::default().iteration(false) && iterations < 1000 {
-            iterations += 1;
+            iterations = iterations.saturating_add(1);
         }
     }
 

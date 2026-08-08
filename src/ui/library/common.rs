@@ -3,7 +3,7 @@
 use std::{mem::take, sync::Arc, time::Duration};
 
 use {
-    async_channel::Receiver,
+    async_channel::{Receiver, Sender, unbounded},
     libadwaita::{
         gdk::Key,
         glib::{
@@ -24,13 +24,17 @@ use {
     },
     parking_lot::Mutex,
     tokio::select,
+    tracing::warn,
 };
 
 use crate::{
     app::{AppState, NavigationEvent, SortMemo},
-    storage::settings::{
-        ActiveTab,
-        ViewMode::{self, Column, Grid},
+    storage::{
+        database::SqliteStorage,
+        settings::{
+            ActiveTab,
+            ViewMode::{self, Column, Grid},
+        },
     },
     zoom::grid_cover_size,
 };
@@ -51,6 +55,19 @@ pub enum RebuildAction {
     DeferDirty,
     /// Rebuild the current view mode from the in-memory cache.
     Rebuild,
+}
+
+/// Event dispatched from the coalescing loop to the widget-side consumer.
+///
+/// The loop runs as a `Send` future, so the preview/rebuild closures it holds
+/// can only carry `Send` data.  Widget-touching work is performed by a
+/// separate local consumer that receives these events in FIFO order.
+#[derive(Debug, Clone, Copy)]
+enum SortZoomEvent {
+    /// Run the immediate zoom preview before the debounce window elapses.
+    Preview,
+    /// Run the debounced rebuild with the coalesced `(sort_fired, zoom_fired)` flags.
+    Rebuild(bool, bool),
 }
 
 /// Decide how a library grid should react to a sort/zoom change.
@@ -94,9 +111,9 @@ pub fn decide_rebuild(
 pub async fn listen_sort_zoom_loop(
     sort_rx: Receiver<()>,
     zoom_rx: Receiver<()>,
-    debounce: impl AsyncFn(),
-    preview_zoom: impl Fn(),
-    rebuild: impl AsyncFn(bool, bool),
+    debounce: impl AsyncFn() + Send + Sync,
+    preview_zoom: impl Fn() + Send + Sync,
+    rebuild: impl Fn(bool, bool) + Send + Sync,
 ) {
     let mut sort_fired = false;
     let mut zoom_fired = false;
@@ -122,7 +139,7 @@ pub async fn listen_sort_zoom_loop(
             &debounce,
         )
         .await;
-        rebuild(sort_fired, zoom_fired).await;
+        rebuild(sort_fired, zoom_fired);
         sort_fired = false;
         zoom_fired = false;
     }
@@ -139,7 +156,7 @@ async fn coalesce_quiet_period(
     zoom_rx: &Receiver<()>,
     sort_fired: &mut bool,
     zoom_fired: &mut bool,
-    debounce: &impl AsyncFn(),
+    debounce: &(impl AsyncFn() + Send + Sync),
 ) {
     loop {
         debounce().await;
@@ -172,14 +189,22 @@ async fn coalesce_quiet_period(
 /// zoom-only change so cards resize before the debounce; the rebuild handler
 /// receives `(sort_fired, zoom_fired)` flags so it can resize in place for
 /// zoom-only changes.
+///
+/// The coalescing loop runs as a `Send` future that emits [`SortZoomEvent`]s
+/// over an unbounded channel; a second local consumer performs the actual
+/// widget work, keeping non-`Send` widget handles out of the loop.
 pub fn spawn_listen_sort_zoom(
     state: &Arc<AppState>,
     sort_rx: Receiver<()>,
     zoom_rx: Receiver<()>,
     preview_zoom: impl Fn() + 'static,
-    rebuild: impl AsyncFn(bool, bool) + 'static,
+    rebuild: impl Fn(bool, bool) + 'static,
 ) {
     let storage = Arc::clone(&state.storage);
+    let (event_tx, event_rx) = unbounded::<SortZoomEvent>();
+    let preview_event_tx = event_tx.clone();
+    let rebuild_event_tx = event_tx;
+
     spawn_future_local(async move {
         listen_sort_zoom_loop(
             sort_rx,
@@ -187,14 +212,49 @@ pub fn spawn_listen_sort_zoom(
             async || {
                 timeout_future(SORT_ZOOM_DEBOUNCE).await;
             },
-            preview_zoom,
-            async move |sort_fired, zoom_fired| {
-                rebuild(sort_fired, zoom_fired).await;
-                storage.save_settings();
+            move || send_preview_event(&preview_event_tx),
+            move |sort_fired, zoom_fired| {
+                send_rebuild_event(&rebuild_event_tx, sort_fired, zoom_fired);
             },
         )
         .await;
     });
+
+    spawn_future_local(async move {
+        while let Ok(event) = event_rx.recv().await {
+            consume_sort_zoom_event(event, &preview_zoom, &rebuild, &storage);
+        }
+    });
+}
+
+/// Apply a coalesced sort/zoom event to the grid widgets.
+fn consume_sort_zoom_event(
+    event: SortZoomEvent,
+    preview_zoom: &impl Fn(),
+    rebuild: &impl Fn(bool, bool),
+    storage: &Arc<SqliteStorage>,
+) {
+    match event {
+        SortZoomEvent::Preview => preview_zoom(),
+        SortZoomEvent::Rebuild(sort_fired, zoom_fired) => {
+            rebuild(sort_fired, zoom_fired);
+            storage.save_settings();
+        }
+    }
+}
+
+/// Dispatch a preview event from the coalescing loop to the widget consumer.
+fn send_preview_event(tx: &Sender<SortZoomEvent>) {
+    if let Err(e) = tx.try_send(SortZoomEvent::Preview) {
+        warn!(error = %e, "Failed to dispatch sort/zoom preview event");
+    }
+}
+
+/// Dispatch a rebuild event from the coalescing loop to the widget consumer.
+fn send_rebuild_event(tx: &Sender<SortZoomEvent>, sort_fired: bool, zoom_fired: bool) {
+    if let Err(e) = tx.try_send(SortZoomEvent::Rebuild(sort_fired, zoom_fired)) {
+        warn!(error = %e, "Failed to dispatch sort/zoom rebuild event");
+    }
 }
 
 /// Locate the live `FlowBox` inside a mode stack's `"grid"` child.
@@ -328,7 +388,7 @@ where
     F: FnMut(usize, &Overlay, i32),
 {
     let start = *next;
-    let end = start + GRID_BATCH_SIZE;
+    let end = start.saturating_add(GRID_BATCH_SIZE);
     *next = end;
     for idx in start..end {
         let index = i32::try_from(idx).unwrap_or(i32::MAX);
@@ -385,7 +445,12 @@ where
 
 /// Map a cover size to the grid's row/column spacing in pixels.
 fn grid_spacing(cover_size: i32) -> u32 {
-    (cover_size.max(0).cast_unsigned() * 12 + 90) / 180
+    (cover_size
+        .max(0)
+        .cast_unsigned()
+        .saturating_mul(12)
+        .saturating_add(90))
+        / 180
 }
 
 /// Update a `FlowBox`'s row/column spacing to match `cover_size`.
@@ -471,7 +536,7 @@ fn activate_focused_card(
             activate_focused_card_by_index(state, card_ids, i, make_event);
             break;
         }
-        i += 1;
+        i = i.saturating_add(1);
     }
 }
 
@@ -656,7 +721,7 @@ mod tests {
             move || {
                 previews.lock().push(());
             },
-            async move |sort_fired, zoom_fired| {
+            move |sort_fired, zoom_fired| {
                 calls.lock().push((sort_fired, zoom_fired));
             },
         )
@@ -715,11 +780,12 @@ mod tests {
         let state = Arc::new(AppState::mock()?);
         activate_focused_card_by_index(&state, &[7, 8], 1, AlbumDetail);
         let mut received = state.navigation_rx.try_recv();
-        let mut attempts = 0;
-        while received.is_err() && attempts < 32 {
+        for _ in 0..32 {
+            if received.is_ok() {
+                break;
+            }
             MainContext::default().iteration(false);
             received = state.navigation_rx.try_recv();
-            attempts += 1;
         }
         ensure!(matches!(received, Ok(AlbumDetail(8))));
         Ok(())
@@ -784,8 +850,10 @@ mod tests {
     fn fill_grid_batch_bails_when_build_is_stale() -> Result<()> {
         let state = Arc::new(AppState::mock()?);
         let mut remaining = vec![0usize, 1, 2];
-        let mut built = 0;
-        let flow = fill_grid_batch(false, &state, &mut remaining, |_, _| built += 1);
+        let mut built: usize = 0;
+        let flow = fill_grid_batch(false, &state, &mut remaining, |_, _| {
+            built = built.saturating_add(1);
+        });
         ensure!(flow == Break, "stale build must bail");
         ensure!(built == 0, "stale build must not build any cards");
         ensure!(
@@ -799,8 +867,10 @@ mod tests {
     fn fill_grid_batch_builds_up_to_batch_size_then_continues() -> Result<()> {
         let state = Arc::new(AppState::mock()?);
         let mut remaining: Vec<usize> = (0..GRID_BATCH_SIZE + 3).collect();
-        let mut built = 0;
-        let flow = fill_grid_batch(true, &state, &mut remaining, |_, _| built += 1);
+        let mut built: usize = 0;
+        let flow = fill_grid_batch(true, &state, &mut remaining, |_, _| {
+            built = built.saturating_add(1);
+        });
         ensure!(flow == Continue, "more indices remain, must continue");
         ensure!(built == GRID_BATCH_SIZE, "must build exactly one batch");
         ensure!(remaining.len() == 3, "batch must consume one batch worth");
