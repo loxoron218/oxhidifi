@@ -99,7 +99,7 @@ struct TrackLabels {
 pub fn format_time(seconds: f64) -> String {
     let total = seconds.max(0.0).floor();
     let mins = (total / 60.0).floor();
-    let secs = total - (mins * 60.0);
+    let secs = mins.mul_add(-60.0, total);
     format!("{mins:02.0}:{secs:02.0}")
 }
 

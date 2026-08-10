@@ -4,7 +4,7 @@ use std::{fs::metadata, path::Path};
 
 use {
     lofty::{
-        error::LoftyError,
+        error::FileParseError,
         file::{
             AudioFile,
             FileType::{self, Aiff, Flac, Mp4, Mpeg, Opus, Vorbis, Wav},
@@ -59,7 +59,7 @@ pub struct AudioMetadata {
 pub enum MetadataError {
     /// Failed to read or parse the audio file.
     #[error("Failed to read audio file: {0}")]
-    ReadError(#[from] LoftyError),
+    ReadError(#[from] FileParseError),
     /// File does not exist or is not a regular file.
     #[error("File not found or inaccessible: {0}")]
     FileNotFound(String),

@@ -180,8 +180,8 @@ mod tests {
     #[test]
     fn downmix_empty_input_returns_empty_output() {
         let result = downmix(&[], 2, 1);
-        assert!(result.is_empty());
+        assert_eq!(result, Vec::<f32>::new());
         let result = downmix(&[], 1, 6);
-        assert!(result.is_empty());
+        assert_eq!(result, Vec::<f32>::new());
     }
 }

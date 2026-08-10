@@ -8,7 +8,7 @@ use std::{
 
 use {
     lofty::{
-        error::LoftyError,
+        error::FileParseError,
         file::TaggedFileExt,
         picture::{MimeType, PictureType::CoverFront},
         read_from_path,
@@ -33,7 +33,7 @@ const CACHE_VERSION: &str = "2";
 pub enum ArtworkError {
     /// Failed to read the audio file for artwork.
     #[error("Failed to read audio file for artwork: {0}")]
-    ReadError(#[from] LoftyError),
+    ReadError(#[from] FileParseError),
     /// File not found or inaccessible.
     #[error("File not found or inaccessible: {0}")]
     FileNotFound(String),
