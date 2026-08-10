@@ -665,7 +665,10 @@ mod tests {
         env::temp_dir,
         path::Path,
         process::id,
-        sync::{Arc, LazyLock},
+        sync::{
+            Arc, LazyLock,
+            atomic::{AtomicBool, Ordering::SeqCst},
+        },
     };
 
     use {
@@ -674,8 +677,8 @@ mod tests {
         libadwaita::{
             Application,
             glib::ExitCode,
-            gtk::{self, test as gtk_test},
-            prelude::ApplicationExtManual,
+            gtk::test_synced,
+            prelude::{ApplicationExt, ApplicationExtManual},
         },
         tempfile::{TempDir, tempdir},
         tokio::runtime::Runtime,
@@ -701,6 +704,8 @@ mod tests {
         },
         threading::ThreadManager,
     };
+
+    static QUIT_SHUTDOWN_EMITTED: AtomicBool = AtomicBool::new(false);
 
     impl AppState {
         /// Create a mock `AppState` for testing.
@@ -891,20 +896,34 @@ mod tests {
         Ok(())
     }
 
-    #[gtk_test]
-    async fn dispatch_quit_on_main_requests_application_quit() -> Result<()> {
-        let app = Application::builder().application_id(APP_ID).build();
-        let (quit_tx, quit_rx) = unbounded();
-        quit_tx
-            .try_send(())
-            .context("Failed to send quit request")?;
+    #[test]
+    fn dispatch_quit_on_main_requests_application_quit() -> Result<()> {
+        test_synced(move || {
+            let app = Application::builder().application_id(APP_ID).build();
+            app.connect_activate(|_| ());
 
-        dispatch_quit_on_main(app.clone(), quit_rx);
+            let app_hold = app.hold();
 
-        ensure!(
-            app.run() == ExitCode::new(1),
-            "run() should return 1 immediately once quit was requested"
-        );
-        Ok(())
+            let (quit_tx, quit_rx) = unbounded();
+            quit_tx
+                .try_send(())
+                .context("Failed to send quit request")?;
+
+            QUIT_SHUTDOWN_EMITTED.store(false, SeqCst);
+            app.connect_shutdown(|_| QUIT_SHUTDOWN_EMITTED.store(true, SeqCst));
+
+            dispatch_quit_on_main(app.clone(), quit_rx);
+
+            ensure!(
+                app.run_with_args::<&str>(&[]) == ExitCode::new(0),
+                "run() should return once the quit request was consumed"
+            );
+            ensure!(
+                QUIT_SHUTDOWN_EMITTED.load(SeqCst),
+                "application should shut down after the quit request"
+            );
+            drop(app_hold);
+            Ok(())
+        })
     }
 }
