@@ -12,7 +12,7 @@ use {async_channel::Sender, parking_lot::Mutex, tokio::sync::mpsc::Sender as Mps
 use crate::playback::{
     gapless::GaplessTransitioner,
     output::AudioOutput,
-    queue::PlaybackQueue,
+    queue_manager::PlaybackQueue,
     state::{PlaybackEvent, PlaybackState},
 };
 
@@ -155,9 +155,9 @@ mod tests {
 
     use crate::playback::{
         PlaybackError::{NoDeviceAvailable, Output, QueueEmpty, TrackNotFound},
-        control::PlaybackController,
         engine::PlaybackEngine,
         state::PlaybackStatus::Stopped,
+        transport::PlaybackTransport,
     };
 
     fn setup_queue(engine: &PlaybackEngine, track_ids: Vec<i64>) {

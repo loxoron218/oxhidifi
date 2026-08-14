@@ -1,269 +1,242 @@
-//! XDG-based user settings persistence using `serde_json`.
+//! User-facing settings data model persisted as JSON.
 
-use std::{
-    fs::write,
-    path::{Path, PathBuf},
-};
-
-use {
-    anyhow::{Context, Result},
-    serde::{Deserialize, Serialize},
-    serde_json::{from_str, to_string_pretty},
-    tokio::fs::{create_dir_all, read_to_string, rename, try_exists},
-    tracing::warn,
-};
+use serde::{Deserialize, Serialize};
 
 use crate::{
-    app::dirs_config_home, playback::devices::OutputMode, storage::user_settings::UserSettings,
+    playback::devices::OutputMode::{self, Resampled},
+    storage::{
+        active_tab::ActiveTab::{self, Albums},
+        sort_rules::{AlbumSortItem, ArtistSortItem, default_albums_sort, default_artists_sort},
+        view_mode::ViewMode::{self, Grid},
+    },
 };
 
-/// Active tab in the library view.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ActiveTab {
-    /// Albums tab.
-    Albums,
-    /// Artists tab.
-    Artists,
+/// Default grid zoom level (level 2 → 180 px covers).
+pub const DEFAULT_GRID_ZOOM: u8 = 2;
+
+/// Default list zoom level (level 1 → 48 px covers).
+pub const DEFAULT_LIST_ZOOM: u8 = 1;
+
+/// Persistent user settings stored as JSON at XDG config path.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UserSettings {
+    /// Preferred audio output device name (None = default).
+    pub audio_device: Option<String>,
+    /// Playback volume (0.0–1.0).
+    pub volume: f64,
+    /// Current view mode preference.
+    pub view_mode: ViewMode,
+    /// Last active tab.
+    pub active_tab: ActiveTab,
+    /// Stored window width.
+    pub window_width: i32,
+    /// Stored window height.
+    pub window_height: i32,
+    /// Whether window is maximized.
+    pub window_maximized: bool,
+    /// Whether gapless playback is enabled.
+    pub gapless_enabled: bool,
+    /// Whether to show album title/artist/format labels under cover art.
+    pub show_album_labels: bool,
+    /// Output mode: resampled (software volume) or bit-perfect (hardware volume).
+    pub output_mode: OutputMode,
+    /// Track IDs from the last playback session (for queue restoration).
+    pub last_queue: Vec<i64>,
+    /// Index into `last_queue` for the track that was playing.
+    pub last_queue_index: Option<usize>,
+    /// Track ID that was playing when the session ended.
+    pub last_track_id: Option<i64>,
+    /// Elapsed seconds in the last track.
+    pub last_position: f64,
+    /// Duration of the last track (for validation).
+    pub last_duration: f64,
+    /// Sort criteria for albums grid view.
+    pub albums_sort: Vec<AlbumSortItem>,
+    /// Sort criteria for artists grid view.
+    pub artists_sort: Vec<ArtistSortItem>,
+    /// Grid view zoom level (0–4).
+    pub grid_zoom_level: u8,
+    /// List view zoom level (0–2).
+    pub list_zoom_level: u8,
 }
 
-/// Manages persistent user settings stored as JSON.
-#[derive(Debug, Clone)]
-pub struct SettingsStore {
-    /// Path to the settings JSON file.
-    settings_path: PathBuf,
-    /// In-memory settings state.
-    settings: UserSettings,
-}
-
-impl SettingsStore {
-    /// Load settings from the XDG config path, creating defaults if missing.
-    ///
-    /// A malformed or unreadable settings file falls back to defaults rather
-    /// than failing the whole load.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the config directory cannot be created.
-    pub async fn load_async() -> Result<Self> {
-        let settings_path = dirs_config_home()?.join("oxhidifi").join("settings.json");
-        Self::load_from_path(&settings_path).await
-    }
-
-    /// Load settings from an explicit settings file path, creating the parent
-    /// directory and falling back to defaults for a missing or malformed file.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the settings parent directory cannot be created.
-    pub async fn load_from_path(settings_path: &Path) -> Result<Self> {
-        if let Some(config_dir) = settings_path.parent() {
-            create_dir_all(config_dir).await.context(format!(
-                "Failed to create config directory: {}",
-                config_dir.display()
-            ))?;
+impl Default for UserSettings {
+    fn default() -> Self {
+        Self {
+            audio_device: None,
+            volume: 1.0,
+            view_mode: Grid,
+            active_tab: Albums,
+            window_width: 1200,
+            window_height: 800,
+            window_maximized: false,
+            gapless_enabled: true,
+            show_album_labels: true,
+            output_mode: Resampled,
+            last_queue: Vec::new(),
+            last_queue_index: None,
+            last_track_id: None,
+            last_position: 0.0,
+            last_duration: 0.0,
+            albums_sort: default_albums_sort(),
+            artists_sort: default_artists_sort(),
+            grid_zoom_level: DEFAULT_GRID_ZOOM,
+            list_zoom_level: DEFAULT_LIST_ZOOM,
         }
-
-        let settings = load_settings_with_fallback(settings_path).await?;
-
-        Ok(Self {
-            settings_path: settings_path.to_path_buf(),
-            settings,
-        })
-    }
-
-    /// Synchronously update in-memory state only (no I/O).
-    pub fn update_memory(&mut self, f: impl FnOnce(&mut UserSettings)) {
-        f(&mut self.settings);
-    }
-
-    /// Serialize current settings and write to disk synchronously.
-    ///
-    /// Bypasses the async write path so the write is guaranteed to complete
-    /// before the caller returns (e.g. on window close, when the process
-    /// exits before a debounced async save would finish).
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if serialization or the file write fails.
-    pub fn save_sync(&self) -> Result<()> {
-        let json = to_string_pretty(&self.settings).context("Failed to serialize settings")?;
-        write(&self.settings_path, &json).with_context(|| {
-            format!("Failed to write settings: {}", self.settings_path.display())
-        })?;
-        Ok(())
-    }
-
-    /// Get a reference to the current settings.
-    #[must_use]
-    pub const fn get(&self) -> &UserSettings {
-        &self.settings
-    }
-
-    /// Get whether gapless playback is enabled.
-    #[must_use]
-    pub const fn get_gapless_enabled(&self) -> bool {
-        self.settings.gapless_enabled
-    }
-
-    /// Get whether album labels are shown under cover art.
-    #[must_use]
-    pub const fn get_show_album_labels(&self) -> bool {
-        self.settings.show_album_labels
-    }
-
-    /// Get the preferred audio device name.
-    #[must_use]
-    pub fn get_audio_device(&self) -> Option<&str> {
-        self.settings.audio_device.as_deref()
-    }
-
-    /// Get the active tab preference.
-    #[must_use]
-    pub const fn get_active_tab(&self) -> ActiveTab {
-        self.settings.active_tab
-    }
-
-    /// Get the volume level.
-    #[must_use]
-    pub const fn get_volume(&self) -> f64 {
-        self.settings.volume
-    }
-
-    /// Get the output mode.
-    #[must_use]
-    pub const fn get_output_mode(&self) -> OutputMode {
-        self.settings.output_mode
-    }
-
-    /// Get the last playback session data.
-    #[must_use]
-    pub fn get_last_session(&self) -> (Vec<i64>, Option<usize>, Option<i64>, f64, f64) {
-        (
-            self.settings.last_queue.clone(),
-            self.settings.last_queue_index,
-            self.settings.last_track_id,
-            self.settings.last_position,
-            self.settings.last_duration,
-        )
-    }
-
-    /// Get read access to the underlying settings path.
-    #[must_use]
-    pub fn path(&self) -> &Path {
-        &self.settings_path
-    }
-}
-
-/// User-facing view mode preference.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ViewMode {
-    /// Grid layout.
-    Grid,
-    /// Column/list layout.
-    Column,
-}
-
-impl ViewMode {
-    /// Get the icon name for this view mode.
-    #[must_use]
-    pub const fn icon_name(self) -> &'static str {
-        match self {
-            Self::Grid => "view-grid-symbolic",
-            Self::Column => "view-list-symbolic",
-        }
-    }
-
-    /// Get the tooltip text for this view mode.
-    #[must_use]
-    pub const fn tooltip(self) -> &'static str {
-        match self {
-            Self::Grid => "Switch to column view",
-            Self::Column => "Switch to grid view",
-        }
-    }
-}
-
-/// Try to load settings from file, falling back to defaults on parse error.
-async fn load_settings_with_fallback(settings_path: &Path) -> Result<UserSettings> {
-    if try_exists(settings_path).await.unwrap_or(false) {
-        let content = read_to_string(settings_path)
-            .await
-            .with_context(|| format!("Failed to read settings: {}", settings_path.display()))?;
-        match from_str(&content) {
-            Ok(settings) => Ok(settings),
-            Err(e) => {
-                warn!(
-                    error = %e,
-                    path = %settings_path.display(),
-                    "Failed to parse settings, falling back to defaults",
-                );
-                backup_corrupt_settings(settings_path).await;
-                Ok(UserSettings::default())
-            }
-        }
-    } else {
-        Ok(UserSettings::default())
-    }
-}
-
-/// Preserve a corrupt settings file before defaults overwrite it.
-///
-/// The fallback above returns defaults, which the next save writes back over
-/// the corrupt file — destroying any recoverable data. Renaming the file out
-/// of the way first keeps it for manual recovery. Best‑effort: a failed
-/// rename only logs, never fails the load.
-async fn backup_corrupt_settings(settings_path: &Path) {
-    let backup_path = settings_path.with_extension("json.corrupt");
-    if let Err(e) = rename(settings_path, &backup_path).await {
-        warn!(
-            error = %e,
-            path = %backup_path.display(),
-            "Failed to back up corrupt settings file",
-        );
     }
 }
 
 #[cfg(test)]
 mod tests {
     use std::{
-        fs::{File, read_to_string, write},
+        fs::{File, write},
         io::BufReader,
-        path::Path,
     };
 
     use {
-        anyhow::{Result, bail, ensure},
+        anyhow::{Result, ensure},
         serde_json::{from_reader, from_str, to_string_pretty},
-        tempfile::{TempDir, tempdir},
-        tokio::test as tokio_test,
+        tempfile::tempdir,
     };
 
     use crate::{
         playback::devices::OutputMode::{BitPerfect, Resampled},
         storage::{
-            settings::{
-                ActiveTab::{Albums, Artists},
-                SettingsStore,
-                ViewMode::{Column, Grid},
+            active_tab::ActiveTab::{Albums, Artists},
+            settings::{DEFAULT_GRID_ZOOM, DEFAULT_LIST_ZOOM, UserSettings, default_artists_sort},
+            sort_rules::{
+                AlbumSortCriteria::{BitDepth, Title},
+                AlbumSortItem,
+                ArtistSortCriteria::Name,
+                ArtistSortItem,
+                SortOrder::{Ascending, Descending},
+                default_albums_sort,
             },
-            user_settings::UserSettings,
+            view_mode::ViewMode::{Column, Grid},
         },
     };
 
-    fn store_in(dir: &Path) -> SettingsStore {
-        SettingsStore {
-            settings_path: dir.join("settings.json"),
-            settings: UserSettings {
-                volume: 0.5,
-                ..UserSettings::default()
-            },
+    fn custom_settings() -> UserSettings {
+        UserSettings {
+            audio_device: Some("hw:0".to_string()),
+            volume: 0.25,
+            view_mode: Column,
+            active_tab: Artists,
+            window_width: 900,
+            window_height: 600,
+            window_maximized: true,
+            gapless_enabled: false,
+            show_album_labels: false,
+            output_mode: BitPerfect,
+            last_queue: vec![1, 2, 3],
+            last_queue_index: Some(1),
+            last_track_id: Some(2),
+            last_position: 42.5,
+            last_duration: 200.0,
+            albums_sort: vec![
+                AlbumSortItem {
+                    criteria: Title,
+                    order: Descending,
+                },
+                AlbumSortItem {
+                    criteria: BitDepth,
+                    order: Ascending,
+                },
+            ],
+            artists_sort: vec![ArtistSortItem {
+                criteria: Name,
+                order: Descending,
+            }],
+            grid_zoom_level: 3,
+            list_zoom_level: 2,
         }
     }
 
-    fn read_volume(dir: &TempDir) -> Result<f64> {
-        let content = read_to_string(dir.path().join("settings.json"))?;
-        let restored: UserSettings = from_str(&content)?;
-        Ok(restored.volume)
+    #[test]
+    fn full_round_trip_preserves_every_field() -> Result<()> {
+        let original = custom_settings();
+        let json = to_string_pretty(&original)?;
+        let restored: UserSettings = from_str(&json)?;
+
+        ensure!(restored.audio_device == original.audio_device);
+        ensure!((restored.volume - original.volume).abs() < f64::EPSILON);
+        ensure!(restored.view_mode == original.view_mode);
+        ensure!(restored.active_tab == original.active_tab);
+        ensure!(restored.window_width == original.window_width);
+        ensure!(restored.window_height == original.window_height);
+        ensure!(restored.window_maximized == original.window_maximized);
+        ensure!(restored.gapless_enabled == original.gapless_enabled);
+        ensure!(restored.show_album_labels == original.show_album_labels);
+        ensure!(restored.output_mode == original.output_mode);
+        ensure!(restored.last_queue == original.last_queue);
+        ensure!(restored.last_queue_index == original.last_queue_index);
+        ensure!(restored.last_track_id == original.last_track_id);
+        ensure!((restored.last_position - original.last_position).abs() < f64::EPSILON);
+        ensure!((restored.last_duration - original.last_duration).abs() < f64::EPSILON);
+        ensure!(restored.albums_sort == original.albums_sort);
+        ensure!(restored.artists_sort == original.artists_sort);
+        ensure!(restored.grid_zoom_level == original.grid_zoom_level);
+        ensure!(restored.list_zoom_level == original.list_zoom_level);
+        Ok(())
+    }
+
+    #[test]
+    fn empty_document_parses_to_defaults() -> Result<()> {
+        let settings: UserSettings = from_str("{}")?;
+        ensure!(
+            settings.albums_sort == default_albums_sort(),
+            "missing albums_sort must fall back to defaults"
+        );
+        ensure!(
+            settings.artists_sort == default_artists_sort(),
+            "missing artists_sort must fall back to defaults"
+        );
+        ensure!(settings.grid_zoom_level == DEFAULT_GRID_ZOOM);
+        ensure!(settings.list_zoom_level == DEFAULT_LIST_ZOOM);
+        ensure!((settings.volume - 1.0).abs() < f64::EPSILON);
+        Ok(())
+    }
+
+    #[test]
+    fn legacy_document_without_new_fields_parses_to_defaults() -> Result<()> {
+        let legacy = r#"{
+            "audio_device": "default",
+            "volume": 0.5,
+            "view_mode": "Grid",
+            "active_tab": "Albums",
+            "window_width": 1200,
+            "window_height": 800,
+            "window_maximized": false,
+            "gapless_enabled": true,
+            "show_album_labels": true,
+            "output_mode": "resampled"
+        }"#;
+        let settings: UserSettings = from_str(legacy)?;
+        ensure!(settings.audio_device.as_deref() == Some("default"));
+        ensure!(
+            settings.albums_sort == default_albums_sort(),
+            "a legacy file without sort fields must use the default sort"
+        );
+        ensure!(settings.grid_zoom_level == DEFAULT_GRID_ZOOM);
+        Ok(())
+    }
+
+    #[test]
+    fn output_mode_round_trips_through_user_settings() -> Result<()> {
+        let original = UserSettings {
+            output_mode: BitPerfect,
+            ..UserSettings::default()
+        };
+        let json = to_string_pretty(&original)?;
+        ensure!(
+            json.contains("\"bit_perfect\""),
+            "output_mode should serialize with snake_case tag"
+        );
+        let restored: UserSettings = from_str(&json)?;
+        ensure!(restored.output_mode == BitPerfect);
+        ensure!(restored.output_mode == original.output_mode);
+        Ok(())
     }
 
     #[test]
@@ -305,193 +278,5 @@ mod tests {
 
         assert!((restored.volume - 0.5).abs() < f64::EPSILON);
         assert_eq!(restored.view_mode, Column);
-    }
-
-    #[test]
-    fn show_album_labels_defaults_and_round_trips() {
-        let Ok(dir) = tempdir() else { return };
-        let mut store = SettingsStore {
-            settings_path: dir.path().join("settings.json"),
-            settings: UserSettings::default(),
-        };
-        assert!(
-            store.get_show_album_labels(),
-            "album labels should default to visible"
-        );
-        store.update_memory(|s| s.show_album_labels = false);
-        assert!(
-            !store.get_show_album_labels(),
-            "album labels should reflect update_memory"
-        );
-        store.update_memory(|s| s.show_album_labels = true);
-        assert!(
-            store.get_show_album_labels(),
-            "album labels should be re-enabled"
-        );
-    }
-
-    #[test]
-    fn last_session_round_trips() {
-        let Ok(dir) = tempdir() else { return };
-        let mut store = SettingsStore {
-            settings_path: dir.path().join("settings.json"),
-            settings: UserSettings::default(),
-        };
-
-        let (queue, index, track, position, duration) = store.get_last_session();
-        assert!(queue.is_empty(), "default session queue should be empty");
-        assert_eq!(index, None);
-        assert_eq!(track, None);
-        assert!((position - 0.0).abs() < f64::EPSILON);
-        assert!((duration - 0.0).abs() < f64::EPSILON);
-
-        store.update_memory(|s| {
-            s.last_queue = vec![10, 20, 30];
-            s.last_queue_index = Some(1);
-            s.last_track_id = Some(20);
-            s.last_position = 42.5;
-            s.last_duration = 200.0;
-        });
-
-        let (queue, index, track, position, duration) = store.get_last_session();
-        assert_eq!(queue, vec![10, 20, 30]);
-        assert_eq!(index, Some(1));
-        assert_eq!(track, Some(20));
-        assert!((position - 42.5).abs() < f64::EPSILON);
-        assert!((duration - 200.0).abs() < f64::EPSILON);
-    }
-
-    #[test]
-    fn active_tab_round_trips() {
-        let Ok(dir) = tempdir() else { return };
-        let mut store = SettingsStore {
-            settings_path: dir.path().join("settings.json"),
-            settings: UserSettings::default(),
-        };
-        assert_eq!(store.get_active_tab(), Albums);
-        store.update_memory(|s| s.active_tab = Artists);
-        assert_eq!(store.get_active_tab(), Artists);
-    }
-
-    #[test]
-    fn output_mode_round_trips_through_user_settings() {
-        let original = UserSettings {
-            output_mode: BitPerfect,
-            ..UserSettings::default()
-        };
-        let Ok(json) = to_string_pretty(&original) else {
-            return;
-        };
-        assert!(
-            json.contains("\"bit_perfect\""),
-            "output_mode should serialize with snake_case tag"
-        );
-        let Ok(restored) = from_str::<UserSettings>(&json) else {
-            return;
-        };
-        assert_eq!(restored.output_mode, BitPerfect);
-        assert_eq!(restored.output_mode, original.output_mode);
-    }
-
-    #[test]
-    fn save_sync_persists_file() -> Result<()> {
-        let dir = tempdir()?;
-        let store = store_in(dir.path());
-        store.save_sync()?;
-        ensure!((read_volume(&dir)? - 0.5).abs() < f64::EPSILON);
-        Ok(())
-    }
-
-    #[test]
-    fn save_sync_error_includes_settings_path() -> Result<()> {
-        let dir = tempdir()?;
-        let store = SettingsStore {
-            settings_path: dir.path().join("missing").join("settings.json"),
-            settings: UserSettings::default(),
-        };
-        let message = match store.save_sync() {
-            Ok(()) => bail!("expected save to fail for a missing directory"),
-            Err(e) => e.to_string(),
-        };
-        ensure!(message.contains("settings.json"), "message was: {message}");
-        ensure!(
-            message.contains("Failed to write settings"),
-            "message was: {message}"
-        );
-        Ok(())
-    }
-
-    #[tokio_test]
-    async fn load_from_path_creates_parent_dir_and_returns_defaults() -> Result<()> {
-        let dir = tempdir()?;
-        let settings_path = dir.path().join("nested").join("settings.json");
-        let store = SettingsStore::load_from_path(&settings_path).await?;
-        ensure!(
-            dir.path().join("nested").is_dir(),
-            "load_from_path must create the settings parent directory"
-        );
-        ensure!(store.path() == settings_path);
-        ensure!(
-            (store.get_volume() - 1.0).abs() < f64::EPSILON,
-            "a missing file must yield default settings"
-        );
-        Ok(())
-    }
-
-    #[tokio_test]
-    async fn load_from_path_round_trips_valid_file() -> Result<()> {
-        let dir = tempdir()?;
-        let settings_path = dir.path().join("settings.json");
-        let original = UserSettings {
-            volume: 0.75,
-            ..UserSettings::default()
-        };
-        write(&settings_path, to_string_pretty(&original)?)?;
-
-        let store = SettingsStore::load_from_path(&settings_path).await?;
-        ensure!(
-            (store.get_volume() - 0.75).abs() < f64::EPSILON,
-            "loaded volume must match the file contents"
-        );
-        Ok(())
-    }
-
-    #[tokio_test]
-    async fn load_from_path_falls_back_to_defaults_on_corrupt_file() -> Result<()> {
-        let dir = tempdir()?;
-        let settings_path = dir.path().join("settings.json");
-        write(&settings_path, "{ this is not valid json")?;
-
-        let store = SettingsStore::load_from_path(&settings_path).await?;
-        ensure!(
-            (store.get_volume() - 1.0).abs() < f64::EPSILON,
-            "a corrupt file must fall back to defaults instead of failing the load"
-        );
-        Ok(())
-    }
-
-    #[tokio_test]
-    async fn load_from_path_backs_up_corrupt_file_before_defaults() -> Result<()> {
-        let dir = tempdir()?;
-        let settings_path = dir.path().join("settings.json");
-        let corrupt = "{ this is not valid json";
-        write(&settings_path, corrupt)?;
-
-        SettingsStore::load_from_path(&settings_path).await?;
-
-        ensure!(
-            !settings_path.exists(),
-            "the corrupt file must be renamed out of the way"
-        );
-        let backup_path = settings_path.with_extension("json.corrupt");
-        ensure!(
-            backup_path.exists(),
-            "the corrupt file must be preserved as a backup"
-        );
-        ensure!(
-            read_to_string(&backup_path)? == corrupt,
-            "the backup must retain the original corrupt contents"
-        );
-        Ok(())
     }
 }

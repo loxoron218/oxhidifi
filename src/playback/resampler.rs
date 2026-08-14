@@ -1,17 +1,16 @@
 //! Rubato-based sample rate conversion with fixed I/O buffers.
 
-use std::f64::consts::PI;
+pub mod amplitude;
+pub mod inspect;
+pub mod tone_gen;
 
-use {
-    num_traits,
-    rubato::{
-        Fft,
-        FixedSync::Input,
-        Indexing,
-        ResampleError::{self, InsufficientInputBufferSize, InsufficientOutputBufferSize},
-        Resampler, ResamplerConstructionError,
-        audioadapter_buffers::direct::InterleavedSlice,
-    },
+use rubato::{
+    Fft,
+    FixedSync::Input,
+    Indexing,
+    ResampleError::{self, InsufficientInputBufferSize, InsufficientOutputBufferSize},
+    Resampler, ResamplerConstructionError,
+    audioadapter_buffers::direct::InterleavedSlice,
 };
 
 /// Sample rate converter wrapping the rubato FFT resampler.
@@ -216,67 +215,6 @@ impl AudioResampler {
         self.indexing.output_offset = 0;
         self.indexing.partial_len = None;
     }
-
-    /// Input sample rate in Hz.
-    #[must_use]
-    pub const fn input_rate(&self) -> u32 {
-        self.input_rate
-    }
-
-    /// Output sample rate in Hz.
-    #[must_use]
-    pub const fn output_rate(&self) -> u32 {
-        self.output_rate
-    }
-
-    /// Number of audio channels.
-    #[must_use]
-    pub const fn channels(&self) -> usize {
-        self.channels
-    }
-
-    /// Fixed input chunk size in frames.
-    #[must_use]
-    pub const fn chunk_size(&self) -> usize {
-        self.chunk_size
-    }
-
-    /// Resample ratio (`output_rate` / `input_rate`).
-    #[must_use]
-    pub fn ratio(&self) -> f64 {
-        f64::from(self.output_rate) / f64::from(self.input_rate)
-    }
-
-    /// The resampler's output delay in output frames.
-    #[must_use]
-    pub fn output_delay(&self) -> usize {
-        self.resampler.output_delay()
-    }
-
-    /// Number of input frames needed for the next process call.
-    #[must_use]
-    pub fn input_frames_next(&self) -> usize {
-        self.resampler.input_frames_next()
-    }
-
-    /// Number of accumulated input frames.
-    #[must_use]
-    pub const fn accum_frames(&self) -> usize {
-        match self.input_accum.len().checked_div(self.channels) {
-            Some(frames) => frames,
-            None => 0,
-        }
-    }
-
-    /// Returns `true` if enough input has been accumulated to process a chunk.
-    #[must_use]
-    pub fn has_pending_output(&self) -> bool {
-        self.input_accum.len()
-            >= self
-                .resampler
-                .input_frames_next()
-                .saturating_mul(self.channels)
-    }
 }
 
 /// Configurable resampling algorithm.
@@ -284,157 +222,6 @@ impl AudioResampler {
 pub enum ResampleAlgorithm {
     /// High-quality FFT-based resampling.
     Fft,
-}
-
-/// Compute the RMS (Root Mean Square) of a slice of samples.
-#[must_use]
-pub fn rms(samples: &[f32]) -> f64 {
-    if samples.is_empty() {
-        return 0.0;
-    }
-    let sum_sq: f64 = samples.iter().map(|&s| f64::from(s).powi(2)).sum();
-    let len: f64 = num_traits::NumCast::from(samples.len()).unwrap_or(f64::INFINITY);
-    (sum_sq / len).sqrt()
-}
-
-/// Compute the Signal-to-Noise Ratio (SNR) in dB between a reference
-/// signal and a test signal.
-///
-/// SNR = 20 * `log10(RMS_reference` / `RMS_noise`)
-/// where `RMS_noise` = RMS(reference - test).
-///
-/// # Panics
-///
-/// Panics if the two slices differ in length.
-#[must_use]
-pub fn compute_snr_db(reference: &[f32], test: &[f32]) -> f64 {
-    assert_eq!(reference.len(), test.len(), "signal lengths must match");
-
-    let rms_ref = rms(reference);
-    if rms_ref < f64::EPSILON {
-        return 0.0;
-    }
-
-    let noise: Vec<f32> = reference
-        .iter()
-        .zip(test.iter())
-        .map(|(a, b)| a - b)
-        .collect();
-    let rms_noise = rms(&noise);
-
-    if rms_noise < f64::EPSILON {
-        return f64::INFINITY;
-    }
-
-    20.0 * (rms_ref / rms_noise).log10()
-}
-
-/// Calculate the number of samples for a given duration at a sample rate.
-fn calc_num_samples(sample_rate: u32, duration_secs: f64) -> usize {
-    num_traits::NumCast::from((f64::from(sample_rate) * duration_secs).floor()).unwrap_or(0)
-}
-
-/// Allocate an interleaved f32 sample buffer for a duration at a sample rate.
-///
-/// # Arguments
-///
-/// * `sample_rate` - Sample rate in Hz.
-/// * `duration_secs` - Buffer duration in seconds.
-/// * `channels` - Number of interleaved channels.
-///
-/// # Returns
-///
-/// A `(frame_count, buffer)` pair where `frame_count` is the number of frames and
-/// `buffer` is pre-allocated for `frame_count * channels` interleaved samples.
-fn allocate_samples(sample_rate: u32, duration_secs: f64, channels: usize) -> (usize, Vec<f32>) {
-    let num_samples = calc_num_samples(sample_rate, duration_secs);
-    (
-        num_samples,
-        Vec::with_capacity(num_samples.saturating_mul(channels)),
-    )
-}
-
-/// Generate a sine wave tone at the given frequency.
-///
-/// Returns interleaved samples for the given number of channels.
-#[must_use]
-pub fn generate_sine(
-    frequency: f64,
-    sample_rate: u32,
-    duration_secs: f64,
-    amplitude: f32,
-    channels: usize,
-) -> Vec<f32> {
-    let (num_samples, mut samples) = allocate_samples(sample_rate, duration_secs, channels);
-    for i in 0..num_samples {
-        let t: f64 = num_traits::NumCast::from(i).unwrap_or(0.0) / f64::from(sample_rate);
-        let sin_val: f32 =
-            num_traits::NumCast::from((2.0_f64 * PI * frequency * t).sin()).unwrap_or(0.0);
-        let value = amplitude * sin_val;
-        for _ in 0..channels {
-            samples.push(value);
-        }
-    }
-    samples
-}
-
-/// Generate silence samples.
-#[must_use]
-pub fn generate_silence(sample_rate: u32, duration_secs: f64, channels: usize) -> Vec<f32> {
-    let num_samples = calc_num_samples(sample_rate, duration_secs);
-    vec![0.0_f32; num_samples.saturating_mul(channels)]
-}
-
-/// Generate pink noise with a deterministic LCG-based approach.
-#[must_use]
-pub fn generate_pink_noise(
-    sample_rate: u32,
-    duration_secs: f64,
-    amplitude: f32,
-    channels: usize,
-) -> Vec<f32> {
-    let (num_samples, mut samples) = allocate_samples(sample_rate, duration_secs, channels);
-    let octaves = 16;
-    let mut white_buf = vec![0.0_f32; octaves];
-    let mut pink = 0.0_f32;
-    let mut state: u32 = 12345;
-
-    let norm = f64::from(u32::MAX);
-    for i in 0..num_samples {
-        state = state.wrapping_mul(1_103_515_245).wrapping_add(12_345);
-        let white_f32: f32 = num_traits::NumCast::from(f64::from(state) / norm).unwrap_or(0.0);
-        let white = white_f32.mul_add(2.0_f32, -1.0_f32) * amplitude;
-        let Some(slot) = white_buf.get_mut(i % octaves) else {
-            continue;
-        };
-        pink += white - *slot;
-        *slot = white;
-        let value = pink / 16.0_f32;
-        for _ in 0..channels {
-            samples.push(value);
-        }
-    }
-    samples
-}
-
-/// Generate an impulse (Dirac delta) at the given position (in seconds).
-#[must_use]
-pub fn generate_impulse(
-    sample_rate: u32,
-    position_secs: f64,
-    amplitude: f32,
-    channels: usize,
-) -> Vec<f32> {
-    let position_samples: usize =
-        num_traits::NumCast::from((f64::from(sample_rate) * position_secs).floor()).unwrap_or(0);
-    let total_samples = position_samples.saturating_add(1);
-    let mut samples = vec![0.0_f32; total_samples.saturating_mul(channels)];
-    let offset = position_samples.saturating_mul(channels);
-    let Some(impulse) = samples.get_mut(offset..offset.saturating_add(channels)) else {
-        return samples;
-    };
-    impulse.fill(amplitude);
-    samples
 }
 
 /// Create a new resampler for a given sample rate pair.
@@ -453,13 +240,9 @@ pub fn create_resampler(
 
 #[cfg(test)]
 mod tests {
-    use std::f64::consts::SQRT_2;
-
     use anyhow::{Result, anyhow, ensure};
 
-    use crate::playback::resampler::{
-        AudioResampler, compute_snr_db, generate_silence, generate_sine, rms,
-    };
+    use crate::playback::resampler::AudioResampler;
 
     #[test]
     fn resampler_creates_with_valid_params() -> Result<()> {
@@ -580,43 +363,5 @@ mod tests {
             ensure!(result.is_some(), "expected output for {rate} Hz input");
         }
         Ok(())
-    }
-
-    #[test]
-    fn rms_of_sine_is_correct() {
-        let sine = generate_sine(440.0, 44100, 1.0, 1.0, 1);
-        let measured = rms(&sine);
-        let expected = 1.0 / SQRT_2;
-        assert!(
-            (measured - expected).abs() < 0.01,
-            "expected RMS ~{expected}, got {measured}"
-        );
-    }
-
-    #[test]
-    fn snr_of_identical_signals_is_infinite() {
-        let signal = generate_sine(440.0, 44100, 0.5, 1.0, 2);
-        let snr = compute_snr_db(&signal, &signal);
-        assert!(
-            snr.is_infinite(),
-            "identical signals should have infinite SNR"
-        );
-    }
-
-    #[test]
-    fn snr_of_silence_is_zero() {
-        let signal = generate_sine(440.0, 44100, 0.5, 1.0, 2);
-        let silence = generate_silence(44100, 0.5, 2);
-        let snr_silence = compute_snr_db(&silence, &silence);
-        assert!(
-            (snr_silence).abs() < f64::EPSILON,
-            "silence SNR should be 0"
-        );
-        let snr = compute_snr_db(&signal, &silence);
-        assert!(snr.is_finite(), "SNR should be finite");
-        assert!(
-            (snr).abs() < f64::EPSILON,
-            "SNR should be 0 dB when comparing signal to silence"
-        );
     }
 }

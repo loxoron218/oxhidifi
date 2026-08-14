@@ -17,7 +17,7 @@ use {
     tracing::warn,
 };
 
-use crate::app::dirs_cache_home;
+use crate::app::xdg_paths::dirs_cache_home;
 
 /// Subdirectory for cached artwork files.
 const ARTWORK_CACHE_DIR: &str = "oxhidifi/artwork";

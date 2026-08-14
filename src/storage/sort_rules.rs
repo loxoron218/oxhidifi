@@ -14,16 +14,14 @@ macro_rules! impl_criteria_helpers {
     ($ty:ident { $($variant:ident => ($disc:literal, $label:literal)),+ $(,)? }) => {
         impl $ty {
             /// Numeric discriminator used as a compact widget identifier.
-            #[must_use]
-            pub const fn discriminator(&self) -> u8 {
+                        pub const fn discriminator(&self) -> u8 {
                 match self {
                     $(Self::$variant => $disc,)+
                 }
             }
 
             /// Recover a variant from its numeric discriminator.
-            #[must_use]
-            pub const fn from_discriminator(d: u8) -> Option<Self> {
+                        pub const fn from_discriminator(d: u8) -> Option<Self> {
                 match d {
                     $($disc => Some(Self::$variant),)+
                     _ => None,

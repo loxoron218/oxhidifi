@@ -7,4 +7,3 @@ pub mod playback;
 pub mod storage;
 pub mod threading;
 pub mod ui;
-pub mod zoom;

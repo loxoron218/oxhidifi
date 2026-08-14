@@ -15,7 +15,7 @@ use {
     },
 };
 
-use oxhidifi::app::{dirs_data_home, run_application};
+use oxhidifi::app::{lifecycle::run_application, xdg_paths::dirs_data_home};
 
 /// Initialize structured logging to file and stderr.
 ///

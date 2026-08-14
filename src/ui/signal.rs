@@ -22,7 +22,6 @@ pub struct ValueSignal<T> {
 
 impl<T: Copy> ValueSignal<T> {
     /// Create a channel with the given initial value.
-    #[must_use]
     pub fn new(initial: T) -> Self {
         Self {
             inner: Arc::new(ValueSignalInner {
@@ -115,10 +114,9 @@ mod tests {
     #[test]
     fn dropped_receiver_is_pruned() -> Result<()> {
         let channel = ValueSignal::new(0u8);
-        {
-            let _rx = channel.subscribe();
-            ensure!(channel.inner.subs.lock().len() == 1);
-        }
+        let rx = channel.subscribe();
+        ensure!(channel.inner.subs.lock().len() == 1);
+        drop(rx);
         channel.publish();
         ensure!(
             channel.inner.subs.lock().is_empty(),

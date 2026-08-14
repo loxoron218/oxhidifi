@@ -14,6 +14,7 @@ use {
 };
 
 use crate::playback::{
+    advancer::finalize_track,
     decoder::Decoder,
     devices::OutputMode::{BitPerfect, Resampled},
     engine::{
@@ -27,7 +28,6 @@ use crate::playback::{
         PlaybackEvent::{DeviceLost, Resumed, TrackStarted},
         PlaybackStatus::{Paused, Playing},
     },
-    track_transition::finalize_track,
 };
 
 /// Initialised decoder and resampler context for a decode loop.

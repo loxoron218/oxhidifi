@@ -20,8 +20,8 @@ use {
 };
 
 use crate::{
-    app::AppState,
-    library::scanner::{
+    app::runtime::AppState,
+    library::scanner::events::{
         ScanEvent,
         ScanEvent::{ScanCompleted, ScanError, ScanProgress, ScanStarted},
     },
@@ -46,7 +46,6 @@ impl StatusBar {
     /// # Arguments
     ///
     /// * `state` - Application state containing the scan event channel
-    #[must_use]
     pub fn new(state: &Arc<AppState>) -> Self {
         let root = Box::builder()
             .orientation(Horizontal)
@@ -209,7 +208,7 @@ mod tests {
         },
     };
 
-    use crate::{app::AppState, ui::status::StatusBar};
+    use crate::{app::runtime::AppState, ui::status::StatusBar};
 
     #[test]
     fn status_bar_creates_with_root_widget() -> Result<()> {
