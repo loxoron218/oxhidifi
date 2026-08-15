@@ -45,13 +45,18 @@ pub fn build_artist_card(state: &Arc<AppState>, artist: &Artist, size: i32) -> (
         .spacing(6)
         .css_classes(["card"])
         .can_focus(true)
+        .width_request(size)
         .tooltip_text(format!("View albums by {}", artist.name))
         .build();
     card.update_property(&[PropertyLabel(&format!("View albums by {}", artist.name))]);
 
     let avatar = build_artist_avatar(size);
 
-    let overlay = Overlay::new();
+    let overlay = Overlay::builder()
+        .width_request(size)
+        .height_request(size)
+        .halign(Start)
+        .build();
     overlay.set_child(Some(&avatar));
     overlay.set_css_classes(&["cover-overlay"]);
 

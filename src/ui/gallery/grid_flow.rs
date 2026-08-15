@@ -229,6 +229,11 @@ pub fn apply_grid_spacing(flow: &FlowBox, cover_size: i32) {
 /// Handles both the placeholder `Image` and a decoded `Picture`, keeping
 /// the existing widget tree intact so zoom never recreates the cards.
 pub fn resize_overlay_cover(overlay: &Overlay, size: i32) {
+    if let Some(card) = overlay.parent() {
+        card.set_width_request(size);
+    }
+    overlay.set_width_request(size);
+    overlay.set_height_request(size);
     let Some(child) = overlay.child() else {
         return;
     };
@@ -270,17 +275,22 @@ mod tests {
     use std::sync::Arc;
 
     use {
-        anyhow::{Result, ensure},
+        anyhow::{Result, bail, ensure},
         libadwaita::{
-            glib::ControlFlow,
-            gtk::{self, test},
-            prelude::WidgetExt,
+            glib::{ControlFlow, prelude::Cast},
+            gtk::{self, Box, Image, Orientation::Vertical, Overlay, test},
+            prelude::{BoxExt, WidgetExt},
         },
     };
 
     use crate::{
         app::runtime::AppState,
-        ui::gallery::grid_flow::{GRID_BATCH_SIZE, build_grid, fill_grid_batch, grid_spacing},
+        ui::gallery::{
+            card::build_placeholder,
+            grid_flow::{
+                GRID_BATCH_SIZE, build_grid, fill_grid_batch, grid_spacing, resize_overlay_cover,
+            },
+        },
     };
 
     #[test]
@@ -340,5 +350,45 @@ mod tests {
     fn grid_spacing_clamps_negative_cover_sizes() {
         assert_eq!(grid_spacing(-100), 0);
         assert_eq!(grid_spacing(-1), 0);
+    }
+
+    #[test]
+    fn resize_overlay_cover_resizes_card_and_cover() -> Result<()> {
+        let card = Box::new(Vertical, 0);
+        let cover = build_placeholder(120);
+        let overlay = Overlay::new();
+        overlay.set_child(Some(&cover));
+        card.append(&overlay);
+        resize_overlay_cover(&overlay, 240);
+
+        ensure!(
+            card.width_request() == 240,
+            "card width must follow the cover size"
+        );
+        ensure!(
+            overlay.width_request() == 240,
+            "overlay width must follow the cover size"
+        );
+        ensure!(
+            overlay.height_request() == 240,
+            "overlay height must follow the cover size"
+        );
+        let child = overlay.child();
+        let Some(img) = child.as_ref().and_then(|w| w.downcast_ref::<Image>()) else {
+            bail!("placeholder cover must be an Image");
+        };
+        ensure!(
+            img.pixel_size() == 120,
+            "placeholder icon must scale with the cover size"
+        );
+        ensure!(
+            img.width_request() == 240,
+            "placeholder width must follow the cover size"
+        );
+        ensure!(
+            img.height_request() == 240,
+            "placeholder height must follow the cover size"
+        );
+        Ok(())
     }
 }

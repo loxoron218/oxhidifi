@@ -1,25 +1,18 @@
 //! Album cover cards with async artwork loading.
 
-use std::{boxed::Box, sync::Arc};
+use std::sync::Arc;
 
-use {
-    async_channel::{Sender, unbounded},
-    libadwaita::{
-        gdk::MemoryTexture,
-        glib::{prelude::Cast, spawn_future_local},
-        gtk::{
-            Align::{End, Start},
-            Box as GtkBox,
-            ContentFit::Cover,
-            EventControllerMotion, GestureClick, Image, Label,
-            Orientation::{Horizontal, Vertical},
-            Overlay, Picture, Widget,
-            accessible::Property::Label as PropertyLabel,
-            pango::EllipsizeMode::End as EllipsizeEnd,
-        },
-        prelude::{AccessibleExtManual, BoxExt, ButtonExt, WidgetExt},
+use libadwaita::{
+    glib::{prelude::Cast, spawn_future_local},
+    gtk::{
+        Align::{End, Start},
+        Box as GtkBox, EventControllerMotion, GestureClick, Image, Label,
+        Orientation::{Horizontal, Vertical},
+        Overlay, Widget,
+        accessible::Property::Label as PropertyLabel,
+        pango::EllipsizeMode::End as EllipsizeEnd,
     },
-    tracing::error,
+    prelude::{AccessibleExtManual, BoxExt, ButtonExt, WidgetExt},
 };
 
 use crate::{
@@ -27,10 +20,7 @@ use crate::{
     storage::{catalog::Album, formats::FormatInfo},
     ui::{
         gallery::play_action::{album_play_icon, toggle_or_play_album},
-        image_decode::{DecodedCover, raw_to_texture},
         osd_button::build_album_play_button,
-        texture_pool::{CoverArtCache, dispatch::ArtworkDecodeRequest},
-        zoom::grid_cover_size,
     },
 };
 
@@ -51,171 +41,15 @@ pub fn build_placeholder(size: i32) -> Widget {
     placeholder.upcast()
 }
 
-/// Apply a decoded texture to an overlay's child.
-///
-/// If the child is already a `Picture`, updates its paintable in place.
-/// Otherwise replaces the child with a new `Picture`.
-fn apply_texture(overlay: &Overlay, texture: &MemoryTexture, size: i32) {
-    let updated = overlay.child().and_then(|c| {
-        c.downcast_ref::<Picture>()
-            .map(|p| p.set_paintable(Some(texture)))
-    });
-    if updated.is_none() {
-        let picture = Picture::builder()
-            .paintable(texture)
-            .content_fit(Cover)
-            .width_request(size)
-            .height_request(size)
-            .css_classes(["album-cover"])
-            .build();
-        picture.update_property(&[PropertyLabel("Album cover art")]);
-        overlay.set_child(Some(&picture));
-    }
-}
-
-/// Resolve a single card's cover widget to `size`.
-///
-/// Applies a cached texture for the size immediately, or swaps a decoded
-/// `Picture` for a placeholder when the size is not yet cached, so a card
-/// never shows a texture decoded at a stale size. Does not dispatch new
-/// decode requests — the caller defers those to the debounced path.
-pub fn resolve_cover_widget(cache: &CoverArtCache, overlay: &Overlay, album_id: i64, size: i32) {
-    if let Some(texture) = cache.get(album_id, size) {
-        apply_texture(overlay, &texture, size);
-        return;
-    }
-    if overlay
-        .child()
-        .is_some_and(|child| child.downcast_ref::<Picture>().is_some())
-    {
-        overlay.set_child(Some(&build_placeholder(size)));
-    }
-}
-
-/// Send decoded album cover through the channel, logging on failure.
-fn try_send_album_cover(
-    tx: &Sender<(usize, i64, DecodedCover)>,
-    index: usize,
-    album_id: i64,
-    decoded: Option<DecodedCover>,
-) {
-    let Some(decoded) = decoded else { return };
-    if let Err(e) = tx.try_send((index, album_id, decoded)) {
-        error!(error = %e, "Failed to send decoded album cover to main thread");
-    }
-}
-
-/// Check the shared [`CoverArtCache`] and dispatch decode requests for
-/// missing covers to the centralized decoder.
-///
-/// Each decoded cover is written to the cache and applied to its overlay via a
-/// [`spawn_future_local`] async task that stays alive until all results
-/// are received, preventing a race where the channel receiver is dropped
-/// before the background decoder finishes.
-pub fn load_cover_art_async(
-    state: &Arc<AppState>,
-    cover_art_data: &[(i64, usize, String)],
-    overlays: &[Overlay],
-    cache: &Arc<CoverArtCache>,
-    size: i32,
-) {
-    if cover_art_data.is_empty() {
-        return;
-    }
-
-    let (tx, rx) = unbounded::<(usize, i64, DecodedCover)>();
-    let mut uncached: Vec<(i64, usize, String)> = Vec::new();
-
-    for (album_id, index, path) in cover_art_data {
-        let Some(overlay) = overlays.get(*index) else {
-            continue;
-        };
-        if let Some(texture) = cache.get(*album_id, size) {
-            apply_texture(overlay, &texture, size);
-            continue;
-        }
-        uncached.push((*album_id, *index, path.clone()));
-    }
-
-    if uncached.is_empty() {
-        return;
-    }
-
-    for (album_id, index, path) in uncached {
-        let tx = tx.clone();
-        cache.request_decode(ArtworkDecodeRequest {
-            album_id,
-            path,
-            size,
-            on_complete: Box::new(move |_, decoded| {
-                try_send_album_cover(&tx, index, album_id, decoded);
-            }),
-        });
-    }
-    drop(tx);
-
-    let overlays: Vec<Overlay> = overlays.to_vec();
-    let cache_clone = Arc::clone(cache);
-    let state = Arc::clone(state);
-
-    spawn_future_local(async move {
-        while let Ok((index, album_id, decoded)) = rx.recv().await {
-            apply_decoded_cover_if_current(
-                &state,
-                &cache_clone,
-                &overlays,
-                index,
-                album_id,
-                &decoded,
-                size,
-            );
-        }
-    });
-}
-
-/// Insert a decoded cover into the cache and apply it to its card, skipping
-/// sizes superseded by a newer zoom *before* allocating a texture, so stale
-/// decodes never do main-thread texture work or churn the cache.
-fn apply_decoded_cover_if_current(
-    state: &Arc<AppState>,
-    cache: &CoverArtCache,
-    overlays: &[Overlay],
-    index: usize,
-    album_id: i64,
-    decoded: &DecodedCover,
-    size: i32,
-) {
-    if size != grid_cover_size(state.storage.get_grid_zoom_level()) {
-        return;
-    }
-    let texture = raw_to_texture(decoded);
-    cache.insert(album_id, size, texture.clone());
-    apply_decoded_cover(state, overlays, index, &texture, size);
-}
-
-/// Apply a decoded cover to its card, skipping sizes superseded by a newer
-/// zoom. The caller already skipped stale sizes before creating the texture
-/// (see `load_cover_art_async`); this guards against a size that became
-/// stale between the guard and the widget apply.
-fn apply_decoded_cover(
-    state: &Arc<AppState>,
-    overlays: &[Overlay],
-    index: usize,
-    texture: &MemoryTexture,
-    size: i32,
-) {
-    if size == grid_cover_size(state.storage.get_grid_zoom_level())
-        && let Some(overlay) = overlays.get(index)
-    {
-        apply_texture(overlay, texture, size);
-    }
-}
-
 /// Build the cover art overlay with hover play button for an album card.
 fn build_card_overlay(state: &Arc<AppState>, album_id: i64, size: i32) -> Overlay {
     let cover_art = build_placeholder(size);
 
-    let overlay = Overlay::new();
+    let overlay = Overlay::builder()
+        .width_request(size)
+        .height_request(size)
+        .halign(Start)
+        .build();
     overlay.set_child(Some(&cover_art));
     overlay.set_css_classes(&["cover-overlay"]);
 
@@ -256,6 +90,62 @@ fn build_card_overlay(state: &Arc<AppState>, album_id: i64, size: i32) -> Overla
     overlay
 }
 
+/// Calculate the title label's character limit for a cover size.
+fn title_max_chars(size: i32) -> i32 {
+    (size / 10).max(6)
+}
+
+/// Calculate the artist label's character limit for a cover size.
+fn artist_max_chars(size: i32) -> i32 {
+    (size / 8).max(8)
+}
+
+/// Calculate the format label's character limit for a cover size.
+fn format_max_chars(size: i32) -> i32 {
+    (size / 10).max(6)
+}
+
+/// Resize an album card's layout and metadata constraints to `size`.
+pub fn resize_album_card(overlay: &Overlay, size: i32) {
+    let Some(card) = overlay
+        .parent()
+        .and_then(|parent| parent.downcast::<GtkBox>().ok())
+    else {
+        return;
+    };
+    card.set_width_request(size);
+
+    let Some(title) = overlay
+        .next_sibling()
+        .and_then(|widget| widget.downcast::<Label>().ok())
+    else {
+        return;
+    };
+    title.set_max_width_chars(title_max_chars(size));
+
+    let Some(artist) = title
+        .next_sibling()
+        .and_then(|widget| widget.downcast::<Label>().ok())
+    else {
+        return;
+    };
+    artist.set_max_width_chars(artist_max_chars(size));
+
+    let Some(format_row) = artist
+        .next_sibling()
+        .and_then(|widget| widget.downcast::<GtkBox>().ok())
+    else {
+        return;
+    };
+    format_row.set_width_request(size);
+    if let Some(format_label) = format_row
+        .first_child()
+        .and_then(|widget| widget.downcast::<Label>().ok())
+    {
+        format_label.set_max_width_chars(format_max_chars(size));
+    }
+}
+
 /// Build a single album card widget.
 ///
 /// Returns a `Box` containing a vertical layout with cover art,
@@ -286,6 +176,7 @@ pub fn build_album_card(
         .spacing(6)
         .css_classes(["card"])
         .can_focus(true)
+        .width_request(size)
         .tooltip_text(format!(
             "Play \u{201c}{}\u{201d} by album artist",
             album.title
@@ -305,7 +196,7 @@ pub fn build_album_card(
     let title_label = Label::builder()
         .label(&album.title)
         .ellipsize(EllipsizeEnd)
-        .max_width_chars(20)
+        .max_width_chars(title_max_chars(size))
         .css_classes(["heading", "title"])
         .halign(Start)
         .build();
@@ -314,23 +205,27 @@ pub fn build_album_card(
     let artist_label = Label::builder()
         .label(artist_name)
         .ellipsize(EllipsizeEnd)
-        .max_width_chars(20)
+        .max_width_chars(artist_max_chars(size))
         .css_classes(["dim-label", "caption"])
         .halign(Start)
         .build();
     artist_label.update_property(&[PropertyLabel(&format!("Artist: {artist_name}"))]);
 
-    let format_row = GtkBox::builder().orientation(Horizontal).spacing(6).build();
+    let format_row = GtkBox::builder()
+        .orientation(Horizontal)
+        .spacing(6)
+        .width_request(size)
+        .build();
 
     let format_label = Label::builder()
         .label(format_info.summary())
         .ellipsize(EllipsizeEnd)
-        .max_width_chars(14)
+        .max_width_chars(format_max_chars(size))
         .css_classes(["dim-label", "caption"])
         .halign(Start)
+        .hexpand(true)
         .build();
     format_label.update_property(&[PropertyLabel(&format!("Format: {}", format_info.summary()))]);
-    format_label.set_hexpand(true);
 
     let year_label = Label::builder()
         .label(album.year.map_or(String::new(), |y| y.to_string()))
@@ -367,30 +262,131 @@ pub fn build_album_card(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use {
-        anyhow::{Result, ensure},
-        async_channel::unbounded,
-        libadwaita::gtk::{self, test},
+        anyhow::{Result, bail, ensure},
+        libadwaita::{
+            glib::prelude::Cast,
+            gtk::{self, Box, Label, Overlay, test},
+            prelude::WidgetExt,
+        },
     };
 
-    use crate::ui::{
-        gallery::card::try_send_album_cover, image_decode::DecodedCover,
-        texture_pool::dispatch::tests::mock_decoded_cover,
+    use crate::{
+        app::runtime::AppState,
+        storage::{catalog::Album, formats::FormatInfo},
+        ui::gallery::card::{
+            artist_max_chars, build_album_card, format_max_chars, resize_album_card,
+            title_max_chars,
+        },
     };
 
-    #[test]
-    fn try_send_album_cover_none_is_noop() -> Result<()> {
-        let (tx, rx) = unbounded::<(usize, i64, DecodedCover)>();
-        try_send_album_cover(&tx, 0, 1, None);
-        ensure!(rx.try_recv().is_err());
-        Ok(())
+    fn build_mock_card(size: i32) -> Result<(Box, Overlay)> {
+        let album = Album {
+            id: 7,
+            title: "Test Album".into(),
+            artist_id: 1,
+            year: Some(2024),
+            genre: None,
+            artwork_path: None,
+            track_count: 12,
+            total_duration: 3600.0,
+            format_summary: "FLAC".into(),
+            lossless: true,
+            format: "FLAC".into(),
+            bit_depth: Some(24),
+            sample_rate: Some(96000),
+        };
+        let state = Arc::new(AppState::mock()?);
+        Ok(build_album_card(
+            &state,
+            &album,
+            "Test Artist",
+            &FormatInfo::default(),
+            size,
+        ))
     }
 
     #[test]
-    fn try_send_album_cover_forwards_decoded() -> Result<()> {
-        let (tx, rx) = unbounded::<(usize, i64, DecodedCover)>();
-        try_send_album_cover(&tx, 3, 9, Some(mock_decoded_cover()));
-        ensure!(matches!(rx.try_recv(), Ok((3, 9, _))));
+    fn max_chars_scale_with_cover_size() {
+        let cases = [
+            (0, 6, 8),
+            (40, 6, 8),
+            (60, 6, 8),
+            (72, 7, 9),
+            (100, 10, 12),
+            (120, 12, 15),
+            (180, 18, 22),
+            (240, 24, 30),
+        ];
+        for (size, title, artist) in cases {
+            assert_eq!(
+                title_max_chars(size),
+                title,
+                "cover size {size} px must cap the title at {title} chars"
+            );
+            assert_eq!(
+                format_max_chars(size),
+                title,
+                "cover size {size} px must cap the format at {title} chars"
+            );
+            assert_eq!(
+                artist_max_chars(size),
+                artist,
+                "cover size {size} px must cap the artist at {artist} chars"
+            );
+        }
+    }
+
+    #[test]
+    fn resize_album_card_scales_layout_and_labels() -> Result<()> {
+        let (card, overlay) = build_mock_card(120)?;
+        for size in [120, 200, 40] {
+            resize_album_card(&overlay, size);
+            ensure!(
+                card.width_request() == size,
+                "card width must follow the cover size"
+            );
+            let title = overlay.next_sibling();
+            let Some(title) = title.as_ref().and_then(|w| w.downcast_ref::<Label>()) else {
+                bail!("title label must follow the overlay in the card");
+            };
+            let cap = title_max_chars(size);
+            ensure!(
+                title.max_width_chars() == cap,
+                "title must cap at {cap} chars for cover size {size}"
+            );
+            let artist = title.next_sibling();
+            let Some(artist) = artist.as_ref().and_then(|w| w.downcast_ref::<Label>()) else {
+                bail!("artist label must follow the title label");
+            };
+            let cap = artist_max_chars(size);
+            ensure!(
+                artist.max_width_chars() == cap,
+                "artist must cap at {cap} chars for cover size {size}"
+            );
+            let format_row = artist.next_sibling();
+            let Some(format_row) = format_row.as_ref().and_then(|w| w.downcast_ref::<Box>()) else {
+                bail!("format row must follow the artist label");
+            };
+            ensure!(
+                format_row.width_request() == size,
+                "format row width must follow the cover size"
+            );
+            let format_label = format_row.first_child();
+            let Some(format_label) = format_label
+                .as_ref()
+                .and_then(|w| w.downcast_ref::<Label>())
+            else {
+                bail!("format row must start with the format label");
+            };
+            let cap = format_max_chars(size);
+            ensure!(
+                format_label.max_width_chars() == cap,
+                "format label must cap at {cap} chars for cover size {size}"
+            );
+        }
         Ok(())
     }
 }
