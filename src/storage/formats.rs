@@ -24,6 +24,12 @@ impl FormatInfo {
         self.formats.len() <= 1 && self.sample_rates.len() <= 1 && self.bit_depths.len() <= 1
     }
 
+    /// Whether the album spans more than one format, sample rate, or bit depth.
+    #[must_use]
+    pub const fn is_mixed(&self) -> bool {
+        !self.is_uniform()
+    }
+
     /// Compact summary for album **grid cards** (no units, no bullets).
     ///
     /// Order is always: format(s) → bit-depth(s) → sample-rate(s).
@@ -196,6 +202,19 @@ mod tests {
             "mixed format properties are not uniform"
         );
         assert!(FormatInfo::default().is_uniform(), "empty info is uniform");
+    }
+
+    #[test]
+    fn format_is_mixed() {
+        assert!(
+            mixed_audio().is_mixed(),
+            "mixed format properties are mixed"
+        );
+        assert!(
+            !flac_24_96().is_mixed(),
+            "single format properties are not mixed"
+        );
+        assert!(!FormatInfo::default().is_mixed(), "empty info is not mixed");
     }
 
     #[test]

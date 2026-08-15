@@ -217,15 +217,23 @@ pub fn build_album_card(
         .width_request(size)
         .build();
 
+    let (format_text, format_tooltip) = if format_info.is_mixed() {
+        ("Mixed".to_string(), format_info.summary())
+    } else {
+        let s = format_info.summary();
+        (s.clone(), s)
+    };
+
     let format_label = Label::builder()
-        .label(format_info.summary())
+        .label(&format_text)
+        .tooltip_text(&format_tooltip)
         .ellipsize(EllipsizeEnd)
         .max_width_chars(format_max_chars(size))
         .css_classes(["dim-label", "caption"])
         .halign(Start)
         .hexpand(true)
         .build();
-    format_label.update_property(&[PropertyLabel(&format!("Format: {}", format_info.summary()))]);
+    format_label.update_property(&[PropertyLabel(&format!("Format: {format_tooltip}"))]);
 
     let year_label = Label::builder()
         .label(album.year.map_or(String::new(), |y| y.to_string()))
