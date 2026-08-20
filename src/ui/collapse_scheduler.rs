@@ -1,45 +1,29 @@
-//! Main application window with `OverlaySplitView` sidebar layout.
+//! Responsive breakpoints that defer `OverlaySplitView` collapse changes.
 //!
-//! Creates the window with `AdwToolbarView` panes for sidebar and content;
-//! the sidebar has its own `AdwHeaderBar` with back button (Nautilus pattern).
+//! Breakpoint setters apply synchronously inside the window's size-allocate
+//! pass; collapsing the split view there swaps its internal layout manager and
+//! toggles its shield widget mid-allocation, leaving libadwaita's bare
+//! `AdwGizmo` widgets in a draw-before-allocation state ("Trying to snapshot
+//! `AdwGizmo` without a current allocation"). This buffers the desired state
+//! and applies it from an idle callback, coalescing rapid breakpoint
+//! transitions into a single `set_collapsed` call off the allocation path.
 
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering::Relaxed},
 };
 
-use {
-    libadwaita::{
-        Application, ApplicationWindow, Breakpoint, BreakpointCondition,
-        BreakpointConditionLengthType::MaxWidth,
-        LengthUnit::Sp,
-        OverlaySplitView, Toast, ToastOverlay,
-        ToastPriority::Normal,
-        gdk::{Display, Key},
-        glib::{
-            ControlFlow::Break,
-            Propagation::{Proceed, Stop},
-            idle_add_local,
-            object::{Cast, ObjectExt},
-            spawn_future_local,
-        },
-        gtk::{
-            CssProvider, EventControllerKey, STYLE_PROVIDER_PRIORITY_APPLICATION, Widget, Window,
-            prelude::ToggleButtonExt, style_context_add_provider_for_display,
-        },
-        prelude::{AdwApplicationWindowExt, ButtonExt, GtkWindowExt, WidgetExt},
-    },
-    tracing::info,
+use libadwaita::{
+    ApplicationWindow, Breakpoint, BreakpointCondition,
+    BreakpointConditionLengthType::MaxWidth,
+    LengthUnit::Sp,
+    OverlaySplitView,
+    glib::{ControlFlow::Break, idle_add_local},
+    gtk::Widget,
+    prelude::AdwApplicationWindowExt,
 };
 
-use crate::{
-    app::runtime::AppState,
-    ui::{
-        gallery::narrow_flag::NarrowState,
-        panes::{SwitcherGroup, build_content},
-        player::wire_panel_events,
-    },
-};
+use crate::ui::{gallery::narrow_flag::NarrowState, panes::SwitcherGroup};
 
 /// Schedules deferred `OverlaySplitView` collapse changes.
 ///
@@ -99,118 +83,6 @@ impl CollapseScheduler {
     }
 }
 
-/// Hide the sidebar when Escape is pressed and the sidebar is shown.
-///
-/// Returns `true` when the key was handled (sidebar was visible and got
-/// hidden), so the caller can stop propagation.
-fn handle_escape_key(split_view: &OverlaySplitView) -> bool {
-    if split_view.shows_sidebar() {
-        split_view.set_show_sidebar(false);
-        true
-    } else {
-        false
-    }
-}
-
-/// Build the main application window.
-///
-/// Creates an `AdwApplicationWindow` with `AdwOverlaySplitView`
-/// containing separate `ToolbarView` panes for the sidebar and
-/// content. The sidebar is hidden by default and auto-shown on
-/// playback start.
-pub fn build_window(app: &Application, state: &Arc<AppState>) -> ApplicationWindow {
-    info!("Building main application window");
-
-    let window = ApplicationWindow::builder()
-        .application(app)
-        .title("Oxhidifi")
-        .default_width(1200)
-        .default_height(800)
-        .build();
-
-    load_hig_css();
-
-    let narrow_state = NarrowState::new_shared();
-    let (toast_overlay, split_view, toggle_button, back_button, close_button, switchers) =
-        build_content(state, &narrow_state, window.upcast_ref::<Window>());
-    window.set_content(Some(&toast_overlay));
-
-    listen_for_toasts(state, &toast_overlay);
-
-    add_responsive_breakpoints(&window, &split_view, &narrow_state, &switchers);
-
-    wire_panel_events(state, &split_view);
-
-    let esc_split = split_view.clone();
-    let esc_controller = EventControllerKey::new();
-    esc_controller.connect_key_pressed(move |_, key, _, _| {
-        if key == Key::Escape && handle_escape_key(&esc_split) {
-            Stop
-        } else {
-            Proceed
-        }
-    });
-    window.add_controller(esc_controller);
-
-    window.connect_close_request(|_| {
-        info!("Window close requested — session persists during application shutdown");
-        Proceed
-    });
-
-    split_view.connect_show_sidebar_notify(move |sv| {
-        let showing = sv.shows_sidebar();
-        info!(showing, "Sidebar visibility changed",);
-        toggle_button.set_visible(!showing);
-        toggle_button.set_active(showing);
-        back_button.set_visible(showing);
-        back_button.set_active(showing);
-    });
-
-    let window_close = window.clone();
-    close_button.connect_clicked(move |_| {
-        window_close.close();
-    });
-
-    split_view
-        .bind_property("collapsed", &close_button, "visible")
-        .sync_create()
-        .build();
-
-    window
-}
-
-/// Load HIG-compliant CSS transitions (200 ms ease) and style rules.
-fn load_hig_css() {
-    let Some(display) = Display::default() else {
-        return;
-    };
-    let provider = CssProvider::new();
-    provider.load_from_string(
-        "
-        headerbar {
-            transition: background 200ms ease;
-        }
-        ",
-    );
-    style_context_add_provider_for_display(
-        &display,
-        &provider,
-        STYLE_PROVIDER_PRIORITY_APPLICATION,
-    );
-}
-
-/// Spawn a future to listen for toast messages and display them.
-fn listen_for_toasts(state: &Arc<AppState>, toast_overlay: &ToastOverlay) {
-    let rx = state.toast_rx.clone();
-    let overlay = toast_overlay.clone();
-    spawn_future_local(async move {
-        while let Ok(message) = rx.recv().await {
-            let toast = Toast::builder().title(message).priority(Normal).build();
-            overlay.add_toast(toast);
-        }
-    });
-}
-
 /// Add responsive breakpoints for narrow windows.
 ///
 /// Collapses the `OverlaySplitView` sidebar below 800 px width and
@@ -224,7 +96,7 @@ fn listen_for_toasts(state: &Arc<AppState>, toast_overlay: &ToastOverlay) {
 /// window's size-allocate pass, and collapsing the split view there swaps its
 /// internal layout manager mid-allocation. Deferring the property change to
 /// an idle callback keeps the layout mutation off the allocation path.
-fn add_responsive_breakpoints(
+pub fn add_responsive_breakpoints(
     window: &ApplicationWindow,
     split_view: &OverlaySplitView,
     narrow_state: &Arc<NarrowState>,
@@ -279,21 +151,18 @@ fn add_responsive_breakpoints(
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Arc, atomic::Ordering::Relaxed};
+    use std::sync::atomic::Ordering::Relaxed;
 
     use {
         anyhow::{Result, ensure},
         libadwaita::{
             OverlaySplitView,
             glib::MainContext,
-            gtk::{self, test},
+            gtk::{self, test as gtk_test},
         },
     };
 
-    use crate::{
-        app::{mocks::pump_in_test_runtime, runtime::AppState},
-        ui::shell::{CollapseScheduler, handle_escape_key},
-    };
+    use crate::{app::mocks::pump_in_test_runtime, ui::collapse_scheduler::CollapseScheduler};
 
     fn pump_main_context() {
         let mut iterations: usize = 0;
@@ -306,41 +175,7 @@ mod tests {
         pump_in_test_runtime(pump_main_context)
     }
 
-    #[test]
-    fn escape_key_hides_shown_sidebar() -> Result<()> {
-        let split_view = OverlaySplitView::new();
-        split_view.set_show_sidebar(true);
-        ensure!(
-            handle_escape_key(&split_view),
-            "Escape on a shown sidebar must be handled"
-        );
-        ensure!(
-            !split_view.shows_sidebar(),
-            "Escape must hide the shown sidebar"
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn escape_key_ignores_hidden_sidebar() -> Result<()> {
-        let split_view = OverlaySplitView::new();
-        split_view.set_show_sidebar(false);
-        ensure!(
-            !handle_escape_key(&split_view),
-            "Escape with a hidden sidebar must not be handled"
-        );
-        ensure!(!split_view.shows_sidebar());
-        Ok(())
-    }
-
-    #[test]
-    fn window_builds_with_state() -> Result<()> {
-        let state = Arc::new(AppState::mock()?);
-        drop(state);
-        Ok(())
-    }
-
-    #[test]
+    #[gtk_test]
     fn collapse_scheduler_initializes_from_current_state() -> Result<()> {
         let split_view = OverlaySplitView::new();
         let scheduler = CollapseScheduler::new(&split_view);
@@ -357,7 +192,7 @@ mod tests {
         Ok(())
     }
 
-    #[test]
+    #[gtk_test]
     fn collapse_scheduler_applies_from_idle() -> Result<()> {
         let split_view = OverlaySplitView::new();
         let scheduler = CollapseScheduler::new(&split_view);
@@ -377,7 +212,7 @@ mod tests {
         Ok(())
     }
 
-    #[test]
+    #[gtk_test]
     fn collapse_scheduler_coalesces_nested_transitions() -> Result<()> {
         let split_view = OverlaySplitView::new();
         let scheduler = CollapseScheduler::new(&split_view);
@@ -394,7 +229,7 @@ mod tests {
         Ok(())
     }
 
-    #[test]
+    #[gtk_test]
     fn collapse_scheduler_unapply_expands_split_view() -> Result<()> {
         let split_view = OverlaySplitView::new();
         let scheduler = CollapseScheduler::new(&split_view);

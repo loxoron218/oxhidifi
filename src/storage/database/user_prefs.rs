@@ -17,6 +17,14 @@ impl SqliteStorage {
         self.settings.read().get().view_mode
     }
 
+    /// Set the view mode in memory.
+    ///
+    /// The debounced disk write is triggered via [`Self::save_settings`],
+    /// which runs in the background so callers are not blocked.
+    pub fn set_view_mode_memory(&self, mode: ViewMode) {
+        self.settings.write().update_memory(|s| s.view_mode = mode);
+    }
+
     /// Set the view mode in memory and persist to disk asynchronously.
     ///
     /// # Errors

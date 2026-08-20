@@ -2,7 +2,8 @@
 //!
 //! The content pane hosts the library view switcher in the header bar for
 //! wide windows and relocates it to a bottom `ViewSwitcherBar` in narrow
-//! windows via a breakpoint wired in [`shell`](crate::ui::shell).
+//! windows via a breakpoint wired in
+//! [`collapse_scheduler`](crate::ui::collapse_scheduler).
 
 use std::sync::{
     Arc,
@@ -205,7 +206,7 @@ fn build_content_pane(
 /// title. The content pane contains the library view switcher and
 /// stack. Bottom bars (view switcher and status) are attached to the
 /// content pane; the header switcher is swapped for the bottom bar in
-/// narrow windows (see [`SwitcherGroup`] and `ui::shell`).
+/// narrow windows (see [`SwitcherGroup`] and `ui::collapse_scheduler`).
 ///
 /// Returns the `(ToastOverlay, OverlaySplitView, toggle_button, back_button,
 /// close_button, switchers)` for event wiring in `build_window`.

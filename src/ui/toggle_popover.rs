@@ -160,7 +160,7 @@ fn update_zoom_sensitivity(state: &Arc<AppState>, zoom_out_btn: &Button, zoom_in
 /// Only updates in-memory settings; the debounced disk write happens once
 /// per zoom episode in `spawn_listen_sort_zoom` (see `common.rs`), so rapid
 /// clicking never spawns a write task per click.
-fn apply_zoom_out(state: &AppState, mode: ViewMode) {
+pub fn apply_zoom_out(state: &AppState, mode: ViewMode) {
     match mode {
         Grid => {
             let level = state.storage.get_grid_zoom_level().saturating_sub(1);
@@ -177,7 +177,7 @@ fn apply_zoom_out(state: &AppState, mode: ViewMode) {
 ///
 /// Only updates in-memory settings; the debounced disk write happens once
 /// per zoom episode in `spawn_listen_sort_zoom` (see `common.rs`).
-fn apply_zoom_in(state: &AppState, mode: ViewMode) {
+pub fn apply_zoom_in(state: &AppState, mode: ViewMode) {
     match mode {
         Grid => {
             let level = state

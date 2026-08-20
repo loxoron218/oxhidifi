@@ -36,7 +36,7 @@ use crate::{
     playback::{engine::PlaybackEngine, transport::PlaybackTransport},
     storage::database::SqliteStorage,
     threading::ThreadManager,
-    ui::shell::build_window,
+    ui::window::build_window,
 };
 
 /// Application identifier for D-Bus and resource paths.
