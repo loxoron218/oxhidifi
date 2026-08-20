@@ -107,40 +107,39 @@ fn format_max_chars(size: i32) -> i32 {
 
 /// Resize an album card's layout and metadata constraints to `size`.
 pub fn resize_album_card(overlay: &Overlay, size: i32) {
-    let Some(card) = overlay
-        .parent()
-        .and_then(|parent| parent.downcast::<GtkBox>().ok())
-    else {
+    let Some(parent) = overlay.parent() else {
+        return;
+    };
+    let Ok(card) = parent.downcast::<GtkBox>() else {
         return;
     };
     card.set_width_request(size);
 
-    let Some(title) = overlay
-        .next_sibling()
-        .and_then(|widget| widget.downcast::<Label>().ok())
-    else {
+    let Some(next) = overlay.next_sibling() else {
+        return;
+    };
+    let Ok(title) = next.downcast::<Label>() else {
         return;
     };
     title.set_max_width_chars(title_max_chars(size));
 
-    let Some(artist) = title
-        .next_sibling()
-        .and_then(|widget| widget.downcast::<Label>().ok())
-    else {
+    let Some(next) = title.next_sibling() else {
+        return;
+    };
+    let Ok(artist) = next.downcast::<Label>() else {
         return;
     };
     artist.set_max_width_chars(artist_max_chars(size));
 
-    let Some(format_row) = artist
-        .next_sibling()
-        .and_then(|widget| widget.downcast::<GtkBox>().ok())
-    else {
+    let Some(next) = artist.next_sibling() else {
+        return;
+    };
+    let Ok(format_row) = next.downcast::<GtkBox>() else {
         return;
     };
     format_row.set_width_request(size);
-    if let Some(format_label) = format_row
-        .first_child()
-        .and_then(|widget| widget.downcast::<Label>().ok())
+    if let Some(child) = format_row.first_child()
+        && let Ok(format_label) = child.downcast::<Label>()
     {
         format_label.set_max_width_chars(format_max_chars(size));
     }
