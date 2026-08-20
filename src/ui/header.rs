@@ -1,11 +1,13 @@
 //! `HeaderBar` with Albums/Artists tab buttons and view toggle controls.
 //!
-//! Uses `AdwViewSwitcher` for tab navigation per GNOME HIG. The switcher
-//! is placed in the title widget slot of `AdwHeaderBar`.
+//! Tab navigation lives in the sibling [`panes`](super::panes) module: a
+//! `ViewSwitcher` sits in the header bar title slot for wide windows and is
+//! replaced by a bottom `ViewSwitcherBar` in narrow windows per GNOME HIG.
 //!
 //! Provides a `SplitButton` to toggle between grid and column layout views
-//! with a popover containing zoom controls and sort configuration. The
-//! popover construction lives in the sibling [`toggle_popover`] module.
+//! with a popover containing zoom controls, sort configuration, and a
+//! preferences entry. The popover construction lives in the sibling
+//! [`toggle_popover`] module.
 
 use std::sync::Arc;
 
@@ -13,11 +15,8 @@ use {
     libadwaita::{
         SplitButton,
         glib::spawn_future_local,
-        gtk::{
-            Box, Button, Orientation::Horizontal, Widget, Window,
-            accessible::Property::Label as PropertyLabel,
-        },
-        prelude::{AccessibleExtManual, BoxExt, ButtonExt, WidgetExt},
+        gtk::{Widget, Window, accessible::Property::Label as PropertyLabel},
+        prelude::{AccessibleExtManual, WidgetExt},
     },
     tracing::warn,
 };
@@ -28,7 +27,7 @@ use crate::{
         active_tab::ActiveTab::Albums,
         view_mode::ViewMode::{self, Column, Grid},
     },
-    ui::{preferences::show_preferences_dialog, toggle_popover::build_popover},
+    ui::toggle_popover::build_popover,
 };
 
 /// Persist the view mode setting to storage, logging on failure.
@@ -42,16 +41,19 @@ async fn save_view_mode(state: Arc<AppState>, mode: ViewMode) {
 ///
 /// Creates a `SplitButton` that switches between grid and column layout
 /// on main button click. The arrow dropdown shows a popover with zoom
-/// controls (zoom out/in) and sort configuration lists (albums/artists).
+/// controls (zoom out/in), sort configuration lists (albums/artists),
+/// and a preferences entry.
 ///
 /// # Arguments
 ///
 /// * `state` - Application state containing storage with settings
+/// * `parent` - Parent window used to present the preferences dialog
 ///
 /// # Returns
 ///
-/// A `SplitButton` with attached popover for view and sort controls.
-pub fn build_view_toggle(state: &Arc<AppState>) -> SplitButton {
+/// A `SplitButton` with attached popover for view, sort, and preferences
+/// controls.
+pub fn build_view_toggle(state: &Arc<AppState>, parent: &Window) -> SplitButton {
     let initial_mode = state.storage.get_view_mode();
 
     let split_btn = SplitButton::builder()
@@ -61,7 +63,7 @@ pub fn build_view_toggle(state: &Arc<AppState>) -> SplitButton {
         .build();
     split_btn.update_property(&[PropertyLabel(initial_mode.tooltip())]);
 
-    let (popover, albums_sort, artists_sort) = build_popover(state);
+    let (popover, albums_sort, artists_sort) = build_popover(state, parent);
     split_btn.set_popover(Some(&popover));
 
     let state_clone = Arc::clone(state);
@@ -111,46 +113,19 @@ fn subscribe_view_updates(
     });
 }
 
-/// Build a header bar with view toggle and preferences button.
-///
-/// Creates a horizontal box containing the view split button and a
-/// gear icon button to open the preferences dialog.
-pub fn build_header_controls(state: &Arc<AppState>, parent: &Window) -> Box {
-    let controls = Box::builder().orientation(Horizontal).spacing(6).build();
-
-    let toggle = build_view_toggle(state);
-    controls.append(&toggle);
-
-    let prefs_btn = Button::builder()
-        .icon_name("open-menu-symbolic")
-        .tooltip_text("Preferences")
-        .css_classes(["flat"])
-        .can_focus(true)
-        .build();
-    prefs_btn.update_property(&[PropertyLabel("Preferences")]);
-
-    let state_prefs = Arc::clone(state);
-    let parent_clone = parent.clone();
-    prefs_btn.connect_clicked(move |_| {
-        show_preferences_dialog(&state_prefs, &parent_clone);
-    });
-
-    controls.append(&prefs_btn);
-
-    controls
-}
-
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
 
     use {
-        anyhow::{Result, ensure},
-        libadwaita::gtk::{self, test},
+        anyhow::{Context, Result, ensure},
+        libadwaita::gtk::{self, Window, test},
+        tempfile::tempdir,
+        tokio::runtime::Runtime,
     };
 
     use crate::{
-        app::runtime::AppState,
+        app::mocks::{build_app_state, fresh_storage},
         storage::view_mode::ViewMode::{Column, Grid},
         ui::header::build_view_toggle,
     };
@@ -169,8 +144,12 @@ mod tests {
 
     #[test]
     fn build_view_toggle_sets_initial_icon() -> Result<()> {
-        let state = Arc::new(AppState::mock()?);
-        let toggle = build_view_toggle(&state);
+        let dir = tempdir()?;
+        let rt = Runtime::new().context("Failed to create tokio runtime")?;
+        let storage = rt.block_on(fresh_storage(dir.path()))?;
+        let state = Arc::new(build_app_state(storage));
+        let window = Window::new();
+        let toggle = build_view_toggle(&state, &window);
         ensure!(toggle.icon_name().as_deref() == Some("view-grid-symbolic"));
         Ok(())
     }

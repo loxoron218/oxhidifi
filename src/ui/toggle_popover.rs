@@ -1,17 +1,20 @@
-//! View-toggle popover: zoom controls and sort configuration lists.
+//! View-toggle popover: zoom controls, sort configuration lists, and a
+//! preferences entry.
 
 use std::sync::Arc;
 
 use {
     libadwaita::{
+        ButtonContent,
         glib::prelude::Cast,
         gtk::{
             Align::{Center, End},
             Box, Button, Label,
             Orientation::{Horizontal, Vertical},
-            Popover, Separator, Widget,
+            Popover, Separator, Widget, Window,
+            accessible::Property::Label as PropertyLabel,
         },
-        prelude::{BoxExt, ButtonExt, WidgetExt},
+        prelude::{AccessibleExtManual, BoxExt, ButtonExt, WidgetExt},
     },
     tracing::warn,
 };
@@ -24,14 +27,22 @@ use crate::{
     },
     ui::{
         drag::{build_albums_drag_list, build_artists_drag_list},
+        preferences::show_preferences_dialog,
         zoom::{GRID_ZOOM_MAX, GRID_ZOOM_MIN, LIST_ZOOM_MAX, LIST_ZOOM_MIN},
     },
 };
 
-/// Build the popover with zoom controls and sort lists.
+/// Build the popover with zoom controls, sort lists, and a preferences entry.
 ///
-/// Returns the popover and the albums/artists sort list widgets for visibility toggling.
-pub fn build_popover(state: &Arc<AppState>) -> (Popover, Widget, Widget) {
+/// # Arguments
+///
+/// * `state` - Application state containing storage with settings
+/// * `parent` - Parent window used to present the preferences dialog
+///
+/// # Returns
+///
+/// The popover and the albums/artists sort list widgets for visibility toggling.
+pub fn build_popover(state: &Arc<AppState>, parent: &Window) -> (Popover, Widget, Widget) {
     let zoom_box = Box::builder()
         .orientation(Vertical)
         .spacing(6)
@@ -92,6 +103,29 @@ pub fn build_popover(state: &Arc<AppState>) -> (Popover, Widget, Widget) {
     sort_box.append(&albums_sort);
     sort_box.append(&artists_sort);
     zoom_box.append(&sort_box);
+
+    let prefs_separator = Separator::new(Horizontal);
+    zoom_box.append(&prefs_separator);
+
+    let prefs_btn = Button::builder()
+        .child(
+            &ButtonContent::builder()
+                .icon_name("preferences-system-symbolic")
+                .label("Preferences")
+                .build(),
+        )
+        .tooltip_text("Open preferences")
+        .css_classes(["flat"])
+        .can_focus(true)
+        .hexpand(true)
+        .build();
+    prefs_btn.update_property(&[PropertyLabel("Preferences")]);
+    let state_prefs = Arc::clone(state);
+    let parent_prefs = parent.clone();
+    prefs_btn.connect_clicked(move |_| {
+        show_preferences_dialog(&state_prefs, &parent_prefs);
+    });
+    zoom_box.append(&prefs_btn);
 
     connect_zoom_handlers(state, &zoom_out_btn, &zoom_in_btn);
 

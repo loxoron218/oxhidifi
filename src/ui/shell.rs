@@ -24,7 +24,7 @@ use {
             spawn_future_local,
         },
         gtk::{
-            CssProvider, EventControllerKey, STYLE_PROVIDER_PRIORITY_APPLICATION, Window,
+            CssProvider, EventControllerKey, STYLE_PROVIDER_PRIORITY_APPLICATION, Widget, Window,
             prelude::ToggleButtonExt, style_context_add_provider_for_display,
         },
         prelude::{AdwApplicationWindowExt, ButtonExt, GtkWindowExt, WidgetExt},
@@ -34,7 +34,11 @@ use {
 
 use crate::{
     app::runtime::AppState,
-    ui::{gallery::narrow_flag::NarrowState, panes::build_content, player::wire_panel_events},
+    ui::{
+        gallery::narrow_flag::NarrowState,
+        panes::{SwitcherGroup, build_content},
+        player::wire_panel_events,
+    },
 };
 
 /// Schedules deferred `OverlaySplitView` collapse changes.
@@ -127,13 +131,13 @@ pub fn build_window(app: &Application, state: &Arc<AppState>) -> ApplicationWind
     load_hig_css();
 
     let narrow_state = NarrowState::new_shared();
-    let (toast_overlay, split_view, toggle_button, back_button, close_button) =
+    let (toast_overlay, split_view, toggle_button, back_button, close_button, switchers) =
         build_content(state, &narrow_state, window.upcast_ref::<Window>());
     window.set_content(Some(&toast_overlay));
 
     listen_for_toasts(state, &toast_overlay);
 
-    add_responsive_breakpoints(&window, &split_view, &narrow_state);
+    add_responsive_breakpoints(&window, &split_view, &narrow_state, &switchers);
 
     wire_panel_events(state, &split_view);
 
@@ -211,7 +215,9 @@ fn listen_for_toasts(state: &Arc<AppState>, toast_overlay: &ToastOverlay) {
 ///
 /// Collapses the `OverlaySplitView` sidebar below 800 px width and
 /// hides non‑essential columns (Format, Bit Depth, Sample Rate) below
-/// 700 px width.
+/// 700 px width. Below 700 px the header `ViewSwitcher` is replaced by
+/// the bottom `ViewSwitcherBar` so the header keeps room for its
+/// controls on small windows.
 ///
 /// The collapse is *deferred* via [`CollapseScheduler`] instead of a
 /// declarative breakpoint setter: setters apply synchronously inside the
@@ -222,6 +228,7 @@ fn add_responsive_breakpoints(
     window: &ApplicationWindow,
     split_view: &OverlaySplitView,
     narrow_state: &Arc<NarrowState>,
+    switchers: &SwitcherGroup,
 ) {
     let collapse = CollapseScheduler::new(split_view);
 
@@ -241,22 +248,30 @@ fn add_responsive_breakpoints(
 
     let narrow_condition = BreakpointCondition::new_length(MaxWidth, 700.0, Sp);
     let narrow_bp = Breakpoint::new(narrow_condition);
+    let narrow_ctx = (
+        Arc::clone(&collapse),
+        split_view.clone(),
+        Arc::clone(narrow_state),
+        switchers.header.clone(),
+        switchers.bar.clone(),
+        switchers.switcher.clone(),
+    );
     narrow_bp.connect_apply({
-        let collapse = Arc::clone(&collapse);
-        let sv = split_view.clone();
-        let ns = Arc::clone(narrow_state);
+        let (collapse, sv, ns, header, bar, _) = narrow_ctx.clone();
         move |_| {
             collapse.set(&sv, true);
             ns.set(true);
+            header.set_title_widget(None::<&Widget>);
+            bar.set_reveal(true);
         }
     });
     narrow_bp.connect_unapply({
-        let collapse = Arc::clone(&collapse);
-        let sv = split_view.clone();
-        let ns = Arc::clone(narrow_state);
+        let (collapse, sv, ns, header, bar, switcher) = narrow_ctx;
         move |_| {
             collapse.set(&sv, false);
             ns.set(false);
+            header.set_title_widget(Some(&switcher));
+            bar.set_reveal(false);
         }
     });
     window.add_breakpoint(narrow_bp);

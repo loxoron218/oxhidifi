@@ -1,4 +1,8 @@
 //! Sidebar and content panes for the main split view.
+//!
+//! The content pane hosts the library view switcher in the header bar for
+//! wide windows and relocates it to a bottom `ViewSwitcherBar` in narrow
+//! windows via a breakpoint wired in [`shell`](crate::ui::shell).
 
 use std::sync::{
     Arc,
@@ -36,13 +40,24 @@ use crate::{
             artist_grid::{build_artist_grid, lazy_build_artist_mode},
             narrow_flag::NarrowState,
         },
-        header::build_header_controls,
+        header::build_view_toggle,
         navigation::{handle_navigation_event, persist_active_tab},
         player::sidebar::build_player_content,
         status::StatusBar,
         switching::handle_tab_switch,
     },
 };
+
+/// Library view switcher widgets shared with the window shell for adaptive
+/// narrow-mode wiring.
+pub struct SwitcherGroup {
+    /// Header bar holding the wide-mode `ViewSwitcher` in its title slot.
+    pub header: HeaderBar,
+    /// Wide-mode switcher shown in the header bar title slot.
+    pub switcher: ViewSwitcher,
+    /// Narrow-mode `ViewSwitcherBar` shown at the bottom of the content pane.
+    pub bar: ViewSwitcherBar,
+}
 
 /// Build the sidebar panel with player content.
 ///
@@ -78,7 +93,7 @@ fn build_content_pane(
     toggle_button: &ToggleButton,
     narrow_state: &Arc<NarrowState>,
     parent: &Window,
-) -> (ToolbarView, ViewStack, Stack, Widget) {
+) -> (ToolbarView, ViewStack, Stack, Widget, SwitcherGroup) {
     let content_toolbar = ToolbarView::new();
 
     let content_header = HeaderBar::new();
@@ -148,8 +163,8 @@ fn build_content_pane(
     switcher.update_property(&[Label("Switch between Albums and Artists views")]);
     content_header.set_title_widget(Some(&switcher));
 
-    let controls = build_header_controls(state, parent);
-    content_header.pack_end(&controls);
+    let toggle = build_view_toggle(state, parent);
+    content_header.pack_end(&toggle);
     content_header.pack_start(toggle_button);
 
     content_toolbar.add_top_bar(&content_header);
@@ -174,7 +189,13 @@ fn build_content_pane(
     let status_bar = StatusBar::new(state);
     content_toolbar.add_bottom_bar(status_bar.widget());
 
-    (content_toolbar, stack, content_area, orig_stack)
+    let switchers = SwitcherGroup {
+        header: content_header,
+        switcher,
+        bar: switcher_bar,
+    };
+
+    (content_toolbar, stack, content_area, orig_stack, switchers)
 }
 
 /// Build the split-view content with sidebar and content panes.
@@ -183,10 +204,11 @@ fn build_content_pane(
 /// contains the player panel with a back button and "Now Playing"
 /// title. The content pane contains the library view switcher and
 /// stack. Bottom bars (view switcher and status) are attached to the
-/// content pane.
+/// content pane; the header switcher is swapped for the bottom bar in
+/// narrow windows (see [`SwitcherGroup`] and `ui::shell`).
 ///
-/// Returns the `(ToastOverlay, OverlaySplitView, toggle_button, back_button)` for
-/// event wiring in `build_window`.
+/// Returns the `(ToastOverlay, OverlaySplitView, toggle_button, back_button,
+/// close_button, switchers)` for event wiring in `build_window`.
 pub fn build_content(
     state: &Arc<AppState>,
     narrow_state: &Arc<NarrowState>,
@@ -197,6 +219,7 @@ pub fn build_content(
     ToggleButton,
     ToggleButton,
     Button,
+    SwitcherGroup,
 ) {
     let toast_overlay = ToastOverlay::new();
 
@@ -221,7 +244,7 @@ pub fn build_content(
         .build();
     toggle_button.update_property(&[Label("Toggle player panel")]);
 
-    let (content_toolbar, stack, content_area, orig_stack) =
+    let (content_toolbar, stack, content_area, orig_stack, switchers) =
         build_content_pane(state, &toggle_button, narrow_state, parent);
 
     let nav_tx = state.navigation_tx.clone();
@@ -308,6 +331,7 @@ pub fn build_content(
         toggle_button,
         back_button,
         close_button,
+        switchers,
     )
 }
 
