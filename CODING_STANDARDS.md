@@ -40,8 +40,12 @@ src/
 
 ### Module naming (global stem uniqueness)
 
-Stems must be unique codebase-wide; singular and plural count as the same stem (`album` ≡ `albums`). Consequently, no two modules may share a stem in
-any position (`track_row` + `track_transition`, `album_card` + `album_playback`, or `playback::queue` + `ui::player::queue` are all forbidden).
+Every word of a module file name is a stem, and all stems must be unique codebase-wide across `src/`, `tests/`, and `benches/`. Singular and plural
+count as the same stem (`album` ≡ `albums`). A stem may not appear at **any word position** of any module name — neither as a leading word, a
+trailing word, nor in between. Consequently, no two modules may share a word in any position (`track_row` + `track_transition`, `album_card` +
+`album_playback`, `queue_persistence` + `settings_persistence`, or `playback::queue` + `ui::player::queue` are all forbidden). Stems are derived
+exclusively from `.rs` file names (parent indexes included); grouping directories without a parent index (e.g. `tests/verification/`) contribute no
+stems.
 
 ### Parent-index modules (no `mod.rs`)
 
