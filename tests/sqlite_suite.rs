@@ -13,10 +13,10 @@ mod tests {
 
     use oxhidifi::storage::{
         Storage,
-        catalog::{NewAlbum, NewArtist, NewQueueEntry, QueueContext::Manual, TrackUpdate},
+        catalog::{NewArtist, NewQueueEntry, QueueContext::Manual, TrackUpdate},
     };
 
-    use crate::db_setup::{make_track, test_storage};
+    use crate::db_setup::{make_album, make_track, test_storage};
 
     #[test]
     async fn insert_and_get_artist() -> Result<()> {
@@ -49,18 +49,7 @@ mod tests {
             })
             .await?;
         let album_id = storage
-            .insert_album(NewAlbum {
-                title: "Test Album".to_string(),
-                artist_id,
-                year: Some(2024),
-                genre: Some("Rock".to_string()),
-                artwork_path: None,
-                format_summary: "FLAC 16-bit/44.1kHz".to_string(),
-                lossless: true,
-                format: "FLAC".to_string(),
-                bit_depth: Some(16),
-                sample_rate: Some(44100),
-            })
+            .insert_album(make_album("Test Album", artist_id, 2024))
             .await?;
         let album = storage
             .get_album(album_id)
@@ -197,18 +186,7 @@ mod tests {
             .await?;
 
         let album_id = storage
-            .insert_album(NewAlbum {
-                title: "Rel Album".to_string(),
-                artist_id,
-                year: Some(2024),
-                genre: Some("Jazz".to_string()),
-                artwork_path: None,
-                format_summary: "FLAC 24-bit/96kHz".to_string(),
-                lossless: true,
-                format: "FLAC".to_string(),
-                bit_depth: Some(24),
-                sample_rate: Some(96000),
-            })
+            .insert_album(make_album("Rel Album", artist_id, 2024))
             .await?;
 
         storage

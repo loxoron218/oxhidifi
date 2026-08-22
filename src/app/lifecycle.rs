@@ -29,7 +29,7 @@ use crate::{
             emit_session_events, persist_session_on_shutdown, run_startup_checks,
             spawn_watcher_loop,
         },
-        runtime::{AppChannels, AppState, build_broadcast_channels},
+        runtime::{AppState, build_app_channels, build_broadcast_channels},
         xdg_paths::data_dir,
     },
     library::{scanner::FsScanner, watcher::LibraryWatcher},
@@ -175,12 +175,11 @@ pub async fn run_application() -> Result<()> {
         ps.duration_seconds = last_duration;
     }
 
-    let (scan_event_tx, scan_event_rx) = unbounded();
-    let (toast_tx, toast_rx) = unbounded();
+    let channels = build_app_channels();
 
     let scanner = Arc::new(FsScanner::new(
         Arc::clone(&storage),
-        scan_event_tx.clone(),
+        channels.scan_event_tx.clone(),
         4,
     ));
 
@@ -191,17 +190,6 @@ pub async fn run_application() -> Result<()> {
 
     let initial_view_mode = storage.get_view_mode();
     let initial_active_tab = storage.get_active_tab();
-
-    let (navigation_tx, navigation_rx) = unbounded();
-
-    let channels = AppChannels {
-        scan_event_tx,
-        scan_event_rx,
-        toast_tx,
-        toast_rx,
-        navigation_tx,
-        navigation_rx,
-    };
 
     let thread_manager = Arc::new(ThreadManager::new());
 

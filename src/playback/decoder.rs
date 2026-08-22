@@ -39,10 +39,15 @@ pub struct AudioParams {
 }
 
 /// Decoded PCM samples with associated audio parameters.
+///
+/// The `samples` slice borrows the decoder's pre-allocated buffer so that
+/// successive [`Decoder::decode_next`] calls reuse the same allocation instead
+/// of allocating a fresh `Vec` per batch (zero allocation on the audio hot
+/// path, per Constitution Principle IV).
 #[derive(Debug, Clone)]
-pub struct DecodedSamples {
+pub struct DecodedSamples<'a> {
     /// Interleaved f32 PCM samples.
-    pub samples: Vec<f32>,
+    pub samples: &'a [f32],
     /// Audio parameters for this batch.
     pub params: AudioParams,
 }
@@ -63,6 +68,10 @@ pub struct Decoder {
     track_id: u32,
     /// Audio parameters of the decoded stream.
     params: AudioParams,
+    /// Reusable pre-allocated buffer for decoded samples.
+    ///
+    /// Reused across `decode_next` calls to avoid per-batch heap allocation.
+    buf: Vec<f32>,
 }
 
 impl Decoder {
@@ -139,17 +148,22 @@ impl Decoder {
             codec_params,
             track_id,
             params,
+            buf: Vec::new(),
         })
     }
 
     /// Decode the next batch of interleaved f32 PCM samples.
     ///
-    /// Returns an empty `samples` vec when the stream has ended.
+    /// Returns an empty `samples` slice when the stream has ended.
+    ///
+    /// The returned slice borrows the decoder's internal pre-allocated buffer;
+    /// it is valid only until the next call to [`Decoder::decode_next`] (or
+    /// any other mutating method).
     ///
     /// # Errors
     ///
     /// Returns [`DecoderError`] on decode failure.
-    pub fn decode_next(&mut self) -> Result<DecodedSamples, DecoderError> {
+    pub fn decode_next(&mut self) -> Result<DecodedSamples<'_>, DecoderError> {
         loop {
             match self.try_decode_one() {
                 Ok(Some(result)) => return Ok(result),
@@ -161,9 +175,10 @@ impl Decoder {
     }
 
     /// Return an empty sample batch with the current audio params.
-    const fn empty_samples(&self) -> DecodedSamples {
+    fn empty_samples(&mut self) -> DecodedSamples<'_> {
+        self.buf.clear();
         DecodedSamples {
-            samples: Vec::new(),
+            samples: &self.buf,
             params: self.params,
         }
     }
@@ -173,7 +188,7 @@ impl Decoder {
     /// # Errors
     ///
     /// Returns [`DecoderError::DecodeError`] if the packet cannot be decoded.
-    fn try_decode_one(&mut self) -> Result<Option<DecodedSamples>, DecoderError> {
+    fn try_decode_one(&mut self) -> Result<Option<DecodedSamples<'_>>, DecoderError> {
         let packet = match self.format.next_packet() {
             Ok(Some(packet)) => packet,
             Ok(None) => return Err(EndOfStream),
@@ -191,10 +206,10 @@ impl Decoder {
             Err(e) => return Err(PlaybackDecodeError(e.to_string())),
         };
 
-        let mut samples = Vec::new();
-        copy_interleaved_f32(&decoded, &mut samples);
+        self.buf.clear();
+        copy_interleaved_f32(&decoded, &mut self.buf);
         Ok(Some(DecodedSamples {
-            samples,
+            samples: &self.buf,
             params: self.params,
         }))
     }
@@ -203,6 +218,17 @@ impl Decoder {
     #[must_use]
     pub const fn params(&self) -> AudioParams {
         self.params
+    }
+
+    /// Returns the current capacity of the pre-allocated sample buffer.
+    ///
+    /// Only compiled for the `verification-tests` feature, which asserts this
+    /// capacity stays constant across `decode_next` calls (zero reallocation
+    /// on the audio hot path).
+    #[cfg(feature = "verification-tests")]
+    #[must_use]
+    pub const fn buffer_capacity(&self) -> usize {
+        self.buf.capacity()
     }
 
     /// Seek to a position in seconds.

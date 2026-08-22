@@ -68,6 +68,30 @@ name = "throughput"
 harness = false
 name = "conversion_baseline"
 
+
+[features]
+verification-tests = []
+
+[[test]]
+name = "load_verification"
+path = "tests/verification/load_verification.rs"
+required-features = ["verification-tests"]
+
+[[test]]
+name = "response_time"
+path = "tests/verification/response_time.rs"
+required-features = ["verification-tests"]
+
+[[test]]
+name = "sc006"
+path = "tests/verification/sc006.rs"
+required-features = ["verification-tests"]
+
+[[test]]
+name = "zero_alloc"
+path = "tests/verification/zero_alloc.rs"
+required-features = ["verification-tests"]
+
 [lints.clippy]
 # unused_trait_names = "deny"
 allow_attributes = "deny"

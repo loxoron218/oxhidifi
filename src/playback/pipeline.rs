@@ -297,7 +297,7 @@ pub fn process_decode_frame(
             .unwrap_or(u32::MAX);
             ctx.elapsed += f64::from(frame_count) / ctx.track_sample_rate_f64;
             engine_shared.update_elapsed(ctx.elapsed, &mut ctx.last_tick);
-            let samples = maybe_downmix(batch, ctx.src_channels, usize::from(output_cfg.channels));
+            let samples = maybe_downmix(&batch, ctx.src_channels, usize::from(output_cfg.channels));
             *event_to_send = process_decoded_batch(&samples, &mut ctx.resampler, producer);
             event_to_send.is_some() || producer.is_abandoned()
         }

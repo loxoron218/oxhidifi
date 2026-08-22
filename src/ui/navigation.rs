@@ -88,6 +88,7 @@ mod tests {
 
     use {
         anyhow::{Result, ensure},
+        async_channel::Sender,
         libadwaita::{
             glib::object::Cast,
             gtk::{self, Box, Orientation::Vertical, Stack, Widget, test},
@@ -97,7 +98,7 @@ mod tests {
     use crate::{
         app::runtime::{
             AppState,
-            NavigationEvent::{AlbumDetail, Back},
+            NavigationEvent::{self, AlbumDetail, Back},
         },
         storage::active_tab::ActiveTab::{Albums, Artists},
         ui::navigation::{handle_navigation_event, persist_active_tab},
@@ -128,12 +129,8 @@ mod tests {
     #[test]
     fn handle_navigation_event_adds_and_removes_detail() -> Result<()> {
         let state = Arc::new(AppState::mock()?);
-        let content_area = Stack::new();
-        let orig_stack = Box::new(Vertical, 0);
-        content_area.add_named(&orig_stack, Some("library"));
-        content_area.set_visible_child(&orig_stack);
-        let nav_tx = state.navigation_tx.clone();
-        let orig: Widget = orig_stack.upcast();
+        let content_area = Stack::builder().build();
+        let (orig, nav_tx) = add_library_child(&content_area, &state);
 
         handle_navigation_event(&state, &content_area, &nav_tx, &orig, AlbumDetail(1));
         ensure!(content_area.child_by_name("detail").is_some());
@@ -141,5 +138,17 @@ mod tests {
         handle_navigation_event(&state, &content_area, &nav_tx, &orig, Back);
         ensure!(content_area.child_by_name("detail").is_none());
         Ok(())
+    }
+
+    fn add_library_child(
+        content_area: &Stack,
+        state: &Arc<AppState>,
+    ) -> (Widget, Sender<NavigationEvent>) {
+        let orig_stack = Box::builder().orientation(Vertical).spacing(0).build();
+        content_area.add_named(&orig_stack, Some("library"));
+        content_area.set_visible_child(&orig_stack);
+        let nav_tx = state.navigation_tx.clone();
+        let orig: Widget = orig_stack.upcast();
+        (orig, nav_tx)
     }
 }

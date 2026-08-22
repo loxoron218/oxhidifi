@@ -249,16 +249,16 @@ description: "Task list for high-fidelity music player refactoring"
 
 **Purpose**: Final code quality enforcement and comprehensive verification of all system requirements
 
-- [ ] T049 Run `cargo clippy --fix --allow-dirty --all-targets -- -W clippy::pedantic && cargo fmt` and fix all warnings; then run `find . -name "*.rs" -exec perl -i -0777 -pe 's/([;}])[ \t]*\r?\n([ \t]*\/\/(?!\/))/$1\n\n$2/g' {} +` to enforce blank lines before single-line comments after braces/semicolons per constitution
-- [ ] T050 Validate with quickstart.md — build (debug + release), run, verify all user stories functional
-- [ ] T052 Add library load verification: populate library with 10,000 synthetic tracks, measure scan throughput (<30s per SC-004) using metrics collector in src/metrics/collector.rs
-- [ ] T052c Add UI response verification: navigate between Albums/Artists views, toggle grid/column, access detail pages — measure response time (<100ms per SC-005) using metrics collector in src/metrics/collector.rs
-- [ ] T052b [P] Add queue persistence verification: populate queue, restart application, verify queue order, track IDs, and context are preserved per FR-028
-- [ ] T056 [P] Add multi-format end-to-end verification test fixture covering FLAC, MP3, AAC, Ogg Vorbis, Opus, WAV, and AIFF per FR-016
-- [ ] T057 Add library persistence verification: populate library, restart application, verify all tracks/albums/artists are reloaded from SQLite without re-scanning per FR-028
-- [ ] T058 Add settings persistence verification: configure library directories, audio device, view preferences, volume level, window geometry (width/height/maximized); restart application; verify all settings restored from XDG config path per FR-028
-- [ ] T059 Add SC-006 verification: configure library directory with 3,000 synthetic audio files, start scan, assert library populates and becomes browsable within 9 seconds per SC-006; use metrics collector from T046b for throughput timing
-- [ ] T060 [P] Add zero-heap-allocation verification for audio hot path per Constitution Principle IV: instrument the decoder+output+resampler path (src/playback/decoder.rs, src/playback/output.rs, src/playback/resampler.rs) to assert no heap allocation occurs during audio processing (pre-allocated buffers only). Use `#[global_allocator]` with allocation-count tracking or LRZ (`-Z perf-stats`) in a dedicated criterion benchmark; assert zero allocations over a 60-second steady-state playback run in tests/zero_alloc.rs
+- [X] T049 Run `cargo clippy --fix --allow-dirty --all-targets -- -W clippy::pedantic && cargo fmt` and fix all warnings; then run `find . -name "*.rs" -exec perl -i -0777 -pe 's/([;}])[ \t]*\r?\n([ \t]*\/\/(?!\/))/$1\n\n$2/g' {} +` to enforce blank lines before single-line comments after braces/semicolons per constitution
+- [X] T050 Validate with quickstart.md — build (debug + release), run, verify all user stories functional
+- [X] T052 Add library load verification: populate library with 10,000 synthetic tracks, measure scan throughput (<30s per SC-004) using metrics collector in src/metrics/collector.rs
+- [X] T052c Add UI response verification: navigate between Albums/Artists views, toggle grid/column, access detail pages — measure response time (<100ms per SC-005) using metrics collector in src/metrics/collector.rs
+- [X] T052b [P] Add queue persistence verification: populate queue, restart application, verify queue order, track IDs, and context are preserved per FR-028
+- [X] T056 [P] Add multi-format end-to-end verification test fixture covering FLAC, MP3, AAC, Ogg Vorbis, Opus, WAV, and AIFF per FR-016
+- [X] T057 Add library persistence verification: populate library, restart application, verify all tracks/albums/artists are reloaded from SQLite without re-scanning per FR-028
+- [X] T058 Add settings persistence verification: configure library directories, audio device, view preferences, volume level, window geometry (width/height/maximized); restart application; verify all settings restored from XDG config path per FR-028
+- [X] T059 Add SC-006 verification: configure library directory with 3,000 synthetic audio files, start scan, assert library populates and becomes browsable within 9 seconds per SC-006; use metrics collector from T046b for throughput timing
+- [X] T060 [P] Add zero-heap-allocation verification for audio hot path per Constitution Principle IV: instrument the decoder+output+resampler path (src/playback/decoder.rs, src/playback/output.rs, src/playback/resampler.rs) to assert no heap allocation occurs during audio processing (pre-allocated buffers only). Use `#[global_allocator]` with allocation-count tracking or LRZ (`-Z perf-stats`) in a dedicated criterion benchmark; assert zero allocations over a 60-second steady-state playback run in tests/zero_alloc.rs
 
 **Checkpoint**: All code quality checks pass, all verification tests pass, system meets all success criteria
 

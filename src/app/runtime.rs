@@ -278,6 +278,25 @@ pub struct SortMemo<C> {
     pub indices: Arc<[usize]>,
 }
 
+/// Build the app's standard channel set with fresh pairs.
+///
+/// Shared by `main`, the test mock, and the integration verification tests so
+/// all `AppState` constructions wire the same channels.
+#[must_use]
+pub fn build_app_channels() -> AppChannels {
+    let (scan_event_tx, scan_event_rx) = unbounded();
+    let (toast_tx, toast_rx) = unbounded();
+    let (navigation_tx, navigation_rx) = unbounded();
+    AppChannels {
+        scan_event_tx,
+        scan_event_rx,
+        toast_tx,
+        toast_rx,
+        navigation_tx,
+        navigation_rx,
+    }
+}
+
 /// Build the app's broadcast channel set with the given initial UI state.
 ///
 /// Shared by `main` and the test mock so both construct their channels

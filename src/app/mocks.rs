@@ -9,12 +9,11 @@ use std::{
 
 use {
     anyhow::{Context, Result, anyhow},
-    async_channel::unbounded,
     tokio::runtime::Runtime,
 };
 
 use crate::{
-    app::runtime::{AppChannels, AppState, build_broadcast_channels},
+    app::runtime::{AppState, build_app_channels, build_broadcast_channels},
     library::scanner::FsScanner,
     playback::engine::PlaybackEngine,
     storage::{active_tab::ActiveTab::Albums, database::SqliteStorage, view_mode::ViewMode::Grid},
@@ -55,19 +54,7 @@ impl AppState {
 pub fn build_app_state(storage: Arc<SqliteStorage>) -> AppState {
     let scanner_storage = Arc::clone(&storage);
 
-    let (scan_event_tx, scan_event_rx) = unbounded();
-    let (toast_tx, toast_rx) = unbounded();
-
-    let (navigation_tx, navigation_rx) = unbounded();
-
-    let channels = AppChannels {
-        scan_event_tx,
-        scan_event_rx,
-        toast_tx,
-        toast_rx,
-        navigation_tx,
-        navigation_rx,
-    };
+    let channels = build_app_channels();
 
     let broadcast = build_broadcast_channels(Grid, Albums);
 

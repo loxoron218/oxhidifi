@@ -58,12 +58,19 @@ fn downmix(samples: &[f32], src_channels: usize, dst_channels: usize) -> Vec<f32
 }
 
 /// Return `batch.samples` as-is if channel counts match, otherwise downmix.
+///
+/// When channel counts match, the returned buffer is a fresh allocation owned
+/// by the caller. When they differ, a downmix/upmix buffer is allocated.
 #[must_use]
-pub fn maybe_downmix(batch: DecodedSamples, src_channels: usize, dst_channels: usize) -> Vec<f32> {
+pub fn maybe_downmix(
+    batch: &DecodedSamples<'_>,
+    src_channels: usize,
+    dst_channels: usize,
+) -> Vec<f32> {
     if src_channels == dst_channels {
-        batch.samples
+        batch.samples.to_vec()
     } else {
-        downmix(&batch.samples, src_channels, dst_channels)
+        downmix(batch.samples, src_channels, dst_channels)
     }
 }
 
@@ -143,28 +150,28 @@ mod tests {
     #[test]
     fn maybe_downmix_no_downmix_when_channels_match() {
         let batch = DecodedSamples {
-            samples: vec![0.5, -0.5, 0.25, -0.25],
+            samples: &[0.5, -0.5, 0.25, -0.25],
             params: AudioParams {
                 sample_rate: 44100,
                 channels: 2,
                 duration_seconds: 0.0,
             },
         };
-        let result = maybe_downmix(batch, 2, 2);
+        let result = maybe_downmix(&batch, 2, 2);
         assert_eq!(result, vec![0.5, -0.5, 0.25, -0.25]);
     }
 
     #[test]
     fn maybe_downmix_downmixes_when_channels_differ() {
         let batch = DecodedSamples {
-            samples: vec![0.8, 0.2],
+            samples: &[0.8, 0.2],
             params: AudioParams {
                 sample_rate: 44100,
                 channels: 2,
                 duration_seconds: 0.0,
             },
         };
-        let result = maybe_downmix(batch, 2, 1);
+        let result = maybe_downmix(&batch, 2, 1);
         assert_eq!(result.len(), 1);
         assert_samples_close(&result, &[0.5], f32::EPSILON);
     }

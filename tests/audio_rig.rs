@@ -63,7 +63,7 @@ pub fn transition_and_decode(
     let batch = decoder
         .decode_next()
         .context("Failed to decode next track")?;
-    Ok(batch.samples)
+    Ok(batch.samples.to_vec())
 }
 
 /// Count leading silence samples (consecutive zeros) in a buffer.

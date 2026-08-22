@@ -8,9 +8,17 @@ use {
 };
 
 use oxhidifi::storage::{
-    catalog::{NewTrack, TrackAudio},
+    catalog::{NewAlbum, NewTrack, TrackAudio},
     database::SqliteStorage,
 };
+
+async fn storage_connect(dir: &Path) -> Result<SqliteStorage> {
+    let db_path = dir.join("test.db");
+    let settings_path = dir.join("settings.json");
+    SqliteStorage::connect_with_settings_path(&db_path, &settings_path)
+        .await
+        .context("failed to connect to storage")
+}
 
 /// Create a temporary `SqliteStorage` instance for testing.
 ///
@@ -19,11 +27,7 @@ use oxhidifi::storage::{
 /// Returns an error if the temp directory or database connection cannot be created.
 pub async fn test_storage() -> Result<(SqliteStorage, TempDir)> {
     let dir = tempdir().context("failed to create temp dir")?;
-    let db_path = dir.path().join("test.db");
-    let settings_path = dir.path().join("settings.json");
-    let storage = SqliteStorage::connect_with_settings_path(&db_path, &settings_path)
-        .await
-        .context("failed to connect to storage")?;
+    let storage = storage_connect(dir.path()).await?;
     Ok((storage, dir))
 }
 
@@ -50,5 +54,22 @@ pub fn make_track(title: &str, path: &Path, album_id: Option<i64>) -> NewTrack {
             file_size: 1024,
             last_modified: "2024-01-01T00:00:00Z".to_string(),
         },
+    }
+}
+
+/// Build a minimal `NewAlbum` fixture for storage tests.
+#[must_use]
+pub fn make_album(title: &str, artist_id: i64, year: i32) -> NewAlbum {
+    NewAlbum {
+        title: title.to_string(),
+        artist_id,
+        year: Some(year),
+        genre: Some("Rock".to_string()),
+        format_summary: "FLAC 16-bit/44.1kHz".to_string(),
+        lossless: true,
+        format: "FLAC".to_string(),
+        bit_depth: Some(16),
+        sample_rate: Some(44100),
+        artwork_path: None,
     }
 }

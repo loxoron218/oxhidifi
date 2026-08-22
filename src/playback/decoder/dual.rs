@@ -50,11 +50,13 @@ impl DualDecoder {
 
     /// Decode the next batch from the active decoder.
     ///
+    /// The returned samples borrow the active decoder's pre-allocated buffer.
+    ///
     /// # Errors
     ///
     /// Returns [`DecoderError`] on decode failure. Returns
     /// [`DecoderError::EndOfStream`] if no active decoder is available.
-    pub fn decode_next(&mut self) -> Result<DecodedSamples, DecoderError> {
+    pub fn decode_next(&mut self) -> Result<DecodedSamples<'_>, DecoderError> {
         self.active
             .as_mut()
             .map_or(Err(EndOfStream), Decoder::decode_next)

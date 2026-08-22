@@ -13,6 +13,12 @@ use rubato::{
     audioadapter_buffers::direct::InterleavedSlice,
 };
 
+/// Multiplier applied to the input accumulation buffer capacity so that
+/// `push_input` never reallocates on the audio hot path. The accumulator can
+/// reach `chunk_size + one decoded batch` before a chunk is emitted; this
+/// factor reserves enough capacity for the largest realistic symphonia batch.
+const INPUT_ACCUM_RESERVE_MULTIPLIER: usize = 32;
+
 /// Sample rate converter wrapping the rubato FFT resampler.
 ///
 /// Pre-allocates all internal buffers so no heap allocation occurs on the
@@ -68,6 +74,12 @@ impl AudioResampler {
         let output_frames_max = resampler.output_frames_max();
         let output_buf = vec![0.0_f32; output_frames_max.saturating_mul(channels)];
 
+        let input_accum = Vec::with_capacity(
+            chunk_size
+                .saturating_mul(channels)
+                .saturating_mul(INPUT_ACCUM_RESERVE_MULTIPLIER),
+        );
+
         let indexing = Indexing {
             input_offset: 0,
             output_offset: 0,
@@ -81,7 +93,7 @@ impl AudioResampler {
             output_rate,
             channels,
             chunk_size,
-            input_accum: Vec::new(),
+            input_accum,
             output_buf,
             indexing,
         })
@@ -200,6 +212,11 @@ impl AudioResampler {
         self.input_rate = input_rate;
         self.output_rate = output_rate;
         self.input_accum.clear();
+        self.input_accum.reserve(
+            self.chunk_size
+                .saturating_mul(self.channels)
+                .saturating_mul(INPUT_ACCUM_RESERVE_MULTIPLIER),
+        );
         self.indexing.input_offset = 0;
         self.indexing.output_offset = 0;
         self.indexing.partial_len = None;
@@ -214,6 +231,26 @@ impl AudioResampler {
         self.indexing.input_offset = 0;
         self.indexing.output_offset = 0;
         self.indexing.partial_len = None;
+    }
+
+    /// Returns the capacity of the input accumulation buffer.
+    ///
+    /// Only compiled for the `verification-tests` feature, which asserts this
+    /// capacity stays constant across `push_input`/`process` calls (zero
+    /// reallocation on the audio hot path).
+    #[cfg(feature = "verification-tests")]
+    #[must_use]
+    pub const fn input_accum_capacity(&self) -> usize {
+        self.input_accum.capacity()
+    }
+
+    /// Returns the capacity of the pre-allocated output buffer.
+    ///
+    /// Only compiled for the `verification-tests` feature.
+    #[cfg(feature = "verification-tests")]
+    #[must_use]
+    pub const fn output_buf_capacity(&self) -> usize {
+        self.output_buf.capacity()
     }
 }
 
