@@ -147,6 +147,10 @@ impl SettingsStore {
 }
 
 /// Try to load settings from file, falling back to defaults on parse error.
+///
+/// # Errors
+///
+/// Returns an error if the settings file exists but cannot be read.
 async fn load_settings_with_fallback(settings_path: &Path) -> Result<UserSettings> {
     if try_exists(settings_path).await.unwrap_or(false) {
         let content = read_to_string(settings_path)

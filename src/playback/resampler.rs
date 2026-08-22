@@ -13,10 +13,12 @@ use rubato::{
     audioadapter_buffers::direct::InterleavedSlice,
 };
 
-/// Multiplier applied to the input accumulation buffer capacity so that
-/// `push_input` never reallocates on the audio hot path. The accumulator can
-/// reach `chunk_size + one decoded batch` before a chunk is emitted; this
-/// factor reserves enough capacity for the largest realistic symphonia batch.
+/// Multiplier applied to the input accumulation buffer capacity.
+///
+/// Ensures `push_input` never reallocates on the audio hot path: the
+/// accumulator can reach `chunk_size + one decoded batch` before a chunk is
+/// emitted, so this factor reserves enough capacity for the largest realistic
+/// symphonia batch.
 const INPUT_ACCUM_RESERVE_MULTIPLIER: usize = 32;
 
 /// Sample rate converter wrapping the rubato FFT resampler.
@@ -239,7 +241,6 @@ impl AudioResampler {
     /// capacity stays constant across `push_input`/`process` calls (zero
     /// reallocation on the audio hot path).
     #[cfg(feature = "verification-tests")]
-    #[must_use]
     pub const fn input_accum_capacity(&self) -> usize {
         self.input_accum.capacity()
     }
@@ -248,7 +249,6 @@ impl AudioResampler {
     ///
     /// Only compiled for the `verification-tests` feature.
     #[cfg(feature = "verification-tests")]
-    #[must_use]
     pub const fn output_buf_capacity(&self) -> usize {
         self.output_buf.capacity()
     }

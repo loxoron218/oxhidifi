@@ -12,6 +12,11 @@ use oxhidifi::storage::{
     database::SqliteStorage,
 };
 
+/// Connect storage to a fresh SQLite file and settings path in `dir`.
+///
+/// # Errors
+///
+/// Returns an error if the database connection cannot be established.
 async fn storage_connect(dir: &Path) -> Result<SqliteStorage> {
     let db_path = dir.join("test.db");
     let settings_path = dir.join("settings.json");
