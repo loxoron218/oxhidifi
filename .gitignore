@@ -1,4 +1,5 @@
 /target
+.specify/.gitignore
 .specify/extensions
 .specify/extensions.yml
 .specify/init-options.json
