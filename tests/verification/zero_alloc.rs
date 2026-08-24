@@ -12,8 +12,7 @@
 //! is therefore scoped to *our* pre-allocated buffers: the decoder's reusable
 //! sample buffer and the resampler's input/output buffers must keep a constant
 //! capacity across the whole steady-state run, proving they are allocated once
-//! and reused rather than reallocated per batch. A counting `#[global_allocator]`
-//! additionally reports the total allocation pressure for documentation.
+//! and reused rather than reallocated per batch.
 //!
 //! Gated behind the `verification-tests` feature. Run with:
 //!
@@ -21,21 +20,14 @@
 //! cargo test --features verification-tests --test zero_alloc
 //! ```
 
-use std::{
-    alloc::{GlobalAlloc, Layout, System},
-    f64::consts::PI,
-    fs::File,
-    io::Write,
-    path::Path,
-    sync::atomic::{AtomicUsize, Ordering::Relaxed},
-};
+use std::{f64::consts::PI, fs::File, io::Write, path::Path};
 
 use {
     anyhow::{Context, Result, ensure},
     num_traits::cast,
     rtrb::{Consumer, Producer, PushError::Full, RingBuffer},
     tempfile::tempdir,
-    tracing::warn,
+    tracing::info,
 };
 
 use oxhidifi::playback::{decoder::Decoder, resampler::AudioResampler, write_wav_header};
@@ -51,49 +43,6 @@ const CHANNELS: u16 = 1;
 
 /// Output sample rate (forces resampling to be exercised).
 const OUTPUT_RATE: u32 = 48_000;
-
-/// Global allocation counters for documentation/reporting.
-static ALLOC_COUNT: AtomicUsize = AtomicUsize::new(0);
-static ALLOC_BYTES: AtomicUsize = AtomicUsize::new(0);
-
-/// Installed as the process-wide allocator to count allocations during the
-/// steady-state run.
-#[global_allocator]
-static GLOBAL_ALLOCATOR: CountingAllocator = CountingAllocator;
-
-/// A counting global allocator wrapping the system allocator.
-struct CountingAllocator;
-
-// SAFETY: `CountingAllocator` is a zero-sized marker type. Forwarding to the
-// system allocator upholds the `GlobalAlloc` contract, which `System`
-// guarantees for well-formed `alloc`/`dealloc` argument pairs.
-unsafe impl GlobalAlloc for CountingAllocator {
-    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        ALLOC_COUNT.fetch_add(1, Relaxed);
-        ALLOC_BYTES.fetch_add(layout.size(), Relaxed);
-
-        // SAFETY: `layout` comes from the caller of `alloc` and is forwarded
-        // verbatim to `System::alloc`, which validates it against the
-        // `GlobalAlloc` contract.
-        unsafe { System.alloc(layout) }
-    }
-
-    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        // SAFETY: `ptr` was returned by a matching `alloc` call for this exact
-        // `layout`, satisfying the contract of `System::dealloc`.
-        unsafe { System.dealloc(ptr, layout) }
-    }
-
-    unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
-        ALLOC_COUNT.fetch_add(1, Relaxed);
-        ALLOC_BYTES.fetch_add(layout.size().max(new_size), Relaxed);
-
-        // SAFETY: `ptr` and `layout` originate from a prior `alloc` on this
-        // allocator and are forwarded to `System::realloc` under the same
-        // contract.
-        unsafe { System.realloc(ptr, layout, new_size) }
-    }
-}
 
 /// Write a WAV file with `seconds` seconds of a mono 1 kHz tone.
 fn write_wav(path: &Path, seconds: u32) -> Result<()> {
@@ -169,12 +118,9 @@ fn main_test() -> Result<()> {
     ensure!(batches > 0, "no batches decoded");
     ensure!(output_samples > 0, "no resampled output produced");
 
-    let total_allocs = ALLOC_COUNT.load(Relaxed);
-    let total_bytes = ALLOC_BYTES.load(Relaxed);
-    warn!(
-        "zero_alloc: {batches} batches, {output_samples} output samples, {total_allocs} total \
-         allocations ({total_bytes} bytes) — our pre-allocated buffers held constant capacity \
-         throughout"
+    info!(
+        "zero_alloc: {batches} batches, {output_samples} output samples — our pre-allocated \
+         buffers held constant capacity throughout"
     );
 
     drop(dir);
