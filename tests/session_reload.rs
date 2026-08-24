@@ -13,7 +13,7 @@ use {
 
 use oxhidifi::storage::{Storage, catalog::NewArtist, database::SqliteStorage};
 
-use crate::db_setup::{make_album, make_track, test_storage};
+use crate::db_setup::{make_album, make_track};
 
 /// Insert one track and return its id.
 ///
@@ -156,9 +156,17 @@ async fn assert_artist_track_counts(storage: &SqliteStorage, artist_ids: &[i64])
 
 #[cfg(test)]
 mod tests {
-    use tokio::test;
+    use {
+        anyhow::{Result, ensure},
+        tokio::test,
+    };
 
-    use super::*;
+    use oxhidifi::storage::{Storage, database::SqliteStorage};
+
+    use crate::{
+        assert_albums_reloaded, assert_artist_track_counts, assert_artists_reloaded,
+        assert_tracks_reloaded, db_setup::test_storage, populate,
+    };
 
     #[test]
     async fn library_survives_reconnect_without_rescan() -> Result<()> {

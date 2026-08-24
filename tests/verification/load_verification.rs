@@ -147,10 +147,12 @@ fn main_test() -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use anyhow::Result;
+
+    use crate::main_test;
 
     #[test]
     fn load_ten_thousand_tracks_within_budget() -> Result<()> {
-        super::main_test()
+        main_test()
     }
 }

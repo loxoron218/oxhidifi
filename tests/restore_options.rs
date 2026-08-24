@@ -7,11 +7,6 @@
 
 use std::path::Path;
 
-use {
-    anyhow::{Result, ensure},
-    tempfile::tempdir,
-};
-
 use oxhidifi::{
     playback::devices::OutputMode::{self, BitPerfect},
     storage::{
@@ -46,9 +41,20 @@ fn configure_preferences(store: &mut SettingsStore) {
 
 #[cfg(test)]
 mod tests {
-    use tokio::test;
+    use {
+        anyhow::{Result, ensure},
+        tempfile::tempdir,
+    };
 
-    use super::*;
+    use oxhidifi::{
+        playback::devices::OutputMode::BitPerfect,
+        storage::{
+            active_tab::ActiveTab::Artists, config::persistence::SettingsStore,
+            view_mode::ViewMode::Column,
+        },
+    };
+
+    use {crate::configure_preferences, tokio::test};
 
     #[test]
     async fn settings_survive_save_and_reload() -> Result<()> {

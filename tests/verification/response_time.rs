@@ -109,9 +109,28 @@ fn time_operation(action: &'static str, f: impl FnOnce()) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use libadwaita::gtk::init;
+    use {
+        anyhow::{Context, Result},
+        libadwaita::{
+            ViewStack,
+            glib::object::Cast,
+            gtk::{Box, Orientation::Vertical, Stack, Widget, init},
+        },
+    };
 
-    use super::*;
+    use oxhidifi::{
+        app::runtime::NavigationEvent::{AlbumDetail, Back},
+        storage::{
+            active_tab::ActiveTab::{Albums, Artists},
+            view_mode::ViewMode::{Column, Grid},
+        },
+        ui::{
+            gallery::narrow_flag::NarrowState, navigation::handle_navigation_event,
+            switching::handle_tab_switch,
+        },
+    };
+
+    use crate::{mock_state, time_operation};
 
     #[test]
     fn ui_navigation_response_under_threshold() -> Result<()> {

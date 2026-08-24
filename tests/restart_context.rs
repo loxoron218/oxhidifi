@@ -8,10 +8,7 @@ mod db_setup;
 
 use std::path::Path;
 
-use {
-    anyhow::{Context, Result, ensure},
-    tempfile::tempdir,
-};
+use anyhow::Result;
 
 use oxhidifi::storage::{
     Storage,
@@ -23,7 +20,7 @@ use oxhidifi::storage::{
     database::SqliteStorage,
 };
 
-use crate::db_setup::{make_album, make_track, test_storage};
+use crate::db_setup::{make_album, make_track};
 
 /// Return the (`context_type`, `context_id`) pair of a queue entry at `idx`,
 /// or `(None, None)` when the entry does not exist.
@@ -91,9 +88,15 @@ async fn populate_queue(db_path: &Path, settings_path: &Path, dir: &Path) -> Res
 
 #[cfg(test)]
 mod tests {
-    use tokio::test;
+    use {
+        anyhow::{Context, Result, ensure},
+        tempfile::tempdir,
+        tokio::test,
+    };
 
-    use super::*;
+    use oxhidifi::storage::{Storage, catalog::NewQueueEntry, database::SqliteStorage};
+
+    use crate::{context_at, db_setup::test_storage, insert_track, populate_queue};
 
     #[test]
     async fn queue_order_ids_and_context_survive_reconnect() -> Result<()> {

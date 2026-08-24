@@ -26,7 +26,6 @@ use std::{
 use {
     anyhow::{Context, Result, bail, ensure},
     num_traits::cast,
-    tempfile::tempdir,
 };
 
 use oxhidifi::playback::{decoder::Decoder, write_wav_header};
@@ -172,9 +171,13 @@ fn drain_check(path: &Path) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use tracing::warn;
+    use {
+        anyhow::{Context, Result, ensure},
+        tempfile::tempdir,
+        tracing::warn,
+    };
 
-    use super::*;
+    use crate::{FORMATS, drain_check, ffmpeg_available, transcode, write_source_wav};
 
     #[test]
     fn supported_formats_decode_via_symphonia_bridge() -> Result<()> {

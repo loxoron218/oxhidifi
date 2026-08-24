@@ -1,6 +1,6 @@
 //! `HeaderBar` with Albums/Artists tab buttons and view toggle controls.
 //!
-//! Tab navigation lives in the sibling [`panes`](super::panes) module: a
+//! Tab navigation lives in the sibling [`panes`](crate::ui::panes) module: a
 //! `ViewSwitcher` sits in the header bar title slot for wide windows and is
 //! replaced by a bottom `ViewSwitcherBar` in narrow windows per GNOME HIG.
 //!

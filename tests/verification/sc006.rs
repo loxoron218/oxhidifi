@@ -109,10 +109,12 @@ fn main_test() -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use anyhow::Result;
+
+    use crate::main_test;
 
     #[test]
     fn sc006_library_browsable_within_budget() -> Result<()> {
-        super::main_test()
+        main_test()
     }
 }

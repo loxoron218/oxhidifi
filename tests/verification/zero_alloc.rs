@@ -149,10 +149,12 @@ fn push_blocking(sample: f32, producer: &mut Producer<f32>) {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use anyhow::Result;
+
+    use crate::main_test;
 
     #[test]
     fn zero_alloc_steady_state() -> Result<()> {
-        super::main_test()
+        main_test()
     }
 }
