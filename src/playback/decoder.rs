@@ -226,6 +226,7 @@ impl Decoder {
     /// capacity stays constant across `decode_next` calls (zero reallocation
     /// on the audio hot path).
     #[cfg(feature = "verification-tests")]
+    #[must_use]
     pub const fn buffer_capacity(&self) -> usize {
         self.buf.capacity()
     }

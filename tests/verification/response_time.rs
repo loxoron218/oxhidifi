@@ -20,33 +20,16 @@ use std::{
 use {
     anyhow::{Context, Result, ensure},
     async_channel::unbounded,
-    libadwaita::{
-        ViewStack,
-        glib::object::Cast,
-        gtk::{Box, Orientation::Vertical, Stack, Widget},
-    },
     tokio::runtime::Runtime,
 };
 
 use oxhidifi::{
-    app::runtime::{
-        AppChannels, AppState,
-        NavigationEvent::{AlbumDetail, Back},
-        build_broadcast_channels,
-    },
+    app::runtime::{AppChannels, AppState, build_broadcast_channels},
     library::scanner::FsScanner,
     metrics::UiResponse,
     playback::engine::PlaybackEngine,
-    storage::{
-        active_tab::ActiveTab::{Albums, Artists},
-        database::SqliteStorage,
-        view_mode::ViewMode::{Column, Grid},
-    },
+    storage::{active_tab::ActiveTab::Albums, database::SqliteStorage, view_mode::ViewMode::Grid},
     threading::ThreadManager,
-    ui::{
-        gallery::narrow_flag::NarrowState, navigation::handle_navigation_event,
-        switching::handle_tab_switch,
-    },
 };
 
 /// SC-005 UI response threshold in milliseconds.

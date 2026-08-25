@@ -77,7 +77,7 @@ pub mod database;
 ### Commands
 
 ```bash
-cargo clippy --fix --allow-dirty --all-targets && cargo fmt
+cargo clippy --fix --allow-dirty --all-targets --all-features && cargo fmt
 cargo test    # all tests must pass before committing
 cargo bench   # benchmarks
 ```

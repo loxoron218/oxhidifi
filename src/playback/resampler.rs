@@ -241,6 +241,7 @@ impl AudioResampler {
     /// capacity stays constant across `push_input`/`process` calls (zero
     /// reallocation on the audio hot path).
     #[cfg(feature = "verification-tests")]
+    #[must_use]
     pub const fn input_accum_capacity(&self) -> usize {
         self.input_accum.capacity()
     }
@@ -249,6 +250,7 @@ impl AudioResampler {
     ///
     /// Only compiled for the `verification-tests` feature.
     #[cfg(feature = "verification-tests")]
+    #[must_use]
     pub const fn output_buf_capacity(&self) -> usize {
         self.output_buf.capacity()
     }
