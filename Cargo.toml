@@ -92,6 +92,22 @@ name = "zero_alloc"
 path = "tests/verification/zero_alloc.rs"
 required-features = ["verification-tests"]
 
+[lints.rust]
+deprecated_safe = { level = "deny", priority = -1 }
+future_incompatible = { level = "deny", priority = -1 }
+keyword_idents = { level = "deny", priority = -1 }
+let_underscore = { level = "deny", priority = -1 }
+nonstandard_style = { level = "deny", priority = -1 }
+refining_impl_trait = { level = "deny", priority = -1 }
+rust_2018_compatibility = { level = "deny", priority = -1 }
+rust_2018_idioms = { level = "deny", priority = -1 }
+rust_2021_compatibility = { level = "deny", priority = -1 }
+rust_2024_compatibility = { level = "deny", priority = -1 }
+unknown_or_malformed_diagnostic_attributes = { level = "deny", priority = -1 }
+unsafe_code = "forbid"
+unused = { level = "deny", priority = -1 }
+warnings = { level = "deny", priority = -1 }
+
 [lints.clippy]
 # unused_trait_names = "deny"
 allow_attributes = "deny"
@@ -99,6 +115,8 @@ allow_attributes_without_reason = "deny"
 arbitrary_source_item_ordering = "deny"
 arithmetic_side_effects = "deny"
 as_conversions = "deny"
+as_pointer_underscore = "deny"
+as_underscore = "deny"
 assertions_on_result_states = "deny"
 await_holding_lock = "deny"
 await_holding_refcell_ref = "deny"
@@ -109,6 +127,7 @@ cast_sign_loss = "deny"
 clone_on_ref_ptr = "deny"
 dbg_macro = "deny"
 debug_assert_with_mut_call = "deny"
+doc_paragraphs_missing_punctuation = "deny"
 else_if_without_else = "deny"
 empty_drop = "deny"
 empty_enum_variants_with_brackets = "deny"
@@ -129,6 +148,7 @@ iter_not_returning_iterator = "deny"
 large_futures = "deny"
 let_underscore_future = "deny"
 let_underscore_must_use = "deny"
+let_underscore_untyped = "deny"
 lossy_float_literal = "deny"
 map_err_ignore = "deny"
 map_with_unused_argument_over_ranges = "deny"
@@ -136,10 +156,13 @@ mem_forget = "deny"
 missing_assert_message = "deny"
 missing_asserts_for_indexing = "deny"
 missing_docs_in_private_items = "deny"
+missing_trait_methods = "deny"
+mod_module_files = "deny"
 multiple_unsafe_ops_per_block = "deny"
 mutex_atomic = "deny"
 mutex_integer = "deny"
 needless_raw_strings = "deny"
+negative_feature_names = "deny"
 nursery = { level = "deny", priority = -1 }
 panic = "deny"
 panic_in_result_fn = "deny"
@@ -155,6 +178,7 @@ redundant_type_annotations = "deny"
 ref_patterns = "deny"
 rest_pat_in_fully_bound_structs = "deny"
 return_and_then = "deny"
+same_name_method = "deny"
 string_lit_chars_any = "deny"
 string_slice = "deny"
 tests_outside_test_module = "deny"
