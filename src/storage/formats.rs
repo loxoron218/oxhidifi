@@ -37,7 +37,7 @@ impl FormatInfo {
     ///
     /// Uniform lossless: `"FLAC 24/96"`
     /// Uniform lossy:    `"MP3 44.1"`
-    /// Mixed:           `"FLAC, MP3 16, 24/44.1, 96"`
+    /// Mixed:           `"FLAC, MP3 16, 24/44.1, 96"`.
     #[must_use]
     pub fn summary(&self) -> String {
         let fmt = self.formats_display();
@@ -75,7 +75,7 @@ impl FormatInfo {
     ///
     /// Uniform lossless: `"FLAC \u{2022} 24-bit / 96.0 kHz \u{2022} Stereo"`
     /// Uniform lossy:    `"MP3 \u{2022} 44.1 kHz \u{2022} Stereo"`
-    /// Mixed:           `"FLAC, MP3 \u{2022} 16, 24-bit / 44.1, 96.0 kHz \u{2022} Stereo"`
+    /// Mixed:           `"FLAC, MP3 \u{2022} 16, 24-bit / 44.1, 96.0 kHz \u{2022} Stereo"`.
     pub fn summary_detailed(&self) -> String {
         let mut parts: Vec<String> = Vec::new();
         let fmt = self.formats_display();

@@ -300,7 +300,7 @@ mod tests {
     ///
     /// # Returns
     ///
-    /// The connected `SqliteStorage`
+    /// The connected `SqliteStorage`.
     pub async fn storage_in(dir: &TempDir) -> Result<SqliteStorage> {
         let db = dir.path().join("library.db");
         let settings = dir.path().join("settings.json");

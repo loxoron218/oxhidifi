@@ -22,7 +22,7 @@ use crate::{
 ///
 /// # Returns
 ///
-/// The current `ViewMode` if `tab` is active, otherwise `None`
+/// The current `ViewMode` if `tab` is active, otherwise `None`.
 pub fn take_stale_mode_child(
     state: &Arc<AppState>,
     tab: ActiveTab,

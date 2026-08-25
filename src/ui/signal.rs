@@ -69,6 +69,10 @@ impl<T> Clone for ValueSignal<T> {
             inner: Arc::clone(&self.inner),
         }
     }
+
+    fn clone_from(&mut self, source: &Self) {
+        Arc::clone_from(&mut self.inner, &source.inner);
+    }
 }
 
 /// Shared state behind a [`ValueSignal`].

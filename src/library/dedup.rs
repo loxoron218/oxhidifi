@@ -89,7 +89,7 @@ pub fn create_fingerprint(metadata: &AudioMetadata) -> String {
 /// Check if a file path indicates a supported audio format.
 ///
 /// Supported extensions: `.flac`, `.mp3`, `.aac`, `.m4a`, `.ogg`, `.opus`,
-/// `.wav`, `.aiff`, `.aif`
+/// `.wav`, `.aiff`, `.aif`.
 #[must_use]
 pub fn is_supported_audio_format(path: &Path) -> bool {
     path.extension()
