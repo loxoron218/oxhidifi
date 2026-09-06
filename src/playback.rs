@@ -31,6 +31,8 @@ use std::{
 
 use thiserror::Error;
 
+use crate::storage::StorageError;
+
 /// Errors originating from the decoder subsystem.
 #[derive(Debug, Error)]
 pub enum DecoderError {
@@ -95,6 +97,9 @@ pub enum PlaybackError {
     /// Playback queue has reached its maximum capacity.
     #[error("Queue full (max {max})")]
     QueueFull { max: usize },
+    /// Storage layer error.
+    #[error("Storage error: {0}")]
+    Storage(#[from] StorageError),
 }
 
 /// Write a WAV file header (PCM, mono/stereo). Does not write audio data.

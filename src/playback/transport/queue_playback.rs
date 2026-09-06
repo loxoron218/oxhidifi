@@ -9,12 +9,14 @@ use std::sync::Arc;
 
 use tracing::{info, warn};
 
-use crate::playback::{
-    PlaybackError::{self, QueueEmpty, QueueFull, TrackNotFound},
-    engine::EngineShared,
-    queue_manager::PlaybackQueue,
-    state::PlaybackEvent::QueueChanged,
-    worker::start_playback,
+use crate::{
+    playback::{
+        PlaybackError::{self, QueueEmpty, QueueFull, Storage, TrackNotFound},
+        engine::EngineShared,
+        state::PlaybackEvent::QueueChanged,
+        worker::start_playback,
+    },
+    storage::StorageError::QueueFull as StorageQueueFull,
 };
 
 /// Play a specific track by ID.
@@ -90,8 +92,9 @@ pub fn play_list_at(
     shared
         .queue
         .set_queue(queue.clone())
-        .map_err(|_err| QueueFull {
-            max: PlaybackQueue::MAX_CAPACITY,
+        .map_err(|error| match error {
+            StorageQueueFull { max } => QueueFull { max },
+            error => Storage(error),
         })?;
     shared.queue.set_current_index(start_index);
     shared.send_event(&QueueChanged { track_ids: queue });
@@ -146,8 +149,9 @@ pub fn play_list(shared: &Arc<EngineShared>, queue: Vec<i64>) -> Result<(), Play
     shared
         .queue
         .set_queue(queue.clone())
-        .map_err(|_err| QueueFull {
-            max: PlaybackQueue::MAX_CAPACITY,
+        .map_err(|error| match error {
+            StorageQueueFull { max } => QueueFull { max },
+            error => Storage(error),
         })?;
     shared.send_event(&QueueChanged { track_ids: queue });
     let first_id = shared.queue.current().ok_or(QueueEmpty)?;
