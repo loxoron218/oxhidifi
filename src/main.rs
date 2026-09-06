@@ -1,6 +1,6 @@
 //! Application entry point with structured logging initialization.
 
-use std::{fs::create_dir_all, io::stderr};
+use std::{fs::create_dir_all, io::stderr, time::Duration};
 
 use {
     anyhow::{Context, Result},
@@ -71,5 +71,6 @@ fn main() -> Result<()> {
     let rt = Runtime::new().context("Failed to create tokio runtime")?;
     let result = rt.block_on(run_application());
     drop(log_guard);
+    rt.shutdown_timeout(Duration::from_secs(5));
     result
 }

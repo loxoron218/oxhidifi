@@ -1,6 +1,10 @@
 //! Library directories preferences page.
 
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    path::{Path, PathBuf},
+    slice::from_ref,
+    sync::Arc,
+};
 
 use {
     libadwaita::{
@@ -13,41 +17,91 @@ use {
             PreferencesGroupExt, PreferencesPageExt, WidgetExt,
         },
     },
-    tracing::{error, info},
+    tokio::spawn,
+    tracing::{error, info, warn},
 };
 
 use crate::{
     app::runtime::AppState,
+    library::{scanner::LibraryScanner, watcher::LibraryWatcher},
     storage::{Storage, catalog::LibraryDirectory, database::SqliteStorage},
 };
 
-/// Remove a library directory by ID in a background task.
-fn spawn_remove_directory(storage: &Arc<SqliteStorage>, dir_id: i64) {
-    info!(dir_id, "Library directory removed",);
-    let storage = Arc::clone(storage);
+/// Remove a library directory by ID, hard-delete tracks/albums/artists, unwatch, and refresh UI.
+fn spawn_remove_directory(state: &Arc<AppState>, dir_id: i64, dir_path: String) {
+    info!(dir_id, path = %dir_path, "Library directory removed");
+    let state_clone = Arc::clone(state);
     spawn_future_local(async move {
-        if let Err(e) = storage.remove_library_directory(dir_id).await {
+        if let Err(e) = state_clone.storage.remove_library_directory(dir_id).await {
             error!(error = %e, "Failed to remove library directory");
+            return;
         }
+        let watcher_opt = state_clone.watcher.lock().as_ref().cloned();
+        if let Some(watcher_arc) = watcher_opt {
+            let path = Path::new(&dir_path).to_path_buf();
+            try_unwatch_directory(&watcher_arc, &path, &dir_path);
+        }
+        state_clone.refresh.publish();
+        info!(path = %dir_path, "Refresh published after directory removal");
     });
+}
+
+/// Attempt to unwatch a directory, logging on failure.
+fn try_unwatch_directory(watcher: &LibraryWatcher<SqliteStorage>, path: &Path, dir_path: &str) {
+    if let Err(error) = watcher.unwatch_directory(path) {
+        warn!(
+            error = %error,
+            path = %dir_path,
+            "Failed to unwatch removed directory"
+        );
+    }
 }
 
 /// Add a library directory by path in a background task.
 fn spawn_add_directory(state: &Arc<AppState>, path: PathBuf) {
     let state = Arc::clone(state);
-    spawn_future_local(async move {
-        if let Err(e) = state.storage.add_library_directory(&path).await {
-            error!(error = %e, "Failed to add library directory");
+    spawn_future_local(handle_add_directory(state, path));
+}
+
+/// Handle adding a directory, then scanning and refreshing the UI.
+async fn handle_add_directory(state: Arc<AppState>, path: PathBuf) {
+    if let Err(e) = state.storage.add_library_directory(&path).await {
+        error!(error = %e, "Failed to add library directory");
+        return;
+    }
+    if let Some(watcher_arc) = state.watcher.lock().as_ref().cloned()
+        && let Err(e) = watcher_arc.watch_directories(from_ref(&path))
+    {
+        warn!(error = %e, path = %path.display(), "Failed to watch new directory");
+    }
+    info!(
+        path = %path.display(),
+        "Added library directory, spawning background scan"
+    );
+    scan_directory_and_publish(state, path).await;
+}
+
+/// Scan a directory and publish a library refresh.
+async fn scan_directory_and_publish(state: Arc<AppState>, path: PathBuf) {
+    let scanner = Arc::clone(&state.scanner);
+    let refresh = state.refresh.clone();
+    let scan_path = path.clone();
+    spawn(async move {
+        if let Err(e) = scanner.scan_directory(&scan_path).await {
+            warn!(error = %e, path = %scan_path.display(), "Failed to scan directory");
+            return;
         }
+        info!(path = %scan_path.display(), "Scan completed after adding directory");
+        refresh.publish();
+    })
+    .await
+    .unwrap_or_else(|e| {
+        warn!(error = %e, "Scan task panicked");
     });
 }
 
 /// Build a directory row with a remove button and add it to the group.
-fn add_directory_row(
-    group: &PreferencesGroup,
-    storage: &Arc<SqliteStorage>,
-    dir: &LibraryDirectory,
-) {
+fn add_directory_row(group: &PreferencesGroup, state: &Arc<AppState>, dir: &LibraryDirectory) {
     let row = ActionRow::builder()
         .title(&dir.path)
         .activatable_widget(group)
@@ -63,11 +117,12 @@ fn add_directory_row(
     row.add_suffix(&remove_btn);
     row.set_activatable_widget(Some(&remove_btn));
 
-    let storage = Arc::clone(storage);
+    let state_clone = Arc::clone(state);
     let dir_id = dir.id;
+    let dir_path = dir.path.clone();
     let row_clone = row.clone();
     remove_btn.connect_clicked(move |_| {
-        spawn_remove_directory(&storage, dir_id);
+        spawn_remove_directory(&state_clone, dir_id, dir_path.clone());
         row_clone.set_visible(false);
     });
 
@@ -106,7 +161,7 @@ pub fn build_library_page(dialog: &PreferencesDialog, state: &Arc<AppState>, par
         };
 
         for dir in &dirs {
-            add_directory_row(&group_clone, &state_clone.storage, dir);
+            add_directory_row(&group_clone, &state_clone, dir);
         }
     });
 

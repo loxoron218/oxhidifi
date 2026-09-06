@@ -21,6 +21,7 @@ use {
 
 use crate::{
     app::runtime::AppState,
+    metrics::GLOBAL_PANEL_REVEAL,
     playback::{
         state::PlaybackEvent::{self, Stopped, TrackFinished, TrackStarted},
         transport::PlaybackTransport,
@@ -51,6 +52,7 @@ fn handle_panel_event(
     match event {
         TrackStarted { track_id } => {
             split_view.set_show_sidebar(true);
+            GLOBAL_PANEL_REVEAL.record_visible();
             spawn_fetch_album_id(Arc::clone(&state.storage), *track_id, album_tx.clone());
         }
         Stopped => {

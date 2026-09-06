@@ -15,6 +15,7 @@ use {
         tag::ItemKey::{AlbumArtist, RecordingDate},
     },
     thiserror::Error,
+    tracing::warn,
 };
 
 /// Extracted metadata from an audio file.
@@ -98,10 +99,22 @@ pub fn extract_metadata(path: &Path) -> Result<AudioMetadata, MetadataError> {
     let track_number = extract_track_number(&tagged_file);
     let disc_number = extract_disc_number(&tagged_file);
 
-    let duration = props.duration().as_secs_f64();
-    if duration <= 0.0 {
-        return Err(MetadataError::InvalidDuration(duration));
-    }
+    let raw_duration = props.duration().as_secs_f64();
+    let duration = if raw_duration <= 0.0 {
+        let is_lossless = matches!(file_type, Flac | Wav | Aiff);
+        if is_lossless {
+            0.0
+        } else {
+            warn!(
+                path = %path.display(),
+                raw_duration,
+                "No duration in metadata, using 1.0s placeholder per FR-005"
+            );
+            1.0
+        }
+    } else {
+        raw_duration
+    };
 
     let sample_rate = i32::try_from(props.sample_rate().unwrap_or(0)).unwrap_or(0);
 

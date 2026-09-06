@@ -25,6 +25,7 @@ use crate::{
         engine::PlaybackEngine,
         state::MuteState::Unmuted,
         transport::PlaybackTransport,
+        volume::format_volume_db,
     },
     storage::database::SqliteStorage,
     ui::player::{playlist::build_queue_view, sidebar::format_time},
@@ -213,7 +214,9 @@ pub fn build_volume(state: &Arc<AppState>) -> (Box, Button, Scale) {
     volume_scale.set_draw_value(false);
     volume_scale.set_hexpand(true);
     volume_scale.set_can_focus(true);
-    volume_scale.update_property(&[PropertyLabel("Adjust volume")]);
+    let initial_db = format_volume_db(initial_volume);
+    volume_scale.set_tooltip_text(Some(&format!("Volume: {initial_db}")));
+    volume_scale.update_property(&[PropertyLabel(&format!("Adjust volume ({initial_db})"))]);
     let state_vol = Arc::clone(state);
     let vol_ref = volume_scale.clone();
     volume_scale.connect_value_changed(move |_| {
@@ -221,6 +224,9 @@ pub fn build_volume(state: &Arc<AppState>) -> (Box, Button, Scale) {
         if let Err(e) = state_vol.playback.set_volume(value) {
             error!(error = %e, "Failed to set volume");
         }
+        let db = format_volume_db(value);
+        vol_ref.set_tooltip_text(Some(&format!("Volume: {db}")));
+        vol_ref.update_property(&[PropertyLabel(&format!("Adjust volume ({db})"))]);
         state_vol.storage.set_volume_memory(value);
         state_vol.storage.save_settings();
     });
@@ -262,12 +268,14 @@ pub fn build_volume(state: &Arc<AppState>) -> (Box, Button, Scale) {
 ///
 /// In bit-perfect mode the scale is greyed out and interaction is
 /// prevented — the volume is controlled via the ALSA hardware mixer.
+/// In resampled mode the tooltip reflects the dB attenuation per FR-020.
 pub fn update_volume_scale_visual(scale: &Scale, mode: OutputMode) {
     match mode {
         Resampled => {
             scale.set_sensitive(true);
-            scale.set_tooltip_text(Some("Adjust volume"));
-            scale.update_property(&[PropertyLabel("Adjust volume")]);
+            let db = format_volume_db(scale.value());
+            scale.set_tooltip_text(Some(&format!("Volume: {db}")));
+            scale.update_property(&[PropertyLabel(&format!("Adjust volume ({db})"))]);
         }
         BitPerfect => {
             scale.set_sensitive(false);

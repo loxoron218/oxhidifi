@@ -1,9 +1,4 @@
-//! Sidebar and content panes for the main split view.
-//!
-//! The content pane hosts the library view switcher in the header bar for
-//! wide windows and relocates it to a bottom `ViewSwitcherBar` in narrow
-//! windows via a breakpoint wired in
-//! [`collapse_scheduler`](crate::ui::collapse_scheduler).
+//! Sidebar and content panes.
 
 use std::sync::{
     Arc,
@@ -12,16 +7,13 @@ use std::sync::{
 
 use {
     libadwaita::{
-        HeaderBar, OverlaySplitView, ToastOverlay, ToolbarView, ViewStack, ViewSwitcher,
-        ViewSwitcherBar,
+        HeaderBar, NavigationPage, NavigationView, OverlaySplitView, ToastOverlay, ToolbarView,
+        ViewStack, ViewSwitcher, ViewSwitcherBar,
         ViewSwitcherPolicy::Wide,
         WindowTitle,
-        glib::{
-            object::{Cast, ObjectExt},
-            spawn_future_local,
-        },
+        glib::{object::ObjectExt, spawn_future_local},
         gtk::{
-            Button, Stack, ToggleButton, Widget, Window, accessible::Property::Label,
+            Button, Stack, ToggleButton, Window, accessible::Property::Label as PropertyLabel,
             prelude::ToggleButtonExt,
         },
         prelude::{AccessibleExtManual, WidgetExt},
@@ -73,7 +65,7 @@ fn build_sidebar(state: &Arc<AppState>, back_button: &ToggleButton) -> (ToolbarV
         .css_classes(["flat"])
         .can_focus(true)
         .build();
-    close_button.update_property(&[Label("Close application")]);
+    close_button.update_property(&[PropertyLabel("Close application")]);
 
     let sidebar_header = HeaderBar::new();
     sidebar_header.set_title_widget(Some(&WindowTitle::new("Now Playing", "")));
@@ -88,128 +80,124 @@ fn build_sidebar(state: &Arc<AppState>, back_button: &ToggleButton) -> (ToolbarV
     (sidebar_toolbar, close_button)
 }
 
+/// Build the library `ViewStack` with album and artist pages.
+fn build_library_stack(
+    state: &Arc<AppState>,
+    narrow_state: &Arc<NarrowState>,
+) -> (ViewStack, Stack, Stack) {
+    let stack = ViewStack::new();
+    stack.set_vexpand(true);
+    let album_grid = build_album_grid(state, narrow_state);
+    let ac = stack.add_titled_with_icon(
+        &album_grid.mode_stack,
+        Some("albums"),
+        "Albums",
+        "view-grid-symbolic",
+    );
+    ac.set_icon_name(Some("view-grid-symbolic"));
+    let artist_grid = build_artist_grid(state, narrow_state);
+    let ar = stack.add_titled_with_icon(
+        &artist_grid.mode_stack,
+        Some("artists"),
+        "Artists",
+        "avatar-default-symbolic",
+    );
+    ar.set_icon_name(Some("avatar-default-symbolic"));
+    if state.storage.get_active_tab() == Artists {
+        stack.set_visible_child_name("artists");
+    }
+    (stack, album_grid.mode_stack, artist_grid.mode_stack)
+}
+/// Wire tab and view-mode signals for the library stack.
+fn wire_library_signals(
+    state: &Arc<AppState>,
+    stack: &ViewStack,
+    album_stack: Stack,
+    artist_stack: Stack,
+    narrow_state: Arc<NarrowState>,
+) {
+    let tab_rx = state.active_tab.subscribe();
+    let s1 = stack.clone();
+    let st1 = Arc::clone(state);
+    let a1 = album_stack.clone();
+    let r1 = artist_stack.clone();
+    let n1 = Arc::clone(&narrow_state);
+    spawn_future_local(async move {
+        while let Ok(tab) = tab_rx.recv().await {
+            handle_tab_switch(&s1, &st1, tab, &a1, &r1, &n1);
+        }
+    });
+    let s2 = Arc::clone(state);
+    let a2 = album_stack;
+    let r2 = artist_stack;
+    let n2 = narrow_state;
+    spawn_future_local(async move {
+        let rx = s2.view_mode.subscribe();
+        while let Ok(m) = rx.recv().await {
+            switch_mode_for_active_tab(&s2, m, &a2, &r2, &n2);
+        }
+    });
+}
+
 /// Build the content pane with library views and controls.
 fn build_content_pane(
     state: &Arc<AppState>,
     toggle_button: &ToggleButton,
     narrow_state: &Arc<NarrowState>,
     parent: &Window,
-) -> (ToolbarView, ViewStack, Stack, Widget, SwitcherGroup) {
+) -> (ToolbarView, ViewStack, NavigationView, SwitcherGroup) {
     let content_toolbar = ToolbarView::new();
-
     let content_header = HeaderBar::new();
-
-    let stack = ViewStack::new();
-    stack.set_vexpand(true);
-
-    let album_grid = build_album_grid(state, narrow_state);
-    let albums_child = stack.add_titled_with_icon(
-        &album_grid.mode_stack,
-        Some("albums"),
-        "Albums",
-        "view-grid-symbolic",
+    let (stack, album_stack, artist_stack) = build_library_stack(state, narrow_state);
+    wire_library_signals(
+        state,
+        &stack,
+        album_stack,
+        artist_stack,
+        Arc::clone(narrow_state),
     );
-    albums_child.set_icon_name(Some("view-grid-symbolic"));
-
-    let artist_grid = build_artist_grid(state, narrow_state);
-    let artists_child = stack.add_titled_with_icon(
-        &artist_grid.mode_stack,
-        Some("artists"),
-        "Artists",
-        "avatar-default-symbolic",
-    );
-    artists_child.set_icon_name(Some("avatar-default-symbolic"));
-
-    match state.storage.get_active_tab() {
-        Artists => stack.set_visible_child_name("artists"),
-        Albums => {}
-    }
-
-    let tab_rx = state.active_tab.subscribe();
-    let active_tab_stack = stack.clone();
-    let tab_state = Arc::clone(state);
-    let tab_album_stack = album_grid.mode_stack.clone();
-    let tab_artist_stack = artist_grid.mode_stack.clone();
-    let tab_nm = Arc::clone(narrow_state);
-    spawn_future_local(async move {
-        while let Ok(tab) = tab_rx.recv().await {
-            handle_tab_switch(
-                &active_tab_stack,
-                &tab_state,
-                tab,
-                &tab_album_stack,
-                &tab_artist_stack,
-                &tab_nm,
-            );
-        }
-    });
-
-    let vm_state = Arc::clone(state);
-    let vm_album_stack = album_grid.mode_stack;
-    let vm_artist_stack = artist_grid.mode_stack;
-    let vm_nm = Arc::clone(narrow_state);
-    spawn_future_local(async move {
-        let rx = vm_state.view_mode.subscribe();
-        while let Ok(mode) = rx.recv().await {
-            switch_mode_for_active_tab(&vm_state, mode, &vm_album_stack, &vm_artist_stack, &vm_nm);
-        }
-    });
-
     let switcher = ViewSwitcher::builder()
         .policy(Wide)
         .stack(&stack)
         .can_focus(true)
         .tooltip_text("Switch between Albums and Artists views")
         .build();
-    switcher.update_property(&[Label("Switch between Albums and Artists views")]);
+    switcher.update_property(&[PropertyLabel("Switch between Albums and Artists views")]);
     content_header.set_title_widget(Some(&switcher));
-
     let toggle = build_view_toggle(state, parent);
     content_header.pack_end(&toggle);
     content_header.pack_start(toggle_button);
-
     content_toolbar.add_top_bar(&content_header);
-
-    let content_area = Stack::new();
-    content_area.set_vexpand(true);
-    content_area.set_hexpand(true);
-    content_area.add_named(&stack, Some("library"));
-    content_area.set_visible_child(&stack);
-    content_toolbar.set_content(Some(&content_area));
-
-    let orig_stack = stack.clone().upcast::<Widget>();
-
+    let nav_view = NavigationView::new();
+    nav_view.set_pop_on_escape(true);
+    let library_page = NavigationPage::builder()
+        .child(&stack)
+        .title("Library")
+        .tag("library")
+        .build();
+    nav_view.add(&library_page);
+    content_toolbar.set_content(Some(&nav_view));
     let switcher_bar = ViewSwitcherBar::builder()
         .stack(&stack)
         .can_focus(true)
         .tooltip_text("Switch between Albums and Artists views")
         .build();
-    switcher_bar.update_property(&[Label("Switch between Albums and Artists views")]);
+    switcher_bar.update_property(&[PropertyLabel("Switch between Albums and Artists views")]);
     content_toolbar.add_bottom_bar(&switcher_bar);
-
     let status_bar = StatusBar::new(state);
     content_toolbar.add_bottom_bar(status_bar.widget());
-
     let switchers = SwitcherGroup {
         header: content_header,
         switcher,
         bar: switcher_bar,
     };
-
-    (content_toolbar, stack, content_area, orig_stack, switchers)
+    (content_toolbar, stack, nav_view, switchers)
 }
 
-/// Build the split-view content with sidebar and content panes.
+/// Build split-view content with sidebar and content panes.
 ///
-/// Each pane has its own `ToolbarView` and `HeaderBar`. The sidebar
-/// contains the player panel with a back button and "Now Playing"
-/// title. The content pane contains the library view switcher and
-/// stack. Bottom bars (view switcher and status) are attached to the
-/// content pane; the header switcher is swapped for the bottom bar in
-/// narrow windows (see [`SwitcherGroup`] and `ui::collapse_scheduler`).
-///
-/// Returns the `(ToastOverlay, OverlaySplitView, toggle_button, back_button,
-/// close_button, switchers)` for event wiring in `build_window`.
+/// Returns `(ToastOverlay, OverlaySplitView, toggle_button, back_button,
+/// close_button, switchers)` for `build_window`.
 pub fn build_content(
     state: &Arc<AppState>,
     narrow_state: &Arc<NarrowState>,
@@ -231,7 +219,7 @@ pub fn build_content(
         .active(true)
         .can_focus(true)
         .build();
-    back_button.update_property(&[Label("Hide player panel")]);
+    back_button.update_property(&[PropertyLabel("Hide player panel")]);
     back_button.set_visible(false);
 
     let (sidebar_toolbar, close_button) = build_sidebar(state, &back_button);
@@ -243,29 +231,26 @@ pub fn build_content(
         .css_classes(["flat"])
         .can_focus(true)
         .build();
-    toggle_button.update_property(&[Label("Toggle player panel")]);
+    toggle_button.update_property(&[PropertyLabel("Toggle player panel")]);
 
-    let (content_toolbar, stack, content_area, orig_stack, switchers) =
+    let (content_toolbar, stack, nav_view, switchers) =
         build_content_pane(state, &toggle_button, narrow_state, parent);
 
     let nav_tx = state.navigation_tx.clone();
 
     let tab_nav_tx = nav_tx.clone();
-    let tab_content_area = content_area.clone();
-    let tab_orig = orig_stack.clone();
+    let tab_nav_view = nav_view.clone();
     let tab_stack = stack.clone();
     let tab_storage = Arc::clone(&state.storage);
     let tab_active_tab = state.active_tab.clone();
     stack.connect_visible_child_notify(move |_| {
-        if let Some(child) = tab_content_area.visible_child()
-            && child == tab_orig
+        if tab_nav_view.find_page("detail").is_none()
             && let Some(name) = tab_stack.visible_child_name()
         {
             info!(tab_name = name.as_str(), "Tab switched",);
             persist_active_tab(&tab_storage, &tab_active_tab, name.as_str());
         }
-        let visible = tab_content_area.visible_child();
-        let is_on_detail = visible.as_ref().is_none_or(|child| *child != tab_orig);
+        let is_on_detail = tab_nav_view.find_page("detail").is_some();
         if is_on_detail && let Err(err) = tab_nav_tx.try_send(Back) {
             error!(error = %err, "Failed to send Back navigation event");
         }
@@ -280,7 +265,9 @@ pub fn build_content(
         .pin_sidebar(true)
         .tooltip_text("Player panel — toggle with button in header")
         .build();
-    split_view.update_property(&[Label("Main player panel with sidebar and content area")]);
+    split_view.update_property(&[PropertyLabel(
+        "Main player panel with sidebar and content area",
+    )]);
 
     let user_wants_sidebar = Arc::new(AtomicBool::new(false));
 
@@ -317,11 +304,10 @@ pub fn build_content(
     toast_overlay.set_child(Some(&split_view));
 
     let nav_state = Arc::clone(state);
-    let nav_content_area = content_area;
     spawn_future_local(async move {
         let rx = nav_state.navigation_rx.clone();
         while let Ok(event) = rx.recv().await {
-            handle_navigation_event(&nav_state, &nav_content_area, &nav_tx, &orig_stack, event);
+            handle_navigation_event(&nav_state, &nav_view, &nav_tx, event);
         }
     });
 

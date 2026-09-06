@@ -9,6 +9,7 @@ use std::{
 };
 
 use {
+    async_channel::Receiver,
     libadwaita::{
         glib::{object::Cast, spawn_future_local},
         gtk::{
@@ -137,6 +138,7 @@ pub fn build_library_grid(
     let refresh_mode = Arc::clone(&current_mode);
     spawn_future_local(async move {
         while refresh_rx.recv().await.is_ok() {
+            drain_receiver(&refresh_rx);
             let mode = refresh_state.view_mode.borrow();
             *refresh_state.album_grid.cache.lock() = None;
             *refresh_state.artist_grid.cache.lock() = None;
@@ -166,6 +168,11 @@ fn clear_stack(stack: &Stack) {
     }
 }
 
+/// Drain any pending values from a receiver without blocking.
+fn drain_receiver<T>(receiver: &Receiver<T>) {
+    while receiver.try_recv().is_ok() {}
+}
+
 /// Wrap `child` in a `ScrolledWindow` and add it to `stack` as a named page.
 pub fn add_scrolled(stack: &Stack, child: &impl IsA<Widget>, name: &str) {
     let scrolled = ScrolledWindow::builder()
@@ -174,6 +181,59 @@ pub fn add_scrolled(stack: &Stack, child: &impl IsA<Widget>, name: &str) {
         .build();
     scrolled.set_child(Some(child));
     stack.add_named(&scrolled, Some(name));
+}
+
+/// Show the library empty state for a grid view.
+///
+/// Shared helper for album/artist grids to avoid duplicating the
+/// `list_library_directories` fetch and empty-state widget construction.
+/// Checks for an existing `"grid"` child first (race-guard), then
+/// asynchronously fetches library directories and displays the appropriate
+/// empty state (configured vs. empty library).
+pub fn show_library_empty(
+    state: &Arc<AppState>,
+    stack: &Stack,
+    icon_name: &'static str,
+    icon_label: &'static str,
+) {
+    if stack.child_by_name("grid").is_some() {
+        stack.set_visible_child_name("grid");
+        return;
+    }
+    let state_clone = Arc::clone(state);
+    let stack_clone = stack.clone();
+    spawn_future_local(async move {
+        let dirs = state_clone
+            .storage
+            .list_library_directories()
+            .await
+            .unwrap_or_default();
+        let params = if dirs.is_empty() {
+            EmptyStateParams {
+                icon_name,
+                icon_label,
+                heading: "No Music Library Configured",
+                heading_label: "No music library configured",
+                description: "Add a music folder via Preferences > Library to get started.",
+                description_label: "Add a music folder via Preferences to get started.",
+            }
+        } else {
+            EmptyStateParams {
+                icon_name,
+                icon_label,
+                heading: "No Music Found",
+                heading_label: "No music found",
+                description: "No music files found in your library directories. Add more files or \
+                              check your folders.",
+                description_label: "No music files found",
+            }
+        };
+        let empty_widget = build_empty_state(&state_clone, &params);
+        if stack_clone.child_by_name("grid").is_none() {
+            stack_clone.add_named(&empty_widget, Some("grid"));
+        }
+        stack_clone.set_visible_child_name("grid");
+    });
 }
 
 /// Update the tracked view mode, ignoring a poisoned mutex.

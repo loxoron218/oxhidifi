@@ -95,9 +95,8 @@ mod tests {
     use {
         anyhow::{Context, Result},
         libadwaita::{
-            ViewStack,
-            glib::object::Cast,
-            gtk::{Box, Orientation::Vertical, Stack, Widget, init},
+            NavigationPage, NavigationView, ViewStack,
+            gtk::{Box, Orientation::Vertical, Stack, init},
         },
     };
 
@@ -188,18 +187,21 @@ mod tests {
             );
         })?;
 
-        let content_area = Stack::new();
-        let orig_stack = Box::new(Vertical, 0);
-        content_area.add_named(&orig_stack, Some("library"));
-        content_area.set_visible_child(&orig_stack);
+        let nav_view = NavigationView::new();
+        let library_box = Box::new(Vertical, 0);
+        let library_page = NavigationPage::builder()
+            .child(&library_box)
+            .title("Library")
+            .tag("library")
+            .build();
+        nav_view.add(&library_page);
         let nav_tx = state.navigation_tx.clone();
-        let orig: Widget = orig_stack.upcast();
 
         time_operation("open_album_detail", || {
-            handle_navigation_event(&state, &content_area, &nav_tx, &orig, AlbumDetail(1));
+            handle_navigation_event(&state, &nav_view, &nav_tx, AlbumDetail(1));
         })?;
         time_operation("back_to_library", || {
-            handle_navigation_event(&state, &content_area, &nav_tx, &orig, Back);
+            handle_navigation_event(&state, &nav_view, &nav_tx, Back);
         })?;
 
         Ok(())

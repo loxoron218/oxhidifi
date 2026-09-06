@@ -4,7 +4,7 @@
 //! The two builder functions return a fully wired `GtkColumnView` with
 //! column-specific factories, sorters, and click‑to‑navigate handling.
 
-use std::{mem::take, sync::Arc};
+use std::{cmp::Ordering::Equal, mem::take, sync::Arc};
 
 use {
     libadwaita::{
@@ -30,10 +30,11 @@ use crate::{
     },
     ui::{
         gallery::{
-            boxed_data::{AlbumData, ArtistData},
+            boxed_data::{AlbumData, ArtistData, format_duration},
             columns::{
                 PendingCovers, build_artist_icon_column, build_cover_column, build_int_column,
-                build_string_column, default_int_format, start_cover_batch_decode,
+                build_label_column, build_string_column, default_int_format,
+                start_cover_batch_decode,
             },
             narrow_flag::NarrowState,
         },
@@ -92,6 +93,8 @@ fn fill_album_store_batch(
         if let Some(path) = &album.artwork_path {
             covers.push((album.id, path.clone()));
         }
+        let duration_secs = album.total_duration;
+        let duration = format_duration(duration_secs);
         let data = AlbumData {
             id: album.id,
             title: album.title.clone(),
@@ -100,6 +103,8 @@ fn fill_album_store_batch(
             format: fi.formats_display(),
             bit_depth: fi.bit_depth_display(),
             sample_rate: fi.sample_rate_display(),
+            duration_secs,
+            duration,
             artwork_path: album.artwork_path.clone().unwrap_or_default(),
         };
         store.append(&BoxedAnyObject::new(data));
@@ -130,8 +135,9 @@ fn fill_artist_store_batch(
 /// Build a fully wired `ColumnView` for albums.
 ///
 /// Columns: Cover, Artist Name, Album Name, Format, Bit Depth,
-/// Sample Rate, Year.  Format/Bit Depth/Sample Rate bind to
-/// `narrow_state` and hide when the window is narrow.
+/// Sample Rate, Year, Duration.  Format/Bit Depth/Sample Rate bind to
+/// `narrow_state` and hide when the window is narrow. Duration is always
+/// visible alongside Year per FR-009.
 ///
 /// # Arguments
 ///
@@ -162,6 +168,16 @@ pub fn build_album_column_view(
     let sample_rate_col =
         build_string_column("Sample Rate", |d: &AlbumData| d.sample_rate.clone(), false);
     let year_col = build_int_column("Year", |d: &AlbumData| d.year, default_int_format, false);
+    let duration_col = build_label_column(
+        "Duration",
+        |d: &AlbumData| d.duration.clone(),
+        |a: &AlbumData, b: &AlbumData| {
+            a.duration_secs
+                .partial_cmp(&b.duration_secs)
+                .unwrap_or(Equal)
+        },
+        false,
+    );
 
     column_view.append_column(&cover_col);
     column_view.append_column(&artist_col);
@@ -170,6 +186,7 @@ pub fn build_album_column_view(
     column_view.append_column(&bit_depth_col);
     column_view.append_column(&sample_rate_col);
     column_view.append_column(&year_col);
+    column_view.append_column(&duration_col);
 
     let nav_state = Arc::clone(state);
     column_view.connect_activate(move |cv, position| {

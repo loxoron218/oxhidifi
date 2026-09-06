@@ -93,31 +93,25 @@ pub fn finalize_track(
 
 #[cfg(test)]
 mod tests {
-    use std::{path::PathBuf, sync::Arc};
+    use std::path::PathBuf;
 
     use anyhow::{Result, ensure};
 
     use crate::playback::{
         advancer::{finalize_track, try_auto_advance},
-        engine::EngineShared,
+        engine_fixture::{engine_with_queue, make_shared_engine, two_track_shared_engine},
         state::{
             PlaybackEvent::{Paused, TrackFinished},
             PlaybackStatus::{Playing, Stopped},
         },
     };
 
-    fn make_shared_engine() -> Arc<EngineShared> {
-        Arc::new(EngineShared::default())
-    }
-
-    fn two_track_shared_engine() -> Arc<EngineShared> {
-        let shared = make_shared_engine();
-        shared.queue.set_queue(vec![1, 2]);
-        shared
-            .track_paths
-            .lock()
-            .insert(2, PathBuf::from("/music/two.flac"));
-        shared
+    fn assert_advance_none(queue: Vec<i64>, track_id: i64) -> Result<()> {
+        let shared = engine_with_queue(queue)?;
+        let mut event = Some(TrackFinished { track_id });
+        let result = try_auto_advance(&shared, &mut event);
+        ensure!(result.is_none(), "should return None for given queue");
+        Ok(())
     }
 
     #[test]
@@ -132,32 +126,18 @@ mod tests {
     }
 
     #[test]
-    fn try_auto_advance_returns_none_when_no_upcoming_track() {
-        let shared = make_shared_engine();
-        shared.queue.set_queue(vec![1]);
-        let mut event = Some(TrackFinished { track_id: 1 });
-        let result = try_auto_advance(&shared, &mut event);
-        assert!(
-            result.is_none(),
-            "should return None when queue has only one track"
-        );
+    fn try_auto_advance_returns_none_when_no_upcoming_track() -> Result<()> {
+        assert_advance_none(vec![1], 1)
     }
 
     #[test]
-    fn try_auto_advance_returns_none_when_path_not_found() {
-        let shared = make_shared_engine();
-        shared.queue.set_queue(vec![1, 2]);
-        let mut event = Some(TrackFinished { track_id: 1 });
-        let result = try_auto_advance(&shared, &mut event);
-        assert!(
-            result.is_none(),
-            "should return None when path not found for upcoming track"
-        );
+    fn try_auto_advance_returns_none_when_path_not_found() -> Result<()> {
+        assert_advance_none(vec![1, 2], 1)
     }
 
     #[test]
     fn try_auto_advance_success_path() -> Result<()> {
-        let shared = two_track_shared_engine();
+        let shared = two_track_shared_engine()?;
         let mut event = Some(TrackFinished { track_id: 1 });
         let result = try_auto_advance(&shared, &mut event);
         ensure!(
@@ -181,7 +161,7 @@ mod tests {
 
     #[test]
     fn finalize_track_auto_advances() -> Result<()> {
-        let shared = two_track_shared_engine();
+        let shared = two_track_shared_engine()?;
         let mut event = Some(TrackFinished { track_id: 1 });
         let result = finalize_track(&shared, &mut event);
         ensure!(
@@ -193,8 +173,7 @@ mod tests {
 
     #[test]
     fn finalize_track_stops_when_no_next() -> Result<()> {
-        let shared = make_shared_engine();
-        shared.queue.set_queue(vec![1]);
+        let shared = engine_with_queue(vec![1])?;
         shared.state.lock().current_track_id = Some(1);
         let mut event = Some(TrackFinished { track_id: 1 });
         let result = finalize_track(&shared, &mut event);

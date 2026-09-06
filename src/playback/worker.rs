@@ -13,20 +13,23 @@ use {
     tracing::{error, info, warn},
 };
 
-use crate::playback::{
-    advancer::finalize_track,
-    decoder::Decoder,
-    devices::OutputMode::{BitPerfect, Resampled},
-    engine::{
-        DecodeCommand::{self, PreloadNext},
-        EngineShared,
-    },
-    output::AudioOutput,
-    pipeline::{LoopCtx, OutputConfig, handle_decode_cmd, process_decode_frame},
-    resampler::{AudioResampler, create_resampler},
-    state::{
-        PlaybackEvent::{DeviceLost, Resumed, TrackStarted},
-        PlaybackStatus::{Paused, Playing},
+use crate::{
+    metrics::{GLOBAL_PANEL_REVEAL, GLOBAL_PLAYBACK_LATENCY},
+    playback::{
+        advancer::finalize_track,
+        decoder::Decoder,
+        devices::OutputMode::{BitPerfect, Resampled},
+        engine::{
+            DecodeCommand::{self, PreloadNext},
+            EngineShared,
+        },
+        output::AudioOutput,
+        pipeline::{LoopCtx, OutputConfig, handle_decode_cmd, process_decode_frame},
+        resampler::{AudioResampler, algorithm::create_resampler},
+        state::{
+            PlaybackEvent::{DeviceLost, Resumed, TrackStarted},
+            PlaybackStatus::{Paused, Playing},
+        },
     },
 };
 
@@ -57,19 +60,28 @@ fn init_decoder(
             return None;
         }
     };
-    let track_sample_rate = decoder.params().sample_rate;
-    let src_channels = usize::from(decoder.params().channels);
+    let params = decoder.params();
+    let track_sample_rate = params.sample_rate;
+    let track_bit_depth = params.bit_depth.unwrap_or(0);
+    let src_channels = usize::from(params.channels);
     let out_channels = usize::from(output.channels);
 
     *engine_shared.track_sample_rate.lock() = track_sample_rate;
 
     {
         let mut state = engine_shared.state.lock();
-        state.duration_seconds = decoder.params().duration_seconds;
+        state.duration_seconds = params.duration_seconds;
         state.elapsed_seconds = 0.0;
     }
 
-    let resampler = if track_sample_rate == output.device_sample_rate {
+    let output_mode = engine_shared.state.lock().output_mode;
+    let supports_native = engine_shared
+        .output
+        .lock()
+        .as_ref()
+        .is_some_and(|o| o.supports_native(track_sample_rate, track_bit_depth));
+    let is_bitperfect_native = output_mode == BitPerfect && supports_native;
+    let resampler = if is_bitperfect_native || track_sample_rate == output.device_sample_rate {
         None
     } else {
         match create_resampler(track_sample_rate, output.device_sample_rate, out_channels) {
@@ -117,6 +129,7 @@ fn run_decode_loop(
         track_sample_rate_f64: f64::from(track_sample_rate),
         elapsed: 0.0,
         last_tick: Instant::now(),
+        channel_scratch: Vec::with_capacity(65536),
     };
 
     loop {
@@ -169,7 +182,11 @@ fn init_decode_thread_loop(
 
         let ring_capacity = 48000 * 2;
         let device_lost = Arc::clone(&engine_shared.device_lost);
-        let (output, producer) = match AudioOutput::open(ring_capacity, &device_lost) {
+        GLOBAL_PLAYBACK_LATENCY.record_start(track_id);
+        GLOBAL_PANEL_REVEAL.record_start();
+        let desired_mode = engine_shared.state.lock().output_mode;
+        let (output, producer) = match AudioOutput::open(ring_capacity, &device_lost, desired_mode)
+        {
             Ok(pair) => pair,
             Err(e) => {
                 engine_shared.send_error_event(&format!("Audio device unavailable: {e}"));
@@ -183,8 +200,9 @@ fn init_decode_thread_loop(
         };
         *engine_shared.device_sample_rate.lock() = output_config.device_sample_rate;
         let current_volume = engine_shared.state.lock().volume;
-        if output.mode() == Resampled {
-            output.set_volume_atomic(current_volume);
+        match output.mode() {
+            BitPerfect => output.set_hardware_volume(current_volume),
+            Resampled => output.set_volume_atomic(current_volume),
         }
         *engine_shared.output.lock() = Some(output);
 
@@ -237,17 +255,15 @@ fn reconnect_device(engine_shared: &Arc<EngineShared>) -> Option<Producer<f32>> 
     *engine_shared.output.lock() = None;
 
     let ring_capacity = 48000 * 2;
-    match AudioOutput::open(ring_capacity, &engine_shared.device_lost) {
-        Ok((mut new_output, new_producer)) => {
+    let desired_mode = engine_shared.state.lock().output_mode;
+    match AudioOutput::open(ring_capacity, &engine_shared.device_lost, desired_mode) {
+        Ok((new_output, new_producer)) => {
             let state = engine_shared.state.lock();
             let current_vol = state.volume;
-            let mode = state.output_mode;
             drop(state);
-            if mode == BitPerfect {
-                new_output.set_mode(mode);
-                new_output.set_hardware_volume(current_vol);
-            } else {
-                new_output.set_volume_atomic(current_vol);
+            match new_output.mode() {
+                BitPerfect => new_output.set_hardware_volume(current_vol),
+                Resampled => new_output.set_volume_atomic(current_vol),
             }
             let sr = new_output.sample_rate();
             *engine_shared.device_sample_rate.lock() = sr;
@@ -285,6 +301,8 @@ pub fn stop_decode_task(shared: &EngineShared) {
 /// Spawns a decode thread that handles its own `AudioOutput` lifecycle,
 /// keeping potentially-blocking device operations off the main thread.
 pub fn start_playback(shared: &Arc<EngineShared>, track_id: i64, path: PathBuf) {
+    GLOBAL_PLAYBACK_LATENCY.record_start(track_id);
+    GLOBAL_PANEL_REVEAL.record_start();
     stop_decode_task(shared);
 
     {

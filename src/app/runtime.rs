@@ -15,9 +15,13 @@ use {
 };
 
 use crate::{
-    library::scanner::{FsScanner, events::ScanEvent},
-    playback::engine::PlaybackEngine,
+    library::{
+        scanner::{FsScanner, events::ScanEvent},
+        watcher::LibraryWatcher,
+    },
+    playback::{engine::PlaybackEngine, transport::PlaybackTransport},
     storage::{
+        StorageError,
         active_tab::ActiveTab,
         catalog::{Album, Artist},
         database::SqliteStorage,
@@ -110,9 +114,35 @@ pub struct AppState {
     pub album_grid_covers: Mutex<Arc<Vec<(i64, usize, String)>>>,
     /// Thread lifecycle manager for named OS threads.
     pub thread_manager: Arc<ThreadManager>,
+    /// Filesystem watcher for library directories. Interior-mut (`Mutex`) in
+    /// `LibraryWatcher` allows `watch`/`unwatch` via `&self`. `None` until
+    /// `lifecycle::run_application` creates it.
+    pub watcher: Mutex<Option<Arc<LibraryWatcher<SqliteStorage>>>>,
 }
 
 impl AppState {
+    /// Persist the current playback session to storage.
+    ///
+    /// Snapshots the queue, current index, and playback timing from the
+    /// playback engine and writes them synchronously. Centralizes the
+    /// session snapshot logic used by both shutdown and window-close paths.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StorageError`] if the settings file cannot be written.
+    pub fn persist_playback_session(&self) -> Result<(), StorageError> {
+        let snapshot = self.playback.state();
+        let queue_tracks = self.playback.queue().tracks();
+        let queue_index = self.playback.queue().current_index();
+        self.storage.set_last_session(
+            queue_tracks,
+            queue_index,
+            snapshot.current_track_id,
+            snapshot.elapsed_seconds,
+            snapshot.duration_seconds,
+        )
+    }
+
     /// Send a navigation event and log on failure.
     pub async fn send_navigation_event(&self, event: NavigationEvent) {
         if let Err(e) = self.navigation_tx.send(event).await {
@@ -156,6 +186,7 @@ impl AppState {
             artist_grid: GridState::default(),
             album_grid_covers: Mutex::new(Arc::new(Vec::new())),
             thread_manager,
+            watcher: Mutex::new(None),
         }
     }
 }

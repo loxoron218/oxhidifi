@@ -1,5 +1,6 @@
 //! Rubato-based sample rate conversion with fixed I/O buffers.
 
+pub mod algorithm;
 pub mod amplitude;
 pub mod inspect;
 pub mod tone_gen;
@@ -208,7 +209,13 @@ impl AudioResampler {
         )?;
 
         let output_frames_max = new_resampler.output_frames_max();
-        self.output_buf = vec![0.0_f32; output_frames_max.saturating_mul(self.channels)];
+        let needed = output_frames_max.saturating_mul(self.channels);
+        self.output_buf.clear();
+        if self.output_buf.capacity() < needed {
+            self.output_buf
+                .reserve(needed.saturating_sub(self.output_buf.capacity()));
+        }
+        self.output_buf.resize(needed, 0.0);
 
         self.resampler = new_resampler;
         self.input_rate = input_rate;
@@ -254,27 +261,6 @@ impl AudioResampler {
     pub const fn output_buf_capacity(&self) -> usize {
         self.output_buf.capacity()
     }
-}
-
-/// Configurable resampling algorithm.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ResampleAlgorithm {
-    /// High-quality FFT-based resampling.
-    Fft,
-}
-
-/// Create a new resampler for a given sample rate pair.
-///
-/// # Errors
-///
-/// Returns a descriptive error string if the resampler cannot be created.
-pub fn create_resampler(
-    input_rate: u32,
-    output_rate: u32,
-    channels: usize,
-) -> Result<AudioResampler, String> {
-    AudioResampler::new(input_rate, output_rate, 1024, channels)
-        .map_err(|e| format!("Failed to create resampler: {e}"))
 }
 
 #[cfg(test)]
@@ -352,14 +338,14 @@ mod tests {
         let mut r = AudioResampler::new(44100, 48000, 1024, 2)?;
         ensure!(
             !r.has_pending_output(),
-            "expected no pending output initially"
+            "expected no pending output initially",
         );
         r.push_input(&[1.0_f32; 1024 * 2]);
         ensure!(r.has_pending_output(), "expected pending output after push");
         r.process()?;
         ensure!(
             !r.has_pending_output(),
-            "expected no pending output after process"
+            "expected no pending output after process",
         );
         Ok(())
     }

@@ -213,6 +213,20 @@ impl SqliteStorage {
             .map_err(|e| Database(format!("Find by hash failed: {e}")))
     }
 
+    /// Check if any track exists with the given content hash (exists-only).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StorageError::Database`] if the query fails.
+    pub async fn hash_exists_row(&self, hash: &str) -> StorageResult<bool> {
+        let exists: (i64,) = query_as("SELECT EXISTS(SELECT 1 FROM tracks WHERE content_hash = ?)")
+            .bind(hash)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(|e| Database(format!("Hash exists check failed: {e}")))?;
+        Ok(exists.0 != 0)
+    }
+
     /// Find track rows by artist/album/title metadata fingerprint.
     ///
     /// # Errors

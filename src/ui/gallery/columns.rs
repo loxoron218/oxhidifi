@@ -241,7 +241,7 @@ pub fn build_artist_icon_column() -> ColumnViewColumn {
 }
 
 /// Build a label column with a shared factory, bind, and sorter.
-fn build_label_column<T: Clone + Send + 'static>(
+pub fn build_label_column<T: Clone + Send + 'static>(
     title: &str,
     get_text: impl Fn(&T) -> String + 'static,
     compare: impl Fn(&T, &T) -> Ordering + 'static,

@@ -3,7 +3,7 @@
 //! Startup checks and session emit/persist orchestration live in the sibling
 //! [`bootstrap`] module.
 
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use {
     anyhow::{Context, Result},
@@ -18,7 +18,8 @@ use {
         select,
         signal::unix::{SignalKind, signal},
         spawn,
-        task::spawn_blocking,
+        task::{JoinHandle, spawn_blocking},
+        time::sleep,
     },
     tracing::{info, warn},
 };
@@ -34,7 +35,7 @@ use crate::{
     },
     library::{scanner::FsScanner, watcher::LibraryWatcher},
     playback::{engine::PlaybackEngine, transport::PlaybackTransport},
-    storage::database::SqliteStorage,
+    storage::{Storage, database::SqliteStorage},
     threading::ThreadManager,
     ui::window::build_window,
 };
@@ -121,6 +122,27 @@ fn run_gtk_application(state: &Arc<AppState>) {
     app.run();
 }
 
+/// Shut down the filesystem watcher with a bounded grace period.
+///
+/// Allows the watcher task 500 ms to exit gracefully after cancellation,
+/// then aborts to discard queued scan events and unblock shutdown.
+async fn shutdown_watcher(
+    watcher_arc: Arc<LibraryWatcher<SqliteStorage>>,
+    mut handle: JoinHandle<()>,
+    state: &Arc<AppState>,
+) {
+    watcher_arc.shutdown();
+    *state.watcher.lock() = None;
+    let grace = sleep(Duration::from_millis(500));
+    select! {
+        _ = &mut handle => {},
+        () = grace => {
+            handle.abort();
+            drop(handle.await);
+        }
+    }
+}
+
 /// Build and run the Libadwaita application.
 ///
 /// Initializes the storage backend, playback engine, and presents the main
@@ -162,7 +184,9 @@ pub async fn run_application() -> Result<()> {
         playback.set_track_paths(paths);
 
         let queue = playback.queue();
-        queue.set_queue(last_queue);
+        if let Err(e) = queue.set_queue(last_queue) {
+            warn!(error = %e, "Failed to restore queue — cap exceeded");
+        }
         if let Some(idx) = last_index
             && idx < queue.len()
         {
@@ -183,11 +207,6 @@ pub async fn run_application() -> Result<()> {
         4,
     ));
 
-    match LibraryWatcher::new(Arc::clone(&scanner)) {
-        Ok((watcher, watcher_rx)) => spawn_watcher_loop(watcher, watcher_rx),
-        Err(e) => warn!(error = %e, "Failed to create filesystem watcher"),
-    }
-
     let initial_view_mode = storage.get_view_mode();
     let initial_active_tab = storage.get_active_tab();
 
@@ -197,15 +216,47 @@ pub async fn run_application() -> Result<()> {
 
     let state = Arc::new(AppState::new(
         playback,
-        storage,
-        scanner,
+        Arc::clone(&storage),
+        Arc::clone(&scanner),
         channels,
         broadcast,
         Arc::clone(&thread_manager),
     ));
 
+    state.scanner.set_refresh(state.refresh.clone());
+
+    let configured_dirs = storage.list_library_directories().await.unwrap_or_default();
+    let dir_paths: Vec<PathBuf> = configured_dirs
+        .into_iter()
+        .map(|d| PathBuf::from(d.path))
+        .collect();
+    let watcher_handle: Option<(Arc<LibraryWatcher<SqliteStorage>>, JoinHandle<()>)> =
+        match LibraryWatcher::new(Arc::clone(&scanner)) {
+            Ok((watcher, watcher_rx)) => {
+                let watcher_arc = Arc::new(watcher);
+                if !dir_paths.is_empty()
+                    && let Err(e) = watcher_arc.watch_directories(&dir_paths)
+                {
+                    warn!(error = %e, "Failed to watch library directories");
+                }
+                *state.watcher.lock() = Some(Arc::clone(&watcher_arc));
+                let handle = spawn_watcher_loop(Arc::clone(&watcher_arc), watcher_rx);
+                Some((watcher_arc, handle))
+            }
+            Err(e) => {
+                warn!(error = %e, "Failed to create filesystem watcher");
+                None
+            }
+        };
+
     {
         run_gtk_application(&state);
+    }
+
+    if let Some((watcher_arc, handle)) = watcher_handle {
+        shutdown_watcher(watcher_arc, handle, &state).await;
+    } else {
+        *state.watcher.lock() = None;
     }
 
     let shutdown_state = Arc::clone(&state);

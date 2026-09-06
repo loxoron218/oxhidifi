@@ -16,15 +16,15 @@ use oxhidifi::{
     },
 };
 
-// Silence unused-import warnings for type-only imports referenced in closures.
-#[expect(
-    dead_code,
-    reason = "pins type-only imports used by the settings assertions"
-)]
 const fn assert_types(_: OutputMode, _: ActiveTab, _: ViewMode, _: &Path) {}
+
+fn use_assert_types() {
+    assert_types(BitPerfect, Artists, Column, Path::new("/tmp"));
+}
 
 /// Set every persisted preference on the in-memory settings.
 fn configure_preferences(store: &mut SettingsStore) {
+    use_assert_types();
     store.update_memory(|s| {
         s.audio_device = Some("hw:0".to_string());
         s.volume = 0.42;

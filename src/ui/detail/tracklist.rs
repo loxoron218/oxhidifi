@@ -3,6 +3,11 @@
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use {
+    crate::{
+        app::runtime::AppState,
+        playback::{queue_manager::PlaybackQueue, transport::PlaybackTransport},
+        storage::{Storage, catalog::Track, formats::format_sample_rate_str},
+    },
     libadwaita::{
         gdk::Key,
         glib::{
@@ -21,12 +26,6 @@ use {
     },
     num_traits::NumCast,
     tracing::{info, warn},
-};
-
-use crate::{
-    app::runtime::AppState,
-    playback::transport::PlaybackTransport,
-    storage::{Storage, catalog::Track, formats::format_sample_rate_str},
 };
 
 /// Number of tracks to add per batch in the detail page track list.
@@ -180,7 +179,11 @@ fn attach_track_controllers(row: &ListBoxRow, state: &Arc<AppState>, track_id: i
     let right_click = GestureClick::new();
     right_click.set_button(3);
     right_click.connect_released(move |_, _, _, _| {
-        sc2.playback.queue().append(tid2);
+        if let Err(e) = sc2.playback.queue().append(tid2) {
+            let msg = format!("Queue full (max {}): {e}", PlaybackQueue::MAX_CAPACITY);
+            warn!(error = %e, "Queue append rejected — cap reached");
+            drop(sc2.toast_tx.try_send(msg));
+        }
     });
     row.add_controller(right_click);
 }

@@ -30,16 +30,19 @@ pub fn compute_snr_db(reference: &[f32], test: &[f32]) -> f64 {
     assert_eq!(reference.len(), test.len(), "signal lengths must match");
 
     let rms_ref = rms(reference);
-    if rms_ref < f64::EPSILON {
-        return 0.0;
-    }
-
     let noise: Vec<f32> = reference
         .iter()
         .zip(test.iter())
         .map(|(a, b)| a - b)
         .collect();
     let rms_noise = rms(&noise);
+
+    if rms_ref < f64::EPSILON {
+        if rms_noise < f64::EPSILON {
+            return f64::INFINITY;
+        }
+        return 0.0;
+    }
 
     if rms_noise < f64::EPSILON {
         return f64::INFINITY;
@@ -86,8 +89,8 @@ mod tests {
         let silence = generate_silence(44100, 0.5, 2);
         let snr_silence = compute_snr_db(&silence, &silence);
         ensure!(
-            (snr_silence).abs() < f64::EPSILON,
-            "silence SNR should be 0"
+            snr_silence.is_infinite(),
+            "silence vs silence should be infinite SNR (perfect)"
         );
         let snr = compute_snr_db(&signal, &silence);
         ensure!(snr.is_finite(), "SNR should be finite");

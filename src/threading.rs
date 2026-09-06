@@ -70,15 +70,22 @@
 //! # Shutdown Sequence
 //!
 //! 1. `GLib` main loop exits (`app.run()` returns)
-//! 2. `ThreadManager::shutdown()` joins the cover decoder threads
-//! 3. `decode_tx` (command sender) dropped — decode thread sees channel disconnect and exits the
+//! 2. `LibraryWatcher::shutdown()` unwatches directories and closes the `tokio::sync::mpsc` channel
+//!    via the shared `event_tx` (no `abort`); the `tokio::spawn` watcher task drains and exits
+//!    gracefully, allowing its `Arc<LibraryWatcher>` to be dropped and the `RecommendedWatcher`
+//!    callback to be released
+//! 3. `AppState::watcher` cleared — breaks the `Arc` cycle with the watcher task
+//! 4. Playback session persisted via `spawn_blocking` (`bootstrap::persist_session_on_shutdown`)
+//! 5. `ThreadManager::shutdown()` joins the cover decoder threads (channel closed by
+//!    `CoverArtCache::shutdown` inside the persist step)
+//! 6. `decode_tx` (command sender) dropped — decode thread sees channel disconnect and exits the
 //!    decode loop
-//! 4. `AudioOutput::drop()` runs inside the decode thread (blocking ALSA close). The decode thread
+//! 7. `AudioOutput::drop()` runs inside the decode thread (blocking ALSA close). The decode thread
 //!    is detached — its `JoinHandle` is stored in `EngineShared::decode_thread` but never
 //!    explicitly joined to avoid blocking the `GLib` main loop.
-//! 5. Tokio runtime drops → all tokio tasks cancelled
-//! 6. Rayon pool drains
-//! 7. Process exits
+//! 8. Tokio runtime `shutdown_timeout(5s)` → any remaining tokio tasks time out
+//! 9. Rayon pool drains
+//! 10. Process exits
 
 //! # Exceptions
 //!

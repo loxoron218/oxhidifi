@@ -11,6 +11,8 @@
 //! cargo test --features verification-tests --test load_verification
 //! ```
 
+mod browse_assert;
+
 use std::{
     fs::{File, create_dir_all},
     io::Write,
@@ -31,8 +33,10 @@ use oxhidifi::{
     library::scanner::{FsScanner, LibraryScanner, events::ScanEvent},
     metrics::ScanThroughput,
     playback::write_wav_header,
-    storage::database::SqliteStorage,
+    storage::{Storage, database::SqliteStorage},
 };
+
+use crate::browse_assert::assert_browsable;
 
 /// Number of synthetic tracks to generate (SC-004: 10,000).
 const TRACK_COUNT: u32 = 10_000;
@@ -139,6 +143,35 @@ fn main_test() -> Result<()> {
         files_per_second >= MIN_FILES_PER_SECOND,
         "SC-004: throughput {files_per_second:.1} files/s below {MIN_FILES_PER_SECOND}"
     );
+
+    let albums = rt
+        .block_on(storage.get_all_albums())
+        .context("get_all_albums failed")?;
+    let artists = rt
+        .block_on(storage.get_all_artists())
+        .context("get_all_artists failed")?;
+    let tracks = rt
+        .block_on(storage.search_tracks(""))
+        .context("search_tracks failed")?;
+
+    ensure!(
+        !tracks.is_empty(),
+        "SC-004: no tracks inserted (expected {TRACK_COUNT})"
+    );
+    ensure!(
+        u32::try_from(tracks.len()).unwrap_or(0) == TRACK_COUNT,
+        "SC-004: track count {} != expected {TRACK_COUNT}",
+        tracks.len()
+    );
+    ensure!(
+        !albums.is_empty(),
+        "SC-004: no albums inserted — library not browsable"
+    );
+    ensure!(
+        !artists.is_empty(),
+        "SC-004: no artists inserted — library not browsable"
+    );
+    rt.block_on(assert_browsable(&*storage, &albums, "SC-004"))?;
 
     drop(storage);
     drop(dir);

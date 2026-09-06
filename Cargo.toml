@@ -73,6 +73,10 @@ name = "conversion_baseline"
 verification-tests = []
 
 [[test]]
+name = "abx"
+path = "tests/abx/main.rs"
+
+[[test]]
 name = "load_verification"
 path = "tests/verification/load_verification.rs"
 required-features = ["verification-tests"]

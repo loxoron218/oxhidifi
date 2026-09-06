@@ -3,7 +3,7 @@
 use sqlx::{query, query_as};
 
 use crate::storage::{
-    StorageError::Database,
+    StorageError::{Database, QueueFull},
     StorageResult,
     catalog::{
         NewQueueEntry,
@@ -58,12 +58,20 @@ impl SqliteStorage {
     ///
     /// # Errors
     ///
-    /// Returns [`StorageError::Database`] if any query fails.
+    /// Returns [`StorageError::QueueFull`] if the queue already contains 100,000 entries,
+    /// or [`StorageError::Database`] if any query fails.
     pub async fn append_queue_row(
         &self,
         track_id: i64,
         context: Option<QueueContext>,
     ) -> StorageResult<()> {
+        let count: (i64,) = query_as("SELECT COUNT(*) FROM playback_queue")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(|e| Database(format!("Queue count failed: {e}")))?;
+        if count.0 >= 100_000 {
+            return Err(QueueFull { max: 100_000 });
+        }
         let max_pos: Option<(i32,)> =
             query_as("SELECT COALESCE(MAX(position), -1) FROM playback_queue")
                 .fetch_optional(&self.pool)

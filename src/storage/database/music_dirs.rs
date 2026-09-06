@@ -44,17 +44,96 @@ impl SqliteStorage {
         Ok(())
     }
 
-    /// Remove a library directory row by ID.
+    /// Remove a library directory row by ID and hard-delete all tracks
+    /// whose `file_path` is under that directory, plus orphan albums/artists.
+    ///
+    /// Matches `file_path == dir` OR `file_path LIKE dir || '/%'` with
+    /// trailing-slash normalization so `/music` does not match `/music2`.
+    /// Orphan `albums`/`artists` are hard-deleted immediately (no ghosts with
+    /// `track_count=0`). Runs in a single transaction.
     ///
     /// # Errors
     ///
-    /// Returns [`StorageError::Database`] if the query fails.
+    /// Returns [`StorageError::Database`] if any query or the transaction fails.
     pub async fn remove_library_directory_row(&self, id: i64) -> StorageResult<()> {
+        let path_row: Option<(String,)> =
+            query_as("SELECT path FROM library_directories WHERE id = ?")
+                .bind(id)
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(|e| Database(format!("Fetch directory path failed: {e}")))?;
+
+        let Some((dir,)) = path_row else {
+            return Ok(());
+        };
+
+        let dir_norm = dir.trim_end_matches('/').to_string();
+
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| Database(format!("Begin transaction failed: {e}")))?;
+
+        query("DELETE FROM tracks WHERE file_path = ? OR file_path LIKE ? || '/%'")
+            .bind(&dir_norm)
+            .bind(&dir_norm)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| Database(format!("Delete tracks by directory failed: {e}")))?;
+
+        query(
+            "DELETE FROM albums WHERE id NOT IN (SELECT DISTINCT album_id FROM tracks WHERE \
+             album_id IS NOT NULL)",
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| Database(format!("Delete orphan albums failed: {e}")))?;
+
+        query(
+            "DELETE FROM artists WHERE id NOT IN (SELECT DISTINCT artist_id FROM albums) AND id \
+             NOT IN (SELECT DISTINCT artist_id FROM tracks WHERE artist_id IS NOT NULL)",
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| Database(format!("Delete orphan artists failed: {e}")))?;
+
         query("DELETE FROM library_directories WHERE id = ?")
             .bind(id)
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await
             .map_err(|e| Database(format!("Remove directory failed: {e}")))?;
+
+        tx.commit()
+            .await
+            .map_err(|e| Database(format!("Commit transaction failed: {e}")))?;
+
+        Ok(())
+    }
+
+    /// Delete orphan albums and artists (no remaining tracks/albums).
+    ///
+    /// Used by the file watcher after deleting a single track on removal.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StorageError::Database`] if any delete fails.
+    pub async fn prune_orphans_row(&self) -> StorageResult<()> {
+        query(
+            "DELETE FROM albums WHERE id NOT IN (SELECT DISTINCT album_id FROM tracks WHERE \
+             album_id IS NOT NULL)",
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| Database(format!("Delete orphan albums failed: {e}")))?;
+
+        query(
+            "DELETE FROM artists WHERE id NOT IN (SELECT DISTINCT artist_id FROM albums) AND id \
+             NOT IN (SELECT DISTINCT artist_id FROM tracks WHERE artist_id IS NOT NULL)",
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| Database(format!("Delete orphan artists failed: {e}")))?;
 
         Ok(())
     }

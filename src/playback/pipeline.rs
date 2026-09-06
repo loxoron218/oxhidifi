@@ -1,14 +1,10 @@
 //! Output pipeline: dispatching decode commands and moving decoded audio through
 //! resampling and ring-buffer push.
 
-use std::{
-    sync::Arc,
-    thread::sleep,
-    time::{Duration, Instant},
-};
+use std::{sync::Arc, time::Instant};
 
 use {
-    rtrb::{Producer, PushError::Full},
+    rtrb::Producer,
     tokio::sync::mpsc::{
         Receiver,
         error::TryRecvError::{Disconnected, Empty},
@@ -17,14 +13,16 @@ use {
 };
 
 use crate::playback::{
-    channel::maybe_downmix,
+    channel::fill_channel_scratch,
     decoder::Decoder,
+    devices::OutputMode::BitPerfect,
     engine::{
         DecodeCommand::{self, Pause, PreloadNext, Resume, Seek},
         EngineShared,
     },
     output::AudioOutput,
-    resampler::{AudioResampler, create_resampler},
+    resampler::{AudioResampler, algorithm::create_resampler},
+    ring_push::process_decoded_batch as ring_push_process_decoded_batch,
     state::PlaybackEvent::{self, Error, TrackFinished, TrackStarted},
 };
 
@@ -44,6 +42,8 @@ pub struct LoopCtx {
     pub elapsed: f64,
     /// Last tick time for position update throttling.
     pub last_tick: Instant,
+    /// Scratch for channel conversion (borrowed when src==dst).
+    pub channel_scratch: Vec<f32>,
 }
 
 /// Audio output configuration for the decode loop.
@@ -55,81 +55,46 @@ pub struct OutputConfig {
     pub channels: u16,
 }
 
-/// Loop pushing a single sample, retrying on full buffer.
-///
-/// Returns `false` if the producer is abandoned.
-fn push_sample(sample: f32, producer: &mut Producer<f32>) -> bool {
-    let mut s = sample;
-    loop {
-        match producer.push(s) {
-            Ok(()) => return true,
-            Err(Full(val)) => {
-                s = val;
-            }
-        }
-        if producer.is_abandoned() {
-            return false;
-        }
-        sleep(Duration::from_millis(1));
-    }
-}
-
-/// Push interleaved f32 samples into the ring buffer.
-///
-/// Volume scaling is now handled by the audio callback via an atomic,
-/// so samples pass through unchanged here.
-///
-/// Blocks by yielding the thread when the ring buffer is full, preventing
-/// sample loss and throttling the decode loop to real-time playback rate.
-/// Returns early if the producer is abandoned (all consumers dropped).
-fn push_samples(samples: &[f32], producer: &mut Producer<f32>) {
-    for sample in samples {
-        if !push_sample(*sample, producer) {
-            return;
-        }
-    }
-}
-
-/// Pushes samples through a resampler and writes output to the ring buffer.
-///
-/// Returns `Some(error)` if resampling fails.
-fn process_resampler(
-    r: &mut AudioResampler,
-    samples: &[f32],
-    producer: &mut Producer<f32>,
-) -> Option<String> {
-    r.push_input(samples);
-    while r.has_pending_output() {
-        match r.process() {
-            Ok(Some(output)) => push_samples(output, producer),
-            Ok(None) => break,
-            Err(e) => return Some(format!("Resampler error: {e}")),
-        }
-    }
-    None
-}
-
-/// Processes a decoded batch, optionally resampling, and returns an event if
-/// an error occurred.
+/// Re-export wrapper for `ring_push::process_decoded_batch` to preserve public API
+/// without using `pub use` (which triggers `clippy::pub_use`).
 pub fn process_decoded_batch(
     samples: &[f32],
     resampler: &mut Option<AudioResampler>,
     producer: &mut Producer<f32>,
 ) -> Option<PlaybackEvent> {
-    let error = if let Some(r) = resampler {
-        process_resampler(r, samples, producer)
-    } else {
-        push_samples(samples, producer);
-        None
-    };
-    error.map(|e| Error { error: e })
+    ring_push_process_decoded_batch(samples, resampler, producer)
 }
 
-/// Handle an empty decode batch (track finished).
+/// Update the resampler for a gapless transition, reusing buffers when possible.
 ///
-/// Attempts a gapless transition. Returns `Some(track_id)` if a transition was
-/// applied and the decode loop should continue. Returns `None` if no
-/// pre-buffered track is available.
+/// Returns `Ok(())` on success, or an error string if reconfiguration fails.
+fn update_resampler(
+    resampler: &mut Option<AudioResampler>,
+    next_sr: u32,
+    device_sr: u32,
+    dst_channels: usize,
+) -> Result<(), String> {
+    match resampler.as_mut() {
+        Some(r)
+            if r.input_rate() == next_sr
+                && r.output_rate() == device_sr
+                && r.channels() == dst_channels =>
+        {
+            r.reset();
+            Ok(())
+        }
+        Some(r) if r.channels() == dst_channels => {
+            r.reconfigure(next_sr, device_sr).map_err(|e| e.to_string())
+        }
+        _ => {
+            let new_r = create_resampler(next_sr, device_sr, dst_channels)?;
+            *resampler = Some(new_r);
+            Ok(())
+        }
+    }
+}
+
+/// Handle empty batch (track finished).
 fn handle_empty_batch(
     engine_shared: &Arc<EngineShared>,
     ctx: &mut LoopCtx,
@@ -147,6 +112,7 @@ fn handle_empty_batch(
 
     let params = next_decoder.params();
     let next_sr = params.sample_rate;
+    let track_bit_depth = params.bit_depth.unwrap_or(0);
 
     if engine_shared.queue.peek_next() != Some(next_id) {
         return None;
@@ -165,13 +131,25 @@ fn handle_empty_batch(
     }
     *engine_shared.track_sample_rate.lock() = next_sr;
 
-    if next_sr != ctx.track_sample_rate {
-        match create_resampler(next_sr, device_sample_rate, dst_channels) {
-            Ok(r) => ctx.resampler = Some(r),
-            Err(e) => {
-                warn!("Resampler reconfiguration failed: {e}");
-                return None;
-            }
+    let output_mode = engine_shared.state.lock().output_mode;
+    let supports_native = engine_shared
+        .output
+        .lock()
+        .as_ref()
+        .is_some_and(|o| o.supports_native(next_sr, track_bit_depth));
+    let is_bitperfect_native = output_mode == BitPerfect && supports_native;
+    if is_bitperfect_native || next_sr == device_sample_rate {
+        ctx.resampler = None;
+    } else {
+        let resampler_result = update_resampler(
+            &mut ctx.resampler,
+            next_sr,
+            device_sample_rate,
+            dst_channels,
+        );
+        if let Err(e) = resampler_result {
+            warn!("Resampler reconfiguration failed: {e}");
+            return None;
         }
     }
 
@@ -185,10 +163,10 @@ fn handle_empty_batch(
     Some(next_id)
 }
 
-/// Handle a decode command from the control channel.
+/// Drain pending decode commands from the control channel.
 ///
-/// Returns `true` if the caller should exit the decode loop
-/// (channel disconnected or error).
+/// Returns `true` when the decode thread should shut down (channel
+/// disconnected).
 pub fn handle_decode_cmd(
     cmd_rx: &mut Receiver<DecodeCommand>,
     engine_shared: &Arc<EngineShared>,
@@ -231,8 +209,7 @@ pub fn handle_decode_cmd(
     }
 }
 
-/// Send a `PreloadNext` command for the upcoming track after a gapless
-/// transition, if any.
+/// Send preload for upcoming track.
 fn preload_next_upcoming(engine_shared: &Arc<EngineShared>) {
     let next_id = engine_shared.queue.upcoming().first().copied();
     let next_path = next_id.and_then(|id| engine_shared.track_paths.lock().get(&id).cloned());
@@ -251,11 +228,9 @@ fn preload_next_upcoming(engine_shared: &Arc<EngineShared>) {
     }
 }
 
-/// Process one decoded frame from the decoder.
+/// Decode a single frame, push it to the output, and advance playback state.
 ///
-/// Handles empty batches (track finished with possible gapless transition),
-/// normal decoded batches, and decode errors. Returns `true` if the caller
-/// should exit the decode loop.
+/// Returns `true` while the decode loop should keep running.
 pub fn process_decode_frame(
     ctx: &mut LoopCtx,
     engine_shared: &Arc<EngineShared>,
@@ -297,8 +272,19 @@ pub fn process_decode_frame(
             .unwrap_or(u32::MAX);
             ctx.elapsed += f64::from(frame_count) / ctx.track_sample_rate_f64;
             engine_shared.update_elapsed(ctx.elapsed, &mut ctx.last_tick);
-            let samples = maybe_downmix(&batch, ctx.src_channels, usize::from(output_cfg.channels));
-            *event_to_send = process_decoded_batch(&samples, &mut ctx.resampler, producer);
+            let dst_channels = usize::from(output_cfg.channels);
+            if ctx.src_channels == dst_channels {
+                *event_to_send = process_decoded_batch(batch.samples, &mut ctx.resampler, producer);
+            } else {
+                fill_channel_scratch(
+                    batch.samples,
+                    ctx.src_channels,
+                    dst_channels,
+                    &mut ctx.channel_scratch,
+                );
+                *event_to_send =
+                    process_decoded_batch(&ctx.channel_scratch, &mut ctx.resampler, producer);
+            }
             event_to_send.is_some() || producer.is_abandoned()
         }
         Err(e) => {
@@ -324,9 +310,8 @@ mod tests {
     use crate::playback::{
         decoder::Decoder,
         engine::{DecodeCommand::PreloadNext, EngineShared},
-        pipeline::{
-            LoopCtx, handle_decode_cmd, preload_next_upcoming, process_decoded_batch, push_samples,
-        },
+        pipeline::{LoopCtx, handle_decode_cmd, preload_next_upcoming, process_decoded_batch},
+        ring_push::push_samples,
         write_wav_header,
     };
 
@@ -367,6 +352,7 @@ mod tests {
             track_sample_rate_f64: f64::from(sr),
             elapsed: 0.0,
             last_tick: Instant::now(),
+            channel_scratch: Vec::with_capacity(8192),
         };
         let exit = handle_decode_cmd(&mut rx, &shared, &mut ctx);
         ensure!(!exit, "empty channel must not exit");
@@ -383,17 +369,16 @@ mod tests {
     }
 
     #[test]
-    fn preload_next_upcoming_sends_command() {
-        let shared = Arc::new(EngineShared::default());
-        shared.queue.set_queue(vec![1, 2]);
-        shared
-            .track_paths
-            .lock()
-            .insert(2, PathBuf::from("/music/two.flac"));
+    fn preload_next_upcoming_sends_command() -> Result<()> {
+        let shared = crate::playback::engine_fixture::two_track_shared_engine()?;
         let (tx, mut rx) = channel(8);
         *shared.decode_tx.lock() = Some(tx);
         preload_next_upcoming(&shared);
         let cmd = rx.try_recv();
-        assert!(matches!(cmd, Ok(PreloadNext { track_id: 2, .. })));
+        ensure!(
+            matches!(cmd, Ok(PreloadNext { track_id: 2, .. })),
+            "expected PreloadNext command for track_id 2"
+        );
+        Ok(())
     }
 }

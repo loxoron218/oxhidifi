@@ -8,14 +8,14 @@ use {
         glib::{idle_add_local, prelude::Cast, spawn_future_local},
         gtk::{
             Align::Start,
-            Box as GtkBox,
+            Box as GtkBox, Button,
             ContentFit::Cover,
-            Label, ListBox, ListBoxRow,
+            GestureClick, Label, ListBox, ListBoxRow,
             Orientation::{Horizontal, Vertical},
             Picture, Widget,
             accessible::Property::Label as PropertyLabel,
             pango::EllipsizeMode::End,
-            prelude::{AccessibleExtManual, BoxExt},
+            prelude::{AccessibleExtManual, BoxExt, ButtonExt, GestureSingleExt, WidgetExt},
         },
     },
     tokio::join,
@@ -23,16 +23,22 @@ use {
 };
 
 use crate::{
-    app::runtime::{AppState, NavigationEvent},
+    app::runtime::{
+        AppState,
+        NavigationEvent::{self, AlbumDetail},
+    },
     storage::{
         Storage,
         catalog::{Album, Track},
         formats::FormatInfo,
     },
-    ui::detail::{
-        cover_art::decode_cover_into_picture,
-        page::{build_detail_wrapper, build_scroll_content},
-        tracklist::fill_track_list_batch,
+    ui::{
+        detail::{
+            cover_art::decode_cover_into_picture,
+            page::{build_detail_wrapper, build_scroll_content},
+            tracklist::fill_track_list_batch,
+        },
+        gallery::play_action::play_artist,
     },
 };
 
@@ -77,6 +83,24 @@ pub fn build_artist_detail(
         .build();
     album_count_label.update_property(&[PropertyLabel("Album count")]);
     content.append(&album_count_label);
+
+    let play_all_button = Button::builder()
+        .label("Play All")
+        .icon_name("media-playback-start-symbolic")
+        .css_classes(["suggested-action", "pill"])
+        .halign(Start)
+        .tooltip_text("Play all albums by this artist")
+        .can_focus(true)
+        .build();
+    play_all_button.update_property(&[PropertyLabel("Play all albums by this artist")]);
+    let play_state = Arc::clone(state);
+    play_all_button.connect_clicked(move |_| {
+        let state = Arc::clone(&play_state);
+        spawn_future_local(async move {
+            play_artist(&state, artist_id).await;
+        });
+    });
+    content.append(&play_all_button);
 
     let albums_container = GtkBox::builder().orientation(Vertical).spacing(18).build();
     content.append(&albums_container);
@@ -200,7 +224,9 @@ fn clear_other_lists(row: Option<&ListBoxRow>, others: &[ListBox]) {
 
 /// Build a section for a single album in the artist detail page.
 ///
-/// Creates a header with thumbnail, title, metadata and a track list.
+/// Creates a header with thumbnail, title, metadata and a track list. The
+/// header is clickable — clicking it navigates to the album's detail page per
+/// US5/AC4.
 ///
 /// Returns the section widget and the track list box for selection management.
 /// Cover art is loaded asynchronously off the main thread.
@@ -215,7 +241,22 @@ fn build_album_section(
     let album_header = GtkBox::builder()
         .orientation(Horizontal)
         .spacing(12)
+        .tooltip_text(format!("Open {}", album.title))
+        .can_focus(true)
         .build();
+    album_header.update_property(&[PropertyLabel(&format!("Open album {}", album.title))]);
+
+    let album_id = album.id;
+    let nav_state = Arc::clone(state);
+    let gesture = GestureClick::new();
+    gesture.set_button(1);
+    gesture.connect_released(move |_, _, _, _| {
+        let ns = Arc::clone(&nav_state);
+        spawn_future_local(async move {
+            ns.send_navigation_event(AlbumDetail(album_id)).await;
+        });
+    });
+    album_header.add_controller(gesture);
 
     if let Some(art_path) = &album.artwork_path {
         let thumb = Picture::builder()

@@ -29,9 +29,7 @@ use crate::{
     ui::{
         gallery::{
             coalescer::spawn_listen_sort_zoom,
-            empty::{
-                EmptyStateParams, LibraryGrid, add_scrolled, build_empty_state, build_library_grid,
-            },
+            empty::{LibraryGrid, add_scrolled, build_library_grid, show_library_empty},
             frame_resize::{apply_album_resize, fill_album_grid, resize_album_grid},
             grid_flow::build_grid,
             keyboard_nav::setup_flowbox_keyboard_nav,
@@ -341,22 +339,12 @@ fn finish_lazy_album_build(
 }
 
 /// Show the empty‑albums state widget, replacing any existing grid child.
+///
+/// Two-state per FR-007: "No Music Library Configured" when no directories
+/// are configured, "No Music Found" when directories exist but contain no
+/// albums.
 fn show_albums_empty(state: &Arc<AppState>, stack: &Stack) {
     state.album_grid.ready.store(false, Relaxed);
     *state.album_grid_covers.lock() = Arc::new(Vec::new());
-    if stack.child_by_name("grid").is_none() {
-        let empty_widget = build_empty_state(
-            state,
-            &EmptyStateParams {
-                icon_name: "folder-music-symbolic",
-                icon_label: "Music library icon",
-                heading: "No Albums Found",
-                heading_label: "No albums found",
-                description: "Add a music folder to see your albums here.",
-                description_label: "Add a music folder to see your albums here.",
-            },
-        );
-        stack.add_named(&empty_widget, Some("grid"));
-    }
-    stack.set_visible_child_name("grid");
+    show_library_empty(state, stack, "folder-music-symbolic", "Music library icon");
 }

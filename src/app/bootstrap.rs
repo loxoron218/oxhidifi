@@ -1,7 +1,13 @@
 //! Application boot, startup checks, and session emit/persist orchestration.
 
+use std::sync::Arc;
+
 use {
-    tokio::{spawn, sync::mpsc::UnboundedReceiver, task::spawn_blocking},
+    tokio::{
+        spawn,
+        sync::mpsc::UnboundedReceiver,
+        task::{JoinHandle, spawn_blocking},
+    },
     tracing::{info, warn},
 };
 
@@ -20,15 +26,36 @@ use crate::{
 };
 
 /// Run the filesystem watcher loop in the background.
-pub fn spawn_watcher_loop(
-    watcher: LibraryWatcher<SqliteStorage>,
+///
+/// Takes `Arc<LibraryWatcher>` with interior mut for `watch`/`unwatch`.
+/// Returns a `JoinHandle` so the caller can await graceful shutdown after
+/// calling [`LibraryWatcher::shutdown`]. The loop exits when the channel
+/// closes (shared `event_tx` taken) and discards queued events after a
+/// cancellation signal.
+async fn watcher_loop(
+    watcher: Arc<LibraryWatcher<SqliteStorage>>,
     mut watcher_rx: UnboundedReceiver<WatcherEvent>,
 ) {
-    spawn(async move {
-        while let Some(event) = watcher_rx.recv().await {
-            watcher.process_event(event).await;
-        }
-    });
+    while !watcher.is_cancelled() {
+        let Some(event) = watcher_rx.recv().await else {
+            break;
+        };
+        watcher.process_event(event).await;
+    }
+}
+
+/// Run the filesystem watcher loop in the background.
+///
+/// Takes `Arc<LibraryWatcher>` with interior mut for `watch`/`unwatch`.
+/// Returns a `JoinHandle` so the caller can await graceful shutdown after
+/// calling [`LibraryWatcher::shutdown`]. The loop exits when the channel
+/// closes (shared `event_tx` taken) and discards queued events after a
+/// cancellation signal.
+pub fn spawn_watcher_loop(
+    watcher: Arc<LibraryWatcher<SqliteStorage>>,
+    watcher_rx: UnboundedReceiver<WatcherEvent>,
+) -> JoinHandle<()> {
+    spawn(watcher_loop(watcher, watcher_rx))
 }
 
 /// Check artwork cache version and test audio device at startup.
@@ -80,17 +107,7 @@ pub fn emit_session_events(state: &AppState) {
 /// the process exits. The session is snapshotted before
 /// [`PlaybackTransport::stop`] clears the playback state.
 pub fn persist_session_on_shutdown(state: &AppState) {
-    let s = state.playback.state();
-    let queue_tracks = state.playback.queue().tracks();
-    let queue_index = state.playback.queue().current_index();
-
-    if let Err(e) = state.storage.set_last_session(
-        queue_tracks,
-        queue_index,
-        s.current_track_id,
-        s.elapsed_seconds,
-        s.duration_seconds,
-    ) {
+    if let Err(e) = state.persist_playback_session() {
         warn!(error = %e, "Failed to persist session on shutdown");
     }
 
@@ -105,7 +122,7 @@ mod tests {
     use std::sync::Arc;
 
     use {
-        anyhow::{Context, Result, ensure},
+        anyhow::{Context, Result, anyhow, ensure},
         async_channel::unbounded,
         tempfile::{TempDir, tempdir},
         tokio::runtime::Runtime,
@@ -127,13 +144,20 @@ mod tests {
         storage::database::SqliteStorage,
     };
 
-    fn setup_session(state: &AppState) {
-        state.playback.queue().set_queue(vec![10, 20, 30]);
+    fn setup_session(state: &AppState) -> Result<()> {
+        state
+            .playback
+            .queue()
+            .set_queue(vec![10, 20, 30])
+            .map_err(|e| anyhow!("{e}"))?;
         state.playback.queue().set_current_index(1);
-        let mut s = state.playback.shared.state.lock();
-        s.current_track_id = Some(20);
-        s.elapsed_seconds = 42.5;
-        s.duration_seconds = 200.0;
+        {
+            let mut s = state.playback.shared.state.lock();
+            s.current_track_id = Some(20);
+            s.elapsed_seconds = 42.5;
+            s.duration_seconds = 200.0;
+        }
+        Ok(())
     }
 
     fn fresh_state(rt: &Runtime) -> Result<(TempDir, Arc<SqliteStorage>, AppState)> {
@@ -163,7 +187,7 @@ mod tests {
     fn persist_session_on_shutdown_writes_current_session() -> Result<()> {
         let rt = Runtime::new().context("Failed to create tokio runtime")?;
         let (_, storage, state) = fresh_state(&rt)?;
-        setup_session(&state);
+        setup_session(&state)?;
 
         persist_session_on_shutdown(&state);
 
@@ -201,7 +225,7 @@ mod tests {
     fn persist_session_survives_storage_reload() -> Result<()> {
         let rt = Runtime::new().context("Failed to create tokio runtime")?;
         let (dir, _, state) = fresh_state(&rt)?;
-        setup_session(&state);
+        setup_session(&state)?;
 
         persist_session_on_shutdown(&state);
         drop(state);
@@ -214,7 +238,7 @@ mod tests {
     #[test]
     fn emit_session_events_broadcasts_restored_session() -> Result<()> {
         let state = AppState::mock()?;
-        setup_session(&state);
+        setup_session(&state)?;
 
         let (tx, rx) = unbounded();
         state.playback.shared.event_subs.lock().push(tx);

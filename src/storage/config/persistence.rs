@@ -5,17 +5,18 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use {
-    anyhow::{Context, Result},
-    serde_json::{from_str, to_string_pretty},
-    tokio::fs::{create_dir_all, read_to_string, rename, try_exists},
-    tracing::warn,
-};
+use serde_json::to_string_pretty;
 
 use crate::{
     app::xdg_paths::dirs_config_home,
     playback::devices::OutputMode,
-    storage::{active_tab::ActiveTab, settings::UserSettings},
+    storage::{
+        StorageError::{Database, Serialization},
+        StorageResult,
+        active_tab::ActiveTab,
+        config::config_fallback::{ensure_parent_dir, load_settings_with_fallback},
+        settings::UserSettings,
+    },
 };
 
 /// Manages persistent user settings stored as JSON.
@@ -36,8 +37,11 @@ impl SettingsStore {
     /// # Errors
     ///
     /// Returns an error if the config directory cannot be created.
-    pub async fn load_async() -> Result<Self> {
-        let settings_path = dirs_config_home()?.join("oxhidifi").join("settings.json");
+    pub async fn load_async() -> StorageResult<Self> {
+        let settings_path = dirs_config_home()
+            .map_err(|e| Database(format!("Failed to resolve config dir: {e}")))?
+            .join("oxhidifi")
+            .join("settings.json");
         Self::load_from_path(&settings_path).await
     }
 
@@ -47,12 +51,9 @@ impl SettingsStore {
     /// # Errors
     ///
     /// Returns an error if the settings parent directory cannot be created.
-    pub async fn load_from_path(settings_path: &Path) -> Result<Self> {
-        if let Some(config_dir) = settings_path.parent() {
-            create_dir_all(config_dir).await.context(format!(
-                "Failed to create config directory: {}",
-                config_dir.display()
-            ))?;
+    pub async fn load_from_path(settings_path: &Path) -> StorageResult<Self> {
+        if let Some(dir) = settings_path.parent() {
+            ensure_parent_dir(dir).await?;
         }
 
         let settings = load_settings_with_fallback(settings_path).await?;
@@ -77,10 +78,14 @@ impl SettingsStore {
     /// # Errors
     ///
     /// Returns an error if serialization or the file write fails.
-    pub fn save_sync(&self) -> Result<()> {
-        let json = to_string_pretty(&self.settings).context("Failed to serialize settings")?;
-        write(&self.settings_path, &json).with_context(|| {
-            format!("Failed to write settings: {}", self.settings_path.display())
+    pub fn save_sync(&self) -> StorageResult<()> {
+        let json = to_string_pretty(&self.settings)
+            .map_err(|e| Serialization(format!("Failed to serialize settings: {e}")))?;
+        write(&self.settings_path, &json).map_err(|e| {
+            Database(format!(
+                "Failed to write settings: {}: {e}",
+                self.settings_path.display()
+            ))
         })?;
         Ok(())
     }
@@ -143,50 +148,6 @@ impl SettingsStore {
     #[must_use]
     pub fn path(&self) -> &Path {
         &self.settings_path
-    }
-}
-
-/// Try to load settings from file, falling back to defaults on parse error.
-///
-/// # Errors
-///
-/// Returns an error if the settings file exists but cannot be read.
-async fn load_settings_with_fallback(settings_path: &Path) -> Result<UserSettings> {
-    if try_exists(settings_path).await.unwrap_or(false) {
-        let content = read_to_string(settings_path)
-            .await
-            .with_context(|| format!("Failed to read settings: {}", settings_path.display()))?;
-        match from_str(&content) {
-            Ok(settings) => Ok(settings),
-            Err(e) => {
-                warn!(
-                    error = %e,
-                    path = %settings_path.display(),
-                    "Failed to parse settings, falling back to defaults",
-                );
-                backup_corrupt_settings(settings_path).await;
-                Ok(UserSettings::default())
-            }
-        }
-    } else {
-        Ok(UserSettings::default())
-    }
-}
-
-/// Preserve a corrupt settings file before defaults overwrite it.
-///
-/// The fallback above returns defaults, which the next save writes back over
-/// the corrupt file — destroying any recoverable data. Renaming the file out
-/// of the way first keeps it for manual recovery. Best‑effort: a failed
-/// rename only logs, never fails the load.
-async fn backup_corrupt_settings(settings_path: &Path) {
-    let backup_path = settings_path.with_extension("json.corrupt");
-    if let Err(e) = rename(settings_path, &backup_path).await {
-        warn!(
-            error = %e,
-            path = %backup_path.display(),
-            "Failed to back up corrupt settings file",
-        );
     }
 }
 

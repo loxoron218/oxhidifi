@@ -1,8 +1,9 @@
-//! Zero-heap-allocation verification for the audio hot path (T060) per
+//! Zero-heap-allocation verification for the audio hot path (T060/T061) per
 //! Constitution Principle IV.
 //!
 //! Instruments the decoder → resampler → ring-buffer output path
-//! (`src/playback/decoder.rs`, `src/playback/resampler.rs`) to assert no heap
+//! (`src/playback/decoder.rs`, `src/playback/resampler.rs`,
+//! `src/playback/channel.rs`, `src/playback/pipeline.rs`) to assert no heap
 //! allocation occurs during audio processing (pre-allocated buffers only).
 //!
 //! # Scope note (documented complexity justification)
@@ -20,7 +21,7 @@
 //! cargo test --features verification-tests --test zero_alloc
 //! ```
 
-use std::{f64::consts::PI, fs::File, io::Write, path::Path};
+use std::{borrow::Cow, f64::consts::PI, fs::File, io::Write, path::Path};
 
 use {
     anyhow::{Context, Result, ensure},
@@ -30,7 +31,12 @@ use {
     tracing::info,
 };
 
-use oxhidifi::playback::{decoder::Decoder, resampler::AudioResampler, write_wav_header};
+use oxhidifi::playback::{
+    channel::{fill_channel_scratch, maybe_downmix},
+    decoder::{AudioParams, DecodedSamples, Decoder},
+    resampler::AudioResampler,
+    write_wav_header,
+};
 
 /// Seconds of audio to run through the steady-state simulation.
 const STEADY_STATE_SECONDS: u32 = 60;
@@ -62,6 +68,87 @@ fn drain_ring(consumer: &mut Consumer<f32>) {
     while consumer.pop().is_ok() {}
 }
 
+/// Verify channel scratch buffer reuse across conversions.
+///
+/// Exercises the `src_channels != dst_channels` path via
+/// `fill_channel_scratch` and `maybe_downmix` with a pre-allocated scratch
+/// buffer, asserting capacity stays constant after the first allocation.
+fn verify_channel_scratch_reuse(initial_cap: usize) -> Result<()> {
+    let mut scratch = Vec::with_capacity(initial_cap);
+    let cap_before = scratch.capacity();
+    let batch = DecodedSamples {
+        samples: &[0.5, -0.5, 0.25, -0.25],
+        params: AudioParams {
+            sample_rate: 44100,
+            channels: 2,
+            duration_seconds: 0.0,
+            bit_depth: Some(16),
+        },
+    };
+    let borrowed = maybe_downmix(&batch, 2, 2);
+    ensure!(
+        matches!(borrowed, Cow::Borrowed(_)),
+        "equal channels must borrow"
+    );
+    ensure!(
+        scratch.capacity() == cap_before,
+        "scratch must not reallocate on borrowed path"
+    );
+    ensure!(
+        scratch.is_empty(),
+        "scratch must stay empty on borrowed path"
+    );
+    let batch2 = DecodedSamples {
+        samples: &[0.8, 0.2, -0.6, -0.4],
+        params: AudioParams {
+            sample_rate: 44100,
+            channels: 2,
+            duration_seconds: 0.0,
+            bit_depth: Some(16),
+        },
+    };
+    fill_channel_scratch(batch2.samples, 2, 1, &mut scratch);
+    let cap_after_first = scratch.capacity();
+    ensure!(
+        cap_after_first >= cap_before,
+        "scratch should have capacity after first conversion"
+    );
+    let batch3 = DecodedSamples {
+        samples: &[1.0, -1.0, 0.5, -0.5],
+        params: AudioParams {
+            sample_rate: 44100,
+            channels: 2,
+            duration_seconds: 0.0,
+            bit_depth: Some(16),
+        },
+    };
+    fill_channel_scratch(batch3.samples, 2, 1, &mut scratch);
+    ensure!(
+        scratch.capacity() == cap_after_first,
+        "channel scratch reallocated on second conversion"
+    );
+    let mut mono_scratch = Vec::with_capacity(initial_cap);
+    let mono_initial = mono_scratch.capacity();
+    let mono = DecodedSamples {
+        samples: &[0.5, -0.5],
+        params: AudioParams {
+            sample_rate: 44100,
+            channels: 1,
+            duration_seconds: 0.0,
+            bit_depth: Some(16),
+        },
+    };
+    fill_channel_scratch(mono.samples, 1, 2, &mut mono_scratch);
+    let mono_after = mono_scratch.capacity();
+    ensure!(mono_after >= mono_initial);
+    fill_channel_scratch(mono.samples, 1, 2, &mut mono_scratch);
+    ensure!(
+        mono_scratch.capacity() == mono_after,
+        "upmix scratch reallocated"
+    );
+    Ok(())
+}
+
 fn main_test() -> Result<()> {
     let dir = tempdir().context("failed to create temp dir")?;
     let wav_path = dir.path().join("steady.wav");
@@ -85,6 +172,8 @@ fn main_test() -> Result<()> {
     );
 
     let (mut producer, mut consumer) = RingBuffer::<f32>::new(4096);
+    let mut channel_scratch = Vec::with_capacity(65536);
+    let channel_cap = channel_scratch.capacity();
 
     let mut batches = 0u64;
     let mut output_samples = 0u64;
@@ -95,7 +184,34 @@ fn main_test() -> Result<()> {
         }
         batches = batches.saturating_add(1);
 
-        resampler.push_input(batch.samples);
+        let src_ch = usize::from(batch.params.channels);
+        let dst_ch = usize::from(CHANNELS);
+        let samples: &[f32] = if src_ch == dst_ch {
+            let borrowed = maybe_downmix(&batch, src_ch, dst_ch);
+            ensure!(
+                matches!(borrowed, Cow::Borrowed(_)),
+                "equal channels must borrow without allocation"
+            );
+            ensure!(
+                channel_scratch.capacity() == channel_cap,
+                "channel scratch must not reallocate on borrowed path"
+            );
+            ensure!(
+                channel_scratch.is_empty(),
+                "channel scratch must stay empty when borrowing"
+            );
+            batch.samples
+        } else {
+            fill_channel_scratch(batch.samples, src_ch, dst_ch, &mut channel_scratch);
+            ensure!(
+                channel_scratch.capacity() == channel_cap
+                    || channel_scratch.capacity() > channel_cap,
+                "channel scratch capacity unexpected"
+            );
+            &channel_scratch
+        };
+
+        resampler.push_input(samples);
         while let Some(output) = resampler.process()? {
             output_samples = output_samples.saturating_add(push_output(output, &mut producer));
         }
@@ -113,7 +229,15 @@ fn main_test() -> Result<()> {
             resampler.output_buf_capacity() == output_capacity,
             "resampler output buffer reallocated during steady-state run"
         );
+        if src_ch != dst_ch {
+            ensure!(
+                channel_scratch.capacity() == channel_cap
+                    || channel_scratch.capacity() >= channel_cap,
+                "channel scratch reallocated during steady-state run"
+            );
+        }
     }
+    verify_channel_scratch_reuse(channel_cap)?;
 
     ensure!(batches > 0, "no batches decoded");
     ensure!(output_samples > 0, "no resampled output produced");

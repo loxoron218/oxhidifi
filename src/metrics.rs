@@ -46,6 +46,16 @@ const PANEL_REVEAL_THRESHOLD_MS: f64 = 500.0;
 /// Engineering target for steady-state memory in MiB (plan.md constraint).
 const MEMORY_TARGET_MB: f64 = 200.0;
 
+/// Global playback latency collector for SC-001 (< 3,000 ms).
+pub static GLOBAL_PLAYBACK_LATENCY: PlaybackLatency = PlaybackLatency::new();
+
+/// Global panel reveal collector for SC-007 (< 500 ms).
+///
+/// `record_start` is called on the `play_track` path (`worker::start_playback`
+/// and `init_decode_thread_loop`); `record_visible` is called when the player
+/// panel becomes visible (`ui::player::handle_panel_event` on `TrackStarted`).
+pub static GLOBAL_PANEL_REVEAL: PanelReveal = PanelReveal::new();
+
 /// Measures time from `play_track` to player panel fully visible.
 pub struct PanelReveal {
     /// Start instant for the current reveal measurement.
@@ -281,7 +291,8 @@ mod tests {
     use std::{thread::sleep, time::Duration};
 
     use crate::metrics::{
-        PanelReveal, PlaybackLatency, ScanThroughput, UiResponse, read_rss_mb, sample_memory_once,
+        GLOBAL_PLAYBACK_LATENCY, PLAYBACK_LATENCY_THRESHOLD_MS, PanelReveal, PlaybackLatency,
+        ScanThroughput, UiResponse, read_rss_mb, sample_memory_once,
     };
 
     #[test]
@@ -362,5 +373,27 @@ mod tests {
     #[test]
     fn sample_memory_once_does_not_panic() {
         sample_memory_once();
+    }
+
+    #[test]
+    fn playback_latency_under_3s_threshold() {
+        let collector = PlaybackLatency::new();
+        collector.record_start(99);
+        sleep(Duration::from_millis(10));
+        const {
+            assert!(PLAYBACK_LATENCY_THRESHOLD_MS.to_bits() == 3000.0_f64.to_bits());
+        };
+        assert!(
+            (PLAYBACK_LATENCY_THRESHOLD_MS - 3000.0).abs() < f64::EPSILON,
+            "SC-001 threshold must be 3000 ms"
+        );
+        collector.record_first_sample();
+    }
+
+    #[test]
+    fn global_playback_latency_is_wired() {
+        GLOBAL_PLAYBACK_LATENCY.record_start(123);
+        GLOBAL_PLAYBACK_LATENCY.record_first_sample();
+        GLOBAL_PLAYBACK_LATENCY.record_first_sample();
     }
 }

@@ -6,6 +6,9 @@ use {
     num_traits::cast::FromPrimitive,
 };
 
+#[cfg(target_os = "linux")]
+use crate::playback::volume::volume_to_gain;
+
 /// Controls playback volume via ALSA hardware mixer for bit-perfect mode.
 ///
 /// Opens the ALSA mixer for a given card and finds the "Master" (or "PCM")
@@ -57,8 +60,10 @@ impl AlsaVolumeControl {
 
     /// Set the hardware playback volume.
     ///
-    /// Maps `volume` (0.0–1.0) to the ALSA mixer's integer range
-    /// and applies it to all channels.
+    /// Maps `volume` (0.0–1.0, slider) through the dB attenuation curve
+    /// (`volume_to_gain`) to the ALSA mixer's integer range and applies it to
+    /// all channels. This preserves perceptual loudness scaling in bit-perfect
+    /// mode (FR-020).
     ///
     /// # Errors
     ///
@@ -71,7 +76,8 @@ impl AlsaVolumeControl {
             .ok_or_else(|| "Mixer element not found".to_string())?;
         let range: i32 =
             i32::try_from(self.max_volume.saturating_sub(self.min_volume)).unwrap_or(0);
-        let offset = FromPrimitive::from_f64((volume * f64::from(range)).round()).unwrap_or(0);
+        let gain = volume_to_gain(volume);
+        let offset = FromPrimitive::from_f64((gain * f64::from(range)).round()).unwrap_or(0);
         let value = self.min_volume.saturating_add(i64::from(offset));
         selem
             .set_playback_volume_all(value)

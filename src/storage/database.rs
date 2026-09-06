@@ -12,19 +12,23 @@ pub mod music_dirs;
 pub mod queue;
 pub mod tracks;
 pub mod user_prefs;
+pub mod window_session;
 
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
     sync::atomic::{AtomicBool, AtomicU64},
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 use {
     parking_lot::{Mutex, RwLock},
     sqlx::{
         SqlitePool,
-        sqlite::{SqliteConnectOptions, SqlitePoolOptions},
+        sqlite::{
+            SqliteConnectOptions, SqliteJournalMode::Wal, SqlitePoolOptions,
+            SqliteSynchronous::Normal,
+        },
     },
 };
 
@@ -95,12 +99,19 @@ impl SqliteStorage {
         database_path: &Path,
         settings_path: &Path,
     ) -> StorageResult<Self> {
-        let opts = SqliteConnectOptions::new()
+        let is_memory = database_path.as_os_str() == ":memory:";
+        let mut opts = SqliteConnectOptions::new()
             .filename(database_path)
-            .create_if_missing(true);
+            .create_if_missing(true)
+            .busy_timeout(Duration::from_secs(5))
+            .foreign_keys(true);
+        if !is_memory {
+            opts = opts.journal_mode(Wal).synchronous(Normal);
+        }
 
         let pool = SqlitePoolOptions::new()
-            .max_connections(1)
+            .max_connections(if is_memory { 1 } else { 8 })
+            .acquire_timeout(Duration::from_secs(10))
             .connect_with(opts)
             .await
             .map_err(|e| Database(format!("Failed to connect: {e}")))?;
@@ -280,6 +291,14 @@ impl Storage for SqliteStorage {
 
     async fn get_tracks_by_ids(&self, ids: &[i64]) -> StorageResult<Vec<Track>> {
         self.tracks_by_ids_rows(ids).await
+    }
+
+    async fn hash_exists(&self, hash: &str) -> StorageResult<bool> {
+        self.hash_exists_row(hash).await
+    }
+
+    async fn prune_orphans(&self) -> StorageResult<()> {
+        self.prune_orphans_row().await
     }
 }
 

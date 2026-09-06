@@ -178,6 +178,12 @@ pub trait Storage: Send + Sync + 'static {
         &self,
         ids: &[i64],
     ) -> impl Future<Output = StorageResult<Vec<Track>>> + Send;
+
+    /// Check if any track exists with the given content hash (exists-only query).
+    fn hash_exists(&self, hash: &str) -> impl Future<Output = StorageResult<bool>> + Send;
+
+    /// Delete orphan albums and artists (no remaining tracks/albums).
+    fn prune_orphans(&self) -> impl Future<Output = StorageResult<()>> + Send;
 }
 
 /// Error type for storage operations.
@@ -198,6 +204,9 @@ pub enum StorageError {
     /// Invalid path.
     #[error("Invalid path: {0}")]
     InvalidPath(String),
+    /// Queue append rejected because the 100,000-entry cap was reached (FR-021).
+    #[error("Queue full: maximum {max} entries")]
+    QueueFull { max: usize },
 }
 
 /// Convenience alias for storage operation results.

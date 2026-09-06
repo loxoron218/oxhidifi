@@ -35,10 +35,7 @@ impl<S: Storage> FsScanner<S> {
     ///
     /// Returns a storage error if the database lookup fails.
     pub async fn check_hash_duplicate(&self, hash: &str) -> Result<bool, StorageError> {
-        match self.storage.find_by_hash(hash).await {
-            Ok(tracks) => Ok(!tracks.is_empty()),
-            Err(e) => Err(e),
-        }
+        self.storage.hash_exists(hash).await
     }
 
     /// Check if a file should be skipped based on metadata fingerprint.

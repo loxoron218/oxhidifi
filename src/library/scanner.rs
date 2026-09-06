@@ -5,6 +5,8 @@
 
 pub mod events;
 pub mod ingest;
+pub mod scan_catalog;
+pub mod scan_hash;
 pub mod screening;
 pub mod timefmt;
 pub mod walker;
@@ -13,12 +15,14 @@ use std::{future::Future, path::Path, result::Result, sync::Arc};
 
 use {
     async_channel::Sender,
+    parking_lot::Mutex,
     tokio::sync::watch::{Receiver, Sender as TokioSender, channel},
 };
 
 use crate::{
     library::scanner::events::ScanEvent,
     storage::{Storage, StorageError},
+    ui::signal::ValueSignal,
 };
 
 /// Filesystem-based library scanner with storage integration.
@@ -33,6 +37,8 @@ pub struct FsScanner<S: Storage> {
     pub cancel_rx: Receiver<bool>,
     /// Channel sender for forwarding scan events to the UI.
     pub scan_event_tx: Sender<ScanEvent>,
+    /// Optional refresh signal for incremental grid updates (FR-006).
+    pub refresh: Mutex<Option<ValueSignal<()>>>,
 }
 
 impl<S: Storage> FsScanner<S> {
@@ -45,7 +51,13 @@ impl<S: Storage> FsScanner<S> {
             cancel_tx,
             cancel_rx,
             scan_event_tx,
+            refresh: Mutex::new(None),
         }
+    }
+
+    /// Set the refresh signal for incremental UI updates.
+    pub fn set_refresh(&self, refresh: ValueSignal<()>) {
+        *self.refresh.lock() = Some(refresh);
     }
 }
 

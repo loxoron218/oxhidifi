@@ -4,10 +4,7 @@ use std::sync::Arc;
 
 use {
     async_channel::Sender,
-    libadwaita::{
-        glib::spawn_future_local,
-        gtk::{Stack, Widget},
-    },
+    libadwaita::{NavigationPage, NavigationView, glib::spawn_future_local},
     tracing::{info, warn},
 };
 
@@ -46,37 +43,49 @@ pub fn persist_active_tab(
 }
 
 /// Handle navigation events (album/artist detail, back navigation).
+///
+/// Page stacks are managed via [`NavigationView`]: detail pages are pushed
+/// as [`NavigationPage`]s with tag `detail`, and back navigation pops to the
+/// `library` tag. This satisfies Constitution III which mandates
+/// `AdwNavigationView` for push/pop stacks.
 pub fn handle_navigation_event(
     nav_state: &Arc<AppState>,
-    nav_content_area: &Stack,
+    nav_view: &NavigationView,
     nav_tx: &Sender<NavigationEvent>,
-    orig_stack: &Widget,
     event: NavigationEvent,
 ) {
     match event {
         AlbumDetail(album_id) => {
             info!(album_id, "Navigating to album detail",);
-            if let Some(prev_detail) = nav_content_area.child_by_name("detail") {
-                nav_content_area.remove(&prev_detail);
+            if let Some(prev) = nav_view.find_page("detail") {
+                nav_view.remove(&prev);
             }
             let detail = build_album_detail(nav_state, album_id, nav_tx);
-            nav_content_area.add_named(&detail, Some("detail"));
-            nav_content_area.set_visible_child(&detail);
+            let page = NavigationPage::builder()
+                .child(&detail)
+                .title("Album")
+                .tag("detail")
+                .build();
+            nav_view.push(&page);
         }
         ArtistDetail(artist_id) => {
             info!(artist_id, "Navigating to artist detail",);
-            if let Some(prev_detail) = nav_content_area.child_by_name("detail") {
-                nav_content_area.remove(&prev_detail);
+            if let Some(prev) = nav_view.find_page("detail") {
+                nav_view.remove(&prev);
             }
             let detail = build_artist_detail(nav_state, artist_id, nav_tx);
-            nav_content_area.add_named(&detail, Some("detail"));
-            nav_content_area.set_visible_child(&detail);
+            let page = NavigationPage::builder()
+                .child(&detail)
+                .title("Artist")
+                .tag("detail")
+                .build();
+            nav_view.push(&page);
         }
         Back => {
             info!("Navigating back to library view");
-            nav_content_area.set_visible_child(orig_stack);
-            if let Some(prev_detail) = nav_content_area.child_by_name("detail") {
-                nav_content_area.remove(&prev_detail);
+            nav_view.pop_to_tag("library");
+            if let Some(stale) = nav_view.find_page("detail") {
+                nav_view.remove(&stale);
             }
         }
     }
@@ -90,8 +99,8 @@ mod tests {
         anyhow::{Result, ensure},
         async_channel::Sender,
         libadwaita::{
-            glib::object::Cast,
-            gtk::{self, Box, Orientation::Vertical, Stack, Widget, test},
+            NavigationPage, NavigationView,
+            gtk::{self, Box, Orientation::Vertical, test},
         },
     };
 
@@ -129,26 +138,38 @@ mod tests {
     #[test]
     fn handle_navigation_event_adds_and_removes_detail() -> Result<()> {
         let state = Arc::new(AppState::mock()?);
-        let content_area = Stack::builder().build();
-        let (orig, nav_tx) = add_library_child(&content_area, &state);
+        let nav_view = NavigationView::new();
+        let nav_tx = add_library_page(&nav_view, &state);
 
-        handle_navigation_event(&state, &content_area, &nav_tx, &orig, AlbumDetail(1));
-        ensure!(content_area.child_by_name("detail").is_some());
+        handle_navigation_event(&state, &nav_view, &nav_tx, AlbumDetail(1));
+        ensure!(
+            nav_view.find_page("detail").is_some(),
+            "detail page must be pushed"
+        );
 
-        handle_navigation_event(&state, &content_area, &nav_tx, &orig, Back);
-        ensure!(content_area.child_by_name("detail").is_none());
+        handle_navigation_event(&state, &nav_view, &nav_tx, Back);
+        ensure!(
+            nav_view.find_page("detail").is_none(),
+            "detail page must be popped on Back"
+        );
+        ensure!(
+            nav_view.find_page("library").is_some(),
+            "library page must remain"
+        );
         Ok(())
     }
 
-    fn add_library_child(
-        content_area: &Stack,
+    fn add_library_page(
+        nav_view: &NavigationView,
         state: &Arc<AppState>,
-    ) -> (Widget, Sender<NavigationEvent>) {
-        let orig_stack = Box::builder().orientation(Vertical).spacing(0).build();
-        content_area.add_named(&orig_stack, Some("library"));
-        content_area.set_visible_child(&orig_stack);
-        let nav_tx = state.navigation_tx.clone();
-        let orig: Widget = orig_stack.upcast();
-        (orig, nav_tx)
+    ) -> Sender<NavigationEvent> {
+        let library = Box::builder().orientation(Vertical).spacing(0).build();
+        let page = NavigationPage::builder()
+            .child(&library)
+            .title("Library")
+            .tag("library")
+            .build();
+        nav_view.add(&page);
+        state.navigation_tx.clone()
     }
 }

@@ -1,6 +1,4 @@
-//! Symphonia decoder bridge with optional dual-decoder pre-buffering.
-
-pub mod dual;
+//! Symphonia decoder bridge.
 
 use std::{fs::File, path::Path};
 
@@ -36,6 +34,8 @@ pub struct AudioParams {
     pub channels: u16,
     /// Total duration of the track in seconds (0.0 if unknown).
     pub duration_seconds: f64,
+    /// Bit depth (None for lossy / unknown).
+    pub bit_depth: Option<u16>,
 }
 
 /// Decoded PCM samples with associated audio parameters.
@@ -131,10 +131,15 @@ impl Decoder {
             })
             .map_or(0.0, |t| t.as_secs_f64());
 
+        let bit_depth = audio_params
+            .bits_per_sample
+            .map(|b| u16::try_from(b).unwrap_or(0));
+
         let params = AudioParams {
             sample_rate,
             channels,
             duration_seconds,
+            bit_depth,
         };
 
         let dec_opts = AudioDecoderOptions::default();

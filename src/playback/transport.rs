@@ -1,251 +1,75 @@
 //! Playback control interface: trait definition and implementation on `PlaybackEngine`.
+//!
+//! The [`PlaybackTransport`] trait lives here alongside the thin delegating
+//! `impl` block. Queue-driven playback and engine-control logic live in the
+//! sibling `transport/` sub-modules to keep each file under 400 lines.
 
-use {
-    async_channel::{Receiver, unbounded},
-    tracing::{error, info, warn},
-};
+pub mod engine_controls;
+pub mod queue_playback;
+
+use async_channel::{Receiver, unbounded};
 
 use crate::playback::{
-    PlaybackError::{self, QueueEmpty, TrackNotFound},
-    devices::OutputMode::{self, BitPerfect, Resampled},
-    engine::{
-        DecodeCommand::{Pause, Resume, Seek},
-        EngineShared, PlaybackEngine,
-    },
-    gapless::GaplessMode::{Disabled, Enabled},
-    state::{
-        MuteState::{Muted, Unmuted},
-        PlaybackEvent::{
-            self, GaplessEnabledChanged, OutputModeChanged, Paused, QueueChanged, Resumed, Seeked,
-            Stopped, VolumeChanged,
+    PlaybackError,
+    devices::OutputMode,
+    engine::PlaybackEngine,
+    state::{PlaybackEvent, PlaybackState},
+    transport::{
+        engine_controls::{
+            apply_gapless, apply_muted, apply_output_mode, apply_volume, seek_to_position,
+            stop_playback, toggle_pause_or_resume,
         },
-        PlaybackState,
-        PlaybackStatus::{Paused as StatusPaused, Playing, Stopped as StatusStopped},
+        queue_playback::{advance_next, advance_previous, play_list, play_list_at, play_single},
     },
-    worker::{start_playback, stop_decode_task},
 };
 
 impl PlaybackTransport for PlaybackEngine {
     fn play_track(&self, track_id: i64) -> Result<(), PlaybackError> {
-        let path = self
-            .shared
-            .track_paths
-            .lock()
-            .get(&track_id)
-            .cloned()
-            .ok_or_else(|| {
-                warn!(track_id, "Track not found for playback",);
-                TrackNotFound(track_id)
-            })?;
-        info!(track_id, "Play track command",);
-        start_playback(&self.shared, track_id, path);
-        Ok(())
+        play_single(&self.shared, track_id)
     }
 
     fn play_at(&self, queue: Vec<i64>, start_index: usize) -> Result<(), PlaybackError> {
-        if queue.is_empty() {
-            warn!(queue_len = queue.len(), "Play at command with empty queue");
-            return Err(QueueEmpty);
-        }
-        if start_index >= queue.len() {
-            warn!(
-                start_index,
-                queue_len = queue.len(),
-                "Start index out of bounds"
-            );
-            return Err(QueueEmpty);
-        }
-        let queue_len = queue.len();
-        info!(queue_len, start_index, "Play at command",);
-        self.shared.queue.set_queue(queue.clone());
-        self.shared.queue.set_current_index(start_index);
-        self.shared.send_event(&QueueChanged { track_ids: queue });
-        let play_id = self.shared.queue.current().ok_or(QueueEmpty)?;
-        let path = self
-            .shared
-            .track_paths
-            .lock()
-            .get(&play_id)
-            .cloned()
-            .ok_or(TrackNotFound(play_id))?;
-        start_playback(&self.shared, play_id, path);
-        Ok(())
+        play_list_at(&self.shared, queue, start_index)
     }
 
     fn play_queue(&self, queue: Vec<i64>) -> Result<(), PlaybackError> {
-        if queue.is_empty() {
-            warn!(
-                queue_len = queue.len(),
-                "Play queue command with empty queue"
-            );
-            return Err(QueueEmpty);
-        }
-        let queue_len = queue.len();
-        info!(queue_len, "Play queue command",);
-        self.shared.queue.set_queue(queue.clone());
-        self.shared.send_event(&QueueChanged { track_ids: queue });
-        let first_id = self.shared.queue.current().ok_or(QueueEmpty)?;
-        let path = self
-            .shared
-            .track_paths
-            .lock()
-            .get(&first_id)
-            .cloned()
-            .ok_or(TrackNotFound(first_id))?;
-        start_playback(&self.shared, first_id, path);
-        Ok(())
+        play_list(&self.shared, queue)
     }
 
     fn toggle_pause(&self) -> Result<(), PlaybackError> {
-        if self.shared.state.lock().status != StatusStopped {
-            toggle_play_pause(&self.shared);
-            return Ok(());
-        }
-
-        let (tid, saved_position, saved_duration) = {
-            let s = self.shared.state.lock();
-            (s.current_track_id, s.elapsed_seconds, s.duration_seconds)
-        };
-
-        let Some(tid) = tid else {
-            info!("Toggle pause ignored — not playing");
-            return Ok(());
-        };
-
-        info!(track_id = tid, "Resuming playback from saved session");
-        self.play_track(tid)?;
-
-        if saved_duration > 0.0 {
-            self.shared.state.lock().duration_seconds = saved_duration;
-        }
-
-        if saved_position > 0.0 {
-            self.seek_to(saved_position)?;
-        }
-
-        Ok(())
+        toggle_pause_or_resume(&self.shared)
     }
 
     fn stop(&self) -> Result<(), PlaybackError> {
-        let current_track = self.shared.state.lock().current_track_id;
-        info!(track_id = current_track, "Playback stopped",);
-        stop_decode_task(&self.shared);
-        let mut state = self.shared.state.lock();
-        state.status = StatusStopped;
-        state.current_track_id = None;
-        state.current_path = None;
-        state.elapsed_seconds = 0.0;
-        state.duration_seconds = 0.0;
-        drop(state);
-        self.shared.send_event(&Stopped);
-        Ok(())
+        stop_playback(&self.shared)
     }
 
     fn next_track(&self) -> Result<(), PlaybackError> {
-        let next_id = self.shared.queue.next().ok_or_else(|| {
-            info!("Next track failed — queue empty");
-            QueueEmpty
-        })?;
-        let path = self
-            .shared
-            .track_paths
-            .lock()
-            .get(&next_id)
-            .cloned()
-            .ok_or(TrackNotFound(next_id))?;
-        start_playback(&self.shared, next_id, path);
-        Ok(())
+        advance_next(&self.shared)
     }
 
     fn previous_track(&self) -> Result<(), PlaybackError> {
-        let prev_id = self.shared.queue.previous().ok_or_else(|| {
-            info!("Previous track failed — queue empty");
-            QueueEmpty
-        })?;
-        let path = self
-            .shared
-            .track_paths
-            .lock()
-            .get(&prev_id)
-            .cloned()
-            .ok_or(TrackNotFound(prev_id))?;
-        start_playback(&self.shared, prev_id, path);
-        Ok(())
+        advance_previous(&self.shared)
     }
 
     fn set_volume(&self, volume: f64) -> Result<(), PlaybackError> {
-        let clamped = volume.clamp(0.0, 1.0);
-        info!(volume = clamped, "Volume changed",);
-        let guard = self.shared.output.lock();
-        if let Some(output) = guard.as_ref() {
-            match output.mode() {
-                BitPerfect => output.set_hardware_volume(clamped),
-                Resampled => output.set_volume_atomic(clamped),
-            }
-        }
-        drop(guard);
-        self.shared.state.lock().volume = clamped;
-        self.shared.send_event(&VolumeChanged { volume: clamped });
-        Ok(())
+        apply_volume(&self.shared, volume)
     }
 
     fn set_muted(&self, muted: bool) -> Result<(), PlaybackError> {
-        let vol = self.shared.state.lock().volume;
-        let new_state = if muted { Muted } else { Unmuted };
-        let hw_vol = if muted { 0.0 } else { vol };
-        let guard = self.shared.output.lock();
-        if let Some(output) = guard.as_ref() {
-            match output.mode() {
-                BitPerfect => output.set_hardware_volume(hw_vol),
-                Resampled => output.set_volume_atomic(hw_vol),
-            }
-        }
-        drop(guard);
-        self.shared.state.lock().muted = new_state;
-        Ok(())
+        apply_muted(&self.shared, muted)
     }
 
     fn set_output_mode(&self, mode: OutputMode) -> Result<(), PlaybackError> {
-        info!(
-            output_mode = ?mode,
-            "Output mode changed",
-        );
-
-        if let Some(output) = self.shared.output.lock().as_mut() {
-            output.set_mode(mode);
-            let current_vol = self.shared.state.lock().volume;
-            match mode {
-                Resampled => output.set_volume_atomic(current_vol),
-                BitPerfect => output.set_hardware_volume(current_vol),
-            }
-        }
-        self.shared.state.lock().output_mode = mode;
-        self.shared.send_event(&OutputModeChanged { mode });
-        Ok(())
+        apply_output_mode(&self.shared, mode)
     }
 
     fn set_gapless_enabled(&self, enabled: bool) -> Result<(), PlaybackError> {
-        info!(enabled, "Gapless playback toggled",);
-        self.shared.state.lock().gapless_mode = if enabled { Enabled } else { Disabled };
-        self.shared.send_event(&GaplessEnabledChanged { enabled });
-        Ok(())
+        apply_gapless(&self.shared, enabled)
     }
 
     fn seek_to(&self, position_seconds: f64) -> Result<(), PlaybackError> {
-        let clamped = {
-            let state = self.shared.state.lock();
-            position_seconds.clamp(0.0, state.duration_seconds)
-        };
-        let cmd_tx = self.shared.decode_tx.lock();
-        if let Some(tx) = cmd_tx.as_ref()
-            && tx.try_send(Seek(clamped)).is_err()
-        {}
-        drop(cmd_tx);
-        self.shared.state.lock().elapsed_seconds = clamped;
-        self.shared.send_event(&Seeked {
-            position_seconds: clamped,
-        });
-        Ok(())
+        seek_to_position(&self.shared, position_seconds)
     }
 
     fn subscribe(&self) -> Receiver<PlaybackEvent> {
@@ -355,29 +179,25 @@ pub trait PlaybackTransport: Send + 'static {
     fn seek_to(&self, position_seconds: f64) -> Result<(), PlaybackError>;
 }
 
-/// Toggle between playing and paused states when playback is active.
-fn toggle_play_pause(shared: &EngineShared) {
-    let mut state = shared.state.lock();
-    let was_paused = state.status == StatusPaused;
-    let tid = state.current_track_id;
-    let (event, cmd) = if was_paused {
-        state.status = Playing;
-        info!(track_id = tid, "Playback resumed");
-        (Resumed, Resume)
-    } else {
-        state.status = StatusPaused;
-        info!(track_id = tid, "Playback paused");
-        (Paused, Pause)
-    };
-    drop(state);
+#[cfg(test)]
+mod tests {
+    use anyhow::{Result, anyhow, bail};
 
-    let cmd_tx = shared.decode_tx.lock();
-    if let Some(tx) = cmd_tx.as_ref()
-        && let Err(e) = tx.try_send(cmd)
-    {
-        error!(error = %e, "Failed to send pause/resume command to decode thread");
+    use crate::playback::{engine::PlaybackEngine, transport::PlaybackTransport};
+
+    #[test]
+    fn transport_delegates_play_track_not_found() {
+        let engine = PlaybackEngine::new();
+        assert!(engine.play_track(99).is_err());
     }
-    drop(cmd_tx);
 
-    shared.send_event(&event);
+    #[test]
+    fn transport_delegates_volume_clamp() -> Result<()> {
+        let engine = PlaybackEngine::new();
+        engine.set_volume(2.0).map_err(|e| anyhow!("{e}"))?;
+        if (engine.state().volume - 1.0).abs() >= f64::EPSILON {
+            bail!("volume should clamp to 1.0");
+        }
+        Ok(())
+    }
 }

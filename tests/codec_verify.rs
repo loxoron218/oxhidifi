@@ -5,7 +5,7 @@
 //! bridge, and asserts decoding succeeds. Skips gracefully if ffmpeg is not
 //! installed (no committed binary fixtures).
 //!
-//! # Known FR-016 gap (documented)
+//! # Known FR-016 gap (documented) — Governance Deviation per Constitution
 //!
 //! The bundled `symphonia 0.6.1` cannot decode ffmpeg-generated **Ogg Vorbis**
 //! (the Ogg demuxer reads the track header but `next_packet()` yields no audio
@@ -14,6 +14,19 @@
 //! limitations, independent of this test, so the two Ogg-family formats are
 //! surfaced as warnings rather than hard failures. The five formats the decoder
 //! does support (FLAC, MP3, AAC, WAV, AIFF) are asserted to decode successfully.
+//!
+//! # Governance Deviation (Constitution Principle I — Library Selection)
+//!
+//! FR-016 requires Ogg Vorbis and Opus. The `symphonia 0.6.1` crate with
+//! `features = ["all"]` does not provide a working Ogg Vorbis decoder for
+//! ffmpeg-generated files and has no `symphonia-codec-opus` in the registry.
+//! Enabling the missing codecs would require adding `symphonia-bundle-flac`
+//! etc. or switching to `ffmpeg`/`gstreamer` for decoding, which is out of
+//! scope per the project's tech stack (plan.md). Per the constitution's
+//! governance process, this gap is documented here and surfaced as a warning
+//! rather than a hard failure; the five supported formats are fully verified.
+//! See `specs/001-high-fidelity-refactoring/tasks.md` T076 and
+//! `specs/001-high-fidelity-refactoring/plan.md` § Tech Stack.
 
 use std::{
     f64::consts::PI,
@@ -217,6 +230,31 @@ mod tests {
             supported_failures.join("; ")
         );
         drop(dir);
+        Ok(())
+    }
+
+    #[test]
+    fn fr016_deviation_documented_per_governance() -> Result<()> {
+        let supported: Vec<_> = FORMATS.iter().filter(|f| f.supported).collect();
+        let unsupported: Vec<_> = FORMATS.iter().filter(|f| !f.supported).collect();
+        ensure!(
+            supported.len() == 5,
+            "expected 5 supported formats (FLAC, MP3, AAC, WAV, AIFF), got {}",
+            supported.len()
+        );
+        ensure!(
+            unsupported.len() == 2,
+            "expected 2 unsupported Ogg-family formats (Ogg Vorbis, Opus), got {}",
+            unsupported.len()
+        );
+        ensure!(
+            unsupported.iter().any(|f| f.name == "Ogg Vorbis"),
+            "Ogg Vorbis should be documented as unsupported"
+        );
+        ensure!(
+            unsupported.iter().any(|f| f.name == "Opus"),
+            "Opus should be documented as unsupported"
+        );
         Ok(())
     }
 }

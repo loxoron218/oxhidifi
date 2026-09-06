@@ -184,7 +184,7 @@ mod tests {
     use std::sync::Arc;
 
     use {
-        anyhow::{Result, ensure},
+        anyhow::{Result, anyhow, ensure},
         libadwaita::{
             gio::{ListStore, prelude::ListModelExt},
             glib::{BoxedAnyObject, object::Cast, prelude::StaticType},
@@ -220,10 +220,11 @@ mod tests {
     }
 
     #[test]
-    fn queue_tracks_returns_ids() {
+    fn queue_tracks_returns_ids() -> Result<()> {
         let q = PlaybackQueue::new();
-        q.set_queue(vec![1, 2, 3]);
-        assert_eq!(q.tracks(), vec![1, 2, 3]);
+        q.set_queue(vec![1, 2, 3]).map_err(|e| anyhow!("{e}"))?;
+        ensure!(q.tracks() == vec![1, 2, 3], "tracks should be [1,2,3]");
+        Ok(())
     }
 
     #[test]
@@ -238,7 +239,7 @@ mod tests {
     #[test]
     fn populate_store_sets_names_and_current() -> Result<()> {
         let queue = PlaybackQueue::new();
-        queue.set_queue(vec![10, 20]);
+        queue.set_queue(vec![10, 20]).map_err(|e| anyhow!("{e}"))?;
         queue.set_current_index(1);
         let store = make_store();
         let names = vec![(10, "Alpha".to_string()), (20, "Beta".to_string())];
@@ -252,7 +253,7 @@ mod tests {
     #[test]
     fn populate_store_falls_back_to_track_id() -> Result<()> {
         let queue = PlaybackQueue::new();
-        queue.set_queue(vec![42]);
+        queue.set_queue(vec![42]).map_err(|e| anyhow!("{e}"))?;
         let store = make_store();
         populate_store(&store, &queue, &[]);
         ensure!(item_data(&store, 0) == Some(("Track #42".to_string(), true)));

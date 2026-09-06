@@ -5,15 +5,21 @@ use std::sync::Arc;
 use libadwaita::{
     glib::{prelude::Cast, spawn_future_local},
     gtk::{
-        Align::Start, Box, GestureClick, Image, Label, Orientation::Vertical, Overlay, Widget,
-        accessible::Property::Label as PropertyLabel, pango::EllipsizeMode::End,
+        Align::Start,
+        Box, EventControllerMotion, GestureClick, Image, Label,
+        Orientation::Vertical,
+        Overlay, Widget,
+        accessible::Property::Label as PropertyLabel,
+        pango::EllipsizeMode::End,
+        prelude::{ButtonExt, WidgetExt},
     },
-    prelude::{AccessibleExtManual, BoxExt, WidgetExt},
+    prelude::{AccessibleExtManual, BoxExt},
 };
 
 use crate::{
     app::runtime::{AppState, NavigationEvent::ArtistDetail},
     storage::catalog::Artist,
+    ui::{gallery::play_action::play_artist, osd_button::build_album_play_button},
 };
 
 /// Build the avatar widget for an artist.
@@ -59,6 +65,36 @@ pub fn build_artist_card(state: &Arc<AppState>, artist: &Artist, size: i32) -> (
         .build();
     overlay.set_child(Some(&avatar));
     overlay.set_css_classes(&["cover-overlay"]);
+
+    let play_button = build_album_play_button();
+    play_button.set_icon_name("media-playback-start-symbolic");
+    play_button.set_tooltip_text(Some(&format!("Play all albums by {}", artist.name)));
+    play_button.update_property(&[PropertyLabel(&format!(
+        "Play all albums by {}",
+        artist.name
+    ))]);
+    play_button.set_visible(false);
+    overlay.add_overlay(&play_button);
+
+    let motion = EventControllerMotion::new();
+    let btn_show = play_button.clone();
+    motion.connect_enter(move |_, _, _| {
+        btn_show.set_visible(true);
+    });
+    let btn_hide = play_button.clone();
+    motion.connect_leave(move |_| {
+        btn_hide.set_visible(false);
+    });
+    overlay.add_controller(motion);
+
+    let artist_id = artist.id;
+    let state_clone = Arc::clone(state);
+    play_button.connect_clicked(move |_| {
+        let state = Arc::clone(&state_clone);
+        spawn_future_local(async move {
+            play_artist(&state, artist_id).await;
+        });
+    });
 
     card.append(&overlay.clone().upcast::<Widget>());
 

@@ -14,6 +14,7 @@ use {
         gdk::{Display, Key},
         glib::{
             Propagation::{Proceed, Stop},
+            idle_add_local_once,
             object::{Cast, ObjectExt},
             spawn_future_local,
         },
@@ -21,9 +22,9 @@ use {
             CssProvider, EventControllerKey, STYLE_PROVIDER_PRIORITY_APPLICATION, Window,
             prelude::ToggleButtonExt, style_context_add_provider_for_display,
         },
-        prelude::{AdwApplicationWindowExt, ButtonExt, GtkWindowExt, WidgetExt},
+        prelude::{AdwApplicationWindowExt, ApplicationExt, ButtonExt, GtkWindowExt, WidgetExt},
     },
-    tracing::info,
+    tracing::{info, warn},
 };
 
 use crate::{
@@ -43,15 +44,24 @@ use crate::{
 /// containing separate `ToolbarView` panes for the sidebar and
 /// content. The sidebar is hidden by default and auto-shown on
 /// playback start.
+///
+/// # Panics
+///
+/// This function does not panic under normal operation. Internal callbacks
+/// gracefully handle unexpected window types without panicking.
 pub fn build_window(app: &Application, state: &Arc<AppState>) -> ApplicationWindow {
     info!("Building main application window");
 
+    let (win_width, win_height, win_maximized) = state.storage.get_window_geometry();
     let window = ApplicationWindow::builder()
         .application(app)
         .title("Oxhidifi")
-        .default_width(1200)
-        .default_height(800)
+        .default_width(win_width)
+        .default_height(win_height)
         .build();
+    if win_maximized {
+        window.maximize();
+    }
 
     load_hig_css();
 
@@ -88,9 +98,38 @@ pub fn build_window(app: &Application, state: &Arc<AppState>) -> ApplicationWind
     });
     window.add_controller(zoom_controller);
 
-    window.connect_close_request(|_| {
-        info!("Window close requested — session persists during application shutdown");
+    let persist_state = Arc::clone(state);
+    let persist_window = window.clone();
+    let quit_app = app.clone();
+    window.connect_close_request(move |_| {
+        info!("Window close requested — persisting geometry and session");
+        persist_geometry_and_session(
+            &persist_state,
+            persist_window.default_width(),
+            persist_window.default_height(),
+            persist_window.is_maximized(),
+        );
+        let quit = quit_app.clone();
+        idle_add_local_once(move || quit.quit());
         Proceed
+    });
+
+    let geom_state = Arc::clone(state);
+    let geom_window = window.clone();
+    geom_window.connect_notify(Some("maximized"), move |w, _| {
+        let Some(win) = w.downcast_ref::<ApplicationWindow>() else {
+            warn!("Maximized notification received for non-ApplicationWindow");
+            return;
+        };
+        let width = win.default_width();
+        let height = win.default_height();
+        let maximized = win.is_maximized();
+        if let Err(e) = geom_state
+            .storage
+            .set_window_geometry_sync(width, height, maximized)
+        {
+            warn!(error = %e, "Failed to persist window geometry on maximize");
+        }
     });
 
     split_view.connect_show_sidebar_notify(move |sv| {
@@ -115,7 +154,28 @@ pub fn build_window(app: &Application, state: &Arc<AppState>) -> ApplicationWind
     window
 }
 
+/// Persist window geometry and playback session synchronously.
+///
+/// Runs on the `GLib` main thread during `close_request` so the data is
+/// durable before `Application::quit` exits the main loop.
+fn persist_geometry_and_session(state: &AppState, width: i32, height: i32, maximized: bool) {
+    if let Err(e) = state
+        .storage
+        .set_window_geometry_sync(width, height, maximized)
+    {
+        warn!(error = %e, "Failed to persist window geometry");
+    }
+    if let Err(e) = state.persist_playback_session() {
+        warn!(error = %e, "Failed to persist session on window close");
+    }
+}
+
 /// Load HIG-compliant CSS transitions (200 ms ease) and style rules.
+///
+/// Applies 200 ms ease transitions to the header bar and to the
+/// `AdwOverlaySplitView` sidebar reveal/hide per FR-023/FR-025. The split-view
+/// rule targets the overlay's sidebar and content so both the slide-in
+/// (FR-023) and slide-out (FR-025) use the same HIG timing.
 fn load_hig_css() {
     let Some(display) = Display::default() else {
         return;
@@ -125,6 +185,22 @@ fn load_hig_css() {
         "
         headerbar {
             transition: background 200ms ease;
+        }
+        overlay-split-view {
+            transition: all 200ms ease;
+        }
+        overlay-split-view > widget {
+            transition: all 200ms ease;
+        }
+        navigation-split-view {
+            transition: all 200ms ease;
+        }
+        navigation-split-view > widget {
+            transition: all 200ms ease;
+        }
+        .sidebar,
+        .content {
+            transition: all 200ms ease;
         }
         ",
     );

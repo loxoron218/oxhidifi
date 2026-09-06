@@ -1,6 +1,6 @@
 //! Pure channel-conversion DSP: downmixing and upmixing audio frames.
 
-use std::iter::repeat_n;
+use std::{borrow::Cow, iter::repeat_n};
 
 use crate::playback::decoder::DecodedSamples;
 
@@ -10,20 +10,7 @@ fn downsample_frames(samples: &[f32], src_channels: usize, dst_channels: usize) 
     let frames = samples.len().checked_div(src_channels).unwrap_or(0);
     let mut out = Vec::with_capacity(frames.saturating_mul(dst_channels));
     for frame in samples.chunks_exact(src_channels) {
-        for out_ch in 0..dst_channels {
-            let start_ch = out_ch
-                .saturating_mul(src_channels)
-                .checked_div(dst_channels)
-                .unwrap_or(0);
-            let end_ch = out_ch
-                .saturating_add(1)
-                .saturating_mul(src_channels)
-                .checked_div(dst_channels)
-                .unwrap_or(0);
-            let group_len = end_ch.saturating_sub(start_ch);
-            let count = u8::try_from(group_len).unwrap_or(1);
-            out.push(frame.iter().skip(start_ch).take(group_len).sum::<f32>() / f32::from(count));
-        }
+        push_downmixed_frame(frame, src_channels, dst_channels, &mut out);
     }
     out
 }
@@ -59,27 +46,118 @@ fn downmix(samples: &[f32], src_channels: usize, dst_channels: usize) -> Vec<f32
 
 /// Return `batch.samples` as-is if channel counts match, otherwise downmix.
 ///
-/// When channel counts match, the returned buffer is a fresh allocation owned
-/// by the caller. When they differ, a downmix/upmix buffer is allocated.
+/// When channel counts match, the returned [`Cow::Borrowed`] slice avoids any
+/// heap allocation. When they differ, a downmix/upmix buffer is allocated.
+/// This preserves the zero-allocation guarantee on the audio hot path for the
+/// common case where source and device channel counts coincide.
 #[must_use]
-pub fn maybe_downmix(
-    batch: &DecodedSamples<'_>,
+pub fn maybe_downmix<'a>(
+    batch: &'a DecodedSamples<'a>,
     src_channels: usize,
     dst_channels: usize,
-) -> Vec<f32> {
+) -> Cow<'a, [f32]> {
     if src_channels == dst_channels {
-        batch.samples.to_vec()
+        Cow::Borrowed(batch.samples)
     } else {
-        downmix(batch.samples, src_channels, dst_channels)
+        Cow::Owned(downmix(batch.samples, src_channels, dst_channels))
+    }
+}
+
+/// Push a single downmixed frame to `out`.
+fn push_downmixed_frame(
+    frame: &[f32],
+    src_channels: usize,
+    dst_channels: usize,
+    out: &mut Vec<f32>,
+) {
+    for out_ch in 0..dst_channels {
+        let start_ch = out_ch
+            .saturating_mul(src_channels)
+            .checked_div(dst_channels)
+            .unwrap_or(0);
+        let end_ch = out_ch
+            .saturating_add(1)
+            .saturating_mul(src_channels)
+            .checked_div(dst_channels)
+            .unwrap_or(0);
+        let group_len = end_ch.saturating_sub(start_ch);
+        let count = u8::try_from(group_len).unwrap_or(1);
+        out.push(frame.iter().skip(start_ch).take(group_len).sum::<f32>() / f32::from(count));
+    }
+}
+
+/// Fill `scratch` with channel-converted samples.
+///
+/// Clears `scratch` and populates it with the converted interleaved frames.
+/// The caller must ensure `src_channels != dst_channels`; when equal, the
+/// scratch buffer is left untouched.
+pub fn fill_channel_scratch(
+    samples: &[f32],
+    src_channels: usize,
+    dst_channels: usize,
+    scratch: &mut Vec<f32>,
+) {
+    scratch.clear();
+    if dst_channels > src_channels {
+        let pad = dst_channels.saturating_sub(src_channels);
+        let frames = samples.len().checked_div(src_channels).unwrap_or(0);
+        scratch.reserve(frames.saturating_mul(dst_channels));
+        for frame in samples.chunks_exact(src_channels) {
+            scratch.extend_from_slice(frame);
+            scratch.extend(repeat_n(0.0, pad));
+        }
+    } else {
+        let frames = samples.len().checked_div(src_channels).unwrap_or(0);
+        scratch.reserve(frames.saturating_mul(dst_channels));
+        for frame in samples.chunks_exact(src_channels) {
+            push_downmixed_frame(frame, src_channels, dst_channels, scratch);
+        }
+    }
+}
+
+/// Channel conversion with a reusable scratch buffer.
+///
+/// When `src_channels == dst_channels`, returns a borrowed slice without
+/// touching `scratch`. Otherwise clears `scratch`, fills it with the
+/// converted samples, and returns a borrowed view of `scratch`.
+#[must_use]
+pub fn maybe_downmix_with_scratch<'a, 'b>(
+    batch: &'a DecodedSamples<'a>,
+    src_channels: usize,
+    dst_channels: usize,
+    scratch: &'b mut Vec<f32>,
+) -> Cow<'a, [f32]>
+where
+    'b: 'a,
+{
+    if src_channels == dst_channels {
+        Cow::Borrowed(batch.samples)
+    } else {
+        fill_channel_scratch(batch.samples, src_channels, dst_channels, scratch);
+        Cow::Borrowed(scratch.as_slice())
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
+
     use crate::playback::{
-        channel::{downmix, maybe_downmix},
+        channel::{downmix, maybe_downmix, maybe_downmix_with_scratch},
         decoder::{AudioParams, DecodedSamples},
     };
+
+    fn stereo_samples() -> DecodedSamples<'static> {
+        DecodedSamples {
+            samples: &[0.5, -0.5, 0.25, -0.25],
+            params: AudioParams {
+                sample_rate: 44100,
+                channels: 2,
+                duration_seconds: 0.0,
+                bit_depth: Some(16),
+            },
+        }
+    }
 
     fn assert_samples_close(actual: &[f32], expected: &[f32], tolerance: f32) {
         assert_eq!(
@@ -149,16 +227,13 @@ mod tests {
 
     #[test]
     fn maybe_downmix_no_downmix_when_channels_match() {
-        let batch = DecodedSamples {
-            samples: &[0.5, -0.5, 0.25, -0.25],
-            params: AudioParams {
-                sample_rate: 44100,
-                channels: 2,
-                duration_seconds: 0.0,
-            },
-        };
+        let batch = stereo_samples();
         let result = maybe_downmix(&batch, 2, 2);
-        assert_eq!(result, vec![0.5, -0.5, 0.25, -0.25]);
+        assert_eq!(result.as_ref(), &[0.5, -0.5, 0.25, -0.25]);
+        assert!(
+            matches!(result, Cow::Borrowed(_)),
+            "equal channels must borrow without allocation"
+        );
     }
 
     #[test]
@@ -169,11 +244,64 @@ mod tests {
                 sample_rate: 44100,
                 channels: 2,
                 duration_seconds: 0.0,
+                bit_depth: Some(16),
             },
         };
         let result = maybe_downmix(&batch, 2, 1);
         assert_eq!(result.len(), 1);
-        assert_samples_close(&result, &[0.5], f32::EPSILON);
+        assert_samples_close(result.as_ref(), &[0.5], f32::EPSILON);
+        assert!(
+            matches!(result, Cow::Owned(_)),
+            "differing channels must allocate owned buffer"
+        );
+    }
+
+    #[test]
+    fn maybe_downmix_with_scratch_borrows_when_channels_match() {
+        let batch = stereo_samples();
+        let mut scratch = Vec::with_capacity(16);
+        let cap_before = scratch.capacity();
+        let result = maybe_downmix_with_scratch(&batch, 2, 2, &mut scratch);
+        assert_eq!(result.as_ref(), &[0.5, -0.5, 0.25, -0.25]);
+        assert_eq!(
+            scratch.capacity(),
+            cap_before,
+            "scratch must not be touched when channels match"
+        );
+        assert!(scratch.is_empty(), "scratch must stay empty when borrowing");
+    }
+
+    #[test]
+    fn maybe_downmix_with_scratch_reuses_allocation() {
+        let batch = DecodedSamples {
+            samples: &[0.8, 0.2, -0.6, -0.4],
+            params: AudioParams {
+                sample_rate: 44100,
+                channels: 2,
+                duration_seconds: 0.0,
+                bit_depth: Some(16),
+            },
+        };
+        let mut scratch = Vec::with_capacity(16);
+        let result = maybe_downmix_with_scratch(&batch, 2, 1, &mut scratch);
+        assert_samples_close(result.as_ref(), &[0.5, -0.5], f32::EPSILON);
+        let cap_after_first = scratch.capacity();
+        let batch2 = DecodedSamples {
+            samples: &[1.0, -1.0, 0.5, -0.5],
+            params: AudioParams {
+                sample_rate: 44100,
+                channels: 2,
+                duration_seconds: 0.0,
+                bit_depth: Some(16),
+            },
+        };
+        let result2 = maybe_downmix_with_scratch(&batch2, 2, 1, &mut scratch);
+        assert_samples_close(result2.as_ref(), &[0.0, 0.0], f32::EPSILON);
+        assert_eq!(
+            scratch.capacity(),
+            cap_after_first,
+            "scratch capacity must remain stable across conversions"
+        );
     }
 
     #[test]

@@ -12,19 +12,23 @@ use std::sync::{
 use {
     cpal::{
         Device,
-        SampleFormat::{self, F32, I16, U16},
+        SampleFormat::{self, F32, I16, I32, U16, U32},
         Stream, StreamConfig, default_host,
         traits::{DeviceTrait, HostTrait, StreamTrait},
     },
     num_traits::cast::AsPrimitive,
     rtrb::{Consumer, Producer, RingBuffer},
-    tracing::{error, info, warn},
+    tracing::{error, warn},
 };
 
 use crate::playback::{
     OutputError::{self, NoDeviceAvailable, Output, StreamConfigError},
     alsa_volume::AlsaVolumeControl,
-    devices::{OutputMode, alsa_card_name, prioritize_devices},
+    devices::{
+        OutputMode::{self, BitPerfect, Resampled},
+        prioritize_devices,
+    },
+    native_support::{open_alsa_volume, supports_native},
     stream::build_stream,
 };
 
@@ -73,12 +77,19 @@ impl AudioOutput {
     pub fn open(
         ring_capacity: usize,
         device_lost: &Arc<AtomicBool>,
+        desired_mode: OutputMode,
     ) -> Result<(Self, Producer<f32>), OutputError> {
         let volume_atomic = Arc::new(AtomicU32::new(f32::to_bits(1.0)));
         let host = default_host();
 
         if let Some(device) = host.default_output_device() {
-            match Self::try_open_device(&device, ring_capacity, device_lost, &volume_atomic) {
+            match Self::try_open_device(
+                &device,
+                ring_capacity,
+                device_lost,
+                &volume_atomic,
+                desired_mode,
+            ) {
                 Ok(result) => return Ok(result),
                 Err(e) => warn!(error = %e, "Default audio device failed, trying fallback devices"),
             }
@@ -97,7 +108,13 @@ impl AudioOutput {
 
         let mut last_err = NoDeviceAvailable;
         for device in &devices {
-            match Self::try_open_device(device, ring_capacity, device_lost, &volume_atomic) {
+            match Self::try_open_device(
+                device,
+                ring_capacity,
+                device_lost,
+                &volume_atomic,
+                desired_mode,
+            ) {
                 Ok(result) => return Ok(result),
                 Err(e) => last_err = e,
             }
@@ -127,6 +144,7 @@ impl AudioOutput {
         ring_capacity: usize,
         device_lost: &Arc<AtomicBool>,
         volume_atomic: &Arc<AtomicU32>,
+        desired_mode: OutputMode,
     ) -> Result<(Self, Producer<f32>), OutputError> {
         let (producer, consumer) = RingBuffer::new(ring_capacity);
         let flush_flag = Arc::new(AtomicBool::new(false));
@@ -136,6 +154,7 @@ impl AudioOutput {
             flush_flag,
             Arc::clone(device_lost),
             Arc::clone(volume_atomic),
+            desired_mode,
         )
         .map(|output| (output, producer))
     }
@@ -151,6 +170,7 @@ impl AudioOutput {
         flush_flag: Arc<AtomicBool>,
         device_lost: Arc<AtomicBool>,
         volume_atomic: Arc<AtomicU32>,
+        desired_mode: OutputMode,
     ) -> Result<Self, OutputError> {
         let device_id = device
             .id()
@@ -191,6 +211,22 @@ impl AudioOutput {
                 Arc::clone(&device_lost),
                 Arc::clone(&volume_atomic),
             )?,
+            I32 => build_stream::<i32>(
+                device,
+                &config,
+                consumer,
+                Arc::clone(&flush_flag),
+                Arc::clone(&device_lost),
+                Arc::clone(&volume_atomic),
+            )?,
+            U32 => build_stream::<u32>(
+                device,
+                &config,
+                consumer,
+                Arc::clone(&flush_flag),
+                Arc::clone(&device_lost),
+                Arc::clone(&volume_atomic),
+            )?,
             fmt => {
                 return Err(StreamConfigError(format!(
                     "unsupported sample format: {fmt:?}"
@@ -200,8 +236,18 @@ impl AudioOutput {
 
         stream.play().map_err(|e| Output(e.to_string()))?;
 
-        let mode = OutputMode::Resampled;
-        let alsa_volume = None;
+        let (mode, alsa_volume) = match desired_mode {
+            BitPerfect => {
+                let alsa = open_alsa_volume(
+                    &device
+                        .id()
+                        .map_or_else(|_| String::new(), |id| id.to_string()),
+                );
+                volume_atomic.store(f32::to_bits(1.0), Relaxed);
+                (BitPerfect, alsa)
+            }
+            Resampled => (Resampled, None),
+        };
 
         Ok(Self {
             stream,
@@ -264,27 +310,12 @@ impl AudioOutput {
         }
         self.mode = mode;
         match mode {
-            OutputMode::BitPerfect => {
-                self.alsa_volume = Self::open_alsa_volume(&self.device_id);
+            BitPerfect => {
+                self.alsa_volume = open_alsa_volume(&self.device_id);
                 self.volume_atomic.store(f32::to_bits(1.0), Relaxed);
             }
-            OutputMode::Resampled => {
+            Resampled => {
                 self.alsa_volume = None;
-            }
-        }
-    }
-
-    /// Attempt to initialise the ALSA hardware volume controller.
-    fn open_alsa_volume(device_id: &str) -> Option<AlsaVolumeControl> {
-        let card = alsa_card_name(device_id);
-        match AlsaVolumeControl::new(&card) {
-            Ok(ctl) => {
-                info!(card = %card, "ALSA hardware volume control initialised");
-                Some(ctl)
-            }
-            Err(e) => {
-                warn!(error = %e, "Failed to initialise ALSA volume control, falling back to no volume scaling");
-                None
             }
         }
     }
@@ -314,17 +345,17 @@ impl AudioOutput {
 
     /// Check whether the device supports bit-perfect playback at the
     /// given sample rate and bit depth.
-    ///
-    /// Returns `true` if the device's native config matches the requested
-    /// parameters.
     #[must_use]
-    pub const fn supports_native(&self, sample_rate: u32, _: u16) -> bool {
-        self.config.sample_rate == sample_rate
+    pub const fn supports_native(&self, sample_rate: u32, bit_depth: u16) -> bool {
+        supports_native(
+            sample_rate,
+            bit_depth,
+            self.config.sample_rate,
+            self.sample_format,
+        )
     }
 
     /// Query whether a given sample rate is supported by the current device.
-    ///
-    /// Returns `true` if the device supports the given sample rate natively.
     #[must_use]
     pub const fn supports_sample_rate(&self, sample_rate: u32) -> bool {
         sample_rate == self.config.sample_rate

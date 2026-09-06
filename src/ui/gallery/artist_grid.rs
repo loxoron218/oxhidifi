@@ -32,9 +32,7 @@ use crate::{
         gallery::{
             avatar::build_artist_card,
             coalescer::spawn_listen_sort_zoom,
-            empty::{
-                EmptyStateParams, LibraryGrid, add_scrolled, build_empty_state, build_library_grid,
-            },
+            empty::{LibraryGrid, add_scrolled, build_library_grid, show_library_empty},
             grid_flow::{build_grid, fill_grid_batch, resize_grid_batched},
             keyboard_nav::setup_flowbox_keyboard_nav,
             narrow_flag::NarrowState,
@@ -256,23 +254,13 @@ fn build_artist_mode(
 }
 
 /// Show the empty‑artists state widget, replacing any existing grid child.
+///
+/// Two-state per FR-007: "No Music Library Configured" when no directories
+/// are configured, "No Music Found" when directories exist but contain no
+/// artists.
 fn show_artists_empty(state: &Arc<AppState>, stack: &Stack) {
     state.artist_grid.ready.store(false, Relaxed);
-    let empty = build_empty_state(
-        state,
-        &EmptyStateParams {
-            icon_name: "avatar-default-symbolic",
-            icon_label: "Artist icon",
-            heading: "No Artists Found",
-            heading_label: "No artists found",
-            description: "Add a music folder to see your artists here.",
-            description_label: "Add a music folder to see your artists here.",
-        },
-    );
-    if stack.child_by_name("grid").is_none() {
-        stack.add_named(&empty, Some("grid"));
-    }
-    stack.set_visible_child_name("grid");
+    show_library_empty(state, stack, "avatar-default-symbolic", "Artist icon");
 }
 
 /// Lazily build a view mode that wasn't constructed at startup.

@@ -196,7 +196,7 @@ fn bind_row(list_item: &ListItem) {
 #[cfg(test)]
 mod tests {
     use {
-        anyhow::{Result, ensure},
+        anyhow::{Result, anyhow, ensure},
         libadwaita::{
             gio::{ListStore, prelude::ListModelExt},
             glib::{BoxedAnyObject, prelude::StaticType},
@@ -218,18 +218,18 @@ mod tests {
             .build()
     }
 
-    fn queue_and_store() -> (PlaybackQueue, ListStore) {
+    fn queue_and_store() -> Result<(PlaybackQueue, ListStore)> {
         let queue = PlaybackQueue::new();
-        queue.set_queue(vec![10, 20]);
+        queue.set_queue(vec![10, 20]).map_err(|e| anyhow!("{e}"))?;
         let store = make_store();
         let names = vec![(10, "Alpha".to_string()), (20, "Beta".to_string())];
         populate_store(&store, &queue, &names);
-        (queue, store)
+        Ok((queue, store))
     }
 
     #[test]
     fn try_remove_entry_removes_in_bounds() -> Result<()> {
-        let (queue, store) = queue_and_store();
+        let (queue, store) = queue_and_store()?;
         try_remove_entry(&queue, &store, 0);
         ensure!(store.n_items() == 1);
         ensure!(queue.len() == 1);
@@ -239,7 +239,7 @@ mod tests {
 
     #[test]
     fn try_remove_entry_out_of_bounds_is_noop() -> Result<()> {
-        let (queue, store) = queue_and_store();
+        let (queue, store) = queue_and_store()?;
         try_remove_entry(&queue, &store, 5);
         ensure!(store.n_items() == 2);
         ensure!(queue.len() == 2);
@@ -248,7 +248,7 @@ mod tests {
 
     #[test]
     fn try_remove_entry_shorter_store_skips_oob_removal() -> Result<()> {
-        let (queue, store) = queue_and_store();
+        let (queue, store) = queue_and_store()?;
         store.remove(0);
         ensure!(store.n_items() == 1);
         try_remove_entry(&queue, &store, 1);
@@ -259,7 +259,7 @@ mod tests {
 
     #[test]
     fn reorder_entry_out_of_bounds_is_noop() -> Result<()> {
-        let (queue, store) = queue_and_store();
+        let (queue, store) = queue_and_store()?;
         reorder_entry(&queue, &store, 5, 0);
         ensure!(queue.tracks() == vec![10, 20]);
         ensure!(store.n_items() == 2);
@@ -268,7 +268,7 @@ mod tests {
 
     #[test]
     fn reorder_entry_swaps_in_queue_and_store() -> Result<()> {
-        let (queue, store) = queue_and_store();
+        let (queue, store) = queue_and_store()?;
         reorder_entry(&queue, &store, 0, 1);
         ensure!(queue.tracks() == vec![20, 10]);
         ensure!(store.n_items() == 2);

@@ -151,7 +151,7 @@ impl PlaybackEngine {
 mod tests {
     use std::{collections::HashMap, path::PathBuf};
 
-    use anyhow::{Result, anyhow, bail};
+    use anyhow::{Result, anyhow, bail, ensure};
 
     use crate::playback::{
         PlaybackError::{NoDeviceAvailable, Output, QueueEmpty, TrackNotFound},
@@ -160,13 +160,17 @@ mod tests {
         transport::PlaybackTransport,
     };
 
-    fn setup_queue(engine: &PlaybackEngine, track_ids: Vec<i64>) {
+    fn setup_queue(engine: &PlaybackEngine, track_ids: Vec<i64>) -> Result<()> {
         let paths: HashMap<_, _> = track_ids
             .iter()
             .map(|id| (*id, PathBuf::from(format!("/fake/{id}.flac"))))
             .collect();
         engine.set_track_paths(paths);
-        engine.queue().set_queue(track_ids);
+        engine
+            .queue()
+            .set_queue(track_ids)
+            .map_err(|e| anyhow!("{e}"))?;
+        Ok(())
     }
 
     #[test]
@@ -229,7 +233,7 @@ mod tests {
     #[test]
     fn play_queue_succeeds_when_path_is_set() -> Result<()> {
         let engine = PlaybackEngine::new();
-        setup_queue(&engine, vec![1, 2, 3]);
+        setup_queue(&engine, vec![1, 2, 3])?;
         let result = engine.play_queue(vec![1, 2, 3]);
         match result {
             Err(NoDeviceAvailable | Output(_)) | Ok(()) => Ok(()),
@@ -254,10 +258,14 @@ mod tests {
     }
 
     #[test]
-    fn next_track_returns_queue_empty_when_single() {
+    fn next_track_returns_queue_empty_when_single() -> Result<()> {
         let engine = PlaybackEngine::new();
-        setup_queue(&engine, vec![1]);
-        assert!(matches!(engine.next_track(), Err(QueueEmpty)));
+        setup_queue(&engine, vec![1])?;
+        ensure!(
+            matches!(engine.next_track(), Err(QueueEmpty)),
+            "expected QueueEmpty when next_track with single track"
+        );
+        Ok(())
     }
 
     #[test]
@@ -282,7 +290,7 @@ mod tests {
     #[test]
     fn play_at_valid_sets_current_index() -> Result<()> {
         let engine = PlaybackEngine::new();
-        setup_queue(&engine, vec![1, 2, 3]);
+        setup_queue(&engine, vec![1, 2, 3])?;
         match engine.play_at(vec![1, 2, 3], 1) {
             Ok(()) | Err(NoDeviceAvailable | Output(_)) => {}
             Err(e) => bail!("unexpected error: {e}"),

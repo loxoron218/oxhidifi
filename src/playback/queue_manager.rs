@@ -4,6 +4,11 @@ use std::sync::Arc;
 
 use parking_lot::Mutex;
 
+use crate::{
+    playback::queue_index::{adjust_index_after_move, adjust_index_after_remove},
+    storage::StorageError::{self, QueueFull},
+};
+
 /// Thread-safe playback queue managing ordered track IDs with navigation.
 #[derive(Debug, Clone)]
 pub struct PlaybackQueue {
@@ -12,6 +17,9 @@ pub struct PlaybackQueue {
 }
 
 impl PlaybackQueue {
+    /// Maximum number of entries allowed in a single queue instance (FR-021).
+    pub const MAX_CAPACITY: usize = 100_000;
+
     /// Create a new empty playback queue.
     #[must_use]
     pub fn new() -> Self {
@@ -24,7 +32,17 @@ impl PlaybackQueue {
     }
 
     /// Replace the entire queue and start from the beginning.
-    pub fn set_queue(&self, track_ids: Vec<i64>) {
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::storage::StorageError::QueueFull`] if `track_ids`
+    /// exceeds [`Self::MAX_CAPACITY`].
+    pub fn set_queue(&self, track_ids: Vec<i64>) -> Result<(), crate::storage::StorageError> {
+        if track_ids.len() > Self::MAX_CAPACITY {
+            return Err(QueueFull {
+                max: Self::MAX_CAPACITY,
+            });
+        }
         let mut inner = self.inner.lock();
         inner.tracks = track_ids;
         inner.current_index = if inner.tracks.is_empty() {
@@ -32,6 +50,7 @@ impl PlaybackQueue {
         } else {
             Some(0)
         };
+        Ok(())
     }
 
     /// Set the current index to `index`.
@@ -49,12 +68,32 @@ impl PlaybackQueue {
     }
 
     /// Append a track to the end of the queue.
-    pub fn append(&self, track_id: i64) {
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::storage::StorageError::QueueFull`] if the queue already
+    /// contains [`Self::MAX_CAPACITY`] entries.
+    pub fn append(&self, track_id: i64) -> Result<(), StorageError> {
         let mut inner = self.inner.lock();
+        if inner.tracks.len() >= Self::MAX_CAPACITY {
+            return Err(QueueFull {
+                max: Self::MAX_CAPACITY,
+            });
+        }
         inner.tracks.push(track_id);
         if inner.current_index.is_none() {
             inner.current_index = Some(0);
         }
+        drop(inner);
+        Ok(())
+    }
+
+    /// Try to append a track, returning `false` when the cap is hit.
+    ///
+    /// Convenience for UI call-sites that only need a boolean.
+    #[must_use]
+    pub fn try_append(&self, track_id: i64) -> bool {
+        self.append(track_id).is_ok()
     }
 
     /// Remove a track by its position in the queue.
@@ -190,190 +229,169 @@ struct PlaybackQueueInner {
     current_index: Option<usize>,
 }
 
-/// Adjust current index after removing a track at `position`.
-const fn adjust_index_after_remove(idx: usize, position: usize, len: usize) -> Option<usize> {
-    if len == 0 {
-        None
-    } else if idx > position {
-        Some(idx.saturating_sub(1))
-    } else if idx >= len {
-        Some(len.saturating_sub(1))
-    } else {
-        Some(idx)
-    }
-}
-
-/// Adjust current index after moving a track from `from` to `to`.
-const fn adjust_index_after_move(idx: usize, from: usize, to: usize) -> usize {
-    if idx == from {
-        to
-    } else if from < idx && to >= idx {
-        idx.saturating_sub(1)
-    } else if from > idx && to <= idx {
-        match idx.checked_add(1) {
-            Some(next) => next,
-            None => idx,
-        }
-    } else {
-        idx
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use crate::playback::queue_manager::{
-        PlaybackQueue, adjust_index_after_move, adjust_index_after_remove,
-    };
+    use anyhow::{Result, anyhow, ensure};
 
-    fn three_track_queue() -> PlaybackQueue {
+    use crate::playback::queue_manager::PlaybackQueue;
+
+    fn three_track_queue() -> Result<PlaybackQueue> {
         let q = PlaybackQueue::new();
-        q.set_queue(vec![10, 20, 30]);
-        q
+        q.set_queue(vec![10, 20, 30]).map_err(|e| anyhow!("{e}"))?;
+        Ok(q)
     }
 
     #[test]
-    fn new_queue_is_empty() {
+    fn new_queue_is_empty() -> Result<()> {
         let q = PlaybackQueue::new();
-        assert!(q.is_empty());
-        assert_eq!(q.len(), 0);
-        assert!(q.current().is_none());
+        ensure!(q.is_empty(), "q should be empty");
+        ensure!(q.is_empty(), "q.len should be 0");
+        ensure!(q.current().is_none(), "q.current should be None");
+        Ok(())
     }
 
     #[test]
-    fn set_queue_starts_at_first() {
-        let q = three_track_queue();
-        assert_eq!(q.current(), Some(10));
-        assert_eq!(q.len(), 3);
+    fn set_queue_starts_at_first() -> Result<()> {
+        let q = three_track_queue()?;
+        ensure!(q.current() == Some(10), "current should be Some(10)");
+        ensure!(q.len() == 3, "len should be 3");
+        Ok(())
     }
 
     #[test]
-    fn next_advances_index() {
-        let q = three_track_queue();
-        assert_eq!(q.next(), Some(20));
-        assert_eq!(q.next(), Some(30));
-        assert_eq!(q.next(), None);
+    fn next_advances_index() -> Result<()> {
+        let q = three_track_queue()?;
+        ensure!(q.next() == Some(20), "next should be Some(20)");
+        ensure!(q.next() == Some(30), "next should be Some(30)");
+        ensure!(q.next().is_none(), "next should be None at end");
+        Ok(())
     }
 
     #[test]
-    fn previous_goes_back() {
-        let q = three_track_queue();
-        assert_eq!(q.next(), Some(20));
-        assert_eq!(q.next(), Some(30));
-        assert_eq!(q.previous(), Some(20));
-        assert_eq!(q.previous(), Some(10));
-        assert_eq!(q.previous(), None);
+    fn previous_goes_back() -> Result<()> {
+        let q = three_track_queue()?;
+        ensure!(q.next() == Some(20), "next should be Some(20)");
+        ensure!(q.next() == Some(30), "next should be Some(30)");
+        ensure!(q.previous() == Some(20), "previous should be Some(20)");
+        ensure!(q.previous() == Some(10), "previous should be Some(10)");
+        ensure!(q.previous().is_none(), "previous should be None at start");
+        Ok(())
     }
 
     #[test]
-    fn append_adds_to_end() {
+    fn append_adds_to_end() -> Result<()> {
         let q = PlaybackQueue::new();
-        q.set_queue(vec![10, 20]);
-        q.append(30);
-        assert_eq!(q.len(), 3);
-        assert_eq!(q.upcoming(), vec![20, 30]);
+        q.set_queue(vec![10, 20]).map_err(|e| anyhow!("{e}"))?;
+        ensure!(matches!(q.append(30), Ok(())), "append should succeed");
+        ensure!(q.len() == 3, "len should be 3");
+        ensure!(q.upcoming() == vec![20, 30], "upcoming should be [20,30]");
+        Ok(())
     }
 
     #[test]
-    fn remove_adjusts_current() {
+    fn remove_adjusts_current() -> Result<()> {
         let q = PlaybackQueue::new();
-        q.set_queue(vec![10, 20, 30]);
+        q.set_queue(vec![10, 20, 30]).map_err(|e| anyhow!("{e}"))?;
 
         let removed = q.remove(0);
-        assert_eq!(removed, Some(10));
+        ensure!(removed == Some(10), "removed should be Some(10)");
 
-        assert_eq!(q.current(), Some(20));
+        ensure!(
+            q.current() == Some(20),
+            "current should be Some(20) after remove"
+        );
+        Ok(())
     }
 
     #[test]
-    fn clear_resets_everything() {
+    fn clear_resets_everything() -> Result<()> {
         let q = PlaybackQueue::new();
-        q.set_queue(vec![10, 20, 30]);
+        q.set_queue(vec![10, 20, 30]).map_err(|e| anyhow!("{e}"))?;
         q.clear();
-        assert!(q.is_empty());
-        assert!(q.current().is_none());
+        ensure!(q.is_empty(), "assert failed");
+        ensure!(q.current().is_none(), "assert failed");
+        Ok(())
     }
 
     #[test]
-    fn set_current_index_updates_current() {
-        let q = three_track_queue();
+    fn set_current_index_updates_current() -> Result<()> {
+        let q = three_track_queue()?;
         q.set_current_index(1);
-        assert_eq!(q.current(), Some(20));
-        assert_eq!(q.current_index(), Some(1));
+        ensure!(q.current() == Some(20), "current should be Some(20)");
+        ensure!(q.current_index() == Some(1), "index should be Some(1)");
+        Ok(())
     }
 
     #[test]
-    fn peek_next_returns_upcoming_without_advancing() {
-        let q = three_track_queue();
-        assert_eq!(q.peek_next(), Some(20));
-        assert_eq!(q.peek_next(), Some(20));
-        assert_eq!(q.current_index(), Some(0));
+    fn peek_next_returns_upcoming_without_advancing() -> Result<()> {
+        let q = three_track_queue()?;
+        ensure!(q.peek_next() == Some(20), "peek_next should be Some(20)");
+        ensure!(
+            q.peek_next() == Some(20),
+            "peek_next should still be Some(20)"
+        );
+        ensure!(q.current_index() == Some(0), "index should remain Some(0)");
+        Ok(())
     }
 
     #[test]
-    fn peek_next_none_at_end_or_single_track() {
-        let q = three_track_queue();
+    fn peek_next_none_at_end_or_single_track() -> Result<()> {
+        let q = three_track_queue()?;
         q.set_current_index(2);
-        assert!(q.peek_next().is_none());
+        ensure!(q.peek_next().is_none(), "assert failed");
 
         let single = PlaybackQueue::new();
-        single.set_queue(vec![42]);
-        assert!(single.peek_next().is_none());
+        single.set_queue(vec![42]).map_err(|e| anyhow!("{e}"))?;
+        ensure!(single.peek_next().is_none(), "assert failed");
+        Ok(())
     }
 
     #[test]
-    fn move_track_moving_current_updates_index_to_target() {
-        let q = three_track_queue();
+    fn move_track_moving_current_updates_index_to_target() -> Result<()> {
+        let q = three_track_queue()?;
         q.move_track(0, 2);
-        assert_eq!(q.current(), Some(10));
-        assert_eq!(q.current_index(), Some(2));
+        ensure!(
+            q.current() == Some(10),
+            "current should be Some(10) after move"
+        );
+        ensure!(q.current_index() == Some(2), "index should be Some(2)");
+        Ok(())
     }
 
     #[test]
-    fn move_track_moving_before_current_decrements_index() {
-        let q = three_track_queue();
+    fn move_track_moving_before_current_decrements_index() -> Result<()> {
+        let q = three_track_queue()?;
         q.set_current_index(2);
         q.move_track(0, 2);
-        assert_eq!(q.current(), Some(30));
-        assert_eq!(q.current_index(), Some(1));
+        ensure!(q.current() == Some(30), "current should be Some(30)");
+        ensure!(q.current_index() == Some(1), "index should be Some(1)");
+        Ok(())
     }
 
     #[test]
-    fn move_track_moving_after_current_increments_index() {
-        let q = three_track_queue();
+    fn move_track_moving_after_current_increments_index() -> Result<()> {
+        let q = three_track_queue()?;
         q.move_track(2, 0);
-        assert_eq!(q.current(), Some(10));
-        assert_eq!(q.current_index(), Some(1));
+        ensure!(q.current() == Some(10), "current should be Some(10)");
+        ensure!(q.current_index() == Some(1), "index should be Some(1)");
+        Ok(())
     }
 
     #[test]
-    fn adjust_index_after_remove_all_cases() {
-        assert_eq!(adjust_index_after_remove(0, 0, 0), None);
-        assert_eq!(adjust_index_after_remove(2, 1, 3), Some(1));
-        assert_eq!(adjust_index_after_remove(2, 2, 2), Some(1));
-        assert_eq!(adjust_index_after_remove(0, 1, 3), Some(0));
+    fn remove_out_of_bounds_returns_none() -> Result<()> {
+        let q = three_track_queue()?;
+        ensure!(q.remove(3).is_none(), "assert failed");
+        ensure!(q.len() == 3, "assert failed");
+        Ok(())
     }
 
     #[test]
-    fn adjust_index_after_move_all_cases() {
-        assert_eq!(adjust_index_after_move(1, 1, 3), 3);
-        assert_eq!(adjust_index_after_move(3, 1, 3), 2);
-        assert_eq!(adjust_index_after_move(0, 2, 0), 1);
-        assert_eq!(adjust_index_after_move(0, 1, 2), 0);
-    }
-
-    #[test]
-    fn remove_out_of_bounds_returns_none() {
-        let q = three_track_queue();
-        assert!(q.remove(3).is_none());
-        assert_eq!(q.len(), 3);
-    }
-
-    #[test]
-    fn remove_at_end_clamps_index() {
-        let q = three_track_queue();
+    fn remove_at_end_clamps_index() -> Result<()> {
+        let q = three_track_queue()?;
         q.set_current_index(2);
-        assert_eq!(q.remove(2), Some(30));
-        assert_eq!(q.current(), Some(20));
-        assert_eq!(q.current_index(), Some(1));
+        ensure!(q.remove(2) == Some(30), "remove should return Some(30)");
+        ensure!(q.current() == Some(20), "current should be Some(20)");
+        ensure!(q.current_index() == Some(1), "index should be Some(1)");
+        Ok(())
     }
 }

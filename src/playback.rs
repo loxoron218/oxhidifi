@@ -6,15 +6,22 @@ pub mod channel;
 pub mod decoder;
 pub mod devices;
 pub mod engine;
+#[cfg(test)]
+pub mod engine_fixture;
 pub mod gapless;
 pub mod layout;
+pub mod native_support;
 pub mod output;
+pub mod pause_toggle;
 pub mod pipeline;
+pub mod queue_index;
 pub mod queue_manager;
 pub mod resampler;
+pub mod ring_push;
 pub mod state;
 pub mod stream;
 pub mod transport;
+pub mod volume;
 pub mod worker;
 
 use std::{
@@ -85,6 +92,9 @@ pub enum PlaybackError {
     /// Playback queue is empty.
     #[error("Queue empty")]
     QueueEmpty,
+    /// Playback queue has reached its maximum capacity.
+    #[error("Queue full (max {max})")]
+    QueueFull { max: usize },
 }
 
 /// Write a WAV file header (PCM, mono/stereo). Does not write audio data.

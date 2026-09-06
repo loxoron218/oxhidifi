@@ -231,42 +231,6 @@ impl SqliteStorage {
             .write()
             .update_memory(|s| s.output_mode = mode);
     }
-
-    /// Get the last playback session data from settings.
-    pub fn get_last_session(&self) -> (Vec<i64>, Option<usize>, Option<i64>, f64, f64) {
-        self.settings.read().get_last_session()
-    }
-
-    /// Persist the current playback session to settings synchronously.
-    ///
-    /// Used on window close, where the write must complete before the
-    /// process exits. Bypasses the debounced async save, which may be
-    /// dropped once the main loop stops before the debounce window
-    /// elapses.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the settings file cannot be written.
-    pub fn set_last_session(
-        &self,
-        queue: Vec<i64>,
-        queue_index: Option<usize>,
-        track_id: Option<i64>,
-        position: f64,
-        duration: f64,
-    ) -> Result<(), StorageError> {
-        self.settings.write().update_memory(|s| {
-            s.last_queue = queue;
-            s.last_queue_index = queue_index;
-            s.last_track_id = track_id;
-            s.last_position = position;
-            s.last_duration = duration;
-        });
-        self.settings
-            .read()
-            .save_sync()
-            .map_err(|e| Database(format!("Failed to save session: {e}")))
-    }
 }
 
 #[cfg(test)]
