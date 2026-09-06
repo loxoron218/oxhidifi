@@ -8,11 +8,11 @@
 pub mod albums;
 pub mod artists;
 pub mod disk_sync;
+pub mod geometry_session;
 pub mod music_dirs;
 pub mod queue;
 pub mod tracks;
 pub mod user_prefs;
-pub mod window_session;
 
 use std::{
     collections::HashMap,

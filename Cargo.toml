@@ -74,7 +74,7 @@ verification-tests = []
 
 [[test]]
 name = "abx"
-path = "tests/abx/main.rs"
+path = "tests/abx/abx_trial.rs"
 
 [[test]]
 name = "load_verification"

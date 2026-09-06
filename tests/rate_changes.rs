@@ -5,7 +5,7 @@
 //! divisor rate. Asserts resampler reconfigures transparently, gapless
 //! transition maintained (inter-track silence < 5 ms), and no audible glitch.
 
-mod audio_rig;
+mod synth_wav;
 
 use {
     anyhow::{Context, Result, bail},
@@ -13,8 +13,8 @@ use {
 };
 
 use {
-    audio_rig::{leading_silence, transition_and_decode, write_wav},
     oxhidifi::playback::resampler::AudioResampler,
+    synth_wav::{leading_silence, transition_and_decode, write_wav},
 };
 
 /// Incompatible sample rate families with no common divisor.

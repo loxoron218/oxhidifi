@@ -4,7 +4,7 @@
 //! reconnects to the same SQLite file, and asserts the queue order, track IDs,
 //! and context are preserved.
 
-mod db_setup;
+mod scratch_store;
 
 use std::path::Path;
 
@@ -20,7 +20,7 @@ use oxhidifi::storage::{
     database::SqliteStorage,
 };
 
-use crate::db_setup::{make_album, make_track};
+use crate::scratch_store::{make_album, make_track};
 
 /// Return the (`context_type`, `context_id`) pair of a queue entry at `idx`,
 /// or `(None, None)` when the entry does not exist.
@@ -96,7 +96,7 @@ mod tests {
 
     use oxhidifi::storage::{Storage, catalog::NewQueueEntry, database::SqliteStorage};
 
-    use crate::{context_at, db_setup::test_storage, insert_track, populate_queue};
+    use crate::{context_at, insert_track, populate_queue, scratch_store::test_storage};
 
     #[test]
     async fn queue_order_ids_and_context_survive_reconnect() -> Result<()> {

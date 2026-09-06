@@ -7,7 +7,7 @@ use {
     tracing::{info, warn},
 };
 
-use crate::playback::{alsa_volume::AlsaVolumeControl, devices::alsa_card_name};
+use crate::playback::{alsa_mixer::AlsaVolumeControl, devices::alsa_card_name};
 
 /// Check whether the device supports bit-perfect playback at the given rate and depth.
 ///

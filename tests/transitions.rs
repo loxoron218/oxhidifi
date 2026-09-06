@@ -1,7 +1,7 @@
 //! SC-002 verification: measure inter-track silence region and assert < 5 ms,
 //! and assert ring buffer underrun count = 0 across 100 consecutive gapless transitions.
 
-mod audio_rig;
+mod synth_wav;
 
 use std::path::Path;
 
@@ -12,7 +12,6 @@ use {
 };
 
 use {
-    audio_rig::{leading_silence, write_wav},
     oxhidifi::playback::{
         decoder::Decoder,
         gapless::GaplessTransitioner,
@@ -20,6 +19,7 @@ use {
         resampler::{AudioResampler, algorithm::create_resampler},
         state::PlaybackEvent::Error,
     },
+    synth_wav::{leading_silence, write_wav},
 };
 
 /// Create a set of temporary WAV files for testing.
@@ -284,9 +284,10 @@ mod tests {
     use anyhow::{Result, anyhow, bail};
 
     use crate::{
-        audio_rig::{leading_silence, transition_and_decode},
-        create_test_wavs, create_test_wavs_with_rates, transition_via_production_pipeline,
-        underrun_detected, verify_production_samples, verify_samples_nonempty_and_silence,
+        create_test_wavs, create_test_wavs_with_rates,
+        synth_wav::{leading_silence, transition_and_decode},
+        transition_via_production_pipeline, underrun_detected, verify_production_samples,
+        verify_samples_nonempty_and_silence,
     };
 
     #[test]

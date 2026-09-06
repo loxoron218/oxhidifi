@@ -4,10 +4,10 @@
 //! extracting metadata, deduplicating tracks, and persisting results to storage.
 
 pub mod events;
+pub mod fingerprint_check;
 pub mod ingest;
-pub mod scan_catalog;
-pub mod scan_hash;
 pub mod screening;
+pub mod tag_resolve;
 pub mod timefmt;
 pub mod walker;
 

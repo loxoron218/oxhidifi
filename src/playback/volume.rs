@@ -3,7 +3,7 @@
 //! FR-020 specifies the slider range 0.0–1.0 mapped to dB attenuation. This
 //! module implements the canonical curve used by both the software volume path
 //! (`src/playback/stream.rs`) and the ALSA hardware volume path
-//! (`src/playback/alsa_volume.rs`). The player panel slider remains linear
+//! (`src/playback/alsa_mixer.rs`). The player panel slider remains linear
 //! 0.0–1.0; the dB conversion is applied only on the audio path.
 
 use num_traits::cast::cast;

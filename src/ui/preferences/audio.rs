@@ -212,9 +212,7 @@ mod tests {
         },
     };
 
-    use crate::{
-        playback::devices::DeviceInfo, ui::preferences::audio_setup::set_preferred_device,
-    };
+    use crate::{playback::devices::DeviceInfo, ui::preferences::audio::set_preferred_device};
 
     fn mock_devices() -> Vec<DeviceInfo> {
         vec![

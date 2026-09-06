@@ -4,7 +4,7 @@
 //! connection, reconnects to the same SQLite file, and asserts everything is
 //! reloaded without re-scanning.
 
-mod db_setup;
+mod scratch_store;
 
 use {
     anyhow::{Context, Result, ensure},
@@ -13,7 +13,7 @@ use {
 
 use oxhidifi::storage::{Storage, catalog::NewArtist, database::SqliteStorage};
 
-use crate::db_setup::{make_album, make_track};
+use crate::scratch_store::{make_album, make_track};
 
 /// Insert one track and return its id.
 ///
@@ -165,7 +165,7 @@ mod tests {
 
     use crate::{
         assert_albums_reloaded, assert_artist_track_counts, assert_artists_reloaded,
-        assert_tracks_reloaded, db_setup::test_storage, populate,
+        assert_tracks_reloaded, populate, scratch_store::test_storage,
     };
 
     #[test]

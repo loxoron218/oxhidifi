@@ -1,6 +1,6 @@
 //! `PreferencesDialog` orchestration for library, audio, and view pages.
 
-mod audio_setup;
+mod audio;
 mod directories;
 mod display;
 
@@ -15,7 +15,7 @@ use libadwaita::{
 use crate::{
     app::runtime::AppState,
     ui::preferences::{
-        audio_setup::build_audio_page, directories::build_library_page, display::build_view_page,
+        audio::build_audio_page, directories::build_library_page, display::build_view_page,
     },
 };
 

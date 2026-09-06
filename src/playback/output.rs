@@ -23,7 +23,7 @@ use {
 
 use crate::playback::{
     OutputError::{self, NoDeviceAvailable, Output, StreamConfigError},
-    alsa_volume::AlsaVolumeControl,
+    alsa_mixer::AlsaVolumeControl,
     devices::{
         OutputMode::{self, BitPerfect, Resampled},
         prioritize_devices,

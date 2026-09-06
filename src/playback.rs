@@ -1,7 +1,7 @@
 //! Audio playback pipeline: decoder, resampler, output, queue, gapless transitions.
 
 pub mod advancer;
-pub mod alsa_volume;
+pub mod alsa_mixer;
 pub mod channel;
 pub mod decoder;
 pub mod devices;
@@ -12,7 +12,7 @@ pub mod gapless;
 pub mod layout;
 pub mod native_support;
 pub mod output;
-pub mod pause_toggle;
+pub mod pause_resume;
 pub mod pipeline;
 pub mod queue_index;
 pub mod queue_manager;

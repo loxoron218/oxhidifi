@@ -14,7 +14,7 @@ use crate::playback::{
     devices::OutputMode::{self, BitPerfect, Resampled},
     engine::{DecodeCommand::Seek, EngineShared},
     gapless::GaplessMode::{Disabled, Enabled},
-    pause_toggle::toggle_play_pause,
+    pause_resume::toggle_play_pause,
     state::{
         MuteState::{Muted, Unmuted},
         PlaybackEvent::{GaplessEnabledChanged, OutputModeChanged, Seeked, Stopped, VolumeChanged},

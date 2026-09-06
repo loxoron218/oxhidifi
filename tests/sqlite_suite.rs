@@ -1,6 +1,6 @@
 //! Integration tests for the storage layer (`SqliteStorage` + `Storage` trait).
 
-mod db_setup;
+mod scratch_store;
 
 #[cfg(test)]
 mod tests {
@@ -16,7 +16,7 @@ mod tests {
         catalog::{NewArtist, NewQueueEntry, QueueContext::Manual, TrackUpdate},
     };
 
-    use crate::db_setup::{make_album, make_track, test_storage};
+    use crate::scratch_store::{make_album, make_track, test_storage};
 
     #[test]
     async fn insert_and_get_artist() -> Result<()> {

@@ -14,7 +14,7 @@ use crate::{
         StorageError::{Database, Serialization},
         StorageResult,
         active_tab::ActiveTab,
-        config::config_fallback::{ensure_parent_dir, load_settings_with_fallback},
+        config::corrupt_recovery::{ensure_parent_dir, load_settings_with_fallback},
         settings::UserSettings,
     },
 };
