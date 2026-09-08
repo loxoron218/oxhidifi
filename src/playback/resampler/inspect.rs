@@ -65,4 +65,24 @@ impl AudioResampler {
                 .input_frames_next()
                 .saturating_mul(self.channels)
     }
+
+    /// Returns the capacity of the input accumulation buffer.
+    ///
+    /// Only compiled for the `verification-tests` feature, which asserts this
+    /// capacity stays constant across `push_input`/`process` calls (zero
+    /// reallocation on the audio hot path).
+    #[cfg(feature = "verification-tests")]
+    #[must_use]
+    pub const fn input_accum_capacity(&self) -> usize {
+        self.input_accum.capacity()
+    }
+
+    /// Returns the capacity of the pre-allocated output buffer.
+    ///
+    /// Only compiled for the `verification-tests` feature.
+    #[cfg(feature = "verification-tests")]
+    #[must_use]
+    pub const fn output_buf_capacity(&self) -> usize {
+        self.output_buf.capacity()
+    }
 }

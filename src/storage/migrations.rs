@@ -10,7 +10,7 @@ use crate::storage::{StorageError::Database, StorageResult};
 ///
 /// Returns an error if any SQL statement fails.
 pub async fn run(pool: &SqlitePool) -> StorageResult<()> {
-    query(
+    _ = query(
         "CREATE TABLE IF NOT EXISTS artists (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL UNIQUE,
@@ -21,7 +21,7 @@ pub async fn run(pool: &SqlitePool) -> StorageResult<()> {
     .await
     .map_err(|e| Database(format!("Migration failed: {e}")))?;
 
-    query(
+    _ = query(
         "CREATE TABLE IF NOT EXISTS albums (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT NOT NULL,
@@ -39,7 +39,7 @@ pub async fn run(pool: &SqlitePool) -> StorageResult<()> {
     .await
     .map_err(|e| Database(format!("Migration failed: {e}")))?;
 
-    query(
+    _ = query(
         "CREATE TABLE IF NOT EXISTS tracks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT NOT NULL,
@@ -66,7 +66,7 @@ pub async fn run(pool: &SqlitePool) -> StorageResult<()> {
     .await
     .map_err(|e| Database(format!("Migration failed: {e}")))?;
 
-    query(
+    _ = query(
         "CREATE TABLE IF NOT EXISTS library_directories (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             path TEXT NOT NULL UNIQUE,
@@ -79,7 +79,7 @@ pub async fn run(pool: &SqlitePool) -> StorageResult<()> {
     .await
     .map_err(|e| Database(format!("Migration failed: {e}")))?;
 
-    query(
+    _ = query(
         "CREATE TABLE IF NOT EXISTS playback_queue (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             track_id INTEGER NOT NULL REFERENCES tracks(id),
@@ -106,27 +106,27 @@ pub async fn run(pool: &SqlitePool) -> StorageResult<()> {
 /// Returns a storage error if any ALTER TABLE or UPDATE fails.
 async fn add_album_format_columns(pool: &SqlitePool) -> StorageResult<()> {
     if !column_exists(pool, "format").await {
-        query("ALTER TABLE albums ADD COLUMN format TEXT NOT NULL DEFAULT ''")
+        _ = query("ALTER TABLE albums ADD COLUMN format TEXT NOT NULL DEFAULT ''")
             .execute(pool)
             .await
             .map_err(|e| Database(format!("Migration failed: {e}")))?;
     }
 
     if !column_exists(pool, "bit_depth").await {
-        query("ALTER TABLE albums ADD COLUMN bit_depth INTEGER")
+        _ = query("ALTER TABLE albums ADD COLUMN bit_depth INTEGER")
             .execute(pool)
             .await
             .map_err(|e| Database(format!("Migration failed: {e}")))?;
     }
 
     if !column_exists(pool, "sample_rate").await {
-        query("ALTER TABLE albums ADD COLUMN sample_rate INTEGER")
+        _ = query("ALTER TABLE albums ADD COLUMN sample_rate INTEGER")
             .execute(pool)
             .await
             .map_err(|e| Database(format!("Migration failed: {e}")))?;
     }
 
-    query(
+    _ = query(
         "UPDATE albums SET format = COALESCE((SELECT UPPER(codec) FROM tracks WHERE \
          tracks.album_id = albums.id LIMIT 1), format_summary), bit_depth = (SELECT bit_depth \
          FROM tracks WHERE tracks.album_id = albums.id LIMIT 1), sample_rate = (SELECT \
@@ -154,32 +154,32 @@ async fn column_exists(pool: &SqlitePool, name: &str) -> bool {
 ///
 /// Returns a storage error if any index creation fails.
 async fn create_indexes(pool: &SqlitePool) -> StorageResult<()> {
-    query("CREATE INDEX IF NOT EXISTS idx_track_album_id ON tracks(album_id)")
+    _ = query("CREATE INDEX IF NOT EXISTS idx_track_album_id ON tracks(album_id)")
         .execute(pool)
         .await
         .map_err(|e| Database(format!("Index creation failed: {e}")))?;
 
-    query("CREATE INDEX IF NOT EXISTS idx_track_artist_id ON tracks(artist_id)")
+    _ = query("CREATE INDEX IF NOT EXISTS idx_track_artist_id ON tracks(artist_id)")
         .execute(pool)
         .await
         .map_err(|e| Database(format!("Index creation failed: {e}")))?;
 
-    query("CREATE INDEX IF NOT EXISTS idx_track_file_path ON tracks(file_path)")
+    _ = query("CREATE INDEX IF NOT EXISTS idx_track_file_path ON tracks(file_path)")
         .execute(pool)
         .await
         .map_err(|e| Database(format!("Index creation failed: {e}")))?;
 
-    query("CREATE INDEX IF NOT EXISTS idx_track_content_hash ON tracks(content_hash)")
+    _ = query("CREATE INDEX IF NOT EXISTS idx_track_content_hash ON tracks(content_hash)")
         .execute(pool)
         .await
         .map_err(|e| Database(format!("Index creation failed: {e}")))?;
 
-    query("CREATE INDEX IF NOT EXISTS idx_album_artist_id ON albums(artist_id)")
+    _ = query("CREATE INDEX IF NOT EXISTS idx_album_artist_id ON albums(artist_id)")
         .execute(pool)
         .await
         .map_err(|e| Database(format!("Index creation failed: {e}")))?;
 
-    query("CREATE INDEX IF NOT EXISTS idx_queue_position ON playback_queue(position)")
+    _ = query("CREATE INDEX IF NOT EXISTS idx_queue_position ON playback_queue(position)")
         .execute(pool)
         .await
         .map_err(|e| Database(format!("Index creation failed: {e}")))?;

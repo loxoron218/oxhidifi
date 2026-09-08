@@ -67,15 +67,21 @@ pub fn build_view_toggle(state: &Arc<AppState>, parent: &Window) -> SplitButton 
     split_btn.set_popover(Some(&popover));
 
     let state_clone = Arc::clone(state);
-    split_btn.connect_clicked(move |btn| {
-        let current_mode = state_clone.storage.get_view_mode();
-        let mode = if current_mode == Grid { Column } else { Grid };
-        btn.set_icon_name(mode.icon_name());
-        btn.set_tooltip_text(Some(mode.tooltip()));
-        let sc = Arc::clone(&state_clone);
-        spawn_future_local(save_view_mode(sc, mode));
-        state_clone.view_mode.send(mode);
-    });
+    state
+        .handles
+        .lock()
+        .retain_signal(split_btn.connect_clicked(move |btn| {
+            let current_mode = state_clone.storage.get_view_mode();
+            let mode = if current_mode == Grid { Column } else { Grid };
+            btn.set_icon_name(mode.icon_name());
+            btn.set_tooltip_text(Some(mode.tooltip()));
+            let sc = Arc::clone(&state_clone);
+            state_clone
+                .handles
+                .lock()
+                .retain_task(spawn_future_local(save_view_mode(sc, mode)));
+            state_clone.view_mode.send(mode);
+        }));
 
     subscribe_view_updates(state, &split_btn, &albums_sort, &artists_sort);
 
@@ -92,25 +98,31 @@ fn subscribe_view_updates(
 ) {
     let s = Arc::clone(state);
     let btn = split_btn.clone();
-    spawn_future_local(async move {
-        let vm_rx = s.view_mode.subscribe();
-        while let Ok(mode) = vm_rx.recv().await {
-            btn.set_icon_name(mode.icon_name());
-            btn.set_tooltip_text(Some(mode.tooltip()));
-        }
-    });
+    state
+        .handles
+        .lock()
+        .retain_task(spawn_future_local(async move {
+            let vm_rx = s.view_mode.subscribe();
+            while let Ok(mode) = vm_rx.recv().await {
+                btn.set_icon_name(mode.icon_name());
+                btn.set_tooltip_text(Some(mode.tooltip()));
+            }
+        }));
 
     let s2 = Arc::clone(state);
     let albums_sort_btn = albums_sort.clone();
     let artists_sort_btn = artists_sort.clone();
-    spawn_future_local(async move {
-        let tab_rx = s2.active_tab.subscribe();
-        while let Ok(tab) = tab_rx.recv().await {
-            let is_albums = tab == Albums;
-            albums_sort_btn.set_visible(is_albums);
-            artists_sort_btn.set_visible(!is_albums);
-        }
-    });
+    state
+        .handles
+        .lock()
+        .retain_task(spawn_future_local(async move {
+            let tab_rx = s2.active_tab.subscribe();
+            while let Ok(tab) = tab_rx.recv().await {
+                let is_albums = tab == Albums;
+                albums_sort_btn.set_visible(is_albums);
+                artists_sort_btn.set_visible(!is_albums);
+            }
+        }));
 }
 
 #[cfg(test)]

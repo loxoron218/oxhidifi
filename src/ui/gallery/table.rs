@@ -38,6 +38,7 @@ use crate::{
             },
             narrow_flag::NarrowState,
         },
+        signal_handlers::UiHandles,
         zoom::list_cover_size,
     },
 };
@@ -189,11 +190,14 @@ pub fn build_album_column_view(
     column_view.append_column(&duration_col);
 
     let nav_state = Arc::clone(state);
-    column_view.connect_activate(move |cv, position| {
-        if let Some(album_id) = id_at_position::<AlbumData>(cv, position, |d| d.id) {
-            navigate_to_event(Arc::clone(&nav_state), AlbumDetail(album_id));
-        }
-    });
+    state
+        .handles
+        .lock()
+        .retain_signal(column_view.connect_activate(move |cv, position| {
+            if let Some(album_id) = id_at_position::<AlbumData>(cv, position, |d| d.id) {
+                navigate_to_event(&nav_state, AlbumDetail(album_id));
+            }
+        }));
 
     setup_narrow_bindings(
         narrow_state,
@@ -210,14 +214,14 @@ pub fn build_album_column_view(
     let mut remaining: Vec<usize> = indices.to_vec();
     remaining.reverse();
     let mut covers: Vec<(i64, String)> = Vec::new();
-    idle_add_local(move || {
+    state.handles.lock().retain_source(idle_add_local(move || {
         if fill_album_store_batch(&store_fill, &cached_owned, &mut remaining, &mut covers) {
             dispatch_column_covers(&state_owned, &pending_widgets, cover_size, &mut covers);
             Break
         } else {
             Continue
         }
-    });
+    }));
 
     column_view.upcast::<Widget>()
 }
@@ -277,11 +281,14 @@ pub fn build_artist_column_view(
     column_view.append_column(&albums_col);
 
     let nav_state = Arc::clone(state);
-    column_view.connect_activate(move |cv, position| {
-        if let Some(artist_id) = id_at_position::<ArtistData>(cv, position, |d| d.id) {
-            navigate_to_event(Arc::clone(&nav_state), ArtistDetail(artist_id));
-        }
-    });
+    state
+        .handles
+        .lock()
+        .retain_signal(column_view.connect_activate(move |cv, position| {
+            if let Some(artist_id) = id_at_position::<ArtistData>(cv, position, |d| d.id) {
+                navigate_to_event(&nav_state, ArtistDetail(artist_id));
+            }
+        }));
 
     let cached_owned = CachedArtistData {
         artists: Arc::clone(&cached.artists),
@@ -289,13 +296,13 @@ pub fn build_artist_column_view(
     let store_fill = store;
     let mut remaining: Vec<usize> = indices.to_vec();
     remaining.reverse();
-    idle_add_local(move || {
+    state.handles.lock().retain_source(idle_add_local(move || {
         if fill_artist_store_batch(&store_fill, &cached_owned, &mut remaining) {
             Break
         } else {
             Continue
         }
-    });
+    }));
 
     column_view.upcast::<Widget>()
 }
@@ -305,11 +312,12 @@ fn setup_narrow_bindings(narrow_state: &NarrowState, columns: &[&ColumnViewColum
     let cols: Vec<ColumnViewColumn> = columns.iter().copied().cloned().collect();
     let rx = narrow_state.subscribe();
     set_columns_visibility(&cols, narrow_state.get());
-    spawn_future_local(async move {
+    let mut handles = UiHandles::default();
+    handles.retain_task(spawn_future_local(async move {
         while let Ok(narrow) = rx.recv().await {
             set_columns_visibility(&cols, narrow);
         }
-    });
+    }));
 }
 
 /// Set visibility of all columns based on narrow mode.
@@ -320,10 +328,14 @@ fn set_columns_visibility(cols: &[ColumnViewColumn], narrow: bool) {
 }
 
 /// Spawn a future to send a navigation event.
-fn navigate_to_event(state: Arc<AppState>, event: NavigationEvent) {
-    spawn_future_local(async move {
-        state.send_navigation_event(event).await;
-    });
+fn navigate_to_event(state: &Arc<AppState>, event: NavigationEvent) {
+    let state_cb = Arc::clone(state);
+    state
+        .handles
+        .lock()
+        .retain_task(spawn_future_local(async move {
+            state_cb.send_navigation_event(event).await;
+        }));
 }
 
 /// Extract the id at the given sort‑model position.

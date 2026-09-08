@@ -63,3 +63,29 @@ pub fn data_dir() -> PathBuf {
         .unwrap_or_else(|_| PathBuf::from("."))
         .join("oxhidifi")
 }
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use crate::app::xdg_paths::{data_dir, dirs_config_home, dirs_data_home};
+
+    #[test]
+    fn xdg_data_home_resolves_to_absolute_path() {
+        let dir = dirs_data_home().unwrap_or_else(|_| PathBuf::from("."));
+        assert!(dir.is_absolute());
+    }
+
+    #[test]
+    fn xdg_config_home_resolves_to_absolute_path() {
+        let dir = dirs_config_home().unwrap_or_else(|_| PathBuf::from("."));
+        assert!(dir.is_absolute());
+    }
+
+    #[test]
+    fn data_dir_appends_application_component() {
+        let dir = data_dir();
+        assert!(dir.ends_with("oxhidifi"));
+        assert!(dir.is_absolute());
+    }
+}

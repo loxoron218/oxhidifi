@@ -47,26 +47,32 @@ pub fn spawn_listen_sort_zoom(
     let preview_event_tx = event_tx.clone();
     let rebuild_event_tx = event_tx;
 
-    spawn_future_local(async move {
-        listen_sort_zoom_loop(
-            sort_rx,
-            zoom_rx,
-            async || {
-                timeout_future(SORT_ZOOM_DEBOUNCE).await;
-            },
-            move || send_preview_event(&preview_event_tx),
-            move |sort_fired, zoom_fired| {
-                send_rebuild_event(&rebuild_event_tx, sort_fired, zoom_fired);
-            },
-        )
-        .await;
-    });
+    state
+        .handles
+        .lock()
+        .retain_task(spawn_future_local(async move {
+            listen_sort_zoom_loop(
+                sort_rx,
+                zoom_rx,
+                async || {
+                    timeout_future(SORT_ZOOM_DEBOUNCE).await;
+                },
+                move || send_preview_event(&preview_event_tx),
+                move |sort_fired, zoom_fired| {
+                    send_rebuild_event(&rebuild_event_tx, sort_fired, zoom_fired);
+                },
+            )
+            .await;
+        }));
 
-    spawn_future_local(async move {
-        while let Ok(event) = event_rx.recv().await {
-            consume_sort_zoom_event(event, &preview_zoom, &rebuild, &storage);
-        }
-    });
+    state
+        .handles
+        .lock()
+        .retain_task(spawn_future_local(async move {
+            while let Ok(event) = event_rx.recv().await {
+                consume_sort_zoom_event(event, &preview_zoom, &rebuild, &storage);
+            }
+        }));
 }
 
 /// Apply a coalesced sort/zoom event to the grid widgets.

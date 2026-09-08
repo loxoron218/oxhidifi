@@ -94,12 +94,18 @@ pub fn build_artist_detail(
         .build();
     play_all_button.update_property(&[PropertyLabel("Play all albums by this artist")]);
     let play_state = Arc::clone(state);
-    play_all_button.connect_clicked(move |_| {
-        let state = Arc::clone(&play_state);
-        spawn_future_local(async move {
-            play_artist(&state, artist_id).await;
-        });
-    });
+    state
+        .handles
+        .lock()
+        .retain_signal(play_all_button.connect_clicked(move |_| {
+            let state_cb = Arc::clone(&play_state);
+            play_state
+                .handles
+                .lock()
+                .retain_task(spawn_future_local(async move {
+                    play_artist(&state_cb, artist_id).await;
+                }));
+        }));
     content.append(&play_all_button);
 
     let albums_container = GtkBox::builder().orientation(Vertical).spacing(18).build();
@@ -109,17 +115,20 @@ pub fn build_artist_detail(
     wrapper.append(&scroll);
 
     let sc = Arc::clone(state);
-    spawn_future_local(async move {
-        if let Some(data) = fetch_artist_detail(&sc, artist_id).await {
-            apply_artist_detail(
-                &name_label,
-                &album_count_label,
-                &albums_container,
-                &sc,
-                data,
-            );
-        }
-    });
+    state
+        .handles
+        .lock()
+        .retain_task(spawn_future_local(async move {
+            if let Some(data) = fetch_artist_detail(&sc, artist_id).await {
+                apply_artist_detail(
+                    &name_label,
+                    &album_count_label,
+                    &albums_container,
+                    &sc,
+                    data,
+                );
+            }
+        }));
 
     wrapper.upcast()
 }
@@ -207,7 +216,10 @@ fn apply_artist_detail(
             .filter(|(j, _)| *j != i)
             .map(|(_, lb)| lb.clone())
             .collect();
-        tb.connect_row_selected(move |_, row| clear_other_lists(row, &others));
+        state
+            .handles
+            .lock()
+            .retain_signal(tb.connect_row_selected(move |_, row| clear_other_lists(row, &others)));
     }
 }
 
@@ -250,12 +262,18 @@ fn build_album_section(
     let nav_state = Arc::clone(state);
     let gesture = GestureClick::new();
     gesture.set_button(1);
-    gesture.connect_released(move |_, _, _, _| {
-        let ns = Arc::clone(&nav_state);
-        spawn_future_local(async move {
-            ns.send_navigation_event(AlbumDetail(album_id)).await;
-        });
-    });
+    state
+        .handles
+        .lock()
+        .retain_signal(gesture.connect_released(move |_, _, _, _| {
+            let ns = Arc::clone(&nav_state);
+            nav_state
+                .handles
+                .lock()
+                .retain_task(spawn_future_local(async move {
+                    ns.send_navigation_event(AlbumDetail(album_id)).await;
+                }));
+        }));
     album_header.add_controller(gesture);
 
     if let Some(art_path) = &album.artwork_path {
@@ -315,8 +333,10 @@ fn build_album_section(
     remaining_tracks.reverse();
 
     let tl = track_list.clone();
-    let state = Arc::clone(state);
-    idle_add_local(move || fill_track_list_batch(&mut remaining_tracks, &tl, &state));
+    let state_cb = Arc::clone(state);
+    state.handles.lock().retain_source(idle_add_local(move || {
+        fill_track_list_batch(&mut remaining_tracks, &tl, &state_cb)
+    }));
 
     section.append(&track_list);
     (section, track_list)

@@ -10,9 +10,7 @@ use {
     async_channel::{Sender, unbounded},
     libadwaita::{
         gio::ListStore,
-        glib::{
-            BoxedAnyObject, ControlFlow::Break, MainContext, idle_add_local, prelude::StaticType,
-        },
+        glib::{BoxedAnyObject, MainContext, idle_add_local_once, prelude::StaticType},
         gtk::{Box, ListView, NoSelection, Orientation::Vertical, accessible::Property::Label},
         prelude::{AccessibleExtManual, BoxExt},
     },
@@ -29,7 +27,7 @@ use crate::{
         transport::PlaybackTransport,
     },
     storage::Storage,
-    ui::player::row_factory::build_row_factory,
+    ui::{player::row_factory::build_row_factory, signal_handlers::UiHandles},
 };
 
 /// Data for a single queue entry.
@@ -44,7 +42,7 @@ pub struct QueueItemData {
 /// Spawn fetching track names in a background thread.
 fn spawn_fetch_queue_names(state: &Arc<AppState>, ids: Vec<i64>, tx: Sender<Vec<(i64, String)>>) {
     let s = Arc::clone(state);
-    spawn(async move {
+    drop(spawn(async move {
         let storage = &s.storage;
         let tracks = storage.get_tracks_by_ids(&ids).await.unwrap_or_default();
         let track_map: HashMap<i64, String> = tracks.into_iter().map(|t| (t.id, t.title)).collect();
@@ -61,7 +59,7 @@ fn spawn_fetch_queue_names(state: &Arc<AppState>, ids: Vec<i64>, tx: Sender<Vec<
         if let Err(e) = tx.try_send(names) {
             error!(error = %e, "Failed to send queue names");
         }
-    });
+    }));
 }
 
 /// Refresh the store from the main thread via `idle_add_local`.
@@ -69,10 +67,10 @@ fn refresh_store_on_main(store: &ListStore, queue: &PlaybackQueue, names: &[(i64
     let s = store.clone();
     let q = queue.clone();
     let n = names.to_vec();
-    idle_add_local(move || {
+    let mut handles = UiHandles::default();
+    handles.retain_source(idle_add_local_once(move || {
         populate_store(&s, &q, &n);
-        Break
-    });
+    }));
 }
 
 /// Handle a single playback event for queue updates.
@@ -140,21 +138,27 @@ pub fn build_queue_view(state: &Arc<AppState>, queue: &PlaybackQueue) -> Box {
     let ev_queue = poll_queue.clone();
     let ev_tx = queue_tx;
     let ev_cache = Arc::clone(&cached_names);
-    MainContext::default().spawn_local(async move {
-        while let Ok(event) = rx.recv().await {
-            handle_queue_event(event, &ev_state, &ev_store, &ev_queue, &ev_cache, &ev_tx);
-        }
-    });
+    state
+        .handles
+        .lock()
+        .retain_task(MainContext::default().spawn_local(async move {
+            while let Ok(event) = rx.recv().await {
+                handle_queue_event(event, &ev_state, &ev_store, &ev_queue, &ev_cache, &ev_tx);
+            }
+        }));
 
     let names_store = poll_store;
     let names_queue = poll_queue;
     let names_cache = cached_names;
-    MainContext::default().spawn_local(async move {
-        while let Ok(names) = queue_rx.recv().await {
-            update_name_cache(&names_cache, &names);
-            refresh_store_on_main(&names_store, &names_queue, &names);
-        }
-    });
+    state
+        .handles
+        .lock()
+        .retain_task(MainContext::default().spawn_local(async move {
+            while let Ok(names) = queue_rx.recv().await {
+                update_name_cache(&names_cache, &names);
+                refresh_store_on_main(&names_store, &names_queue, &names);
+            }
+        }));
 
     container
 }
@@ -188,14 +192,18 @@ mod tests {
         libadwaita::{
             gio::{ListStore, prelude::ListModelExt},
             glib::{BoxedAnyObject, object::Cast, prelude::StaticType},
-            gtk::{self, test},
+            gtk::{self, ListView, test},
+            prelude::WidgetExt,
         },
         parking_lot::Mutex,
     };
 
     use crate::{
+        app::runtime::AppState,
         playback::queue_manager::PlaybackQueue,
-        ui::player::playlist::{QueueItemData, populate_store, update_name_cache},
+        ui::player::playlist::{
+            QueueItemData, build_queue_view, populate_store, update_name_cache,
+        },
     };
 
     fn make_store() -> ListStore {
@@ -257,6 +265,23 @@ mod tests {
         let store = make_store();
         populate_store(&store, &queue, &[]);
         ensure!(item_data(&store, 0) == Some(("Track #42".to_string(), true)));
+        Ok(())
+    }
+
+    #[test]
+    fn build_queue_view_contains_list_view() -> Result<()> {
+        let state = Arc::new(AppState::mock()?);
+        let queue = PlaybackQueue::new();
+        let view = build_queue_view(&state, &queue);
+        let first = view.first_child();
+        ensure!(first.is_some(), "queue view must install a child");
+        ensure!(
+            first
+                .as_ref()
+                .and_then(|w| w.downcast_ref::<ListView>())
+                .is_some(),
+            "queue view child must be a ListView"
+        );
         Ok(())
     }
 }

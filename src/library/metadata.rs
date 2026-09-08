@@ -283,6 +283,7 @@ pub fn metadata_fingerprint(meta: &AudioMetadata) -> (String, String, String, Op
 }
 
 #[cfg(test)]
+/// Unit tests for metadata extraction, codec names, fingerprints, and test fixtures.
 pub mod tests {
     use std::path::Path;
 
@@ -295,6 +296,11 @@ pub mod tests {
         AudioMetadata, codec_name, extract_metadata, metadata_fingerprint,
     };
 
+    /// Build a representative metadata fixture for tests.
+    ///
+    /// # Returns
+    ///
+    /// A populated [`AudioMetadata`] with representative values.
     #[must_use]
     pub fn test_metadata() -> AudioMetadata {
         AudioMetadata {
@@ -317,6 +323,11 @@ pub mod tests {
         }
     }
 
+    /// Build a minimal metadata fixture with unset optional fields.
+    ///
+    /// # Returns
+    ///
+    /// An [`AudioMetadata`] with `None` optionals for default-path coverage.
     #[must_use]
     pub fn test_metadata_defaults() -> AudioMetadata {
         AudioMetadata {

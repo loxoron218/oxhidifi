@@ -1,6 +1,6 @@
 //! Integration tests for the storage layer (`SqliteStorage` + `Storage` trait).
 
-mod scratch_store;
+pub mod scratch_store;
 
 #[cfg(test)]
 mod tests {
@@ -14,9 +14,25 @@ mod tests {
     use oxhidifi::storage::{
         Storage,
         catalog::{NewArtist, NewQueueEntry, QueueContext::Manual, TrackUpdate},
+        database::SqliteStorage,
     };
 
     use crate::scratch_store::{make_album, make_track, test_storage};
+
+    /// Insert an artist and assert a positive id is returned.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the insert fails or yields a non-positive id.
+    async fn insert_artist_named(storage: &SqliteStorage, name: &str) -> Result<()> {
+        let artist_id = storage
+            .insert_artist(NewArtist {
+                name: name.to_string(),
+            })
+            .await?;
+        ensure!(artist_id > 0, "insert should return a positive artist id");
+        Ok(())
+    }
 
     #[test]
     async fn insert_and_get_artist() -> Result<()> {
@@ -134,7 +150,11 @@ mod tests {
         let (storage, dir) = test_storage().await?;
         let path = Path::new("/music/unique.flac");
         let track = make_track("Unique Path", path, None);
-        storage.insert_track(track).await?;
+        let unique_track_id = storage.insert_track(track).await?;
+        ensure!(
+            unique_track_id > 0,
+            "insert should return a positive track id"
+        );
         let found = storage
             .find_by_path(path)
             .await?
@@ -163,11 +183,13 @@ mod tests {
 
         let mut track1 = make_track("Track 1", Path::new("/music/track1.flac"), None);
         track1.audio.content_hash = Some(hash.to_string());
-        storage.insert_track(track1).await?;
+        let track1_id = storage.insert_track(track1).await?;
+        ensure!(track1_id > 0, "insert should return a positive track id");
 
         let mut track2 = make_track("Track 2", Path::new("/music/track2.flac"), None);
         track2.audio.content_hash = Some(hash.to_string());
-        storage.insert_track(track2).await?;
+        let track2_id = storage.insert_track(track2).await?;
+        ensure!(track2_id > 0, "insert should return a positive track id");
 
         let found = storage.find_by_hash(hash).await?;
         ensure!(found.len() == 2, "expected 2 tracks, got {}", found.len());
@@ -189,20 +211,28 @@ mod tests {
             .insert_album(make_album("Rel Album", artist_id, 2024))
             .await?;
 
-        storage
+        let rel_track1_id = storage
             .insert_track(make_track(
                 "Track 1",
                 Path::new("/music/r1.flac"),
                 Some(album_id),
             ))
             .await?;
-        storage
+        ensure!(
+            rel_track1_id > 0,
+            "insert should return a positive track id"
+        );
+        let rel_track2_id = storage
             .insert_track(make_track(
                 "Track 2",
                 Path::new("/music/r2.flac"),
                 Some(album_id),
             ))
             .await?;
+        ensure!(
+            rel_track2_id > 0,
+            "insert should return a positive track id"
+        );
 
         let tracks = storage.get_tracks_by_album(album_id).await?;
         ensure!(tracks.len() == 2, "expected 2 tracks, got {}", tracks.len());
@@ -294,20 +324,28 @@ mod tests {
     async fn track_search() -> Result<()> {
         let (storage, dir) = test_storage().await?;
 
-        storage
+        let search_track1_id = storage
             .insert_track(make_track(
                 "Bohemian Rhapsody",
                 Path::new("/music/queen.flac"),
                 None,
             ))
             .await?;
-        storage
+        ensure!(
+            search_track1_id > 0,
+            "insert should return a positive track id"
+        );
+        let search_track2_id = storage
             .insert_track(make_track(
                 "Stairway to Heaven",
                 Path::new("/music/ledzep.flac"),
                 None,
             ))
             .await?;
+        ensure!(
+            search_track2_id > 0,
+            "insert should return a positive track id"
+        );
 
         let results = storage.search_tracks("Bohemian").await?;
         ensure!(
@@ -330,16 +368,8 @@ mod tests {
     async fn get_all_artists() -> Result<()> {
         let (storage, dir) = test_storage().await?;
 
-        storage
-            .insert_artist(NewArtist {
-                name: "Artist A".to_string(),
-            })
-            .await?;
-        storage
-            .insert_artist(NewArtist {
-                name: "Artist B".to_string(),
-            })
-            .await?;
+        insert_artist_named(&storage, "Artist A").await?;
+        insert_artist_named(&storage, "Artist B").await?;
 
         let all = storage.get_all_artists().await?;
         ensure!(all.len() == 2, "expected 2 artists, got {}", all.len());

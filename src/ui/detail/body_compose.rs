@@ -18,6 +18,7 @@ use crate::ui::{detail::page::build_scroll_content, osd_button::build_album_play
 pub const DETAIL_COVER_SIZE: i32 = 320;
 
 /// Owned widgets for the album detail content area.
+#[derive(Debug)]
 pub struct AlbumDetailContent {
     /// The scroll window wrapping content.
     pub scroll: ScrolledWindow,
@@ -42,6 +43,7 @@ pub struct AlbumDetailContent {
 }
 
 /// Widget references for the album detail page.
+#[derive(Debug)]
 pub struct AlbumDetailWidgets<'a> {
     /// Album artwork display.
     pub artwork: &'a Picture,

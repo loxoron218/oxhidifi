@@ -20,7 +20,7 @@ macro_rules! apply_field {
     ($track:expr, $field:ident, $pool:expr, $id:expr) => {
         match &$track.$field {
             Set(v) => {
-                query(concat!(
+                _ = query(concat!(
                     "UPDATE tracks SET ",
                     stringify!($field),
                     " = ? WHERE id = ?"
@@ -32,7 +32,7 @@ macro_rules! apply_field {
                 .map_err(|e| Database(format!("Update track failed: {e}")))?;
             }
             SetNull => {
-                query(concat!(
+                _ = query(concat!(
                     "UPDATE tracks SET ",
                     stringify!($field),
                     " = NULL WHERE id = ?"
@@ -91,7 +91,7 @@ impl SqliteStorage {
     /// Returns [`StorageError::Database`] if any update query fails.
     pub async fn update_track_row(&self, id: i64, track: TrackUpdate) -> StorageResult<()> {
         if let Some(title) = track.title {
-            query("UPDATE tracks SET title = ? WHERE id = ?")
+            _ = query("UPDATE tracks SET title = ? WHERE id = ?")
                 .bind(&title)
                 .bind(id)
                 .execute(&self.pool)
@@ -101,7 +101,7 @@ impl SqliteStorage {
         apply_field!(track, track_number, self.pool, id);
         apply_field!(track, disc_number, self.pool, id);
         if let Some(duration) = track.duration {
-            query("UPDATE tracks SET duration = ? WHERE id = ?")
+            _ = query("UPDATE tracks SET duration = ? WHERE id = ?")
                 .bind(duration)
                 .bind(id)
                 .execute(&self.pool)
@@ -120,7 +120,7 @@ impl SqliteStorage {
     ///
     /// Returns [`StorageError::Database`] if the delete query fails.
     pub async fn delete_track_row(&self, id: i64) -> StorageResult<()> {
-        query("DELETE FROM tracks WHERE id = ?")
+        _ = query("DELETE FROM tracks WHERE id = ?")
             .bind(id)
             .execute(&self.pool)
             .await
@@ -326,9 +326,9 @@ impl SqliteStorage {
         let mut builder = QueryBuilder::new("SELECT * FROM tracks WHERE album_id IN (");
         let mut separated = builder.separated(", ");
         for id in album_ids {
-            separated.push_bind(id);
+            _ = separated.push_bind(id);
         }
-        builder.push(") ORDER BY album_id, number");
+        _ = builder.push(") ORDER BY album_id, number");
         builder
             .build_query_as::<Track>()
             .fetch_all(&self.pool)
@@ -348,9 +348,9 @@ impl SqliteStorage {
         let mut builder = QueryBuilder::new("SELECT * FROM tracks WHERE id IN (");
         let mut separated = builder.separated(", ");
         for id in ids {
-            separated.push_bind(id);
+            _ = separated.push_bind(id);
         }
-        builder.push(")");
+        _ = builder.push(")");
         builder
             .build_query_as::<Track>()
             .fetch_all(&self.pool)

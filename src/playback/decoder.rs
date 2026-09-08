@@ -1,6 +1,10 @@
 //! Symphonia decoder bridge.
 
-use std::{fs::File, path::Path};
+use std::{
+    fmt::{Debug, Formatter, Result as FmtResult},
+    fs::File,
+    path::Path,
+};
 
 use symphonia::{
     core::{
@@ -89,7 +93,7 @@ impl Decoder {
 
         let mut hint = Hint::new();
         if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-            hint.with_extension(ext);
+            _ = hint.with_extension(ext);
         }
 
         let meta_opts = MetadataOptions::default();
@@ -246,7 +250,7 @@ impl Decoder {
     /// Returns [`DecoderError::SeekError`] if seeking fails.
     pub fn seek_to(&mut self, seconds: f64) -> Result<f64, DecoderError> {
         let time = Time::try_from_secs_f64(seconds)
-            .ok_or_else(|| DecoderError::SeekError("invalid seek time".into()))?;
+            .ok_or_else(|| SeekError("invalid seek time".into()))?;
 
         let seeked_to = self
             .format
@@ -275,6 +279,16 @@ impl Decoder {
             .map_or(seconds, |t| t.as_secs_f64());
 
         Ok(actual_seconds)
+    }
+}
+
+impl Debug for Decoder {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        f.debug_struct("Decoder")
+            .field("track_id", &self.track_id)
+            .field("params", &self.params)
+            .field("buf_len", &self.buf.len())
+            .finish_non_exhaustive()
     }
 }
 

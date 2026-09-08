@@ -33,6 +33,7 @@ use crate::{
     ui::{
         gallery::{boxed_data::AlbumData, grid_flow::GRID_BATCH_SIZE},
         image_decode::{DecodedCover, raw_to_texture},
+        signal_handlers::UiHandles,
         texture_pool::CoverArtCache,
         zoom::list_cover_size,
     },
@@ -81,7 +82,8 @@ pub fn build_cover_column(
     let cache = Arc::clone(cache);
     let pending = Arc::clone(pending_widgets);
 
-    factory.connect_setup(move |_, item: &Object| {
+    let mut handles = UiHandles::default();
+    handles.retain_signal(factory.connect_setup(move |_, item: &Object| {
         let picture = Picture::builder()
             .content_fit(Cover)
             .width_request(cover_size)
@@ -92,9 +94,9 @@ pub fn build_cover_column(
         if let Some(list_item) = item.downcast_ref::<ListItem>() {
             list_item.set_child(Some(&picture.upcast::<Widget>()));
         }
-    });
+    }));
 
-    factory.connect_bind(move |_, item: &Object| {
+    handles.retain_signal(factory.connect_bind(move |_, item: &Object| {
         with_list_item_data!(item, AlbumData, list_item, data => {
             let Some(child) = list_item.child() else {
                 return;
@@ -120,7 +122,7 @@ pub fn build_cover_column(
                 .or_default()
                 .push(picture_ref.downgrade());
         });
-    });
+    }));
 
     ColumnViewColumn::builder()
         .title("Cover")
@@ -149,12 +151,15 @@ fn apply_cover_to_widgets(
     let texture = raw_to_texture(decoded);
     cover_cache.insert(album_id, size, texture.clone());
 
-    let waiters = pending_widgets.lock().remove(&album_id);
-    if let Some(waiters) = waiters {
-        for weak in waiters {
-            weak.upgrade()
-                .inspect(|pic| pic.set_paintable(Some(&texture)));
-        }
+    let pictures = pending_widgets
+        .lock()
+        .remove(&album_id)
+        .into_iter()
+        .flatten()
+        .filter_map(|weak| weak.upgrade())
+        .collect::<Vec<_>>();
+    for pic in pictures {
+        pic.set_paintable(Some(&texture));
     }
 }
 
@@ -179,8 +184,10 @@ pub fn start_cover_batch_decode(
     }
     drop(tx);
 
-    let state = Arc::clone(state);
-    idle_add_local(move || drain_cover_batch(&rx, &state, &cover_cache, &pending_widgets));
+    let state_cb = Arc::clone(state);
+    state.handles.lock().retain_source(idle_add_local(move || {
+        drain_cover_batch(&rx, &state_cb, &cover_cache, &pending_widgets)
+    }));
 }
 
 /// Drain up to [`GRID_BATCH_SIZE`] decoded covers into the cache and any
@@ -218,7 +225,8 @@ fn drain_cover_batch(
 pub fn build_artist_icon_column() -> ColumnViewColumn {
     let factory = SignalListItemFactory::new();
 
-    factory.connect_setup(|_, item: &Object| {
+    let mut handles = UiHandles::default();
+    handles.retain_signal(factory.connect_setup(|_, item: &Object| {
         let image = Image::builder()
             .icon_name("avatar-default-symbolic")
             .pixel_size(32)
@@ -230,7 +238,7 @@ pub fn build_artist_icon_column() -> ColumnViewColumn {
         if let Some(list_item) = item.downcast_ref::<ListItem>() {
             list_item.set_child(Some(&image.upcast::<Widget>()));
         }
-    });
+    }));
 
     ColumnViewColumn::builder()
         .title("Icon")
@@ -249,7 +257,8 @@ pub fn build_label_column<T: Clone + Send + 'static>(
 ) -> ColumnViewColumn {
     let factory = SignalListItemFactory::new();
 
-    factory.connect_setup(|_, item: &Object| {
+    let mut handles = UiHandles::default();
+    handles.retain_signal(factory.connect_setup(|_, item: &Object| {
         let label = Label::builder()
             .ellipsize(End)
             .halign(Start)
@@ -258,19 +267,19 @@ pub fn build_label_column<T: Clone + Send + 'static>(
         if let Some(list_item) = item.downcast_ref::<ListItem>() {
             list_item.set_child(Some(&label.upcast::<Widget>()));
         }
-    });
+    }));
 
     let get_text = Arc::new(get_text);
     let compare = Arc::new(compare);
 
     let gt = Arc::clone(&get_text);
-    factory.connect_bind(move |_, item: &Object| {
+    handles.retain_signal(factory.connect_bind(move |_, item: &Object| {
         with_list_item_data!(item, T, list_item, data => {
             let Some(child) = list_item.child() else { return };
             let Some(label) = child.downcast_ref::<Label>() else { return };
             label.set_label(&gt(&data));
         });
-    });
+    }));
 
     let ct = Arc::clone(&compare);
     let sorter = CustomSorter::new(move |a, b| {

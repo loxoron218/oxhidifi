@@ -5,7 +5,7 @@
 //! divisor rate. Asserts resampler reconfigures transparently, gapless
 //! transition maintained (inter-track silence < 5 ms), and no audible glitch.
 
-mod synth_wav;
+pub mod synth_wav;
 
 use {
     anyhow::{Context, Result, bail},

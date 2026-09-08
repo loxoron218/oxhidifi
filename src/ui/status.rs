@@ -25,9 +25,11 @@ use crate::{
         ScanEvent,
         ScanEvent::{ScanCompleted, ScanError, ScanProgress, ScanStarted},
     },
+    ui::signal_handlers::UiHandles,
 };
 
 /// Status bar showing scanning progress and library information.
+#[derive(Debug)]
 pub struct StatusBar {
     /// The root widget containing all status bar elements.
     root: Box,
@@ -142,11 +144,12 @@ impl StatusBar {
 /// Runs on the `GLib` main context via a local future so the widgets are
 /// only ever touched on the main thread.
 fn run_scan_event_loop(rx: Receiver<ScanEvent>, status_label: Label, progress_bar: ProgressBar) {
-    spawn_future_local(async move {
+    let mut handles = UiHandles::default();
+    handles.retain_task(spawn_future_local(async move {
         while let Ok(event) = rx.recv().await {
             handle_scan_event(&status_label, &progress_bar, event);
         }
-    });
+    }));
 }
 
 /// Apply a single scan event to the status bar widgets.

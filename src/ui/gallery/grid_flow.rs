@@ -115,7 +115,7 @@ where
     let mut on_complete = Some(on_complete);
     let mut next = 0usize;
     let mut collected: Vec<Overlay> = Vec::new();
-    idle_add_local(move || {
+    state.handles.lock().retain_source(idle_add_local(move || {
         if is_stale() {
             return Break;
         }
@@ -131,7 +131,7 @@ where
         } else {
             Continue
         }
-    });
+    }));
     true
 }
 

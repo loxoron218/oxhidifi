@@ -54,7 +54,7 @@ pub enum ScanEvent {
 }
 
 /// Reason a track was skipped during scanning.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SkipReason {
     /// File extension not supported.
     UnsupportedFormat,

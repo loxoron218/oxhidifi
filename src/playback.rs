@@ -96,7 +96,10 @@ pub enum PlaybackError {
     QueueEmpty,
     /// Playback queue has reached its maximum capacity.
     #[error("Queue full (max {max})")]
-    QueueFull { max: usize },
+    QueueFull {
+        /// Maximum number of tracks the queue can hold.
+        max: usize,
+    },
     /// Storage layer error.
     #[error("Storage error: {0}")]
     Storage(#[from] StorageError),

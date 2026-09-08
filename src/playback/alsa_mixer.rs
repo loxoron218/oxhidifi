@@ -1,6 +1,9 @@
 //! ALSA hardware volume control used in bit-perfect output mode.
 
 #[cfg(target_os = "linux")]
+use std::fmt::{Debug, Formatter, Result as FmtResult};
+
+#[cfg(target_os = "linux")]
 use {
     alsa::mixer::{Mixer, SelemId},
     num_traits::cast::FromPrimitive,
@@ -86,8 +89,19 @@ impl AlsaVolumeControl {
     }
 }
 
+#[cfg(target_os = "linux")]
+impl Debug for AlsaVolumeControl {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        f.debug_struct("AlsaVolumeControl")
+            .field("min_volume", &self.min_volume)
+            .field("max_volume", &self.max_volume)
+            .finish_non_exhaustive()
+    }
+}
+
 /// Stub for non-Linux platforms.
 #[cfg(not(target_os = "linux"))]
+#[derive(Debug)]
 pub struct AlsaVolumeControl;
 
 #[cfg(not(target_os = "linux"))]

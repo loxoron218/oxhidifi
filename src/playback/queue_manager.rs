@@ -37,7 +37,7 @@ impl PlaybackQueue {
     ///
     /// Returns [`crate::storage::StorageError::QueueFull`] if `track_ids`
     /// exceeds [`Self::MAX_CAPACITY`].
-    pub fn set_queue(&self, track_ids: Vec<i64>) -> Result<(), crate::storage::StorageError> {
+    pub fn set_queue(&self, track_ids: Vec<i64>) -> Result<(), StorageError> {
         if track_ids.len() > Self::MAX_CAPACITY {
             return Err(QueueFull {
                 max: Self::MAX_CAPACITY,

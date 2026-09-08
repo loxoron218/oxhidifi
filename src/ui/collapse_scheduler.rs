@@ -14,16 +14,14 @@ use std::sync::{
 };
 
 use libadwaita::{
-    ApplicationWindow, Breakpoint, BreakpointCondition,
-    BreakpointConditionLengthType::MaxWidth,
-    LengthUnit::Sp,
-    OverlaySplitView,
-    glib::{ControlFlow::Break, idle_add_local},
-    gtk::Widget,
+    ApplicationWindow, Breakpoint, BreakpointCondition, BreakpointConditionLengthType::MaxWidth,
+    LengthUnit::Sp, OverlaySplitView, glib::idle_add_local_once, gtk::Widget,
     prelude::AdwApplicationWindowExt,
 };
 
-use crate::ui::{gallery::narrow_flag::NarrowState, panes::SwitcherGroup};
+use crate::ui::{
+    gallery::narrow_flag::NarrowState, panes::SwitcherGroup, signal_handlers::UiHandles,
+};
 
 /// Schedules deferred `OverlaySplitView` collapse changes.
 ///
@@ -67,10 +65,10 @@ impl CollapseScheduler {
         }
         let this = Arc::clone(self);
         let split_view = split_view.clone();
-        idle_add_local(move || {
+        let mut handles = UiHandles::default();
+        handles.retain_source(idle_add_local_once(move || {
             this.apply(&split_view);
-            Break
-        });
+        }));
     }
 
     /// Apply the current desired state to the split view.
@@ -104,18 +102,19 @@ pub fn add_responsive_breakpoints(
 ) {
     let collapse = CollapseScheduler::new(split_view);
 
+    let mut handles = UiHandles::default();
     let sidebar_condition = BreakpointCondition::new_length(MaxWidth, 800.0, Sp);
     let sidebar_bp = Breakpoint::new(sidebar_condition);
-    sidebar_bp.connect_apply({
+    handles.retain_signal(sidebar_bp.connect_apply({
         let collapse = Arc::clone(&collapse);
         let sv = split_view.clone();
         move |_| collapse.set(&sv, true)
-    });
-    sidebar_bp.connect_unapply({
+    }));
+    handles.retain_signal(sidebar_bp.connect_unapply({
         let collapse = Arc::clone(&collapse);
         let sv = split_view.clone();
         move |_| collapse.set(&sv, false)
-    });
+    }));
     window.add_breakpoint(sidebar_bp);
 
     let narrow_condition = BreakpointCondition::new_length(MaxWidth, 700.0, Sp);
@@ -128,7 +127,7 @@ pub fn add_responsive_breakpoints(
         switchers.bar.clone(),
         switchers.switcher.clone(),
     );
-    narrow_bp.connect_apply({
+    handles.retain_signal(narrow_bp.connect_apply({
         let (collapse, sv, ns, header, bar, _) = narrow_ctx.clone();
         move |_| {
             collapse.set(&sv, true);
@@ -136,8 +135,8 @@ pub fn add_responsive_breakpoints(
             header.set_title_widget(None::<&Widget>);
             bar.set_reveal(true);
         }
-    });
-    narrow_bp.connect_unapply({
+    }));
+    handles.retain_signal(narrow_bp.connect_unapply({
         let (collapse, sv, ns, header, bar, switcher) = narrow_ctx;
         move |_| {
             collapse.set(&sv, false);
@@ -145,24 +144,42 @@ pub fn add_responsive_breakpoints(
             header.set_title_widget(Some(&switcher));
             bar.set_reveal(false);
         }
-    });
+    }));
     window.add_breakpoint(narrow_bp);
 }
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::Ordering::Relaxed;
+    use std::sync::{Arc, atomic::Ordering::Relaxed};
 
     use {
         anyhow::{Result, ensure},
         libadwaita::{
-            OverlaySplitView,
+            ApplicationWindow, OverlaySplitView,
             glib::MainContext,
             gtk::{self, test as gtk_test},
         },
     };
 
-    use crate::{app::mocks::pump_in_test_runtime, ui::collapse_scheduler::CollapseScheduler};
+    use crate::{
+        app::mocks::pump_in_test_runtime,
+        ui::{
+            collapse_scheduler::{CollapseScheduler, add_responsive_breakpoints},
+            gallery::narrow_flag::NarrowState,
+            panes::SwitcherGroup,
+        },
+    };
+
+    #[test]
+    fn responsive_breakpoints_signature_shape() {
+        fn assert_shape<
+            F: Fn(&ApplicationWindow, &OverlaySplitView, &Arc<NarrowState>, &SwitcherGroup),
+        >(
+            _: F,
+        ) {
+        }
+        assert_shape(add_responsive_breakpoints);
+    }
 
     fn pump_main_context() {
         let mut iterations: usize = 0;

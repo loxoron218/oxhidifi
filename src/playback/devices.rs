@@ -11,6 +11,7 @@ use {
 use crate::playback::OutputError::{self, Output};
 
 /// Describes an available audio output device.
+#[derive(Debug)]
 pub struct DeviceInfo {
     /// Stable device identifier for persisting selection across restarts.
     pub id: String,
@@ -149,7 +150,7 @@ mod tests {
 
     use crate::playback::devices::{
         OutputMode::{self, BitPerfect, Resampled},
-        alsa_card_name, list_output_devices,
+        alsa_card_name, is_device_available, list_output_devices, startup_device_check,
     };
 
     #[test]
@@ -226,5 +227,20 @@ mod tests {
             return;
         };
         assert_eq!(restored, Resampled);
+    }
+
+    #[test]
+    fn output_mode_icon_names() {
+        assert_eq!(BitPerfect.icon_name(), "media-optical-cd-audio-symbolic");
+        assert_eq!(Resampled.icon_name(), "audio-card-symbolic");
+    }
+
+    #[test]
+    fn device_availability_checks_agree() {
+        assert_eq!(
+            startup_device_check().is_none(),
+            is_device_available(),
+            "startup check must report missing hardware exactly when no device is available"
+        );
     }
 }

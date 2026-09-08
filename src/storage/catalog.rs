@@ -132,7 +132,7 @@ pub struct NewTrack {
 }
 
 /// Context describing how a track was added to the queue.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum QueueContext {
     /// Queued from an album context.
     Album(i64),
@@ -227,4 +227,91 @@ pub struct TrackUpdate {
     pub album_id: FieldUpdate<i64>,
     /// New artist id.
     pub artist_id: FieldUpdate<i64>,
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::storage::catalog::{
+        NewQueueEntry,
+        QueueContext::{self, Album, Artist, Manual},
+        QueueEntry,
+    };
+
+    #[test]
+    fn new_queue_entry_fields_and_debug() {
+        let entry = NewQueueEntry {
+            track_id: 42,
+            position: 3,
+            context_type: Some("album".to_string()),
+            context_id: Some(7),
+        };
+        assert_eq!(entry.track_id, 42, "track id must round-trip");
+        assert_eq!(entry.position, 3, "position must round-trip");
+        assert_eq!(
+            entry.context_type.as_deref(),
+            Some("album"),
+            "context type must round-trip"
+        );
+        assert_eq!(entry.context_id, Some(7), "context id must round-trip");
+        let cloned = entry.clone();
+        assert_eq!(cloned.track_id, 42, "clone must preserve track id");
+        assert!(
+            format!("{entry:?}").contains("42"),
+            "debug must include track id"
+        );
+    }
+
+    #[test]
+    fn queue_context_variants_copy_and_debug() {
+        let album = Album(1);
+        let artist = Artist(2);
+        let manual = Manual;
+        let copied: QueueContext = album;
+        assert!(
+            matches!(copied, Album(1)),
+            "copied album context must match"
+        );
+        assert!(matches!(album, Album(1)), "album context must survive copy");
+        assert!(matches!(artist, Artist(2)), "artist context must match");
+        assert!(matches!(manual, Manual), "manual context must match");
+        assert!(
+            format!("{album:?}").contains('1'),
+            "album debug must include id"
+        );
+        assert!(
+            format!("{artist:?}").contains('2'),
+            "artist debug must include id"
+        );
+        assert!(
+            format!("{manual:?}").contains("Manual"),
+            "manual debug must include variant"
+        );
+    }
+
+    #[test]
+    fn queue_entry_fields_and_debug() {
+        let entry = QueueEntry {
+            id: 1,
+            track_id: 2,
+            position: 0,
+            context_type: None,
+            context_id: None,
+            added_at: "2024-01-01T00:00:00Z".to_string(),
+        };
+        assert_eq!(entry.id, 1, "id must round-trip");
+        assert_eq!(entry.track_id, 2, "track id must round-trip");
+        assert_eq!(entry.position, 0, "position must round-trip");
+        assert_eq!(entry.context_type, None, "context type must round-trip");
+        assert_eq!(entry.context_id, None, "context id must round-trip");
+        assert_eq!(
+            entry.added_at, "2024-01-01T00:00:00Z",
+            "added_at must round-trip"
+        );
+        let cloned = entry.clone();
+        assert_eq!(cloned.id, 1, "clone must preserve id");
+        assert!(
+            format!("{entry:?}").contains('2'),
+            "debug must include track id"
+        );
+    }
 }

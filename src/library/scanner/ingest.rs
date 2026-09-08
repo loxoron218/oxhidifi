@@ -50,7 +50,7 @@ impl<S: Storage> FsScanner<S> {
         let skip_hashing = artists.is_empty();
         let mut artist_cache: HashMap<String, i64> = HashMap::with_capacity(artists.len());
         for a in &artists {
-            artist_cache.insert(a.name.to_lowercase(), a.id);
+            *artist_cache.entry(a.name.to_lowercase()).or_insert(a.id) = a.id;
         }
         let mut album_cache: HashMap<(i64, String), i64> = HashMap::new();
 
@@ -185,6 +185,7 @@ impl<S: Storage> FsScanner<S> {
 }
 
 /// Mutable state shared across scan item processing.
+#[derive(Debug)]
 pub struct ScanContext<'a> {
     /// Directory being scanned.
     pub dir: &'a Path,

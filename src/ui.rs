@@ -12,7 +12,7 @@ pub mod osd_button;
 pub mod panes;
 pub mod player;
 pub mod preferences;
-pub mod signal;
+pub mod signal_handlers;
 pub mod status;
 pub mod switching;
 pub mod texture_pool;

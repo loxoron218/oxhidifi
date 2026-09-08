@@ -1,13 +1,16 @@
 //! Narrow-width mode tracking for adaptive column hiding.
 
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, Ordering::Relaxed},
+use std::{
+    fmt::{Debug, Formatter, Result as FmtResult},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering::Relaxed},
+    },
 };
 
 use async_channel::Receiver;
 
-use crate::ui::signal::ValueSignal;
+use crate::ui::signal_handlers::ValueSignal;
 
 /// Tracks whether the window is in narrow‑width mode.
 ///
@@ -50,6 +53,14 @@ impl NarrowState {
     /// [`NarrowState::get`].
     pub fn subscribe(&self) -> Receiver<bool> {
         self.narrow_signal.subscribe()
+    }
+}
+
+impl Debug for NarrowState {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        f.debug_struct("NarrowState")
+            .field("narrow", &self.narrow.load(Relaxed))
+            .finish_non_exhaustive()
     }
 }
 

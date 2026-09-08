@@ -10,7 +10,7 @@ pub mod settings;
 pub mod sort_rules;
 pub mod view_mode;
 
-use std::{collections::HashMap, future::Future, path::Path, result::Result};
+use std::{collections::HashMap, path::Path};
 
 use thiserror::Error;
 
@@ -206,7 +206,10 @@ pub enum StorageError {
     InvalidPath(String),
     /// Queue append rejected because the 100,000-entry cap was reached (FR-021).
     #[error("Queue full: maximum {max} entries")]
-    QueueFull { max: usize },
+    QueueFull {
+        /// Maximum number of queue entries allowed.
+        max: usize,
+    },
 }
 
 /// Convenience alias for storage operation results.

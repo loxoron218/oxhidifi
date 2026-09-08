@@ -158,9 +158,13 @@ fn main_test() -> Result<()> {
     let mut resampler = AudioResampler::new(SAMPLE_RATE, OUTPUT_RATE, 1024, usize::from(CHANNELS))
         .context("failed to create resampler")?;
 
-    decoder.decode_next()?;
+    let warmup = decoder.decode_next()?;
+    ensure!(
+        !warmup.samples.is_empty(),
+        "warmup decode should yield samples"
+    );
     resampler.push_input(&[0.0_f32; 1024]);
-    resampler.process()?;
+    _ = resampler.process()?;
 
     let decoder_capacity = decoder.buffer_capacity();
     let input_capacity = resampler.input_accum_capacity();
@@ -261,7 +265,6 @@ fn push_output(samples: &[f32], producer: &mut Producer<f32>) -> u64 {
 
 /// Push a single sample, retrying when the ring buffer is full.
 fn push_blocking(sample: f32, producer: &mut Producer<f32>) {
-    use Full;
     let mut s = sample;
     loop {
         match producer.push(s) {

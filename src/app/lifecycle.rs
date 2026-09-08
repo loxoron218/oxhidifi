@@ -10,7 +10,7 @@ use {
     async_channel::{Receiver, Sender, unbounded},
     libadwaita::{
         Application,
-        glib::{ControlFlow::Break, idle_add_local, spawn_future_local},
+        glib::{ControlFlow::Break, ExitCode, idle_add_local, spawn_future_local},
         prelude::{ApplicationExt, ApplicationExtManual, GtkWindowExt},
     },
     tokio::{
@@ -51,7 +51,7 @@ const APP_ID: &str = "com.github.oxhidifi";
 /// `quit_tx`, which then calls [`Application::quit`] so `app.run()` returns
 /// and the shutdown persistence in [`run_application`] runs.
 fn spawn_signal_handlers(quit_tx: Sender<()>) {
-    spawn(async move {
+    drop(spawn(async move {
         let mut sigint = match signal(SignalKind::interrupt()) {
             Ok(s) => s,
             Err(e) => {
@@ -75,7 +75,7 @@ fn spawn_signal_handlers(quit_tx: Sender<()>) {
         if let Err(e) = quit_tx.send(()).await {
             warn!(error = %e, "Failed to notify main thread of shutdown signal");
         }
-    });
+    }));
 }
 
 /// Dispatch an application-quit request on the `GLib` main thread.
@@ -85,41 +85,52 @@ fn spawn_signal_handlers(quit_tx: Sender<()>) {
 /// local future on the `GLib` main context so the app object is only ever
 /// touched on the main thread.
 fn dispatch_quit_on_main(app: Application, quit_rx: Receiver<()>) {
-    spawn_future_local(async move {
+    drop(spawn_future_local(async move {
         if quit_rx.recv().await.is_ok() {
             app.quit();
         }
-    });
+    }));
 }
 
 /// Build, configure, and run the Libadwaita application to completion.
 ///
 /// Kept separate from [`run_application`] so the non-`Send` [`Application`]
 /// handle never enters the async future's captured state.
-fn run_gtk_application(state: &Arc<AppState>) {
+///
+/// # Returns
+///
+/// * `ExitCode` - Process exit code reported by the GTK main loop.
+fn run_gtk_application(state: &Arc<AppState>) -> ExitCode {
     let app = Application::builder().application_id(APP_ID).build();
 
     let (quit_tx, quit_rx) = unbounded();
 
     let startup_state = Arc::clone(state);
-    app.connect_activate(move |app| {
-        build_window(app, &startup_state).present();
-        spawn_future_local(run_startup_checks());
+    state
+        .handles
+        .lock()
+        .retain_signal(app.connect_activate(move |app| {
+            build_window(app, &startup_state).present();
+            startup_state
+                .handles
+                .lock()
+                .retain_task(spawn_future_local(run_startup_checks()));
 
-        let quit_app = app.clone();
-        let quit_rx = quit_rx.clone();
-        dispatch_quit_on_main(quit_app, quit_rx);
+            let quit_app = app.clone();
+            let quit_rx = quit_rx.clone();
+            dispatch_quit_on_main(quit_app, quit_rx);
 
-        let ss = Arc::clone(&startup_state);
-        idle_add_local(move || {
-            emit_session_events(&ss);
-            Break
-        });
-    });
+            let ss = Arc::clone(&startup_state);
+            let ss_emit = Arc::clone(&ss);
+            ss.handles.lock().retain_source(idle_add_local(move || {
+                emit_session_events(&ss_emit);
+                Break
+            }));
+        }));
 
     info!("Starting application");
     spawn_signal_handlers(quit_tx);
-    app.run();
+    app.run()
 }
 
 /// Shut down the filesystem watcher with a bounded grace period.
@@ -148,11 +159,15 @@ async fn shutdown_watcher(
 /// Initializes the storage backend, playback engine, and presents the main
 /// window. This is the top-level entry point for the GUI.
 ///
+/// # Returns
+///
+/// * `ExitCode` - Process exit code reported by the GTK main loop.
+///
 /// # Errors
 ///
 /// Returns an error if the application cannot be built or if the storage
 /// backend fails to initialize.
-pub async fn run_application() -> Result<()> {
+pub async fn run_application() -> Result<ExitCode> {
     let db_dir = data_dir();
     create_dir_all(&db_dir)
         .await
@@ -249,9 +264,7 @@ pub async fn run_application() -> Result<()> {
             }
         };
 
-    {
-        run_gtk_application(&state);
-    }
+    let exit_code = run_gtk_application(&state);
 
     if let Some((watcher_arc, handle)) = watcher_handle {
         shutdown_watcher(watcher_arc, handle, &state).await;
@@ -266,7 +279,7 @@ pub async fn run_application() -> Result<()> {
 
     thread_manager.shutdown();
 
-    Ok(())
+    Ok(exit_code)
 }
 
 #[cfg(test)]
@@ -284,16 +297,20 @@ mod tests {
         },
     };
 
-    use crate::app::{
-        lifecycle::{APP_ID, dispatch_quit_on_main},
-        mocks::pump_in_test_runtime,
+    use crate::{
+        app::{
+            lifecycle::{APP_ID, dispatch_quit_on_main, run_application},
+            mocks::pump_in_test_runtime,
+        },
+        ui::signal_handlers::UiHandles,
     };
 
     static QUIT_SHUTDOWN_EMITTED: AtomicBool = AtomicBool::new(false);
 
     fn run_quit_test() -> Result<()> {
         let app = Application::builder().application_id(APP_ID).build();
-        app.connect_activate(|_| ());
+        let mut handles = UiHandles::default();
+        handles.retain_signal(app.connect_activate(|_| ()));
 
         let app_hold = app.hold();
 
@@ -303,7 +320,7 @@ mod tests {
             .context("Failed to send quit request")?;
 
         QUIT_SHUTDOWN_EMITTED.store(false, SeqCst);
-        app.connect_shutdown(|_| QUIT_SHUTDOWN_EMITTED.store(true, SeqCst));
+        handles.retain_signal(app.connect_shutdown(|_| QUIT_SHUTDOWN_EMITTED.store(true, SeqCst)));
 
         dispatch_quit_on_main(app.clone(), quit_rx);
 
@@ -322,5 +339,16 @@ mod tests {
     #[test]
     fn dispatch_quit_on_main_requests_application_quit() -> Result<()> {
         pump_in_test_runtime(run_quit_test)?
+    }
+
+    #[test]
+    fn run_application_signature() {
+        fn assert_shape<F, Fut>(_: F)
+        where
+            F: Fn() -> Fut,
+            Fut: Future<Output = Result<ExitCode>>,
+        {
+        }
+        assert_shape(run_application);
     }
 }

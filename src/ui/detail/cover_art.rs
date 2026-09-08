@@ -67,7 +67,10 @@ pub fn decode_cover_into_picture(
         on_complete: Box::new(move |_, decoded| try_send_cover(&tx, decoded)),
     });
     let picture = picture.clone();
-    idle_add_local(move || poll_artwork(&rx, &picture));
+    state
+        .handles
+        .lock()
+        .retain_source(idle_add_local(move || poll_artwork(&rx, &picture)));
 }
 
 #[cfg(test)]

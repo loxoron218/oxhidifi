@@ -115,7 +115,10 @@ mod tests {
     };
 
     use crate::library::{
-        dedup::{compute_content_hash, create_fingerprint, is_supported_audio_format},
+        dedup::{
+            DedupResult::{DuplicateByFingerprint, DuplicateByHash, DuplicateByPath, Unique},
+            compute_content_hash, create_fingerprint, is_supported_audio_format,
+        },
         metadata::tests::{test_metadata, test_metadata_defaults},
     };
 
@@ -177,5 +180,19 @@ mod tests {
             bail!("expected error for missing file");
         }
         Ok(())
+    }
+
+    #[test]
+    fn dedup_result_variants() {
+        let unique = Unique;
+        assert!(matches!(unique, Unique));
+        let by_path = DuplicateByPath;
+        assert!(matches!(by_path, DuplicateByPath));
+        let by_hash = DuplicateByHash("abc123".to_string());
+        assert!(matches!(by_hash, DuplicateByHash(_)));
+        let by_fingerprint = DuplicateByFingerprint;
+        assert!(matches!(by_fingerprint, DuplicateByFingerprint));
+        assert_eq!(unique, Unique);
+        assert_ne!(format!("{by_hash:?}"), "");
     }
 }

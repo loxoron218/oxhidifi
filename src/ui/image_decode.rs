@@ -13,6 +13,7 @@ use {
 };
 
 /// Decoded cover art as raw pixel data (Send-safe).
+#[derive(Debug)]
 pub struct DecodedCover {
     /// Image width in pixels.
     pub width: i32,
@@ -70,4 +71,17 @@ pub fn raw_to_texture(decoded: &DecodedCover) -> MemoryTexture {
 /// Returns `None` if the file could not be loaded or decoded.
 pub fn decode_cover_at_size(path: &str, size: i32) -> Option<MemoryTexture> {
     decode_cover_raw(path, size).as_ref().map(raw_to_texture)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::ui::image_decode::decode_cover_at_size;
+
+    #[test]
+    fn missing_cover_decodes_to_none() {
+        assert!(
+            decode_cover_at_size("/nonexistent-oxhidifi-cover", 64).is_none(),
+            "missing file must decode to None"
+        );
+    }
 }

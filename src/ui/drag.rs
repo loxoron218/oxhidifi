@@ -5,7 +5,12 @@
 
 pub mod reconstruct;
 
-use std::{collections::HashMap, hash::Hash, sync::Arc};
+use std::{
+    collections::HashMap,
+    fmt::{Debug, Formatter, Result as FmtResult},
+    hash::Hash,
+    sync::Arc,
+};
 
 use {
     libadwaita::{
@@ -29,7 +34,10 @@ use crate::{
         AlbumSortCriteria, AlbumSortItem, ArtistSortCriteria, ArtistSortItem,
         SortOrder::{self, Ascending, Descending},
     },
-    ui::drag::reconstruct::{reconstruct_albums_sort, reconstruct_artists_sort},
+    ui::{
+        drag::reconstruct::{reconstruct_albums_sort, reconstruct_artists_sort},
+        signal_handlers::UiHandles,
+    },
 };
 
 /// Implements `SortItem` trait for a sort item type.
@@ -166,13 +174,14 @@ where
         let reconstruct_click = self.reconstruct.clone();
         let update_click = self.update.clone();
 
-        toggle.connect_clicked(move |_| {
+        let mut handles = UiHandles::default();
+        handles.retain_signal(toggle.connect_clicked(move |_| {
             let mut om = om_clone.lock();
             let new_order = match om.get(&criteria_clone).unwrap_or(&Ascending) {
                 Ascending => Descending,
                 Descending => Ascending,
             };
-            om.insert(criteria_clone.clone(), new_order);
+            _ = om.insert(criteria_clone.clone(), new_order);
             toggle_clone.set_icon_name(match new_order {
                 Ascending => "pan-up-symbolic",
                 Descending => "pan-down-symbolic",
@@ -181,7 +190,7 @@ where
             let new_sort = reconstruct_click(&lb_clone, &om);
             update_click(new_sort);
             drop(om);
-        });
+        }));
 
         row_box.append(&toggle);
         row.set_child(Some(&row_box));
@@ -189,9 +198,9 @@ where
         let drag_source = DragSource::new();
         drag_source.set_actions(DragAction::MOVE);
         let row_clone = row.clone();
-        drag_source.connect_prepare(move |_, _, _| {
+        handles.retain_signal(drag_source.connect_prepare(move |_, _, _| {
             Some(ContentProvider::for_value(&row_clone.to_value()))
-        });
+        }));
         row.add_controller(drag_source);
 
         let drop_target = DropTarget::new(ListBoxRow::static_type(), DragAction::MOVE);
@@ -207,9 +216,9 @@ where
         let om = om_clone2;
         let reconstruct = reconstruct_drop;
         let update = update_drop;
-        drop_target.connect_drop(move |_, value, _, _| {
+        handles.retain_signal(drop_target.connect_drop(move |_, value, _, _| {
             Self::on_sort_row_drop(value, &lb, target.index(), &om, &reconstruct, &update)
-        });
+        }));
         row.add_controller(drop_target);
 
         self.list_box.append(&row);
@@ -261,7 +270,7 @@ where
             Arc::new(Mutex::new(HashMap::with_capacity(sort_items.len())));
         for item in sort_items {
             let mut om = order_map.lock();
-            om.insert(item.criteria().clone(), *item.order());
+            _ = om.insert(item.criteria().clone(), *item.order());
         }
 
         let builder = Self {
@@ -275,6 +284,16 @@ where
         }
 
         builder.list_box
+    }
+}
+
+impl<T, F, U> Debug for SortListBuilder<T, F, U>
+where
+    T: SortListBounds,
+    T::Criteria: 'static,
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        f.debug_struct("SortListBuilder").finish_non_exhaustive()
     }
 }
 

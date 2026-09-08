@@ -79,7 +79,7 @@ pub fn build_artist_grid(state: &Arc<AppState>, narrow_state: &Arc<NarrowState>)
                 && preview_state.view_mode.borrow() == Grid
                 && preview_state.artist_grid.ready.load(Relaxed)
             {
-                resize_artist_grid(&preview_state, &preview_stack);
+                _ = resize_artist_grid(&preview_state, &preview_stack);
             }
         },
         move |sort_fired, zoom_fired| {
@@ -226,8 +226,8 @@ fn build_artist_mode(
             let cached_owned = CachedArtistData {
                 artists: Arc::clone(&cached.artists),
             };
-            let state = Arc::clone(state);
-            let build_seq = state
+            let state_fill = Arc::clone(state);
+            let build_seq = state_fill
                 .artist_grid
                 .build_seq
                 .fetch_add(1, Relaxed)
@@ -235,16 +235,16 @@ fn build_artist_mode(
             let mut overlays: Vec<Overlay> = Vec::new();
             let mut remaining: Vec<usize> = indices.iter().rev().copied().collect();
 
-            idle_add_local(move || {
+            state.handles.lock().retain_source(idle_add_local(move || {
                 fill_artist_grid(
                     &cached_owned,
                     &mut remaining,
                     &mut overlays,
                     &flow,
-                    &state,
+                    &state_fill,
                     build_seq,
                 )
-            });
+            }));
         }
         Column => {
             let column_view = build_artist_column_view(state, cached, indices);
@@ -294,43 +294,46 @@ pub fn lazy_build_artist_mode(state: &Arc<AppState>, stack: &Stack, mode: ViewMo
         return;
     }
 
-    let state = Arc::clone(state);
-    let stack = stack.clone();
-    spawn_future_local(async move {
-        let my_gen = state.artist_grid.generation.load(Relaxed);
-        let artists = match state.storage.get_all_artists().await {
-            Ok(a) => a
-                .into_iter()
-                .filter(|a| a.album_count > 0)
-                .collect::<Vec<_>>(),
-            Err(e) => {
-                warn!(error = %e, "Failed to load artists for lazy build");
+    let state_cb = Arc::clone(state);
+    let stack_cb = stack.clone();
+    state
+        .handles
+        .lock()
+        .retain_task(spawn_future_local(async move {
+            let my_gen = state_cb.artist_grid.generation.load(Relaxed);
+            let artists = match state_cb.storage.get_all_artists().await {
+                Ok(a) => a
+                    .into_iter()
+                    .filter(|a| a.album_count > 0)
+                    .collect::<Vec<_>>(),
+                Err(e) => {
+                    warn!(error = %e, "Failed to load artists for lazy build");
+                    return;
+                }
+            };
+
+            if state_cb.artist_grid.generation.load(Relaxed) != my_gen {
                 return;
             }
-        };
+            if stack_cb.child_by_name(child_name).is_some() {
+                stack_cb.set_visible_child_name(child_name);
+                return;
+            }
 
-        if state.artist_grid.generation.load(Relaxed) != my_gen {
-            return;
-        }
-        if stack.child_by_name(child_name).is_some() {
-            stack.set_visible_child_name(child_name);
-            return;
-        }
+            if artists.is_empty() {
+                *state_cb.artist_grid.cache.lock() = Some(CachedArtistData {
+                    artists: Arc::new(artists),
+                });
+                show_artists_empty(&state_cb, &stack_cb);
+                return;
+            }
 
-        if artists.is_empty() {
-            *state.artist_grid.cache.lock() = Some(CachedArtistData {
+            let cached = CachedArtistData {
                 artists: Arc::new(artists),
-            });
-            show_artists_empty(&state, &stack);
-            return;
-        }
-
-        let cached = CachedArtistData {
-            artists: Arc::new(artists),
-        };
-        let indices = artist_sort_indices(&state, &cached);
-        build_artist_mode(&state, &stack, mode, &cached, &indices);
-        *state.artist_grid.cache.lock() = Some(cached);
-        stack.set_visible_child_name(child_name);
-    });
+            };
+            let indices = artist_sort_indices(&state_cb, &cached);
+            build_artist_mode(&state_cb, &stack_cb, mode, &cached, &indices);
+            *state_cb.artist_grid.cache.lock() = Some(cached);
+            stack_cb.set_visible_child_name(child_name);
+        }));
 }

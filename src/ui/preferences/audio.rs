@@ -73,7 +73,7 @@ async fn persist_output_mode(storage: Arc<SqliteStorage>, mode: OutputMode) {
 }
 
 /// Build the Audio > Output and Audio > Playback group.
-pub fn build_audio_page(dialog: &PreferencesDialog, state: &Arc<AppState>) {
+pub(super) fn build_audio_page(dialog: &PreferencesDialog, state: &Arc<AppState>) {
     let page = PreferencesPage::new();
     page.set_title("Audio");
     page.set_icon_name(Some("audio-speakers-symbolic"));
@@ -87,35 +87,45 @@ pub fn build_audio_page(dialog: &PreferencesDialog, state: &Arc<AppState>) {
 
     let state_devices = Arc::clone(state);
     let combo = device_combo.clone();
-    spawn_future_local(async move {
-        let devices = match spawn_blocking(list_output_devices).await {
-            Ok(Ok(devices)) => devices,
-            Ok(Err(e)) => {
-                warn!(error = %e, "Failed to enumerate audio devices");
-                return;
-            }
-            Err(e) => {
-                warn!(error = ?e, "Failed to enumerate audio devices");
-                return;
-            }
-        };
+    state
+        .handles
+        .lock()
+        .retain_task(spawn_future_local(async move {
+            let devices = match spawn_blocking(list_output_devices).await {
+                Ok(Ok(devices)) => devices,
+                Ok(Err(e)) => {
+                    warn!(error = %e, "Failed to enumerate audio devices");
+                    return;
+                }
+                Err(e) => {
+                    warn!(error = ?e, "Failed to enumerate audio devices");
+                    return;
+                }
+            };
 
-        let names: Vec<&str> = devices.iter().map(|d| d.name.as_str()).collect();
-        let model = StringList::new(&names);
-        combo.set_model(Some(&model));
+            let names: Vec<&str> = devices.iter().map(|d| d.name.as_str()).collect();
+            let model = StringList::new(&names);
+            combo.set_model(Some(&model));
 
-        let preferred = state_devices.storage.get_audio_device();
-        set_preferred_device(&combo, &devices, preferred.as_ref());
-    });
+            let preferred = state_devices.storage.get_audio_device();
+            set_preferred_device(&combo, &devices, preferred.as_ref());
+        }));
 
     let state_devices = Arc::clone(state);
-    device_combo.connect_selected_notify(move |combo| {
-        let idx = combo.selected();
-        let state = Arc::clone(&state_devices);
-        spawn_future_local(async move {
-            set_audio_device(&state, idx).await;
-        });
-    });
+    state
+        .handles
+        .lock()
+        .retain_signal(device_combo.connect_selected_notify(move |combo| {
+            let idx = combo.selected();
+            let state = Arc::clone(&state_devices);
+            let state_cb = Arc::clone(&state);
+            state
+                .handles
+                .lock()
+                .retain_task(spawn_future_local(async move {
+                    set_audio_device(&state_cb, idx).await;
+                }));
+        }));
 
     output_group.add(&device_combo);
 
@@ -134,21 +144,30 @@ pub fn build_audio_page(dialog: &PreferencesDialog, state: &Arc<AppState>) {
     });
 
     let state_mode = Arc::clone(state);
-    mode_combo.connect_selected_notify(move |combo| {
-        let mode = if combo.selected() == 0 {
-            Resampled
-        } else {
-            BitPerfect
-        };
-        info!(
-            output_mode = ?mode,
-            "Output mode changed",
-        );
-        if let Err(e) = state_mode.playback.set_output_mode(mode) {
-            warn!(error = %e, "Failed to set output mode");
-        }
-        spawn_future_local(persist_output_mode(Arc::clone(&state_mode.storage), mode));
-    });
+    state
+        .handles
+        .lock()
+        .retain_signal(mode_combo.connect_selected_notify(move |combo| {
+            let mode = if combo.selected() == 0 {
+                Resampled
+            } else {
+                BitPerfect
+            };
+            info!(
+                output_mode = ?mode,
+                "Output mode changed",
+            );
+            if let Err(e) = state_mode.playback.set_output_mode(mode) {
+                warn!(error = %e, "Failed to set output mode");
+            }
+            state_mode
+                .handles
+                .lock()
+                .retain_task(spawn_future_local(persist_output_mode(
+                    Arc::clone(&state_mode.storage),
+                    mode,
+                )));
+        }));
 
     output_group.add(&mode_combo);
     page.add(&output_group);
@@ -174,12 +193,17 @@ fn build_playback_group(page: &PreferencesPage, state: &Arc<AppState>) {
         .build();
 
     let state_vol = Arc::clone(state);
-    volume_row.connect_notify_local(Some("value"), move |row, _| {
-        let vol = row.value() / 100.0;
-        if let Err(e) = state_vol.playback.set_volume(vol) {
-            warn!(error = %e, "Failed to set volume from preferences");
-        }
-    });
+    state
+        .handles
+        .lock()
+        .retain_signal(
+            volume_row.connect_notify_local(Some("value"), move |row, _| {
+                let vol = row.value() / 100.0;
+                if let Err(e) = state_vol.playback.set_volume(vol) {
+                    warn!(error = %e, "Failed to set volume from preferences");
+                }
+            }),
+        );
 
     playback_group.add(&volume_row);
 
@@ -189,13 +213,22 @@ fn build_playback_group(page: &PreferencesPage, state: &Arc<AppState>) {
     gapless_row.set_active(state.storage.get_gapless_enabled());
 
     let state_gapless = Arc::clone(state);
-    gapless_row.connect_active_notify(move |row| {
-        let enabled = row.is_active();
-        if let Err(e) = state_gapless.playback.set_gapless_enabled(enabled) {
-            warn!(error = %e, "Failed to toggle gapless playback");
-        }
-        spawn_future_local(save_gapless_setting(Arc::clone(&state_gapless), enabled));
-    });
+    state
+        .handles
+        .lock()
+        .retain_signal(gapless_row.connect_active_notify(move |row| {
+            let enabled = row.is_active();
+            if let Err(e) = state_gapless.playback.set_gapless_enabled(enabled) {
+                warn!(error = %e, "Failed to toggle gapless playback");
+            }
+            state_gapless
+                .handles
+                .lock()
+                .retain_task(spawn_future_local(save_gapless_setting(
+                    Arc::clone(&state_gapless),
+                    enabled,
+                )));
+        }));
 
     playback_group.add(&gapless_row);
     page.add(&playback_group);

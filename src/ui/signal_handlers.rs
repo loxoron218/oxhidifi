@@ -1,11 +1,108 @@
 //! Latest-value store with per-subscriber unbounded signal fan-out.
+//!
+//! Also owns fire-and-forget GTK handles: signal connections, main-context
+//! tasks, event sources, and property bindings return small handle values
+//! that must be owned for the application lifetime (see [`UiHandles`]).
 
-use std::sync::Arc;
+use std::{
+    fmt::{Debug, Formatter, Result as FmtResult},
+    sync::Arc,
+};
 
 use {
     async_channel::{Receiver, Sender, unbounded},
+    libadwaita::glib::{Binding, JoinHandle, SignalHandlerId, SourceId},
     parking_lot::Mutex,
+    tokio::task::JoinHandle as TokioJoinHandle,
 };
+
+/// Owns fire-and-forget UI handles for the application lifetime.
+///
+/// Centralizes ownership of every handle that outlives its creation scope:
+/// signal connections live with their widgets, tasks and sources with the
+/// main context or Tokio runtime, and property bindings live exactly as long
+/// as the [`Binding`] value is retained (dropping one unbinds it). All
+/// `retain_*` methods return `()`, so call sites stay lint-clean without
+/// placeholder bindings. Thread safety comes from the `parking_lot::Mutex`
+/// at the storage site; this type itself is only touched on the GTK main
+/// thread.
+#[derive(Default)]
+pub struct UiHandles {
+    /// Retained property bindings; each stays bound while stored here.
+    bindings: Vec<Binding>,
+    /// Retained Tokio task handles, detached but owned for symmetry.
+    blocking_tasks: Vec<TokioJoinHandle<()>>,
+    /// Retained signal handler IDs, kept as explicit ownership records.
+    signals: Vec<SignalHandlerId>,
+    /// Retained event source IDs.
+    sources: Vec<SourceId>,
+    /// Retained main-context task handles.
+    tasks: Vec<JoinHandle<()>>,
+}
+
+impl UiHandles {
+    /// Retain a property binding so it stays bound.
+    ///
+    /// # Arguments
+    ///
+    /// * `binding` - Binding returned by `bind_property().build()`; dropping it would unbind the
+    ///   properties immediately.
+    pub fn retain_binding(&mut self, binding: Binding) {
+        self.bindings.push(binding);
+    }
+
+    /// Retain a spawned Tokio task handle.
+    ///
+    /// # Arguments
+    ///
+    /// * `handle` - Task handle returned by `tokio::spawn`; the task is detached and keeps running
+    ///   independently.
+    pub fn retain_blocking_task(&mut self, handle: TokioJoinHandle<()>) {
+        self.blocking_tasks.push(handle);
+    }
+
+    /// Retain a connected signal handler ID for the application lifetime.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - Handler ID returned by `connect_*`; the connection itself is kept alive by its
+    ///   widget.
+    pub fn retain_signal(&mut self, id: SignalHandlerId) {
+        self.signals.push(id);
+    }
+
+    /// Retain an event source ID for the application lifetime.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - Source ID returned by `idle_add_local` or `timeout_add_local`; the source lives
+    ///   with the main context.
+    pub fn retain_source(&mut self, id: SourceId) {
+        self.sources.push(id);
+    }
+
+    /// Retain a spawned main-context task handle.
+    ///
+    /// # Arguments
+    ///
+    /// * `handle` - Task handle returned by `spawn_future_local` or `spawn_local`; the task keeps
+    ///   running independently.
+    pub fn retain_task(&mut self, handle: JoinHandle<()>) {
+        self.tasks.push(handle);
+    }
+}
+
+impl Debug for UiHandles {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        f.debug_struct("UiHandles")
+            .field("signals", &self.signals.len())
+            .field("tasks", &self.tasks.len())
+            .field("blocking_tasks", &self.blocking_tasks.len())
+            .field("sources", &self.sources.len())
+            .field("bindings", &self.bindings.len())
+            .finish()
+    }
+}
 
 /// Latest-value store with per-subscriber unbounded `async_channel` fan-out.
 ///
@@ -15,6 +112,7 @@ use {
 /// receiver is awaited in a `spawn_future_local` — unlike `tokio::sync::watch`,
 /// whose wakers do not reliably wake the `GLib` main loop. Slow or dropped
 /// subscribers never affect others: each has its own unbounded channel.
+#[derive(Debug)]
 pub struct ValueSignal<T> {
     /// Inner shared state.
     inner: Arc<ValueSignalInner<T>>,
@@ -76,6 +174,7 @@ impl<T> Clone for ValueSignal<T> {
 }
 
 /// Shared state behind a [`ValueSignal`].
+#[derive(Debug)]
 struct ValueSignalInner<T> {
     /// Authoritative latest value, readable synchronously via [`ValueSignal::borrow`].
     value: Mutex<T>,
@@ -87,7 +186,7 @@ struct ValueSignalInner<T> {
 mod tests {
     use anyhow::{Result, ensure};
 
-    use crate::ui::signal::ValueSignal;
+    use crate::ui::signal_handlers::ValueSignal;
 
     #[test]
     fn borrow_returns_initial_value() {

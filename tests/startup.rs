@@ -12,6 +12,7 @@ mod tests {
     use {
         anyhow::{Context, Result, ensure},
         async_channel::unbounded,
+        tempfile::tempdir,
         tokio::runtime::Runtime,
         tracing::warn,
     };
@@ -47,7 +48,7 @@ mod tests {
     #[test]
     fn library_scanning_works_without_device() -> Result<()> {
         let rt = Runtime::new().context("Failed to create tokio runtime")?;
-        let dir = tempfile::tempdir().context("Failed to create temp dir")?;
+        let dir = tempdir().context("Failed to create temp dir")?;
         let settings_path = dir.path().join("settings.json");
 
         rt.block_on(async {

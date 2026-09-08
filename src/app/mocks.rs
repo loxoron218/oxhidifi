@@ -1,7 +1,8 @@
-//! Mock `AppState` construction and fresh storage test scaffolding.
+//! Mock `AppState` construction, fresh storage, and widget fixtures for tests.
 
 use std::{
     env::temp_dir,
+    io::Error,
     path::Path,
     process::id,
     sync::{Arc, LazyLock},
@@ -9,6 +10,7 @@ use std::{
 
 use {
     anyhow::{Context, Result, anyhow},
+    libadwaita::gtk::{Button, Label, Orientation::Horizontal, Picture, Scale},
     tokio::runtime::Runtime,
 };
 
@@ -18,6 +20,7 @@ use crate::{
     playback::engine::PlaybackEngine,
     storage::{active_tab::ActiveTab::Albums, database::SqliteStorage, view_mode::ViewMode::Grid},
     threading::ThreadManager,
+    ui::player::sidebar::{PlaybackWidgets, TrackLabels},
 };
 
 /// Shared Tokio runtime used to drive the `GLib` main context in tests.
@@ -29,7 +32,7 @@ use crate::{
 /// fetches) are polled from that shared context on whichever thread pumps
 /// it, and would otherwise panic on the missing Tokio context. Sharing one
 /// runtime keeps timer registrations valid across pump calls.
-static TEST_RUNTIME: LazyLock<Result<Runtime, std::io::Error>> = LazyLock::new(Runtime::new);
+static TEST_RUNTIME: LazyLock<Result<Runtime, Error>> = LazyLock::new(Runtime::new);
 
 impl AppState {
     /// Create a mock `AppState` for testing.
@@ -47,6 +50,36 @@ impl AppState {
             .map_err(|e| anyhow!("{e:#}"))?;
 
         Ok(build_app_state(storage))
+    }
+}
+
+impl PlaybackWidgets {
+    /// Build deterministic widgets for listener tests.
+    #[must_use]
+    pub fn test_fixture() -> Self {
+        Self {
+            labels: TrackLabels::test_fixture(),
+            artwork_image: Picture::new(),
+            play_button: Button::new(),
+            seek_scale: Scale::with_range(Horizontal, 0.0, 100.0, 1.0),
+            current_time: Label::new(Some("00:00")),
+            total_time: Label::new(Some("00:00")),
+            output_mode_btn: Button::new(),
+            volume_scale: Scale::with_range(Horizontal, 0.0, 1.0, 0.01),
+        }
+    }
+}
+
+impl TrackLabels {
+    /// Build deterministic labels for widget tests.
+    #[must_use]
+    pub fn test_fixture() -> Self {
+        Self {
+            title: Label::new(Some("Title")),
+            artist: Label::new(Some("Artist")),
+            album: Label::new(Some("Album")),
+            format: Label::new(Some("FLAC")),
+        }
     }
 }
 

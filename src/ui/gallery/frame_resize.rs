@@ -1,7 +1,6 @@
 //! Album cover frame resize and grid cover population for in-place zoom.
 
 use std::{
-    boxed::Box,
     collections::HashMap,
     mem::take,
     sync::{Arc, atomic::Ordering::Relaxed},
@@ -29,8 +28,9 @@ use crate::{
     app::runtime::{AppState, CachedAlbumData},
     ui::{
         gallery::{
-            card::{build_album_card, build_placeholder, resize_album_card},
+            card::{build_album_card, build_placeholder},
             grid_flow::{fill_grid_batch, resize_grid_batched},
+            label_sizing::resize_album_card,
         },
         image_decode::{DecodedCover, raw_to_texture},
         texture_pool::{CoverArtCache, dispatch::ArtworkDecodeRequest},
@@ -314,21 +314,24 @@ fn load_cover_art_async(
 
     let overlays: Vec<Overlay> = overlays.to_vec();
     let cache_clone = Arc::clone(cache);
-    let state = Arc::clone(state);
+    let state_cb = Arc::clone(state);
 
-    spawn_future_local(async move {
-        while let Ok((index, album_id, decoded)) = rx.recv().await {
-            apply_decoded_cover_if_current(
-                &state,
-                &cache_clone,
-                &overlays,
-                index,
-                album_id,
-                &decoded,
-                size,
-            );
-        }
-    });
+    state
+        .handles
+        .lock()
+        .retain_task(spawn_future_local(async move {
+            while let Ok((index, album_id, decoded)) = rx.recv().await {
+                apply_decoded_cover_if_current(
+                    &state_cb,
+                    &cache_clone,
+                    &overlays,
+                    index,
+                    album_id,
+                    &decoded,
+                    size,
+                );
+            }
+        }));
 }
 
 /// Insert a decoded cover into the cache and apply it, skipping sizes that

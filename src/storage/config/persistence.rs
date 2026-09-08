@@ -321,7 +321,11 @@ mod tests {
         let corrupt = "{ this is not valid json";
         write(&settings_path, corrupt)?;
 
-        SettingsStore::load_from_path(&settings_path).await?;
+        let corrupt_store = SettingsStore::load_from_path(&settings_path).await?;
+        ensure!(
+            corrupt_store.settings_path == settings_path,
+            "loaded store must reference the settings path"
+        );
 
         ensure!(
             !settings_path.exists(),

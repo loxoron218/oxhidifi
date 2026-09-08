@@ -47,7 +47,7 @@ impl<S: Storage> FsScanner<S> {
             })
             .await
             .map_err(|e| Self::map_insert_error(&e, "artist"))?;
-        cache.insert(key, id);
+        *cache.entry(key).or_insert(id) = id;
         Ok(id)
     }
 
@@ -118,7 +118,7 @@ impl<S: Storage> FsScanner<S> {
             })
             .await
             .map_err(|e| Self::map_insert_error(&e, "album"))?;
-        cache.insert(key, id);
+        *cache.entry(key).or_insert(id) = id;
         Ok(id)
     }
 

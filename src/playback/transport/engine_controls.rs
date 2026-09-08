@@ -192,7 +192,7 @@ pub fn seek_to_position(
 mod tests {
     use std::sync::Arc;
 
-    use anyhow::{Result, bail};
+    use anyhow::{Result, anyhow, bail};
 
     use crate::playback::{
         devices::OutputMode::{BitPerfect, Resampled},
@@ -207,7 +207,7 @@ mod tests {
     #[test]
     fn stop_clears_state() -> Result<()> {
         let shared = Arc::new(EngineShared::default());
-        stop_playback(&shared).map_err(|e| anyhow::anyhow!("{e}"))?;
+        stop_playback(&shared).map_err(|e| anyhow!("{e}"))?;
         if shared.state.lock().status != Stopped {
             bail!("engine should be stopped after stop_playback");
         }
@@ -217,7 +217,7 @@ mod tests {
     #[test]
     fn toggle_pause_when_stopped_without_track_is_noop() -> Result<()> {
         let shared = Arc::new(EngineShared::default());
-        toggle_pause_or_resume(&shared).map_err(|e| anyhow::anyhow!("{e}"))?;
+        toggle_pause_or_resume(&shared).map_err(|e| anyhow!("{e}"))?;
         if shared.state.lock().status != Stopped {
             bail!("engine should remain stopped");
         }
@@ -227,11 +227,11 @@ mod tests {
     #[test]
     fn apply_volume_clamps() -> Result<()> {
         let shared = Arc::new(EngineShared::default());
-        apply_volume(&shared, 2.0).map_err(|e| anyhow::anyhow!("{e}"))?;
+        apply_volume(&shared, 2.0).map_err(|e| anyhow!("{e}"))?;
         if (shared.state.lock().volume - 1.0).abs() >= f64::EPSILON {
             bail!("volume should clamp to 1.0");
         }
-        apply_volume(&shared, -0.5).map_err(|e| anyhow::anyhow!("{e}"))?;
+        apply_volume(&shared, -0.5).map_err(|e| anyhow!("{e}"))?;
         if shared.state.lock().volume.abs() >= f64::EPSILON {
             bail!("volume should clamp to 0.0");
         }
@@ -241,22 +241,22 @@ mod tests {
     #[test]
     fn apply_muted_preserves_volume() -> Result<()> {
         let shared = Arc::new(EngineShared::default());
-        apply_volume(&shared, 0.7).map_err(|e| anyhow::anyhow!("{e}"))?;
-        apply_muted(&shared, true).map_err(|e| anyhow::anyhow!("{e}"))?;
+        apply_volume(&shared, 0.7).map_err(|e| anyhow!("{e}"))?;
+        apply_muted(&shared, true).map_err(|e| anyhow!("{e}"))?;
         if (shared.state.lock().volume - 0.7).abs() >= f64::EPSILON {
             bail!("slider volume must be preserved while muted");
         }
-        apply_muted(&shared, false).map_err(|e| anyhow::anyhow!("{e}"))?;
+        apply_muted(&shared, false).map_err(|e| anyhow!("{e}"))?;
         Ok(())
     }
 
     #[test]
     fn apply_output_mode_and_gapless() -> Result<()> {
         let shared = Arc::new(EngineShared::default());
-        apply_output_mode(&shared, BitPerfect).map_err(|e| anyhow::anyhow!("{e}"))?;
-        apply_output_mode(&shared, Resampled).map_err(|e| anyhow::anyhow!("{e}"))?;
-        apply_gapless(&shared, true).map_err(|e| anyhow::anyhow!("{e}"))?;
-        apply_gapless(&shared, false).map_err(|e| anyhow::anyhow!("{e}"))?;
+        apply_output_mode(&shared, BitPerfect).map_err(|e| anyhow!("{e}"))?;
+        apply_output_mode(&shared, Resampled).map_err(|e| anyhow!("{e}"))?;
+        apply_gapless(&shared, true).map_err(|e| anyhow!("{e}"))?;
+        apply_gapless(&shared, false).map_err(|e| anyhow!("{e}"))?;
         Ok(())
     }
 
@@ -264,7 +264,7 @@ mod tests {
     fn seek_clamps_to_duration() -> Result<()> {
         let shared = Arc::new(EngineShared::default());
         shared.state.lock().duration_seconds = 200.0;
-        seek_to_position(&shared, 500.0).map_err(|e| anyhow::anyhow!("{e}"))?;
+        seek_to_position(&shared, 500.0).map_err(|e| anyhow!("{e}"))?;
         if (shared.state.lock().elapsed_seconds - 200.0).abs() >= f64::EPSILON {
             bail!("elapsed should clamp to duration");
         }

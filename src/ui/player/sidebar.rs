@@ -24,7 +24,8 @@ use crate::{
     ui::{
         detail::page::build_scroll_content,
         player::{
-            deck::{build_queue_section, build_seek_section, build_transport, build_volume},
+            acoustic_fader::build_volume,
+            deck::{build_queue_section, build_seek_section, build_transport},
             playback_events::spawn_async_listeners,
         },
     },
@@ -41,7 +42,7 @@ pub const COVER_MIN_SIZE: i32 = 180;
 pub type MetaResult = (String, String, String, Option<String>, String, i64);
 
 /// Widget references for playback control updates.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct PlaybackWidgets {
     /// Track title, artist, album, format labels.
     pub labels: TrackLabels,
@@ -62,7 +63,7 @@ pub struct PlaybackWidgets {
 }
 
 /// Labels for track metadata display.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct TrackLabels {
     /// Title label.
     pub title: Label,
@@ -190,7 +191,17 @@ fn build_track_info() -> (Label, Label, Label, Label) {
 
 #[cfg(test)]
 mod tests {
-    use crate::ui::player::sidebar::format_time;
+    use std::sync::Arc;
+
+    use anyhow::{Result, ensure};
+
+    use crate::{
+        app::runtime::AppState,
+        ui::player::sidebar::{
+            COVER_MIN_SIZE, MetaResult, PlaybackWidgets, TrackLabels, build_player_content,
+            format_time,
+        },
+    };
 
     #[test]
     fn format_time_zero() {
@@ -205,5 +216,64 @@ mod tests {
     #[test]
     fn format_time_hours() {
         assert_eq!(format_time(3661.0), "61:01");
+    }
+
+    #[test]
+    fn cover_min_size_is_documented_floor() {
+        assert_eq!(
+            COVER_MIN_SIZE, 180,
+            "cover size floor must stay 180 px per the documented threshold"
+        );
+    }
+
+    #[test]
+    fn meta_result_fields_are_accessible() {
+        let meta: MetaResult = (
+            String::from("Title"),
+            String::from("Artist"),
+            String::from("Album"),
+            None,
+            String::from("FLAC"),
+            7,
+        );
+        assert_eq!(meta.0, "Title", "title field must round-trip");
+        assert_eq!(meta.5, 7, "album id field must round-trip");
+    }
+
+    #[test]
+    fn track_labels_fields_are_accessible() {
+        let labels = TrackLabels::test_fixture();
+        assert_eq!(labels.title.label(), "Title", "title label must round-trip");
+        assert_eq!(
+            labels.format.label(),
+            "FLAC",
+            "format label must round-trip"
+        );
+    }
+
+    #[test]
+    fn playback_widgets_fields_are_accessible() {
+        let widgets = PlaybackWidgets::test_fixture();
+        assert_eq!(
+            widgets.current_time.label(),
+            "00:00",
+            "current time label must round-trip"
+        );
+        assert_eq!(
+            widgets.total_time.label(),
+            "00:00",
+            "total time label must round-trip"
+        );
+    }
+
+    #[test]
+    fn player_content_installs_child() -> Result<()> {
+        let state = Arc::new(AppState::mock()?);
+        let scroll = build_player_content(&state);
+        ensure!(
+            scroll.child().is_some(),
+            "player content must be installed in the scrolled window"
+        );
+        Ok(())
     }
 }

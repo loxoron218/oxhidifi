@@ -5,7 +5,7 @@
 //! navigation on [`EngineShared`]. The thin [`PlaybackTransport`] impl in
 //! the parent module delegates to these helpers.
 
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 use tracing::{info, warn};
 
@@ -18,6 +18,66 @@ use crate::{
     },
     storage::StorageError::QueueFull as StorageQueueFull,
 };
+
+/// Resolve the registered file path for a track.
+///
+/// # Arguments
+///
+/// * `shared` - Engine state holding the track path registry
+/// * `track_id` - Track to resolve
+///
+/// # Returns
+///
+/// The file path registered for `track_id`.
+///
+/// # Errors
+///
+/// Returns [`PlaybackError::TrackNotFound`] if no path is registered.
+fn track_path(shared: &Arc<EngineShared>, track_id: i64) -> Result<PathBuf, PlaybackError> {
+    shared
+        .track_paths
+        .lock()
+        .get(&track_id)
+        .cloned()
+        .ok_or(TrackNotFound(track_id))
+}
+
+/// Resolve the path for `track_id` and start playback.
+///
+/// # Arguments
+///
+/// * `shared` - Engine state holding paths and the decode worker
+/// * `track_id` - Track to start
+///
+/// # Errors
+///
+/// Returns [`PlaybackError::TrackNotFound`] if no path is registered.
+fn start_track(shared: &Arc<EngineShared>, track_id: i64) -> Result<(), PlaybackError> {
+    let path = track_path(shared, track_id)?;
+    start_playback(shared, track_id, path);
+    Ok(())
+}
+
+/// Replace the queue contents, mapping storage errors to playback errors.
+///
+/// # Arguments
+///
+/// * `shared` - Engine state holding the queue
+/// * `queue` - Replacement track IDs in play order
+///
+/// # Errors
+///
+/// Returns [`PlaybackError::QueueFull`] if the queue exceeds capacity.
+/// Returns [`PlaybackError::Storage`] for other storage failures.
+fn replace_queue(shared: &Arc<EngineShared>, queue: &[i64]) -> Result<(), PlaybackError> {
+    shared
+        .queue
+        .set_queue(queue.to_vec())
+        .map_err(|error| match error {
+            StorageQueueFull { max } => QueueFull { max },
+            error => Storage(error),
+        })
+}
 
 /// Play a specific track by ID.
 ///
@@ -80,32 +140,14 @@ pub fn play_list_at(
         && queue.iter().all(|id| existing.contains(id));
     if should_preserve && let Some(pos) = existing.iter().position(|&id| id == play_id) {
         shared.queue.set_current_index(pos);
-        let path = shared
-            .track_paths
-            .lock()
-            .get(&play_id)
-            .cloned()
-            .ok_or(TrackNotFound(play_id))?;
-        start_playback(shared, play_id, path);
+        start_track(shared, play_id)?;
         return Ok(());
     }
-    shared
-        .queue
-        .set_queue(queue.clone())
-        .map_err(|error| match error {
-            StorageQueueFull { max } => QueueFull { max },
-            error => Storage(error),
-        })?;
+    replace_queue(shared, &queue)?;
     shared.queue.set_current_index(start_index);
     shared.send_event(&QueueChanged { track_ids: queue });
     let play_id = shared.queue.current().ok_or(QueueEmpty)?;
-    let path = shared
-        .track_paths
-        .lock()
-        .get(&play_id)
-        .cloned()
-        .ok_or(TrackNotFound(play_id))?;
-    start_playback(shared, play_id, path);
+    start_track(shared, play_id)?;
     Ok(())
 }
 
@@ -137,31 +179,13 @@ pub fn play_list(shared: &Arc<EngineShared>, queue: Vec<i64>) -> Result<(), Play
         && let Some(pos) = existing.iter().position(|&id| id == first_id)
     {
         shared.queue.set_current_index(pos);
-        let path = shared
-            .track_paths
-            .lock()
-            .get(&first_id)
-            .cloned()
-            .ok_or(TrackNotFound(first_id))?;
-        start_playback(shared, first_id, path);
+        start_track(shared, first_id)?;
         return Ok(());
     }
-    shared
-        .queue
-        .set_queue(queue.clone())
-        .map_err(|error| match error {
-            StorageQueueFull { max } => QueueFull { max },
-            error => Storage(error),
-        })?;
+    replace_queue(shared, &queue)?;
     shared.send_event(&QueueChanged { track_ids: queue });
     let first_id = shared.queue.current().ok_or(QueueEmpty)?;
-    let path = shared
-        .track_paths
-        .lock()
-        .get(&first_id)
-        .cloned()
-        .ok_or(TrackNotFound(first_id))?;
-    start_playback(shared, first_id, path);
+    start_track(shared, first_id)?;
     Ok(())
 }
 
@@ -176,13 +200,7 @@ pub fn advance_next(shared: &Arc<EngineShared>) -> Result<(), PlaybackError> {
         info!("Next track failed — queue empty");
         QueueEmpty
     })?;
-    let path = shared
-        .track_paths
-        .lock()
-        .get(&next_id)
-        .cloned()
-        .ok_or(TrackNotFound(next_id))?;
-    start_playback(shared, next_id, path);
+    start_track(shared, next_id)?;
     Ok(())
 }
 
@@ -197,13 +215,7 @@ pub fn advance_previous(shared: &Arc<EngineShared>) -> Result<(), PlaybackError>
         info!("Previous track failed — queue empty");
         QueueEmpty
     })?;
-    let path = shared
-        .track_paths
-        .lock()
-        .get(&prev_id)
-        .cloned()
-        .ok_or(TrackNotFound(prev_id))?;
-    start_playback(shared, prev_id, path);
+    start_track(shared, prev_id)?;
     Ok(())
 }
 

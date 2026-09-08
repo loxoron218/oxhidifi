@@ -136,7 +136,9 @@ mod tests {
         num_traits::NumCast,
     };
 
-    use crate::playback::resampler::tone_gen::{generate_impulse, generate_silence, generate_sine};
+    use crate::playback::resampler::tone_gen::{
+        generate_impulse, generate_pink_noise, generate_silence, generate_sine,
+    };
 
     #[test]
     fn silence_has_expected_length() -> Result<()> {
@@ -165,6 +167,17 @@ mod tests {
         let len: f64 = NumCast::from(sine.len()).unwrap_or(1.0);
         let mean = NumCast::from(sine.iter().sum::<f32>()).unwrap_or(0.0) / len;
         ensure!(mean.abs() < 0.05, "mean should be near zero, got {mean}");
+        Ok(())
+    }
+
+    #[test]
+    fn pink_noise_has_expected_len_and_non_silent() -> Result<()> {
+        let noise = generate_pink_noise(44100, 0.01, 0.5, 1);
+        ensure!(!noise.is_empty(), "expected non-empty pink noise");
+        ensure!(
+            noise.iter().any(|s| s.abs() > f32::EPSILON),
+            "expected non-silent pink noise"
+        );
         Ok(())
     }
 }

@@ -35,7 +35,7 @@ impl SqliteStorage {
             .to_str()
             .ok_or_else(|| InvalidPath(path.display().to_string()))?;
 
-        query("INSERT OR IGNORE INTO library_directories (path) VALUES (?)")
+        _ = query("INSERT OR IGNORE INTO library_directories (path) VALUES (?)")
             .bind(path_str)
             .execute(&self.pool)
             .await
@@ -75,14 +75,14 @@ impl SqliteStorage {
             .await
             .map_err(|e| Database(format!("Begin transaction failed: {e}")))?;
 
-        query("DELETE FROM tracks WHERE file_path = ? OR file_path LIKE ? || '/%'")
+        _ = query("DELETE FROM tracks WHERE file_path = ? OR file_path LIKE ? || '/%'")
             .bind(&dir_norm)
             .bind(&dir_norm)
             .execute(&mut *tx)
             .await
             .map_err(|e| Database(format!("Delete tracks by directory failed: {e}")))?;
 
-        query(
+        _ = query(
             "DELETE FROM albums WHERE id NOT IN (SELECT DISTINCT album_id FROM tracks WHERE \
              album_id IS NOT NULL)",
         )
@@ -90,7 +90,7 @@ impl SqliteStorage {
         .await
         .map_err(|e| Database(format!("Delete orphan albums failed: {e}")))?;
 
-        query(
+        _ = query(
             "DELETE FROM artists WHERE id NOT IN (SELECT DISTINCT artist_id FROM albums) AND id \
              NOT IN (SELECT DISTINCT artist_id FROM tracks WHERE artist_id IS NOT NULL)",
         )
@@ -98,7 +98,7 @@ impl SqliteStorage {
         .await
         .map_err(|e| Database(format!("Delete orphan artists failed: {e}")))?;
 
-        query("DELETE FROM library_directories WHERE id = ?")
+        _ = query("DELETE FROM library_directories WHERE id = ?")
             .bind(id)
             .execute(&mut *tx)
             .await
@@ -119,7 +119,7 @@ impl SqliteStorage {
     ///
     /// Returns [`StorageError::Database`] if any delete fails.
     pub async fn prune_orphans_row(&self) -> StorageResult<()> {
-        query(
+        _ = query(
             "DELETE FROM albums WHERE id NOT IN (SELECT DISTINCT album_id FROM tracks WHERE \
              album_id IS NOT NULL)",
         )
@@ -127,7 +127,7 @@ impl SqliteStorage {
         .await
         .map_err(|e| Database(format!("Delete orphan albums failed: {e}")))?;
 
-        query(
+        _ = query(
             "DELETE FROM artists WHERE id NOT IN (SELECT DISTINCT artist_id FROM albums) AND id \
              NOT IN (SELECT DISTINCT artist_id FROM tracks WHERE artist_id IS NOT NULL)",
         )

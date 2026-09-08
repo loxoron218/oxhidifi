@@ -4,6 +4,7 @@
 //! scans when files are added, modified, or removed.
 
 use std::{
+    fmt::{Debug, Formatter, Result as FmtResult},
     mem::take,
     path::{Path, PathBuf},
     sync::Arc,
@@ -126,7 +127,7 @@ impl<S: Storage + 'static> LibraryWatcher<S> {
     /// # Errors
     ///
     /// Returns an error if a directory cannot be watched.
-    pub fn watch_directories(&self, directories: &[PathBuf]) -> Result<(), notify::Error> {
+    pub fn watch_directories(&self, directories: &[PathBuf]) -> Result<(), Error> {
         let mut fs_watcher = self.watcher.lock();
         let mut watched_dirs = self.watched.lock();
         for dir in directories {
@@ -152,7 +153,7 @@ impl<S: Storage + 'static> LibraryWatcher<S> {
     /// # Errors
     ///
     /// Returns an error if the directory cannot be unwatched.
-    pub fn unwatch_directory(&self, path: &Path) -> Result<(), notify::Error> {
+    pub fn unwatch_directory(&self, path: &Path) -> Result<(), Error> {
         self.watcher.lock().unwatch(path)?;
         self.watched.lock().retain(|p| p != path);
         info!(path = %path.display(), "Stopped watching directory");
@@ -172,7 +173,7 @@ impl<S: Storage + 'static> LibraryWatcher<S> {
     /// event channel and cancel any in-progress scan.
     pub fn shutdown(&self) {
         self.stop_watching();
-        self.event_tx.lock().take();
+        drop(self.event_tx.lock().take());
         if let Err(e) = self.scanner.cancel() {
             warn!(error = %e, "Failed to cancel scan during watcher shutdown");
         }
@@ -286,6 +287,14 @@ impl<S: Storage + 'static> LibraryWatcher<S> {
             "File modified, triggering incremental scan of parent"
         );
         self.scan_and_log(parent).await;
+    }
+}
+
+impl<S: Storage> Debug for LibraryWatcher<S> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        f.debug_struct("LibraryWatcher")
+            .field("watched", &self.watched.lock().clone())
+            .finish_non_exhaustive()
     }
 }
 

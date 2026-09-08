@@ -130,10 +130,14 @@ mod tests {
 
     use crate::{
         app::{
-            bootstrap::{emit_session_events, persist_session_on_shutdown},
+            bootstrap::{
+                emit_session_events, persist_session_on_shutdown, run_startup_checks,
+                spawn_watcher_loop,
+            },
             mocks::{build_app_state, fresh_storage},
             runtime::AppState,
         },
+        library::watcher::LibraryWatcher,
         playback::{
             state::{
                 PlaybackEvent::{Paused, PositionTick, QueueChanged, TrackStarted},
@@ -263,5 +267,31 @@ mod tests {
                 && (duration_seconds - 200.0).abs() < f64::EPSILON
         ));
         Ok(())
+    }
+
+    #[test]
+    fn spawn_watcher_loop_exits_after_shutdown() -> Result<()> {
+        let runtime = Runtime::new().context("Failed to create tokio runtime")?;
+        let state = AppState::mock()?;
+        let (watcher, watcher_rx) =
+            LibraryWatcher::new(Arc::clone(&state.scanner)).map_err(|e| anyhow!("{e}"))?;
+        let watcher = Arc::new(watcher);
+        runtime.block_on(async {
+            let handle = spawn_watcher_loop(Arc::clone(&watcher), watcher_rx);
+            watcher.shutdown();
+            handle.await.map_err(|e| anyhow!("{e}"))
+        })?;
+        Ok(())
+    }
+
+    #[test]
+    fn run_startup_checks_signature() {
+        fn assert_shape<F, Fut>(_: F)
+        where
+            F: Fn() -> Fut,
+            Fut: Future<Output = ()>,
+        {
+        }
+        assert_shape(run_startup_checks);
     }
 }

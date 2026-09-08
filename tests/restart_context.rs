@@ -4,7 +4,7 @@
 //! reconnects to the same SQLite file, and asserts the queue order, track IDs,
 //! and context are preserved.
 
-mod scratch_store;
+pub mod scratch_store;
 
 use std::path::Path;
 

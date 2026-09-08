@@ -16,7 +16,7 @@ fn resampler_44100_to_48000(c: &mut Criterion) {
     };
     let input = vec![0.5_f32; 1024 * 2];
 
-    c.bench_function("resampler_44100_to_48000", |b| {
+    _ = c.bench_function("resampler_44100_to_48000", |b| {
         b.iter(|| {
             resampler.push_input(&input);
             drain_resampler(&mut resampler);
@@ -31,7 +31,7 @@ fn resampler_48000_to_96000(c: &mut Criterion) {
     };
     let input = vec![0.5_f32; 1024 * 2];
 
-    c.bench_function("resampler_48000_to_96000", |b| {
+    _ = c.bench_function("resampler_48000_to_96000", |b| {
         b.iter(|| {
             resampler.push_input(&input);
             drain_resampler(&mut resampler);
@@ -46,7 +46,7 @@ fn resampler_96000_to_44100(c: &mut Criterion) {
     };
     let input = vec![0.5_f32; 1024 * 2];
 
-    c.bench_function("resampler_96000_to_44100", |b| {
+    _ = c.bench_function("resampler_96000_to_44100", |b| {
         b.iter(|| {
             resampler.push_input(&input);
             drain_resampler(&mut resampler);
@@ -61,7 +61,7 @@ fn resampler_mono_44100_to_48000(c: &mut Criterion) {
     };
     let input = vec![0.5_f32; 1024];
 
-    c.bench_function("resampler_mono_44100_to_48000", |b| {
+    _ = c.bench_function("resampler_mono_44100_to_48000", |b| {
         b.iter(|| {
             resampler.push_input(&input);
             drain_resampler(&mut resampler);
@@ -76,7 +76,7 @@ fn resampler_192000_to_48000(c: &mut Criterion) {
     };
     let input = vec![0.5_f32; 1024 * 2];
 
-    c.bench_function("resampler_192000_to_48000", |b| {
+    _ = c.bench_function("resampler_192000_to_48000", |b| {
         b.iter(|| {
             resampler.push_input(&input);
             drain_resampler(&mut resampler);

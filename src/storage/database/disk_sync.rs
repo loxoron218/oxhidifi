@@ -74,9 +74,9 @@ impl SqliteStorage {
     /// write.  Errors are logged on the background task.
     pub fn save_settings(self: &Arc<Self>) {
         let me = Arc::clone(self);
-        spawn(async move {
+        drop(spawn(async move {
             Self::persist_settings(&me).await;
-        });
+        }));
     }
 
     /// Write settings to disk with a debounce, logging any failure.

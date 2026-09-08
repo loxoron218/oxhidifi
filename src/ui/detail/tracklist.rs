@@ -8,6 +8,7 @@ use {
         playback::{queue_manager::PlaybackQueue, transport::PlaybackTransport},
         storage::{Storage, catalog::Track, formats::format_sample_rate_str},
     },
+    async_channel::Sender,
     libadwaita::{
         gdk::Key,
         glib::{
@@ -156,44 +157,68 @@ fn attach_track_controllers(row: &ListBoxRow, state: &Arc<AppState>, track_id: i
     let sc = Arc::clone(state);
     let tid = track_id;
     let click = GestureClick::new();
-    click.connect_released(move |_, _, _, _| {
-        spawn_playback(&sc, tid);
-    });
+    state
+        .handles
+        .lock()
+        .retain_signal(click.connect_released(move |_, _, _, _| {
+            spawn_playback(&sc, tid);
+        }));
     row.add_controller(click);
 
     let sc_kb = Arc::clone(state);
     let tid_kb = track_id;
     let key_controller = EventControllerKey::new();
-    key_controller.connect_key_pressed(move |_, key, _, _| {
-        if key == Key::Return || key == Key::KP_Enter {
-            spawn_playback(&sc_kb, tid_kb);
-            Stop
-        } else {
-            Proceed
-        }
-    });
+    state
+        .handles
+        .lock()
+        .retain_signal(key_controller.connect_key_pressed(move |_, key, _, _| {
+            if key == Key::Return || key == Key::KP_Enter {
+                spawn_playback(&sc_kb, tid_kb);
+                Stop
+            } else {
+                Proceed
+            }
+        }));
     row.add_controller(key_controller);
 
     let sc2 = Arc::clone(state);
     let tid2 = track_id;
     let right_click = GestureClick::new();
     right_click.set_button(3);
-    right_click.connect_released(move |_, _, _, _| {
-        if let Err(e) = sc2.playback.queue().append(tid2) {
-            let msg = format!("Queue full (max {}): {e}", PlaybackQueue::MAX_CAPACITY);
-            warn!(error = %e, "Queue append rejected — cap reached");
-            drop(sc2.toast_tx.try_send(msg));
-        }
-    });
+    state
+        .handles
+        .lock()
+        .retain_signal(right_click.connect_released(move |_, _, _, _| {
+            if let Err(e) = sc2.playback.queue().append(tid2) {
+                let msg = format!("Queue full (max {}): {e}", PlaybackQueue::MAX_CAPACITY);
+                warn!(error = %e, "Queue append rejected — cap reached");
+                send_queue_full_toast(&sc2.toast_tx, msg);
+            }
+        }));
     row.add_controller(right_click);
+}
+
+/// Send a queue-full toast, logging when the toast channel is full.
+///
+/// # Arguments
+///
+/// * `toast_tx` - Channel sender for toast notifications.
+/// * `msg` - Toast message to display.
+fn send_queue_full_toast(toast_tx: &Sender<String>, msg: String) {
+    if let Err(e) = toast_tx.try_send(msg) {
+        warn!(error = %e, "Queue-full toast dropped");
+    }
 }
 
 /// Spawns playback of the track with the given ID.
 fn spawn_playback(state: &Arc<AppState>, track_id: i64) {
-    let state = Arc::clone(state);
-    spawn_future_local(async move {
-        play_single_track(&state, track_id).await;
-    });
+    let state_cb = Arc::clone(state);
+    state
+        .handles
+        .lock()
+        .retain_task(spawn_future_local(async move {
+            play_single_track(&state_cb, track_id).await;
+        }));
 }
 
 /// Play a track in its album context.

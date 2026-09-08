@@ -30,10 +30,12 @@ pub fn two_track_shared_engine() -> Result<Arc<EngineShared>> {
         .queue
         .set_queue(vec![1, 2])
         .map_err(|e| anyhow!("{e}"))?;
-    shared
-        .track_paths
-        .lock()
-        .insert(2, PathBuf::from("/music/two.flac"));
+    drop(
+        shared
+            .track_paths
+            .lock()
+            .insert(2, PathBuf::from("/music/two.flac")),
+    );
     Ok(shared)
 }
 

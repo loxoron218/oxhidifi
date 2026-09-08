@@ -168,9 +168,9 @@ impl SqliteStorage {
 
         let mut separated = builder.separated(", ");
         for id in album_ids {
-            separated.push_bind(id);
+            _ = separated.push_bind(id);
         }
-        builder.push(") GROUP BY album_id");
+        _ = builder.push(") GROUP BY album_id");
 
         let rows: Vec<FormatInfoRow> = builder
             .build_query_as()

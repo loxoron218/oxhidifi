@@ -26,13 +26,16 @@ pub fn setup_flowbox_keyboard_nav(
     key_controller.set_propagation_phase(Capture);
     let state_kb = Arc::clone(state);
     let flow_clone = flow.clone();
-    key_controller.connect_key_pressed(move |_, key, _, _| {
-        if key != Key::Return && key != Key::KP_Enter && key != Key::space {
-            return Proceed;
-        }
-        activate_focused_card(&flow_clone, &state_kb, &card_ids, make_event);
-        Stop
-    });
+    state
+        .handles
+        .lock()
+        .retain_signal(key_controller.connect_key_pressed(move |_, key, _, _| {
+            if key != Key::Return && key != Key::KP_Enter && key != Key::space {
+                return Proceed;
+            }
+            activate_focused_card(&flow_clone, &state_kb, &card_ids, make_event);
+            Stop
+        }));
     flow.add_controller(key_controller);
 }
 
@@ -62,9 +65,12 @@ pub fn activate_focused_card_by_index(
 ) {
     if let Some(&id) = card_ids.get(usize::try_from(index).unwrap_or(0)) {
         let s = Arc::clone(state);
-        spawn_future_local(async move {
-            s.send_navigation_event(make_event(id)).await;
-        });
+        state
+            .handles
+            .lock()
+            .retain_task(spawn_future_local(async move {
+                s.send_navigation_event(make_event(id)).await;
+            }));
     }
 }
 
@@ -112,7 +118,7 @@ mod tests {
                 if received.is_ok() {
                     break;
                 }
-                MainContext::default().iteration(false);
+                _ = MainContext::default().iteration(false);
                 received = state.navigation_rx.try_recv();
             }
         })?;
@@ -125,7 +131,7 @@ mod tests {
         let state = Arc::new(AppState::mock()?);
         activate_focused_card_by_index(&state, &[7], 5, AlbumDetail);
         pump_in_test_runtime(|| {
-            MainContext::default().iteration(false);
+            _ = MainContext::default().iteration(false);
         })?;
         ensure!(state.navigation_rx.try_recv().is_err());
         Ok(())

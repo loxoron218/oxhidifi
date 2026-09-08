@@ -68,52 +68,63 @@ pub fn build_album_detail(
     let click_state = Arc::clone(state);
     let click_aid = album_id;
     let click_btn = content.play_button.clone();
-    content.play_button.connect_clicked(move |_| {
-        let icon = album_play_icon(&click_state, click_aid);
-        click_btn.set_icon_name(if icon == "media-playback-pause-symbolic" {
-            "media-playback-start-symbolic"
-        } else {
-            "media-playback-pause-symbolic"
-        });
+    state
+        .handles
+        .lock()
+        .retain_signal(content.play_button.connect_clicked(move |_| {
+            let icon = album_play_icon(&click_state, click_aid);
+            click_btn.set_icon_name(if icon == "media-playback-pause-symbolic" {
+                "media-playback-start-symbolic"
+            } else {
+                "media-playback-pause-symbolic"
+            });
 
-        let s = Arc::clone(&click_state);
-        let aid = click_aid;
-        spawn_future_local(async move {
-            toggle_or_play_album(&s, aid).await;
-        });
-    });
+            let s_cb = Arc::clone(&click_state);
+            click_state
+                .handles
+                .lock()
+                .retain_task(spawn_future_local(async move {
+                    toggle_or_play_album(&s_cb, click_aid).await;
+                }));
+        }));
 
     let ev_btn = content.play_button.clone();
     let ev_state = Arc::clone(state);
     let ev_aid = album_id;
     let wrapper_alive = wrapper.clone();
-    timeout_add_local(Duration::from_millis(200), move || {
-        if wrapper_alive.parent().is_none() {
-            return Break;
-        }
-        ev_btn.set_icon_name(album_play_icon(&ev_state, ev_aid));
-        Continue
-    });
+    state
+        .handles
+        .lock()
+        .retain_source(timeout_add_local(Duration::from_millis(200), move || {
+            if wrapper_alive.parent().is_none() {
+                return Break;
+            }
+            ev_btn.set_icon_name(album_play_icon(&ev_state, ev_aid));
+            Continue
+        }));
 
     let sc = Arc::clone(state);
-    spawn_future_local(async move {
-        if let Some(data) = fetch_album_detail(&sc, album_id).await {
-            apply_album_detail(
-                &AlbumDetailWidgets {
-                    artwork: &content.artwork,
-                    title_label: &content.title_label,
-                    artist_label: &content.artist_label,
-                    year_label: &content.year_label,
-                    genre_label: &content.genre_label,
-                    tracks_label: &content.tracks_label,
-                    format_label: &content.format_label,
-                    track_list: &content.track_list,
-                },
-                &sc,
-                data,
-            );
-        }
-    });
+    state
+        .handles
+        .lock()
+        .retain_task(spawn_future_local(async move {
+            if let Some(data) = fetch_album_detail(&sc, album_id).await {
+                apply_album_detail(
+                    &AlbumDetailWidgets {
+                        artwork: &content.artwork,
+                        title_label: &content.title_label,
+                        artist_label: &content.artist_label,
+                        year_label: &content.year_label,
+                        genre_label: &content.genre_label,
+                        tracks_label: &content.tracks_label,
+                        format_label: &content.format_label,
+                        track_list: &content.track_list,
+                    },
+                    &sc,
+                    data,
+                );
+            }
+        }));
 
     wrapper.upcast()
 }
@@ -224,6 +235,8 @@ fn apply_album_detail(
         .collect::<Vec<_>>();
     remaining.reverse();
 
-    let state = Arc::clone(state);
-    idle_add_local(move || fill_track_list_batch(&mut remaining, &track_list, &state));
+    let state_cb = Arc::clone(state);
+    state.handles.lock().retain_source(idle_add_local(move || {
+        fill_track_list_batch(&mut remaining, &track_list, &state_cb)
+    }));
 }

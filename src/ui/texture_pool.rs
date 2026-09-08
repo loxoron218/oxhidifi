@@ -22,6 +22,7 @@ use crate::ui::texture_pool::dispatch::{ArtworkDecodeRequest, MAX_SIZES_PER_ALBU
 /// Both the grid view and column view share the same cache instance,
 /// and texture lookups without a specific size (e.g. the player panel)
 /// return any cached size for the album.
+#[derive(Debug)]
 pub struct CoverArtCache {
     /// Guarded cache state: decoded textures and per-album size indices.
     inner: Mutex<CoverCacheInner>,
@@ -77,24 +78,24 @@ impl CoverArtCache {
     /// already has [`MAX_SIZES_PER_ALBUM`] sizes, the oldest is evicted.
     pub fn insert(&self, album_id: i64, size: i32, texture: MemoryTexture) {
         let mut inner = self.inner.lock();
-        inner.textures.insert((album_id, size), Arc::new(texture));
+        drop(inner.textures.insert((album_id, size), Arc::new(texture)));
         let sizes = inner.sizes.entry(album_id).or_default();
         if let Some(pos) = sizes.iter().position(|&s| s == size) {
-            sizes.remove(pos);
+            _ = sizes.remove(pos);
         }
         sizes.push(size);
         let evicted: Vec<i32> = sizes
             .drain(..sizes.len().saturating_sub(usize::from(MAX_SIZES_PER_ALBUM)))
             .collect();
         for old in evicted {
-            inner.textures.remove(&(album_id, old));
+            drop(inner.textures.remove(&(album_id, old)));
         }
     }
 
     /// Record the album that a track belongs to, enabling cache lookups
     /// by track ID to resolve to the album-level cache entry.
     pub fn record_track_album(&self, track_id: i64, album_id: i64) {
-        self.track_to_album.lock().insert(track_id, album_id);
+        _ = self.track_to_album.lock().insert(track_id, album_id);
     }
 
     /// Look up a cached cover texture by track ID.
@@ -117,6 +118,7 @@ impl CoverArtCache {
 ///
 /// `textures` and `sizes` live under one lock so that eviction can remove
 /// from both without cross-lock ordering or a consistency window.
+#[derive(Debug)]
 struct CoverCacheInner {
     /// Map of `(album_id, size)` to decoded texture.
     textures: HashMap<(i64, i32), Arc<MemoryTexture>>,
@@ -125,6 +127,7 @@ struct CoverCacheInner {
 }
 
 #[cfg(test)]
+/// Unit tests for the cover art cache's insert, lookup, and eviction behavior.
 pub mod tests {
     use anyhow::{Result, ensure};
 

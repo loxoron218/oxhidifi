@@ -1,6 +1,9 @@
 //! Decode request dispatch and the background cover-decoder worker pool.
 
-use std::sync::{Arc, Weak};
+use std::{
+    fmt::{Debug, Formatter, Result as FmtResult},
+    sync::{Arc, Weak},
+};
 
 use {
     async_channel::{Receiver, Sender, unbounded},
@@ -42,6 +45,16 @@ pub struct ArtworkDecodeRequest {
     pub size: i32,
     /// Callback invoked on the worker thread with the decode result.
     pub on_complete: Box<dyn FnOnce(i64, Option<DecodedCover>) + Send + 'static>,
+}
+
+impl Debug for ArtworkDecodeRequest {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        f.debug_struct("ArtworkDecodeRequest")
+            .field("album_id", &self.album_id)
+            .field("path", &self.path)
+            .field("size", &self.size)
+            .finish_non_exhaustive()
+    }
 }
 
 impl CoverArtCache {
@@ -87,7 +100,7 @@ impl CoverArtCache {
         if let Some(tx) = self.request_tx.lock().as_ref()
             && let Err(e) = tx.try_send(request)
         {
-            self.in_flight.lock().remove(&key);
+            _ = self.in_flight.lock().remove(&key);
             error!(error = %e, "Failed to send cover decode request");
         }
     }
@@ -121,7 +134,7 @@ impl CoverArtCache {
     /// `recv_blocking` loops, allowing `ThreadManager::shutdown` to
     /// join them without hanging.
     pub fn shutdown(&self) {
-        self.request_tx.lock().take();
+        drop(self.request_tx.lock().take());
     }
 }
 
@@ -129,7 +142,7 @@ impl CoverArtCache {
 /// decode completes. No-op when the cache was dropped (shutdown).
 fn release_in_flight(cache: &Weak<CoverArtCache>, album_id: i64, size: i32) {
     if let Some(cache) = cache.upgrade() {
-        cache.in_flight.lock().remove(&(album_id, size));
+        _ = cache.in_flight.lock().remove(&(album_id, size));
     }
 }
 
@@ -171,6 +184,7 @@ pub fn send_channel_cover(
 }
 
 #[cfg(test)]
+/// Unit tests for cover decode dispatch, channel forwarding, and test helpers.
 pub mod tests {
     use std::sync::Arc;
 

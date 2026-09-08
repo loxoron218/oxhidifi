@@ -19,7 +19,7 @@ use crate::{
 };
 
 /// Compare two artists by a single sort item, applying the configured order.
-fn cmp_artists(a: &Artist, b: &Artist, item: &ArtistSortItem) -> Ordering {
+fn cmp_artists(a: &Artist, b: &Artist, item: ArtistSortItem) -> Ordering {
     let mut cmp = match item.criteria {
         Name => a.name.cmp(&b.name),
         AlbumCount => a.album_count.cmp(&b.album_count),
@@ -48,7 +48,7 @@ pub fn sorted_artist_indices(artists: &[Artist], sort_items: &[ArtistSortItem]) 
         sort_items
             .iter()
             .find_map(|item| {
-                let cmp = cmp_artists(a_artist, b_artist, item);
+                let cmp = cmp_artists(a_artist, b_artist, *item);
                 (cmp != Equal).then_some(cmp)
             })
             .unwrap_or(Equal)

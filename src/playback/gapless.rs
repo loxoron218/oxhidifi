@@ -41,6 +41,7 @@ pub enum GaplessState {
 /// Coordinates the dual decoder state, resampler reconfiguration,
 /// and event emission during gapless transitions.
 /// When disabled, pre-buffering and transitions are skipped entirely.
+#[derive(Debug)]
 pub struct GaplessTransitioner {
     /// Current transition state.
     state: GaplessState,

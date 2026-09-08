@@ -11,7 +11,7 @@
 //! cargo test --features verification-tests --test load_verification
 //! ```
 
-mod browse_assert;
+pub mod browse_assert;
 
 use std::{
     fs::{File, create_dir_all},

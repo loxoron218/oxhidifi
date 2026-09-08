@@ -22,7 +22,7 @@ use crate::{
     },
     ui::{
         detail::{album_page::build_album_detail, artist_page::build_artist_detail},
-        signal::ValueSignal,
+        signal_handlers::{UiHandles, ValueSignal},
     },
 };
 
@@ -34,11 +34,12 @@ pub fn persist_active_tab(
 ) {
     let tab = if name == "artists" { Artists } else { Albums };
     let s = Arc::clone(storage);
-    spawn_future_local(async move {
+    let mut handles = UiHandles::default();
+    handles.retain_task(spawn_future_local(async move {
         if let Err(e) = s.set_active_tab(tab).await {
             warn!(error = %e, "Failed to save active tab");
         }
-    });
+    }));
     active_tab.send(tab);
 }
 
@@ -83,7 +84,7 @@ pub fn handle_navigation_event(
         }
         Back => {
             info!("Navigating back to library view");
-            nav_view.pop_to_tag("library");
+            _ = nav_view.pop_to_tag("library");
             if let Some(stale) = nav_view.find_page("detail") {
                 nav_view.remove(&stale);
             }

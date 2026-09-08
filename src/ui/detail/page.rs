@@ -18,7 +18,10 @@ use {
     tracing::error,
 };
 
-use crate::app::runtime::NavigationEvent::{self, Back};
+use crate::{
+    app::runtime::NavigationEvent::{self, Back},
+    ui::signal_handlers::UiHandles,
+};
 
 /// Build the wrapper box with back navigation and header bar for a detail page.
 #[must_use]
@@ -51,21 +54,22 @@ pub fn setup_back_navigation(widget: &impl WidgetExt, nav_tx: Sender<NavigationE
         .build();
     back_button.update_property(&[PropertyLabel("Back to library")]);
 
+    let mut handles = UiHandles::default();
     let ntx = nav_tx.clone();
-    back_button.connect_clicked(move |_| {
+    handles.retain_signal(back_button.connect_clicked(move |_| {
         try_send_back(&ntx);
-    });
+    }));
 
     let nav_back = nav_tx;
     let key_controller = EventControllerKey::new();
-    key_controller.connect_key_pressed(move |_, key, _, _| {
+    handles.retain_signal(key_controller.connect_key_pressed(move |_, key, _, _| {
         if key == Key::Escape {
             try_send_back(&nav_back);
             Stop
         } else {
             Proceed
         }
-    });
+    }));
     widget.add_controller(key_controller);
 
     back_button

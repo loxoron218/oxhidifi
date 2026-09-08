@@ -1,5 +1,7 @@
 //! Artwork extraction and caching from audio files.
 
+pub mod thumbnail;
+
 use std::{
     fs::{create_dir_all, read_dir, read_to_string as fs_read_to_string, remove_file, write},
     io::ErrorKind::NotFound,
@@ -7,7 +9,6 @@ use std::{
 };
 
 use {
-    libadwaita::gtk::gdk_pixbuf::{InterpType::Bilinear, PixbufLoader, prelude::PixbufLoaderExt},
     lofty::{
         error::FileParseError,
         file::TaggedFileExt,
@@ -20,6 +21,8 @@ use {
 
 use crate::app::xdg_paths::dirs_cache_home;
 
+use self::thumbnail::generate_thumbnails;
+
 /// Subdirectory for cached artwork files.
 const ARTWORK_CACHE_DIR: &str = "oxhidifi/artwork";
 
@@ -28,13 +31,6 @@ const ARTWORK_EXTENSIONS: &[&str] = &["jpg", "png", "webp"];
 
 /// Current cache format version.  Bump to force re-extraction of all artwork.
 const CACHE_VERSION: &str = "3";
-
-/// Thumbnail sizes generated for grid/column views (px).
-///
-/// Covers the default grid (180 px) and list (48 px) sizes plus the extremes so
-/// every zoom level has a close thumbnail on disk. The full-size original is
-/// always cached alongside these.
-const THUMBNAIL_SIZES: &[i32] = &[32, 48, 64, 120, 150, 180, 210, 240];
 
 /// Errors occurring during artwork operations.
 #[derive(Debug, Error)]
@@ -114,8 +110,8 @@ fn ensure_artwork_cache_dir() -> Result<PathBuf, ArtworkError> {
 /// The artwork is stored as `{key}.{ext}`.  The extension is detected from the
 /// embedded picture's MIME type (determined during extraction).
 /// Downscaled thumbnails for grid/column views are generated alongside the
-/// original per FR-003b and stored as `{key}_{size}.{ext}` for each size in
-/// [`THUMBNAIL_SIZES`]. Thumbnail generation failures are logged as warnings
+/// original per FR-003b and stored as `{key}_{size}.{ext}` for each thumbnail
+/// size. Thumbnail generation failures are logged as warnings
 /// but do not fail the overall cache operation.
 ///
 /// # Errors
@@ -140,70 +136,6 @@ fn cache_artwork_in(
     generate_thumbnails(cache_dir, key, data, ext);
 
     Ok(file_path)
-}
-
-/// Generate downscaled thumbnails for grid/column views.
-///
-/// Thumbnails are written as `{key}_{size}.{ext}` for each size in
-/// [`THUMBNAIL_SIZES`]. Failures are logged via `tracing::warn` and do not
-/// propagate — the original artwork remains usable even if thumbnails cannot be
-/// created (e.g., corrupt image bytes or missing `gdk-pixbuf` loader).
-fn generate_thumbnails(cache_dir: &Path, key: &str, data: &[u8], ext: &str) {
-    let loader = PixbufLoader::new();
-    if let Err(e) = loader.write(data) {
-        warn!(error = %e, key, "Failed to load artwork bytes for thumbnail generation");
-        return;
-    }
-    if let Err(e) = loader.close() {
-        warn!(error = %e, key, "Failed to close pixbuf loader for thumbnails");
-        return;
-    }
-    let Some(pixbuf) = loader.pixbuf() else {
-        warn!(key, "Pixbuf loader produced no image for thumbnails");
-        return;
-    };
-    let orig_w = pixbuf.width();
-    let orig_h = pixbuf.height();
-    if orig_w <= 0 || orig_h <= 0 {
-        warn!(key, orig_w, orig_h, "Invalid original artwork dimensions");
-        return;
-    }
-    for &size in THUMBNAIL_SIZES {
-        let (thumb_w, thumb_h) = scaled_dimensions(orig_w, orig_h, size);
-        let Some(scaled) = pixbuf.scale_simple(thumb_w, thumb_h, Bilinear) else {
-            warn!(key, size, "Failed to scale artwork thumbnail");
-            continue;
-        };
-        let thumb_path = cache_dir.join(format!("{key}_{size}.{ext}"));
-        let save_type = match ext {
-            "jpg" | "jpeg" => "jpeg",
-            "webp" => "webp",
-            _ => "png",
-        };
-        if let Err(e) = scaled.savev(&thumb_path, save_type, &[]) {
-            warn!(error = %e, key, size, path = %thumb_path.display(), "Failed to save artwork thumbnail");
-        }
-    }
-}
-
-/// Compute scaled dimensions preserving aspect ratio, fitting within `size`.
-///
-/// The longer edge is scaled to `size`; the shorter edge is scaled
-/// proportionally. Both dimensions are at least 1.
-fn scaled_dimensions(orig_w: i32, orig_h: i32, size: i32) -> (i32, i32) {
-    if orig_w >= orig_h {
-        let denom = i64::from(orig_w).max(1);
-        let numer = i64::from(orig_h).saturating_mul(i64::from(size));
-        let raw = numer.checked_div(denom).unwrap_or(1);
-        let h = raw.max(1).min(i64::from(size));
-        (size, i32::try_from(h).unwrap_or(size))
-    } else {
-        let denom = i64::from(orig_h).max(1);
-        let numer = i64::from(orig_w).saturating_mul(i64::from(size));
-        let raw = numer.checked_div(denom).unwrap_or(1);
-        let w = raw.max(1).min(i64::from(size));
-        (i32::try_from(w).unwrap_or(size), size)
-    }
 }
 
 /// Get the cached thumbnail path for a given key and size, returning `None` if not cached.
@@ -316,7 +248,8 @@ mod tests {
     };
 
     use crate::library::artwork::{
-        cache_artwork_in, extract_artwork, get_cached_artwork_path, read_to_string,
+        CACHE_VERSION, cache_artwork_in, check_cache_version, ensure_artwork_cache_dir,
+        extract_artwork, get_cached_artwork_path, get_cached_thumbnail_path, read_to_string,
     };
 
     fn has_cached_artwork_in(cache_dir: &Path, key: &str) -> bool {
@@ -367,6 +300,22 @@ mod tests {
     fn get_cached_artwork_missing_returns_none() {
         let path = get_cached_artwork_path("nonexistent-key");
         assert!(path.is_none());
+    }
+
+    #[test]
+    fn get_cached_thumbnail_path_missing_returns_none() {
+        let path = get_cached_thumbnail_path("nonexistent-key", 48);
+        assert!(path.is_none());
+    }
+
+    #[test]
+    fn check_cache_version_writes_version_file() {
+        check_cache_version();
+        let Ok(cache_dir) = ensure_artwork_cache_dir() else {
+            return;
+        };
+        let version = read_to_string(&cache_dir.join(".version"));
+        assert_eq!(version.as_deref(), Some(CACHE_VERSION));
     }
 
     #[test]

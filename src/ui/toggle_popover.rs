@@ -122,9 +122,12 @@ pub fn build_popover(state: &Arc<AppState>, parent: &Window) -> (Popover, Widget
     prefs_btn.update_property(&[PropertyLabel("Preferences")]);
     let state_prefs = Arc::clone(state);
     let parent_prefs = parent.clone();
-    prefs_btn.connect_clicked(move |_| {
-        show_preferences_dialog(&state_prefs, &parent_prefs);
-    });
+    state
+        .handles
+        .lock()
+        .retain_signal(prefs_btn.connect_clicked(move |_| {
+            show_preferences_dialog(&state_prefs, &parent_prefs);
+        }));
     zoom_box.append(&prefs_btn);
 
     connect_zoom_handlers(state, &zoom_out_btn, &zoom_in_btn);
@@ -217,22 +220,28 @@ fn connect_zoom_handlers(state: &Arc<AppState>, zoom_out_btn: &Button, zoom_in_b
     let s_zo = Arc::clone(state);
     let out_btn = zoom_out_btn.clone();
     let in_btn = zoom_in_btn.clone();
-    zoom_out_btn.connect_clicked(move |_| {
-        let mode = s_zo.storage.get_view_mode();
-        apply_zoom_out(&s_zo, mode);
-        notify_zoom_change(&s_zo);
-        update_zoom_sensitivity(&s_zo, &out_btn, &in_btn);
-    });
+    state
+        .handles
+        .lock()
+        .retain_signal(zoom_out_btn.connect_clicked(move |_| {
+            let mode = s_zo.storage.get_view_mode();
+            apply_zoom_out(&s_zo, mode);
+            notify_zoom_change(&s_zo);
+            update_zoom_sensitivity(&s_zo, &out_btn, &in_btn);
+        }));
 
     let s_zin = Arc::clone(state);
     let out_btn2 = zoom_out_btn.clone();
     let in_btn2 = zoom_in_btn.clone();
-    zoom_in_btn.connect_clicked(move |_| {
-        let mode = s_zin.storage.get_view_mode();
-        apply_zoom_in(&s_zin, mode);
-        notify_zoom_change(&s_zin);
-        update_zoom_sensitivity(&s_zin, &out_btn2, &in_btn2);
-    });
+    state
+        .handles
+        .lock()
+        .retain_signal(zoom_in_btn.connect_clicked(move |_| {
+            let mode = s_zin.storage.get_view_mode();
+            apply_zoom_in(&s_zin, mode);
+            notify_zoom_change(&s_zin);
+            update_zoom_sensitivity(&s_zin, &out_btn2, &in_btn2);
+        }));
 }
 
 #[cfg(test)]

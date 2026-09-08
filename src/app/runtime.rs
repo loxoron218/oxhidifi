@@ -2,6 +2,7 @@
 
 use std::{
     collections::HashMap,
+    fmt::{Debug, Formatter, Result as FmtResult},
     sync::{
         Arc,
         atomic::{AtomicBool, AtomicU64},
@@ -30,10 +31,14 @@ use crate::{
         view_mode::ViewMode,
     },
     threading::ThreadManager,
-    ui::{signal::ValueSignal, texture_pool::CoverArtCache},
+    ui::{
+        signal_handlers::{UiHandles, ValueSignal},
+        texture_pool::CoverArtCache,
+    },
 };
 
 /// Holds the channel pairs that are common across all `AppState` constructions.
+#[derive(Debug)]
 pub struct AppChannels {
     /// Sender for forwarding scan events to the UI (status bar).
     pub scan_event_tx: Sender<ScanEvent>,
@@ -118,6 +123,12 @@ pub struct AppState {
     /// `LibraryWatcher` allows `watch`/`unwatch` via `&self`. `None` until
     /// `lifecycle::run_application` creates it.
     pub watcher: Mutex<Option<Arc<LibraryWatcher<SqliteStorage>>>>,
+    /// Owns fire-and-forget UI handles (signal IDs, tasks, sources, bindings).
+    ///
+    /// Builders retain handles here instead of discarding them; GTK keeps
+    /// handlers alive via widgets, while property `Binding`s stay bound only
+    /// while retained, so this collection owns them for the app lifetime.
+    pub handles: Mutex<UiHandles>,
 }
 
 impl AppState {
@@ -187,7 +198,14 @@ impl AppState {
             album_grid_covers: Mutex::new(Arc::new(Vec::new())),
             thread_manager,
             watcher: Mutex::new(None),
+            handles: Mutex::new(UiHandles::default()),
         }
+    }
+}
+
+impl Debug for AppState {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        f.debug_struct("AppState").finish_non_exhaustive()
     }
 }
 
@@ -217,12 +235,19 @@ pub struct BroadcastChannels {
     pub artists_zoom_rx: Receiver<()>,
 }
 
+impl Debug for BroadcastChannels {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        f.debug_struct("BroadcastChannels").finish_non_exhaustive()
+    }
+}
+
 /// Cached album library data used to avoid re-fetching from the database
 /// on sort/zoom changes.
 ///
 /// The collections are shared via [`Arc`]: rebuilds borrow the album data
 /// and derive the display order from a sorted index vector, so no deep
 /// clone of the `Vec<Album>` (or the lookup maps) is performed.
+#[derive(Debug)]
 pub struct CachedAlbumData {
     /// All albums in the library.
     pub albums: Arc<Vec<Album>>,
@@ -233,6 +258,7 @@ pub struct CachedAlbumData {
 }
 
 /// Cached artist library data.
+#[derive(Debug)]
 pub struct CachedArtistData {
     /// All artists with at least one album.
     pub artists: Arc<Vec<Artist>>,
@@ -247,6 +273,7 @@ pub struct CachedArtistData {
 /// `C` is the grid's sort-configuration type (e.g. `Vec<AlbumSortItem>`),
 /// used as the memo key for cached sort indices. The default `()` keeps
 /// construction generic-free for callers that never touch the memo.
+#[derive(Debug)]
 pub struct GridState<T, C = ()> {
     /// In-memory library data cache (avoids DB re-fetch on sort/zoom changes).
     pub cache: Mutex<Option<T>>,
@@ -300,6 +327,7 @@ pub enum NavigationEvent {
 /// Keyed by the grid `generation` (incremented on library refresh) and the
 /// exact sort configuration the indices were computed for. The `indices`
 /// are shared via [`Arc`] so rebuilds clone the handle, not the vector.
+#[derive(Debug)]
 pub struct SortMemo<C> {
     /// The grid generation the indices were computed for.
     pub generation: u64,

@@ -80,7 +80,7 @@ pub fn build_album_grid(state: &Arc<AppState>, narrow_state: &Arc<NarrowState>) 
                 && preview_state.view_mode.borrow() == Grid
                 && preview_state.album_grid.ready.load(Relaxed)
             {
-                apply_album_resize(&preview_state, &preview_stack);
+                _ = apply_album_resize(&preview_state, &preview_stack);
             }
         },
         move |sort_fired, zoom_fired| {
@@ -180,8 +180,8 @@ fn build_album_mode(
                 artist_names: Arc::clone(&cached.artist_names),
                 format_info: Arc::clone(&cached.format_info),
             };
-            let state = Arc::clone(state);
-            let build_seq = state
+            let state_fill = Arc::clone(state);
+            let build_seq = state_fill
                 .album_grid
                 .build_seq
                 .fetch_add(1, Relaxed)
@@ -190,17 +190,17 @@ fn build_album_mode(
             let mut cover_art_data: Vec<(i64, usize, String)> = Vec::new();
             let mut remaining: Vec<usize> = indices.iter().rev().copied().collect();
 
-            idle_add_local(move || {
+            state.handles.lock().retain_source(idle_add_local(move || {
                 fill_album_grid(
                     &cached_owned,
                     &mut remaining,
                     &mut overlays,
                     &mut cover_art_data,
                     &flow,
-                    &state,
+                    &state_fill,
                     build_seq,
                 )
-            });
+            }));
         }
         Column => {
             let column_view = build_album_column_view(state, cached, narrow_state, indices);
@@ -245,50 +245,53 @@ pub fn lazy_build_album_mode(
         return;
     }
 
-    let state = Arc::clone(state);
-    let stack = stack.clone();
-    let narrow_state = Arc::clone(narrow_state);
-    spawn_future_local(async move {
-        let my_gen = state.album_grid.generation.load(Relaxed);
-        let (albums_res, artist_names_res) = join!(
-            state.storage.get_all_albums(),
-            state.storage.get_all_artists(),
-        );
+    let state_cb = Arc::clone(state);
+    let stack_cb = stack.clone();
+    let narrow_cb = Arc::clone(narrow_state);
+    state
+        .handles
+        .lock()
+        .retain_task(spawn_future_local(async move {
+            let my_gen = state_cb.album_grid.generation.load(Relaxed);
+            let (albums_res, artist_names_res) = join!(
+                state_cb.storage.get_all_albums(),
+                state_cb.storage.get_all_artists(),
+            );
 
-        let albums = match albums_res {
-            Ok(a) => a,
-            Err(e) => {
-                warn!(error = %e, "Failed to load albums for lazy build");
-                return;
-            }
-        };
+            let albums = match albums_res {
+                Ok(a) => a,
+                Err(e) => {
+                    warn!(error = %e, "Failed to load albums for lazy build");
+                    return;
+                }
+            };
 
-        let artist_names: HashMap<i64, String> = match artist_names_res {
-            Ok(artists) => artists.into_iter().map(|a| (a.id, a.name)).collect(),
-            Err(e) => {
-                warn!(error = %e, "Failed to load artists for lazy build");
+            let artist_names: HashMap<i64, String> = match artist_names_res {
+                Ok(artists) => artists.into_iter().map(|a| (a.id, a.name)).collect(),
+                Err(e) => {
+                    warn!(error = %e, "Failed to load artists for lazy build");
+                    HashMap::new()
+                }
+            };
+
+            let format_info = if albums.is_empty() {
                 HashMap::new()
-            }
-        };
+            } else {
+                let album_ids: Vec<i64> = albums.iter().map(|a| a.id).collect();
+                state_cb
+                    .storage
+                    .get_albums_format_info(&album_ids)
+                    .await
+                    .unwrap_or_default()
+            };
 
-        let format_info = if albums.is_empty() {
-            HashMap::new()
-        } else {
-            let album_ids: Vec<i64> = albums.iter().map(|a| a.id).collect();
-            state
-                .storage
-                .get_albums_format_info(&album_ids)
-                .await
-                .unwrap_or_default()
-        };
-
-        let cached = CachedAlbumData {
-            albums: Arc::new(albums),
-            artist_names: Arc::new(artist_names),
-            format_info: Arc::new(format_info),
-        };
-        finish_lazy_album_build(&state, &stack, &narrow_state, mode, my_gen, cached);
-    });
+            let cached = CachedAlbumData {
+                albums: Arc::new(albums),
+                artist_names: Arc::new(artist_names),
+                format_info: Arc::new(format_info),
+            };
+            finish_lazy_album_build(&state_cb, &stack_cb, &narrow_cb, mode, my_gen, cached);
+        }));
 }
 
 /// Complete a lazy album-mode build from already-fetched data.

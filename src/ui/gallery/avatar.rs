@@ -6,7 +6,7 @@ use libadwaita::{
     glib::{prelude::Cast, spawn_future_local},
     gtk::{
         Align::Start,
-        Box, EventControllerMotion, GestureClick, Image, Label,
+        Box, EventControllerMotion, Image, Label,
         Orientation::Vertical,
         Overlay, Widget,
         accessible::Property::Label as PropertyLabel,
@@ -19,7 +19,10 @@ use libadwaita::{
 use crate::{
     app::runtime::{AppState, NavigationEvent::ArtistDetail},
     storage::catalog::Artist,
-    ui::{gallery::play_action::play_artist, osd_button::build_album_play_button},
+    ui::{
+        gallery::{build_navigation_gesture, play_action::play_artist},
+        osd_button::build_album_play_button,
+    },
 };
 
 /// Build the avatar widget for an artist.
@@ -78,23 +81,35 @@ pub fn build_artist_card(state: &Arc<AppState>, artist: &Artist, size: i32) -> (
 
     let motion = EventControllerMotion::new();
     let btn_show = play_button.clone();
-    motion.connect_enter(move |_, _, _| {
-        btn_show.set_visible(true);
-    });
+    state
+        .handles
+        .lock()
+        .retain_signal(motion.connect_enter(move |_, _, _| {
+            btn_show.set_visible(true);
+        }));
     let btn_hide = play_button.clone();
-    motion.connect_leave(move |_| {
-        btn_hide.set_visible(false);
-    });
+    state
+        .handles
+        .lock()
+        .retain_signal(motion.connect_leave(move |_| {
+            btn_hide.set_visible(false);
+        }));
     overlay.add_controller(motion);
 
     let artist_id = artist.id;
     let state_clone = Arc::clone(state);
-    play_button.connect_clicked(move |_| {
-        let state = Arc::clone(&state_clone);
-        spawn_future_local(async move {
-            play_artist(&state, artist_id).await;
-        });
-    });
+    state
+        .handles
+        .lock()
+        .retain_signal(play_button.connect_clicked(move |_| {
+            let state_cb = Arc::clone(&state_clone);
+            state_clone
+                .handles
+                .lock()
+                .retain_task(spawn_future_local(async move {
+                    play_artist(&state_cb, artist_id).await;
+                }));
+        }));
 
     card.append(&overlay.clone().upcast::<Widget>());
 
@@ -122,15 +137,7 @@ pub fn build_artist_card(state: &Arc<AppState>, artist: &Artist, size: i32) -> (
     card.append(&name_label);
     card.append(&album_count_label);
 
-    let gesture = GestureClick::new();
-    let state_clone = Arc::clone(state);
-    let artist_id = artist.id;
-    gesture.connect_released(move |_, _, _, _| {
-        let state = Arc::clone(&state_clone);
-        spawn_future_local(async move {
-            state.send_navigation_event(ArtistDetail(artist_id)).await;
-        });
-    });
+    let gesture = build_navigation_gesture(state, ArtistDetail(artist.id));
     card.add_controller(gesture);
 
     (card, overlay)

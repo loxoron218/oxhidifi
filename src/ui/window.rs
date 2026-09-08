@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use {
     libadwaita::{
-        Application, ApplicationWindow, Toast, ToastOverlay,
+        Application, ApplicationWindow, OverlaySplitView, Toast, ToastOverlay,
         ToastPriority::Normal,
         gdk::{Display, Key},
         glib::{
@@ -19,8 +19,8 @@ use {
             spawn_future_local,
         },
         gtk::{
-            CssProvider, EventControllerKey, STYLE_PROVIDER_PRIORITY_APPLICATION, Window,
-            prelude::ToggleButtonExt, style_context_add_provider_for_display,
+            Button, CssProvider, EventControllerKey, STYLE_PROVIDER_PRIORITY_APPLICATION,
+            ToggleButton, Window, prelude::ToggleButtonExt, style_context_add_provider_for_display,
         },
         prelude::{AdwApplicationWindowExt, ApplicationExt, ButtonExt, GtkWindowExt, WidgetExt},
     },
@@ -76,82 +76,163 @@ pub fn build_window(app: &Application, state: &Arc<AppState>) -> ApplicationWind
 
     wire_panel_events(state, &split_view);
 
+    add_key_controllers(&window, &split_view, state);
+
+    wire_close_request(app, &window, state);
+
+    wire_sidebar_sync(
+        state,
+        &window,
+        &split_view,
+        &toggle_button,
+        &back_button,
+        &close_button,
+    );
+    state.handles.lock().retain_binding(
+        split_view
+            .bind_property("collapsed", &close_button, "visible")
+            .sync_create()
+            .build(),
+    );
+
+    window
+}
+
+/// Add Escape and zoom key controllers to the window.
+///
+/// # Arguments
+///
+/// * `window` - Window receiving the controllers.
+/// * `split_view` - Split view used for Escape-key handling.
+/// * `state` - Application state owning the retained signal handles.
+fn add_key_controllers(
+    window: &ApplicationWindow,
+    split_view: &OverlaySplitView,
+    state: &Arc<AppState>,
+) {
     let esc_split = split_view.clone();
     let esc_controller = EventControllerKey::new();
-    esc_controller.connect_key_pressed(move |_, key, _, _| {
-        if key == Key::Escape && handle_escape_key(&esc_split) {
-            Stop
-        } else {
-            Proceed
-        }
-    });
+    state
+        .handles
+        .lock()
+        .retain_signal(esc_controller.connect_key_pressed(move |_, key, _, _| {
+            if key == Key::Escape && handle_escape_key(&esc_split) {
+                Stop
+            } else {
+                Proceed
+            }
+        }));
     window.add_controller(esc_controller);
 
     let zoom_state = Arc::clone(state);
     let zoom_controller = EventControllerKey::new();
-    zoom_controller.connect_key_pressed(move |_, key, _, modifiers| {
-        if handle_zoom_key(&zoom_state, key, modifiers) {
-            Stop
-        } else {
-            Proceed
-        }
-    });
+    state
+        .handles
+        .lock()
+        .retain_signal(
+            zoom_controller.connect_key_pressed(move |_, key, _, modifiers| {
+                if handle_zoom_key(&zoom_state, key, modifiers) {
+                    Stop
+                } else {
+                    Proceed
+                }
+            }),
+        );
     window.add_controller(zoom_controller);
+}
 
+/// Wire window-close persistence and application quit.
+///
+/// # Arguments
+///
+/// * `app` - Application to quit on close.
+/// * `window` - Window whose close request is handled.
+/// * `state` - Application state owning the retained signal handles.
+fn wire_close_request(app: &Application, window: &ApplicationWindow, state: &Arc<AppState>) {
     let persist_state = Arc::clone(state);
     let persist_window = window.clone();
     let quit_app = app.clone();
-    window.connect_close_request(move |_| {
-        info!("Window close requested — persisting geometry and session");
-        persist_geometry_and_session(
-            &persist_state,
-            persist_window.default_width(),
-            persist_window.default_height(),
-            persist_window.is_maximized(),
-        );
-        let quit = quit_app.clone();
-        idle_add_local_once(move || quit.quit());
-        Proceed
-    });
+    state
+        .handles
+        .lock()
+        .retain_signal(window.connect_close_request(move |_| {
+            info!("Window close requested — persisting geometry and session");
+            persist_geometry_and_session(
+                &persist_state,
+                persist_window.default_width(),
+                persist_window.default_height(),
+                persist_window.is_maximized(),
+            );
+            let quit = quit_app.clone();
+            persist_state
+                .handles
+                .lock()
+                .retain_source(idle_add_local_once(move || quit.quit()));
+            Proceed
+        }));
+}
 
+/// Synchronize sidebar toggle buttons and persist geometry changes.
+///
+/// # Arguments
+///
+/// * `state` - Application state owning the retained signal handles.
+/// * `window` - Window whose maximize notifications are persisted.
+/// * `split_view` - Split view whose sidebar state is synchronized.
+/// * `toggle_button` - Header toggle button for the player panel.
+/// * `back_button` - Sidebar back button mirroring the toggle state.
+/// * `close_button` - Close button bound to sidebar collapse.
+fn wire_sidebar_sync(
+    state: &Arc<AppState>,
+    window: &ApplicationWindow,
+    split_view: &OverlaySplitView,
+    toggle_button: &ToggleButton,
+    back_button: &ToggleButton,
+    close_button: &Button,
+) {
+    let toggle_button = toggle_button.clone();
+    let back_button = back_button.clone();
+    let close_button = close_button.clone();
     let geom_state = Arc::clone(state);
     let geom_window = window.clone();
-    geom_window.connect_notify(Some("maximized"), move |w, _| {
-        let Some(win) = w.downcast_ref::<ApplicationWindow>() else {
-            warn!("Maximized notification received for non-ApplicationWindow");
-            return;
-        };
-        let width = win.default_width();
-        let height = win.default_height();
-        let maximized = win.is_maximized();
-        if let Err(e) = geom_state
-            .storage
-            .set_window_geometry_sync(width, height, maximized)
-        {
-            warn!(error = %e, "Failed to persist window geometry on maximize");
-        }
-    });
+    state
+        .handles
+        .lock()
+        .retain_signal(geom_window.connect_notify(Some("maximized"), move |w, _| {
+            let Some(win) = w.downcast_ref::<ApplicationWindow>() else {
+                warn!("Maximized notification received for non-ApplicationWindow");
+                return;
+            };
+            let width = win.default_width();
+            let height = win.default_height();
+            let maximized = win.is_maximized();
+            if let Err(e) = geom_state
+                .storage
+                .set_window_geometry_sync(width, height, maximized)
+            {
+                warn!(error = %e, "Failed to persist window geometry on maximize");
+            }
+        }));
 
-    split_view.connect_show_sidebar_notify(move |sv| {
-        let showing = sv.shows_sidebar();
-        info!(showing, "Sidebar visibility changed",);
-        toggle_button.set_visible(!showing);
-        toggle_button.set_active(showing);
-        back_button.set_visible(showing);
-        back_button.set_active(showing);
-    });
+    state
+        .handles
+        .lock()
+        .retain_signal(split_view.connect_show_sidebar_notify(move |sv| {
+            let showing = sv.shows_sidebar();
+            info!(showing, "Sidebar visibility changed",);
+            toggle_button.set_visible(!showing);
+            toggle_button.set_active(showing);
+            back_button.set_visible(showing);
+            back_button.set_active(showing);
+        }));
 
     let window_close = window.clone();
-    close_button.connect_clicked(move |_| {
-        window_close.close();
-    });
-
-    split_view
-        .bind_property("collapsed", &close_button, "visible")
-        .sync_create()
-        .build();
-
-    window
+    state
+        .handles
+        .lock()
+        .retain_signal(close_button.connect_clicked(move |_| {
+            window_close.close();
+        }));
 }
 
 /// Persist window geometry and playback session synchronously.
@@ -215,26 +296,42 @@ fn load_hig_css() {
 fn listen_for_toasts(state: &Arc<AppState>, toast_overlay: &ToastOverlay) {
     let rx = state.toast_rx.clone();
     let overlay = toast_overlay.clone();
-    spawn_future_local(async move {
-        while let Ok(message) = rx.recv().await {
-            let toast = Toast::builder().title(message).priority(Normal).build();
-            overlay.add_toast(toast);
-        }
-    });
+    state
+        .handles
+        .lock()
+        .retain_task(spawn_future_local(async move {
+            while let Ok(message) = rx.recv().await {
+                let toast = Toast::builder().title(message).priority(Normal).build();
+                overlay.add_toast(toast);
+            }
+        }));
 }
 
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
 
-    use anyhow::Result;
+    use {
+        anyhow::{Result, ensure},
+        libadwaita::{Application, ApplicationWindow},
+    };
 
-    use crate::app::runtime::AppState;
+    use crate::{app::runtime::AppState, ui::window::build_window};
 
     #[test]
     fn window_builds_with_state() -> Result<()> {
         let state = Arc::new(AppState::mock()?);
+        ensure!(
+            format!("{:?}", state.handles.lock()).contains("tasks: 0"),
+            "fresh mock state must own no tasks"
+        );
         drop(state);
         Ok(())
+    }
+
+    #[test]
+    fn window_builder_signature_shape() {
+        fn assert_shape<F: Fn(&Application, &Arc<AppState>) -> ApplicationWindow>(_: F) {}
+        assert_shape(build_window);
     }
 }

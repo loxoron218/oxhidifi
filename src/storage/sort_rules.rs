@@ -41,7 +41,7 @@ macro_rules! impl_criteria_helpers {
 }
 
 /// Criteria for sorting the album grid view.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AlbumSortCriteria {
     /// Sort by album title.
     Title,
@@ -67,7 +67,7 @@ impl_criteria_helpers!(AlbumSortCriteria {
 });
 
 /// A single sort rule for the album grid.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AlbumSortItem {
     /// The sorting criteria.
     pub criteria: AlbumSortCriteria,
@@ -76,7 +76,7 @@ pub struct AlbumSortItem {
 }
 
 /// Criteria for sorting the artist grid view.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ArtistSortCriteria {
     /// Sort by artist name.
     Name,
@@ -90,7 +90,7 @@ impl_criteria_helpers!(ArtistSortCriteria {
 });
 
 /// A single sort rule for the artist grid.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ArtistSortItem {
     /// The sorting criteria.
     pub criteria: ArtistSortCriteria,
@@ -239,7 +239,7 @@ mod tests {
     #[test]
     fn default_albums_sort_orders_by_artist_year_title_then_format_quality() {
         let sort = default_albums_sort();
-        let criteria: Vec<_> = sort.iter().map(|item| item.criteria.clone()).collect();
+        let criteria: Vec<_> = sort.iter().map(|item| item.criteria).collect();
         assert_eq!(
             criteria,
             vec![Artist, Year, Title, Format, BitDepth, SampleRate],
@@ -259,7 +259,7 @@ mod tests {
     #[test]
     fn default_artists_sort_orders_by_name_then_album_count() {
         let sort = default_artists_sort();
-        let criteria: Vec<_> = sort.iter().map(|item| item.criteria.clone()).collect();
+        let criteria: Vec<_> = sort.iter().map(|item| item.criteria).collect();
         assert_eq!(
             criteria,
             vec![Name, AlbumCount],

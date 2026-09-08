@@ -1,6 +1,7 @@
 //! Playback orchestrator wiring decoder, resampler, ring buffer, and output together.
 use std::{
     collections::HashMap,
+    fmt::{Debug, Formatter, Result as FmtResult},
     path::PathBuf,
     sync::{Arc, atomic::AtomicBool},
     thread::JoinHandle,
@@ -17,6 +18,7 @@ use crate::playback::{
 };
 
 /// Commands sent to the decode task.
+#[derive(Debug)]
 pub enum DecodeCommand {
     /// Seek to a position in seconds.
     Seek(f64),
@@ -89,6 +91,12 @@ impl EngineShared {
     }
 }
 
+impl Debug for EngineShared {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        f.debug_struct("EngineShared").finish_non_exhaustive()
+    }
+}
+
 impl Default for EngineShared {
     fn default() -> Self {
         Self {
@@ -108,13 +116,18 @@ impl Default for EngineShared {
 }
 
 /// Playback engine orchestrator.
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct PlaybackEngine {
     /// Shared state wrapped in an `Arc`.
     pub shared: Arc<EngineShared>,
 }
 
 impl PlaybackEngine {
+    /// Create a new playback engine with default shared state.
+    ///
+    /// # Returns
+    ///
+    /// A new `PlaybackEngine` wrapping a default `EngineShared`.
     #[must_use]
     pub fn new() -> Self {
         Self {

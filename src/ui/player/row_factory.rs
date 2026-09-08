@@ -15,7 +15,10 @@ use {
     tracing::{error, warn},
 };
 
-use crate::{playback::queue_manager::PlaybackQueue, ui::player::playlist::QueueItemData};
+use crate::{
+    playback::queue_manager::PlaybackQueue,
+    ui::{player::playlist::QueueItemData, signal_handlers::UiHandles},
+};
 
 /// Reorder an item within both the queue model and the `ListStore`.
 fn reorder_entry(queue: &PlaybackQueue, store: &ListStore, from: usize, to: usize) {
@@ -70,14 +73,16 @@ pub fn build_row_factory(queue: &PlaybackQueue, store: &ListStore) -> SignalList
     let factory = SignalListItemFactory::new();
     let factory_queue = queue.clone();
     let factory_store = store.clone();
+    let mut handles = UiHandles::default();
 
-    factory.connect_setup(move |_, list_item| {
+    handles.retain_signal(factory.connect_setup(move |_, list_item| {
         let Some(list_item_obj) = list_item.downcast_ref::<ListItem>() else {
             return;
         };
         let li = list_item_obj.clone();
         let queue_li = factory_queue.clone();
         let store_li = factory_store.clone();
+        let mut handles = UiHandles::default();
 
         let container = Box::builder()
             .orientation(Horizontal)
@@ -98,12 +103,12 @@ pub fn build_row_factory(queue: &PlaybackQueue, store: &ListStore) -> SignalList
 
         let drag = DragSource::builder().actions(DragAction::MOVE).build();
         let li_drag = li.clone();
-        drag.connect_prepare(move |_, _, _| {
+        handles.retain_signal(drag.connect_prepare(move |_, _, _| {
             let pos = li_drag.position();
             let pos_i32 = i32::try_from(pos).unwrap_or(0);
             let value = pos_i32.to_value();
             Some(ContentProvider::for_value(&value))
-        });
+        }));
         handle.add_controller(drag);
 
         let label = Label::builder()
@@ -125,35 +130,35 @@ pub fn build_row_factory(queue: &PlaybackQueue, store: &ListStore) -> SignalList
         let li_remove = li.clone();
         let queue_remove = queue_li.clone();
         let store_remove = store_li.clone();
-        remove.connect_clicked(move |_| {
+        handles.retain_signal(remove.connect_clicked(move |_| {
             let pos = usize::try_from(li_remove.position()).unwrap_or(0);
             try_remove_entry(&queue_remove, &store_remove, pos);
-        });
+        }));
 
-        let drop = DropTarget::new(Type::I32, DragAction::MOVE);
+        let drop_target = DropTarget::new(Type::I32, DragAction::MOVE);
         let li_drop = li;
         let queue_drop = queue_li;
         let store_drop = store_li;
-        drop.connect_drop(move |_, value, _, _| {
+        handles.retain_signal(drop_target.connect_drop(move |_, value, _, _| {
             let to_pos = usize::try_from(li_drop.position()).unwrap_or(0);
             handle_drop_value(value, &queue_drop, &store_drop, to_pos);
             true
-        });
+        }));
 
         container.append(&handle);
         container.append(&label);
         container.append(&remove);
-        container.add_controller(drop);
+        container.add_controller(drop_target);
 
         list_item_obj.set_child(Some(&container));
-    });
+    }));
 
-    factory.connect_bind(|_, list_item| {
+    handles.retain_signal(factory.connect_bind(|_, list_item| {
         let Some(list_item) = list_item.downcast_ref::<ListItem>() else {
             return;
         };
         bind_row(list_item);
-    });
+    }));
 
     factory
 }
@@ -199,8 +204,9 @@ mod tests {
         anyhow::{Result, anyhow, ensure},
         libadwaita::{
             gio::{ListStore, prelude::ListModelExt},
-            glib::{BoxedAnyObject, prelude::StaticType},
-            gtk::{self, test},
+            glib::{BoxedAnyObject, MainContext, object::Cast, prelude::StaticType},
+            gtk::{self, Label, ListView, NoSelection, Widget, Window, test},
+            prelude::{GtkWindowExt, WidgetExt},
         },
     };
 
@@ -208,9 +214,40 @@ mod tests {
         playback::queue_manager::PlaybackQueue,
         ui::player::{
             playlist::populate_store,
-            row_factory::{reorder_entry, try_remove_entry},
+            row_factory::{build_row_factory, reorder_entry, try_remove_entry},
         },
     };
+
+    fn collect_labels(widget: &Widget, out: &mut Vec<String>) {
+        if let Some(label) = widget.downcast_ref::<Label>() {
+            out.push(label.label().to_string());
+        }
+        let mut next = widget.first_child();
+        while let Some(current) = next {
+            collect_labels(&current, out);
+            next = current.next_sibling();
+        }
+    }
+
+    fn rows_ready(list_view: &ListView) -> bool {
+        let mut labels = Vec::new();
+        collect_labels(list_view.upcast_ref::<Widget>(), &mut labels);
+        let joined = labels.join("\n");
+        joined.contains("Alpha") && joined.contains("Beta")
+    }
+
+    fn pump_until_ready(list_view: &ListView) -> Result<()> {
+        let mut attempts: usize = 0;
+        while attempts < 200 && !rows_ready(list_view) {
+            _ = MainContext::default().iteration(true);
+            attempts = attempts.saturating_add(1);
+        }
+        ensure!(
+            rows_ready(list_view),
+            "rows were not populated after pumping the main context"
+        );
+        Ok(())
+    }
 
     fn make_store() -> ListStore {
         ListStore::builder()
@@ -272,6 +309,20 @@ mod tests {
         reorder_entry(&queue, &store, 0, 1);
         ensure!(queue.tracks() == vec![20, 10]);
         ensure!(store.n_items() == 2);
+        Ok(())
+    }
+
+    #[test]
+    fn row_factory_setup_bind_populates_rows() -> Result<()> {
+        let (queue, store) = queue_and_store()?;
+        let factory = build_row_factory(&queue, &store);
+        let selection = NoSelection::new(Some(store));
+        let list_view = ListView::new(Some(selection), Some(factory));
+        let window = Window::new();
+        window.set_child(Some(&list_view));
+        window.present();
+        pump_until_ready(&list_view)?;
+        window.close();
         Ok(())
     }
 }

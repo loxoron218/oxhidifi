@@ -31,19 +31,22 @@ use crate::{
 fn spawn_remove_directory(state: &Arc<AppState>, dir_id: i64, dir_path: String) {
     info!(dir_id, path = %dir_path, "Library directory removed");
     let state_clone = Arc::clone(state);
-    spawn_future_local(async move {
-        if let Err(e) = state_clone.storage.remove_library_directory(dir_id).await {
-            error!(error = %e, "Failed to remove library directory");
-            return;
-        }
-        let watcher_opt = state_clone.watcher.lock().as_ref().cloned();
-        if let Some(watcher_arc) = watcher_opt {
-            let path = Path::new(&dir_path).to_path_buf();
-            try_unwatch_directory(&watcher_arc, &path, &dir_path);
-        }
-        state_clone.refresh.publish();
-        info!(path = %dir_path, "Refresh published after directory removal");
-    });
+    state
+        .handles
+        .lock()
+        .retain_task(spawn_future_local(async move {
+            if let Err(e) = state_clone.storage.remove_library_directory(dir_id).await {
+                error!(error = %e, "Failed to remove library directory");
+                return;
+            }
+            let watcher_opt = state_clone.watcher.lock().as_ref().cloned();
+            if let Some(watcher_arc) = watcher_opt {
+                let path = Path::new(&dir_path).to_path_buf();
+                try_unwatch_directory(&watcher_arc, &path, &dir_path);
+            }
+            state_clone.refresh.publish();
+            info!(path = %dir_path, "Refresh published after directory removal");
+        }));
 }
 
 /// Attempt to unwatch a directory, logging on failure.
@@ -59,8 +62,11 @@ fn try_unwatch_directory(watcher: &LibraryWatcher<SqliteStorage>, path: &Path, d
 
 /// Add a library directory by path in a background task.
 fn spawn_add_directory(state: &Arc<AppState>, path: PathBuf) {
-    let state = Arc::clone(state);
-    spawn_future_local(handle_add_directory(state, path));
+    let state_cb = Arc::clone(state);
+    state
+        .handles
+        .lock()
+        .retain_task(spawn_future_local(handle_add_directory(state_cb, path)));
 }
 
 /// Handle adding a directory, then scanning and refreshing the UI.
@@ -121,10 +127,13 @@ fn add_directory_row(group: &PreferencesGroup, state: &Arc<AppState>, dir: &Libr
     let dir_id = dir.id;
     let dir_path = dir.path.clone();
     let row_clone = row.clone();
-    remove_btn.connect_clicked(move |_| {
-        spawn_remove_directory(&state_clone, dir_id, dir_path.clone());
-        row_clone.set_visible(false);
-    });
+    state
+        .handles
+        .lock()
+        .retain_signal(remove_btn.connect_clicked(move |_| {
+            spawn_remove_directory(&state_clone, dir_id, dir_path.clone());
+            row_clone.set_visible(false);
+        }));
 
     group.add(&row);
 }
@@ -140,7 +149,11 @@ fn on_folder_selected(state: &Arc<AppState>, result: Result<File, Error>) {
 }
 
 /// Build the Library > Directories page.
-pub fn build_library_page(dialog: &PreferencesDialog, state: &Arc<AppState>, parent: &Window) {
+pub(super) fn build_library_page(
+    dialog: &PreferencesDialog,
+    state: &Arc<AppState>,
+    parent: &Window,
+) {
     let page = PreferencesPage::new();
     page.set_title("Library");
     page.set_icon_name(Some("folder-music-symbolic"));
@@ -151,19 +164,22 @@ pub fn build_library_page(dialog: &PreferencesDialog, state: &Arc<AppState>, par
 
     let state_clone = Arc::clone(state);
     let group_clone = group.clone();
-    spawn_future_local(async move {
-        let dirs = match state_clone.storage.list_library_directories().await {
-            Ok(d) => d,
-            Err(e) => {
-                error!(error = %e, "Failed to list library directories");
-                return;
-            }
-        };
+    state
+        .handles
+        .lock()
+        .retain_task(spawn_future_local(async move {
+            let dirs = match state_clone.storage.list_library_directories().await {
+                Ok(d) => d,
+                Err(e) => {
+                    error!(error = %e, "Failed to list library directories");
+                    return;
+                }
+            };
 
-        for dir in &dirs {
-            add_directory_row(&group_clone, &state_clone, dir);
-        }
-    });
+            for dir in &dirs {
+                add_directory_row(&group_clone, &state_clone, dir);
+            }
+        }));
 
     let add_btn = Button::builder()
         .label("Add Directory")
@@ -177,16 +193,19 @@ pub fn build_library_page(dialog: &PreferencesDialog, state: &Arc<AppState>, par
 
     let state_clone = Arc::clone(state);
     let parent_clone = parent.clone();
-    add_btn.connect_clicked(move |_| {
-        let dialog = FileDialog::builder()
-            .title("Select Music Directory")
-            .accept_label("Select")
-            .build();
-        let state = Arc::clone(&state_clone);
-        dialog.select_folder(Some(&parent_clone), None::<&Cancellable>, move |result| {
-            on_folder_selected(&state, result);
-        });
-    });
+    state
+        .handles
+        .lock()
+        .retain_signal(add_btn.connect_clicked(move |_| {
+            let dialog = FileDialog::builder()
+                .title("Select Music Directory")
+                .accept_label("Select")
+                .build();
+            let state = Arc::clone(&state_clone);
+            dialog.select_folder(Some(&parent_clone), None::<&Cancellable>, move |result| {
+                on_folder_selected(&state, result);
+            });
+        }));
 
     page.add(&group);
     dialog.add(&page);

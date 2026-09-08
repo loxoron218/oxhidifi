@@ -4,7 +4,7 @@
 //! connection, reconnects to the same SQLite file, and asserts everything is
 //! reloaded without re-scanning.
 
-mod scratch_store;
+pub mod scratch_store;
 
 use {
     anyhow::{Context, Result, ensure},

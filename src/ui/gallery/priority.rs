@@ -24,7 +24,7 @@ use crate::{
 fn cmp_albums<S: BuildHasher>(
     a: &Album,
     b: &Album,
-    item: &AlbumSortItem,
+    item: AlbumSortItem,
     artist_names: &HashMap<i64, String, S>,
 ) -> Ordering {
     let mut cmp = match item.criteria {
@@ -66,7 +66,7 @@ pub fn sorted_album_indices<S: BuildHasher>(
         sort_items
             .iter()
             .find_map(|item| {
-                let cmp = cmp_albums(a_album, b_album, item, artist_names);
+                let cmp = cmp_albums(a_album, b_album, *item, artist_names);
                 (cmp != Equal).then_some(cmp)
             })
             .unwrap_or(Equal)
@@ -130,8 +130,14 @@ mod tests {
             mock_album(3, "Gamma", 20),
         ];
         let mut artist_names = HashMap::new();
-        artist_names.insert(10, "Zed".to_string());
-        artist_names.insert(20, "Adam".to_string());
+        assert!(
+            artist_names.insert(10, "Zed".to_string()).is_none(),
+            "artist map starts empty"
+        );
+        assert!(
+            artist_names.insert(20, "Adam".to_string()).is_none(),
+            "artist map starts empty"
+        );
 
         let items = vec![
             AlbumSortItem {

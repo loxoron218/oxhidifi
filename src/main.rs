@@ -4,6 +4,7 @@ use std::{fs::create_dir_all, io::stderr, time::Duration};
 
 use {
     anyhow::{Context, Result},
+    libadwaita::glib::ExitCode,
     tokio::runtime::Runtime,
     tracing::info,
     tracing_appender::{
@@ -64,7 +65,7 @@ fn init_logging() -> Result<WorkerGuard> {
 ///
 /// Returns an error if logging initialization fails or the application
 /// cannot be built.
-fn main() -> Result<()> {
+fn main() -> Result<ExitCode> {
     let log_guard = init_logging()?;
     info!("Application starting");
 

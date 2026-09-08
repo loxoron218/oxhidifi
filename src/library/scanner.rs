@@ -11,7 +11,11 @@ pub mod tag_resolve;
 pub mod timefmt;
 pub mod walker;
 
-use std::{future::Future, path::Path, result::Result, sync::Arc};
+use std::{
+    fmt::{Debug, Formatter, Result as FmtResult},
+    path::Path,
+    sync::Arc,
+};
 
 use {
     async_channel::Sender,
@@ -22,7 +26,7 @@ use {
 use crate::{
     library::scanner::events::ScanEvent,
     storage::{Storage, StorageError},
-    ui::signal::ValueSignal,
+    ui::signal_handlers::ValueSignal,
 };
 
 /// Filesystem-based library scanner with storage integration.
@@ -58,6 +62,14 @@ impl<S: Storage> FsScanner<S> {
     /// Set the refresh signal for incremental UI updates.
     pub fn set_refresh(&self, refresh: ValueSignal<()>) {
         *self.refresh.lock() = Some(refresh);
+    }
+}
+
+impl<S: Storage> Debug for FsScanner<S> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        f.debug_struct("FsScanner")
+            .field("max_concurrent", &self.max_concurrent)
+            .finish_non_exhaustive()
     }
 }
 

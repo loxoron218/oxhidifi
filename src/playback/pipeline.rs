@@ -27,6 +27,7 @@ use crate::playback::{
 };
 
 /// Mutable decode loop state updated by gapless transitions.
+#[derive(Debug)]
 pub struct LoopCtx {
     /// Active audio decoder.
     pub decoder: Decoder,
@@ -47,7 +48,7 @@ pub struct LoopCtx {
 }
 
 /// Audio output configuration for the decode loop.
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct OutputConfig {
     /// Device sample rate in Hz.
     pub device_sample_rate: u32,
@@ -175,18 +176,18 @@ pub fn handle_decode_cmd(
     match cmd_rx.try_recv() {
         Err(Disconnected) => true,
         Ok(Seek(pos)) => {
-            engine_shared.output.lock().as_ref().map(AudioOutput::flush);
+            _ = engine_shared.output.lock().as_ref().map(AudioOutput::flush);
             let actual = ctx.decoder.seek_to(pos).unwrap_or(pos);
             ctx.elapsed = actual;
             engine_shared.state.lock().elapsed_seconds = actual;
             false
         }
         Ok(Pause) => {
-            engine_shared.output.lock().as_ref().map(AudioOutput::pause);
+            _ = engine_shared.output.lock().as_ref().map(AudioOutput::pause);
             false
         }
         Ok(Resume) => {
-            engine_shared.output.lock().as_ref().map(AudioOutput::play);
+            _ = engine_shared.output.lock().as_ref().map(AudioOutput::play);
             false
         }
         Ok(PreloadNext {
@@ -310,6 +311,7 @@ mod tests {
     use crate::playback::{
         decoder::Decoder,
         engine::{DecodeCommand::PreloadNext, EngineShared},
+        engine_fixture::two_track_shared_engine,
         pipeline::{LoopCtx, handle_decode_cmd, preload_next_upcoming, process_decoded_batch},
         ring_push::push_samples,
         write_wav_header,
@@ -370,7 +372,7 @@ mod tests {
 
     #[test]
     fn preload_next_upcoming_sends_command() -> Result<()> {
-        let shared = crate::playback::engine_fixture::two_track_shared_engine()?;
+        let shared = two_track_shared_engine()?;
         let (tx, mut rx) = channel(8);
         *shared.decode_tx.lock() = Some(tx);
         preload_next_upcoming(&shared);

@@ -18,8 +18,8 @@ use {
 use crate::{
     app::runtime::AppState,
     storage::{
-        active_tab::ActiveTab::{Albums, Artists},
-        view_mode::ViewMode::{Column, Grid},
+        active_tab::ActiveTab::{self, Albums, Artists},
+        view_mode::ViewMode::{self, Column, Grid},
     },
 };
 
@@ -32,7 +32,7 @@ async fn save_album_labels_setting(state: Arc<AppState>, enabled: bool) {
 }
 
 /// Persist view mode and notify listeners.
-async fn save_view_mode_setting(state: Arc<AppState>, mode: crate::storage::view_mode::ViewMode) {
+async fn save_view_mode_setting(state: Arc<AppState>, mode: ViewMode) {
     if let Err(e) = state.storage.set_view_mode(mode).await {
         warn!(error = %e, "Failed to save view mode");
     }
@@ -40,7 +40,7 @@ async fn save_view_mode_setting(state: Arc<AppState>, mode: crate::storage::view
 }
 
 /// Persist active tab and notify listeners.
-async fn save_active_tab_setting(state: Arc<AppState>, tab: crate::storage::active_tab::ActiveTab) {
+async fn save_active_tab_setting(state: Arc<AppState>, tab: ActiveTab) {
     if let Err(e) = state.storage.set_active_tab(tab).await {
         warn!(error = %e, "Failed to save active tab");
     }
@@ -48,7 +48,7 @@ async fn save_active_tab_setting(state: Arc<AppState>, tab: crate::storage::acti
 }
 
 /// Build the View > Display page.
-pub fn build_view_page(dialog: &PreferencesDialog, state: &Arc<AppState>) {
+pub(super) fn build_view_page(dialog: &PreferencesDialog, state: &Arc<AppState>) {
     let page = PreferencesPage::new();
     page.set_title("View");
     page.set_icon_name(Some("preferences-desktop-display-symbolic"));
@@ -63,13 +63,19 @@ pub fn build_view_page(dialog: &PreferencesDialog, state: &Arc<AppState>) {
     labels_row.set_active(state.storage.get_show_album_labels());
 
     let state_labels = Arc::clone(state);
-    labels_row.connect_active_notify(move |row| {
-        let enabled = row.is_active();
-        spawn_future_local(save_album_labels_setting(
-            Arc::clone(&state_labels),
-            enabled,
-        ));
-    });
+    state
+        .handles
+        .lock()
+        .retain_signal(labels_row.connect_active_notify(move |row| {
+            let enabled = row.is_active();
+            state_labels
+                .handles
+                .lock()
+                .retain_task(spawn_future_local(save_album_labels_setting(
+                    Arc::clone(&state_labels),
+                    enabled,
+                )));
+        }));
 
     display_group.add(&labels_row);
 
@@ -84,11 +90,17 @@ pub fn build_view_page(dialog: &PreferencesDialog, state: &Arc<AppState>) {
         Column => 1,
     });
     let state_vm = Arc::clone(state);
-    view_mode_row.connect_selected_notify(move |row| {
-        let mode = if row.selected() == 0 { Grid } else { Column };
-        let s = Arc::clone(&state_vm);
-        spawn_future_local(save_view_mode_setting(s, mode));
-    });
+    state
+        .handles
+        .lock()
+        .retain_signal(view_mode_row.connect_selected_notify(move |row| {
+            let mode = if row.selected() == 0 { Grid } else { Column };
+            let s = Arc::clone(&state_vm);
+            state_vm
+                .handles
+                .lock()
+                .retain_task(spawn_future_local(save_view_mode_setting(s, mode)));
+        }));
     display_group.add(&view_mode_row);
 
     let tab_model = StringList::new(&["Albums", "Artists"]);
@@ -102,11 +114,17 @@ pub fn build_view_page(dialog: &PreferencesDialog, state: &Arc<AppState>) {
         Artists => 1,
     });
     let state_tab = Arc::clone(state);
-    tab_row.connect_selected_notify(move |row| {
-        let tab = if row.selected() == 0 { Albums } else { Artists };
-        let s = Arc::clone(&state_tab);
-        spawn_future_local(save_active_tab_setting(s, tab));
-    });
+    state
+        .handles
+        .lock()
+        .retain_signal(tab_row.connect_selected_notify(move |row| {
+            let tab = if row.selected() == 0 { Albums } else { Artists };
+            let s = Arc::clone(&state_tab);
+            state_tab
+                .handles
+                .lock()
+                .retain_task(spawn_future_local(save_active_tab_setting(s, tab)));
+        }));
     display_group.add(&tab_row);
 
     page.add(&display_group);

@@ -56,7 +56,7 @@ pub fn transition_and_decode(
     drain_decoder(current_path)?;
     let mut transitioner = GaplessTransitioner::new();
     transitioner.start_playback(current_id);
-    transitioner
+    _ = transitioner
         .prebuffer_next(current_id, next_id, next_path.to_path_buf())
         .context("Failed to pre-buffer next track")?;
     let mut decoder = transitioner.transition().context("Transition failed")?;
@@ -70,4 +70,33 @@ pub fn transition_and_decode(
 #[must_use]
 pub fn leading_silence(samples: &[f32]) -> usize {
     samples.iter().take_while(|&&s| s == 0.0).count()
+}
+
+#[cfg(test)]
+mod tests {
+    use {
+        anyhow::{Context, Result, ensure},
+        tempfile::tempdir,
+    };
+
+    use crate::synth_wav::{drain_decoder, leading_silence, transition_and_decode, write_wav};
+
+    #[test]
+    fn helpers_roundtrip() -> Result<()> {
+        let dir = tempdir().context("failed to create temp dir")?;
+        let first_path = dir.path().join("first.wav");
+        let next_path = dir.path().join("next.wav");
+        write_wav(&first_path, 1, 44100, &[0, 0, 1000, -1000])
+            .context("failed to write first wav")?;
+        write_wav(&next_path, 1, 44100, &[500, -500, 0, 0]).context("failed to write next wav")?;
+        drain_decoder(&first_path).context("failed to drain first wav")?;
+        let samples = transition_and_decode(&first_path, &next_path, 1, 2)
+            .context("failed transition decode")?;
+        ensure!(!samples.is_empty(), "transition should yield samples");
+        ensure!(
+            leading_silence(&[0.0, 0.0, 0.5]) == 2,
+            "leading silence should count zeros"
+        );
+        Ok(())
+    }
 }

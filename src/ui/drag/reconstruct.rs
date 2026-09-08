@@ -142,16 +142,16 @@ mod tests {
     fn reconstruct_albums_sort_preserves_box_order() -> Result<()> {
         let list_box = albums_list_box(&["sort:0", "sort:4", "sort:2"]);
         let mut order_map = HashMap::new();
-        order_map.insert(Title, Descending);
-        order_map.insert(BitDepth, Ascending);
-        order_map.insert(Year, Ascending);
+        _ = order_map.insert(Title, Descending);
+        _ = order_map.insert(BitDepth, Ascending);
+        _ = order_map.insert(Year, Ascending);
 
         let sort = reconstruct_albums_sort(&list_box, &order_map);
         assert_reconstructed(
             &sort,
             &[Title, BitDepth, Year],
             &[Descending, Ascending, Ascending],
-            |item| item.criteria.clone(),
+            |item| item.criteria,
             |item| item.order,
         )
     }
@@ -162,15 +162,15 @@ mod tests {
         list_box.append(&row_named("sort:1"));
         list_box.append(&row_named("sort:0"));
         let mut order_map = HashMap::new();
-        order_map.insert(AlbumCount, Descending);
-        order_map.insert(Name, Ascending);
+        _ = order_map.insert(AlbumCount, Descending);
+        _ = order_map.insert(Name, Ascending);
 
         let sort = reconstruct_artists_sort(&list_box, &order_map);
         assert_reconstructed(
             &sort,
             &[AlbumCount, Name],
             &[Descending, Ascending],
-            |item| item.criteria.clone(),
+            |item| item.criteria,
             |item| item.order,
         )
     }

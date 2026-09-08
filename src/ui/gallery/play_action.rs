@@ -117,7 +117,7 @@ pub async fn play_artist(state: &Arc<AppState>, artist_id: i64) {
         };
         tracks.sort_by_key(|t| t.number.unwrap_or(0));
         for track in &tracks {
-            track_paths.insert(track.id, PathBuf::from(&track.audio.file_path));
+            drop(track_paths.insert(track.id, PathBuf::from(&track.audio.file_path)));
         }
         all_tracks.extend(tracks);
     }

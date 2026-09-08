@@ -10,7 +10,7 @@ pub mod runner;
 pub mod stats;
 
 /// Result of a single ABX trial.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct AbxTrial {
     /// Which stimulus was used.
     pub stimulus: StimulusType,
@@ -33,11 +33,17 @@ pub struct AbxTrial {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum StimulusType {
     /// Sine tone at a specific frequency.
-    Sine { frequency: f64 },
+    Sine {
+        /// Frequency of the sine tone in Hz.
+        frequency: f64,
+    },
     /// Pink noise (equal energy per octave).
     PinkNoise,
     /// Silence.
     Silence,
     /// Impulse (Dirac delta).
-    Impulse { position_secs: f64 },
+    Impulse {
+        /// Position of the impulse in seconds from the start.
+        position_secs: f64,
+    },
 }

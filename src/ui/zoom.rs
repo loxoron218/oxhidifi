@@ -42,6 +42,7 @@ mod tests {
     use crate::{
         storage::settings::{DEFAULT_GRID_ZOOM, DEFAULT_LIST_ZOOM},
         ui::zoom::{
+            DEFAULT_GRID_ZOOM as UI_DEFAULT_GRID_ZOOM, DEFAULT_LIST_ZOOM as UI_DEFAULT_LIST_ZOOM,
             GRID_ZOOM_MAX, GRID_ZOOM_MIN, LIST_ZOOM_MAX, LIST_ZOOM_MIN, grid_cover_size,
             list_cover_size,
         },
@@ -98,6 +99,28 @@ mod tests {
             list_cover_size(DEFAULT_LIST_ZOOM),
             48,
             "the documented default list cover size is 48 px"
+        );
+    }
+
+    #[test]
+    fn ui_default_zooms_match_documented_sizes() {
+        assert_eq!(
+            UI_DEFAULT_GRID_ZOOM, 2,
+            "the ui default grid zoom must be level 2"
+        );
+        assert_eq!(
+            UI_DEFAULT_LIST_ZOOM, 1,
+            "the ui default list zoom must be level 1"
+        );
+        assert_eq!(
+            grid_cover_size(UI_DEFAULT_GRID_ZOOM),
+            180,
+            "the ui default grid zoom must map to 180 px"
+        );
+        assert_eq!(
+            list_cover_size(UI_DEFAULT_LIST_ZOOM),
+            48,
+            "the ui default list zoom must map to 48 px"
         );
     }
 }

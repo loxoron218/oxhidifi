@@ -3,35 +3,29 @@
 //! Provides empty state components and the generic grid builder
 //! used by the album and artist grid views.
 
-use std::{
-    path::PathBuf,
-    sync::{Arc, atomic::Ordering::Relaxed},
-};
+use std::sync::{Arc, atomic::Ordering::Relaxed};
 
 use {
     async_channel::Receiver,
     libadwaita::{
-        glib::{object::Cast, spawn_future_local},
+        glib::spawn_future_local,
         gtk::{
-            Align::Center, Box, Button, FileDialog, Image, Label, Orientation::Vertical,
-            ScrolledWindow, Stack, Widget, Window, accessible::Property::Label as PropertyLabel,
-            prelude::WidgetExt,
+            Align::Center, Box, Image, Label, Orientation::Vertical, ScrolledWindow, Stack, Widget,
+            accessible::Property::Label as PropertyLabel, prelude::WidgetExt,
         },
-        prelude::{AccessibleExtManual, BoxExt, ButtonExt, FileExt, IsA},
+        prelude::{AccessibleExtManual, BoxExt, IsA},
     },
     parking_lot::Mutex,
-    tokio::spawn,
-    tracing::{info, warn},
 };
 
 use crate::{
     app::runtime::AppState,
-    library::scanner::{FsScanner, LibraryScanner},
-    storage::{Storage, database::SqliteStorage, view_mode::ViewMode},
-    ui::{gallery::narrow_flag::NarrowState, signal::ValueSignal},
+    storage::{Storage, view_mode::ViewMode},
+    ui::gallery::{folder_picker::build_add_folder_button, narrow_flag::NarrowState},
 };
 
 /// Parameters for building an empty state view.
+#[derive(Debug, Clone, Copy)]
 pub struct EmptyStateParams {
     /// Icon name for the empty state.
     pub icon_name: &'static str,
@@ -52,6 +46,7 @@ pub struct EmptyStateParams {
 ///
 /// Each mode child (`"grid"` and `"column"`) is itself a `ScrolledWindow`
 /// so each mode retains its own scroll position independently.
+#[derive(Debug)]
 pub struct LibraryGrid {
     /// `Stack` containing `"grid"` and `"column"` children.
     /// Toggling the visible child switches modes instantly.
@@ -136,24 +131,27 @@ pub fn build_library_grid(
     let refresh_setup = setup_fn;
     let refresh_nm = Arc::clone(narrow_state);
     let refresh_mode = Arc::clone(&current_mode);
-    spawn_future_local(async move {
-        while refresh_rx.recv().await.is_ok() {
-            drain_receiver(&refresh_rx);
-            let mode = refresh_state.view_mode.borrow();
-            *refresh_state.album_grid.cache.lock() = None;
-            *refresh_state.artist_grid.cache.lock() = None;
-            refresh_state.album_grid.generation.fetch_add(1, Relaxed);
-            refresh_state.artist_grid.generation.fetch_add(1, Relaxed);
-            clear_stack(&refresh_mode_stack);
-            refresh_setup(
-                &refresh_mode_stack,
-                Arc::clone(&refresh_state),
-                Arc::clone(&refresh_nm),
-                mode,
-            );
-            update_mode(&refresh_mode, mode);
-        }
-    });
+    state
+        .handles
+        .lock()
+        .retain_task(spawn_future_local(async move {
+            while refresh_rx.recv().await.is_ok() {
+                drain_receiver(&refresh_rx);
+                let mode = refresh_state.view_mode.borrow();
+                *refresh_state.album_grid.cache.lock() = None;
+                *refresh_state.artist_grid.cache.lock() = None;
+                _ = refresh_state.album_grid.generation.fetch_add(1, Relaxed);
+                _ = refresh_state.artist_grid.generation.fetch_add(1, Relaxed);
+                clear_stack(&refresh_mode_stack);
+                refresh_setup(
+                    &refresh_mode_stack,
+                    Arc::clone(&refresh_state),
+                    Arc::clone(&refresh_nm),
+                    mode,
+                );
+                update_mode(&refresh_mode, mode);
+            }
+        }));
 
     LibraryGrid {
         mode_stack,
@@ -180,7 +178,7 @@ pub fn add_scrolled(stack: &Stack, child: &impl IsA<Widget>, name: &str) {
         .hexpand(true)
         .build();
     scrolled.set_child(Some(child));
-    stack.add_named(&scrolled, Some(name));
+    drop(stack.add_named(&scrolled, Some(name)));
 }
 
 /// Show the library empty state for a grid view.
@@ -202,38 +200,41 @@ pub fn show_library_empty(
     }
     let state_clone = Arc::clone(state);
     let stack_clone = stack.clone();
-    spawn_future_local(async move {
-        let dirs = state_clone
-            .storage
-            .list_library_directories()
-            .await
-            .unwrap_or_default();
-        let params = if dirs.is_empty() {
-            EmptyStateParams {
-                icon_name,
-                icon_label,
-                heading: "No Music Library Configured",
-                heading_label: "No music library configured",
-                description: "Add a music folder via Preferences > Library to get started.",
-                description_label: "Add a music folder via Preferences to get started.",
+    state
+        .handles
+        .lock()
+        .retain_task(spawn_future_local(async move {
+            let dirs = state_clone
+                .storage
+                .list_library_directories()
+                .await
+                .unwrap_or_default();
+            let params = if dirs.is_empty() {
+                EmptyStateParams {
+                    icon_name,
+                    icon_label,
+                    heading: "No Music Library Configured",
+                    heading_label: "No music library configured",
+                    description: "Add a music folder via Preferences > Library to get started.",
+                    description_label: "Add a music folder via Preferences to get started.",
+                }
+            } else {
+                EmptyStateParams {
+                    icon_name,
+                    icon_label,
+                    heading: "No Music Found",
+                    heading_label: "No music found",
+                    description: "No music files found in your library directories. Add more \
+                                  files or check your folders.",
+                    description_label: "No music files found",
+                }
+            };
+            let empty_widget = build_empty_state(&state_clone, &params);
+            if stack_clone.child_by_name("grid").is_none() {
+                drop(stack_clone.add_named(&empty_widget, Some("grid")));
             }
-        } else {
-            EmptyStateParams {
-                icon_name,
-                icon_label,
-                heading: "No Music Found",
-                heading_label: "No music found",
-                description: "No music files found in your library directories. Add more files or \
-                              check your folders.",
-                description_label: "No music files found",
-            }
-        };
-        let empty_widget = build_empty_state(&state_clone, &params);
-        if stack_clone.child_by_name("grid").is_none() {
-            stack_clone.add_named(&empty_widget, Some("grid"));
-        }
-        stack_clone.set_visible_child_name("grid");
-    });
+            stack_clone.set_visible_child_name("grid");
+        }));
 }
 
 /// Update the tracked view mode, ignoring a poisoned mutex.
@@ -268,125 +269,45 @@ pub fn build_empty_container(_: &Arc<AppState>) -> Box {
         .build()
 }
 
-/// Build the "Add Music Folder" button with click handler.
-///
-/// Creates a styled button that opens a file chooser when clicked.
-///
-/// # Arguments
-///
-/// * `state` - Application state for the click handler
-pub fn build_add_folder_button(state: &Arc<AppState>) -> Button {
-    let add_folder_button = Button::builder()
-        .label("Add Music Folder")
-        .use_underline(true)
-        .css_classes(["suggested-action"])
-        .can_focus(true)
-        .tooltip_text("Open a file chooser to select your music folder")
-        .build();
-    add_folder_button.update_property(&[PropertyLabel("Add Music Folder")]);
-
-    let state_clone = Arc::clone(state);
-    add_folder_button.connect_clicked(move |btn| {
-        let state = Arc::clone(&state_clone);
-        let parent = parent_window(btn);
-        add_music_folder(state, parent);
-    });
-
-    add_folder_button
-}
-
-/// Get the parent window from a button's root widget.
-fn parent_window(btn: &Button) -> Option<Window> {
-    let r = btn.root()?;
-    r.downcast::<Window>().map_or_else(
-        |_| {
-            warn!("Button has no parent window");
-            None
-        },
-        Some,
-    )
-}
-
-/// Open a file chooser dialog to add a music folder.
-///
-/// Adds the directory to storage and spawns a background scan.  Runs on the
-/// `GLib` main context via a local future so the dialog and widgets are only
-/// touched on the main thread.
-fn add_music_folder(state: Arc<AppState>, parent: Option<Window>) {
-    spawn_future_local(async move {
-        let dialog = FileDialog::builder()
-            .title("Select Music Folder")
-            .accept_label("Add Folder")
-            .build();
-
-        let folder = match dialog.select_folder_future(parent.as_ref()).await {
-            Ok(folder) => folder,
-            Err(e) => {
-                warn!(error = %e, "File chooser cancelled or failed");
-                return;
-            }
-        };
-
-        let Some(path) = folder.path() else {
-            info!("No folder path selected");
-            return;
-        };
-
-        if let Err(e) = state.storage.add_library_directory(&path).await {
-            warn!(error = %e, path = %path.display(), "Failed to add library directory");
-            return;
-        }
-
-        info!(path = %path.display(), "Added library directory, spawning background scan");
-
-        let scanner = Arc::clone(&state.scanner);
-        let scan_path = path.clone();
-        let refresh = state.refresh.clone();
-        spawn(scan_directory_and_refresh(scanner, scan_path, refresh));
-    });
-}
-
-/// Scan a library directory in the background and publish a library refresh.
-async fn scan_directory_and_refresh(
-    scanner: Arc<FsScanner<SqliteStorage>>,
-    path: PathBuf,
-    refresh: ValueSignal<()>,
-) {
-    if let Err(e) = scanner.scan_directory(&path).await {
-        warn!(error = %e, path = %path.display(), "Failed to scan directory");
-        return;
-    }
-    info!(path = %path.display(), "Scan completed");
-    refresh.publish();
-}
-
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
 
     use {
         anyhow::{Result, ensure},
-        libadwaita::gtk::{self, Button, test},
+        libadwaita::{
+            gtk::{self, Box, Label, Orientation::Vertical, test},
+            prelude::{BoxExt, WidgetExt},
+        },
         parking_lot::Mutex,
     };
 
     use crate::{
         storage::view_mode::ViewMode::{Column, Grid},
-        ui::gallery::empty::{parent_window, update_mode},
+        ui::gallery::empty::{clear_container, update_mode},
     };
-
-    #[test]
-    fn parent_window_none_when_unattached() -> Result<()> {
-        let button = Button::new();
-        ensure!(parent_window(&button).is_none());
-        Ok(())
-    }
 
     #[test]
     fn update_mode_sets_mutex_value() -> Result<()> {
         let mode = Arc::new(Mutex::new(Grid));
         update_mode(&mode, Column);
         ensure!(*mode.lock() == Column);
+        Ok(())
+    }
+
+    #[test]
+    fn clear_container_removes_children() -> Result<()> {
+        let container = Box::new(Vertical, 0);
+        container.append(&Label::new(Some("child")));
+        ensure!(
+            container.first_child().is_some(),
+            "container must hold a child before clearing"
+        );
+        clear_container(&container);
+        ensure!(
+            container.first_child().is_none(),
+            "container must be empty after clearing"
+        );
         Ok(())
     }
 }

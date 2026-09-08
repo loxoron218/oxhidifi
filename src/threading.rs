@@ -111,6 +111,7 @@ use {parking_lot::Mutex, tracing::error};
 /// joined from the `GLib` main thread. Its `JoinHandle` lives in
 /// `EngineShared::decode_thread` instead. See the module-level docs
 /// for the full threading model.
+#[derive(Debug)]
 pub struct ThreadManager {
     /// Collected join handles for all spawned threads.
     handles: Mutex<Vec<JoinHandle<()>>>,
@@ -184,7 +185,7 @@ mod tests {
     }
 
     fn inc_atomic(c: &Arc<AtomicUsize>) {
-        c.fetch_add(1, SeqCst);
+        _ = c.fetch_add(1, SeqCst);
     }
 
     #[test]

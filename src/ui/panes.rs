@@ -1,28 +1,19 @@
 //! Sidebar and content panes.
 
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, Ordering::Relaxed},
-};
+use std::sync::Arc;
 
-use {
-    libadwaita::{
-        HeaderBar, NavigationPage, NavigationView, OverlaySplitView, ToastOverlay, ToolbarView,
-        ViewStack, ViewSwitcher, ViewSwitcherBar,
-        ViewSwitcherPolicy::Wide,
-        WindowTitle,
-        glib::{object::ObjectExt, spawn_future_local},
-        gtk::{
-            Button, Stack, ToggleButton, Window, accessible::Property::Label as PropertyLabel,
-            prelude::ToggleButtonExt,
-        },
-        prelude::{AccessibleExtManual, WidgetExt},
-    },
-    tracing::{error, info},
+use libadwaita::{
+    HeaderBar, NavigationPage, NavigationView, OverlaySplitView, ToastOverlay, ToolbarView,
+    ViewStack, ViewSwitcher, ViewSwitcherBar,
+    ViewSwitcherPolicy::Wide,
+    WindowTitle,
+    glib::spawn_future_local,
+    gtk::{Button, Stack, ToggleButton, Window, accessible::Property::Label as PropertyLabel},
+    prelude::{AccessibleExtManual, WidgetExt},
 };
 
 use crate::{
-    app::runtime::{AppState, NavigationEvent::Back},
+    app::runtime::AppState,
     storage::{
         active_tab::ActiveTab::{Albums, Artists},
         view_mode::ViewMode::{self, Column, Grid},
@@ -34,15 +25,16 @@ use crate::{
             narrow_flag::NarrowState,
         },
         header::build_view_toggle,
-        navigation::{handle_navigation_event, persist_active_tab},
-        player::sidebar::build_player_content,
+        navigation::handle_navigation_event,
+        player::{sidebar::build_player_content, wire_sidebar_toggles},
         status::StatusBar,
-        switching::handle_tab_switch,
+        switching::{handle_tab_switch, wire_tab_tracking},
     },
 };
 
 /// Library view switcher widgets shared with the window shell for adaptive
 /// narrow-mode wiring.
+#[derive(Debug)]
 pub struct SwitcherGroup {
     /// Header bar holding the wide-mode `ViewSwitcher` in its title slot.
     pub header: HeaderBar,
@@ -122,21 +114,27 @@ fn wire_library_signals(
     let a1 = album_stack.clone();
     let r1 = artist_stack.clone();
     let n1 = Arc::clone(&narrow_state);
-    spawn_future_local(async move {
-        while let Ok(tab) = tab_rx.recv().await {
-            handle_tab_switch(&s1, &st1, tab, &a1, &r1, &n1);
-        }
-    });
+    state
+        .handles
+        .lock()
+        .retain_task(spawn_future_local(async move {
+            while let Ok(tab) = tab_rx.recv().await {
+                handle_tab_switch(&s1, &st1, tab, &a1, &r1, &n1);
+            }
+        }));
     let s2 = Arc::clone(state);
     let a2 = album_stack;
     let r2 = artist_stack;
     let n2 = narrow_state;
-    spawn_future_local(async move {
-        let rx = s2.view_mode.subscribe();
-        while let Ok(m) = rx.recv().await {
-            switch_mode_for_active_tab(&s2, m, &a2, &r2, &n2);
-        }
-    });
+    state
+        .handles
+        .lock()
+        .retain_task(spawn_future_local(async move {
+            let rx = s2.view_mode.subscribe();
+            while let Ok(m) = rx.recv().await {
+                switch_mode_for_active_tab(&s2, m, &a2, &r2, &n2);
+            }
+        }));
 }
 
 /// Build the content pane with library views and controls.
@@ -236,25 +234,7 @@ pub fn build_content(
     let (content_toolbar, stack, nav_view, switchers) =
         build_content_pane(state, &toggle_button, narrow_state, parent);
 
-    let nav_tx = state.navigation_tx.clone();
-
-    let tab_nav_tx = nav_tx.clone();
-    let tab_nav_view = nav_view.clone();
-    let tab_stack = stack.clone();
-    let tab_storage = Arc::clone(&state.storage);
-    let tab_active_tab = state.active_tab.clone();
-    stack.connect_visible_child_notify(move |_| {
-        if tab_nav_view.find_page("detail").is_none()
-            && let Some(name) = tab_stack.visible_child_name()
-        {
-            info!(tab_name = name.as_str(), "Tab switched",);
-            persist_active_tab(&tab_storage, &tab_active_tab, name.as_str());
-        }
-        let is_on_detail = tab_nav_view.find_page("detail").is_some();
-        if is_on_detail && let Err(err) = tab_nav_tx.try_send(Back) {
-            error!(error = %err, "Failed to send Back navigation event");
-        }
-    });
+    wire_tab_tracking(state, &stack, &nav_view);
 
     let split_view = OverlaySplitView::builder()
         .sidebar(&sidebar_toolbar)
@@ -269,49 +249,22 @@ pub fn build_content(
         "Main player panel with sidebar and content area",
     )]);
 
-    let user_wants_sidebar = Arc::new(AtomicBool::new(false));
-
-    let sv = split_view.clone();
-    let intended = Arc::clone(&user_wants_sidebar);
-    toggle_button.connect_toggled(move |btn| {
-        intended.store(btn.is_active(), Relaxed);
-        if sv.shows_sidebar() != btn.is_active() {
-            sv.set_show_sidebar(btn.is_active());
-        }
-    });
-
-    let sv_back = split_view.clone();
-    let intended_back = Arc::clone(&user_wants_sidebar);
-    back_button.connect_toggled(move |btn| {
-        intended_back.store(btn.is_active(), Relaxed);
-        if sv_back.shows_sidebar() != btn.is_active() {
-            sv_back.set_show_sidebar(btn.is_active());
-        }
-    });
-
-    let sv_collapse = split_view.clone();
-    let intended_collapse = Arc::clone(&user_wants_sidebar);
-    split_view.connect_notify(Some("collapsed"), move |sv, _| {
-        if sv.is_collapsed() {
-            return;
-        }
-        let wants = intended_collapse.load(Relaxed);
-        if sv.shows_sidebar() != wants {
-            sv.set_show_sidebar(wants);
-        }
-    });
+    wire_sidebar_toggles(state, &split_view, &toggle_button, &back_button);
 
     toast_overlay.set_child(Some(&split_view));
 
+    let nav_tx = state.navigation_tx.clone();
     let nav_state = Arc::clone(state);
-    spawn_future_local(async move {
-        let rx = nav_state.navigation_rx.clone();
-        while let Ok(event) = rx.recv().await {
-            handle_navigation_event(&nav_state, &nav_view, &nav_tx, event);
-        }
-    });
+    state
+        .handles
+        .lock()
+        .retain_task(spawn_future_local(async move {
+            let rx = nav_state.navigation_rx.clone();
+            while let Ok(event) = rx.recv().await {
+                handle_navigation_event(&nav_state, &nav_view, &nav_tx, event);
+            }
+        }));
 
-    drop(sv_collapse);
     (
         toast_overlay,
         split_view,
@@ -364,4 +317,66 @@ fn switch_mode_for_stack(
         }
     }
     stack.set_visible_child_name(child);
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use {
+        anyhow::{Result, ensure},
+        libadwaita::{
+            HeaderBar, OverlaySplitView, ToastOverlay, ViewStack, ViewSwitcher, ViewSwitcherBar,
+            gtk::{self, Button, ToggleButton, Window, test},
+        },
+    };
+
+    use crate::{
+        app::runtime::AppState,
+        ui::{
+            gallery::narrow_flag::NarrowState,
+            panes::{SwitcherGroup, build_content},
+        },
+    };
+
+    #[test]
+    fn build_content_signature_shape() {
+        fn assert_shape<
+            F: Fn(
+                &Arc<AppState>,
+                &Arc<NarrowState>,
+                &Window,
+            ) -> (
+                ToastOverlay,
+                OverlaySplitView,
+                ToggleButton,
+                ToggleButton,
+                Button,
+                SwitcherGroup,
+            ),
+        >(
+            _: F,
+        ) {
+        }
+        assert_shape(build_content);
+    }
+
+    #[test]
+    fn switcher_group_fields_are_accessible() -> Result<()> {
+        let stack = ViewStack::new();
+        let group = SwitcherGroup {
+            header: HeaderBar::new(),
+            switcher: ViewSwitcher::builder().stack(&stack).build(),
+            bar: ViewSwitcherBar::builder().stack(&stack).build(),
+        };
+        ensure!(
+            group.switcher.stack().is_some(),
+            "switcher must be bound to a stack"
+        );
+        ensure!(
+            group.bar.stack().is_some(),
+            "switcher bar must be bound to a stack"
+        );
+        Ok(())
+    }
 }

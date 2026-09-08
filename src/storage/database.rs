@@ -49,6 +49,7 @@ use crate::{
 };
 
 /// SQLite-backed storage implementation.
+#[derive(Debug)]
 pub struct SqliteStorage {
     /// `SQLite` connection pool.
     pub pool: SqlitePool,
@@ -311,16 +312,12 @@ mod tests {
 
     use crate::storage::database::SqliteStorage;
 
-    /// Connect a `SqliteStorage` to a temp database and settings file for tests.
+    /// Connect to a temp database and settings file for tests.
     ///
-    /// # Arguments
+    /// # Errors
     ///
-    /// * `dir` - Temp directory to hold the database and settings files
-    ///
-    /// # Returns
-    ///
-    /// The connected `SqliteStorage`.
-    pub async fn storage_in(dir: &TempDir) -> Result<SqliteStorage> {
+    /// Returns an error if the temporary storage backend fails to connect.
+    pub(super) async fn storage_in(dir: &TempDir) -> Result<SqliteStorage> {
         let db = dir.path().join("library.db");
         let settings = dir.path().join("settings.json");
         SqliteStorage::connect_with_settings_path(&db, &settings)
