@@ -81,10 +81,9 @@ mod tests {
     use {
         anyhow::{Result, ensure},
         libadwaita::{
-            gio::prelude::ListModelExt,
             glib::MainContext,
             gtk::{self, test},
-            prelude::WidgetExt,
+            prelude::{ListModelExt, WidgetExt},
         },
     };
 

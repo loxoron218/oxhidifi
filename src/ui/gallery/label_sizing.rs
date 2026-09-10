@@ -4,9 +4,8 @@
 //! used to scale album card layouts with cover size.
 
 use libadwaita::{
-    glib::prelude::Cast,
     gtk::{Box as GtkBox, Label, Overlay},
-    prelude::WidgetExt,
+    prelude::{Cast, WidgetExt},
 };
 
 /// Calculate the title label's character limit for a cover size.
@@ -74,9 +73,8 @@ mod tests {
     use {
         anyhow::{Result, bail, ensure},
         libadwaita::{
-            glib::prelude::Cast,
             gtk::{self, Box, Label, Overlay, test},
-            prelude::WidgetExt,
+            prelude::{Cast, WidgetExt},
         },
     };
 

@@ -3,17 +3,12 @@
 use std::sync::Arc;
 
 use libadwaita::{
-    glib::{prelude::Cast, spawn_future_local},
+    glib::spawn_future_local,
     gtk::{
-        Align::Start,
-        Box, EventControllerMotion, Image, Label,
-        Orientation::Vertical,
-        Overlay, Widget,
-        accessible::Property::Label as PropertyLabel,
-        pango::EllipsizeMode::End,
-        prelude::{ButtonExt, WidgetExt},
+        Align::Start, Box, EventControllerMotion, Image, Label, Orientation::Vertical, Overlay,
+        Widget, accessible::Property::Label as PropertyLabel, pango::EllipsizeMode::End,
     },
-    prelude::{AccessibleExtManual, BoxExt},
+    prelude::{AccessibleExtManual, BoxExt, ButtonExt, Cast, WidgetExt},
 };
 
 use crate::{

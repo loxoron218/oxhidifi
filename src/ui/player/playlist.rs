@@ -10,9 +10,9 @@ use {
     async_channel::{Sender, unbounded},
     libadwaita::{
         gio::ListStore,
-        glib::{BoxedAnyObject, MainContext, idle_add_local_once, prelude::StaticType},
+        glib::{BoxedAnyObject, MainContext, idle_add_local_once},
         gtk::{Box, ListView, NoSelection, Orientation::Vertical, accessible::Property::Label},
-        prelude::{AccessibleExtManual, BoxExt},
+        prelude::{AccessibleExtManual, BoxExt, StaticType},
     },
     parking_lot::Mutex,
     tokio::spawn,
@@ -190,10 +190,10 @@ mod tests {
     use {
         anyhow::{Result, anyhow, ensure},
         libadwaita::{
-            gio::{ListStore, prelude::ListModelExt},
-            glib::{BoxedAnyObject, object::Cast, prelude::StaticType},
+            gio::ListStore,
+            glib::{BoxedAnyObject, object::Cast},
             gtk::{self, ListView, test},
-            prelude::WidgetExt,
+            prelude::{ListModelExt, StaticType, WidgetExt},
         },
         parking_lot::Mutex,
     };

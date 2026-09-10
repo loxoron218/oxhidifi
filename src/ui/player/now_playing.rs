@@ -10,11 +10,8 @@ use {
     async_channel::Sender,
     libadwaita::{
         glib::idle_add_local_once,
-        gtk::{
-            Picture,
-            accessible::Property::Label as PropertyLabel,
-            prelude::{AccessibleExtManual, TextureExt},
-        },
+        gtk::{Picture, accessible::Property::Label as PropertyLabel},
+        prelude::{AccessibleExtManual, TextureExt},
     },
     tokio::spawn,
     tracing::error,

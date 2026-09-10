@@ -6,7 +6,6 @@ use std::sync::Arc;
 use {
     libadwaita::{
         ButtonContent,
-        glib::prelude::Cast,
         gtk::{
             Align::{Center, End},
             Box, Button, Label,
@@ -14,7 +13,7 @@ use {
             Popover, Separator, Widget, Window,
             accessible::Property::Label as PropertyLabel,
         },
-        prelude::{AccessibleExtManual, BoxExt, ButtonExt, WidgetExt},
+        prelude::{AccessibleExtManual, BoxExt, ButtonExt, Cast, WidgetExt},
     },
     tracing::warn,
 };

@@ -7,14 +7,10 @@ use {
     libadwaita::{
         glib::{
             ControlFlow::{Break, Continue},
-            idle_add_local,
-            prelude::Cast,
-            spawn_future_local, timeout_add_local,
+            idle_add_local, spawn_future_local, timeout_add_local,
         },
-        gtk::{
-            Widget,
-            prelude::{BoxExt, ButtonExt, WidgetExt},
-        },
+        gtk::Widget,
+        prelude::{BoxExt, ButtonExt, Cast, WidgetExt},
     },
     tracing::{info, warn},
 };

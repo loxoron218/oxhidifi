@@ -10,10 +10,8 @@ use {
     libadwaita::{
         gdk::MemoryTexture,
         glib::MainContext,
-        gtk::{
-            accessible::Property::Label as PropertyLabel,
-            prelude::{AccessibleExtManual, ButtonExt, RangeExt, WidgetExt},
-        },
+        gtk::accessible::Property::Label as PropertyLabel,
+        prelude::{AccessibleExtManual, ButtonExt, RangeExt, WidgetExt},
     },
 };
 

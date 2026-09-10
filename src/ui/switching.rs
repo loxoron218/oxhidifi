@@ -122,7 +122,7 @@ mod tests {
 
     use crate::{
         app::runtime::AppState,
-        storage::active_tab::ActiveTab,
+        storage::active_tab::ActiveTab::{Albums, Artists},
         ui::{gallery::narrow_flag::NarrowState, switching::handle_tab_switch},
     };
 
@@ -150,7 +150,7 @@ mod tests {
         handle_tab_switch(
             &view_stack,
             &state,
-            ActiveTab::Albums,
+            Albums,
             &album_stack,
             &artist_stack,
             &narrow,
@@ -164,7 +164,7 @@ mod tests {
         handle_tab_switch(
             &view_stack,
             &state,
-            ActiveTab::Artists,
+            Artists,
             &album_stack,
             &artist_stack,
             &narrow,

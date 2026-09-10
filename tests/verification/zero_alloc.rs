@@ -21,7 +21,7 @@
 //! cargo test --features verification-tests --test zero_alloc
 //! ```
 
-use std::{borrow::Cow, f64::consts::PI, fs::File, io::Write, path::Path};
+use std::{borrow::Cow::Borrowed, f64::consts::PI, fs::File, io::Write, path::Path};
 
 use {
     anyhow::{Context, Result, ensure},
@@ -87,7 +87,7 @@ fn verify_channel_scratch_reuse(initial_cap: usize) -> Result<()> {
     };
     let borrowed = maybe_downmix(&batch, 2, 2);
     ensure!(
-        matches!(borrowed, Cow::Borrowed(_)),
+        matches!(borrowed, Borrowed(_)),
         "equal channels must borrow"
     );
     ensure!(
@@ -193,7 +193,7 @@ fn main_test() -> Result<()> {
         let samples: &[f32] = if src_ch == dst_ch {
             let borrowed = maybe_downmix(&batch, src_ch, dst_ch);
             ensure!(
-                matches!(borrowed, Cow::Borrowed(_)),
+                matches!(borrowed, Borrowed(_)),
                 "equal channels must borrow without allocation"
             );
             ensure!(

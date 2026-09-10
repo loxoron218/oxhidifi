@@ -1,6 +1,9 @@
 //! Pure channel-conversion DSP: downmixing and upmixing audio frames.
 
-use std::{borrow::Cow, iter::repeat_n};
+use std::{
+    borrow::Cow::{self, Borrowed, Owned},
+    iter::repeat_n,
+};
 
 use crate::playback::decoder::DecodedSamples;
 
@@ -57,9 +60,9 @@ pub fn maybe_downmix<'a>(
     dst_channels: usize,
 ) -> Cow<'a, [f32]> {
     if src_channels == dst_channels {
-        Cow::Borrowed(batch.samples)
+        Borrowed(batch.samples)
     } else {
-        Cow::Owned(downmix(batch.samples, src_channels, dst_channels))
+        Owned(downmix(batch.samples, src_channels, dst_channels))
     }
 }
 
@@ -131,16 +134,16 @@ where
     'b: 'a,
 {
     if src_channels == dst_channels {
-        Cow::Borrowed(batch.samples)
+        Borrowed(batch.samples)
     } else {
         fill_channel_scratch(batch.samples, src_channels, dst_channels, scratch);
-        Cow::Borrowed(scratch.as_slice())
+        Borrowed(scratch.as_slice())
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::borrow::Cow;
+    use std::borrow::Cow::{Borrowed, Owned};
 
     use crate::playback::{
         channel::{downmix, maybe_downmix, maybe_downmix_with_scratch},
@@ -231,7 +234,7 @@ mod tests {
         let result = maybe_downmix(&batch, 2, 2);
         assert_eq!(result.as_ref(), &[0.5, -0.5, 0.25, -0.25]);
         assert!(
-            matches!(result, Cow::Borrowed(_)),
+            matches!(result, Borrowed(_)),
             "equal channels must borrow without allocation"
         );
     }
@@ -251,7 +254,7 @@ mod tests {
         assert_eq!(result.len(), 1);
         assert_samples_close(result.as_ref(), &[0.5], f32::EPSILON);
         assert!(
-            matches!(result, Cow::Owned(_)),
+            matches!(result, Owned(_)),
             "differing channels must allocate owned buffer"
         );
     }

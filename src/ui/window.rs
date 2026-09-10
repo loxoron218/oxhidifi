@@ -20,9 +20,12 @@ use {
         },
         gtk::{
             Button, CssProvider, EventControllerKey, STYLE_PROVIDER_PRIORITY_APPLICATION,
-            ToggleButton, Window, prelude::ToggleButtonExt, style_context_add_provider_for_display,
+            ToggleButton, Window, style_context_add_provider_for_display,
         },
-        prelude::{AdwApplicationWindowExt, ApplicationExt, ButtonExt, GtkWindowExt, WidgetExt},
+        prelude::{
+            AdwApplicationWindowExt, ApplicationExt, ButtonExt, GtkWindowExt, ToggleButtonExt,
+            WidgetExt,
+        },
     },
     tracing::{info, warn},
 };

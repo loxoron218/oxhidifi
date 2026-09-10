@@ -22,8 +22,8 @@ use {
             Orientation::Horizontal,
             accessible::Property::Label as PropertyLabel,
             pango::EllipsizeMode::End as EllipsizeEnd,
-            prelude::{AccessibleExtManual, BoxExt, GestureSingleExt, ListBoxRowExt, WidgetExt},
         },
+        prelude::{AccessibleExtManual, BoxExt, GestureSingleExt, ListBoxRowExt, WidgetExt},
     },
     num_traits::NumCast,
     tracing::{info, warn},
@@ -274,9 +274,8 @@ mod tests {
     use {
         anyhow::{Result, ensure},
         libadwaita::{
-            gio::prelude::ListModelExt,
-            gtk::{self, prelude::ListBoxRowExt, test},
-            prelude::WidgetExt,
+            gtk::{self, test},
+            prelude::{ListBoxRowExt, ListModelExt, WidgetExt},
         },
     };
 

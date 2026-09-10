@@ -12,14 +12,13 @@ use {
         gdk::MemoryTexture,
         glib::{
             ControlFlow::{self, Break, Continue},
-            prelude::Cast,
             spawn_future_local,
         },
         gtk::{
             ContentFit::Cover, FlowBox, Overlay, Picture, Stack, Widget,
             accessible::Property::Label,
         },
-        prelude::AccessibleExtManual,
+        prelude::{AccessibleExtManual, Cast},
     },
     tracing::error,
 };

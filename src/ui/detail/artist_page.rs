@@ -5,7 +5,7 @@ use std::{collections::HashMap, sync::Arc};
 use {
     async_channel::Sender,
     libadwaita::{
-        glib::{idle_add_local, prelude::Cast, spawn_future_local},
+        glib::{idle_add_local, spawn_future_local},
         gtk::{
             Align::Start,
             Box as GtkBox, Button,
@@ -15,8 +15,8 @@ use {
             Picture, Widget,
             accessible::Property::Label as PropertyLabel,
             pango::EllipsizeMode::End,
-            prelude::{AccessibleExtManual, BoxExt, ButtonExt, GestureSingleExt, WidgetExt},
         },
+        prelude::{AccessibleExtManual, BoxExt, ButtonExt, Cast, GestureSingleExt, WidgetExt},
     },
     tokio::join,
     tracing::{info, warn},

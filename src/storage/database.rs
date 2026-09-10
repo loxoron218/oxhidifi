@@ -306,8 +306,9 @@ impl Storage for SqliteStorage {
 #[cfg(test)]
 mod tests {
     use {
-        anyhow::{Context, Result},
-        tempfile::TempDir,
+        anyhow::{Context, Result, ensure},
+        tempfile::{TempDir, tempdir},
+        tokio::test,
     };
 
     use crate::storage::database::SqliteStorage;
@@ -323,5 +324,16 @@ mod tests {
         SqliteStorage::connect_with_settings_path(&db, &settings)
             .await
             .context("storage should connect")
+    }
+
+    #[test]
+    async fn storage_in_connects_to_temp_database() -> Result<()> {
+        let dir = tempdir()?;
+        let storage = storage_in(&dir).await?;
+        ensure!(
+            storage.get_queue_rows().await?.is_empty(),
+            "fresh temp database must start with an empty queue"
+        );
+        Ok(())
     }
 }

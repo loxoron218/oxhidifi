@@ -4,7 +4,7 @@
 //! object-based spatial audio configurations. Replaces raw channel counts
 //! with a type-safe enum that the UI and playback engine can reason about.
 
-use std::borrow::Cow;
+use std::borrow::Cow::{self, Borrowed, Owned};
 
 /// Describes the spatial arrangement of audio channels.
 ///
@@ -84,22 +84,22 @@ impl AudioLayout {
 #[must_use]
 pub fn format_channel_label(layout: AudioLayout) -> Cow<'static, str> {
     match layout {
-        AudioLayout::Spatial => Cow::Borrowed("Spatial Audio"),
+        AudioLayout::Spatial => Borrowed("Spatial Audio"),
 
         AudioLayout::Immersive {
             surround,
             lfe,
             height,
-        } => Cow::Owned(format!("{surround}.{lfe}.{height} Immersive")),
+        } => Owned(format!("{surround}.{lfe}.{height} Immersive")),
 
         AudioLayout::Channels(count) => match count {
-            1 => Cow::Borrowed("Mono"),
-            2 => Cow::Borrowed("Stereo"),
-            4 => Cow::Borrowed("Quadraphonic"),
-            6 => Cow::Borrowed("5.1 Surround"),
-            7 => Cow::Borrowed("6.1 Surround"),
-            8 => Cow::Borrowed("7.1 Surround"),
-            n => Cow::Owned(format!("{n}-channel")),
+            1 => Borrowed("Mono"),
+            2 => Borrowed("Stereo"),
+            4 => Borrowed("Quadraphonic"),
+            6 => Borrowed("5.1 Surround"),
+            7 => Borrowed("6.1 Surround"),
+            8 => Borrowed("7.1 Surround"),
+            n => Owned(format!("{n}-channel")),
         },
     }
 }

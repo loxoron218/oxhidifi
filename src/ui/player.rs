@@ -22,7 +22,8 @@ use {
     libadwaita::{
         OverlaySplitView,
         glib::{MainContext, object::ObjectExt},
-        gtk::{ToggleButton, prelude::ToggleButtonExt},
+        gtk::ToggleButton,
+        prelude::ToggleButtonExt,
     },
     tokio::spawn,
     tracing::error,

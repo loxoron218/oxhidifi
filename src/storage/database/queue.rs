@@ -156,7 +156,11 @@ mod tests {
     };
 
     use crate::storage::{
-        catalog::{NewQueueEntry, NewTrack, QueueContext, TrackAudio},
+        catalog::{
+            NewQueueEntry, NewTrack,
+            QueueContext::{Album as QueueAlbum, Artist as QueueArtist, Manual},
+            TrackAudio,
+        },
         database::tests::storage_in,
     };
 
@@ -228,14 +232,12 @@ mod tests {
         );
 
         storage
-            .append_queue_row(track_a, Some(QueueContext::Album(7)))
+            .append_queue_row(track_a, Some(QueueAlbum(7)))
             .await?;
         storage
-            .append_queue_row(track_b, Some(QueueContext::Artist(9)))
+            .append_queue_row(track_b, Some(QueueArtist(9)))
             .await?;
-        storage
-            .append_queue_row(track_a, Some(QueueContext::Manual))
-            .await?;
+        storage.append_queue_row(track_a, Some(Manual)).await?;
         storage.append_queue_row(track_b, None).await?;
         let rows = storage.get_queue_rows().await?;
         ensure!(rows.len() == 6, "expected 6 queue entries");

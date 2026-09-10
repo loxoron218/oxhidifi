@@ -3,14 +3,16 @@
 use {
     libadwaita::{
         gdk::{ContentProvider, DragAction},
-        gio::{ListStore, prelude::ListModelExt},
+        gio::ListStore,
         glib::{BoxedAnyObject, Value, types::Type, value::ToValue},
         gtk::{
             Align::Start, Box, Button, DragSource, DropTarget, Label, ListItem,
             Orientation::Horizontal, SignalListItemFactory,
             accessible::Property::Label as PropertyLabel, pango::EllipsizeMode::End,
         },
-        prelude::{AccessibleExtManual, BoxExt, ButtonExt, Cast, ListItemExt, WidgetExt},
+        prelude::{
+            AccessibleExtManual, BoxExt, ButtonExt, Cast, ListItemExt, ListModelExt, WidgetExt,
+        },
     },
     tracing::{error, warn},
 };
@@ -203,10 +205,10 @@ mod tests {
     use {
         anyhow::{Result, anyhow, ensure},
         libadwaita::{
-            gio::{ListStore, prelude::ListModelExt},
-            glib::{BoxedAnyObject, MainContext, object::Cast, prelude::StaticType},
+            gio::ListStore,
+            glib::{BoxedAnyObject, MainContext, object::Cast},
             gtk::{self, Label, ListView, NoSelection, Widget, Window, test},
-            prelude::{GtkWindowExt, WidgetExt},
+            prelude::{GtkWindowExt, ListModelExt, StaticType, WidgetExt},
         },
     };
 

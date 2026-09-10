@@ -14,7 +14,10 @@ use crate::playback::{
     gapless::GaplessTransitioner,
     output::AudioOutput,
     queue_manager::PlaybackQueue,
-    state::{PlaybackEvent, PlaybackState},
+    state::{
+        PlaybackEvent::{self, Error, PositionTick},
+        PlaybackState,
+    },
 };
 
 /// Commands sent to the decode task.
@@ -70,7 +73,7 @@ impl EngineShared {
 
     /// Send an error event to all subscribers.
     pub fn send_error_event(&self, error: &str) {
-        self.send_event(&PlaybackEvent::Error {
+        self.send_event(&Error {
             error: error.to_string(),
         });
     }
@@ -82,7 +85,7 @@ impl EngineShared {
         if last_tick.elapsed() >= Duration::from_millis(200) {
             let duration = state.duration_seconds;
             drop(state);
-            self.send_event(&PlaybackEvent::PositionTick {
+            self.send_event(&PositionTick {
                 elapsed_seconds: elapsed,
                 duration_seconds: duration,
             });

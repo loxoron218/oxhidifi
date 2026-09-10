@@ -11,9 +11,10 @@ use {
             Orientation::{Horizontal, Vertical},
             Scale,
             accessible::Property::Label as PropertyLabel,
-            prelude::{GestureSingleExt, RangeExt},
         },
-        prelude::{AccessibleExtManual, BoxExt, ButtonExt, ScaleExt, WidgetExt},
+        prelude::{
+            AccessibleExtManual, BoxExt, ButtonExt, GestureSingleExt, RangeExt, ScaleExt, WidgetExt,
+        },
     },
     tracing::error,
 };
@@ -218,8 +219,8 @@ mod tests {
         anyhow::{Result, ensure},
         libadwaita::{
             glib::object::ObjectExt,
-            gtk::{self, prelude::RangeExt, test},
-            prelude::{ButtonExt, WidgetExt},
+            gtk::{self, test},
+            prelude::{ButtonExt, RangeExt, WidgetExt},
         },
     };
 

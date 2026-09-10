@@ -11,9 +11,8 @@ use {
             Orientation::{Horizontal, Vertical},
             ScrolledWindow,
             accessible::Property::Label as PropertyLabel,
-            prelude::{AccessibleExtManual, BoxExt, WidgetExt},
         },
-        prelude::ButtonExt,
+        prelude::{AccessibleExtManual, BoxExt, ButtonExt, WidgetExt},
     },
     tracing::error,
 };

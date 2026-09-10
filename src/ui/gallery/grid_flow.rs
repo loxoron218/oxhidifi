@@ -277,9 +277,9 @@ mod tests {
     use {
         anyhow::{Result, bail, ensure},
         libadwaita::{
-            glib::{ControlFlow, prelude::Cast},
+            glib::ControlFlow::{Break, Continue},
             gtk::{self, Box, Image, Orientation::Vertical, Overlay, test},
-            prelude::{BoxExt, WidgetExt},
+            prelude::{BoxExt, Cast, WidgetExt},
         },
     };
 
@@ -308,7 +308,7 @@ mod tests {
         let flow = fill_grid_batch(false, &state, &mut remaining, |_, _| {
             built = built.saturating_add(1);
         });
-        ensure!(flow == ControlFlow::Break, "stale build must bail");
+        ensure!(flow == Break, "stale build must bail");
         ensure!(built == 0, "stale build must not build any cards");
         ensure!(
             remaining == vec![0, 1, 2],
@@ -325,10 +325,7 @@ mod tests {
         let flow = fill_grid_batch(true, &state, &mut remaining, |_, _| {
             built = built.saturating_add(1);
         });
-        ensure!(
-            flow == ControlFlow::Continue,
-            "more indices remain, must continue"
-        );
+        ensure!(flow == Continue, "more indices remain, must continue");
         ensure!(built == GRID_BATCH_SIZE, "must build exactly one batch");
         ensure!(remaining.len() == 3, "batch must consume one batch worth");
         Ok(())

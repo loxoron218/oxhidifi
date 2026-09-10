@@ -25,7 +25,10 @@ use {
 
 use crate::{
     library::scanner::events::ScanEvent,
-    storage::{Storage, StorageError},
+    storage::{
+        Storage,
+        StorageError::{self, Database},
+    },
     ui::signal_handlers::ValueSignal,
 };
 
@@ -93,7 +96,7 @@ impl<S: Storage + 'static> LibraryScanner for FsScanner<S> {
     fn cancel(&self) -> Result<(), StorageError> {
         self.cancel_tx
             .send(true)
-            .map_err(|e| StorageError::Database(format!("Failed to send cancel signal: {e}")))
+            .map_err(|e| Database(format!("Failed to send cancel signal: {e}")))
     }
 }
 

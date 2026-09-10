@@ -4,7 +4,10 @@ use std::time::Duration;
 
 use {async_channel::Receiver, tokio::select};
 
-use crate::storage::{active_tab::ActiveTab, view_mode::ViewMode};
+use crate::storage::{
+    active_tab::ActiveTab,
+    view_mode::ViewMode::{self, Grid},
+};
 
 /// Debounce window for coalescing rapid sort/zoom changes before a grid rebuild.
 pub const SORT_ZOOM_DEBOUNCE: Duration = Duration::from_millis(200);
@@ -52,7 +55,7 @@ pub fn decide_rebuild(
     if active_tab != tab {
         return RebuildAction::DeferDirty;
     }
-    if view_mode == ViewMode::Grid && zoom_fired && !sort_fired && ready {
+    if view_mode == Grid && zoom_fired && !sort_fired && ready {
         RebuildAction::Resize
     } else {
         RebuildAction::Rebuild

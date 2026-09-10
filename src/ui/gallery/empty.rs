@@ -11,9 +11,9 @@ use {
         glib::spawn_future_local,
         gtk::{
             Align::Center, Box, Image, Label, Orientation::Vertical, ScrolledWindow, Stack, Widget,
-            accessible::Property::Label as PropertyLabel, prelude::WidgetExt,
+            accessible::Property::Label as PropertyLabel,
         },
-        prelude::{AccessibleExtManual, BoxExt, IsA},
+        prelude::{AccessibleExtManual, BoxExt, IsA, WidgetExt},
     },
     parking_lot::Mutex,
 };

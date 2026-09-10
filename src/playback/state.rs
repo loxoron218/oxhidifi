@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use crate::playback::{
     devices::OutputMode::{self, Resampled},
-    gapless::GaplessMode,
+    gapless::GaplessMode::{self, Enabled},
 };
 
 /// Mute state.
@@ -115,7 +115,7 @@ impl Default for PlaybackState {
             muted: MuteState::Unmuted,
             elapsed_seconds: 0.0,
             duration_seconds: 0.0,
-            gapless_mode: GaplessMode::Enabled,
+            gapless_mode: Enabled,
             output_mode: Resampled,
         }
     }

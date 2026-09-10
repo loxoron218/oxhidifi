@@ -11,12 +11,10 @@ use {
     libadwaita::{
         glib::{
             ControlFlow::{self, Break, Continue},
-            idle_add_local,
-            prelude::Cast,
-            spawn_future_local,
+            idle_add_local, spawn_future_local,
         },
         gtk::{Box, FlowBox, Orientation::Vertical, Overlay, Stack, Widget},
-        prelude::BoxExt,
+        prelude::{BoxExt, Cast},
     },
     tracing::warn,
 };

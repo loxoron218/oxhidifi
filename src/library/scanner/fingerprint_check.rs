@@ -22,7 +22,7 @@ use crate::{
     },
     storage::{
         Storage,
-        catalog::{FieldUpdate, Track, TrackUpdate},
+        catalog::{FieldUpdate::Set, Track, TrackUpdate},
     },
 };
 
@@ -101,7 +101,7 @@ impl<S: Storage> FsScanner<S> {
             return;
         };
         let update = TrackUpdate {
-            content_hash: FieldUpdate::Set(hash),
+            content_hash: Set(hash),
             ..Default::default()
         };
         if let Err(error) = self.storage.update_track(track.id, update).await {
