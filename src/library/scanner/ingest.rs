@@ -152,10 +152,6 @@ impl<S: Storage> FsScanner<S> {
     }
 
     /// Process a file using cached artist/album lookups to avoid repeated DB queries.
-    ///
-    /// # Errors
-    ///
-    /// Returns a `SkipReason` if the file is a duplicate, corrupt, or cannot be inserted.
     async fn process_file_cached(
         &self,
         path: &Path,

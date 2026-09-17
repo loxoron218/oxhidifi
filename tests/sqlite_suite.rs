@@ -19,11 +19,6 @@ mod tests {
 
     use crate::scratch_store::{make_album, make_track, test_storage};
 
-    /// Insert an artist and assert a positive id is returned.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the insert fails or yields a non-positive id.
     async fn insert_artist_named(storage: &SqliteStorage, name: &str) -> Result<()> {
         let artist_id = storage
             .insert_artist(NewArtist {

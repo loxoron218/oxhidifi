@@ -123,7 +123,6 @@ pub fn fill_channel_scratch(
 /// When `src_channels == dst_channels`, returns a borrowed slice without
 /// touching `scratch`. Otherwise clears `scratch`, fills it with the
 /// converted samples, and returns a borrowed view of `scratch`.
-#[must_use]
 pub fn maybe_downmix_with_scratch<'a, 'b>(
     batch: &'a DecodedSamples<'a>,
     src_channels: usize,

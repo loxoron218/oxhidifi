@@ -9,7 +9,7 @@ use std::{
 
 use {
     rtrb::Producer,
-    tokio::sync::mpsc::{Receiver as MpscReceiver, Sender, channel as MpscChannel},
+    tokio::sync::mpsc::{Receiver, Sender, channel},
     tracing::{error, info, warn},
 };
 
@@ -108,7 +108,7 @@ fn init_decoder(
 fn run_decode_loop(
     path: &Path,
     mut producer: Producer<f32>,
-    mut cmd_rx: MpscReceiver<DecodeCommand>,
+    mut cmd_rx: Receiver<DecodeCommand>,
     engine_shared: &Arc<EngineShared>,
     mut track_id: i64,
     output: OutputConfig,
@@ -173,7 +173,7 @@ fn run_decode_loop(
 /// stream operations off the main thread.
 fn init_decode_thread_loop(
     mut path: PathBuf,
-    mut cmd_rx: MpscReceiver<DecodeCommand>,
+    mut cmd_rx: Receiver<DecodeCommand>,
     engine_shared: &Arc<EngineShared>,
     mut track_id: i64,
 ) {
@@ -215,7 +215,7 @@ fn init_decode_thread_loop(
             output_config,
         ) {
             Some((next_id, next_path)) => {
-                let (cmd_tx, new_cmd_rx) = MpscChannel(4);
+                let (cmd_tx, new_cmd_rx) = channel(4);
 
                 engine_shared.send_event(&TrackStarted { track_id: next_id });
 
@@ -316,7 +316,7 @@ pub fn start_playback(shared: &Arc<EngineShared>, track_id: i64, path: PathBuf) 
     }
 
     let engine_state = Arc::clone(shared);
-    let (cmd_tx, cmd_rx) = MpscChannel::<DecodeCommand>(4);
+    let (cmd_tx, cmd_rx) = channel::<DecodeCommand>(4);
 
     *shared.decode_tx.lock() = Some(cmd_tx);
 

@@ -10,7 +10,7 @@ use {
     async_channel::Sender,
     libadwaita::{
         glib::idle_add_local_once,
-        gtk::{Picture, accessible::Property::Label as PropertyLabel},
+        gtk::{Picture, accessible::Property::Label},
         prelude::{AccessibleExtManual, TextureExt},
     },
     tokio::spawn,
@@ -199,13 +199,13 @@ pub async fn resolve_track_metadata(
 /// Nothing.
 pub fn apply_meta_labels(labels: &TrackLabels, t: &str, ar: &str, al: &str, fmt: &str) {
     labels.title.set_label(t);
-    labels.title.update_property(&[PropertyLabel(t)]);
+    labels.title.update_property(&[Label(t)]);
     labels.artist.set_label(ar);
-    labels.artist.update_property(&[PropertyLabel(ar)]);
+    labels.artist.update_property(&[Label(ar)]);
     labels.album.set_label(al);
-    labels.album.update_property(&[PropertyLabel(al)]);
+    labels.album.update_property(&[Label(al)]);
     labels.format.set_label(fmt);
-    labels.format.update_property(&[PropertyLabel(fmt)]);
+    labels.format.update_property(&[Label(fmt)]);
 }
 
 /// Process one metadata update: check track ID match, update labels, request cover.

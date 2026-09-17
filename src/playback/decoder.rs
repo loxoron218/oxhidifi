@@ -16,7 +16,7 @@ use symphonia::{
         errors::Error::{DecodeError, IoError, ResetRequired},
         formats::{
             FormatOptions, FormatReader, SeekMode::Accurate, SeekTo::Time as SeekTime,
-            TrackType::Audio as TypeAudio, probe::Hint,
+            TrackType::Audio, probe::Hint,
         },
         io::{MediaSourceStream, MediaSourceStreamOptions},
         meta::MetadataOptions,
@@ -104,7 +104,7 @@ impl Decoder {
             .map_err(|e| UnsupportedFormat(e.to_string()))?;
 
         let track = format
-            .default_track(TypeAudio)
+            .default_track(Audio)
             .ok_or_else(|| UnsupportedFormat("no audio track found".into()))?;
 
         let codec_params = track
@@ -193,10 +193,6 @@ impl Decoder {
     }
 
     /// Attempt to decode a single packet, returning `None` on skip/eos.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`DecoderError::DecodeError`] if the packet cannot be decoded.
     fn try_decode_one(&mut self) -> Result<Option<DecodedSamples<'_>>, DecoderError> {
         let packet = match self.format.next_packet() {
             Ok(Some(packet)) => packet,
@@ -273,7 +269,7 @@ impl Decoder {
 
         let actual_seconds = self
             .format
-            .default_track(TypeAudio)
+            .default_track(Audio)
             .and_then(|t| t.time_base)
             .and_then(|tb| tb.calc_time(seeked_to.actual_ts))
             .map_or(seconds, |t| t.as_secs_f64());

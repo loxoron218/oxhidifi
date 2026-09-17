@@ -8,7 +8,7 @@ use {
         glib::{idle_add_local, spawn_future_local},
         gtk::{
             Align::Start,
-            Box as GtkBox, Button,
+            Box, Button,
             ContentFit::Cover,
             GestureClick, Label, ListBox, ListBoxRow,
             Orientation::{Horizontal, Vertical},
@@ -108,7 +108,7 @@ pub fn build_artist_detail(
         }));
     content.append(&play_all_button);
 
-    let albums_container = GtkBox::builder().orientation(Vertical).spacing(18).build();
+    let albums_container = Box::builder().orientation(Vertical).spacing(18).build();
     content.append(&albums_container);
 
     scroll.set_child(Some(&content));
@@ -188,7 +188,7 @@ async fn fetch_artist_detail(state: &Arc<AppState>, artist_id: i64) -> Option<Ar
 fn apply_artist_detail(
     name_label: &Label,
     album_count_label: &Label,
-    albums_container: &GtkBox,
+    albums_container: &Box,
     state: &Arc<AppState>,
     data: ArtistDetailData,
 ) {
@@ -247,10 +247,10 @@ fn build_album_section(
     album: &Album,
     format_info: &FormatInfo,
     tracks: Vec<Track>,
-) -> (GtkBox, ListBox) {
-    let section = GtkBox::builder().orientation(Vertical).spacing(6).build();
+) -> (Box, ListBox) {
+    let section = Box::builder().orientation(Vertical).spacing(6).build();
 
-    let album_header = GtkBox::builder()
+    let album_header = Box::builder()
         .orientation(Horizontal)
         .spacing(12)
         .tooltip_text(format!("Open {}", album.title))
@@ -290,7 +290,7 @@ fn build_album_section(
         decode_cover_into_picture(state, album.id, art_path.clone(), 60, &thumb);
     }
 
-    let info_box = GtkBox::builder()
+    let info_box = Box::builder()
         .orientation(Vertical)
         .spacing(3)
         .hexpand(true)

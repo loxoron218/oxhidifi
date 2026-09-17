@@ -6,7 +6,7 @@ use libadwaita::{
     glib::spawn_future_local,
     gtk::{
         Align::{End, Start},
-        Box as GtkBox, EventControllerMotion, Image, Label,
+        Box, EventControllerMotion, Image, Label,
         Orientation::{Horizontal, Vertical},
         Overlay, Widget,
         accessible::Property::Label as PropertyLabel,
@@ -27,6 +27,25 @@ use crate::{
         osd_button::build_album_play_button,
     },
 };
+
+/// Build a card container `Box` with standard layout and tooltip.
+///
+/// Shared by album and artist cards to avoid duplicating the builder
+/// pattern. Sets both `tooltip_text` and the accessible `Label` from
+/// `tooltip`.
+#[must_use]
+pub fn build_card_box(size: i32, tooltip: &str) -> Box {
+    let card = Box::builder()
+        .orientation(Vertical)
+        .spacing(6)
+        .css_classes(["card"])
+        .can_focus(true)
+        .width_request(size)
+        .tooltip_text(tooltip)
+        .build();
+    card.update_property(&[PropertyLabel(tooltip)]);
+    card
+}
 
 /// Build a placeholder cover art widget.
 ///
@@ -130,22 +149,9 @@ pub fn build_album_card(
     artist_name: &str,
     format_info: &FormatInfo,
     size: i32,
-) -> (GtkBox, Overlay) {
-    let card = GtkBox::builder()
-        .orientation(Vertical)
-        .spacing(6)
-        .css_classes(["card"])
-        .can_focus(true)
-        .width_request(size)
-        .tooltip_text(format!(
-            "Play \u{201c}{}\u{201d} by album artist",
-            album.title
-        ))
-        .build();
-    card.update_property(&[PropertyLabel(&format!(
-        "Play \u{201c}{}\u{201d} by album artist",
-        album.title
-    ))]);
+) -> (Box, Overlay) {
+    let tooltip = format!("Play \u{201c}{}\u{201d} by album artist", album.title);
+    let card = build_card_box(size, &tooltip);
 
     let album_id = album.id;
 
@@ -171,7 +177,7 @@ pub fn build_album_card(
         .build();
     artist_label.update_property(&[PropertyLabel(&format!("Artist: {artist_name}"))]);
 
-    let format_row = GtkBox::builder()
+    let format_row = Box::builder()
         .orientation(Horizontal)
         .spacing(6)
         .width_request(size)

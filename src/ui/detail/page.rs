@@ -7,7 +7,7 @@ use {
         glib::Propagation::{Proceed, Stop},
         gtk::{
             Align::Start,
-            Box as GtkBox, Button, EventControllerKey, Label,
+            Box, Button, EventControllerKey, Label,
             Orientation::{Horizontal, Vertical},
             ScrolledWindow,
             accessible::Property::Label as PropertyLabel,
@@ -24,11 +24,8 @@ use crate::{
 
 /// Build the wrapper box with back navigation and header bar for a detail page.
 #[must_use]
-pub fn build_detail_wrapper(nav_tx: &Sender<NavigationEvent>, title: &str) -> GtkBox {
-    let wrapper = GtkBox::builder()
-        .orientation(Vertical)
-        .can_focus(true)
-        .build();
+pub fn build_detail_wrapper(nav_tx: &Sender<NavigationEvent>, title: &str) -> Box {
+    let wrapper = Box::builder().orientation(Vertical).can_focus(true).build();
     wrapper.update_property(&[PropertyLabel(&format!("{title} detail page"))]);
     let back_button = setup_back_navigation(&wrapper, nav_tx.clone());
     let header_bar = build_detail_header(&back_button, title);
@@ -76,13 +73,13 @@ pub fn setup_back_navigation(widget: &impl WidgetExt, nav_tx: Sender<NavigationE
 
 /// Build a scrollable content area with standard margins and spacing.
 #[must_use]
-pub fn build_scroll_content() -> (ScrolledWindow, GtkBox) {
+pub fn build_scroll_content() -> (ScrolledWindow, Box) {
     let scroll = ScrolledWindow::builder()
         .vexpand(true)
         .hexpand(true)
         .build();
 
-    let content = GtkBox::builder()
+    let content = Box::builder()
         .orientation(Vertical)
         .spacing(12)
         .margin_top(12)
@@ -96,8 +93,8 @@ pub fn build_scroll_content() -> (ScrolledWindow, GtkBox) {
 
 /// Build a header bar-like box with back button and title.
 #[must_use]
-pub fn build_detail_header(back_button: &Button, title: &str) -> GtkBox {
-    let header = GtkBox::builder()
+pub fn build_detail_header(back_button: &Button, title: &str) -> Box {
+    let header = Box::builder()
         .orientation(Horizontal)
         .spacing(6)
         .margin_top(6)

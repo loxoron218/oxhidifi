@@ -48,7 +48,7 @@ async fn save_active_tab_setting(state: Arc<AppState>, tab: ActiveTab) {
 }
 
 /// Build the View > Display page.
-pub(super) fn build_view_page(dialog: &PreferencesDialog, state: &Arc<AppState>) {
+pub fn build_view_page(dialog: &PreferencesDialog, state: &Arc<AppState>) {
     let page = PreferencesPage::new();
     page.set_title("View");
     page.set_icon_name(Some("preferences-desktop-display-symbolic"));

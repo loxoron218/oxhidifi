@@ -183,8 +183,8 @@ pub fn send_channel_cover(
     }
 }
 
-#[cfg(test)]
 /// Unit tests for cover decode dispatch, channel forwarding, and test helpers.
+#[cfg(test)]
 pub mod tests {
     use std::sync::Arc;
 

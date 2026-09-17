@@ -21,10 +21,6 @@ const MIN_DB: f64 = -60.0;
 /// * `volume` ≥ 1.0 → 1.0 (0 dB, unity)
 /// * otherwise `dB = (volume - 1.0) * 60.0` (i.e., -60 dB at 0.0, 0 dB at 1.0), `gain =
 ///   10^(dB/20)`.
-///
-/// # Panics
-///
-/// This function does not panic under normal operation; inputs outside 0.0–1.0 are clamped.
 #[must_use]
 pub fn volume_to_gain(volume: f64) -> f64 {
     if volume <= 0.0 {
@@ -42,10 +38,6 @@ pub fn volume_to_gain(volume: f64) -> f64 {
 ///
 /// Convenience for the CPAL audio callback which operates on `f32` samples.
 /// Takes an `f32` slider value to avoid `f64`→`f32` truncation on the hot path.
-///
-/// # Panics
-///
-/// This function does not panic.
 #[must_use]
 pub fn volume_to_gain_f32(volume: f32) -> f32 {
     if volume <= 0.0 {
@@ -65,10 +57,6 @@ pub fn volume_to_gain_f32(volume: f32) -> f32 {
 ///
 /// Returns `f64::NEG_INFINITY` for `volume` ≤ 0.0 (true silence), otherwise
 /// `(volume - 1.0) * 60.0`.
-///
-/// # Panics
-///
-/// This function does not panic.
 #[must_use]
 pub fn volume_to_db(volume: f64) -> f64 {
     if volume <= 0.0 {

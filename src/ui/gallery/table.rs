@@ -16,7 +16,7 @@ use {
         },
         gtk::{
             ColumnView, ColumnViewColumn, CustomSorter, NoSelection, SortListModel, Widget,
-            accessible::Property::Label as PropertyLabel,
+            accessible::Property::Label,
         },
         prelude::{AccessibleExtManual, Cast, ListModelExt},
     },
@@ -57,7 +57,7 @@ fn setup_column_view(store: ListStore) -> ColumnView {
         .hexpand(true)
         .vexpand(true)
         .build();
-    column_view.update_property(&[PropertyLabel("Album library")]);
+    column_view.update_property(&[Label("Album library")]);
     column_view
 }
 

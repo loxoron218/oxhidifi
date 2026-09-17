@@ -180,7 +180,6 @@ impl<S: Storage + 'static> LibraryWatcher<S> {
     }
 
     /// Check whether a scan cancellation has been requested.
-    #[must_use]
     pub fn is_cancelled(&self) -> bool {
         *self.scanner.cancel_rx.borrow()
     }

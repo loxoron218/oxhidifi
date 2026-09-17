@@ -9,25 +9,21 @@ use crate::storage::{
 
 impl SqliteStorage {
     /// Get the window width from settings.
-    #[must_use]
     pub fn get_window_width(&self) -> i32 {
         self.settings.read().get().window_width
     }
 
     /// Get the window height from settings.
-    #[must_use]
     pub fn get_window_height(&self) -> i32 {
         self.settings.read().get().window_height
     }
 
     /// Get the window maximized state from settings.
-    #[must_use]
     pub fn get_window_maximized(&self) -> bool {
         self.settings.read().get().window_maximized
     }
 
     /// Get the window geometry (width, height, maximized).
-    #[must_use]
     pub fn get_window_geometry(&self) -> (i32, i32, bool) {
         let s = self.settings.read();
         let cfg = s.get();

@@ -106,10 +106,6 @@ impl AudioOutput {
     /// # Returns
     ///
     /// A tuple of [`Output`] and [`Producer<f32>`] on success.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`OutputError`] if the device cannot be opened.
     fn try_open_device(
         device: &Device,
         ring_capacity: usize,
@@ -131,10 +127,6 @@ impl AudioOutput {
     }
 
     /// Try to open audio output on a specific device.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`OutputError`] if stream creation fails.
     fn try_open_on_device(
         device: &Device,
         consumer: Consumer<f32>,

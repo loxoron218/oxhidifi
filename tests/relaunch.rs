@@ -16,10 +16,6 @@ use oxhidifi::storage::{Storage, catalog::NewArtist, database::SqliteStorage};
 use crate::scratch_store::{make_album, make_track};
 
 /// Insert one track and return its id.
-///
-/// # Errors
-///
-/// Returns an error if the track cannot be inserted.
 async fn insert_track(
     storage: &SqliteStorage,
     dir: &TempDir,
@@ -38,10 +34,6 @@ async fn insert_track(
 }
 
 /// Insert one album and its tracks, returning the album id and track ids.
-///
-/// # Errors
-///
-/// Returns an error if the album or any of its tracks cannot be inserted.
 async fn insert_album(
     storage: &SqliteStorage,
     dir: &TempDir,
@@ -65,10 +57,6 @@ async fn insert_album(
 }
 
 /// Populate the library and return the ids we expect to persist.
-///
-/// # Errors
-///
-/// Returns an error if any artist, album, or track cannot be inserted.
 async fn populate(
     storage: &SqliteStorage,
     dir: &TempDir,
@@ -96,10 +84,6 @@ async fn populate(
 }
 
 /// Assert that every expected artist was reloaded after reconnect.
-///
-/// # Errors
-///
-/// Returns an error if a lookup fails or an artist is missing or renamed.
 async fn assert_artists_reloaded(storage: &SqliteStorage, artist_ids: &[i64]) -> Result<()> {
     for (i, id) in artist_ids.iter().enumerate() {
         let artist = storage
@@ -112,10 +96,6 @@ async fn assert_artists_reloaded(storage: &SqliteStorage, artist_ids: &[i64]) ->
 }
 
 /// Assert that every expected album was reloaded, returning its track count.
-///
-/// # Errors
-///
-/// Returns an error if a lookup fails or an album is missing tracks.
 async fn assert_albums_reloaded(storage: &SqliteStorage, album_ids: &[i64]) -> Result<usize> {
     let mut track_count: usize = 0;
     for id in album_ids {
@@ -127,10 +107,6 @@ async fn assert_albums_reloaded(storage: &SqliteStorage, album_ids: &[i64]) -> R
 }
 
 /// Assert that every expected track was reloaded after reconnect.
-///
-/// # Errors
-///
-/// Returns an error if a lookup fails or a track is missing.
 async fn assert_tracks_reloaded(storage: &SqliteStorage, track_ids: &[i64]) -> Result<()> {
     for id in track_ids {
         ensure!(
@@ -142,10 +118,6 @@ async fn assert_tracks_reloaded(storage: &SqliteStorage, track_ids: &[i64]) -> R
 }
 
 /// Assert that every artist has its expected track count after reconnect.
-///
-/// # Errors
-///
-/// Returns an error if a lookup fails or a track count is wrong.
 async fn assert_artist_track_counts(storage: &SqliteStorage, artist_ids: &[i64]) -> Result<()> {
     for id in artist_ids {
         let tracks = storage.get_tracks_by_artist(*id).await?;

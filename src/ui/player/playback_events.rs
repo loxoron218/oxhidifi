@@ -10,7 +10,7 @@ use {
     libadwaita::{
         gdk::MemoryTexture,
         glib::MainContext,
-        gtk::accessible::Property::Label as PropertyLabel,
+        gtk::accessible::Property::Label,
         prelude::{AccessibleExtManual, ButtonExt, RangeExt, WidgetExt},
     },
 };
@@ -130,13 +130,13 @@ fn apply_stopped_state(widgets: &PlaybackWidgets, is_seeking: &AtomicBool) {
     widgets
         .labels
         .title
-        .update_property(&[PropertyLabel("No track playing")]);
+        .update_property(&[Label("No track playing")]);
     widgets.labels.artist.set_label("");
-    widgets.labels.artist.update_property(&[PropertyLabel("")]);
+    widgets.labels.artist.update_property(&[Label("")]);
     widgets.labels.album.set_label("");
-    widgets.labels.album.update_property(&[PropertyLabel("")]);
+    widgets.labels.album.update_property(&[Label("")]);
     widgets.labels.format.set_label("");
-    widgets.labels.format.update_property(&[PropertyLabel("")]);
+    widgets.labels.format.update_property(&[Label("")]);
     widgets
         .play_button
         .set_icon_name("media-playback-start-symbolic");
@@ -201,7 +201,7 @@ fn on_playback_event(
                 .set_tooltip_text(Some(mode_button_tooltip(*mode)));
             widgets
                 .output_mode_btn
-                .update_property(&[PropertyLabel(mode_button_tooltip(*mode))]);
+                .update_property(&[Label(mode_button_tooltip(*mode))]);
             update_volume_scale_visual(&widgets.volume_scale, *mode);
         }
         _ => {}

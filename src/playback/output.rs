@@ -4,7 +4,7 @@
 pub mod opener;
 
 use std::{
-    fmt::{Debug, Formatter, Result as FmtResult},
+    fmt::{Debug, Formatter, Result},
     sync::{
         Arc,
         atomic::{
@@ -185,7 +185,7 @@ impl AudioOutput {
 }
 
 impl Debug for AudioOutput {
-    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         f.debug_struct("AudioOutput")
             .field("device_id", &self.device_id)
             .field("device_name", &self.device_name)

@@ -86,10 +86,6 @@ pub fn extract_artwork(path: &Path) -> Result<Option<(Vec<u8>, String)>, Artwork
 }
 
 /// Ensure the artwork cache directory exists.
-///
-/// # Errors
-///
-/// Returns an error if the directory cannot be created.
 fn ensure_artwork_cache_dir() -> Result<PathBuf, ArtworkError> {
     let cache_dir = dirs_cache_home()
         .map_err(|e| ArtworkError::FileNotFound(format!("Cannot resolve XDG cache home: {e}")))?
@@ -113,11 +109,6 @@ fn ensure_artwork_cache_dir() -> Result<PathBuf, ArtworkError> {
 /// original per FR-003b and stored as `{key}_{size}.{ext}` for each thumbnail
 /// size. Thumbnail generation failures are logged as warnings
 /// but do not fail the overall cache operation.
-///
-/// # Errors
-///
-/// Returns [`ArtworkError`] if the cache directory cannot be created or the
-/// file cannot be written.
 fn cache_artwork_in(
     cache_dir: &Path,
     key: &str,

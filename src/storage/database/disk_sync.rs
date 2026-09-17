@@ -100,10 +100,6 @@ impl SqliteStorage {
 /// newest in-memory state always lands without concurrent writers racing.
 /// Free function so the loop body stays below the clippy nesting threshold
 /// (a method would add an extra level).
-///
-/// # Errors
-///
-/// Returns `StorageError::Database` if serialization or the file write fails.
 async fn drain_settings_saves(storage: &SqliteStorage) -> Result<(), StorageError> {
     loop {
         let my_seq = storage.last_save_seq.fetch_add(1, Relaxed);

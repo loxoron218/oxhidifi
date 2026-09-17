@@ -15,19 +15,14 @@ use {
     libadwaita::{
         SplitButton,
         glib::spawn_future_local,
-        gtk::{Widget, Window, accessible::Property::Label as PropertyLabel},
+        gtk::{Widget, Window, accessible::Property::Label},
         prelude::{AccessibleExtManual, WidgetExt},
     },
     tracing::warn,
 };
 
 use crate::{
-    app::runtime::AppState,
-    storage::{
-        active_tab::ActiveTab::Albums,
-        view_mode::ViewMode::{self, Column, Grid},
-    },
-    ui::toggle_popover::build_popover,
+    app::runtime::AppState, storage::view_mode::ViewMode, ui::toggle_popover::build_popover,
 };
 
 /// Persist the view mode setting to storage, logging on failure.
@@ -61,7 +56,7 @@ pub fn build_view_toggle(state: &Arc<AppState>, parent: &Window) -> SplitButton 
         .tooltip_text("Toggle View")
         .can_focus(true)
         .build();
-    split_btn.update_property(&[PropertyLabel(initial_mode.tooltip())]);
+    split_btn.update_property(&[Label(initial_mode.tooltip())]);
 
     let (popover, albums_sort, artists_sort) = build_popover(state, parent);
     split_btn.set_popover(Some(&popover));
@@ -72,7 +67,7 @@ pub fn build_view_toggle(state: &Arc<AppState>, parent: &Window) -> SplitButton 
         .lock()
         .retain_signal(split_btn.connect_clicked(move |btn| {
             let current_mode = state_clone.storage.get_view_mode();
-            let mode = if current_mode == Grid { Column } else { Grid };
+            let mode = current_mode.toggle();
             btn.set_icon_name(mode.icon_name());
             btn.set_tooltip_text(Some(mode.tooltip()));
             let sc = Arc::clone(&state_clone);
@@ -118,7 +113,7 @@ fn subscribe_view_updates(
         .retain_task(spawn_future_local(async move {
             let tab_rx = s2.active_tab.subscribe();
             while let Ok(tab) = tab_rx.recv().await {
-                let is_albums = tab == Albums;
+                let is_albums = tab.is_albums();
                 albums_sort_btn.set_visible(is_albums);
                 artists_sort_btn.set_visible(!is_albums);
             }

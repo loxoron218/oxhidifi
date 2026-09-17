@@ -22,11 +22,6 @@ use oxhidifi::app::{lifecycle::run_application, xdg_paths::dirs_data_home};
 ///
 /// Returns a `NonBlocking` guard that must be kept alive for the duration of
 /// the program; dropping it flushes and shuts down the file writer.
-///
-/// # Errors
-///
-/// Returns an error if the log directory cannot be created or the HOME
-/// environment variable is not set.
 fn init_logging() -> Result<WorkerGuard> {
     let log_dir = dirs_data_home()?.join("oxhidifi");
     create_dir_all(&log_dir)
@@ -60,11 +55,6 @@ fn init_logging() -> Result<WorkerGuard> {
 /// Application entry point.
 ///
 /// Initializes logging and starts the Libadwaita application.
-///
-/// # Errors
-///
-/// Returns an error if logging initialization fails or the application
-/// cannot be built.
 fn main() -> Result<ExitCode> {
     let log_guard = init_logging()?;
     info!("Application starting");

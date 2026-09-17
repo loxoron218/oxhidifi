@@ -73,7 +73,7 @@ async fn persist_output_mode(storage: Arc<SqliteStorage>, mode: OutputMode) {
 }
 
 /// Build the Audio > Output and Audio > Playback group.
-pub(super) fn build_audio_page(dialog: &PreferencesDialog, state: &Arc<AppState>) {
+pub fn build_audio_page(dialog: &PreferencesDialog, state: &Arc<AppState>) {
     let page = PreferencesPage::new();
     page.set_title("Audio");
     page.set_icon_name(Some("audio-speakers-symbolic"));

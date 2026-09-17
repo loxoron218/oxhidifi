@@ -248,7 +248,7 @@ mod tests {
     use std::sync::Arc;
 
     use {
-        anyhow::{Result, ensure},
+        anyhow::{Context, Result, ensure},
         libadwaita::gtk::{self, test},
     };
 
@@ -263,7 +263,7 @@ mod tests {
 
     #[test]
     fn notify_zoom_change_reaches_both_grids() -> Result<()> {
-        let state = Arc::new(AppState::mock()?);
+        let state = Arc::new(AppState::mock().context("failed to build mock app state")?);
         notify_zoom_change(&state);
         ensure!(
             state.albums_zoom_rx.try_recv().is_ok(),
@@ -278,7 +278,7 @@ mod tests {
 
     #[test]
     fn apply_zoom_in_clamps_grid_at_max() -> Result<()> {
-        let state = Arc::new(AppState::mock()?);
+        let state = Arc::new(AppState::mock().context("failed to build mock app state")?);
         state.storage.set_grid_zoom_level_memory(GRID_ZOOM_MAX - 1);
         apply_zoom_in(&state, Grid);
         ensure!(
@@ -295,7 +295,7 @@ mod tests {
 
     #[test]
     fn apply_zoom_out_clamps_grid_at_min() -> Result<()> {
-        let state = Arc::new(AppState::mock()?);
+        let state = Arc::new(AppState::mock().context("failed to build mock app state")?);
         state.storage.set_grid_zoom_level_memory(1);
         apply_zoom_out(&state, Grid);
         ensure!(
@@ -312,7 +312,7 @@ mod tests {
 
     #[test]
     fn apply_zoom_in_clamps_list_at_max() -> Result<()> {
-        let state = Arc::new(AppState::mock()?);
+        let state = Arc::new(AppState::mock().context("failed to build mock app state")?);
         state.storage.set_list_zoom_level_memory(LIST_ZOOM_MAX - 1);
         apply_zoom_in(&state, Column);
         ensure!(
@@ -329,7 +329,7 @@ mod tests {
 
     #[test]
     fn apply_zoom_out_clamps_list_at_min() -> Result<()> {
-        let state = Arc::new(AppState::mock()?);
+        let state = Arc::new(AppState::mock().context("failed to build mock app state")?);
         state.storage.set_list_zoom_level_memory(1);
         apply_zoom_out(&state, Column);
         ensure!(

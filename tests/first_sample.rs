@@ -17,10 +17,6 @@ const EXPECTED_MS: f64 = 3000.0;
 ///
 /// Records `start`/`first_sample` on both a local collector and the global
 /// collector, then asserts the threshold constant is 3,000 ms.
-///
-/// # Panics
-///
-/// Panics if the SC-001 threshold assertion fails.
 fn assert_playback_latency_wired_and_under_threshold() {
     let collector = PlaybackLatency::new();
     collector.record_start(42);

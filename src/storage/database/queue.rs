@@ -7,7 +7,7 @@ use crate::storage::{
     StorageResult,
     catalog::{
         NewQueueEntry,
-        QueueContext::{self, Album as QueueAlbum, Artist as QueueArtist, Manual},
+        QueueContext::{self, Album, Artist, Manual},
         QueueEntry,
     },
     database::SqliteStorage,
@@ -81,8 +81,8 @@ impl SqliteStorage {
         let next_pos = max_pos.map_or(0, |(p,)| p.saturating_add(1));
 
         let (context_type, context_id) = match context {
-            Some(QueueAlbum(id)) => (Some("album".to_string()), Some(id)),
-            Some(QueueArtist(id)) => (Some("artist".to_string()), Some(id)),
+            Some(Album(id)) => (Some("album".to_string()), Some(id)),
+            Some(Artist(id)) => (Some("artist".to_string()), Some(id)),
             Some(Manual) | None => (None, None),
         };
 
@@ -158,7 +158,7 @@ mod tests {
     use crate::storage::{
         catalog::{
             NewQueueEntry, NewTrack,
-            QueueContext::{Album as QueueAlbum, Artist as QueueArtist, Manual},
+            QueueContext::{Album, Artist, Manual},
             TrackAudio,
         },
         database::tests::storage_in,
@@ -231,12 +231,8 @@ mod tests {
             "queue entry debug must include track id"
         );
 
-        storage
-            .append_queue_row(track_a, Some(QueueAlbum(7)))
-            .await?;
-        storage
-            .append_queue_row(track_b, Some(QueueArtist(9)))
-            .await?;
+        storage.append_queue_row(track_a, Some(Album(7))).await?;
+        storage.append_queue_row(track_b, Some(Artist(9))).await?;
         storage.append_queue_row(track_a, Some(Manual)).await?;
         storage.append_queue_row(track_b, None).await?;
         let rows = storage.get_queue_rows().await?;

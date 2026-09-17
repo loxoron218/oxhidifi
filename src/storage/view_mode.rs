@@ -29,6 +29,15 @@ impl ViewMode {
             Self::Column => "Switch to grid view",
         }
     }
+
+    /// Get the other view mode.
+    #[must_use]
+    pub const fn toggle(self) -> Self {
+        match self {
+            Self::Grid => Self::Column,
+            Self::Column => Self::Grid,
+        }
+    }
 }
 
 #[cfg(test)]

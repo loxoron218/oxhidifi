@@ -103,10 +103,6 @@ fn ffmpeg_available() -> bool {
 }
 
 /// Write a one-second mono 16-bit 44.1 kHz sine wave to `path`.
-///
-/// # Errors
-///
-/// Returns an error if the file cannot be created or written.
 fn write_source_wav(path: &Path) -> Result<()> {
     let mut f = File::create(path).context("failed to create source wav")?;
     let sample_rate = 44100u32;
@@ -120,10 +116,6 @@ fn write_source_wav(path: &Path) -> Result<()> {
 }
 
 /// Write one PCM sample of a 1 kHz sine tone into `f`.
-///
-/// # Errors
-///
-/// Returns an error if the sample cannot be written.
 fn write_tone_sample(f: &mut File, i: u32, sample_rate: u32) -> Result<()> {
     let sample = ((f64::from(i) * 2.0 * PI * 1000.0) / f64::from(sample_rate)).sin();
     let amp = cast::<f64, i16>(sample * 0.5 * 32767.0).unwrap_or(i16::MAX);
@@ -132,10 +124,6 @@ fn write_tone_sample(f: &mut File, i: u32, sample_rate: u32) -> Result<()> {
 }
 
 /// Transcode `src` with ffmpeg into `out_dir` using `spec`.
-///
-/// # Errors
-///
-/// Returns an error if ffmpeg fails or produces no output file.
 fn transcode(src: &Path, out_dir: &Path, spec: &FormatSpec) -> Result<PathBuf> {
     let out = out_dir.join(format!("fixture.{}", spec.extension));
     let status = Command::new("ffmpeg")
@@ -154,10 +142,6 @@ fn transcode(src: &Path, out_dir: &Path, spec: &FormatSpec) -> Result<PathBuf> {
 }
 
 /// Decode `decoder` until end of stream, returning the total frame count.
-///
-/// # Errors
-///
-/// Returns an error if decoding fails or the stream never ends.
 fn drain_decoder(decoder: &mut Decoder) -> Result<u64> {
     let mut frames = 0u64;
     for _ in 0..10_000 {
@@ -171,10 +155,6 @@ fn drain_decoder(decoder: &mut Decoder) -> Result<u64> {
 }
 
 /// Open `path` and verify the decoder produces at least one frame.
-///
-/// # Errors
-///
-/// Returns an error if the file cannot be opened or yields no samples.
 fn drain_check(path: &Path) -> Result<()> {
     let mut decoder = Decoder::open(path)?;
     let frames = drain_decoder(&mut decoder)?;

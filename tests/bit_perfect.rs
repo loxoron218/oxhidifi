@@ -13,10 +13,6 @@ use oxhidifi::playback::write_wav_header;
 /// Write a minimal WAV with known samples for verification.
 ///
 /// Uses checked arithmetic to satisfy `clippy::arithmetic_side_effects`.
-///
-/// # Errors
-///
-/// Returns an error if the file cannot be created or written.
 fn write_known_wav(path: &Path, sample_rate: u32, bit_depth: u16, channels: u16) -> Result<()> {
     let mut f = File::create(path)?;
     let data_size = u32::from(channels)
@@ -40,7 +36,6 @@ fn write_known_wav(path: &Path, sample_rate: u32, bit_depth: u16, channels: u16)
 /// `supports_native` method on a real `AudioOutput` when possible, otherwise
 /// tests the mapping logic directly via a helper that mirrors
 /// `AudioOutput::supports_native`.
-#[must_use]
 fn supports_native_logic(
     device_rate: u32,
     device_format: &str,
@@ -62,10 +57,6 @@ fn supports_native_logic(
 }
 
 /// Assertions for `supports_native` bit-depth mapping.
-///
-/// # Errors
-///
-/// Returns an error if any `supports_native` mapping assertion fails.
 fn assert_supports_native_bit_depth_mapping() -> Result<()> {
     use anyhow::ensure;
 
@@ -88,10 +79,6 @@ fn assert_supports_native_bit_depth_mapping() -> Result<()> {
 }
 
 /// Verify the bit-perfect path is byte-identical to source PCM.
-///
-/// # Errors
-///
-/// Returns an error if the verification fails or I/O fails.
 fn assert_bit_perfect_path_is_byte_identical() -> Result<()> {
     use {anyhow::ensure, tempfile::NamedTempFile};
 
@@ -158,10 +145,6 @@ fn assert_bit_perfect_path_is_byte_identical() -> Result<()> {
 }
 
 /// Verify I24 carried in I32 is considered bit-perfect.
-///
-/// # Errors
-///
-/// Returns an error if the assertion fails.
 fn assert_i24_carried_in_i32_is_bit_perfect() -> Result<()> {
     use anyhow::ensure;
 

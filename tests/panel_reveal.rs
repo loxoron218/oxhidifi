@@ -19,10 +19,6 @@ const EXPECTED_MS: f64 = 500.0;
 ///
 /// Records `start`/`visible` on both a local collector and the global
 /// collector, then asserts the threshold constant is 500 ms.
-///
-/// # Panics
-///
-/// Panics if the SC-007 threshold assertion fails.
 fn assert_panel_reveal_wired_and_under_threshold() {
     let collector = PanelReveal::new();
     collector.record_start();

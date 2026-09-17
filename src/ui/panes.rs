@@ -8,7 +8,7 @@ use libadwaita::{
     ViewSwitcherPolicy::Wide,
     WindowTitle,
     glib::spawn_future_local,
-    gtk::{Button, Stack, ToggleButton, Window, accessible::Property::Label as PropertyLabel},
+    gtk::{Button, Stack, ToggleButton, Window, accessible::Property::Label},
     prelude::{AccessibleExtManual, WidgetExt},
 };
 
@@ -57,7 +57,7 @@ fn build_sidebar(state: &Arc<AppState>, back_button: &ToggleButton) -> (ToolbarV
         .css_classes(["flat"])
         .can_focus(true)
         .build();
-    close_button.update_property(&[PropertyLabel("Close application")]);
+    close_button.update_property(&[Label("Close application")]);
 
     let sidebar_header = HeaderBar::new();
     sidebar_header.set_title_widget(Some(&WindowTitle::new("Now Playing", "")));
@@ -100,6 +100,7 @@ fn build_library_stack(
     }
     (stack, album_grid.mode_stack, artist_grid.mode_stack)
 }
+
 /// Wire tab and view-mode signals for the library stack.
 fn wire_library_signals(
     state: &Arc<AppState>,
@@ -160,7 +161,7 @@ fn build_content_pane(
         .can_focus(true)
         .tooltip_text("Switch between Albums and Artists views")
         .build();
-    switcher.update_property(&[PropertyLabel("Switch between Albums and Artists views")]);
+    switcher.update_property(&[Label("Switch between Albums and Artists views")]);
     content_header.set_title_widget(Some(&switcher));
     let toggle = build_view_toggle(state, parent);
     content_header.pack_end(&toggle);
@@ -180,7 +181,7 @@ fn build_content_pane(
         .can_focus(true)
         .tooltip_text("Switch between Albums and Artists views")
         .build();
-    switcher_bar.update_property(&[PropertyLabel("Switch between Albums and Artists views")]);
+    switcher_bar.update_property(&[Label("Switch between Albums and Artists views")]);
     content_toolbar.add_bottom_bar(&switcher_bar);
     let status_bar = StatusBar::new(state);
     content_toolbar.add_bottom_bar(status_bar.widget());
@@ -217,7 +218,7 @@ pub fn build_content(
         .active(true)
         .can_focus(true)
         .build();
-    back_button.update_property(&[PropertyLabel("Hide player panel")]);
+    back_button.update_property(&[Label("Hide player panel")]);
     back_button.set_visible(false);
 
     let (sidebar_toolbar, close_button) = build_sidebar(state, &back_button);
@@ -229,7 +230,7 @@ pub fn build_content(
         .css_classes(["flat"])
         .can_focus(true)
         .build();
-    toggle_button.update_property(&[PropertyLabel("Toggle player panel")]);
+    toggle_button.update_property(&[Label("Toggle player panel")]);
 
     let (content_toolbar, stack, nav_view, switchers) =
         build_content_pane(state, &toggle_button, narrow_state, parent);
@@ -245,9 +246,7 @@ pub fn build_content(
         .pin_sidebar(true)
         .tooltip_text("Player panel — toggle with button in header")
         .build();
-    split_view.update_property(&[PropertyLabel(
-        "Main player panel with sidebar and content area",
-    )]);
+    split_view.update_property(&[Label("Main player panel with sidebar and content area")]);
 
     wire_sidebar_toggles(state, &split_view, &toggle_button, &back_button);
 

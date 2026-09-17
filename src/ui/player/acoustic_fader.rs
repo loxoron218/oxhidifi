@@ -7,10 +7,7 @@ use std::sync::Arc;
 
 use {
     libadwaita::{
-        gtk::{
-            Box, Button, Orientation::Horizontal, Scale,
-            accessible::Property::Label as PropertyLabel,
-        },
+        gtk::{Box, Button, Orientation::Horizontal, Scale, accessible::Property::Label},
         prelude::{AccessibleExtManual, BoxExt, ButtonExt, RangeExt, ScaleExt, WidgetExt},
     },
     tracing::error,
@@ -40,7 +37,7 @@ pub fn build_volume(state: &Arc<AppState>) -> (Box, Button, Scale) {
         .tooltip_text("Mute or unmute")
         .can_focus(true)
         .build();
-    mute_button.update_property(&[PropertyLabel("Mute or unmute")]);
+    mute_button.update_property(&[Label("Mute or unmute")]);
     let state_mute = Arc::clone(state);
     let mute_btn_ref = mute_button.clone();
     state
@@ -69,7 +66,7 @@ pub fn build_volume(state: &Arc<AppState>) -> (Box, Button, Scale) {
     volume_scale.set_can_focus(true);
     let initial_db = format_volume_db(initial_volume);
     volume_scale.set_tooltip_text(Some(&format!("Volume: {initial_db}")));
-    volume_scale.update_property(&[PropertyLabel(&format!("Adjust volume ({initial_db})"))]);
+    volume_scale.update_property(&[Label(&format!("Adjust volume ({initial_db})"))]);
     let state_vol = Arc::clone(state);
     let vol_ref = volume_scale.clone();
     state
@@ -82,7 +79,7 @@ pub fn build_volume(state: &Arc<AppState>) -> (Box, Button, Scale) {
             }
             let db = format_volume_db(value);
             vol_ref.set_tooltip_text(Some(&format!("Volume: {db}")));
-            vol_ref.update_property(&[PropertyLabel(&format!("Adjust volume ({db})"))]);
+            vol_ref.update_property(&[Label(&format!("Adjust volume ({db})"))]);
             state_vol.storage.set_volume_memory(value);
             state_vol.storage.save_settings();
         }));
@@ -95,7 +92,7 @@ pub fn build_volume(state: &Arc<AppState>) -> (Box, Button, Scale) {
         .tooltip_text(mode_button_tooltip(initial_mode))
         .can_focus(true)
         .build();
-    mode_button.update_property(&[PropertyLabel(mode_button_tooltip(initial_mode))]);
+    mode_button.update_property(&[Label(mode_button_tooltip(initial_mode))]);
     let state_mode = Arc::clone(state);
     let scale_for_click = volume_scale.clone();
     state
@@ -113,7 +110,7 @@ pub fn build_volume(state: &Arc<AppState>) -> (Box, Button, Scale) {
             persist_toggle_output_mode(&state_mode.storage, new_mode);
             btn.set_icon_name(new_mode.icon_name());
             btn.set_tooltip_text(Some(mode_button_tooltip(new_mode)));
-            btn.update_property(&[PropertyLabel(mode_button_tooltip(new_mode))]);
+            btn.update_property(&[Label(mode_button_tooltip(new_mode))]);
             update_volume_scale_visual(&scale_for_click, new_mode);
         }));
     vol_box.append(&mode_button);
@@ -134,7 +131,7 @@ pub fn update_volume_scale_visual(scale: &Scale, mode: OutputMode) {
             scale.set_sensitive(true);
             let db = format_volume_db(scale.value());
             scale.set_tooltip_text(Some(&format!("Volume: {db}")));
-            scale.update_property(&[PropertyLabel(&format!("Adjust volume ({db})"))]);
+            scale.update_property(&[Label(&format!("Adjust volume ({db})"))]);
         }
         BitPerfect => {
             scale.set_sensitive(false);
@@ -142,7 +139,7 @@ pub fn update_volume_scale_visual(scale: &Scale, mode: OutputMode) {
                 "Volume controlled via hardware mixer \u{2014} switch to Resampled for software \
                  volume",
             ));
-            scale.update_property(&[PropertyLabel(
+            scale.update_property(&[Label(
                 "Volume controlled via hardware mixer, switch to Resampled for software volume",
             )]);
         }

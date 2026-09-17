@@ -1,8 +1,8 @@
 //! `PreferencesDialog` orchestration for library, audio, and view pages.
 
-mod audio;
-mod directories;
-mod display;
+pub mod audio;
+pub mod directories;
+pub mod display;
 
 use std::sync::Arc;
 

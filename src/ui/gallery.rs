@@ -39,7 +39,6 @@ use crate::app::runtime::{AppState, NavigationEvent};
 /// # Returns
 ///
 /// A `GestureClick` wired to dispatch `event` without blocking the UI.
-#[must_use]
 pub fn build_navigation_gesture(state: &Arc<AppState>, event: NavigationEvent) -> GestureClick {
     let gesture = GestureClick::new();
     let state_clone = Arc::clone(state);

@@ -74,7 +74,6 @@ pub fn generate_silence(sample_rate: u32, duration_secs: f64, channels: usize) -
 /// audible band. This avoids the broadband random LCG approach which produces
 /// uncorrelated waveforms across sample rates and yields low time-domain SNR
 /// after resampling.
-#[must_use]
 pub fn generate_pink_noise(
     sample_rate: u32,
     duration_secs: f64,

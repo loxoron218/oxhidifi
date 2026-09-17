@@ -149,11 +149,7 @@ fn on_folder_selected(state: &Arc<AppState>, result: Result<File, Error>) {
 }
 
 /// Build the Library > Directories page.
-pub(super) fn build_library_page(
-    dialog: &PreferencesDialog,
-    state: &Arc<AppState>,
-    parent: &Window,
-) {
+pub fn build_library_page(dialog: &PreferencesDialog, state: &Arc<AppState>, parent: &Window) {
     let page = PreferencesPage::new();
     page.set_title("Library");
     page.set_icon_name(Some("folder-music-symbolic"));

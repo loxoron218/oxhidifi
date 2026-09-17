@@ -8,7 +8,7 @@ use std::{path::PathBuf, sync::Arc};
 use {
     libadwaita::{
         glib::{object::Cast, spawn_future_local},
-        gtk::{Button, FileDialog, Window, accessible::Property::Label as PropertyLabel},
+        gtk::{Button, FileDialog, Window, accessible::Property::Label},
         prelude::{AccessibleExtManual, ButtonExt, FileExt, WidgetExt},
     },
     tokio::spawn,
@@ -37,7 +37,7 @@ pub fn build_add_folder_button(state: &Arc<AppState>) -> Button {
         .can_focus(true)
         .tooltip_text("Open a file chooser to select your music folder")
         .build();
-    add_folder_button.update_property(&[PropertyLabel("Add Music Folder")]);
+    add_folder_button.update_property(&[Label("Add Music Folder")]);
 
     let state_clone = Arc::clone(state);
     state

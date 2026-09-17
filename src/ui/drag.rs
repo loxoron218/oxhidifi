@@ -80,16 +80,22 @@ impl_sort_item!(ArtistSortItem, ArtistSortCriteria, "artist");
 pub trait SortItem {
     /// The criteria type for this sort item.
     type Criteria: Clone + Hash + Eq + ToString;
+
     /// Returns the criteria.
     fn criteria(&self) -> &Self::Criteria;
+
     /// Returns the order.
     fn order(&self) -> &SortOrder;
+
     /// Construct from parts.
     fn new(criteria: Self::Criteria, order: SortOrder) -> Self;
+
     /// Parse a discriminator into criteria.
     fn from_discriminator(d: u8) -> Option<Self::Criteria>;
+
     /// Human-readable entity name for error messages.
     fn entity_name() -> &'static str;
+
     /// Returns a numeric discriminator for the criteria (used as a widget
     /// identifier, avoiding string‑based widget‑name parsing).
     fn discriminator(&self) -> u8;

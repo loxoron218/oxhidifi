@@ -26,10 +26,6 @@ const MAX_SILENCE_SAMPLES: usize = 192_000 * 5 / 1000;
 
 /// Create a temporary WAV file at the given sample rate with a short sine-like
 /// pattern that is distinguishable from silence.
-///
-/// # Errors
-///
-/// Returns an error if the temp file cannot be created.
 fn create_test_wav(sample_rate: u32, tag: i16) -> Result<NamedTempFile> {
     let tmp = NamedTempFile::new().context("Failed to create temp WAV file")?;
     let mut samples = Vec::with_capacity(1024);
@@ -44,10 +40,6 @@ fn create_test_wav(sample_rate: u32, tag: i16) -> Result<NamedTempFile> {
 
 /// Verify that a resampler can be created for the given rate pair, process
 /// silence, and reconfigure without error.
-///
-/// # Errors
-///
-/// Returns an error if the resampler cannot be created or reconfigured.
 fn verify_resampler_reconfigure(input_rate: u32, output_rate: u32) -> Result<()> {
     let mut resampler = AudioResampler::new(input_rate, output_rate, 1024, 2).context(format!(
         "Failed to create resampler {input_rate} -> {output_rate}"
@@ -79,10 +71,6 @@ fn verify_resampler_reconfigure(input_rate: u32, output_rate: u32) -> Result<()>
 
 /// Verify a single transition between two rates, asserting silence is within
 /// tolerance and returning the max silence found.
-///
-/// # Errors
-///
-/// Returns an error if decoding fails or silence exceeds threshold.
 fn assert_transition(from_rate: u32, to_rate: u32, max_silence: &mut usize) -> Result<()> {
     let wav_from = create_test_wav(from_rate, 100)?;
     let wav_to = create_test_wav(to_rate, 200)?;
@@ -102,10 +90,6 @@ fn assert_transition(from_rate: u32, to_rate: u32, max_silence: &mut usize) -> R
 }
 
 /// Run all rate pairs through the given closure and track max silence.
-///
-/// # Errors
-///
-/// Returns an error if any transition fails.
 fn run_rate_pairs(pairs: &[(u32, u32)], max_silence: &mut usize) -> Result<()> {
     for &(from_rate, to_rate) in pairs {
         assert_transition(from_rate, to_rate, max_silence)?;
@@ -122,12 +106,6 @@ mod tests {
         verify_resampler_reconfigure,
     };
 
-    /// Test that the resampler can be created and reconfigured between
-    /// incompatible sample rate families.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if resampler creation or reconfiguration fails.
     #[test]
     fn resampler_handles_incompatible_rate_transitions() -> Result<()> {
         let cross_family: Vec<(u32, u32)> = RATE_FAMILY_44
@@ -145,12 +123,6 @@ mod tests {
         Ok(())
     }
 
-    /// Test gapless transitions between tracks from incompatible sample rate
-    /// families (44.1 kHz family → 48 kHz family).
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if any transition fails or silence exceeds threshold.
     #[test]
     fn gapless_transition_44k_to_48k_family() -> Result<()> {
         let mut max_silence_found = 0usize;
@@ -168,11 +140,6 @@ mod tests {
         Ok(())
     }
 
-    /// Test gapless transitions from 48 kHz family → 44.1 kHz family.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if any transition fails or silence exceeds threshold.
     #[test]
     fn gapless_transition_48k_to_44k_family() -> Result<()> {
         let mut max_silence_found = 0usize;
@@ -190,15 +157,6 @@ mod tests {
         Ok(())
     }
 
-    /// Test mixed-family transitions: 44.1k → 48k → 96k → 176.4k → 192k → 44.1k.
-    ///
-    /// Simulates a playlist that alternates between incompatible families,
-    /// verifying that the resampler reconfigures transparently at each
-    /// transition and the gapless property is maintained.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if any transition fails or silence exceeds threshold.
     #[test]
     fn mixed_family_chained_transitions() -> Result<()> {
         let chain: Vec<u32> = vec![44_100, 48_000, 96_000, 176_400, 192_000, 44_100];

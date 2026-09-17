@@ -13,10 +13,6 @@ use {
 use synth_wav::{leading_silence, write_wav};
 
 /// Create a set of temporary WAV files for testing.
-///
-/// # Errors
-///
-/// Returns an error if a temp file cannot be created or written to.
 fn create_test_wavs(count: usize) -> Result<Vec<NamedTempFile>> {
     let mut files = Vec::with_capacity(count);
     for i in 0..count {
@@ -33,11 +29,6 @@ fn create_test_wavs(count: usize) -> Result<Vec<NamedTempFile>> {
 ///
 /// Files contain 2048 frames (well above the resampler chunk size of 1024) so
 /// that a single batch decode provides enough input for the resampler to emit.
-///
-/// # Errors
-///
-/// Returns an error if a temp file cannot be created or written to, or if
-/// `rates` is empty.
 fn create_test_wavs_with_rates(rates: &[u32]) -> Result<Vec<NamedTempFile>> {
     ensure!(!rates.is_empty(), "rates must not be empty");
     let mut files = Vec::with_capacity(rates.len());
@@ -66,10 +57,6 @@ fn underrun_detected(samples: &[f32]) -> bool {
 }
 
 /// Verify that decoded samples are non-empty and have acceptable silence.
-///
-/// # Errors
-///
-/// Returns an error if samples are empty or silence exceeds the threshold.
 fn verify_samples_nonempty_and_silence(samples: &[f32], iter: usize) -> Result<()> {
     if samples.is_empty() {
         bail!("Next track produced no samples at iteration {iter}");
@@ -85,10 +72,6 @@ fn verify_samples_nonempty_and_silence(samples: &[f32], iter: usize) -> Result<(
 }
 
 /// Verify production pipeline samples meet silence constraints.
-///
-/// # Errors
-///
-/// Returns an error if samples are empty or silence exceeds the threshold.
 fn verify_production_samples(
     samples: &[f32],
     iter: usize,

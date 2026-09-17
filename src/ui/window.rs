@@ -47,11 +47,6 @@ use crate::{
 /// containing separate `ToolbarView` panes for the sidebar and
 /// content. The sidebar is hidden by default and auto-shown on
 /// playback start.
-///
-/// # Panics
-///
-/// This function does not panic under normal operation. Internal callbacks
-/// gracefully handle unexpected window types without panicking.
 pub fn build_window(app: &Application, state: &Arc<AppState>) -> ApplicationWindow {
     info!("Building main application window");
 

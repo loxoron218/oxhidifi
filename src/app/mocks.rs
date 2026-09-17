@@ -121,10 +121,6 @@ pub async fn fresh_storage(dir: &Path) -> Result<Arc<SqliteStorage>> {
 }
 
 /// Build a shared in-memory mock storage for tests.
-///
-/// # Errors
-///
-/// Returns an error if the mock storage cannot be initialized.
 fn init_mock_storage() -> Result<Arc<SqliteStorage>> {
     let rt = Runtime::new().context("Failed to create tokio runtime")?;
     let storage = rt.block_on(create_mock_storage())?;
@@ -132,10 +128,6 @@ fn init_mock_storage() -> Result<Arc<SqliteStorage>> {
 }
 
 /// Create an in-memory `SqliteStorage` with a unique settings file.
-///
-/// # Errors
-///
-/// Returns an error if the storage backend fails to connect.
 async fn create_mock_storage() -> Result<SqliteStorage> {
     let db = Path::new(":memory:");
     let settings = temp_dir().join(format!("oxhidifi-mock-settings-{}.json", id()));

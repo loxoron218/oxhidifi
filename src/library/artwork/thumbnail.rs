@@ -23,7 +23,7 @@ const THUMBNAIL_SIZES: &[i32] = &[32, 48, 64, 120, 150, 180, 210, 240];
 /// [`THUMBNAIL_SIZES`]. Failures are logged via `tracing::warn` and do not
 /// propagate — the original artwork remains usable even if thumbnails cannot be
 /// created (e.g., corrupt image bytes or missing `gdk-pixbuf` loader).
-pub(super) fn generate_thumbnails(cache_dir: &Path, key: &str, data: &[u8], ext: &str) {
+pub fn generate_thumbnails(cache_dir: &Path, key: &str, data: &[u8], ext: &str) {
     let loader = PixbufLoader::new();
     if let Err(e) = loader.write(data) {
         warn!(error = %e, key, "Failed to load artwork bytes for thumbnail generation");

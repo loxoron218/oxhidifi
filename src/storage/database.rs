@@ -303,8 +303,9 @@ impl Storage for SqliteStorage {
     }
 }
 
+/// Test helpers for database integration tests.
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use {
         anyhow::{Context, Result, ensure},
         tempfile::{TempDir, tempdir},
@@ -318,7 +319,7 @@ mod tests {
     /// # Errors
     ///
     /// Returns an error if the temporary storage backend fails to connect.
-    pub(super) async fn storage_in(dir: &TempDir) -> Result<SqliteStorage> {
+    pub async fn storage_in(dir: &TempDir) -> Result<SqliteStorage> {
         let db = dir.path().join("library.db");
         let settings = dir.path().join("settings.json");
         SqliteStorage::connect_with_settings_path(&db, &settings)

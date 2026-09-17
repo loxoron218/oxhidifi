@@ -5,8 +5,8 @@ use std::sync::Arc;
 use libadwaita::{
     glib::spawn_future_local,
     gtk::{
-        Align::Start, Box, EventControllerMotion, Image, Label, Orientation::Vertical, Overlay,
-        Widget, accessible::Property::Label as PropertyLabel, pango::EllipsizeMode::End,
+        Align::Start, Box, EventControllerMotion, Image, Label, Overlay, Widget,
+        accessible::Property::Label as PropertyLabel, pango::EllipsizeMode::End,
     },
     prelude::{AccessibleExtManual, BoxExt, ButtonExt, Cast, WidgetExt},
 };
@@ -15,7 +15,7 @@ use crate::{
     app::runtime::{AppState, NavigationEvent::ArtistDetail},
     storage::catalog::Artist,
     ui::{
-        gallery::{build_navigation_gesture, play_action::play_artist},
+        gallery::{build_navigation_gesture, card::build_card_box, play_action::play_artist},
         osd_button::build_album_play_button,
     },
 };
@@ -44,15 +44,8 @@ fn build_artist_avatar(size: i32) -> Widget {
 /// Also returns the `Overlay` wrapping the avatar so zoom can resize it
 /// in place without rebuilding the card.
 pub fn build_artist_card(state: &Arc<AppState>, artist: &Artist, size: i32) -> (Box, Overlay) {
-    let card = Box::builder()
-        .orientation(Vertical)
-        .spacing(6)
-        .css_classes(["card"])
-        .can_focus(true)
-        .width_request(size)
-        .tooltip_text(format!("View albums by {}", artist.name))
-        .build();
-    card.update_property(&[PropertyLabel(&format!("View albums by {}", artist.name))]);
+    let tooltip = format!("View albums by {}", artist.name);
+    let card = build_card_box(size, &tooltip);
 
     let avatar = build_artist_avatar(size);
 

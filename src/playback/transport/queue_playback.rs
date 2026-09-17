@@ -29,10 +29,6 @@ use crate::{
 /// # Returns
 ///
 /// The file path registered for `track_id`.
-///
-/// # Errors
-///
-/// Returns [`PlaybackError::TrackNotFound`] if no path is registered.
 fn track_path(shared: &Arc<EngineShared>, track_id: i64) -> Result<PathBuf, PlaybackError> {
     shared
         .track_paths
@@ -48,10 +44,6 @@ fn track_path(shared: &Arc<EngineShared>, track_id: i64) -> Result<PathBuf, Play
 ///
 /// * `shared` - Engine state holding paths and the decode worker
 /// * `track_id` - Track to start
-///
-/// # Errors
-///
-/// Returns [`PlaybackError::TrackNotFound`] if no path is registered.
 fn start_track(shared: &Arc<EngineShared>, track_id: i64) -> Result<(), PlaybackError> {
     let path = track_path(shared, track_id)?;
     start_playback(shared, track_id, path);
@@ -64,11 +56,6 @@ fn start_track(shared: &Arc<EngineShared>, track_id: i64) -> Result<(), Playback
 ///
 /// * `shared` - Engine state holding the queue
 /// * `queue` - Replacement track IDs in play order
-///
-/// # Errors
-///
-/// Returns [`PlaybackError::QueueFull`] if the queue exceeds capacity.
-/// Returns [`PlaybackError::Storage`] for other storage failures.
 fn replace_queue(shared: &Arc<EngineShared>, queue: &[i64]) -> Result<(), PlaybackError> {
     shared
         .queue

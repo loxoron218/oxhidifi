@@ -282,8 +282,8 @@ pub fn metadata_fingerprint(meta: &AudioMetadata) -> (String, String, String, Op
     (artist, album, title, meta.track_number)
 }
 
-#[cfg(test)]
 /// Unit tests for metadata extraction, codec names, fingerprints, and test fixtures.
+#[cfg(test)]
 pub mod tests {
     use std::path::Path;
 

@@ -126,8 +126,8 @@ struct CoverCacheInner {
     sizes: HashMap<i64, Vec<i32>>,
 }
 
-#[cfg(test)]
 /// Unit tests for the cover art cache's insert, lookup, and eviction behavior.
+#[cfg(test)]
 pub mod tests {
     use anyhow::{Result, ensure};
 

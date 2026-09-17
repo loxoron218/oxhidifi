@@ -11,6 +11,17 @@ pub enum ActiveTab {
     Artists,
 }
 
+impl ActiveTab {
+    /// Check if this is the albums tab.
+    #[must_use]
+    pub const fn is_albums(self) -> bool {
+        match self {
+            Self::Albums => true,
+            Self::Artists => false,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use {

@@ -30,21 +30,21 @@ const INPUT_ACCUM_RESERVE_MULTIPLIER: usize = 32;
 /// produces interleaved f32 output frames.
 pub struct AudioResampler {
     /// Rubato FFT synchronous resampler.
-    pub(super) resampler: Fft<f32>,
+    pub resampler: Fft<f32>,
     /// Input sample rate in Hz.
-    pub(super) input_rate: u32,
+    pub input_rate: u32,
     /// Output sample rate in Hz.
-    pub(super) output_rate: u32,
+    pub output_rate: u32,
     /// Number of audio channels.
-    pub(super) channels: usize,
+    pub channels: usize,
     /// Fixed input chunk size in frames.
-    pub(super) chunk_size: usize,
+    pub chunk_size: usize,
     /// Accumulation buffer for partial input chunks.
-    pub(super) input_accum: Vec<f32>,
+    pub input_accum: Vec<f32>,
     /// Pre-allocated output buffer for resampled frames.
-    pub(super) output_buf: Vec<f32>,
+    pub output_buf: Vec<f32>,
     /// Indexing state for streaming process calls.
-    pub(super) indexing: Indexing,
+    pub indexing: Indexing,
 }
 
 impl AudioResampler {
