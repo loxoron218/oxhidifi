@@ -125,14 +125,12 @@ mod tests {
     use std::sync::Arc;
 
     use {
-        anyhow::{Context, Result, ensure},
+        anyhow::{Result, ensure},
         libadwaita::gtk::{self, Window, test},
-        tempfile::tempdir,
-        tokio::runtime::Runtime,
     };
 
     use crate::{
-        app::mocks::{build_app_state, fresh_storage},
+        app::mocks::isolated_app_state,
         storage::view_mode::ViewMode::{Column, Grid},
         ui::header::build_view_toggle,
     };
@@ -151,10 +149,7 @@ mod tests {
 
     #[test]
     fn build_view_toggle_sets_initial_icon() -> Result<()> {
-        let dir = tempdir()?;
-        let rt = Runtime::new().context("Failed to create tokio runtime")?;
-        let storage = rt.block_on(fresh_storage(dir.path()))?;
-        let state = Arc::new(build_app_state(storage));
+        let state = Arc::new(isolated_app_state()?);
         let window = Window::new();
         let toggle = build_view_toggle(&state, &window);
         ensure!(toggle.icon_name().as_deref() == Some("view-grid-symbolic"));

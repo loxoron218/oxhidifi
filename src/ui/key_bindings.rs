@@ -72,7 +72,7 @@ mod tests {
     };
 
     use crate::{
-        app::runtime::AppState,
+        app::{mocks::isolated_app_state, runtime::AppState},
         storage::view_mode::ViewMode::{Column, Grid},
         ui::{
             key_bindings::{handle_escape_key, handle_zoom_key},
@@ -108,14 +108,14 @@ mod tests {
     }
 
     fn grid_state(zoom: u8) -> Result<Arc<AppState>> {
-        let state = Arc::new(AppState::mock()?);
+        let state = Arc::new(isolated_app_state()?);
         state.storage.set_view_mode_memory(Grid);
         state.storage.set_grid_zoom_level_memory(zoom);
         Ok(state)
     }
 
     fn column_state(zoom: u8) -> Result<Arc<AppState>> {
-        let state = Arc::new(AppState::mock()?);
+        let state = Arc::new(isolated_app_state()?);
         state.storage.set_view_mode_memory(Column);
         state.storage.set_list_zoom_level_memory(zoom);
         Ok(state)

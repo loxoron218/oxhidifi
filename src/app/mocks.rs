@@ -5,7 +5,10 @@ use std::{
     io::Error,
     path::Path,
     process::id,
-    sync::{Arc, LazyLock},
+    sync::{
+        Arc, LazyLock,
+        atomic::{AtomicU64, Ordering::SeqCst},
+    },
 };
 
 use {
@@ -33,6 +36,9 @@ use crate::{
 /// it, and would otherwise panic on the missing Tokio context. Sharing one
 /// runtime keeps timer registrations valid across pump calls.
 static TEST_RUNTIME: LazyLock<Result<Runtime, Error>> = LazyLock::new(Runtime::new);
+
+/// Counter for unique isolated settings files.
+static ISOLATED_SETTINGS_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 impl AppState {
     /// Create a mock `AppState` for testing.
@@ -118,6 +124,29 @@ pub async fn fresh_storage(dir: &Path) -> Result<Arc<SqliteStorage>> {
             .await
             .context("Failed to create fresh storage")?,
     ))
+}
+
+/// Build an `AppState` with independent in-memory storage for tests.
+///
+/// Unlike [`AppState::mock`], which shares one global backend, each call
+/// returns state with its own storage backend so parallel tests that mutate
+/// settings cannot interfere with each other.
+///
+/// # Errors
+///
+/// Returns an error if the storage backend fails to connect.
+pub fn isolated_app_state() -> Result<AppState> {
+    let index = ISOLATED_SETTINGS_COUNTER.fetch_add(1, SeqCst);
+    let settings_path =
+        temp_dir().join(format!("oxhidifi-isolated-settings-{}-{index}.json", id()));
+    let rt = Runtime::new().context("Failed to create tokio runtime")?;
+    let backend = rt
+        .block_on(SqliteStorage::connect_with_settings_path(
+            Path::new(":memory:"),
+            &settings_path,
+        ))
+        .context("Failed to create isolated storage")?;
+    Ok(build_app_state(Arc::new(backend)))
 }
 
 /// Build a shared in-memory mock storage for tests.

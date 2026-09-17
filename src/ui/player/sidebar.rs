@@ -193,7 +193,10 @@ fn build_track_info() -> (Label, Label, Label, Label) {
 mod tests {
     use std::sync::Arc;
 
-    use anyhow::{Result, ensure};
+    use {
+        anyhow::{Result, ensure},
+        libadwaita::gtk::{self, test as gtk_test},
+    };
 
     use crate::{
         app::runtime::AppState,
@@ -240,7 +243,7 @@ mod tests {
         assert_eq!(meta.5, 7, "album id field must round-trip");
     }
 
-    #[test]
+    #[gtk_test]
     fn track_labels_fields_are_accessible() {
         let labels = TrackLabels::test_fixture();
         assert_eq!(labels.title.label(), "Title", "title label must round-trip");
@@ -251,7 +254,7 @@ mod tests {
         );
     }
 
-    #[test]
+    #[gtk_test]
     fn playback_widgets_fields_are_accessible() {
         let widgets = PlaybackWidgets::test_fixture();
         assert_eq!(
@@ -266,7 +269,7 @@ mod tests {
         );
     }
 
-    #[test]
+    #[gtk_test]
     fn player_content_installs_child() -> Result<()> {
         let state = Arc::new(AppState::mock()?);
         let scroll = build_player_content(&state);
