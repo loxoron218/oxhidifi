@@ -41,6 +41,24 @@ impl AudioResampler {
         self.resampler.output_delay()
     }
 
+    /// Fractional part of the output delay in output frames.
+    ///
+    /// The FFT resampler's true group delay is half its output block size,
+    /// which ends in `.5` frames when that block size is odd. The integer
+    /// [`Self::output_delay`] truncates that half frame, leaving a systematic
+    /// sub-sample misalignment that alone limits a 1 kHz sine to roughly
+    /// 23 dB SNR at 44.1 kHz. Returning `0.5` for odd blocks (and `0.0`
+    /// otherwise) lets SNR measurement pre-shift its ideal reference by the
+    /// same amount for a subsample-accurate comparison.
+    #[must_use]
+    pub fn fractional_delay(&self) -> f64 {
+        if self.resampler.fft_size_out() % 2 == 1 {
+            0.5
+        } else {
+            0.0
+        }
+    }
+
     /// Number of input frames needed for the next process call.
     #[must_use]
     pub fn input_frames_next(&self) -> usize {

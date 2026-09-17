@@ -39,6 +39,14 @@ fn allocate_samples(sample_rate: u32, duration_secs: f64, channels: usize) -> (u
 /// Generate a sine wave tone at the given frequency.
 ///
 /// Returns interleaved samples for the given number of channels.
+///
+/// # Arguments
+///
+/// * `frequency` - Tone frequency in Hz.
+/// * `sample_rate` - Sample rate in Hz.
+/// * `duration_secs` - Tone duration in seconds.
+/// * `amplitude` - Peak amplitude.
+/// * `channels` - Number of interleaved channels.
 #[must_use]
 pub fn generate_sine(
     frequency: f64,
@@ -47,10 +55,46 @@ pub fn generate_sine(
     amplitude: f32,
     channels: usize,
 ) -> Vec<f32> {
+    generate_sine_with_offset(
+        frequency,
+        sample_rate,
+        duration_secs,
+        amplitude,
+        channels,
+        0.0,
+    )
+}
+
+/// Generate a sine wave tone with a fractional frame offset.
+///
+/// Identical to [`generate_sine`], except each sample is evaluated at time
+/// `(index + frame_offset) / sample_rate`. A negative offset of `-0.5`
+/// reproduces the ideal reference for an FFT resampler whose output block
+/// is odd and whose true group delay therefore ends in `.5` frames, enabling
+/// a subsample-accurate SNR comparison.
+///
+/// # Arguments
+///
+/// * `frequency` - Tone frequency in Hz.
+/// * `sample_rate` - Sample rate in Hz.
+/// * `duration_secs` - Tone duration in seconds.
+/// * `amplitude` - Peak amplitude.
+/// * `channels` - Number of interleaved channels.
+/// * `frame_offset` - Fractional frame shift applied to the time base.
+#[must_use]
+pub fn generate_sine_with_offset(
+    frequency: f64,
+    sample_rate: u32,
+    duration_secs: f64,
+    amplitude: f32,
+    channels: usize,
+    frame_offset: f64,
+) -> Vec<f32> {
     let (num_samples, mut samples) = allocate_samples(sample_rate, duration_secs, channels);
     let rate: f64 = NumCast::from(sample_rate).unwrap_or(0.0);
     for i in 0..num_samples {
-        let t: f64 = NumCast::from(i).unwrap_or(0.0) / rate;
+        let index: f64 = NumCast::from(i).unwrap_or(0.0);
+        let t: f64 = (index + frame_offset) / rate;
         let sin_val: f32 = NumCast::from((2.0_f64 * PI * frequency * t).sin()).unwrap_or(0.0);
         let value = amplitude * sin_val;
         for _ in 0..channels {
@@ -74,18 +118,58 @@ pub fn generate_silence(sample_rate: u32, duration_secs: f64, channels: usize) -
 /// audible band. This avoids the broadband random LCG approach which produces
 /// uncorrelated waveforms across sample rates and yields low time-domain SNR
 /// after resampling.
+///
+/// # Arguments
+///
+/// * `sample_rate` - Sample rate in Hz.
+/// * `duration_secs` - Noise duration in seconds.
+/// * `amplitude` - Peak amplitude before normalization.
+/// * `channels` - Number of interleaved channels.
+#[must_use]
 pub fn generate_pink_noise(
     sample_rate: u32,
     duration_secs: f64,
     amplitude: f32,
     channels: usize,
 ) -> Vec<f32> {
+    generate_pink_noise_with_offset(sample_rate, duration_secs, amplitude, channels, 0.0)
+}
+
+/// Generate pink noise with a fractional frame offset.
+///
+/// Identical to [`generate_pink_noise`], except every component sine shares
+/// the same `frame_offset` time shift (see [`generate_sine_with_offset`]).
+/// Passing the negated [`crate::playback::resampler::AudioResampler::fractional_delay`]
+/// aligns the ideal reference with an odd-block FFT resampler for a
+/// subsample-accurate SNR comparison.
+///
+/// # Arguments
+///
+/// * `sample_rate` - Sample rate in Hz.
+/// * `duration_secs` - Noise duration in seconds.
+/// * `amplitude` - Peak amplitude before normalization.
+/// * `channels` - Number of interleaved channels.
+/// * `frame_offset` - Fractional frame shift applied to the time base.
+pub fn generate_pink_noise_with_offset(
+    sample_rate: u32,
+    duration_secs: f64,
+    amplitude: f32,
+    channels: usize,
+    frame_offset: f64,
+) -> Vec<f32> {
     let (num_samples, mut combined) = allocate_samples(sample_rate, duration_secs, channels);
     let mut tones: Vec<Vec<f32>> = Vec::with_capacity(FREQS.len());
     for &freq in FREQS {
         let val: f64 = <f64 as From<f32>>::from(amplitude) * (20.0 / freq).sqrt() * 0.5;
         let amp: f32 = NumCast::from(val).unwrap_or(0.0);
-        tones.push(generate_sine(freq, sample_rate, duration_secs, amp, 1));
+        tones.push(generate_sine_with_offset(
+            freq,
+            sample_rate,
+            duration_secs,
+            amp,
+            1,
+            frame_offset,
+        ));
     }
     for i in 0..num_samples {
         let mut sum = 0.0_f32;

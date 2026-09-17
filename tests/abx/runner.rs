@@ -5,7 +5,10 @@ use anyhow::{Context, Result, bail};
 use oxhidifi::playback::resampler::{
     AudioResampler,
     amplitude::compute_snr_db,
-    tone_gen::{generate_impulse, generate_pink_noise, generate_silence, generate_sine},
+    tone_gen::{
+        generate_impulse, generate_pink_noise_with_offset, generate_silence,
+        generate_sine_with_offset,
+    },
 };
 
 use crate::{
@@ -44,11 +47,14 @@ fn best_snr_for_sine(ideal: &[f32], buffered: &[f32], delay: usize) -> f64 {
 /// This automated version generates the stimulus, resamples it, and
 /// computes the objective RMS SNR with delay compensation. The true SNR
 /// is computed for all four stimuli and asserted to exceed 120 dB per
-/// FR-015. The X presentation is randomized via a deterministic
-/// `pseudo_random` seeded by the stimulus discriminant; the `is_x_a`
-/// flag determines the correct answer and is consumed by
-/// `simulate_ideal_listener` to derive `correct`, so the randomization
-/// determines the trial outcome instead of being ignored.
+/// FR-015. Integer delay comes from [`AudioResampler::output_delay`];
+/// the fractional `.5`-frame part from [`AudioResampler::fractional_delay`]
+/// (odd FFT blocks) pre-shifts the sine and pink-noise ideals so the
+/// comparison stays subsample-accurate. The X presentation is randomized
+/// via a deterministic `pseudo_random` seeded by the stimulus
+/// discriminant; the `is_x_a` flag determines the correct answer and is
+/// consumed by `simulate_ideal_listener` to derive `correct`, so the
+/// randomization determines the trial outcome instead of being ignored.
 ///
 /// Returns the resampled signal, the RMS SNR in dB, and a trial
 /// structure ready for human evaluation.
@@ -65,10 +71,17 @@ pub fn run_abx_trial(
     channels: usize,
 ) -> Result<AbxTrial> {
     let reference = match stimulus {
-        Sine { frequency } => {
-            generate_sine(frequency, input_rate, duration_secs, amplitude, channels)
+        Sine { frequency } => generate_sine_with_offset(
+            frequency,
+            input_rate,
+            duration_secs,
+            amplitude,
+            channels,
+            0.0,
+        ),
+        PinkNoise => {
+            generate_pink_noise_with_offset(input_rate, duration_secs, amplitude, channels, 0.0)
         }
-        PinkNoise => generate_pink_noise(input_rate, duration_secs, amplitude, channels),
         Silence => generate_silence(input_rate, duration_secs, channels),
         Impulse { position_secs } => {
             generate_impulse(input_rate, position_secs, amplitude, channels)
@@ -88,14 +101,29 @@ pub fn run_abx_trial(
         }
     }
 
+    let fractional = resampler.fractional_delay();
+    let frame_offset = 0.0 - fractional;
     let snr_db = match stimulus {
         Sine { frequency } => {
-            let ideal = generate_sine(frequency, output_rate, duration_secs, amplitude, channels);
+            let ideal = generate_sine_with_offset(
+                frequency,
+                output_rate,
+                duration_secs,
+                amplitude,
+                channels,
+                frame_offset,
+            );
             let delay = resampler.output_delay().saturating_mul(channels);
             best_snr_for_sine(&ideal, &buffered, delay)
         }
         PinkNoise => {
-            let ideal = generate_pink_noise(output_rate, duration_secs, amplitude, channels);
+            let ideal = generate_pink_noise_with_offset(
+                output_rate,
+                duration_secs,
+                amplitude,
+                channels,
+                frame_offset,
+            );
             let delay = resampler.output_delay().saturating_mul(channels);
             best_snr_for_sine(&ideal, &buffered, delay)
         }
@@ -188,11 +216,11 @@ pub fn generate_all_stimuli(sample_rate: u32, channels: usize) -> Vec<(StimulusT
     vec![
         (
             Sine { frequency: 1000.0 },
-            generate_sine(1000.0, sample_rate, 1.0, 0.5, channels),
+            generate_sine_with_offset(1000.0, sample_rate, 1.0, 0.5, channels, 0.0),
         ),
         (
             PinkNoise,
-            generate_pink_noise(sample_rate, 1.0, 0.5, channels),
+            generate_pink_noise_with_offset(sample_rate, 1.0, 0.5, channels, 0.0),
         ),
         (Silence, generate_silence(sample_rate, 1.0, channels)),
         (
