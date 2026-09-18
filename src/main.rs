@@ -23,7 +23,9 @@ use oxhidifi::app::{lifecycle::run_application, xdg_paths::dirs_data_home};
 /// Returns a `NonBlocking` guard that must be kept alive for the duration of
 /// the program; dropping it flushes and shuts down the file writer.
 fn init_logging() -> Result<WorkerGuard> {
-    let log_dir = dirs_data_home()?.join("oxhidifi");
+    let log_dir = dirs_data_home()
+        .context("Failed to resolve XDG data home for logging")?
+        .join("oxhidifi");
     create_dir_all(&log_dir)
         .with_context(|| format!("Failed to create log directory: {}", log_dir.display()))?;
 
@@ -56,11 +58,13 @@ fn init_logging() -> Result<WorkerGuard> {
 ///
 /// Initializes logging and starts the Libadwaita application.
 fn main() -> Result<ExitCode> {
-    let log_guard = init_logging()?;
+    let log_guard = init_logging().context("Failed to initialize logging")?;
     info!("Application starting");
 
     let rt = Runtime::new().context("Failed to create tokio runtime")?;
-    let result = rt.block_on(run_application());
+    let result = rt
+        .block_on(run_application())
+        .context("Failed to run application");
     drop(log_guard);
     rt.shutdown_timeout(Duration::from_secs(5));
     result

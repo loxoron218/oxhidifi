@@ -1,21 +1,32 @@
 //! XDG base directory resolution.
 
 use std::{
-    env::{var, var_os},
+    env::{VarError, var, var_os},
     path::PathBuf,
 };
 
-use anyhow::{Context, Result};
+use thiserror::Error;
+
+/// Error type for XDG base directory resolution.
+#[derive(Debug, Error)]
+pub enum XdgError {
+    /// `HOME` environment variable is not set.
+    #[error("HOME environment variable is not set: {0}")]
+    MissingHome(#[from] VarError),
+}
+
+/// Convenience alias for XDG directory resolution results.
+pub type XdgResult<T> = Result<T, XdgError>;
 
 /// Resolve an XDG directory from an environment variable with a fallback path.
-fn resolve_xdg_dir(env_var: &str, fallback: &str) -> Result<PathBuf> {
+fn resolve_xdg_dir(env_var: &str, fallback: &str) -> XdgResult<PathBuf> {
     if let Some(dir) = var_os(env_var)
         .map(PathBuf::from)
         .filter(|p| !p.as_os_str().is_empty())
     {
         return Ok(dir);
     }
-    let home = var("HOME").context("HOME environment variable is not set")?;
+    let home = var("HOME")?;
     Ok(PathBuf::from(home).join(fallback))
 }
 
@@ -26,7 +37,7 @@ fn resolve_xdg_dir(env_var: &str, fallback: &str) -> Result<PathBuf> {
 /// # Errors
 ///
 /// Returns an error if `HOME` is not set and `XDG_DATA_HOME` is also unset.
-pub fn dirs_data_home() -> Result<PathBuf> {
+pub fn dirs_data_home() -> XdgResult<PathBuf> {
     resolve_xdg_dir("XDG_DATA_HOME", ".local/share")
 }
 
@@ -37,7 +48,7 @@ pub fn dirs_data_home() -> Result<PathBuf> {
 /// # Errors
 ///
 /// Returns an error if `HOME` is not set and `XDG_CONFIG_HOME` is also unset.
-pub fn dirs_config_home() -> Result<PathBuf> {
+pub fn dirs_config_home() -> XdgResult<PathBuf> {
     resolve_xdg_dir("XDG_CONFIG_HOME", ".config")
 }
 
@@ -48,7 +59,7 @@ pub fn dirs_config_home() -> Result<PathBuf> {
 /// # Errors
 ///
 /// Returns an error if `HOME` is not set and `XDG_CACHE_HOME` is also unset.
-pub fn dirs_cache_home() -> Result<PathBuf> {
+pub fn dirs_cache_home() -> XdgResult<PathBuf> {
     resolve_xdg_dir("XDG_CACHE_HOME", ".cache")
 }
 

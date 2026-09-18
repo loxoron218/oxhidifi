@@ -159,25 +159,82 @@ mod tests {
         let json = to_string_pretty(&original)?;
         let restored: UserSettings = from_str(&json)?;
 
-        ensure!(restored.audio_device == original.audio_device);
-        ensure!((restored.volume - original.volume).abs() < f64::EPSILON);
-        ensure!(restored.view_mode == original.view_mode);
-        ensure!(restored.active_tab == original.active_tab);
-        ensure!(restored.window_width == original.window_width);
-        ensure!(restored.window_height == original.window_height);
-        ensure!(restored.window_maximized == original.window_maximized);
-        ensure!(restored.gapless_enabled == original.gapless_enabled);
-        ensure!(restored.show_album_labels == original.show_album_labels);
-        ensure!(restored.output_mode == original.output_mode);
-        ensure!(restored.last_queue == original.last_queue);
-        ensure!(restored.last_queue_index == original.last_queue_index);
-        ensure!(restored.last_track_id == original.last_track_id);
-        ensure!((restored.last_position - original.last_position).abs() < f64::EPSILON);
-        ensure!((restored.last_duration - original.last_duration).abs() < f64::EPSILON);
-        ensure!(restored.albums_sort == original.albums_sort);
-        ensure!(restored.artists_sort == original.artists_sort);
-        ensure!(restored.grid_zoom_level == original.grid_zoom_level);
-        ensure!(restored.list_zoom_level == original.list_zoom_level);
+        ensure!(
+            restored.audio_device == original.audio_device,
+            "audio_device should round-trip"
+        );
+        ensure!(
+            (restored.volume - original.volume).abs() < f64::EPSILON,
+            "volume should round-trip"
+        );
+        ensure!(
+            restored.view_mode == original.view_mode,
+            "view_mode should round-trip"
+        );
+        ensure!(
+            restored.active_tab == original.active_tab,
+            "active_tab should round-trip"
+        );
+        ensure!(
+            restored.window_width == original.window_width,
+            "window_width should round-trip"
+        );
+        ensure!(
+            restored.window_height == original.window_height,
+            "window_height should round-trip"
+        );
+        ensure!(
+            restored.window_maximized == original.window_maximized,
+            "window_maximized should round-trip"
+        );
+        ensure!(
+            restored.gapless_enabled == original.gapless_enabled,
+            "gapless_enabled should round-trip"
+        );
+        ensure!(
+            restored.show_album_labels == original.show_album_labels,
+            "show_album_labels should round-trip"
+        );
+        ensure!(
+            restored.output_mode == original.output_mode,
+            "output_mode should round-trip"
+        );
+        ensure!(
+            restored.last_queue == original.last_queue,
+            "last_queue should round-trip"
+        );
+        ensure!(
+            restored.last_queue_index == original.last_queue_index,
+            "last_queue_index should round-trip"
+        );
+        ensure!(
+            restored.last_track_id == original.last_track_id,
+            "last_track_id should round-trip"
+        );
+        ensure!(
+            (restored.last_position - original.last_position).abs() < f64::EPSILON,
+            "last_position should round-trip"
+        );
+        ensure!(
+            (restored.last_duration - original.last_duration).abs() < f64::EPSILON,
+            "last_duration should round-trip"
+        );
+        ensure!(
+            restored.albums_sort == original.albums_sort,
+            "albums_sort should round-trip"
+        );
+        ensure!(
+            restored.artists_sort == original.artists_sort,
+            "artists_sort should round-trip"
+        );
+        ensure!(
+            restored.grid_zoom_level == original.grid_zoom_level,
+            "grid_zoom_level should round-trip"
+        );
+        ensure!(
+            restored.list_zoom_level == original.list_zoom_level,
+            "list_zoom_level should round-trip"
+        );
         Ok(())
     }
 
@@ -192,9 +249,18 @@ mod tests {
             settings.artists_sort == default_artists_sort(),
             "missing artists_sort must fall back to defaults"
         );
-        ensure!(settings.grid_zoom_level == DEFAULT_GRID_ZOOM);
-        ensure!(settings.list_zoom_level == DEFAULT_LIST_ZOOM);
-        ensure!((settings.volume - 1.0).abs() < f64::EPSILON);
+        ensure!(
+            settings.grid_zoom_level == DEFAULT_GRID_ZOOM,
+            "missing grid_zoom_level must fall back to defaults"
+        );
+        ensure!(
+            settings.list_zoom_level == DEFAULT_LIST_ZOOM,
+            "missing list_zoom_level must fall back to defaults"
+        );
+        ensure!(
+            (settings.volume - 1.0).abs() < f64::EPSILON,
+            "missing volume must fall back to defaults"
+        );
         Ok(())
     }
 
@@ -213,12 +279,18 @@ mod tests {
             "output_mode": "resampled"
         }"#;
         let settings: UserSettings = from_str(legacy)?;
-        ensure!(settings.audio_device.as_deref() == Some("default"));
+        ensure!(
+            settings.audio_device.as_deref() == Some("default"),
+            "legacy audio_device should be preserved"
+        );
         ensure!(
             settings.albums_sort == default_albums_sort(),
             "a legacy file without sort fields must use the default sort"
         );
-        ensure!(settings.grid_zoom_level == DEFAULT_GRID_ZOOM);
+        ensure!(
+            settings.grid_zoom_level == DEFAULT_GRID_ZOOM,
+            "a legacy file without zoom fields must use the default zoom"
+        );
         Ok(())
     }
 
@@ -234,8 +306,14 @@ mod tests {
             "output_mode should serialize with snake_case tag"
         );
         let restored: UserSettings = from_str(&json)?;
-        ensure!(restored.output_mode == BitPerfect);
-        ensure!(restored.output_mode == original.output_mode);
+        ensure!(
+            restored.output_mode == BitPerfect,
+            "output_mode should deserialize as BitPerfect"
+        );
+        ensure!(
+            restored.output_mode == original.output_mode,
+            "output_mode should round-trip"
+        );
         Ok(())
     }
 

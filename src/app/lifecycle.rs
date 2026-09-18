@@ -3,16 +3,16 @@
 //! Startup checks and session emit/persist orchestration live in the sibling
 //! [`bootstrap`] module.
 
-use std::{path::PathBuf, sync::Arc, time::Duration};
+use std::{io::Error as IoError, path::PathBuf, sync::Arc, time::Duration};
 
 use {
-    anyhow::{Context, Result},
     async_channel::{Receiver, Sender, unbounded},
     libadwaita::{
         Application,
         glib::{ControlFlow::Break, ExitCode, idle_add_local, spawn_future_local},
         prelude::{ApplicationExt, ApplicationExtManual, GtkWindowExt},
     },
+    thiserror::Error,
     tokio::{
         fs::create_dir_all,
         select,
@@ -35,13 +35,32 @@ use crate::{
     },
     library::{scanner::FsScanner, watcher::LibraryWatcher},
     playback::{engine::PlaybackEngine, transport::PlaybackTransport},
-    storage::{Storage, database::SqliteStorage},
+    storage::{Storage, StorageError, database::SqliteStorage},
     threading::ThreadManager,
     ui::window::build_window,
 };
 
 /// Application identifier for D-Bus and resource paths.
 const APP_ID: &str = "com.github.oxhidifi";
+
+/// Error type for application lifecycle operations.
+#[derive(Debug, Error)]
+pub enum LifecycleError {
+    /// Failed to create the application data directory.
+    #[error("Failed to create data directory {path}: {source}")]
+    CreateDataDir {
+        /// Data directory that could not be created.
+        path: PathBuf,
+        /// Underlying I/O error.
+        source: IoError,
+    },
+    /// Failed to initialize the storage backend.
+    #[error("Failed to initialize storage: {0}")]
+    Storage(#[from] StorageError),
+}
+
+/// Convenience alias for application lifecycle results.
+pub type LifecycleResult<T> = Result<T, LifecycleError>;
 
 /// Register SIGINT/SIGTERM handlers that trigger a graceful application quit.
 ///
@@ -167,18 +186,17 @@ async fn shutdown_watcher(
 ///
 /// Returns an error if the application cannot be built or if the storage
 /// backend fails to initialize.
-pub async fn run_application() -> Result<ExitCode> {
+pub async fn run_application() -> LifecycleResult<ExitCode> {
     let db_dir = data_dir();
     create_dir_all(&db_dir)
         .await
-        .with_context(|| format!("Failed to create data directory: {}", db_dir.display()))?;
+        .map_err(|source| LifecycleError::CreateDataDir {
+            path: db_dir.clone(),
+            source,
+        })?;
 
     let db_path = db_dir.join("library.db");
-    let storage = Arc::new(
-        SqliteStorage::connect(&db_path)
-            .await
-            .context("Failed to initialize storage")?,
-    );
+    let storage = Arc::new(SqliteStorage::connect(&db_path).await?);
 
     let playback = Arc::new(PlaybackEngine::new());
 
@@ -299,7 +317,7 @@ mod tests {
 
     use crate::{
         app::{
-            lifecycle::{APP_ID, dispatch_quit_on_main, run_application},
+            lifecycle::{APP_ID, LifecycleResult, dispatch_quit_on_main, run_application},
             mocks::pump_in_test_runtime,
         },
         ui::signal_handlers::UiHandles,
@@ -346,7 +364,7 @@ mod tests {
         fn assert_shape<F, Fut>(_: F)
         where
             F: Fn() -> Fut,
-            Fut: Future<Output = Result<ExitCode>>,
+            Fut: Future<Output = LifecycleResult<ExitCode>>,
         {
         }
         assert_shape(run_application);
