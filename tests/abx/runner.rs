@@ -3,8 +3,8 @@
 use anyhow::{Context, Result, bail};
 
 use oxhidifi::playback::resampler::{
-    AudioResampler,
     amplitude::compute_snr_db,
+    converter::AudioResampler,
     tone_gen::{
         generate_impulse, generate_pink_noise_with_offset, generate_silence,
         generate_sine_with_offset,

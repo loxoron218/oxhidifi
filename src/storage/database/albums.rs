@@ -8,8 +8,7 @@ use {
 };
 
 use crate::storage::{
-    StorageError::Database,
-    StorageResult,
+    StorageError::{self, Database},
     catalog::{Album, NewAlbum},
     database::SqliteStorage,
     formats::FormatInfo,
@@ -56,7 +55,7 @@ impl SqliteStorage {
     /// # Errors
     ///
     /// Returns [`StorageError::Database`] if the insert query fails.
-    pub async fn insert_album_row(&self, album: &NewAlbum) -> StorageResult<i64> {
+    pub async fn insert_album_row(&self, album: &NewAlbum) -> Result<i64, StorageError> {
         let row_id: (i64,) = query_as(
             "INSERT INTO albums (title, artist_id, year, genre, artwork_path, format_summary, \
              lossless, format, bit_depth, sample_rate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) \
@@ -84,7 +83,7 @@ impl SqliteStorage {
     /// # Errors
     ///
     /// Returns [`StorageError::Database`] if the query fails.
-    pub async fn get_album_row(&self, id: i64) -> StorageResult<Option<Album>> {
+    pub async fn get_album_row(&self, id: i64) -> Result<Option<Album>, StorageError> {
         query_as::<_, Album>(concat!(
             "SELECT al.id, al.title, al.artist_id, al.year, al.genre, al.artwork_path, ",
             album_meta_cols!(),
@@ -101,7 +100,7 @@ impl SqliteStorage {
     /// # Errors
     ///
     /// Returns [`StorageError::Database`] if the query fails.
-    pub async fn all_albums_rows(&self) -> StorageResult<Vec<Album>> {
+    pub async fn all_albums_rows(&self) -> Result<Vec<Album>, StorageError> {
         query_as::<_, Album>(concat!(
             "SELECT al.id, al.title, al.artist_id, al.year, al.genre, al.artwork_path, ",
             album_meta_cols!(),
@@ -117,7 +116,7 @@ impl SqliteStorage {
     /// # Errors
     ///
     /// Returns [`StorageError::Database`] if the query fails.
-    pub async fn album_format_info_rows(&self, album_id: i64) -> StorageResult<FormatInfo> {
+    pub async fn album_format_info_rows(&self, album_id: i64) -> Result<FormatInfo, StorageError> {
         #[derive(Debug, Clone, FromRow)]
         struct RawInfo {
             formats: Option<String>,
@@ -154,7 +153,7 @@ impl SqliteStorage {
     pub async fn albums_format_info_rows(
         &self,
         album_ids: &[i64],
-    ) -> StorageResult<HashMap<i64, FormatInfo>> {
+    ) -> Result<HashMap<i64, FormatInfo>, StorageError> {
         if album_ids.is_empty() {
             return Ok(HashMap::new());
         }
@@ -189,7 +188,7 @@ impl SqliteStorage {
     /// # Errors
     ///
     /// Returns [`StorageError::Database`] if the query fails.
-    pub async fn albums_by_artist_rows(&self, artist_id: i64) -> StorageResult<Vec<Album>> {
+    pub async fn albums_by_artist_rows(&self, artist_id: i64) -> Result<Vec<Album>, StorageError> {
         query_as::<_, Album>(concat!(
             "SELECT al.id, al.title, al.artist_id, al.year, al.genre, al.artwork_path, ",
             album_meta_cols!(),

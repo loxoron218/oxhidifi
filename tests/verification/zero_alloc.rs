@@ -34,7 +34,7 @@ use {
 use oxhidifi::playback::{
     channel::{fill_channel_scratch, maybe_downmix},
     decoder::{AudioParams, DecodedSamples, Decoder},
-    resampler::AudioResampler,
+    resampler::converter::AudioResampler,
     write_wav_header,
 };
 

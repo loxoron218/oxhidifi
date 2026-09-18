@@ -13,7 +13,7 @@ use {
 };
 
 use {
-    oxhidifi::playback::resampler::AudioResampler,
+    oxhidifi::playback::resampler::converter::AudioResampler,
     synth_wav::{leading_silence, transition_and_decode, write_wav},
 };
 

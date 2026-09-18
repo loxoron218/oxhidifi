@@ -59,9 +59,6 @@ pub enum LifecycleError {
     Storage(#[from] StorageError),
 }
 
-/// Convenience alias for application lifecycle results.
-pub type LifecycleResult<T> = Result<T, LifecycleError>;
-
 /// Register SIGINT/SIGTERM handlers that trigger a graceful application quit.
 ///
 /// Pressing `Ctrl+C` in the terminal delivers SIGINT, which by default
@@ -186,7 +183,7 @@ async fn shutdown_watcher(
 ///
 /// Returns an error if the application cannot be built or if the storage
 /// backend fails to initialize.
-pub async fn run_application() -> LifecycleResult<ExitCode> {
+pub async fn run_application() -> Result<ExitCode, LifecycleError> {
     let db_dir = data_dir();
     create_dir_all(&db_dir)
         .await
@@ -302,7 +299,10 @@ pub async fn run_application() -> LifecycleResult<ExitCode> {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicBool, Ordering::SeqCst};
+    use std::{
+        result::Result as StdResult,
+        sync::atomic::{AtomicBool, Ordering::SeqCst},
+    };
 
     use {
         anyhow::{Context, Result, ensure},
@@ -317,7 +317,7 @@ mod tests {
 
     use crate::{
         app::{
-            lifecycle::{APP_ID, LifecycleResult, dispatch_quit_on_main, run_application},
+            lifecycle::{APP_ID, LifecycleError, dispatch_quit_on_main, run_application},
             mocks::pump_in_test_runtime,
         },
         ui::signal_handlers::UiHandles,
@@ -364,7 +364,7 @@ mod tests {
         fn assert_shape<F, Fut>(_: F)
         where
             F: Fn() -> Fut,
-            Fut: Future<Output = LifecycleResult<ExitCode>>,
+            Fut: Future<Output = StdResult<ExitCode, LifecycleError>>,
         {
         }
         assert_shape(run_application);

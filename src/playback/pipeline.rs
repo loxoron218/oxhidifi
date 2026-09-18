@@ -21,7 +21,7 @@ use crate::playback::{
         EngineShared,
     },
     output::AudioOutput,
-    resampler::{AudioResampler, algorithm::create_resampler},
+    resampler::{algorithm::create_resampler, converter::AudioResampler},
     ring_push::process_decoded_batch as ring_push_process_decoded_batch,
     state::PlaybackEvent::{self, Error, TrackFinished, TrackStarted},
 };

@@ -15,11 +15,8 @@ pub enum XdgError {
     MissingHome(#[from] VarError),
 }
 
-/// Convenience alias for XDG directory resolution results.
-pub type XdgResult<T> = Result<T, XdgError>;
-
 /// Resolve an XDG directory from an environment variable with a fallback path.
-fn resolve_xdg_dir(env_var: &str, fallback: &str) -> XdgResult<PathBuf> {
+fn resolve_xdg_dir(env_var: &str, fallback: &str) -> Result<PathBuf, XdgError> {
     if let Some(dir) = var_os(env_var)
         .map(PathBuf::from)
         .filter(|p| !p.as_os_str().is_empty())
@@ -37,7 +34,7 @@ fn resolve_xdg_dir(env_var: &str, fallback: &str) -> XdgResult<PathBuf> {
 /// # Errors
 ///
 /// Returns an error if `HOME` is not set and `XDG_DATA_HOME` is also unset.
-pub fn dirs_data_home() -> XdgResult<PathBuf> {
+pub fn dirs_data_home() -> Result<PathBuf, XdgError> {
     resolve_xdg_dir("XDG_DATA_HOME", ".local/share")
 }
 
@@ -48,7 +45,7 @@ pub fn dirs_data_home() -> XdgResult<PathBuf> {
 /// # Errors
 ///
 /// Returns an error if `HOME` is not set and `XDG_CONFIG_HOME` is also unset.
-pub fn dirs_config_home() -> XdgResult<PathBuf> {
+pub fn dirs_config_home() -> Result<PathBuf, XdgError> {
     resolve_xdg_dir("XDG_CONFIG_HOME", ".config")
 }
 
@@ -59,7 +56,7 @@ pub fn dirs_config_home() -> XdgResult<PathBuf> {
 /// # Errors
 ///
 /// Returns an error if `HOME` is not set and `XDG_CACHE_HOME` is also unset.
-pub fn dirs_cache_home() -> XdgResult<PathBuf> {
+pub fn dirs_cache_home() -> Result<PathBuf, XdgError> {
     resolve_xdg_dir("XDG_CACHE_HOME", ".cache")
 }
 

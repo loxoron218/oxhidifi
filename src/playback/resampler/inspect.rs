@@ -2,7 +2,7 @@
 
 use rubato::Resampler;
 
-use crate::playback::resampler::AudioResampler;
+use crate::playback::resampler::converter::AudioResampler;
 
 impl AudioResampler {
     /// Input sample rate in Hz.

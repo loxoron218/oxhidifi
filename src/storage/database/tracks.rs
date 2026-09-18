@@ -6,8 +6,7 @@ use std::path::Path;
 use sqlx::{QueryBuilder, query, query_as};
 
 use crate::storage::{
-    StorageError::{Database, InvalidPath},
-    StorageResult,
+    StorageError::{self, Database, InvalidPath},
     catalog::{
         FieldUpdate::{Set, SetNull, Skip},
         NewTrack, Track, TrackUpdate,
@@ -53,7 +52,7 @@ impl SqliteStorage {
     /// # Errors
     ///
     /// Returns [`StorageError::Database`] if the insert query fails.
-    pub async fn insert_track_row(&self, track: &NewTrack) -> StorageResult<i64> {
+    pub async fn insert_track_row(&self, track: &NewTrack) -> Result<i64, StorageError> {
         let row_id: (i64,) = query_as(
             "INSERT INTO tracks (title, number, disc_number, duration, file_path, content_hash, \
              format, sample_rate, bit_depth, channels, codec, lossless, bitrate, album_id, \
@@ -89,7 +88,7 @@ impl SqliteStorage {
     /// # Errors
     ///
     /// Returns [`StorageError::Database`] if any update query fails.
-    pub async fn update_track_row(&self, id: i64, track: TrackUpdate) -> StorageResult<()> {
+    pub async fn update_track_row(&self, id: i64, track: TrackUpdate) -> Result<(), StorageError> {
         if let Some(title) = track.title {
             _ = query("UPDATE tracks SET title = ? WHERE id = ?")
                 .bind(&title)
@@ -119,7 +118,7 @@ impl SqliteStorage {
     /// # Errors
     ///
     /// Returns [`StorageError::Database`] if the delete query fails.
-    pub async fn delete_track_row(&self, id: i64) -> StorageResult<()> {
+    pub async fn delete_track_row(&self, id: i64) -> Result<(), StorageError> {
         _ = query("DELETE FROM tracks WHERE id = ?")
             .bind(id)
             .execute(&self.pool)
@@ -133,7 +132,7 @@ impl SqliteStorage {
     /// # Errors
     ///
     /// Returns [`StorageError::Database`] if the query fails.
-    pub async fn get_track_row(&self, id: i64) -> StorageResult<Option<Track>> {
+    pub async fn get_track_row(&self, id: i64) -> Result<Option<Track>, StorageError> {
         query_as::<_, Track>("SELECT * FROM tracks WHERE id = ?")
             .bind(id)
             .fetch_optional(&self.pool)
@@ -146,7 +145,7 @@ impl SqliteStorage {
     /// # Errors
     ///
     /// Returns [`StorageError::Database`] if the query fails.
-    pub async fn tracks_by_album(&self, album_id: i64) -> StorageResult<Vec<Track>> {
+    pub async fn tracks_by_album(&self, album_id: i64) -> Result<Vec<Track>, StorageError> {
         query_as::<_, Track>("SELECT * FROM tracks WHERE album_id = ? ORDER BY number")
             .bind(album_id)
             .fetch_all(&self.pool)
@@ -159,7 +158,7 @@ impl SqliteStorage {
     /// # Errors
     ///
     /// Returns [`StorageError::Database`] if the query fails.
-    pub async fn tracks_by_artist(&self, artist_id: i64) -> StorageResult<Vec<Track>> {
+    pub async fn tracks_by_artist(&self, artist_id: i64) -> Result<Vec<Track>, StorageError> {
         query_as::<_, Track>("SELECT * FROM tracks WHERE artist_id = ?")
             .bind(artist_id)
             .fetch_all(&self.pool)
@@ -172,7 +171,7 @@ impl SqliteStorage {
     /// # Errors
     ///
     /// Returns [`StorageError::Database`] if the query fails.
-    pub async fn search_track_rows(&self, search: &str) -> StorageResult<Vec<Track>> {
+    pub async fn search_track_rows(&self, search: &str) -> Result<Vec<Track>, StorageError> {
         let pattern = format!("%{search}%");
         query_as::<_, Track>("SELECT * FROM tracks WHERE title LIKE ? OR file_path LIKE ?")
             .bind(&pattern)
@@ -188,7 +187,7 @@ impl SqliteStorage {
     ///
     /// Returns [`StorageError::InvalidPath`] if the path is not valid UTF-8,
     /// or [`StorageError::Database`] if the query fails.
-    pub async fn find_by_path_row(&self, path: &Path) -> StorageResult<Option<Track>> {
+    pub async fn find_by_path_row(&self, path: &Path) -> Result<Option<Track>, StorageError> {
         let path_str = path
             .to_str()
             .ok_or_else(|| InvalidPath(path.display().to_string()))?;
@@ -205,7 +204,7 @@ impl SqliteStorage {
     /// # Errors
     ///
     /// Returns [`StorageError::Database`] if the query fails.
-    pub async fn find_by_hash_rows(&self, hash: &str) -> StorageResult<Vec<Track>> {
+    pub async fn find_by_hash_rows(&self, hash: &str) -> Result<Vec<Track>, StorageError> {
         query_as::<_, Track>("SELECT * FROM tracks WHERE content_hash = ?")
             .bind(hash)
             .fetch_all(&self.pool)
@@ -218,7 +217,7 @@ impl SqliteStorage {
     /// # Errors
     ///
     /// Returns [`StorageError::Database`] if the query fails.
-    pub async fn hash_exists_row(&self, hash: &str) -> StorageResult<bool> {
+    pub async fn hash_exists_row(&self, hash: &str) -> Result<bool, StorageError> {
         let exists: (i64,) = query_as("SELECT EXISTS(SELECT 1 FROM tracks WHERE content_hash = ?)")
             .bind(hash)
             .fetch_one(&self.pool)
@@ -238,7 +237,7 @@ impl SqliteStorage {
         album: &str,
         title: &str,
         track: Option<u32>,
-    ) -> StorageResult<Vec<Track>> {
+    ) -> Result<Vec<Track>, StorageError> {
         query_as::<_, Track>(
             "SELECT t.* FROM tracks t JOIN albums a ON t.album_id = a.id JOIN artists ar ON \
              t.artist_id = ar.id WHERE ar.name = ? AND a.title = ? AND t.title = ? AND (? IS NULL \
@@ -259,7 +258,10 @@ impl SqliteStorage {
     /// # Errors
     ///
     /// Returns [`StorageError::Database`] if any insert query fails.
-    pub async fn insert_tracks_batch_rows(&self, tracks: Vec<NewTrack>) -> StorageResult<Vec<i64>> {
+    pub async fn insert_tracks_batch_rows(
+        &self,
+        tracks: Vec<NewTrack>,
+    ) -> Result<Vec<i64>, StorageError> {
         let mut ids = Vec::with_capacity(tracks.len());
         for track in &tracks {
             ids.push(self.insert_track_row(track).await?);
@@ -276,7 +278,7 @@ impl SqliteStorage {
     pub async fn find_by_paths_batch_rows(
         &self,
         paths: &[&Path],
-    ) -> StorageResult<Vec<Option<Track>>> {
+    ) -> Result<Vec<Option<Track>>, StorageError> {
         let mut results = Vec::with_capacity(paths.len());
         for path in paths {
             let path_str = path
@@ -301,7 +303,7 @@ impl SqliteStorage {
     pub async fn find_by_hashes_batch_rows(
         &self,
         hashes: &[&str],
-    ) -> StorageResult<Vec<Vec<Track>>> {
+    ) -> Result<Vec<Vec<Track>>, StorageError> {
         let mut results = Vec::with_capacity(hashes.len());
         for hash in hashes {
             let tracks = query_as::<_, Track>("SELECT * FROM tracks WHERE content_hash = ?")
@@ -319,7 +321,10 @@ impl SqliteStorage {
     /// # Errors
     ///
     /// Returns [`StorageError::Database`] if the query fails.
-    pub async fn tracks_by_albums_rows(&self, album_ids: &[i64]) -> StorageResult<Vec<Track>> {
+    pub async fn tracks_by_albums_rows(
+        &self,
+        album_ids: &[i64],
+    ) -> Result<Vec<Track>, StorageError> {
         if album_ids.is_empty() {
             return Ok(Vec::new());
         }
@@ -341,7 +346,7 @@ impl SqliteStorage {
     /// # Errors
     ///
     /// Returns [`StorageError::Database`] if the query fails.
-    pub async fn tracks_by_ids_rows(&self, ids: &[i64]) -> StorageResult<Vec<Track>> {
+    pub async fn tracks_by_ids_rows(&self, ids: &[i64]) -> Result<Vec<Track>, StorageError> {
         if ids.is_empty() {
             return Ok(Vec::new());
         }

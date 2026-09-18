@@ -12,7 +12,6 @@ use {
 
 use crate::storage::{
     StorageError::{self, Database},
-    StorageResult,
     settings::UserSettings,
 };
 
@@ -27,7 +26,7 @@ pub fn dir_error(dir: &Path, err: &Error) -> StorageError {
 /// # Errors
 ///
 /// Returns an error if the directory cannot be created.
-pub async fn ensure_parent_dir(dir: &Path) -> StorageResult<()> {
+pub async fn ensure_parent_dir(dir: &Path) -> Result<(), StorageError> {
     create_dir_all(dir).await.map_err(|e| dir_error(dir, &e))?;
     Ok(())
 }
@@ -37,7 +36,9 @@ pub async fn ensure_parent_dir(dir: &Path) -> StorageResult<()> {
 /// # Errors
 ///
 /// Returns an error if the settings file exists but cannot be read.
-pub async fn load_settings_with_fallback(settings_path: &Path) -> StorageResult<UserSettings> {
+pub async fn load_settings_with_fallback(
+    settings_path: &Path,
+) -> Result<UserSettings, StorageError> {
     if try_exists(settings_path).await.unwrap_or(false) {
         let content = read_to_string(settings_path).await.map_err(|e| {
             Database(format!(

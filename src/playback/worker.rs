@@ -25,7 +25,7 @@ use crate::{
         },
         output::AudioOutput,
         pipeline::{LoopCtx, OutputConfig, handle_decode_cmd, process_decode_frame},
-        resampler::{AudioResampler, algorithm::create_resampler},
+        resampler::{algorithm::create_resampler, converter::AudioResampler},
         state::{
             PlaybackEvent::{DeviceLost, Resumed, TrackStarted},
             PlaybackStatus::{Paused, Playing},

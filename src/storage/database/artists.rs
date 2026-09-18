@@ -3,8 +3,7 @@
 use sqlx::query_as;
 
 use crate::storage::{
-    StorageError::Database,
-    StorageResult,
+    StorageError::{self, Database},
     catalog::{Artist, NewArtist},
     database::SqliteStorage,
 };
@@ -15,7 +14,7 @@ impl SqliteStorage {
     /// # Errors
     ///
     /// Returns [`StorageError::Database`] if the insert query fails.
-    pub async fn insert_artist_row(&self, artist: &NewArtist) -> StorageResult<i64> {
+    pub async fn insert_artist_row(&self, artist: &NewArtist) -> Result<i64, StorageError> {
         let row_id: (i64,) = query_as("INSERT INTO artists (name) VALUES (?) RETURNING id")
             .bind(&artist.name)
             .fetch_one(&self.pool)
@@ -30,7 +29,7 @@ impl SqliteStorage {
     /// # Errors
     ///
     /// Returns [`StorageError::Database`] if the query fails.
-    pub async fn get_artist_row(&self, id: i64) -> StorageResult<Option<Artist>> {
+    pub async fn get_artist_row(&self, id: i64) -> Result<Option<Artist>, StorageError> {
         query_as::<_, Artist>(
             "SELECT ar.id, ar.name, (SELECT COUNT(*) FROM albums WHERE artist_id = ar.id) AS \
              album_count FROM artists ar WHERE ar.id = ?",
@@ -46,7 +45,7 @@ impl SqliteStorage {
     /// # Errors
     ///
     /// Returns [`StorageError::Database`] if the query fails.
-    pub async fn all_artists_rows(&self) -> StorageResult<Vec<Artist>> {
+    pub async fn all_artists_rows(&self) -> Result<Vec<Artist>, StorageError> {
         query_as::<_, Artist>(
             "SELECT ar.id, ar.name, (SELECT COUNT(*) FROM albums WHERE artist_id = ar.id) AS \
              album_count FROM artists ar ORDER BY ar.name",

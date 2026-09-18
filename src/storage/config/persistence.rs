@@ -11,8 +11,7 @@ use crate::{
     app::xdg_paths::dirs_config_home,
     playback::devices::OutputMode,
     storage::{
-        StorageError::{Database, Serialization},
-        StorageResult,
+        StorageError::{self, Database, Serialization},
         active_tab::ActiveTab,
         config::corrupt_recovery::{ensure_parent_dir, load_settings_with_fallback},
         settings::UserSettings,
@@ -37,7 +36,7 @@ impl SettingsStore {
     /// # Errors
     ///
     /// Returns an error if the config directory cannot be created.
-    pub async fn load_async() -> StorageResult<Self> {
+    pub async fn load_async() -> Result<Self, StorageError> {
         let settings_path = dirs_config_home()
             .map_err(|e| Database(format!("Failed to resolve config dir: {e}")))?
             .join("oxhidifi")
@@ -51,7 +50,7 @@ impl SettingsStore {
     /// # Errors
     ///
     /// Returns an error if the settings parent directory cannot be created.
-    pub async fn load_from_path(settings_path: &Path) -> StorageResult<Self> {
+    pub async fn load_from_path(settings_path: &Path) -> Result<Self, StorageError> {
         if let Some(dir) = settings_path.parent() {
             ensure_parent_dir(dir).await?;
         }
@@ -78,7 +77,7 @@ impl SettingsStore {
     /// # Errors
     ///
     /// Returns an error if serialization or the file write fails.
-    pub fn save_sync(&self) -> StorageResult<()> {
+    pub fn save_sync(&self) -> Result<(), StorageError> {
         let json = to_string_pretty(&self.settings)
             .map_err(|e| Serialization(format!("Failed to serialize settings: {e}")))?;
         write(&self.settings_path, &json).map_err(|e| {

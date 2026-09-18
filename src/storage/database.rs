@@ -36,8 +36,7 @@ use crate::{
     app::xdg_paths::dirs_config_home,
     storage::{
         Storage,
-        StorageError::Database,
-        StorageResult,
+        StorageError::{self, Database},
         catalog::{
             Album, Artist, LibraryDirectory, NewAlbum, NewArtist, NewQueueEntry, NewTrack,
             QueueContext, QueueEntry, Track, TrackUpdate,
@@ -79,7 +78,7 @@ impl SqliteStorage {
     /// # Errors
     ///
     /// Returns an error if the pool cannot be created or migrations fail.
-    pub async fn connect(database_path: &Path) -> StorageResult<Self> {
+    pub async fn connect(database_path: &Path) -> Result<Self, StorageError> {
         let settings_path = dirs_config_home()
             .map_err(|e| Database(format!("Failed to resolve config dir: {e}")))?
             .join("oxhidifi")
@@ -99,7 +98,7 @@ impl SqliteStorage {
     pub async fn connect_with_settings_path(
         database_path: &Path,
         settings_path: &Path,
-    ) -> StorageResult<Self> {
+    ) -> Result<Self, StorageError> {
         let is_memory = database_path.as_os_str() == ":memory:";
         let mut opts = SqliteConnectOptions::new()
             .filename(database_path)
@@ -138,7 +137,10 @@ impl SqliteStorage {
     /// # Errors
     ///
     /// Returns [`StorageError::Database`] if the query fails.
-    pub async fn get_track_paths(&self, ids: &[i64]) -> StorageResult<HashMap<i64, PathBuf>> {
+    pub async fn get_track_paths(
+        &self,
+        ids: &[i64],
+    ) -> Result<HashMap<i64, PathBuf>, StorageError> {
         let tracks = self.get_tracks_by_ids(ids).await?;
         Ok(tracks
             .into_iter()
@@ -148,90 +150,90 @@ impl SqliteStorage {
 }
 
 impl Storage for SqliteStorage {
-    async fn insert_track(&self, track: NewTrack) -> StorageResult<i64> {
+    async fn insert_track(&self, track: NewTrack) -> Result<i64, StorageError> {
         self.insert_track_row(&track).await
     }
 
-    async fn update_track(&self, id: i64, track: TrackUpdate) -> StorageResult<()> {
+    async fn update_track(&self, id: i64, track: TrackUpdate) -> Result<(), StorageError> {
         self.update_track_row(id, track).await
     }
 
-    async fn delete_track(&self, id: i64) -> StorageResult<()> {
+    async fn delete_track(&self, id: i64) -> Result<(), StorageError> {
         self.delete_track_row(id).await
     }
 
-    async fn get_track(&self, id: i64) -> StorageResult<Option<Track>> {
+    async fn get_track(&self, id: i64) -> Result<Option<Track>, StorageError> {
         self.get_track_row(id).await
     }
 
-    async fn get_tracks_by_album(&self, album_id: i64) -> StorageResult<Vec<Track>> {
+    async fn get_tracks_by_album(&self, album_id: i64) -> Result<Vec<Track>, StorageError> {
         self.tracks_by_album(album_id).await
     }
 
-    async fn get_tracks_by_artist(&self, artist_id: i64) -> StorageResult<Vec<Track>> {
+    async fn get_tracks_by_artist(&self, artist_id: i64) -> Result<Vec<Track>, StorageError> {
         self.tracks_by_artist(artist_id).await
     }
 
-    async fn search_tracks(&self, query: &str) -> StorageResult<Vec<Track>> {
+    async fn search_tracks(&self, query: &str) -> Result<Vec<Track>, StorageError> {
         self.search_track_rows(query).await
     }
 
-    async fn insert_album(&self, album: NewAlbum) -> StorageResult<i64> {
+    async fn insert_album(&self, album: NewAlbum) -> Result<i64, StorageError> {
         self.insert_album_row(&album).await
     }
 
-    async fn get_album(&self, id: i64) -> StorageResult<Option<Album>> {
+    async fn get_album(&self, id: i64) -> Result<Option<Album>, StorageError> {
         self.get_album_row(id).await
     }
 
-    async fn get_all_albums(&self) -> StorageResult<Vec<Album>> {
+    async fn get_all_albums(&self) -> Result<Vec<Album>, StorageError> {
         self.all_albums_rows().await
     }
 
-    async fn get_album_format_info(&self, album_id: i64) -> StorageResult<FormatInfo> {
+    async fn get_album_format_info(&self, album_id: i64) -> Result<FormatInfo, StorageError> {
         self.album_format_info_rows(album_id).await
     }
 
     async fn get_albums_format_info(
         &self,
         album_ids: &[i64],
-    ) -> StorageResult<HashMap<i64, FormatInfo>> {
+    ) -> Result<HashMap<i64, FormatInfo>, StorageError> {
         self.albums_format_info_rows(album_ids).await
     }
 
-    async fn get_albums_by_artist(&self, artist_id: i64) -> StorageResult<Vec<Album>> {
+    async fn get_albums_by_artist(&self, artist_id: i64) -> Result<Vec<Album>, StorageError> {
         self.albums_by_artist_rows(artist_id).await
     }
 
-    async fn insert_artist(&self, artist: NewArtist) -> StorageResult<i64> {
+    async fn insert_artist(&self, artist: NewArtist) -> Result<i64, StorageError> {
         self.insert_artist_row(&artist).await
     }
 
-    async fn get_artist(&self, id: i64) -> StorageResult<Option<Artist>> {
+    async fn get_artist(&self, id: i64) -> Result<Option<Artist>, StorageError> {
         self.get_artist_row(id).await
     }
 
-    async fn get_all_artists(&self) -> StorageResult<Vec<Artist>> {
+    async fn get_all_artists(&self) -> Result<Vec<Artist>, StorageError> {
         self.all_artists_rows().await
     }
 
-    async fn list_library_directories(&self) -> StorageResult<Vec<LibraryDirectory>> {
+    async fn list_library_directories(&self) -> Result<Vec<LibraryDirectory>, StorageError> {
         self.list_library_directory_rows().await
     }
 
-    async fn add_library_directory(&self, path: &Path) -> StorageResult<()> {
+    async fn add_library_directory(&self, path: &Path) -> Result<(), StorageError> {
         self.add_library_directory_row(path).await
     }
 
-    async fn remove_library_directory(&self, id: i64) -> StorageResult<()> {
+    async fn remove_library_directory(&self, id: i64) -> Result<(), StorageError> {
         self.remove_library_directory_row(id).await
     }
 
-    async fn get_queue(&self) -> StorageResult<Vec<QueueEntry>> {
+    async fn get_queue(&self) -> Result<Vec<QueueEntry>, StorageError> {
         self.get_queue_rows().await
     }
 
-    async fn set_queue(&self, entries: &[NewQueueEntry]) -> StorageResult<()> {
+    async fn set_queue(&self, entries: &[NewQueueEntry]) -> Result<(), StorageError> {
         self.set_queue_rows(entries).await
     }
 
@@ -239,27 +241,27 @@ impl Storage for SqliteStorage {
         &self,
         track_id: i64,
         context: Option<QueueContext>,
-    ) -> StorageResult<()> {
+    ) -> Result<(), StorageError> {
         self.append_queue_row(track_id, context).await
     }
 
-    async fn remove_queue_entry(&self, id: i64) -> StorageResult<()> {
+    async fn remove_queue_entry(&self, id: i64) -> Result<(), StorageError> {
         self.remove_queue_entry_row(id).await
     }
 
-    async fn reorder_queue(&self, entry_id: i64, new_position: u32) -> StorageResult<()> {
+    async fn reorder_queue(&self, entry_id: i64, new_position: u32) -> Result<(), StorageError> {
         self.reorder_queue_row(entry_id, new_position).await
     }
 
-    async fn clear_queue(&self) -> StorageResult<()> {
+    async fn clear_queue(&self) -> Result<(), StorageError> {
         self.clear_queue_rows().await
     }
 
-    async fn find_by_path(&self, path: &Path) -> StorageResult<Option<Track>> {
+    async fn find_by_path(&self, path: &Path) -> Result<Option<Track>, StorageError> {
         self.find_by_path_row(path).await
     }
 
-    async fn find_by_hash(&self, hash: &str) -> StorageResult<Vec<Track>> {
+    async fn find_by_hash(&self, hash: &str) -> Result<Vec<Track>, StorageError> {
         self.find_by_hash_rows(hash).await
     }
 
@@ -269,36 +271,39 @@ impl Storage for SqliteStorage {
         album: &str,
         title: &str,
         track: Option<u32>,
-    ) -> StorageResult<Vec<Track>> {
+    ) -> Result<Vec<Track>, StorageError> {
         self.find_by_fingerprint_rows(artist, album, title, track)
             .await
     }
 
-    async fn insert_tracks_batch(&self, tracks: Vec<NewTrack>) -> StorageResult<Vec<i64>> {
+    async fn insert_tracks_batch(&self, tracks: Vec<NewTrack>) -> Result<Vec<i64>, StorageError> {
         self.insert_tracks_batch_rows(tracks).await
     }
 
-    async fn find_by_paths_batch(&self, paths: &[&Path]) -> StorageResult<Vec<Option<Track>>> {
+    async fn find_by_paths_batch(
+        &self,
+        paths: &[&Path],
+    ) -> Result<Vec<Option<Track>>, StorageError> {
         self.find_by_paths_batch_rows(paths).await
     }
 
-    async fn find_by_hashes_batch(&self, hashes: &[&str]) -> StorageResult<Vec<Vec<Track>>> {
+    async fn find_by_hashes_batch(&self, hashes: &[&str]) -> Result<Vec<Vec<Track>>, StorageError> {
         self.find_by_hashes_batch_rows(hashes).await
     }
 
-    async fn get_tracks_by_albums(&self, album_ids: &[i64]) -> StorageResult<Vec<Track>> {
+    async fn get_tracks_by_albums(&self, album_ids: &[i64]) -> Result<Vec<Track>, StorageError> {
         self.tracks_by_albums_rows(album_ids).await
     }
 
-    async fn get_tracks_by_ids(&self, ids: &[i64]) -> StorageResult<Vec<Track>> {
+    async fn get_tracks_by_ids(&self, ids: &[i64]) -> Result<Vec<Track>, StorageError> {
         self.tracks_by_ids_rows(ids).await
     }
 
-    async fn hash_exists(&self, hash: &str) -> StorageResult<bool> {
+    async fn hash_exists(&self, hash: &str) -> Result<bool, StorageError> {
         self.hash_exists_row(hash).await
     }
 
-    async fn prune_orphans(&self) -> StorageResult<()> {
+    async fn prune_orphans(&self) -> Result<(), StorageError> {
         self.prune_orphans_row().await
     }
 }

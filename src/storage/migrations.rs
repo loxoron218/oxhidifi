@@ -2,14 +2,14 @@
 
 use sqlx::{SqlitePool, query, query_as};
 
-use crate::storage::{StorageError::Database, StorageResult};
+use crate::storage::StorageError::{self, Database};
 
 /// Run all database migrations to create tables.
 ///
 /// # Errors
 ///
 /// Returns an error if any SQL statement fails.
-pub async fn run(pool: &SqlitePool) -> StorageResult<()> {
+pub async fn run(pool: &SqlitePool) -> Result<(), StorageError> {
     _ = query(
         "CREATE TABLE IF NOT EXISTS artists (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -100,7 +100,7 @@ pub async fn run(pool: &SqlitePool) -> StorageResult<()> {
 /// Add format, `bit_depth`, and `sample_rate` columns to the albums table.
 ///
 /// These columns are populated during scanning and used by the column view.
-async fn add_album_format_columns(pool: &SqlitePool) -> StorageResult<()> {
+async fn add_album_format_columns(pool: &SqlitePool) -> Result<(), StorageError> {
     if !column_exists(pool, "format").await {
         _ = query("ALTER TABLE albums ADD COLUMN format TEXT NOT NULL DEFAULT ''")
             .execute(pool)
@@ -145,7 +145,7 @@ async fn column_exists(pool: &SqlitePool, name: &str) -> bool {
 }
 
 /// Create database indexes for query performance.
-async fn create_indexes(pool: &SqlitePool) -> StorageResult<()> {
+async fn create_indexes(pool: &SqlitePool) -> Result<(), StorageError> {
     _ = query("CREATE INDEX IF NOT EXISTS idx_track_album_id ON tracks(album_id)")
         .execute(pool)
         .await

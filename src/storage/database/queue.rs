@@ -3,8 +3,7 @@
 use sqlx::{query, query_as};
 
 use crate::storage::{
-    StorageError::{Database, QueueFull},
-    StorageResult,
+    StorageError::{self, Database, QueueFull},
     catalog::{
         NewQueueEntry,
         QueueContext::{self, Album, Artist, Manual},
@@ -19,7 +18,7 @@ impl SqliteStorage {
     /// # Errors
     ///
     /// Returns [`StorageError::Database`] if the query fails.
-    pub async fn get_queue_rows(&self) -> StorageResult<Vec<QueueEntry>> {
+    pub async fn get_queue_rows(&self) -> Result<Vec<QueueEntry>, StorageError> {
         query_as::<_, QueueEntry>("SELECT * FROM playback_queue ORDER BY position")
             .fetch_all(&self.pool)
             .await
@@ -31,7 +30,7 @@ impl SqliteStorage {
     /// # Errors
     ///
     /// Returns [`StorageError::Database`] if any query fails.
-    pub async fn set_queue_rows(&self, entries: &[NewQueueEntry]) -> StorageResult<()> {
+    pub async fn set_queue_rows(&self, entries: &[NewQueueEntry]) -> Result<(), StorageError> {
         _ = query("DELETE FROM playback_queue")
             .execute(&self.pool)
             .await
@@ -64,7 +63,7 @@ impl SqliteStorage {
         &self,
         track_id: i64,
         context: Option<QueueContext>,
-    ) -> StorageResult<()> {
+    ) -> Result<(), StorageError> {
         let count: (i64,) = query_as("SELECT COUNT(*) FROM playback_queue")
             .fetch_one(&self.pool)
             .await
@@ -106,7 +105,7 @@ impl SqliteStorage {
     /// # Errors
     ///
     /// Returns [`StorageError::Database`] if the query fails.
-    pub async fn remove_queue_entry_row(&self, id: i64) -> StorageResult<()> {
+    pub async fn remove_queue_entry_row(&self, id: i64) -> Result<(), StorageError> {
         _ = query("DELETE FROM playback_queue WHERE id = ?")
             .bind(id)
             .execute(&self.pool)
@@ -121,7 +120,11 @@ impl SqliteStorage {
     /// # Errors
     ///
     /// Returns [`StorageError::Database`] if the query fails.
-    pub async fn reorder_queue_row(&self, entry_id: i64, new_position: u32) -> StorageResult<()> {
+    pub async fn reorder_queue_row(
+        &self,
+        entry_id: i64,
+        new_position: u32,
+    ) -> Result<(), StorageError> {
         _ = query("UPDATE playback_queue SET position = ? WHERE id = ?")
             .bind(new_position.cast_signed())
             .bind(entry_id)
@@ -137,7 +140,7 @@ impl SqliteStorage {
     /// # Errors
     ///
     /// Returns [`StorageError::Database`] if the query fails.
-    pub async fn clear_queue_rows(&self) -> StorageResult<()> {
+    pub async fn clear_queue_rows(&self) -> Result<(), StorageError> {
         _ = query("DELETE FROM playback_queue")
             .execute(&self.pool)
             .await

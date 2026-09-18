@@ -139,7 +139,7 @@ pub fn generate_pink_noise(
 ///
 /// Identical to [`generate_pink_noise`], except every component sine shares
 /// the same `frame_offset` time shift (see [`generate_sine_with_offset`]).
-/// Passing the negated [`crate::playback::resampler::AudioResampler::fractional_delay`]
+/// Passing the negated [`crate::playback::resampler::converter::AudioResampler::fractional_delay`]
 /// aligns the ideal reference with an odd-block FFT resampler for a
 /// subsample-accurate SNR comparison.
 ///

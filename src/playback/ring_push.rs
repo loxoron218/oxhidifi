@@ -7,7 +7,7 @@ use std::{thread::sleep, time::Duration};
 use rtrb::{Producer, PushError::Full};
 
 use crate::playback::{
-    resampler::AudioResampler,
+    resampler::converter::AudioResampler,
     state::PlaybackEvent::{self, Error},
 };
 

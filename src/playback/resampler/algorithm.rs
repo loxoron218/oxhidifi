@@ -1,6 +1,6 @@
 //! Resampler construction helpers.
 
-use crate::playback::resampler::AudioResampler;
+use crate::playback::resampler::converter::AudioResampler;
 
 /// Configurable resampling algorithm.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

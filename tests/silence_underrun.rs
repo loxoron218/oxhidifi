@@ -11,7 +11,7 @@ use oxhidifi::playback::{
     decoder::Decoder,
     gapless::GaplessTransitioner,
     pipeline::process_decoded_batch,
-    resampler::{AudioResampler, algorithm::create_resampler},
+    resampler::{algorithm::create_resampler, converter::AudioResampler},
     state::PlaybackEvent::Error,
 };
 
