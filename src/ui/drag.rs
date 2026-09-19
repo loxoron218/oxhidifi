@@ -46,26 +46,32 @@ macro_rules! impl_sort_item {
         impl SortItem for $ty {
             type Criteria = $criteria;
 
+            /// Returns the criteria.
             fn criteria(&self) -> &Self::Criteria {
                 &self.criteria
             }
 
+            /// Returns the order.
             fn order(&self) -> &SortOrder {
                 &self.order
             }
 
+            /// Construct from parts.
             fn new(criteria: Self::Criteria, order: SortOrder) -> Self {
                 Self { criteria, order }
             }
 
+            /// Parse a discriminator into criteria.
             fn from_discriminator(d: u8) -> Option<Self::Criteria> {
                 <$criteria>::from_discriminator(d)
             }
 
+            /// Human-readable entity name for error messages.
             fn entity_name() -> &'static str {
                 $entity
             }
 
+            /// Returns a numeric discriminator for the criteria.
             fn discriminator(&self) -> u8 {
                 self.criteria.discriminator()
             }

@@ -77,6 +77,7 @@ impl<S: Storage> Debug for FsScanner<S> {
 }
 
 impl<S: Storage + 'static> LibraryScanner for FsScanner<S> {
+    /// Trigger a full scan of all configured directories.
     async fn scan_all(&self) -> Result<(), StorageError> {
         let dirs = self.storage.list_library_directories().await?;
 
@@ -88,11 +89,13 @@ impl<S: Storage + 'static> LibraryScanner for FsScanner<S> {
         Ok(())
     }
 
+    /// Trigger a scan of a specific directory.
     async fn scan_directory(&self, path: &Path) -> Result<(), StorageError> {
         self.scan_dir(path).await;
         Ok(())
     }
 
+    /// Cancel any in-progress scan.
     fn cancel(&self) -> Result<(), StorageError> {
         self.cancel_tx
             .send(true)
