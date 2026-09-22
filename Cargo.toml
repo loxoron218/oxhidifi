@@ -16,7 +16,7 @@ libadwaita = { version = "0.9.2", default-features = false, features = [
     "gtk_v4_24",
     "v1_10",
 ] }
-lofty = { version = "0.25.1", default-features = false, features = [
+lofty = { version = "0.25.4", default-features = false, features = [
     "id3v2_compression_support",
 ] }
 notify = { version = "8.2.0", default-features = false }
