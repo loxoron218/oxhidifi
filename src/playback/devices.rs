@@ -99,7 +99,7 @@ pub fn startup_device_check() -> Option<String> {
 /// modern Linux desktops than raw hardware devices.
 pub fn prioritize_devices(devices: &mut [Device]) {
     devices.sort_by_key(|d| {
-        let desc = d.description().map(|s| s.to_string()).unwrap_or_default();
+        let desc = d.description().map_or_default(|s| s.to_string());
         if desc.contains("PipeWire") {
             0
         } else if desc.contains("PulseAudio") {
