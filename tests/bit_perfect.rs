@@ -6,9 +6,16 @@
 
 use std::{fs::File, io::Write, path::Path};
 
-use anyhow::Result;
+use {
+    anyhow::{Result, ensure},
+    tempfile::NamedTempFile,
+};
 
-use oxhidifi::playback::write_wav_header;
+use oxhidifi::playback::{
+    decoder::Decoder,
+    devices::OutputMode::{BitPerfect, Resampled},
+    write_wav_header,
+};
 
 /// Write a minimal WAV with known samples for verification.
 ///
@@ -58,8 +65,6 @@ fn supports_native_logic(
 
 /// Assertions for `supports_native` bit-depth mapping.
 fn assert_supports_native_bit_depth_mapping() -> Result<()> {
-    use anyhow::ensure;
-
     ensure!(supports_native_logic(44100, "I16", 44100, 16));
     ensure!(!supports_native_logic(44100, "I16", 44100, 24));
     ensure!(!supports_native_logic(44100, "I16", 44100, 32));
@@ -80,13 +85,6 @@ fn assert_supports_native_bit_depth_mapping() -> Result<()> {
 
 /// Verify the bit-perfect path is byte-identical to source PCM.
 fn assert_bit_perfect_path_is_byte_identical() -> Result<()> {
-    use {anyhow::ensure, tempfile::NamedTempFile};
-
-    use oxhidifi::playback::{
-        decoder::Decoder,
-        devices::OutputMode::{BitPerfect, Resampled},
-    };
-
     let tmp = NamedTempFile::new()?;
     write_known_wav(tmp.path(), 44100, 16, 2)?;
 
@@ -146,8 +144,6 @@ fn assert_bit_perfect_path_is_byte_identical() -> Result<()> {
 
 /// Verify I24 carried in I32 is considered bit-perfect.
 fn assert_i24_carried_in_i32_is_bit_perfect() -> Result<()> {
-    use anyhow::ensure;
-
     ensure!(supports_native_logic(48000, "I32", 48000, 24));
     ensure!(supports_native_logic(48000, "F32", 48000, 24));
 

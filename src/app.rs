@@ -3,7 +3,8 @@
 
 pub mod bootstrap;
 pub mod lifecycle;
-#[cfg(test)]
-pub mod mocks;
 pub mod runtime;
 pub mod xdg_paths;
+
+#[cfg(test)]
+pub mod mocks;

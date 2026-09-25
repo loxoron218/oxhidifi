@@ -19,9 +19,7 @@ use {
     tracing::warn,
 };
 
-use crate::app::xdg_paths::dirs_cache_home;
-
-use self::thumbnail::generate_thumbnails;
+use crate::{app::xdg_paths::dirs_cache_home, library::artwork::thumbnail::generate_thumbnails};
 
 /// Subdirectory for cached artwork files.
 const ARTWORK_CACHE_DIR: &str = "oxhidifi/artwork";

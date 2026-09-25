@@ -44,6 +44,7 @@ mod tests {
     use {
         anyhow::{Result, ensure},
         tempfile::tempdir,
+        tokio::test,
     };
 
     use oxhidifi::{
@@ -54,7 +55,7 @@ mod tests {
         },
     };
 
-    use {crate::configure_preferences, tokio::test};
+    use crate::configure_preferences;
 
     #[test]
     async fn settings_survive_save_and_reload() -> Result<()> {

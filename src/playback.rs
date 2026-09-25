@@ -6,8 +6,6 @@ pub mod channel;
 pub mod decoder;
 pub mod devices;
 pub mod engine;
-#[cfg(test)]
-pub mod engine_fixture;
 pub mod gapless;
 pub mod layout;
 pub mod native_support;
@@ -23,6 +21,9 @@ pub mod stream;
 pub mod transport;
 pub mod volume;
 pub mod worker;
+
+#[cfg(test)]
+pub mod engine_fixture;
 
 use std::{
     io::{Result, Write},

@@ -12,10 +12,9 @@ use {
     tempfile::NamedTempFile,
 };
 
-use {
-    oxhidifi::playback::resampler::converter::AudioResampler,
-    synth_wav::{leading_silence, transition_and_decode, write_wav},
-};
+use oxhidifi::playback::resampler::converter::AudioResampler;
+
+use synth_wav::{leading_silence, transition_and_decode, write_wav};
 
 /// Incompatible sample rate families with no common divisor.
 const RATE_FAMILY_44: &[u32] = &[44_100, 88_200, 176_400];

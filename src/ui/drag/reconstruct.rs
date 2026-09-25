@@ -10,11 +10,12 @@ use {
     tracing::{error, warn},
 };
 
-use crate::storage::sort_rules::{
-    AlbumSortCriteria, AlbumSortItem, ArtistSortCriteria, ArtistSortItem, SortOrder,
+use crate::{
+    storage::sort_rules::{
+        AlbumSortCriteria, AlbumSortItem, ArtistSortCriteria, ArtistSortItem, SortOrder,
+    },
+    ui::drag::SortListBounds,
 };
-
-use crate::ui::drag::SortListBounds;
 
 /// Parse a `"sort:N"` widget name into a sort item and push to `new_sort`.
 fn process_row<T: SortListBounds, S: BuildHasher>(

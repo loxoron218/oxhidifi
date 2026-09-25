@@ -316,9 +316,10 @@ pub enum WatcherEvent {
 mod tests {
     use std::{path::PathBuf, time::Duration};
 
-    use tokio::sync::mpsc::unbounded_channel;
-
-    use notify::{Error, ErrorKind::Generic, Event, EventKind::Create, event::CreateKind::File};
+    use {
+        notify::{Error, ErrorKind::Generic, Event, EventKind::Create, event::CreateKind::File},
+        tokio::sync::mpsc::unbounded_channel,
+    };
 
     use crate::{
         library::watcher::{

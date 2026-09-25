@@ -3,11 +3,6 @@
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use {
-    crate::{
-        app::runtime::AppState,
-        playback::{queue_manager::PlaybackQueue, transport::PlaybackTransport},
-        storage::{Storage, catalog::Track, formats::format_sample_rate_str},
-    },
     async_channel::Sender,
     libadwaita::{
         gdk::Key,
@@ -27,6 +22,12 @@ use {
     },
     num_traits::NumCast,
     tracing::{info, warn},
+};
+
+use crate::{
+    app::runtime::AppState,
+    playback::{queue_manager::PlaybackQueue, transport::PlaybackTransport},
+    storage::{Storage, catalog::Track, formats::format_sample_rate_str},
 };
 
 /// Number of tracks to add per batch in the detail page track list.
