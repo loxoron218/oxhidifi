@@ -147,7 +147,7 @@ path = "tests/transitions.rs"
 
 [[test]]
 name = "signal_path"
-path = "tests/signal_path.rs"
+path = "tests/signal_inspector.rs"
 
 [lints.rust]
 ambiguous_negative_literals = "deny"

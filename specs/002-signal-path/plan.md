@@ -42,7 +42,7 @@ persisted data. N/A for new tables.
 **Testing**: `cargo test` — unit tests in `#[cfg(test)] mod tests` per file
 (`anyhow::Result` + `ensure!`/`bail!`; trivial `()` + `assert!`); GTK tests
 via `libadwaita::gtk::{self, test}` + plain `#[test]`; integration/acceptance
-in `tests/` with `//!` FR headers (new: `tests/signal_path.rs`); `criterion`
+in `tests/` with `//!` FR headers (new: `tests/signal_inspector.rs`, target `signal_path`); `criterion`
 benches (`throughput`, `conversion_baseline`) only if the audio pipeline
 changes (it does not — display-only feature).
 
@@ -144,7 +144,7 @@ src/
         └── signal_badge.rs       # Player-area verdict badge button navigating to the Signal tab
 
 tests/
-└── signal_path.rs                # Acceptance tests (FR-001..FR-015, SC-001..SC-006 mapping)
+└── signal_inspector.rs         # Acceptance tests (test target `signal_path`)
 ```
 
 **Structure Decision**: Single-project desktop-app layout. Playback truth

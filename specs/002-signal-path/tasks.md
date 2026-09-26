@@ -2,7 +2,7 @@
 
 **Input**: Design documents from `specs/002-signal-path/`
 **Prerequisites**: plan.md, spec.md, research.md, data-model.md, contracts/snapshot.md, contracts/dialog.md, quickstart.md
-**Tests**: Included — required by constitution Principle II (every feature ships with tests; new contracts REQUIRE integration tests at the boundary) and asserted by `contracts/snapshot.md` invariants in `tests/signal_path.rs`.
+**Tests**: Included — required by constitution Principle II (every feature ships with tests; new contracts REQUIRE integration tests at the boundary) and asserted by `contracts/snapshot.md` invariants in `tests/signal_inspector.rs`.
 **Organization**: Tasks grouped by user story for independent implementation and testing.
 
 ## Format: `[ID] [P?] [Story] Description`
@@ -23,8 +23,8 @@
 **Purpose**: Register test target, verify naming/mod wiring preconditions, establish baseline
 
 - [X] T001 Verify new file stems are unique codebase-wide (`signal_path`, `path_snapshot`, `path_verdict`, `stage_describe`, `signal_tab`, `signal_footer`, `signal_poll`, `signal_badge` vs `signal_handlers`) via ripgrep in repo root
-- [X] T002 Register `[[test]] name = "signal_path" path = "tests/signal_path.rs"` in Cargo.toml after the `transitions` entry
-- [X] T003 Create acceptance-test skeleton in tests/signal_path.rs with `//!` FR-001..FR-015 header mapping SC-003/SC-006 to contract invariants and SC-002 logic as proxy invariants (human 9/10 classification validated manually via quickstart)
+- [X] T002 Register `[[test]] name = "signal_path" path = "tests/signal_inspector.rs"` in Cargo.toml after the `transitions` entry
+- [X] T003 Create acceptance-test skeleton in tests/signal_inspector.rs with `//!` FR-001..FR-015 header mapping SC-003/SC-006 to contract invariants and SC-002 logic as proxy invariants (human 9/10 classification validated manually via quickstart)
 - [X] T004 Run `cargo collate` baseline in repo root and record any pre-existing failures before feature work
 
 ---
@@ -35,10 +35,10 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T005 Create parent index in src/playback/signal_path.rs with `//!` docs, shared value types (`SignalPathSnapshot` with `generation: u64`, `track_id: Option<i64>`, `zone_name: String`, `verdict: QualityVerdict`, `stages: Vec<PathStage>`, `devices: Vec<RenderingDevice>`, `processing_speed: Option<f64>`, `playback_status: PlaybackStatus` (reused from `crate::playback::state` — do NOT define a new enum); `PathStage` with `position: u32`, `kind: StageKind`, `title/detail/explanation: String`, `verdict: QualityVerdict`, `badge_icon: &'static str`; `QualityVerdict` variants `BitPerfect`/`Processed`/`Limited` with canonical labels exactly `Bit-Perfect`/`Processed`/`Limited`; `RenderingDevice` with `display_name: String`, `role: DeviceRole`, `brand_visual/illustration: String`, `manual_url: Option<String>`; `StageKind`, `StageFacts`, `DeviceRole`, `SnapshotInput` with `auth: Option<AuthFacts>` (MVP always `None` — authentication stage omitted; see data-model §5), `AuthFacts`), typed `SignalPathError` (`thiserror` variants `CatalogLookup`/`NoActiveTrack`/`SnapshotBuild` with `///` docs + `#[from]` sources), and `pub mod` wiring in src/playback.rs
-- [ ] T006 Implement total pure `resolve_verdict(stages: &[QualityVerdict]) -> QualityVerdict` with precedence `Limited > Processed > Bit-Perfect` in src/playback/signal_path/path_verdict.rs plus `#[cfg(test)] mod tests` unit tests (`anyhow::Result` + `ensure!`) covering empty/all-bit-perfect/mixed-limited cases
-- [ ] T007 [P] Add structured `tracing` fields spec for snapshot builds and verdict flips (snapshot generation, track id, verdict transition) in src/playback/signal_path.rs without touching the audio hot path
-- [ ] T008 [P] Add contract invariant tests 1–3 scaffolding (bit-perfect ⇒ `processing_speed.is_none()`; alteration incl. volume-only ⇒ verdict ≥ `Processed` + `processing_speed.is_some()`; shared-mixer/forced-downsample/lost-device ⇒ `Limited` even with enhancements) in tests/signal_path.rs using cloned `SnapshotInput` fixtures (no concurrency simulation)
+- [X] T005 Create parent index in src/playback/signal_path.rs with `//!` docs, shared value types (`SignalPathSnapshot` with `generation: u64`, `track_id: Option<i64>`, `zone_name: String`, `verdict: QualityVerdict`, `stages: Vec<PathStage>`, `devices: Vec<RenderingDevice>`, `processing_speed: Option<f64>`, `playback_status: PlaybackStatus` (reused from `crate::playback::state` — do NOT define a new enum); `PathStage` with `position: u32`, `kind: StageKind`, `title/detail/explanation: String`, `verdict: QualityVerdict`, `badge_icon: &'static str`; `QualityVerdict` variants `BitPerfect`/`Processed`/`Limited` with canonical labels exactly `Bit-Perfect`/`Processed`/`Limited`; `RenderingDevice` with `display_name: String`, `role: DeviceRole`, `brand_visual/illustration: String`, `manual_url: Option<String>`; `StageKind`, `StageFacts`, `DeviceRole`, `SnapshotInput` with `auth: Option<AuthFacts>` (MVP always `None` — authentication stage omitted; see data-model §5), `AuthFacts`), typed `SignalPathError` (`thiserror` variants `CatalogLookup`/`NoActiveTrack`/`SnapshotBuild` with `///` docs + `#[from]` sources), and `pub mod` wiring in src/playback.rs
+- [X] T006 Implement total pure `resolve_verdict(stages: &[QualityVerdict]) -> QualityVerdict` with precedence `Limited > Processed > Bit-Perfect` in src/playback/signal_path/path_verdict.rs plus `#[cfg(test)] mod tests` unit tests (`anyhow::Result` + `ensure!`) covering empty/all-bit-perfect/mixed-limited cases
+- [X] T007 [P] Add structured `tracing` fields spec for snapshot builds and verdict flips (snapshot generation, track id, verdict transition) in src/playback/signal_path.rs without touching the audio hot path
+- [X] T008 [P] Add contract invariant tests 1–3 scaffolding (bit-perfect ⇒ `processing_speed.is_none()`; alteration incl. volume-only ⇒ verdict ≥ `Processed` + `processing_speed.is_some()`; shared-mixer/forced-downsample/lost-device ⇒ `Limited` even with enhancements) in tests/signal_inspector.rs using cloned `SnapshotInput` fixtures (no concurrency simulation)
 
 **Checkpoint**: Foundation ready — `cargo test --test signal_path` compiles (failing assertions OK), user story implementation can now begin
 
@@ -52,8 +52,8 @@
 
 ### Tests for User Story 1
 
-- [ ] T009 [P] [US1] Contract test for `build_snapshot` stage ordering (first stage `StageKind::Source`, last `Output`/`ExternalRenderer`, `stages` non-empty iff `track_id.is_some()`) in tests/signal_path.rs
-- [ ] T010 [P] [US1] Integration test for gapless atomic swap (two `SignalPathSnapshot` with different generations/track ids swap whole-instance, never mixed rows) in tests/signal_path.rs
+- [ ] T009 [P] [US1] Contract test for `build_snapshot` stage ordering (first stage `StageKind::Source`, last `Output`/`ExternalRenderer`, `stages` non-empty iff `track_id.is_some()`) in tests/signal_inspector.rs
+- [ ] T010 [P] [US1] Integration test for gapless atomic swap (two `SignalPathSnapshot` with different generations/track ids swap whole-instance, never mixed rows) in tests/signal_inspector.rs
 
 ### Implementation for User Story 1
 
@@ -76,7 +76,7 @@
 
 ### Tests for User Story 2
 
-- [ ] T017 [P] [US2] Contract test for verdict precedence (`Limited` wins over `Processed` wins over `Bit-Perfect`; bit-perfect requires `OutputMode::BitPerfect` + no resampler + unity/unmuted or hardware-mixer volume + matching channels + native-capable device) in tests/signal_path.rs
+- [ ] T017 [P] [US2] Contract test for verdict precedence (`Limited` wins over `Processed` wins over `Bit-Perfect`; bit-perfect requires `OutputMode::BitPerfect` + no resampler + unity/unmuted or hardware-mixer volume + matching channels + native-capable device) in tests/signal_inspector.rs
 - [ ] T018 [P] [US2] GTK badge/header test (verdict text + dedicated icon per state, badge matches tab header) in src/ui/player/signal_badge.rs + src/ui/signal_view/signal_tab.rs via `libadwaita::gtk::{self, test}` + plain `#[test]`
 
 ### Implementation for User Story 2
@@ -98,7 +98,7 @@
 
 ### Tests for User Story 3
 
-- [ ] T023 [P] [US3] Contract test for `describe` (never empty strings; converter `detail` always carries input→output; volume rows carry dB via `format_volume_db`; DSD + volume/DSP yields explicit `FormatConverter` DSD-to-PCM stage, zero silent alterations SC-003) in tests/signal_path.rs
+- [ ] T023 [P] [US3] Contract test for `describe` (never empty strings; converter `detail` always carries input→output; volume rows carry dB via `format_volume_db`; DSD + volume/DSP yields explicit `FormatConverter` DSD-to-PCM stage, zero silent alterations SC-003) in tests/signal_inspector.rs
 
 ### Implementation for User Story 3
 
@@ -118,8 +118,8 @@
 
 ### Tests for User Story 4
 
-- [ ] T027 [P] [US4] Contract test for device footer (≥1 device when track present; streamer + separate DAC ⇒ ≥2 cards in chain order; cards never name a non-rendering device; lost device forces verdict off `Bit-Perfect`) in tests/signal_path.rs
-- [ ] T028 [P] [US4] Contract test for processing-speed rule (`processing_speed.is_some()` iff any in-app alteration incl. volume-only; `None`/hidden when bit-perfect and when Limited-only with no in-app alteration; invariant 4 summarize lists every stage once in order) in tests/signal_path.rs
+- [ ] T027 [P] [US4] Contract test for device footer (≥1 device when track present; streamer + separate DAC ⇒ ≥2 cards in chain order; cards never name a non-rendering device; lost device forces verdict off `Bit-Perfect`) in tests/signal_inspector.rs
+- [ ] T028 [P] [US4] Contract test for processing-speed rule (`processing_speed.is_some()` iff any in-app alteration incl. volume-only; `None`/hidden when bit-perfect and when Limited-only with no in-app alteration; invariant 4 summarize lists every stage once in order) in tests/signal_inspector.rs
 
 ### Implementation for User Story 4
 
@@ -167,7 +167,7 @@
 
 ### Parallel Opportunities
 
-- T007 + T008 (different files: `signal_path.rs` vs `tests/signal_path.rs`) in Foundational
+- T007 + T008 (different files: `signal_path.rs` vs `tests/signal_inspector.rs`) in Foundational
 - T009 + T010 (same test file — append-only separate sections; or serialize if conflicts arise)
 - T013 (tab shell) parallel with T011–T012 (builder) — different files, builder API is contract-frozen
 - T017 + T018, T027 + T028 (contract vs GTK tests, different files)
@@ -182,15 +182,15 @@
 Task: "Implement build_snapshot + summarize_text in src/playback/signal_path/path_snapshot.rs"
 Task: "Build Signal tab shell in src/ui/signal_view/signal_tab.rs"
 # Tests together (same file, separate sections):
-Task: "Contract test for build_snapshot ordering in tests/signal_path.rs"
-Task: "Integration test for gapless atomic swap in tests/signal_path.rs"
+Task: "Contract test for build_snapshot ordering in tests/signal_inspector.rs"
+Task: "Integration test for gapless atomic swap in tests/signal_inspector.rs"
 ```
 
 ## Parallel Example: User Story 4
 
 ```bash
-Task: "Contract test for device footer in tests/signal_path.rs"
-Task: "Contract test for processing-speed rule in tests/signal_path.rs"
+Task: "Contract test for device footer in tests/signal_inspector.rs"
+Task: "Contract test for processing-speed rule in tests/signal_inspector.rs"
 # Then (different concerns, same tab file — serialize UI edits):
 Task: "Compute processing_speed in src/playback/signal_path/path_snapshot.rs"
 Task: "Render readout + footer cards + overflow menu in src/ui/signal_view/signal_tab.rs"

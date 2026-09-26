@@ -1,7 +1,8 @@
 # Contract: Snapshot Builder API (`002-signal-path`)
 
 **Boundary**: `src/playback/signal_path/` (builder + classifiers) ↔
-`src/ui/signal_view/signal_tab.rs` (renderer) and `tests/signal_path.rs`.
+`src/ui/signal_view/signal_tab.rs` (renderer) and `tests/signal_inspector.rs`
+(test target `signal_path`).
 This is the integration-test boundary for the feature: any contract change
 REQUIRES updating the acceptance tests.
 
@@ -56,7 +57,7 @@ pub fn summarize_text(snapshot: &SignalPathSnapshot) -> String;
 pub fn describe(kind: &StageFacts) -> (String, String, String);
 ```
 
-## Invariants (MUST hold; asserted in `tests/signal_path.rs`)
+## Invariants (MUST hold; asserted in `tests/signal_inspector.rs`, target `signal_path`)
 
 1. Bit-perfect input (native format, `BitPerfect` mode, unity/unmuted volume,
    matching channels, native-capable device) ⇒ verdict `Bit-Perfect` and
