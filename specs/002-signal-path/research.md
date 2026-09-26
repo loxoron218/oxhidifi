@@ -65,9 +65,11 @@ No new crates and no DB migration are required.
 
 - **Decision**: Derive wording from `OutputMode` + CPAL device id/name:
   `hw:`-style devices in `BitPerfect` mode → "ALSA direct/exclusive";
-  `default`/PipeWire/PulseAudio-named devices or `Resampled` mode → "ALSA
-  shared/system mixer"; USB-identifying names → "USB output"; streamer
-  hand-off → "network/streaming transport". `OutputMode` already round-trips
+   `default`/PipeWire/PulseAudio-named devices or `Resampled` mode → "ALSA
+   shared/system mixer"; USB-identifying names → "USB output"; streamer
+   hand-off → "network/streaming transport" (MVP: ALSA direct-exclusive /
+   shared-mixer / USB only — network/streaming wording deferred per FR-005,
+   since no streaming-provider input exists). `OutputMode` already round-trips
   through serde (`snake_case`), so persisted settings stay compatible.
 - **Rationale**: Directly implements the spec's Linux-terms clarification
   using the existing `devices.rs` vocabulary (`alsa_card_name`,

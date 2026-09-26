@@ -62,9 +62,11 @@ pub fn describe(kind: &StageFacts) -> (String, String, String);
 1. Bit-perfect input (native format, `BitPerfect` mode, unity/unmuted volume,
    matching channels, native-capable device) ⇒ verdict `Bit-Perfect` and
    `processing_speed.is_none()`.
-2. Any volume scaling, leveling, headroom, EQ/effect, resample, bit-depth or
+2. Any DSP-volume scaling (incl. volume-only), resample, bit-depth or
    DSD-to-PCM conversion ⇒ verdict ≥ `Processed` and
-   `processing_speed.is_some()`.
+   `processing_speed.is_some()`. (Leveling/headroom/EQ/effect inputs do not
+   exist in MVP; their `describe()` wording is covered by invariant 5, not by
+   builder emission.)
 3. Shared-mixer transport, forced downsampling, or lost device ⇒ verdict
    `Limited` even when enhancements are also present (`processing_speed`
    still follows invariant 2: `Some` iff an in-app alteration is present,
@@ -74,5 +76,6 @@ pub fn describe(kind: &StageFacts) -> (String, String, String);
 5. `describe` never returns empty strings (`explanation` = 1–2 plain sentences
    + input→output values where applicable); unknown source fields render as
    `unknown`; authentication stages are emitted only when provider auth facts
-   are present; external-renderer stages are title-only when filter/modulator
-   details are unknown; DSD + volume/DSP input always yields a `FormatConverter` stage.
+   are present (MVP: always omitted); external-renderer stages are title-only
+   in MVP (filter/modulator always `None` — no source fields exist);
+   DSD + volume/DSP input always yields a `FormatConverter` stage.

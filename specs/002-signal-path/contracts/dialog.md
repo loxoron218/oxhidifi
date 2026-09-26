@@ -23,32 +23,32 @@ Read-only view — zero DSP editing. FR references are normative. Tab-only: no o
   inside the tab content. No overlay dialog, popover, or modal sheet.
 - Header: whole-path verdict label + indicator, output/zone name, hint text
   equivalent to "Click on any stage of the path to learn more", and an
-  overflow (three-dot) `MenuButton` (sole allowed popover) with exactly three
-   actions: **Copy path summary** (copies `summarize_text`, confirms with a
-   `Toast`, no dialog), **open output/device settings** (presents the existing
-   `show_preferences_dialog` PreferencesDialog, audio page per
-   `src/ui/preferences/audio.rs:build_audio_page` — no inline editing),
-   **About** (presents the same existing PreferencesDialog per
-   `src/ui/preferences.rs` — no dedicated About view exists and no new dialog
-   is built in the tab; dedicated About page out of scope).
+   overflow (three-dot) `MenuButton` (sole allowed popover) with exactly three
+    actions: **Copy path summary** (copies `summarize_text`, confirms with a
+    `Toast`, no dialog), **open output/device settings** (presents the existing
+    `show_preferences_dialog` PreferencesDialog, which includes the audio page per
+    `src/ui/preferences/audio.rs:build_audio_page` — MVP selects no page, no inline editing),
+    **About** (presents the same existing PreferencesDialog default view per
+    `src/ui/preferences.rs` — same MVP surface as output settings by design; no dedicated About view exists
+    and no new dialog is built in the tab; dedicated About page is out-of-scope
+    follow-up). Acceptance per action is dialog presentation.
 - Chain: vertical `ListBox` in a `ScrolledWindow` inside the tab, source at top → output at
   bottom, connected by a continuous rail; circular badge icons left,
   two-line title (bold) + detail (blue link-styled) right; scrollable for
   8+ stages with header and device footer reachable.
 - Dark and light appearances: near-black tab page/light text vs. light tab page/dark
-  text, blue detail links, legible rail/badges/indicators in both (no
-  hardcoded colors; theme-aware styling).
+  text, theme-link-colored detail links (theme accent role, never a hardcoded hex),
+  legible rail/badges/indicators in both (generic symbolic icons, theme-aware styling,
+  no hardcoded colors or radii).
 
 ## Stages (FR-004, FR-005, FR-006, FR-007, FR-008)
 
 - One row per snapshot stage in `position` order: Source (origin + codec +
-  rate + depth + channels), each active transformation (authentication only
-  when provider auth facts present, otherwise omitted; decoding,
-  bit-depth/sample-rate/format conversions with
-  input→output wording, volume rows with dB, effects with setting summary,
-  transport with Linux mode wording), Output (destination kind) and terminal
-  external-renderer step when audio hands off beyond the app (filter/modulator
-  description when known, otherwise title-only).
+  rate + depth + channels), each active transformation (authentication omitted in
+  MVP — `auth` always `None`; decoding, bit-depth/sample-rate/format conversions with
+  input→output wording, DSP-volume rows with dB, transport with MVP Linux mode wording:
+  ALSA direct-exclusive, shared-mixer, or USB — network/streaming deferred), Output (destination kind) and terminal
+  external-renderer step when audio hands off beyond the app (title-only in MVP).
 - Per-stage verdict indicator = icon/shape + text label (never color alone).
 - Every row is selectable and expands inline directly under its title/detail
   lines to reveal its plain-language explanation (1–2
@@ -59,9 +59,11 @@ Read-only view — zero DSP editing. FR references are normative. Tab-only: no o
 
 ## Footer (FR-009)
 
-- One device card per `RenderingDevice` in chain order: display name (CPAL
-  `DeviceInfo`, fallback to device id), generic brand/device visual with
-  fallback icon when the brand is unknown, `View Product Manual` link iff
+- MVP: exactly one device card for the active output device (`device_id` /
+  `device_name` from `AudioOutput`; multi-card chain order is a deferred
+  forward rule): display name (CPAL `DeviceInfo`, fallback to device id),
+  generic symbolic brand/device visual with fallback icon when the brand is
+  unknown (never per-brand artwork), `View Product Manual` link iff
   `manual_url.is_some()` (MVP: always `None` — no device-manual config key exists
   yet, so the link is hidden; tests inject `RenderingDevice` fixtures directly;
   future optional `device_manuals` user-config map may populate it; never

@@ -10,8 +10,12 @@ Recreate Roon's Signal Path as a read-only, inspect-and-learn view for
 `oxhidifi`: a player-area quality badge button (Bit-Perfect / Processed / Limited)
 plus a persistent third library tab named `Signal` showing the live vertical
 stage chain from source file to output device, per-stage inline expandable
-explanations, per-device footer cards with manual links, and a
-processing-speed readout whenever in-app alteration is active. Approach from
+explanations, a single-device footer card (manual link hidden in MVP), and a
+processing-speed readout whenever in-app alteration is active. MVP scope: single
+active output device, no EQ/leveling/headroom engine inputs (display vocabulary
+with `describe()` coverage only), `auth` always `None`, `manual_url` always
+`None`, external-renderer title-only; multi-card chains, device-manual config,
+provider auth, and dedicated About content are deferred follow-ups. Approach from
 research: an immutable `SignalPathSnapshot` built off-thread from existing
 `EngineShared`/catalog state, classified by pure verdict/describe functions,
 polled atomically by a single responsive `ViewStack` tab page in
@@ -42,7 +46,10 @@ persisted data. N/A for new tables.
 **Testing**: `cargo test` — unit tests in `#[cfg(test)] mod tests` per file
 (`anyhow::Result` + `ensure!`/`bail!`; trivial `()` + `assert!`); GTK tests
 via `libadwaita::gtk::{self, test}` + plain `#[test]`; integration/acceptance
-in `tests/` with `//!` FR headers (new: `tests/signal_inspector.rs`, target `signal_path`); `criterion`
+in `tests/` with `//!` FR headers (new: `tests/signal_inspector.rs`, target `signal_path`,
+default ungated — the `verification-tests` feature gate does not apply); deterministic
+newest-wins unit test for the poll generation guard (T015, constitution Principle II
+simulation-style coverage for the concurrency-sensitive swap); `criterion`
 benches (`throughput`, `conversion_baseline`) only if the audio pipeline
 changes (it does not — display-only feature).
 
@@ -82,10 +89,11 @@ badge button navigating to it.
   depth ≤2, programmatic widgets, 4-block imports, `//!`/`///` docs, no
   hardcoding (device/manual data from runtime state, theme-aware styling).
 - **II. Testing Standards**: PASS — unit tests per new file; `tests/`
-  acceptance with `//!` FR-001..FR-015 header; `tempfile` fixtures where
-  files are needed; deterministic snapshot/verdict tests (pure functions,
-  no concurrency simulation needed — builder input is cloned state);
-  no audio-pipeline change ⇒ no new `criterion` bench required
+   acceptance with `//!` FR-001..FR-015 header; `tempfile` fixtures where
+   files are needed; deterministic snapshot/verdict tests (pure functions over
+   cloned builder input, so the builder itself needs no concurrency simulation)
+   plus a deterministic newest-wins unit test for the poll generation guard (T015 —
+   the one concurrency-sensitive swap rule); no audio-pipeline change ⇒ no new `criterion` bench required
   (existing `throughput`/`conversion_baseline` keep passing).
 - **III. UX Consistency**: PASS — HIG tab (`ToolbarView`+`HeaderBar`, `ListBox`
   chain, `MenuButton` kebab popover as sole popover exception), overflow
@@ -147,8 +155,12 @@ tests/
 └── signal_inspector.rs         # Acceptance tests (test target `signal_path`)
 ```
 
-**Structure Decision**: Single-project desktop-app layout. Playback truth
-stays in `src/playback/` (engine/decoder/resampler/volume/output owners
+**Structure Decision**: Single-project desktop-app layout. Name map: `playback::signal_path`
+(snapshot/verdict/describe truth) vs `ui::signal_view` (tab presentation: `signal_tab`,
+`signal_footer`, `signal_poll`) vs `ui::player::signal_badge` (entry badge) vs
+`tests/signal_inspector.rs` (acceptance file) run as test target `signal_path` vs
+`contracts/dialog.md` (historic name — specifies the tab-only view, no dialog is built).
+Playback truth stays in `src/playback/` (engine/decoder/resampler/volume/output owners
 unchanged; new `signal_path/` capability group reads them). Presentation
 is a third library tab: `src/ui/signal_view/` tab page (`signal_tab`,
 `signal_footer`, `signal_poll`) added to the existing `ViewStack` in

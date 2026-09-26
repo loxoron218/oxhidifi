@@ -24,15 +24,16 @@ Map each scenario to its contract (`contracts/snapshot.md` = S,
 
 ### 1. Bit-perfect chain (Story 1 + 2; S §1, D badge/header)
 
-1. Set output mode to bit-perfect, volume to maximum (0 dB), EQ/leveling off.
+1. Set output mode to bit-perfect, volume to maximum (0 dB, no DSP scaling).
 2. Play the 44.1 kHz/16-bit FLAC; open the `Signal` tab from the player badge button (badge navigates to the tab, no dialog).
 3. **Expect**: header verdict `Bit-Perfect`; chain Source → (decoder) →
    transport (`ALSA direct/exclusive` wording) → Output; no
-   processing-speed readout; badge matches header (SC-001, SC-002).
+   processing-speed readout; badge matches header (SC-001, SC-002 — timing and
+   human-classification parts are manual gates, not automated).
 
 ### 2. Processed chain with readout (Story 2 + 4; S §2, D readout)
 
-1. Lower the volume slightly (or enable leveling/EQ), keep playing.
+1. Lower the volume slightly (or enable resampling via output mode), keep playing.
 2. **Expect**: verdict flips to `Processed` live without leaving the tab;
    a volume row with dB value appears; `Processing speed: {x.x}x` readout (one
    decimal, header area below the verdict/zone line) is visible (volume-only
@@ -43,7 +44,7 @@ Map each scenario to its contract (`contracts/snapshot.md` = S,
 
 1. Route playback through the shared system mixer (`default`/PipeWire device)
    or force a downsampling output.
-2. **Expect**: verdict `Limited` even if EQ/volume enhancements are also
+2. **Expect**: verdict `Limited` even if a DSP-volume enhancement is also
    active (Limited > Processed > Bit-Perfect).
 
 ### 4. Stage explainer (Story 3; D stages)
@@ -51,14 +52,17 @@ Map each scenario to its contract (`contracts/snapshot.md` = S,
 1. Select the Source row, then a converter row (e.g. sample-rate).
 2. **Expect**: row expands inline with its plain-language explanation within 1 s, including the
    input→output transformation; readable on a narrow window; every row is
-   keyboard-selectable with a spoken title + detail (SC-004).
+   keyboard-selectable with a spoken title + detail (SC-004 — rendering asserted
+   by GTK interaction test; paraphrase comprehension is a manual gate).
 
 ### 5. Device footer (Story 4; D footer)
 
 1. Play to a named device; scroll to the footer.
-2. **Expect**: device card shows the rendering device's display name and a
-   `View Product Manual` link when manual info is known; streamer + DAC
-   setups show one card per device in chain order (SC-005).
+2. **Expect**: MVP shows exactly one device card with the rendering device's
+   display name; the `View Product Manual` link is hidden (`manual_url` always
+   `None` — shown iff `Some` once the `device_manuals` map lands); streamer + DAC
+   multi-card chains are deferred (SC-005 — naming asserted by contract test with
+   injected fixtures; link/count targets apply once the deferred inputs land).
 
 ### 6. Gapless + edge cases (edge cases; D liveness)
 
