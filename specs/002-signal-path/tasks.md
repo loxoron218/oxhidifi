@@ -22,10 +22,10 @@
 
 **Purpose**: Register test target, verify naming/mod wiring preconditions, establish baseline
 
-- [ ] T001 Verify new file stems are unique codebase-wide (`signal_path`, `path_snapshot`, `path_verdict`, `stage_describe`, `signal_tab`, `signal_footer`, `signal_poll`, `signal_badge` vs `signal_handlers`) via ripgrep in repo root
-- [ ] T002 Register `[[test]] name = "signal_path" path = "tests/signal_path.rs"` in Cargo.toml after the `transitions` entry
-- [ ] T003 Create acceptance-test skeleton in tests/signal_path.rs with `//!` FR-001..FR-015 header mapping SC-003/SC-006 to contract invariants and SC-002 logic as proxy invariants (human 9/10 classification validated manually via quickstart)
-- [ ] T004 Run `cargo collate` baseline in repo root and record any pre-existing failures before feature work
+- [X] T001 Verify new file stems are unique codebase-wide (`signal_path`, `path_snapshot`, `path_verdict`, `stage_describe`, `signal_tab`, `signal_footer`, `signal_poll`, `signal_badge` vs `signal_handlers`) via ripgrep in repo root
+- [X] T002 Register `[[test]] name = "signal_path" path = "tests/signal_path.rs"` in Cargo.toml after the `transitions` entry
+- [X] T003 Create acceptance-test skeleton in tests/signal_path.rs with `//!` FR-001..FR-015 header mapping SC-003/SC-006 to contract invariants and SC-002 logic as proxy invariants (human 9/10 classification validated manually via quickstart)
+- [X] T004 Run `cargo collate` baseline in repo root and record any pre-existing failures before feature work
 
 ---
 
