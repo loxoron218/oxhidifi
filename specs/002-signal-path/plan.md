@@ -54,8 +54,8 @@ benches (`throughput`, `conversion_baseline`) only if the audio pipeline
 changes (it does not — display-only feature).
 
 **Target Platform**: Linux desktop (GTK4 + Libadwaita 1.10), ALSA
-direct/exclusive and shared/system-mixer outputs, USB and network/streaming
-transports.
+direct/exclusive and shared/system-mixer outputs, USB output (MVP transports);
+network/streaming transports are deferred (no streaming-provider input — see FR-005 MVP scope).
 
 **Project Type**: Single-binary desktop app (`src/main.rs`, `src/lib.rs`).
 
@@ -75,7 +75,7 @@ full keyboard + screen-reader operability.
 
 **Scale/Scope**: FR-001..FR-015 (15 requirements), 4 entities
 (`SignalPathSnapshot`, `PathStage`, `QualityVerdict`, `RenderingDevice`),
-chains of 1–8+ stages, footer with 1–n device cards, one library tab + one player
+chains of 1–8+ stages, footer with exactly one device card in MVP (multi-card chains deferred), one library tab + one player
 badge button navigating to it.
 
 ## Constitution Check
@@ -84,8 +84,9 @@ badge button navigating to it.
 
 - **I. Code Quality**: PASS — new modules follow capability grouping
   (`playback::signal_path`, `ui::signal_view`), unique stems
-  (`signal_path`, `path_snapshot`, `path_verdict`, `stage_describe`,
-  `signal_tab`, `signal_footer`, `signal_poll`, `signal_badge`), parent-index style, ≤400 lines/file,
+   (`signal_path`, `path_snapshot`, `path_verdict`, `stage_build`,
+   `stage_output`, `stage_describe`, `signal_tab`, `signal_footer`,
+   `signal_publish`, `signal_poll`, `signal_badge`), parent-index style, ≤400 lines/file,
   depth ≤2, programmatic widgets, 4-block imports, `//!`/`///` docs, no
   hardcoding (device/manual data from runtime state, theme-aware styling).
 - **II. Testing Standards**: PASS — unit tests per new file; `tests/`
@@ -141,12 +142,15 @@ src/
 │   └── signal_path/
 │       ├── path_snapshot.rs      # Immutable snapshot builder from EngineShared + catalog
 │       ├── path_verdict.rs       # Per-stage + whole-path verdict (Limited > Processed > Bit-Perfect)
+│       ├── stage_build.rs        # Source/decoder/converter/volume stage constructors behind build_snapshot
+│       ├── stage_output.rs       # Transport/output/footer-device stage constructors behind build_snapshot
 │       └── stage_describe.rs     # Titles, details, plain-language explanations per StageKind
 └── ui/
     ├── signal_view.rs            # Parent index: Signal tab capability (ViewStack page `signal`)
     ├── signal_view/
     │   ├── signal_tab.rs         # Tab page: header verdict, ListBox chain with inline explainers, MenuButton kebab
     │   ├── signal_footer.rs      # Device footer card(s), generic art + device name
+    │   ├── signal_publish.rs     # Off-thread publisher: event subscription, rebuilds, per-subscriber mailbox feed
     │   └── signal_poll.rs        # timeout_add_local poll + try_recv drain, whole-snapshot swap
     └── player/
         └── signal_badge.rs       # Player-area verdict badge button navigating to the Signal tab

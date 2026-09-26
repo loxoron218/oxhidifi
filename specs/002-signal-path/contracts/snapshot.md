@@ -60,7 +60,9 @@ pub fn describe(kind: &StageFacts) -> (String, String, String);
 ## Invariants (MUST hold; asserted in `tests/signal_inspector.rs`, target `signal_path`)
 
 1. Bit-perfect input (native format, `BitPerfect` mode, unity/unmuted volume,
-   matching channels, native-capable device) ⇒ verdict `Bit-Perfect` and
+   matching channels, device matching derived nativeness — track/decoder rate,
+   depth, and channels equal device rate/channels under `OutputMode::BitPerfect`,
+   no separate native-capability input) ⇒ verdict `Bit-Perfect` and
    `processing_speed.is_none()`.
 2. Any DSP-volume scaling (incl. volume-only), resample, bit-depth or
    DSD-to-PCM conversion ⇒ verdict ≥ `Processed` and

@@ -21,20 +21,19 @@ Read-only view — zero DSP editing. FR references are normative. Tab-only: no o
   next to Albums/Artists at all window sizes; narrow layout adapts via the
   existing `ViewSwitcher` / `ViewSwitcherBar` pattern with the chain scrolling
   inside the tab content. No overlay dialog, popover, or modal sheet.
-- Header: whole-path verdict label + indicator, output/zone name, hint text
-  equivalent to "Click on any stage of the path to learn more", and an
+- Header: whole-path verdict label + indicator, output/zone name, hint text with the exact literal `Click on any stage of the path to learn more`, and an
    overflow (three-dot) `MenuButton` (sole allowed popover) with exactly three
-    actions: **Copy path summary** (copies `summarize_text`, confirms with a
-    `Toast`, no dialog), **open output/device settings** (presents the existing
-    `show_preferences_dialog` PreferencesDialog, which includes the audio page per
-    `src/ui/preferences/audio.rs:build_audio_page` — MVP selects no page, no inline editing),
-    **About** (presents the same existing PreferencesDialog default view per
-    `src/ui/preferences.rs` — same MVP surface as output settings by design; no dedicated About view exists
-    and no new dialog is built in the tab; dedicated About page is out-of-scope
-    follow-up). Acceptance per action is dialog presentation.
+     actions: **Copy path summary** (copies `summarize_text`, confirms with a
+     `Toast`, no dialog), **open output/device settings** (presents the existing
+     `show_preferences_dialog` PreferencesDialog with the audio page selected
+     via page-selection support per `src/ui/preferences/audio.rs:build_audio_page` — no inline editing),
+     **About** (presents the existing PreferencesDialog default view per
+     `src/ui/preferences.rs` — default landing page with no page selection; no dedicated About view exists
+     and no new dialog is built in the tab; dedicated About page is out-of-scope
+     follow-up). Acceptance per action is dialog presentation on the correct landing page.
 - Chain: vertical `ListBox` in a `ScrolledWindow` inside the tab, source at top → output at
   bottom, connected by a continuous rail; circular badge icons left,
-  two-line title (bold) + detail (blue link-styled) right; scrollable for
+   two-line title (bold) + detail (theme-accent link-styled, never a hardcoded color) right; scrollable for
   8+ stages with header and device footer reachable.
 - Dark and light appearances: near-black tab page/light text vs. light tab page/dark
   text, theme-link-colored detail links (theme accent role, never a hardcoded hex),

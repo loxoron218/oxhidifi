@@ -26,7 +26,7 @@ Map each scenario to its contract (`contracts/snapshot.md` = S,
 
 1. Set output mode to bit-perfect, volume to maximum (0 dB, no DSP scaling).
 2. Play the 44.1 kHz/16-bit FLAC; open the `Signal` tab from the player badge button (badge navigates to the tab, no dialog).
-3. **Expect**: header verdict `Bit-Perfect`; chain Source → (decoder) →
+3. **Expect**: header verdict `Bit-Perfect`; chain Source → Decoder (iff live decoder facts are present, otherwise omitted) →
    transport (`ALSA direct/exclusive` wording) → Output; no
    processing-speed readout; badge matches header (SC-001, SC-002 — timing and
    human-classification parts are manual gates, not automated).

@@ -117,7 +117,12 @@ under `OutputMode::BitPerfect` — no separate native-capability input),
 always `None` in MVP (title-only),
 `SnapshotInput::auth: Option<AuthFacts>` (`AuthFacts { provider: String, verified: bool }`;
 MVP always `None`, so the Authentication stage is omitted — populated only when
-streaming-provider auth facts exist for the playing source).
+streaming-provider auth facts exist for the playing source). Snapshot-sample
+timing for the processing-speed estimate arrives via `SnapshotInput` timing
+fields (`sampled_at_wall: u64` monotonic wall-clock nanos plus cumulative
+decoded/resampled frame counters, all captured by the publisher worker before
+the call); the EMA (α=0.3) state lives in the publisher worker across polls,
+never in the immutable snapshot — `build_snapshot` stays pure over one input.
 
 ## 6. Error type
 
