@@ -51,7 +51,9 @@ No new crates and no DB migration are required.
   (frames decoded + resampled per wall-clock second ÷ device rate, smoothed),
   computed in the off-thread builder — never instrumented in the audio
   callback. Shown iff any in-app alteration is active (conversion, effect, or
-  volume/leveling/headroom, including volume-only); hidden when bit-perfect.
+  volume/leveling/headroom, including volume-only); hidden when bit-perfect
+  AND when Limited-only with no in-app alteration (shared-mixer/forced-downsample/lost-device
+  alone keeps `processing_speed` as `None` — see `contracts/snapshot.md` invariants 2–3).
 - **Rationale**: Matches the clarified requirement (volume-only triggers the
   readout) without touching the lock-free hot path. Sampling at snapshot
   cadence is accurate enough for a headroom indicator.

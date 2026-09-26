@@ -1,5 +1,9 @@
 # Contract: Signal Tab UI Behavior (`002-signal-path`)
 
+> Note: this file is historically named `dialog.md`; it specifies the tab-only
+> view — no dialog is built (sole exception: the standard `MenuButton` kebab
+> popover per FR-014).
+
 **Scope**: `src/ui/player/signal_badge.rs` + `src/ui/signal_view/signal_tab.rs` (+ `signal_footer.rs`, `signal_poll.rs`).
 Read-only view — zero DSP editing. FR references are normative. Tab-only: no overlay dialog/popover/sheet except the standard `MenuButton` kebab popover.
 
@@ -20,11 +24,13 @@ Read-only view — zero DSP editing. FR references are normative. Tab-only: no o
 - Header: whole-path verdict label + indicator, output/zone name, hint text
   equivalent to "Click on any stage of the path to learn more", and an
   overflow (three-dot) `MenuButton` (sole allowed popover) with exactly three
-  actions: **Copy path summary** (copies `summarize_text`, confirms with a
-  `Toast`, no dialog), **open output/device settings** (navigates to the
-  audio/output preferences view — no inline editing),
-  **About** (navigates to the existing app About/preferences view, no new
-  dialog).
+   actions: **Copy path summary** (copies `summarize_text`, confirms with a
+   `Toast`, no dialog), **open output/device settings** (presents the existing
+   `show_preferences_dialog` PreferencesDialog, audio page per
+   `src/ui/preferences/audio.rs:build_audio_page` — no inline editing),
+   **About** (presents the same existing PreferencesDialog per
+   `src/ui/preferences.rs` — no dedicated About view exists and no new dialog
+   is built in the tab; dedicated About page out of scope).
 - Chain: vertical `ListBox` in a `ScrolledWindow` inside the tab, source at top → output at
   bottom, connected by a continuous rail; circular badge icons left,
   two-line title (bold) + detail (blue link-styled) right; scrollable for
@@ -56,8 +62,10 @@ Read-only view — zero DSP editing. FR references are normative. Tab-only: no o
 - One device card per `RenderingDevice` in chain order: display name (CPAL
   `DeviceInfo`, fallback to device id), generic brand/device visual with
   fallback icon when the brand is unknown, `View Product Manual` link iff
-  `manual_url.is_some()` (`manual_url` only from explicit optional user
-  config/catalog when known; never hardcoded or bundled); never names a
+  `manual_url.is_some()` (MVP: always `None` — no device-manual config key exists
+  yet, so the link is hidden; tests inject `RenderingDevice` fixtures directly;
+  future optional `device_manuals` user-config map may populate it; never
+  hardcoded or bundled); never names a
   non-rendering device.
 
 ## Readout (FR-010)

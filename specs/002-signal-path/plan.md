@@ -136,10 +136,10 @@ src/
 │       └── stage_describe.rs     # Titles, details, plain-language explanations per StageKind
 └── ui/
     ├── signal_view.rs            # Parent index: Signal tab capability (ViewStack page `signal`)
-    └── signal_view/
-        ├── signal_tab.rs         # Tab page: header verdict, ListBox chain with inline explainers, MenuButton kebab
-        ├── signal_footer.rs      # Device footer card(s), generic art + device name
-        ├── signal_poll.rs        # timeout_add_local poll + try_recv drain, whole-snapshot swap
+    ├── signal_view/
+    │   ├── signal_tab.rs         # Tab page: header verdict, ListBox chain with inline explainers, MenuButton kebab
+    │   ├── signal_footer.rs      # Device footer card(s), generic art + device name
+    │   └── signal_poll.rs        # timeout_add_local poll + try_recv drain, whole-snapshot swap
     └── player/
         └── signal_badge.rs       # Player-area verdict badge button navigating to the Signal tab
 
@@ -152,11 +152,15 @@ stays in `src/playback/` (engine/decoder/resampler/volume/output owners
 unchanged; new `signal_path/` capability group reads them). Presentation
 is a third library tab: `src/ui/signal_view/` tab page (`signal_tab`,
 `signal_footer`, `signal_poll`) added to the existing `ViewStack` in
-`src/ui/panes.rs` next to Albums/Artists with `ActiveTab::Signal` persistence,
+`src/ui/panes.rs` next to Albums/Artists with `ActiveTab::Signal` persistence
+(new `Signal` variant in `src/storage/active_tab.rs` plus settings/persistence
+round-trip — see tasks T013),
 plus a verdict badge button in `src/ui/player/` that navigates to the tab.
 No new top-level domains, no `models/`/`utils/` groupings, all new stems
 verified unique (`signal_handlers` is the only near-collision and is
-distinct).
+distinct). If `signal_tab.rs` approaches the 400-line gate, pre-split header +
+chain rows into `signal_header.rs` / `signal_chain.rs` (new stems must stay
+unique codebase-wide).
 
 ## Complexity Tracking
 

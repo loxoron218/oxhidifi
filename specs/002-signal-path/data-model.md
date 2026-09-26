@@ -18,8 +18,8 @@ poll generation; the UI swaps instances atomically, never mutates them.
 | `verdict` | `QualityVerdict` | Whole-path verdict (see §3 precedence). |
 | `stages` | `Vec<PathStage>` | Ordered top (source) → bottom (output/external). |
 | `devices` | `Vec<RenderingDevice>` | Rendering devices in chain order (1–n). |
-| `processing_speed` | `Option<f64>` | Multiple of real time; `Some` iff any in-app alteration is active (incl. volume-only), else `None` (hidden). |
-| `playback_status` | `PlaybackStatus` | `Playing` / `Paused` / `Stopped` — retained last-known path shows a paused/stopped ribbon instead of vanishing. |
+| `processing_speed` | `Option<f64>` | Multiple of real time (snapshot-sampled, EMA α=0.3; informational — presence only is asserted); `Some` iff any in-app alteration is active (incl. volume-only), else `None` (hidden). |
+| `playback_status` | `PlaybackStatus` (reused from `crate::playback::state`; do NOT redefine) | `Playing` / `Paused` / `Stopped` — retained last-known path shows a paused/stopped ribbon instead of vanishing. |
 
 **Validation**: `stages` is non-empty iff `track_id.is_some()`; first stage
 is always `StageKind::Source`; last stage is always `Output` or
@@ -79,7 +79,7 @@ contract violation (SC-003: zero silent alterations).
 | `role` | `DeviceRole` | `TransportTarget` / `Output` / `ExternalRenderer`. |
 | `brand_visual` | `String` | Generic symbolic icon name for the brand/device tile; fallback icon when the brand is unknown (never hardcoded per-brand artwork). |
 | `illustration` | `String` | Outline illustration icon name (fallback when device-specific art is unknown). |
-| `manual_url` | `Option<String>` | `Some` only when manual info is known from explicit optional user config/catalog; card shows `View Product Manual` link iff `Some`. Never hardcoded or bundled. |
+| `manual_url` | `Option<String>` | `Some` only when manual info is known from explicit optional user config/catalog; card shows `View Product Manual` link iff `Some`. Never hardcoded or bundled. MVP: always `None` (no device-manual config key exists yet — link hidden; contract tests inject `RenderingDevice` fixtures directly). Future: optional `device_manuals` user-config map (device id/name → manual URL) may populate it. |
 
 **Validation**: every snapshot with a track lists ≥1 device; a streamer +
 separate DAC produce ≥2 cards in chain order; cards never name a device that
@@ -99,7 +99,10 @@ Inputs (read-only, owned elsewhere): `Decoder::params` + `TrackAudio`
 (Source/Decoder facts), resampler in/out rates (converter stages),
 `PlaybackState::volume/muted/output_mode` (volume + verdict facts),
 `AudioOutput` id/name/rate/channels/mode (transport/output/device facts),
-`PlaybackEvent::DeviceLost` (lost-device state).
+`PlaybackEvent::DeviceLost` (lost-device state),
+`SnapshotInput::auth: Option<AuthFacts>` (`AuthFacts { provider: String, verified: bool }`;
+MVP always `None`, so the Authentication stage is omitted — populated only when
+streaming-provider auth facts exist for the playing source).
 
 ## 6. Error type
 

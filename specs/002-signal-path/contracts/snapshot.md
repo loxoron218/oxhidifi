@@ -15,8 +15,9 @@ REQUIRES updating the acceptance tests.
 ///   `get_track`), decoder params (`AudioParams`), pipeline facts (resampler
 ///   in/out rates, channel counts), playback facts (volume, mute, output
 ///   mode, status), and output facts (device id/name/rate/mode). Provider
-///   auth facts are optional input: no Authentication stage is emitted when
-///   absent.
+///   auth facts are optional input (`SnapshotInput::auth: Option<AuthFacts>`
+///   with `AuthFacts { provider: String, verified: bool }`; MVP always `None`):
+///   no Authentication stage is emitted when absent.
 ///
 /// # Returns
 /// * `Result<SignalPathSnapshot, SignalPathError>` - Ready-to-render
