@@ -17,9 +17,10 @@
 //!   converter input-to-output wording plus explicit DSD-to-PCM.
 //! - SC-006 (gapless atomic swap) maps to `contracts/snapshot.md` invariant 4 plus the data-model
 //!   generation rule: whole-snapshot swap on `generation` change, never mixed rows.
-//! - SC-002 (9/10 classify untouched/processed/limited) is proxy logic here: precedence Limited >
-//!   Processed > Bit-Perfect over per-stage verdicts. Human 9/10 classification is validated
-//!   manually via `quickstart.md` scenarios 1-3, not asserted automatically.
+//! - SC-002 (9/10 classify untouched/processed/limited) is asserted via `build_snapshot` verdict
+//!   precedence (Limited > Processed > Bit-Perfect) over real engine facts. Human 9/10
+//!   classification is validated manually via `quickstart.md` scenarios 1-3, not asserted
+//!   automatically.
 //! - SC-001/SC-004/SC-005 map to `contracts/dialog.md` (badge/header, explainer <1s, footer cards)
 //!   and are covered by later GTK/quickstart validation (T018, T026, T033..T034).
 
@@ -42,48 +43,52 @@ mod tests {
                 path_snapshot::{build_snapshot, summarize_text},
                 path_verdict::resolve_verdict,
             },
-            state::{MuteState::Unmuted, PlaybackStatus::Playing},
+            state::{
+                MuteState::{Muted, Unmuted},
+                PlaybackStatus::Playing,
+            },
         },
         storage::catalog::TrackAudio,
     };
 
-    const VERDICTS: [&str; 3] = ["Bit-Perfect", "Processed", "Limited"];
-
-    fn resolve_proxy(stages: &[&str]) -> &'static str {
-        if stages.contains(&"Limited") {
-            return "Limited";
-        }
-        if stages.contains(&"Processed") {
-            return "Processed";
-        }
-        "Bit-Perfect"
+    fn assert_built(input: &SnapshotInput, verdict: QualityVerdict, speed: bool) -> Result<()> {
+        let snapshot = build_snapshot(input)?;
+        ensure!(snapshot.verdict == verdict, "verdict must resolve");
+        let shown = snapshot.processing_speed.is_some();
+        ensure!(shown == speed, "speed presence must match");
+        Ok(())
     }
 
-    fn assert_verdict_precedence_proxy() -> Result<()> {
-        ensure!(
-            VERDICTS == ["Bit-Perfect", "Processed", "Limited"],
-            "canonical verdict labels must be exactly Bit-Perfect/Processed/Limited"
-        );
-        ensure!(
-            resolve_proxy(&[]) == "Bit-Perfect",
-            "empty stage list resolves to Bit-Perfect"
-        );
-        ensure!(
-            resolve_proxy(&["Bit-Perfect", "Bit-Perfect"]) == "Bit-Perfect",
-            "all bit-perfect stages resolve to Bit-Perfect"
-        );
-        ensure!(
-            resolve_proxy(&["Bit-Perfect", "Processed"]) == "Processed",
-            "any Processed stage forces Processed"
-        );
-        ensure!(
-            resolve_proxy(&["Processed", "Limited"]) == "Limited",
-            "Limited wins over Processed"
-        );
-        ensure!(
-            resolve_proxy(&["Bit-Perfect", "Limited"]) == "Limited",
-            "Limited wins over Bit-Perfect"
-        );
+    #[test]
+    fn us2_verdict_precedence() -> Result<()> {
+        let perfect = playing_input(21, 11, 48000, Some(16));
+        assert_built(&perfect, BitPerfect, false)?;
+        let mut scaled = perfect.clone();
+        scaled.generation = 12;
+        scaled.volume = 0.5;
+        assert_built(&scaled, Processed, true)?;
+        let mut muted = perfect.clone();
+        muted.generation = 13;
+        muted.muted = Muted;
+        assert_built(&muted, Processed, true)?;
+        let mut wide = perfect.clone();
+        wide.generation = 14;
+        wide.device_channels = 6;
+        assert_built(&wide, Processed, true)?;
+        let mut up = perfect.clone();
+        up.generation = 15;
+        up.device_sample_rate = 96000;
+        assert_built(&up, Processed, true)?;
+        let down = playing_input(22, 16, 96000, Some(24));
+        assert_built(&down, Limited, true)?;
+        let mut shared = scaled;
+        shared.generation = 17;
+        shared.device_id = String::from("default");
+        assert_built(&shared, Limited, true)?;
+        let mut lost = perfect;
+        lost.generation = 18;
+        lost.device_lost = true;
+        assert_built(&lost, Limited, false)?;
         Ok(())
     }
 
@@ -117,11 +122,6 @@ mod tests {
             "track id must change across gapless transition (SC-006)"
         );
         Ok(())
-    }
-
-    #[test]
-    fn sc002_verdict_precedence_proxy() -> Result<()> {
-        assert_verdict_precedence_proxy()
     }
 
     #[test]

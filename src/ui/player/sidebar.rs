@@ -27,7 +27,9 @@ use crate::{
             acoustic_fader::build_volume,
             deck::{build_queue_section, build_seek_section, build_transport},
             playback_events::spawn_async_listeners,
+            signal_badge::{build_signal_badge, start_badge_poll},
         },
+        signal_view::{signal_poll::create_mailbox, signal_publish::spawn_snapshot_publisher},
     },
 };
 
@@ -92,6 +94,12 @@ pub fn format_time(seconds: f64) -> String {
 /// Listens to `PlaybackEvent` stream for fully event-driven updates.
 pub fn build_player_content(state: &Arc<AppState>) -> ScrolledWindow {
     let (scroll, content) = build_scroll_content();
+
+    let badge = build_signal_badge(state);
+    content.prepend(badge.widget());
+    let (snapshot_tx, snapshot_rx) = create_mailbox();
+    spawn_snapshot_publisher(&state.playback, &state.storage, snapshot_tx);
+    start_badge_poll(state, &badge, snapshot_rx);
 
     let artwork_image = build_artwork_placeholder();
     content.append(&artwork_image);
