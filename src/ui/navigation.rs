@@ -16,7 +16,7 @@ use crate::{
     storage::{
         active_tab::{
             ActiveTab,
-            ActiveTab::{Albums, Artists},
+            ActiveTab::{Albums, Artists, Signal},
         },
         database::SqliteStorage,
     },
@@ -27,12 +27,21 @@ use crate::{
 };
 
 /// Save the active tab to storage asynchronously and notify subscribers.
+///
+/// Maps the visible stack child name (`albums`, `artists`, `signal`) to its
+/// tab; unknown names fall back to the albums tab.
 pub fn persist_active_tab(
     storage: &Arc<SqliteStorage>,
     active_tab: &ValueSignal<ActiveTab>,
     name: &str,
 ) {
-    let tab = if name == "artists" { Artists } else { Albums };
+    let tab = if name == "artists" {
+        Artists
+    } else if name == "signal" {
+        Signal
+    } else {
+        Albums
+    };
     let s = Arc::clone(storage);
     let mut handles = UiHandles::default();
     handles.retain_task(spawn_future_local(async move {
@@ -110,7 +119,7 @@ mod tests {
             AppState,
             NavigationEvent::{self, AlbumDetail, Back},
         },
-        storage::active_tab::ActiveTab::{Albums, Artists},
+        storage::active_tab::ActiveTab::{Albums, Artists, Signal},
         ui::navigation::{handle_navigation_event, persist_active_tab},
     };
 
@@ -133,6 +142,16 @@ mod tests {
         ensure!(state.active_tab.borrow() == Albums);
         ensure!(matches!(rx.try_recv(), Ok(Artists)));
         ensure!(matches!(rx.try_recv(), Ok(Albums)));
+        Ok(())
+    }
+
+    #[test]
+    fn persist_active_tab_maps_signal() -> Result<()> {
+        let state = Arc::new(AppState::mock()?);
+        let rx = state.active_tab.subscribe();
+        persist_active_tab(&state.storage, &state.active_tab, "signal");
+        ensure!(state.active_tab.borrow() == Signal);
+        ensure!(matches!(rx.try_recv(), Ok(Signal)));
         Ok(())
     }
 

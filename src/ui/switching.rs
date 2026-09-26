@@ -11,7 +11,7 @@ use {
 use crate::{
     app::runtime::{AppState, NavigationEvent::Back},
     storage::{
-        active_tab::ActiveTab::{self, Albums, Artists},
+        active_tab::ActiveTab::{self, Albums, Artists, Signal},
         view_mode::ViewMode::{Column, Grid},
     },
     ui::{
@@ -40,6 +40,7 @@ pub fn handle_tab_switch(
     stack.set_visible_child_name(match tab {
         Albums => "albums",
         Artists => "artists",
+        Signal => "signal",
     });
     let mode = state.view_mode.borrow();
     let child_name = match mode {
@@ -53,6 +54,7 @@ pub fn handle_tab_switch(
             &state.artist_grid.dirty,
             &state.artists_sort_tx,
         ),
+        Signal => return,
     };
     let was_dirty = dirty.swap(false, Relaxed);
     if mode_stack.child_by_name(child_name).is_some() {
@@ -64,6 +66,7 @@ pub fn handle_tab_switch(
     match tab {
         Albums => lazy_build_album_mode(state, album_stack, narrow_state, mode),
         Artists => lazy_build_artist_mode(state, artist_stack, mode),
+        Signal => {}
     }
 }
 
@@ -122,7 +125,7 @@ mod tests {
 
     use crate::{
         app::runtime::AppState,
-        storage::active_tab::ActiveTab::{Albums, Artists},
+        storage::active_tab::ActiveTab::{Albums, Artists, Signal},
         ui::{gallery::narrow_flag::NarrowState, switching::handle_tab_switch},
     };
 
@@ -141,6 +144,7 @@ mod tests {
         let view_stack = ViewStack::new();
         add_page(&view_stack, "albums");
         add_page(&view_stack, "artists");
+        add_page(&view_stack, "signal");
         let album_stack = Stack::new();
         add_stack_page(&album_stack, "grid");
         add_stack_page(&album_stack, "column");
@@ -174,6 +178,20 @@ mod tests {
                 .visible_child_name()
                 .is_some_and(|n| n == "artists"),
             "artists tab must become visible"
+        );
+        handle_tab_switch(
+            &view_stack,
+            &state,
+            Signal,
+            &album_stack,
+            &artist_stack,
+            &narrow,
+        );
+        ensure!(
+            view_stack
+                .visible_child_name()
+                .is_some_and(|n| n == "signal"),
+            "signal tab must become visible without touching the grids"
         );
         Ok(())
     }

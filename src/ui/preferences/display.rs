@@ -18,7 +18,7 @@ use {
 use crate::{
     app::runtime::AppState,
     storage::{
-        active_tab::ActiveTab::{self, Albums, Artists},
+        active_tab::ActiveTab::{self, Albums, Artists, Signal},
         view_mode::ViewMode::{self, Column, Grid},
     },
 };
@@ -103,7 +103,7 @@ pub fn build_view_page(dialog: &PreferencesDialog, state: &Arc<AppState>) {
         }));
     display_group.add(&view_mode_row);
 
-    let tab_model = StringList::new(&["Albums", "Artists"]);
+    let tab_model = StringList::new(&["Albums", "Artists", "Signal"]);
     let tab_row = ComboRow::builder()
         .title("Default Active Tab")
         .subtitle("Initial tab shown when the library opens")
@@ -112,13 +112,20 @@ pub fn build_view_page(dialog: &PreferencesDialog, state: &Arc<AppState>) {
     tab_row.set_selected(match state.storage.get_active_tab() {
         Albums => 0,
         Artists => 1,
+        Signal => 2,
     });
     let state_tab = Arc::clone(state);
     state
         .handles
         .lock()
         .retain_signal(tab_row.connect_selected_notify(move |row| {
-            let tab = if row.selected() == 0 { Albums } else { Artists };
+            let tab = if row.selected() == 0 {
+                Albums
+            } else if row.selected() == 1 {
+                Artists
+            } else {
+                Signal
+            };
             let s = Arc::clone(&state_tab);
             state_tab
                 .handles

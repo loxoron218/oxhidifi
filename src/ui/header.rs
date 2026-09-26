@@ -22,7 +22,12 @@ use {
 };
 
 use crate::{
-    app::runtime::AppState, storage::view_mode::ViewMode, ui::toggle_popover::build_popover,
+    app::runtime::AppState,
+    storage::{
+        active_tab::ActiveTab::{Albums, Artists},
+        view_mode::ViewMode,
+    },
+    ui::toggle_popover::build_popover,
 };
 
 /// Persist the view mode setting to storage, logging on failure.
@@ -113,9 +118,8 @@ fn subscribe_view_updates(
         .retain_task(spawn_future_local(async move {
             let tab_rx = s2.active_tab.subscribe();
             while let Ok(tab) = tab_rx.recv().await {
-                let is_albums = tab.is_albums();
-                albums_sort_btn.set_visible(is_albums);
-                artists_sort_btn.set_visible(!is_albums);
+                albums_sort_btn.set_visible(tab == Albums);
+                artists_sort_btn.set_visible(tab == Artists);
             }
         }));
 }

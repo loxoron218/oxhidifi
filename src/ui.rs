@@ -13,6 +13,7 @@ pub mod panes;
 pub mod player;
 pub mod preferences;
 pub mod signal_handlers;
+pub mod signal_view;
 pub mod status;
 pub mod switching;
 pub mod texture_pool;

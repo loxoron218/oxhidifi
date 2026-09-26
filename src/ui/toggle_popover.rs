@@ -21,7 +21,7 @@ use {
 use crate::{
     app::runtime::AppState,
     storage::{
-        active_tab::ActiveTab::Albums,
+        active_tab::ActiveTab::{Albums, Artists},
         view_mode::ViewMode::{self, Column, Grid},
     },
     ui::{
@@ -95,9 +95,9 @@ pub fn build_popover(state: &Arc<AppState>, parent: &Window) -> (Popover, Widget
     let albums_sort = build_albums_drag_list(state).upcast::<Widget>();
     let artists_sort = build_artists_drag_list(state).upcast::<Widget>();
 
-    let show_albums = state.storage.get_active_tab() == Albums;
-    albums_sort.set_visible(show_albums);
-    artists_sort.set_visible(!show_albums);
+    let active = state.storage.get_active_tab();
+    albums_sort.set_visible(active == Albums);
+    artists_sort.set_visible(active == Artists);
 
     sort_box.append(&albums_sort);
     sort_box.append(&artists_sort);

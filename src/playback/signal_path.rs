@@ -7,7 +7,10 @@
 //! instrumented. Tracing uses flat `generation`, `track_id`,
 //! `verdict_previous` / `verdict_current`, and `stage_count` fields.
 
+pub mod path_snapshot;
 pub mod path_verdict;
+pub mod stage_build;
+pub mod stage_output;
 
 use thiserror::Error;
 

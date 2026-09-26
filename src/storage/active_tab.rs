@@ -9,16 +9,21 @@ pub enum ActiveTab {
     Albums,
     /// Artists tab.
     Artists,
+    /// Live audio signal path tab.
+    Signal,
 }
 
 impl ActiveTab {
     /// Check if this is the albums tab.
     #[must_use]
     pub const fn is_albums(self) -> bool {
-        match self {
-            Self::Albums => true,
-            Self::Artists => false,
-        }
+        matches!(self, Self::Albums)
+    }
+
+    /// Check if this is the signal path tab.
+    #[must_use]
+    pub const fn is_signal(self) -> bool {
+        matches!(self, Self::Signal)
     }
 }
 
@@ -30,7 +35,7 @@ mod tests {
     };
 
     use crate::storage::{
-        active_tab::ActiveTab::{Albums, Artists},
+        active_tab::ActiveTab::{Albums, Artists, Signal},
         config::persistence::SettingsStore,
         settings::UserSettings,
     };
@@ -45,6 +50,10 @@ mod tests {
         ensure!(store.get_active_tab() == Albums);
         store.update_memory(|s| s.active_tab = Artists);
         ensure!(store.get_active_tab() == Artists);
+        store.update_memory(|s| s.active_tab = Signal);
+        ensure!(store.get_active_tab() == Signal);
+        ensure!(Signal.is_signal());
+        ensure!(!Albums.is_signal());
         Ok(())
     }
 }

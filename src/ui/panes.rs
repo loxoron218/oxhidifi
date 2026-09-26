@@ -15,7 +15,7 @@ use libadwaita::{
 use crate::{
     app::runtime::AppState,
     storage::{
-        active_tab::ActiveTab::{Albums, Artists},
+        active_tab::ActiveTab::{Albums, Artists, Signal},
         view_mode::ViewMode::{self, Column, Grid},
     },
     ui::{
@@ -27,6 +27,11 @@ use crate::{
         header::build_view_toggle,
         navigation::handle_navigation_event,
         player::{sidebar::build_player_content, wire_sidebar_toggles},
+        signal_view::{
+            signal_poll::{create_mailbox, start_signal_poll},
+            signal_publish::spawn_snapshot_publisher,
+            signal_tab::{SignalTab, build_signal_page},
+        },
         status::StatusBar,
         switching::{handle_tab_switch, wire_tab_tracking},
     },
@@ -72,11 +77,11 @@ fn build_sidebar(state: &Arc<AppState>, back_button: &ToggleButton) -> (ToolbarV
     (sidebar_toolbar, close_button)
 }
 
-/// Build the library `ViewStack` with album and artist pages.
+/// Build the library `ViewStack` with album, artist, and signal pages.
 fn build_library_stack(
     state: &Arc<AppState>,
     narrow_state: &Arc<NarrowState>,
-) -> (ViewStack, Stack, Stack) {
+) -> (ViewStack, Stack, Stack, SignalTab) {
     let stack = ViewStack::new();
     stack.set_vexpand(true);
     let album_grid = build_album_grid(state, narrow_state);
@@ -95,10 +100,20 @@ fn build_library_stack(
         "avatar-default-symbolic",
     );
     ar.set_icon_name(Some("avatar-default-symbolic"));
-    if state.storage.get_active_tab() == Artists {
-        stack.set_visible_child_name("artists");
+    let signal_tab = build_signal_page();
+    drop(stack.add_titled_with_icon(
+        signal_tab.widget(),
+        Some("signal"),
+        "Signal",
+        "audio-x-generic-symbolic",
+    ));
+    match state.storage.get_active_tab() {
+        Artists => stack.set_visible_child_name("artists"),
+        Signal => stack.set_visible_child_name("signal"),
+        Albums => {}
     }
-    (stack, album_grid.mode_stack, artist_grid.mode_stack)
+    let modes = (album_grid.mode_stack, artist_grid.mode_stack, signal_tab);
+    (stack, modes.0, modes.1, modes.2)
 }
 
 /// Wire tab and view-mode signals for the library stack.
@@ -147,7 +162,7 @@ fn build_content_pane(
 ) -> (ToolbarView, ViewStack, NavigationView, SwitcherGroup) {
     let content_toolbar = ToolbarView::new();
     let content_header = HeaderBar::new();
-    let (stack, album_stack, artist_stack) = build_library_stack(state, narrow_state);
+    let (stack, album_stack, artist_stack, signal_tab) = build_library_stack(state, narrow_state);
     wire_library_signals(
         state,
         &stack,
@@ -155,13 +170,16 @@ fn build_content_pane(
         artist_stack,
         Arc::clone(narrow_state),
     );
+    let (snapshot_tx, snapshot_rx) = create_mailbox();
+    spawn_snapshot_publisher(&state.playback, &state.storage, snapshot_tx);
+    start_signal_poll(state, &signal_tab, snapshot_rx);
     let switcher = ViewSwitcher::builder()
         .policy(Wide)
         .stack(&stack)
         .can_focus(true)
-        .tooltip_text("Switch between Albums and Artists views")
+        .tooltip_text("Switch between Albums, Artists, and Signal views")
         .build();
-    switcher.update_property(&[Label("Switch between Albums and Artists views")]);
+    switcher.update_property(&[Label("Switch between Albums, Artists, and Signal views")]);
     content_header.set_title_widget(Some(&switcher));
     let toggle = build_view_toggle(state, parent);
     content_header.pack_end(&toggle);
@@ -179,9 +197,9 @@ fn build_content_pane(
     let switcher_bar = ViewSwitcherBar::builder()
         .stack(&stack)
         .can_focus(true)
-        .tooltip_text("Switch between Albums and Artists views")
+        .tooltip_text("Switch between Albums, Artists, and Signal views")
         .build();
-    switcher_bar.update_property(&[Label("Switch between Albums and Artists views")]);
+    switcher_bar.update_property(&[Label("Switch between Albums, Artists, and Signal views")]);
     content_toolbar.add_bottom_bar(&switcher_bar);
     let status_bar = StatusBar::new(state);
     content_toolbar.add_bottom_bar(status_bar.widget());
@@ -290,6 +308,7 @@ fn switch_mode_for_active_tab(
     let (stack, name) = match state.active_tab.borrow() {
         Albums => (album_stack, "albums"),
         Artists => (artist_stack, "artists"),
+        Signal => return,
     };
     switch_mode_for_stack(state, name, stack, narrow_state, mode);
 }

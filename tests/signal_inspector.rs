@@ -25,19 +25,26 @@
 
 #[cfg(test)]
 mod tests {
-    use anyhow::{Result, ensure};
+    use anyhow::{Result, bail, ensure};
 
-    use oxhidifi::playback::{
-        devices::OutputMode::{BitPerfect as ModeBitPerfect, Resampled},
-        signal_path::{
-            DeviceRole::Output as DeviceOutput,
-            PathStage,
-            QualityVerdict::{self, BitPerfect, Limited, Processed},
-            RenderingDevice, SignalPathSnapshot, SnapshotInput,
-            StageKind::{self, Output, Source, Transport, Volume},
-            path_verdict::resolve_verdict,
+    use oxhidifi::{
+        playback::{
+            decoder::AudioParams,
+            devices::OutputMode::{BitPerfect as ModeBitPerfect, Resampled},
+            signal_path::{
+                DeviceRole::Output as DeviceOutput,
+                PathStage,
+                QualityVerdict::{self, BitPerfect, Limited, Processed},
+                RenderingDevice,
+                SignalPathError::NoActiveTrack,
+                SignalPathSnapshot, SnapshotInput,
+                StageKind::{self, ExternalRenderer, Output, Source, Transport, Volume},
+                path_snapshot::{build_snapshot, summarize_text},
+                path_verdict::resolve_verdict,
+            },
+            state::{MuteState::Unmuted, PlaybackStatus::Playing},
         },
-        state::{MuteState::Unmuted, PlaybackStatus::Playing},
+        storage::catalog::TrackAudio,
     };
 
     const VERDICTS: [&str; 3] = ["Bit-Perfect", "Processed", "Limited"];
@@ -188,6 +195,122 @@ mod tests {
             processing_speed: speed,
             playback_status: input.status,
         }
+    }
+
+    fn flac_audio(sample_rate: i32, bit_depth: Option<i32>) -> TrackAudio {
+        TrackAudio {
+            file_path: format!("/music/track-{sample_rate}.flac"),
+            content_hash: None,
+            format: String::from("FLAC"),
+            sample_rate,
+            bit_depth,
+            channels: 2,
+            codec: String::from("FLAC"),
+            lossless: true,
+            bitrate: None,
+            album_id: None,
+            artist_id: None,
+            file_size: 1024,
+            last_modified: String::from("2026-01-01T00:00:00Z"),
+        }
+    }
+
+    fn playing_input(
+        track_id: i64,
+        generation: u64,
+        sample_rate: i32,
+        bit_depth: Option<i32>,
+    ) -> SnapshotInput {
+        let mut input = bit_perfect_input();
+        input.track_id = Some(track_id);
+        input.generation = generation;
+        input.track_audio = Some(flac_audio(sample_rate, bit_depth));
+        input.decoder_params = Some(AudioParams {
+            sample_rate: u32::try_from(sample_rate).unwrap_or(0),
+            channels: 2,
+            duration_seconds: 180.0,
+            bit_depth: bit_depth.map(|bits| u16::try_from(bits).unwrap_or(0)),
+        });
+        input
+    }
+
+    #[test]
+    fn us1_build_snapshot_stage_ordering() -> Result<()> {
+        let mut input = playing_input(11, 1, 44100, Some(16));
+        let snapshot = build_snapshot(&input)?;
+        ensure!(!snapshot.stages.is_empty(), "a track must yield stages");
+        let Some(first) = snapshot.stages.first() else {
+            bail!("snapshot must contain a first stage")
+        };
+        ensure!(first.kind == Source, "first stage must be Source");
+        let Some(last) = snapshot.stages.last() else {
+            bail!("snapshot must contain a last stage")
+        };
+        ensure!(
+            last.kind == Output || last.kind == ExternalRenderer,
+            "last stage must be Output or ExternalRenderer"
+        );
+        let ordered = snapshot
+            .stages
+            .iter()
+            .zip(snapshot.stages.iter().skip(1))
+            .all(|(prev, next)| prev.position < next.position);
+        ensure!(ordered, "stages must run in position order");
+        let summary = summarize_text(&snapshot);
+        ensure!(
+            summary.lines().count() == snapshot.stages.len().saturating_add(1),
+            "summary must list every stage once, got {summary}"
+        );
+        input.track_id = None;
+        ensure!(
+            matches!(build_snapshot(&input), Err(NoActiveTrack)),
+            "missing track must map to NoActiveTrack"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn us1_gapless_atomic_swap() -> Result<()> {
+        let first = build_snapshot(&playing_input(11, 1, 44100, Some(16)))?;
+        let second = build_snapshot(&playing_input(12, 2, 96000, Some(24)))?;
+        ensure!(
+            first.generation != second.generation,
+            "generation must bump across the gapless transition"
+        );
+        ensure!(
+            first.track_id != second.track_id,
+            "track id must change across the gapless transition"
+        );
+        let mut displayed = first.clone();
+        ensure!(
+            displayed == first,
+            "displayed chain starts as the first track"
+        );
+        displayed = second.clone();
+        ensure!(
+            displayed.generation == second.generation,
+            "swap must replace the whole generation"
+        );
+        ensure!(
+            displayed.track_id == second.track_id,
+            "swap must replace the whole track"
+        );
+        ensure!(
+            displayed
+                .stages
+                .iter()
+                .all(|stage| !stage.detail.contains("44.1kHz")),
+            "swapped chain must never show mixed rows"
+        );
+        let Some(source) = displayed.stages.first() else {
+            bail!("swapped chain must contain stages")
+        };
+        ensure!(
+            source.detail.contains("96kHz"),
+            "swapped chain must reflect the new track, got {}",
+            source.detail
+        );
+        Ok(())
     }
 
     #[test]
