@@ -1,11 +1,8 @@
 //! Live audio signal path: immutable snapshots, verdicts, and stage facts.
 //!
-//! Read-only view of audio between source and output. An off-thread builder
-//! copies engine and catalog facts into one [`SignalPathSnapshot`] per
-//! generation; the UI swaps snapshots atomically and classifies the path
-//! with [`path_verdict::resolve_verdict`]. The audio hot path is never
-//! instrumented. Tracing uses flat `generation`, `track_id`,
-//! `verdict_previous` / `verdict_current`, and `stage_count` fields.
+//! Read-only view from source to output. An off-thread builder copies facts
+//! into one [`SignalPathSnapshot`] per generation; the UI swaps atomically.
+//! The audio hot path is never instrumented.
 
 pub mod path_snapshot;
 pub mod path_verdict;
@@ -174,6 +171,12 @@ pub struct SnapshotInput {
     pub zone_name: String,
     /// Provider authentication facts; MVP always `None`, omitting the stage.
     pub auth: Option<AuthFacts>,
+    /// Monotonic wall-clock sample time in nanos, captured by the publisher.
+    pub sampled_at_wall: u64,
+    /// Cumulative decoded frames at sample time, captured by the publisher.
+    pub decoded_frames: u64,
+    /// Cumulative resampled frames at sample time, captured by the publisher.
+    pub resampled_frames: u64,
 }
 
 /// Owned parameters describing one stage for title, detail, and explanation.
@@ -336,6 +339,9 @@ mod tests {
             device_lost: false,
             zone_name: String::from("Test DAC"),
             auth: None,
+            sampled_at_wall: 0,
+            decoded_frames: 0,
+            resampled_frames: 0,
         };
         let cloned = input.clone();
         ensure!(input.track_id == cloned.track_id, "clone keeps track");

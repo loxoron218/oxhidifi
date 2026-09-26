@@ -154,6 +154,9 @@ mod tests {
             status: Playing,
             zone_name: String::from("Lab DAC"),
             auth: None,
+            sampled_at_wall: 0,
+            decoded_frames: 0,
+            resampled_frames: 0,
         }
     }
 
