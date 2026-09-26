@@ -29,7 +29,8 @@ Read-only view — zero DSP editing. FR references are normative. Tab-only: no o
      via page-selection support per `src/ui/preferences/audio.rs:build_audio_page` — no inline editing),
       **About** (presents the existing PreferencesDialog default view per
       `src/ui/preferences.rs` — default landing page with no page selection,
-      which serves as the info landing in MVP; no dedicated About view exists
+      which serves as the About-equivalent info landing (MVP stand-in; tracked
+      follow-up: dedicated About page); no dedicated About view exists
       and no new dialog is built in the tab; dedicated About page is out-of-scope
       follow-up). Acceptance per action is dialog presentation on the correct landing page
       (audio page for settings, default view for the About-equivalent info landing).

@@ -170,7 +170,7 @@ is a third library tab: `src/ui/signal_view/` tab page (`signal_tab`,
 `signal_footer`, `signal_poll`) added to the existing `ViewStack` in
 `src/ui/panes.rs` next to Albums/Artists with `ActiveTab::Signal` persistence
 (new `Signal` variant in `src/storage/active_tab.rs` plus settings/persistence
-round-trip — see tasks T013),
+round-trip — see tasks T013; T013 is authoritative for the full existing-caller list),
 plus a verdict badge button in `src/ui/player/` that navigates to the tab.
 No new top-level domains, no `models/`/`utils/` groupings, all new stems
 verified unique (`signal_handlers` is the only near-collision and is

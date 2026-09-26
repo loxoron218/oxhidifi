@@ -56,8 +56,10 @@ No new crates and no DB migration are required.
   presence signal (`Some` iff alteration active, else `None`), and the
   publisher worker's `SpeedEma` (α=0.3) smooths `Some` samples across
   rebuilds — never instrumented in the audio
-  callback. Shown iff any in-app alteration is active (conversion, effect, or
-  volume/leveling/headroom, including volume-only); hidden when bit-perfect
+  callback. Shown iff any in-app alteration is active in MVP (DSP-volume scaling
+  incl. volume-only, resample, bit-depth/channel-count/DSD conversion;
+  effect/leveling/headroom families have no MVP inputs and are `describe()`-only
+  — see FR-010/T029); hidden when bit-perfect
   AND when Limited-only with no in-app alteration (shared-mixer/forced-downsample/lost-device
   alone keeps `processing_speed` as `None` — see `contracts/snapshot.md` invariants 2–3).
 - **Rationale**: Matches the clarified requirement (volume-only triggers the
