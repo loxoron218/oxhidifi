@@ -27,10 +27,12 @@ Read-only view — zero DSP editing. FR references are normative. Tab-only: no o
      `Toast`, no dialog), **open output/device settings** (presents the existing
      `show_preferences_dialog` PreferencesDialog with the audio page selected
      via page-selection support per `src/ui/preferences/audio.rs:build_audio_page` — no inline editing),
-     **About** (presents the existing PreferencesDialog default view per
-     `src/ui/preferences.rs` — default landing page with no page selection; no dedicated About view exists
-     and no new dialog is built in the tab; dedicated About page is out-of-scope
-     follow-up). Acceptance per action is dialog presentation on the correct landing page.
+      **About** (presents the existing PreferencesDialog default view per
+      `src/ui/preferences.rs` — default landing page with no page selection,
+      which serves as the info landing in MVP; no dedicated About view exists
+      and no new dialog is built in the tab; dedicated About page is out-of-scope
+      follow-up). Acceptance per action is dialog presentation on the correct landing page
+      (audio page for settings, default view for the About-equivalent info landing).
 - Chain: vertical `ListBox` in a `ScrolledWindow` inside the tab, source at top → output at
   bottom, connected by a continuous rail; circular badge icons left,
    two-line title (bold) + detail (theme-accent link-styled, never a hardcoded color) right; scrollable for
@@ -79,7 +81,13 @@ Read-only view — zero DSP editing. FR references are normative. Tab-only: no o
 ## Liveness (FR-011 + edge cases)
 
 - Whole-snapshot swap on `generation` change (track/format/setting/device/
-  status; the builder bumps `generation` on `PlaybackStatus` change);
+  status; the builder bumps `generation` on `PlaybackStatus` change).
+  Trigger mapping (no dedicated device/format events exist): track/format
+  changes arrive as `TrackStarted` with new resampler/device facts re-read on
+  every rebuild; setting changes as `VolumeChanged`/`OutputModeChanged`;
+  device changes as `DeviceLost`/`OutputModeChanged`/`TrackStarted`; status
+  changes as `Paused`/`Resumed`/`Stopped` (`PositionTick`, `QueueChanged`,
+  `Seeked`, `GaplessEnabledChanged`, and `Error` never rebuild);
   gapless transitions never show mixed chains; paused/stopped retains
   `track_id` plus the last path with a status ribbon; empty state iff
   `track_id.is_none()` explains how to start playback; lost device is

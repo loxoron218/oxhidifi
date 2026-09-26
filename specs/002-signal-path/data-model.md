@@ -18,7 +18,7 @@ poll generation; the UI swaps instances atomically, never mutates them.
 | `verdict` | `QualityVerdict` | Whole-path verdict (see §3 precedence). |
 | `stages` | `Vec<PathStage>` | Ordered top (source) → bottom (output/external). |
 | `devices` | `Vec<RenderingDevice>` | Rendering devices in chain order (1–n). |
-| `processing_speed` | `Option<f64>` | Multiple of real time (snapshot-sampled, EMA α=0.3; informational — presence only is asserted); `Some` iff any in-app alteration is active (incl. volume-only), else `None` (hidden). |
+| `processing_speed` | `Option<f64>` | Multiple of real time (snapshot-sampled; informational — presence only is asserted); `build_snapshot` returns the instantaneous presence signal (`Some` iff any in-app alteration incl. volume-only, else `None`/hidden) and the publisher worker's `SpeedEma` (α=0.3) smooths `Some` samples across rebuilds, resetting on `None`. |
 | `playback_status` | `PlaybackStatus` (reused from `crate::playback::state`; do NOT redefine) | `Playing` / `Paused` / `Stopped` — retained last-known path shows a paused/stopped ribbon instead of vanishing. |
 
 **Validation**: `stages` is non-empty iff `track_id.is_some()`; first stage
@@ -32,7 +32,15 @@ contracts assert presence only, never the number.
 **State transitions**: rebuilt from scratch on track change, format change,
 setting change (DSP volume/output mode), device change, or
 `PlaybackStatus` change (play/pause/stop); generation bumps each rebuild so the
-UI re-renders the status ribbon. Paused/stopped retains `track_id` plus the
+UI re-renders the status ribbon. Trigger mapping (no dedicated device/format
+events exist): track/format changes arrive as `TrackStarted` with new
+resampler/device facts re-read on every rebuild; setting changes as
+`VolumeChanged`/`OutputModeChanged`; device changes as
+`DeviceLost`/`OutputModeChanged`/`TrackStarted`; status changes as
+`Paused`/`Resumed`/`Stopped` (`PositionTick`, `QueueChanged`, `Seeked`,
+`GaplessEnabledChanged`, and `Error` never rebuild). Manual device
+reselection emitting none of these, and mute toggles (`apply_muted` emits no
+event), are out-of-scope follow-ups. Paused/stopped retains `track_id` plus the
 last snapshot + status flag; empty state applies iff `track_id.is_none()`.
 Device loss rebuilds with the Output stage in lost-device state and verdict
 forced off Bit-Perfect.
@@ -44,7 +52,7 @@ One node in the chain, in execution order.
 | Field | Type | Description |
 |---|---|---|
 | `position` | `u32` | Zero-based order in `stages`. |
-| `kind` | `StageKind` | Source, Authentication (MVP: omitted), Decoder, BitDepthConverter, SampleRateConverter, FormatConverter, Volume (MVP: DSP-volume only), Effect (MVP: `describe()`-only vocabulary), Transport (MVP: ALSA direct-exclusive/shared-mixer/USB), Output, ExternalRenderer (MVP: title-only). |
+| `kind` | `StageKind` | Source, Authentication (MVP: omitted), Decoder, BitDepthConverter, SampleRateConverter, FormatConverter (incl. DSD-to-PCM and source-vs-device Channel Conversion — both builder-emitted), Volume (MVP: DSP-volume only), Effect (MVP: `describe()`-only vocabulary, incl. channel-map — never builder-emitted), Transport (MVP: ALSA direct-exclusive/shared-mixer/USB), Output, ExternalRenderer (MVP: title-only). |
 | `title` | `String` | Concise label, e.g. `Bit Depth Conversion 24bit to 64bit Float`, `ALSA Direct Output`. |
 | `detail` | `String` | Blue detail line: formats, `96kHz to 192kHz`-style input→output, dB values (`format_volume_db`), Linux transport modes. Unknown source fields render as `unknown`. |
 | `verdict` | `QualityVerdict` | Per-stage indicator (color/shape + text, never color alone). |

@@ -64,7 +64,9 @@ pub fn describe(kind: &StageFacts) -> (String, String, String);
    depth, and channels equal device rate/channels under `OutputMode::BitPerfect`,
    no separate native-capability input) ⇒ verdict `Bit-Perfect` and
    `processing_speed.is_none()`.
-2. Any DSP-volume scaling (incl. volume-only), resample, bit-depth or
+2. Any DSP-volume scaling (incl. volume-only), resample, bit-depth,
+   channel-count (source-vs-device `FormatConverter` "Channel Conversion" —
+   distinct from the channel-map `Effect`, which stays `describe()`-only), or
    DSD-to-PCM conversion ⇒ verdict ≥ `Processed` and
    `processing_speed.is_some()`. (Leveling/headroom/EQ/effect inputs do not
    exist in MVP; their `describe()` wording is covered by invariant 5, not by

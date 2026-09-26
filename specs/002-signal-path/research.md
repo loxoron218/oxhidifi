@@ -35,7 +35,10 @@ No new crates and no DB migration are required.
   Bit-Perfect requires ALL of: `OutputMode::BitPerfect`, no resampler, no
   software volume scaling (slider `1.0`/unmuted or hardware-mixer path only),
   no channel-count conversion, and device native support for the track format.
-  Any resample, bit-depth/DSD conversion, channel map, or volume/EQ effect
+  Any resample, bit-depth/DSD conversion, source-vs-device channel-count
+  conversion (emitted as a `FormatConverter` "Channel Conversion" stage —
+  distinct from the channel-map `Effect`, which stays `describe()`-only in
+  MVP), or volume/EQ effect
   yields Processed; shared-mixer output, forced downsampling, or a lost device
   yields Limited (Limited wins over any enhancement present).
 - **Rationale**: A pure, total function is trivially unit-testable
@@ -49,7 +52,10 @@ No new crates and no DB migration are required.
 
 - **Decision**: Snapshot-sampled throughput multiple of real time
   (frames decoded + resampled per wall-clock second ÷ device rate, smoothed),
-  computed in the off-thread builder — never instrumented in the audio
+  split across two owners: the off-thread builder returns the instantaneous
+  presence signal (`Some` iff alteration active, else `None`), and the
+  publisher worker's `SpeedEma` (α=0.3) smooths `Some` samples across
+  rebuilds — never instrumented in the audio
   callback. Shown iff any in-app alteration is active (conversion, effect, or
   volume/leveling/headroom, including volume-only); hidden when bit-perfect
   AND when Limited-only with no in-app alteration (shared-mixer/forced-downsample/lost-device
