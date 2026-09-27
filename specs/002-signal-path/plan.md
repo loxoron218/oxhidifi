@@ -86,7 +86,9 @@ badge button navigating to it.
   (`playback::signal_path`, `ui::signal_view`), unique stems
    (`signal_path`, `path_snapshot`, `path_verdict`, `stage_build`,
    `stage_output`, `stage_describe`, `signal_tab`, `signal_footer`,
-   `signal_publish`, `signal_poll`, `signal_badge`), parent-index style, ≤400 lines/file,
+   `signal_publish`, `signal_poll`, `signal_badge`, plus contingency
+   `signal_header`, `signal_chain` iff the `signal_tab.rs` pre-split is taken —
+   same uniqueness rules, verified under T038), parent-index style, ≤400 lines/file,
   depth ≤2, programmatic widgets, 4-block imports, `//!`/`///` docs, no
   hardcoding (device/manual data from runtime state, theme-aware styling).
 - **II. Testing Standards**: PASS — unit tests per new file; `tests/`
@@ -94,14 +96,17 @@ badge button navigating to it.
    files are needed; deterministic snapshot/verdict tests (pure functions over
    cloned builder input, so the builder itself needs no concurrency simulation)
    plus a deterministic newest-wins unit test for the poll generation guard (T015 —
-   the one concurrency-sensitive swap rule); no audio-pipeline change ⇒ no new `criterion` bench required
+   the one concurrency-sensitive swap rule; the pure-function test is the
+   review-accepted simulation-style coverage for this single rule); no audio-pipeline change ⇒ no new `criterion` bench required
   (existing `throughput`/`conversion_baseline` keep passing).
 - **III. UX Consistency**: PASS — HIG tab (`ToolbarView`+`HeaderBar`, `ListBox`
   chain, `MenuButton` kebab popover as sole popover exception), overflow
   menu with exactly the 3 read-only actions, `Toast` on copy, adaptive
   `ViewStack` + `ViewSwitcher`/`ViewSwitcherBar` tab pattern (no overlay
   dialog/popover/sheet), main-thread discipline (poll + `try_recv`
-  per-subscriber mailbox, workers own I/O), non-color verdict cues +
+  per-subscriber `async-channel` mailbox — the review-accepted satisfaction of
+  the per-subscriber-channel rule (`Lagged`/`Closed` broadcast semantics are
+  N/A to `async-channel`), workers own I/O), non-color verdict cues +
   keyboard/AT support.
 - **IV. Performance**: PASS — display-only; snapshot built off-thread from
   cloned state under minimal lock scopes; no hot-path allocation, locks, or
@@ -174,9 +179,9 @@ round-trip — see tasks T013; T013 is authoritative for the full existing-calle
 plus a verdict badge button in `src/ui/player/` that navigates to the tab.
 No new top-level domains, no `models/`/`utils/` groupings, all new stems
 verified unique (`signal_handlers` is the only near-collision and is
-distinct). If `signal_tab.rs` approaches the 400-line gate, pre-split header +
-chain rows into `signal_header.rs` / `signal_chain.rs` (new stems must stay
-unique codebase-wide).
+ distinct). If `signal_tab.rs` approaches the 400-line gate, pre-split header +
+ chain rows into `signal_header.rs` / `signal_chain.rs` (new stems must stay
+ unique codebase-wide per the Constitution Check inventory above; verified under T038).
 
 ## Complexity Tracking
 

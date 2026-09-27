@@ -29,10 +29,10 @@ Read-only view — zero DSP editing. FR references are normative. Tab-only: no o
      via page-selection support per `src/ui/preferences/audio.rs:build_audio_page` — no inline editing),
       **About** (presents the existing PreferencesDialog default view per
       `src/ui/preferences.rs` — default landing page with no page selection,
-      which serves as the About-equivalent info landing (MVP stand-in; tracked
-      follow-up: dedicated About page); no dedicated About view exists
-      and no new dialog is built in the tab; dedicated About page is out-of-scope
-      follow-up). Acceptance per action is dialog presentation on the correct landing page
+      which serves as the About-equivalent info landing (MVP decision; a
+      dedicated About page is a separately-tracked follow-up outside this
+      feature — no task in this feature tracks it); no dedicated About view exists
+      and no new dialog is built in the tab). Acceptance per action is dialog presentation on the correct landing page
       (audio page for settings, default view for the About-equivalent info landing).
 - Chain: vertical `ListBox` in a `ScrolledWindow` inside the tab, source at top → output at
   bottom, connected by a continuous rail; circular badge icons left,

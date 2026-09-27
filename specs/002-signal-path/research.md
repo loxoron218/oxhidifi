@@ -150,9 +150,13 @@ No new crates and no DB migration are required.
 ## R-08: Device footer cards and manual links
 
 - **Decision**: Footer renders one card per rendering device in chain order
-  (streamer + DAC each get a card). Display name comes from CPAL `DeviceInfo`;
+  (streamer + DAC each get a card in the full design; MVP: exactly one card
+  for the active output device — multi-card streamer+DAC chains are a deferred
+  forward rule since no second-device input facts exist in MVP). Display name
+  comes from CPAL `DeviceInfo`;
   the "View Product Manual" link appears only when manual info is known
-  (optional mapping, e.g. user config/catalog); cards never name a device
+  (optional mapping, e.g. user config/catalog; MVP: `manual_url` always `None`,
+  so the link is hidden); cards never name a device
   that is not rendering. A lost device mid-playback flips the Output stage to
   a lost-device state and forces the verdict off Bit-Perfect.
 - **Rationale**: Implements FR-009 and the disappeared-device / double-device

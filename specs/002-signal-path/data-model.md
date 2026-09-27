@@ -38,9 +38,11 @@ resampler/device facts re-read on every rebuild; setting changes as
 `VolumeChanged`/`OutputModeChanged`; device changes as
 `DeviceLost`/`OutputModeChanged`/`TrackStarted`; status changes as
 `Paused`/`Resumed`/`Stopped` (`PositionTick`, `QueueChanged`, `Seeked`,
-`GaplessEnabledChanged`, and `Error` never rebuild). Manual device
-reselection emitting none of these, and mute toggles (`apply_muted` emits no
-event), are out-of-scope follow-ups. Paused/stopped retains `track_id` plus the
+ `GaplessEnabledChanged`, and `Error` never rebuild). Explicitly out of scope
+ for this feature (MUST NOT be expected to refresh the chain;
+ separately-tracked follow-ups with no task in this feature): manual device
+ reselection emitting none of these events, and mute toggles
+ (`apply_muted` emits no event). Paused/stopped retains `track_id` plus the
 last snapshot + status flag; empty state applies iff `track_id.is_none()`.
 Device loss rebuilds with the Output stage in lost-device state and verdict
 forced off Bit-Perfect.
