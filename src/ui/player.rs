@@ -10,8 +10,8 @@ pub mod now_playing;
 pub mod playback_events;
 pub mod playlist;
 pub mod row_factory;
-pub mod signal_badge;
 pub mod sidebar;
+pub mod signal_badge;
 
 use std::sync::{
     Arc,

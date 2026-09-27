@@ -13,8 +13,7 @@ use std::cell::Cell;
 use libadwaita::{
     Banner, HeaderBar, StatusPage, ToolbarView, WindowTitle,
     gtk::{
-        Align::Start,
-        Box, Image, Label, ListBox,
+        Box, ListBox,
         Orientation::{Horizontal, Vertical},
         ScrolledWindow,
         SelectionMode::Single,
@@ -26,12 +25,12 @@ use libadwaita::{
 
 use crate::{
     playback::{
-        signal_path::{QualityVerdict, SignalPathSnapshot},
+        signal_path::SignalPathSnapshot,
         state::PlaybackStatus::{Paused, Playing, Stopped},
     },
-    ui::{
-        player::signal_badge::{trace_verdict_flip, verdict_icon},
-        signal_view::signal_chain::stage_row,
+    ui::signal_view::{
+        signal_chain::{stage_row, wire_explainer},
+        signal_header::{SignalHeader, build_signal_header},
     },
 };
 
@@ -46,14 +45,8 @@ pub struct SignalTab {
     banner: Banner,
     /// Content switcher between the chain and the empty state.
     content: Stack,
-    /// Header verdict indicator icon (dedicated shape per state).
-    verdict_icon: Image,
-    /// Header whole-path verdict label (`Bit-Perfect`/`Processed`/`Limited`).
-    verdict_label: Label,
-    /// Header output/zone name.
-    zone_label: Label,
-    /// Last verdict shown (`None` before the first snapshot).
-    verdict: Cell<Option<QualityVerdict>>,
+    /// Header verdict, zone name, and explainer hint.
+    header: SignalHeader,
     /// Generation currently on screen.
     generation: Cell<u64>,
     /// Track currently on screen (`None` for the empty state).
@@ -91,7 +84,7 @@ impl SignalTab {
         for stage in &snapshot.stages {
             self.list.append(&stage_row(stage));
         }
-        self.apply_header(snapshot);
+        self.header.apply_snapshot(snapshot);
         match snapshot.playback_status {
             Playing => self.banner.set_revealed(false),
             Paused => {
@@ -113,48 +106,9 @@ impl SignalTab {
     /// Show the empty state explaining how to start playback.
     pub fn show_empty(&self) {
         self.banner.set_revealed(false);
-        self.show_idle_header();
+        self.header.show_idle();
         self.content.set_visible_child_name("empty");
         self.track.set(None);
-    }
-
-    /// Apply the header verdict label, indicator, and zone name.
-    ///
-    /// Verdict flips emit structured `tracing` fields with the snapshot
-    /// generation and track id so DSP-volume and output-mode changes are
-    /// observable without leaving the tab.
-    ///
-    /// # Arguments
-    ///
-    /// * `snapshot` - Newest rendered snapshot.
-    fn apply_header(&self, snapshot: &SignalPathSnapshot) {
-        let next = snapshot.verdict;
-        if let Some(previous) = self.verdict.get()
-            && previous != next
-        {
-            trace_verdict_flip(
-                previous,
-                next,
-                snapshot.generation,
-                snapshot.track_id,
-                "tab",
-            );
-        }
-        self.verdict.set(Some(next));
-        self.verdict_icon.set_icon_name(Some(verdict_icon(next)));
-        self.verdict_label.set_label(next.label());
-        self.zone_label.set_label(&snapshot.zone_name);
-        let announced = format!("Signal path is {}", next.label());
-        self.verdict_label.update_property(&[A11yLabel(&announced)]);
-    }
-
-    /// Reset the header to the empty-state entry.
-    fn show_idle_header(&self) {
-        self.verdict.set(None);
-        self.verdict_icon
-            .set_icon_name(Some("audio-x-generic-symbolic"));
-        self.verdict_label.set_label("No Active Path");
-        self.zone_label.set_label("");
     }
 
     /// Count the rendered chain rows (test hook for atomic-swap coverage).
@@ -171,19 +125,17 @@ impl SignalTab {
 
     /// Header verdict label text (badge/header parity hook).
     pub fn verdict_text(&self) -> String {
-        self.verdict_label.label().to_string()
+        self.header.verdict_text()
     }
 
     /// Header zone name text (badge/header parity hook).
     pub fn zone_text(&self) -> String {
-        self.zone_label.label().to_string()
+        self.header.zone_text()
     }
 
     /// Header verdict icon name (badge/header parity hook).
     pub fn header_icon_name(&self) -> String {
-        self.verdict_icon
-            .icon_name()
-            .map_or_else(String::new, |icon| icon.to_string())
+        self.header.header_icon_name()
     }
 }
 
@@ -214,6 +166,8 @@ pub fn build_signal_page() -> SignalTab {
         .vexpand(true)
         .build();
     list.update_property(&[A11yLabel("Live signal path chain")]);
+    // Wiring lives with the list widget; the binding only names the ids.
+    let _explainer_wiring = wire_explainer(&list);
 
     let scrolled = ScrolledWindow::builder()
         .child(&list)
@@ -245,35 +199,8 @@ pub fn build_signal_page() -> SignalTab {
         .margin_top(6)
         .margin_bottom(6)
         .build();
-    let verdict_mark = Image::builder()
-        .icon_name("audio-x-generic-symbolic")
-        .pixel_size(16)
-        .build();
-    let verdict_label = Label::builder()
-        .label("No Active Path")
-        .css_classes(["heading"])
-        .halign(Start)
-        .build();
-    verdict_label.update_property(&[A11yLabel("No active signal path")]);
-    let zone_label = Label::builder()
-        .label("")
-        .css_classes(["dim-label"])
-        .halign(Start)
-        .build();
-    let hint_label = Label::builder()
-        .label("Click on any stage of the path to learn more")
-        .css_classes(["dim-label", "caption"])
-        .halign(Start)
-        .wrap(true)
-        .build();
-    let verdict_row = Box::builder().orientation(Horizontal).spacing(6).build();
-    verdict_row.append(&verdict_mark);
-    verdict_row.append(&verdict_label);
-    verdict_row.append(&zone_label);
-    let summary = Box::builder().orientation(Vertical).spacing(0).build();
-    summary.append(&verdict_row);
-    summary.append(&hint_label);
-    body.append(&summary);
+    let header = build_signal_header();
+    body.append(header.widget());
     body.append(&banner);
     body.append(&content);
     root.set_content(Some(&body));
@@ -283,10 +210,7 @@ pub fn build_signal_page() -> SignalTab {
         list,
         banner,
         content,
-        verdict_icon: verdict_mark,
-        verdict_label,
-        zone_label,
-        verdict: Cell::new(None),
+        header,
         generation: Cell::new(0),
         track: Cell::new(None),
     }
@@ -295,8 +219,11 @@ pub fn build_signal_page() -> SignalTab {
 #[cfg(test)]
 mod tests {
     use {
-        anyhow::{Result, ensure},
-        libadwaita::gtk::{self, test},
+        anyhow::{Result, bail, ensure},
+        libadwaita::{
+            glib::object::ObjectExt,
+            gtk::{self, test},
+        },
     };
 
     use crate::{
@@ -309,7 +236,7 @@ mod tests {
             },
             state::PlaybackStatus::{Paused, Playing},
         },
-        ui::signal_view::signal_tab::build_signal_page,
+        ui::signal_view::{signal_chain::is_row_expanded, signal_tab::build_signal_page},
     };
 
     fn three_stage_snapshot() -> SignalPathSnapshot {
@@ -366,11 +293,11 @@ mod tests {
         ensure!(tab.track() == Some(7), "tab must track the snapshot id");
         ensure!(tab.generation() == 4, "tab must track the generation");
         ensure!(
-            tab.verdict_label.label() == "Bit-Perfect",
+            tab.verdict_text() == "Bit-Perfect",
             "header must show the snapshot verdict"
         );
         ensure!(
-            tab.zone_label.label() == "Test DAC",
+            tab.zone_text() == "Test DAC",
             "header must show the zone name"
         );
         let paused = SignalPathSnapshot {
@@ -381,13 +308,34 @@ mod tests {
         ensure!(tab.row_count() == 3, "ribbon swap must keep every row");
         tab.show_empty();
         ensure!(
-            tab.verdict_label.label() == "No Active Path",
+            tab.verdict_text() == "No Active Path",
             "empty tab must reset the header"
         );
-        ensure!(
-            tab.zone_label.label().is_empty(),
-            "empty tab must clear the zone name"
-        );
+        ensure!(tab.zone_text().is_empty(), "empty tab must clear the zone");
+        Ok(())
+    }
+
+    #[test]
+    fn explainer_expands_inline_on_selection_and_activation() -> Result<()> {
+        let tab = build_signal_page();
+        tab.render_snapshot(&three_stage_snapshot());
+        let Some(source) = tab.list.row_at_index(0) else {
+            bail!("chain must render a Source row")
+        };
+        let Some(converter) = tab.list.row_at_index(1) else {
+            bail!("chain must render a converter row")
+        };
+        ensure!(!is_row_expanded(&source), "explanations start hidden");
+        tab.list.select_row(Some(&source));
+        ensure!(is_row_expanded(&source), "selection reveals inline");
+        ensure!(!is_row_expanded(&converter), "siblings stay collapsed");
+        tab.list.select_row(Some(&converter));
+        ensure!(is_row_expanded(&converter), "converter explains inline");
+        ensure!(is_row_expanded(&source), "first row stays expanded");
+        ensure!(tab.row_count() == 3, "expansion keeps every row");
+        tab.list.emit_by_name::<()>("row-activated", &[&converter]);
+        ensure!(!is_row_expanded(&converter), "activation toggles");
+        ensure!(is_row_expanded(&source), "toggle spares siblings");
         Ok(())
     }
 }

@@ -5,6 +5,7 @@
 //! change so gapless transitions never show mixed chains.
 
 pub mod signal_chain;
+pub mod signal_header;
 pub mod signal_poll;
 pub mod signal_publish;
 pub mod signal_tab;

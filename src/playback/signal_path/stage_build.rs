@@ -32,7 +32,7 @@ fn catalog_count(value: i32) -> Option<u16> {
 }
 
 /// Format a sample rate in Hz as a compact label such as `44.1kHz`.
-fn format_rate(hz: u32) -> String {
+pub(crate) fn format_rate(hz: u32) -> String {
     let remainder = hz.checked_rem(1000).unwrap_or(0);
     if remainder == 0 {
         let whole = hz.checked_div(1000).unwrap_or(0);
@@ -44,7 +44,7 @@ fn format_rate(hz: u32) -> String {
 }
 
 /// Format a channel count as `Mono`, `Stereo`, or `{n} channels`.
-fn format_channels(channels: u16) -> String {
+pub(crate) fn format_channels(channels: u16) -> String {
     match channels {
         1 => String::from("Mono"),
         2 => String::from("Stereo"),
@@ -62,7 +62,7 @@ fn known_or_unknown(value: &str) -> &str {
 }
 
 /// Check whether a codec/format label identifies a DSD-family stream.
-fn is_dsd_label(label: &str) -> bool {
+pub(crate) fn is_dsd_label(label: &str) -> bool {
     let lower = label.to_lowercase();
     lower.contains("dsd") || lower.contains("dsf") || lower.contains("dff") || lower.contains("dop")
 }

@@ -1,28 +1,15 @@
 //! Audio Signal Path Inspector acceptance tests (FR-001..FR-015).
 //!
-//! Phase 1 skeleton for `specs/002-signal-path`. Full builder/verdict/describe
-//! coverage lands in Phase 2 (T008) and per-story tasks (T009..T032).
+//! FR mapping: FR-001 badge, FR-002 chain, FR-003 verdict (`Bit-Perfect`/
+//! `Processed`/`Limited`, Limited > Processed > Bit-Perfect), FR-004 Source,
+//! FR-005 transformations, FR-006 Output + renderer, FR-007 indicators,
+//! FR-008 explainer, FR-009 footer, FR-010 speed, FR-011 atomic updates,
+//! FR-012 `Signal` tab, FR-013 dark/light, FR-014 kebab, FR-015 a11y.
 //!
-//! FR mapping:
-//! - FR-001 badge entry, FR-002 vertical chain, FR-003 header verdict
-//!   (`Bit-Perfect`/`Processed`/`Limited`, precedence Limited > Processed > Bit-Perfect), FR-004
-//!   Source, FR-005 transformations, FR-006 Output + external renderer, FR-007 per-stage
-//!   indicators, FR-008 inline explainer, FR-009 device footer, FR-010 processing-speed readout,
-//!   FR-011 atomic live updates, FR-012 `Signal` tab, FR-013 dark/light, FR-014 kebab `MenuButton`
-//!   (sole popover exception), FR-015 keyboard + screen-reader.
-//!
-//! SC mapping (proxy invariants until `playback::signal_path` exists):
-//! - SC-003 (zero silent alterations) maps to `contracts/snapshot.md` invariants 2 and 5: any
-//!   alteration yields verdict >= `Processed`, and `describe` never returns empty strings with
-//!   converter input-to-output wording plus explicit DSD-to-PCM.
-//! - SC-006 (gapless atomic swap) maps to `contracts/snapshot.md` invariant 4 plus the data-model
-//!   generation rule: whole-snapshot swap on `generation` change, never mixed rows.
-//! - SC-002 (9/10 classify untouched/processed/limited) is asserted via `build_snapshot` verdict
-//!   precedence (Limited > Processed > Bit-Perfect) over real engine facts. Human 9/10
-//!   classification is validated manually via `quickstart.md` scenarios 1-3, not asserted
-//!   automatically.
-//! - SC-001/SC-004/SC-005 map to `contracts/dialog.md` (badge/header, explainer <1s, footer cards)
-//!   and are covered by later GTK/quickstart validation (T018, T026, T033..T034).
+//! SC mapping: SC-003 via `us3_describe_contract` (wording + explicit DSD
+//! stage); SC-006 via `us1_gapless_atomic_swap`; SC-002 via
+//! `us2_verdict_precedence` (human 9/10 manual via quickstart 1-3);
+//! SC-001/SC-004/SC-005 via GTK/quickstart validation.
 
 #[cfg(test)]
 mod tests {
@@ -38,15 +25,19 @@ mod tests {
                 QualityVerdict::{self, BitPerfect, Limited, Processed},
                 RenderingDevice,
                 SignalPathError::NoActiveTrack,
-                SignalPathSnapshot, SnapshotInput,
-                StageKind::{self, ExternalRenderer, Output, Source, Transport, Volume},
+                SignalPathSnapshot, SnapshotInput, StageFacts,
+                StageKind::{
+                    self, ExternalRenderer, FormatConverter, Output, Source, Transport, Volume,
+                },
                 path_snapshot::{build_snapshot, summarize_text},
                 path_verdict::resolve_verdict,
+                stage_describe::describe,
             },
             state::{
                 MuteState::{Muted, Unmuted},
                 PlaybackStatus::Playing,
             },
+            volume::format_volume_db,
         },
         storage::catalog::TrackAudio,
     };
@@ -90,48 +81,6 @@ mod tests {
         lost.device_lost = true;
         assert_built(&lost, Limited, false)?;
         Ok(())
-    }
-
-    fn assert_zero_silent_alterations_proxy() -> Result<()> {
-        let altering = ["resample", "bit-depth", "dsd-to-pcm", "volume", "eq"];
-        for stage in altering {
-            ensure!(
-                !stage.is_empty(),
-                "altering stage detail must never be empty (SC-003)"
-            );
-        }
-        let converter_detail = "96kHz to 192kHz";
-        ensure!(
-            converter_detail.contains(" to "),
-            "converter detail must carry input-to-output wording (SC-003)"
-        );
-        Ok(())
-    }
-
-    fn assert_gapless_atomic_swap_proxy() -> Result<()> {
-        let old_generation = 1_u64;
-        let new_generation = 2_u64;
-        let old_track = Some(1_i64);
-        let new_track = Some(2_i64);
-        ensure!(
-            old_generation != new_generation,
-            "generation must bump on track change (SC-006)"
-        );
-        ensure!(
-            old_track != new_track,
-            "track id must change across gapless transition (SC-006)"
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn sc003_zero_silent_alterations_proxy() -> Result<()> {
-        assert_zero_silent_alterations_proxy()
-    }
-
-    #[test]
-    fn sc006_gapless_atomic_swap_proxy() -> Result<()> {
-        assert_gapless_atomic_swap_proxy()
     }
 
     fn bit_perfect_input() -> SnapshotInput {
@@ -384,6 +333,67 @@ mod tests {
         ensure!(limited, "Limited wins over Processed");
         let shown = snapshot.processing_speed.is_some();
         ensure!(shown, "alteration still shows speed");
+        Ok(())
+    }
+
+    fn vol(volume: f64, label: &str) -> StageFacts {
+        StageFacts::Volume {
+            volume,
+            label: String::from(label),
+        }
+    }
+
+    #[test]
+    fn us3_describe_contract() -> Result<()> {
+        let dsp_db = format_volume_db(0.5);
+        let cases: Vec<(StageFacts, &str)> = vec![
+            (
+                StageFacts::SampleRateConverter {
+                    input_rate: 96000,
+                    output_rate: 192_000,
+                },
+                "96kHz to 192kHz",
+            ),
+            (
+                StageFacts::FormatConverter {
+                    input_format: String::from("DSD64"),
+                    output_format: String::from("PCM 176.4kHz"),
+                },
+                "DSD64 to PCM",
+            ),
+            (vol(0.5, "DSP volume"), &dsp_db),
+            (vol(0.8, "Leveling"), "Leveling"),
+            (vol(0.9, "Headroom"), "Headroom"),
+            (
+                StageFacts::Effect {
+                    kind: String::from("Channel map"),
+                    summary: String::from("Stereo to Mono"),
+                },
+                "Channel map",
+            ),
+        ];
+        for (kind, needle) in &cases {
+            let (title, detail, explanation) = describe(kind);
+            let texts = [title.as_str(), detail.as_str(), explanation.as_str()];
+            ensure!(texts.iter().all(|text| !text.is_empty()), "empty");
+            let hit = detail.contains(needle) || explanation.contains(needle);
+            ensure!(hit, "missing {needle}");
+            let wants_io = needle.contains(" to ");
+            ensure!(!wants_io || detail.contains(" to "), "converters need io");
+        }
+        let mut dsd = playing_input(31, 31, 2_822_400, None);
+        dsd.volume = 0.5;
+        let Some(audio) = dsd.track_audio.as_mut() else {
+            bail!("DSD fixture needs audio")
+        };
+        audio.codec = String::from("DSF");
+        audio.format = String::from("DSF");
+        let snapshot = build_snapshot(&dsd)?;
+        let explicit = snapshot
+            .stages
+            .iter()
+            .any(|stage| stage.kind == FormatConverter && stage.detail.contains("DSD"));
+        ensure!(explicit, "DSD needs an explicit stage");
         Ok(())
     }
 }

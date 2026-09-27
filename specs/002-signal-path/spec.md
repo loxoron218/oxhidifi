@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-26
 
-**Status**: In Progress (Setup + Foundational + US1 + US2 implementation complete; US3–US4 pending)
+**Status**: In Progress (Setup + Foundational + US1 + US2 + US3 implementation complete; US4 pending)
 
 **Input**: User description: "Recreate Roon's Signal Path feature seen on /home/arch/Projekte/oxhidifi/signal-path. Analyze the images thoroughly to describe the visible functionality, look and feel in detail."
 

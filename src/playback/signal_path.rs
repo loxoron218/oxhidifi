@@ -7,8 +7,8 @@
 pub mod path_snapshot;
 pub mod path_verdict;
 pub mod stage_build;
+pub mod stage_describe;
 pub mod stage_output;
-
 use thiserror::Error;
 
 use crate::{
