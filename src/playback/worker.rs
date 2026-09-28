@@ -21,13 +21,13 @@ use crate::{
         devices::OutputMode::{BitPerfect, Resampled},
         engine::{
             DecodeCommand::{self, PreloadNext},
-            EngineShared,
+            EngineShared, LiveSourceRate,
         },
         output::AudioOutput,
         pipeline::{LoopCtx, OutputConfig, handle_decode_cmd, process_decode_frame},
         resampler::{algorithm::create_resampler, converter::AudioResampler},
         state::{
-            PlaybackEvent::{DeviceLost, Resumed, TrackStarted},
+            PlaybackEvent::{DeviceLost, Resumed, TrackFormatReady, TrackStarted},
             PlaybackStatus::{Paused, Playing},
         },
     },
@@ -47,11 +47,25 @@ struct DecoderCtx {
 
 /// Open a decoder for `path` and create a resampler if needed.
 ///
-/// Returns `None` on failure (error event sent via `engine_shared`).
+/// Returns `None` on failure (error event sent via `engine_shared`) or when
+/// `track_id` is no longer current (stale skip), so a late thread never
+/// overwrites the fresh track's shared rate.
+///
+/// # Arguments
+///
+/// * `path` - Audio file to decode.
+/// * `engine_shared` - Shared engine owning rate state and event fan-out.
+/// * `output` - Device sample rate and channel configuration.
+/// * `track_id` - Track being decoded; must still be current to publish.
+///
+/// # Returns
+///
+/// * `Option<DecoderCtx>` - Decoder context, or `None` on failure or stale skip.
 fn init_decoder(
     path: &Path,
     engine_shared: &Arc<EngineShared>,
     output: OutputConfig,
+    track_id: i64,
 ) -> Option<DecoderCtx> {
     let decoder = match Decoder::open(path) {
         Ok(d) => d,
@@ -60,13 +74,19 @@ fn init_decoder(
             return None;
         }
     };
+    if engine_shared.state.lock().current_track_id != Some(track_id) {
+        return None;
+    }
     let params = decoder.params();
     let track_sample_rate = params.sample_rate;
     let track_bit_depth = params.bit_depth.unwrap_or(0);
     let src_channels = usize::from(params.channels);
     let out_channels = usize::from(output.channels);
 
-    *engine_shared.track_sample_rate.lock() = track_sample_rate;
+    *engine_shared.track_sample_rate.lock() = LiveSourceRate {
+        track_id: Some(track_id),
+        sample_rate: track_sample_rate,
+    };
 
     {
         let mut state = engine_shared.state.lock();
@@ -118,7 +138,14 @@ fn run_decode_loop(
         track_sample_rate,
         src_channels,
         resampler,
-    } = init_decoder(path, engine_shared, output)?;
+    } = init_decoder(path, engine_shared, output, track_id)?;
+
+    if engine_shared.state.lock().current_track_id == Some(track_id) {
+        engine_shared.send_event(&TrackFormatReady {
+            track_id,
+            sample_rate: track_sample_rate,
+        });
+    }
 
     let mut event_to_send = None;
     let mut ctx = LoopCtx {

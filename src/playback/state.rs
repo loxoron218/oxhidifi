@@ -24,6 +24,17 @@ pub enum PlaybackEvent {
         /// Track ID.
         track_id: i64,
     },
+    /// Live decoder facts are ready for a track.
+    ///
+    /// Sent from the decode thread after `Decoder::open` updates the shared
+    /// source rate. Lets signal-path subscribers re-publish once the live
+    /// rate is fresh instead of showing the previous track's rate.
+    TrackFormatReady {
+        /// Track ID the decoder facts belong to.
+        track_id: i64,
+        /// Source sample rate in Hz reported by the decoder.
+        sample_rate: u32,
+    },
     /// The track finished (end of stream).
     TrackFinished {
         /// ID of the finished track.

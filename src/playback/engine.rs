@@ -56,8 +56,8 @@ pub struct EngineShared {
     pub track_paths: Mutex<HashMap<i64, PathBuf>>,
     /// Device output sample rate, updated when `AudioOutput` is created.
     pub device_sample_rate: Mutex<u32>,
-    /// Current track sample rate, updated on track start.
-    pub track_sample_rate: Mutex<u32>,
+    /// Current track sample rate with owning track, updated by the decode thread.
+    pub track_sample_rate: Mutex<LiveSourceRate>,
     /// Shared flag set when the audio device is lost.
     pub device_lost: Arc<AtomicBool>,
     /// Gapless transitioner for seamless track transitions.
@@ -111,9 +111,31 @@ impl Default for EngineShared {
             output: Mutex::new(None),
             track_paths: Mutex::new(HashMap::new()),
             device_sample_rate: Mutex::new(44100),
-            track_sample_rate: Mutex::new(44100),
+            track_sample_rate: Mutex::new(LiveSourceRate::default()),
             device_lost: Arc::new(AtomicBool::new(false)),
             transitioner: Mutex::new(GaplessTransitioner::new()),
+        }
+    }
+}
+
+/// Live decoder source rate tagged with its owning track.
+///
+/// Tags the shared rate with the track that produced it so readers can
+/// detect a stale value after a skip: if the tag does not match the current
+/// track, the rate still belongs to the previous track.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LiveSourceRate {
+    /// Track that produced `sample_rate`, if any.
+    pub track_id: Option<i64>,
+    /// Source sample rate in Hz.
+    pub sample_rate: u32,
+}
+
+impl Default for LiveSourceRate {
+    fn default() -> Self {
+        Self {
+            track_id: None,
+            sample_rate: 44100,
         }
     }
 }

@@ -18,7 +18,7 @@ use crate::playback::{
     devices::OutputMode::BitPerfect,
     engine::{
         DecodeCommand::{self, Pause, PreloadNext, Resume, Seek},
-        EngineShared,
+        EngineShared, LiveSourceRate,
     },
     output::AudioOutput,
     resampler::{algorithm::create_resampler, converter::AudioResampler},
@@ -130,7 +130,10 @@ fn handle_empty_batch(
         state.elapsed_seconds = 0.0;
         state.duration_seconds = params.duration_seconds;
     }
-    *engine_shared.track_sample_rate.lock() = next_sr;
+    *engine_shared.track_sample_rate.lock() = LiveSourceRate {
+        track_id: Some(next_id),
+        sample_rate: next_sr,
+    };
 
     let output_mode = engine_shared.state.lock().output_mode;
     let supports_native = engine_shared

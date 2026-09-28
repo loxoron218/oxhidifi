@@ -31,53 +31,15 @@ use crate::{
         state::{
             PlaybackEvent::{
                 self, DeviceLost, OutputModeChanged, Paused, Resumed, Stopped, TrackFinished,
-                TrackStarted, VolumeChanged,
+                TrackFormatReady, TrackStarted, VolumeChanged,
             },
             PlaybackStatus,
         },
         transport::PlaybackTransport,
     },
     storage::{Storage, database::SqliteStorage},
+    ui::signal_view::signal_source::{SpeedEma, resolve_live_source},
 };
-
-/// Exponential-moving-average factor for processing-speed smoothing.
-const SPEED_ALPHA: f64 = 0.3;
-
-/// Snapshot-sampled processing-speed smoother owned by the publisher worker.
-#[derive(Debug, Clone, Default)]
-struct SpeedEma {
-    /// Last smoothed multiple of real time, if any alteration was active.
-    current: Option<f64>,
-}
-
-impl SpeedEma {
-    /// Create an empty smoother with no prior sample.
-    const fn new() -> Self {
-        Self { current: None }
-    }
-
-    /// Fold one instantaneous multiple into the running average.
-    ///
-    /// # Arguments
-    ///
-    /// * `sample` - Instantaneous throughput multiple for this snapshot.
-    ///
-    /// # Returns
-    ///
-    /// * `f64` - Smoothed multiple of real time.
-    fn update(&mut self, sample: f64) -> f64 {
-        let smoothed = self.current.map_or(sample, |previous| {
-            SPEED_ALPHA.mul_add(sample, (1.0 - SPEED_ALPHA) * previous)
-        });
-        self.current = Some(smoothed);
-        smoothed
-    }
-
-    /// Forget prior samples when the path carries no in-app alteration.
-    const fn reset(&mut self) {
-        self.current = None;
-    }
-}
 
 /// Sample monotonic wall-clock time in nanos for one snapshot.
 ///
@@ -145,6 +107,7 @@ const fn snapshot_event(event: &PlaybackEvent) -> bool {
     matches!(
         event,
         TrackStarted { .. }
+            | TrackFormatReady { .. }
             | TrackFinished { .. }
             | Paused
             | Resumed
@@ -184,6 +147,9 @@ async fn publish_snapshot(
 /// Locks are held only for short clones; the async catalog lookup runs after
 /// every lock is released. Decoder facts stay `None` until the decode loop
 /// exposes them; resampler facts derive from the live source/device rates.
+/// The shared live rate is tagged with its owning track: a tag mismatch means
+/// `TrackStarted` fired before `Decoder::open` updated the rate, so the
+/// catalog rate is preferred until `TrackFormatReady` arrives.
 /// Timing fields are captured here for the snapshot-sampled speed estimate.
 async fn snapshot_for_engine(
     engine: &Arc<PlaybackEngine>,
@@ -206,7 +172,7 @@ async fn snapshot_for_engine(
             )
         })
     };
-    let track_rate = *shared.track_sample_rate.lock();
+    let live_rate = *shared.track_sample_rate.lock();
     let configured_rate = *shared.device_sample_rate.lock();
     let lost = shared.device_lost.load(Relaxed);
     let sampled_at_wall = sample_wall_nanos();
@@ -234,11 +200,12 @@ async fn snapshot_for_engine(
     };
     let catalog_hz =
         u32::try_from(track_audio.as_ref().map_or(0, |audio| audio.sample_rate)).unwrap_or(0);
-    let live_src = if track_rate > 0 {
-        track_rate
-    } else {
-        catalog_hz
-    };
+    let live_src = resolve_live_source(
+        current,
+        live_rate.track_id,
+        live_rate.sample_rate,
+        catalog_hz,
+    );
     let (resampler_in, resampler_out) =
         if live_src > 0 && device_rate > 0 && live_src != device_rate {
             (Some(live_src), Some(device_rate))
@@ -300,16 +267,21 @@ mod tests {
             devices::OutputMode::{BitPerfect as ModeBitPerfect, Resampled},
             state::PlaybackEvent::{
                 DeviceLost, Error, GaplessEnabledChanged, OutputModeChanged, Paused, PositionTick,
-                QueueChanged, Resumed, Seeked, Stopped, TrackFinished, TrackStarted, VolumeChanged,
+                QueueChanged, Resumed, Seeked, Stopped, TrackFinished, TrackFormatReady,
+                TrackStarted, VolumeChanged,
             },
         },
-        ui::signal_view::signal_publish::{SpeedEma, sample_wall_nanos, snapshot_event},
+        ui::signal_view::signal_publish::{sample_wall_nanos, snapshot_event},
     };
 
     #[test]
     fn path_changing_events_trigger_rebuild() -> Result<()> {
         let rebuilds = [
             TrackStarted { track_id: 1 },
+            TrackFormatReady {
+                track_id: 1,
+                sample_rate: 48000,
+            },
             TrackFinished { track_id: 1 },
             Paused,
             Resumed,
@@ -356,27 +328,6 @@ mod tests {
                 "position, queue, seek, and error events must never rebuild, got {event:?}"
             );
         }
-        Ok(())
-    }
-
-    #[test]
-    fn speed_ema_smooths_with_alpha_point_three() -> Result<()> {
-        let mut ema = SpeedEma::new();
-        ensure!(ema.current.is_none(), "fresh smoother holds no sample");
-        let first = ema.update(32.0);
-        ensure!(
-            (first - 32.0).abs() < f64::EPSILON,
-            "first sample passes through, got {first}"
-        );
-        let second = ema.update(42.0);
-        let expected = 0.3_f64.mul_add(42.0, 0.7 * 32.0);
-        ensure!(
-            (second - expected).abs() < 1e-9,
-            "second sample smooths with alpha 0.3, got {second} want {expected}"
-        );
-        ensure!(ema.current.is_some(), "smoother retains the average");
-        ema.reset();
-        ensure!(ema.current.is_none(), "reset clears for bit-perfect paths");
         Ok(())
     }
 
