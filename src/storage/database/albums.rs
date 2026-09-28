@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use {
-    sqlx::{FromRow, QueryBuilder, query_as},
+    sqlx::{FromRow, QueryBuilder, query, query_as},
     tracing::warn,
 };
 
@@ -198,6 +198,25 @@ impl SqliteStorage {
         .fetch_all(&self.pool)
         .await
         .map_err(|e| Database(format!("Get albums by artist failed: {e}")))
+    }
+
+    /// Update an album's cached artwork path.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StorageError::Database`] if the query fails.
+    pub async fn update_album_artwork_row(
+        &self,
+        album_id: i64,
+        artwork_path: Option<String>,
+    ) -> Result<(), StorageError> {
+        _ = query("UPDATE albums SET artwork_path = ? WHERE id = ?")
+            .bind(artwork_path)
+            .bind(album_id)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| Database(format!("Update album artwork failed: {e}")))?;
+        Ok(())
     }
 }
 

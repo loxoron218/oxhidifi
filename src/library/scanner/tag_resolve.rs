@@ -8,7 +8,7 @@ use tracing::{error, info, warn};
 
 use crate::{
     library::{
-        artwork::{ArtworkError, cache_artwork, extract_artwork},
+        artwork::{ArtworkError, artwork_cache_key, cache_artwork, extract_artwork},
         metadata::AudioMetadata,
         scanner::{
             FsScanner,
@@ -96,7 +96,7 @@ impl<S: Storage> FsScanner<S> {
         );
         let artwork_path = Self::cache_extracted_artwork(
             extract_artwork(file_path),
-            &format!("{artist_id}_{}", title.to_lowercase()),
+            &artwork_cache_key(artist_id, title),
         );
         let genre = metadata
             .genre

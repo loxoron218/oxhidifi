@@ -1,5 +1,6 @@
 //! Artwork extraction and caching from audio files.
 
+pub mod repair;
 pub mod thumbnail;
 
 use std::{
@@ -81,6 +82,24 @@ pub fn extract_artwork(path: &Path) -> Result<Option<(Vec<u8>, String)>, Artwork
         .map_or_else(|| "png".to_string(), ToString::to_string);
 
     Ok(Some((picture.data().to_vec(), ext)))
+}
+
+/// Build the cache key for an album's artwork.
+///
+/// Centralizes the `{artist_id}_{lowercased_title}` scheme so the scanner
+/// and the startup repair job derive identical filenames.
+///
+/// # Arguments
+///
+/// * `artist_id` - Database ID of the album artist.
+/// * `title` - Album title as stored in the database.
+///
+/// # Returns
+///
+/// * `String` - Cache key used as the artwork filename stem.
+#[must_use]
+pub fn artwork_cache_key(artist_id: i64, title: &str) -> String {
+    format!("{artist_id}_{}", title.to_lowercase())
 }
 
 /// Ensure the artwork cache directory exists.
@@ -178,16 +197,22 @@ pub fn get_cached_artwork_path(key: &str) -> Option<PathBuf> {
 /// If the stored version does not match [`CACHE_VERSION`], the artwork
 /// directory is wiped so that files are re-extracted with correctly-detected
 /// MIME extensions on the next scan.
-pub fn check_cache_version() {
+///
+/// # Returns
+///
+/// * `true` when the cache was wiped (stored `artwork_path` rows are now stale and should be
+///   repaired from embedded audio tags).
+/// * `false` when the cache was already current.
+pub fn check_cache_version() -> bool {
     let Ok(cache_dir) = ensure_artwork_cache_dir() else {
-        return;
+        return false;
     };
     let version_path = cache_dir.join(".version");
 
     let needs_wipe = read_to_string(&version_path).is_none_or(|v| v.trim() != CACHE_VERSION);
 
     if !needs_wipe {
-        return;
+        return false;
     }
 
     if let Ok(entries) = read_dir(&cache_dir) {
@@ -202,6 +227,7 @@ pub fn check_cache_version() {
     if let Err(e) = write(&version_path, CACHE_VERSION) {
         warn!(error = %e, path = %version_path.display(), "Failed to write cache version");
     }
+    true
 }
 
 /// Remove a cached artwork file, logging on failure.
@@ -237,8 +263,9 @@ mod tests {
     };
 
     use crate::library::artwork::{
-        CACHE_VERSION, cache_artwork_in, check_cache_version, ensure_artwork_cache_dir,
-        extract_artwork, get_cached_artwork_path, get_cached_thumbnail_path, read_to_string,
+        CACHE_VERSION, artwork_cache_key, cache_artwork_in, check_cache_version,
+        ensure_artwork_cache_dir, extract_artwork, get_cached_artwork_path,
+        get_cached_thumbnail_path, read_to_string,
     };
 
     fn has_cached_artwork_in(cache_dir: &Path, key: &str) -> bool {
@@ -299,12 +326,21 @@ mod tests {
 
     #[test]
     fn check_cache_version_writes_version_file() {
-        check_cache_version();
+        _ = check_cache_version();
         let Ok(cache_dir) = ensure_artwork_cache_dir() else {
             return;
         };
         let version = read_to_string(&cache_dir.join(".version"));
         assert_eq!(version.as_deref(), Some(CACHE_VERSION));
+    }
+
+    #[test]
+    fn artwork_cache_key_lowercases_title() {
+        assert_eq!(
+            artwork_cache_key(3, "Back To Black"),
+            "3_back to black",
+            "cache key must lowercase the title"
+        );
     }
 
     #[test]

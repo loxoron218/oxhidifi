@@ -97,6 +97,16 @@ pub trait Storage: Send + Sync + 'static {
         artist_id: i64,
     ) -> impl Future<Output = Result<Vec<Album>, StorageError>> + Send;
 
+    /// Update an album's cached artwork path.
+    ///
+    /// Pass `None` to clear a stale path (missing file or album without
+    /// embedded art) so the UI stops dispatching decodes for it.
+    fn update_album_artwork(
+        &self,
+        album_id: i64,
+        artwork_path: Option<String>,
+    ) -> impl Future<Output = Result<(), StorageError>> + Send;
+
     /// Insert a new artist, returning its id.
     fn insert_artist(
         &self,

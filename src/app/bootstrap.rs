@@ -14,7 +14,7 @@ use {
 use crate::{
     app::runtime::AppState,
     library::{
-        artwork::check_cache_version,
+        artwork::{check_cache_version, repair::repair_missing_artwork},
         watcher::{LibraryWatcher, WatcherEvent},
     },
     playback::{
@@ -58,10 +58,39 @@ pub fn spawn_watcher_loop(
     spawn(watcher_loop(watcher, watcher_rx))
 }
 
-/// Check artwork cache version and test audio device at startup.
-pub async fn run_startup_checks() {
-    if let Err(e) = spawn_blocking(check_cache_version).await {
-        warn!(error = %e, "Failed to check artwork cache version");
+/// Check artwork cache version, repair stale artwork paths, and test audio
+/// device at startup.
+///
+/// A cache wipe invalidates stored `artwork_path` rows, so missing artwork is
+/// re-extracted from embedded audio tags before the gallery dispatches cover
+/// decodes.
+///
+/// # Arguments
+///
+/// * `storage` - Storage backend holding albums and tracks for the repair job.
+pub async fn run_startup_checks(storage: Arc<SqliteStorage>) {
+    let wiped = match spawn_blocking(check_cache_version).await {
+        Ok(wiped) => wiped,
+        Err(e) => {
+            warn!(error = %e, "Failed to check artwork cache version");
+            false
+        }
+    };
+    if wiped {
+        info!(
+            wiped,
+            "Artwork cache version changed, wiped cache and repairing paths"
+        );
+    }
+    let summary = repair_missing_artwork(&*storage).await;
+    if summary.repaired > 0 || summary.cleared > 0 || summary.failed > 0 {
+        info!(
+            checked = summary.checked,
+            repaired = summary.repaired,
+            cleared = summary.cleared,
+            failed = summary.failed,
+            "Startup artwork repair finished"
+        );
     }
     match spawn_blocking(startup_device_check).await {
         Ok(Some(msg)) => {
@@ -288,7 +317,7 @@ mod tests {
     fn run_startup_checks_signature() {
         fn assert_shape<F, Fut>(_: F)
         where
-            F: Fn() -> Fut,
+            F: Fn(Arc<SqliteStorage>) -> Fut,
             Fut: Future<Output = ()>,
         {
         }

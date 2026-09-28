@@ -218,6 +218,15 @@ impl Storage for SqliteStorage {
         self.albums_by_artist_rows(artist_id).await
     }
 
+    /// Update an album's cached artwork path.
+    async fn update_album_artwork(
+        &self,
+        album_id: i64,
+        artwork_path: Option<String>,
+    ) -> Result<(), StorageError> {
+        self.update_album_artwork_row(album_id, artwork_path).await
+    }
+
     /// Insert a new artist, returning its id.
     async fn insert_artist(&self, artist: NewArtist) -> Result<i64, StorageError> {
         self.insert_artist_row(&artist).await

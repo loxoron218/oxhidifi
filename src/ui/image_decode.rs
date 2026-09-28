@@ -1,5 +1,7 @@
 //! Image file decoding into raw pixel data and `MemoryTexture`.
 
+use std::path::Path;
+
 use {
     libadwaita::{
         gdk::{
@@ -9,7 +11,7 @@ use {
         glib::Bytes,
         gtk::gdk_pixbuf::Pixbuf,
     },
-    tracing::error,
+    tracing::warn,
 };
 
 /// Decoded cover art as raw pixel data (Send-safe).
@@ -30,13 +32,22 @@ pub struct DecodedCover {
 /// Decode an image file at a given size into raw pixel data.
 ///
 /// Returns `None` if the file could not be loaded or decoded.
+/// A missing file is an expected condition after an artwork cache wipe
+/// (see `check_cache_version`) and is skipped silently so a full grid of
+/// stale album paths does not flood the log. Callers filter missing files
+/// before dispatching (see `CoverArtCache::request_decode`), so reaching
+/// this branch means the file vanished mid-request.
+/// Genuinely unreadable files are logged at `warn` level.
 /// The raw data can be sent across threads and converted to a
 /// `MemoryTexture` on the main thread via [`raw_to_texture`].
 pub fn decode_cover_raw(path: &str, size: i32) -> Option<DecodedCover> {
+    if !Path::new(path).exists() {
+        return None;
+    }
     let pixbuf = match Pixbuf::from_file_at_scale(path, size, size, true) {
         Ok(p) => p,
         Err(e) => {
-            error!(error = %e, path, "Failed to decode cover art");
+            warn!(error = %e, path, "Failed to decode cover art");
             return None;
         }
     };

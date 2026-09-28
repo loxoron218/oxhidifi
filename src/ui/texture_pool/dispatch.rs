@@ -2,6 +2,7 @@
 
 use std::{
     fmt::{Debug, Formatter, Result as FmtResult},
+    path::Path,
     sync::{Arc, Weak},
 };
 
@@ -80,7 +81,14 @@ impl CoverArtCache {
     /// is released when the decode completes (or if the send fails), so
     /// rapid zoom toggling never queues the same cover twice yet a later
     /// zoom to the same size can still re-decode after eviction.
+    ///
+    /// Requests for files that no longer exist on disk (e.g. after an
+    /// artwork cache wipe with stale `artwork_path` rows) are dropped
+    /// silently instead of dispatching to the worker.
     pub fn request_decode(self: &Arc<Self>, request: ArtworkDecodeRequest) {
+        if !Path::new(&request.path).exists() {
+            return;
+        }
         let key = (request.album_id, request.size);
         if !self.in_flight.lock().insert(key) {
             return;
@@ -192,6 +200,7 @@ pub mod tests {
         anyhow::{Error, Result, ensure},
         async_channel::{Sender, unbounded},
         libadwaita::gdk::MemoryFormat::R8g8b8a8,
+        tempfile::NamedTempFile,
     };
 
     use crate::ui::{
@@ -270,6 +279,8 @@ pub mod tests {
     fn request_decode_dedups_in_flight_requests() -> Result<()> {
         let (tx, rx) = unbounded::<ArtworkDecodeRequest>();
         let cache = Arc::new(CoverArtCache::with_sender(Some(tx)));
+        let cover_file = NamedTempFile::new()?;
+        let cover_path = cover_file.path().to_string_lossy().to_string();
 
         let request = |path: &str| ArtworkDecodeRequest {
             album_id: 1,
@@ -278,8 +289,8 @@ pub mod tests {
             on_complete: Box::new(|_, _| {}),
         };
 
-        cache.request_decode(request("a.jpg"));
-        cache.request_decode(request("a.jpg"));
+        cache.request_decode(request(&cover_path));
+        cache.request_decode(request(&cover_path));
         ensure!(
             rx.len() == 1,
             "a duplicate (album, size) request must be dropped while in flight"
@@ -292,10 +303,32 @@ pub mod tests {
             "completing a decode must release its in-flight key"
         );
 
-        cache.request_decode(request("b.jpg"));
+        cache.request_decode(request(&cover_path));
         ensure!(
             rx.len() == 1,
             "a new request after completion must be accepted"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn request_decode_skips_missing_files() -> Result<()> {
+        let (tx, rx) = unbounded::<ArtworkDecodeRequest>();
+        let cache = Arc::new(CoverArtCache::with_sender(Some(tx)));
+
+        cache.request_decode(ArtworkDecodeRequest {
+            album_id: 1,
+            path: "/nonexistent-oxhidifi-cover.jpg".to_string(),
+            size: 180,
+            on_complete: Box::new(|_, _| {}),
+        });
+        ensure!(
+            rx.is_empty(),
+            "a request for a missing file must not reach the decoder"
+        );
+        ensure!(
+            cache.in_flight.lock().is_empty(),
+            "a skipped request must not occupy the in-flight set"
         );
         Ok(())
     }

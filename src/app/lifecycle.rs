@@ -127,10 +127,11 @@ fn run_gtk_application(state: &Arc<AppState>) -> ExitCode {
         .lock()
         .retain_signal(app.connect_activate(move |app| {
             build_window(app, &startup_state).present();
+            let repair_storage = Arc::clone(&startup_state.storage);
             startup_state
                 .handles
                 .lock()
-                .retain_task(spawn_future_local(run_startup_checks()));
+                .retain_task(spawn_future_local(run_startup_checks(repair_storage)));
 
             let quit_app = app.clone();
             let quit_rx = quit_rx.clone();
