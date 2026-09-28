@@ -93,7 +93,7 @@ impl<S: Storage> FsScanner<S> {
 
     /// Map a storage insertion error to a skip reason with logging.
     pub fn map_insert_error(e: &StorageError, entity: &str) -> SkipReason {
-        warn!(error = %e, "Failed to insert {entity}");
+        warn!(error = %e, entity, "Failed to insert entity");
         CorruptFile
     }
 }

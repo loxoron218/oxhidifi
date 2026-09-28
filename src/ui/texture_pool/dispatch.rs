@@ -179,7 +179,7 @@ pub fn send_channel_cover(
 ) {
     let Some(decoded) = decoded else { return };
     if let Err(e) = tx.try_send((aid, size, decoded)) {
-        error!(error = %e, "Failed to send decoded cover to {context}");
+        error!(error = %e, context, "Failed to send decoded cover");
     }
 }
 

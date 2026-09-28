@@ -44,7 +44,7 @@ pub fn toggle_pause_or_resume(shared: &Arc<EngineShared>) -> Result<(), Playback
     };
 
     let Some(tid) = tid else {
-        info!("Toggle pause ignored — not playing");
+        info!(reason = "no_track", "Toggle pause ignored — not playing");
         return Ok(());
     };
 

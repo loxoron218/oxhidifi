@@ -6,13 +6,13 @@
 //! lives in [`stage_build`](crate::playback::signal_path::stage_build).
 
 use crate::playback::{
-    devices::OutputMode::{BitPerfect as ModeBitPerfect, Resampled},
+    devices::OutputMode::{BitPerfect, Resampled},
     signal_path::{
-        DeviceRole::Output as DeviceOutput,
+        DeviceRole::Output,
         PathStage,
-        QualityVerdict::{BitPerfect, Limited, Processed},
+        QualityVerdict::{BitPerfect as VerdictBitPerfect, Limited, Processed},
         RenderingDevice, SnapshotInput,
-        StageKind::{Output, Transport},
+        StageKind::{Output as KindOutput, Transport},
         stage_build::push_stage,
     },
 };
@@ -61,11 +61,11 @@ pub fn push_transport_stage(stages: &mut Vec<PathStage>, input: &SnapshotInput) 
             String::from("ALSA shared/system mixer"),
             Limited,
         )
-    } else if usb && input.output_mode == ModeBitPerfect {
+    } else if usb && input.output_mode == BitPerfect {
         (
             String::from("USB Output"),
             String::from("USB output"),
-            BitPerfect,
+            VerdictBitPerfect,
         )
     } else if usb {
         (
@@ -83,7 +83,7 @@ pub fn push_transport_stage(stages: &mut Vec<PathStage>, input: &SnapshotInput) 
         (
             String::from("ALSA Direct Output"),
             String::from("ALSA direct exclusive"),
-            BitPerfect,
+            VerdictBitPerfect,
         )
     };
     let detail = format!("{display} ({mode})");
@@ -122,12 +122,12 @@ pub fn push_output_stage(stages: &mut Vec<PathStage>, input: &SnapshotInput) {
     let verdict = if input.device_lost || is_shared_mixer(&input.device_id, &input.device_name) {
         Limited
     } else {
-        BitPerfect
+        VerdictBitPerfect
     };
     let explanation = format!("Renders the final stream on {display}.");
     push_stage(
         stages,
-        Output,
+        KindOutput,
         String::from("Output"),
         display,
         explanation,
@@ -141,7 +141,23 @@ pub fn push_output_stage(stages: &mut Vec<PathStage>, input: &SnapshotInput) {
 pub fn output_device(input: &SnapshotInput) -> RenderingDevice {
     RenderingDevice {
         display_name: display_name(input),
-        role: DeviceOutput,
+        role: Output,
+        brand_visual: String::from("audio-card-symbolic"),
+        illustration: String::from("audio-speakers-symbolic"),
+        manual_url: None,
+    }
+}
+
+/// Build the shared Lab DAC device for tests.
+///
+/// # Returns
+///
+/// * `RenderingDevice` - Deterministic output device for unit tests.
+#[must_use]
+pub fn lab_test_device() -> RenderingDevice {
+    RenderingDevice {
+        display_name: String::from("Test DAC"),
+        role: Output,
         brand_visual: String::from("audio-card-symbolic"),
         illustration: String::from("audio-speakers-symbolic"),
         manual_url: None,

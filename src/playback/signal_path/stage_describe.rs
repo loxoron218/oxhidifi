@@ -5,7 +5,10 @@
 
 use crate::playback::{
     signal_path::{
-        StageFacts,
+        StageFacts::{
+            self, Authentication, BitDepthConverter, Decoder, Effect, ExternalRenderer,
+            FormatConverter, Output, SampleRateConverter, Source, Transport, Volume,
+        },
         stage_build::{format_channels, format_rate, is_dsd_label},
     },
     volume::format_volume_db,
@@ -44,44 +47,43 @@ fn is_channel_label(label: &str) -> bool {
 #[must_use]
 pub fn describe(kind: &StageFacts) -> (String, String, String) {
     match kind {
-        StageFacts::Source {
+        Source {
             origin,
             codec,
             sample_rate,
             bit_depth,
             channels,
         } => describe_source(origin, codec, *sample_rate, *bit_depth, *channels),
-        StageFacts::Authentication { provider, verified } => {
-            describe_authentication(provider, *verified)
-        }
-        StageFacts::Decoder {
+        Authentication { provider, verified } => describe_authentication(provider, *verified),
+        Decoder {
             codec,
             sample_rate,
             channels,
         } => describe_decoder(codec, *sample_rate, *channels),
-        StageFacts::BitDepthConverter {
+        BitDepthConverter {
             input_bits,
             output_bits,
         } => describe_bit_depth(*input_bits, *output_bits),
-        StageFacts::SampleRateConverter {
+        SampleRateConverter {
             input_rate,
             output_rate,
         } => describe_sample_rate(*input_rate, *output_rate),
-        StageFacts::FormatConverter {
+        FormatConverter {
             input_format,
             output_format,
         } => describe_format(input_format, output_format),
-        StageFacts::Volume { volume, label } => describe_volume(*volume, label),
-        StageFacts::Effect { kind, summary } => describe_effect(kind, summary),
-        StageFacts::Transport { mode, device_name } => describe_transport(mode, device_name),
-        StageFacts::Output { destination, mode } => describe_output(destination, mode),
-        StageFacts::ExternalRenderer {
+        Volume { volume, label } => describe_volume(*volume, label),
+        Effect { kind, summary } => describe_effect(kind, summary),
+        Transport { mode, device_name } => describe_transport(mode, device_name),
+        Output { destination, mode } => describe_output(destination, mode),
+        ExternalRenderer {
             title,
             filter,
             modulator,
         } => describe_renderer(title, filter.as_ref(), modulator.as_ref()),
     }
 }
+
 /// Describe the source origin and format facts.
 fn describe_source(
     origin: &str,
@@ -104,6 +106,7 @@ fn describe_source(
     );
     (title, detail, explanation)
 }
+
 /// Describe provider authentication or verification.
 fn describe_authentication(provider: &str, verified: bool) -> (String, String, String) {
     let provider_text = known_or(provider, "unknown provider");
@@ -278,18 +281,23 @@ fn describe_renderer(
 
 #[cfg(test)]
 mod tests {
-    use anyhow::{Result, ensure};
+    use anyhow::{Result, anyhow, ensure};
 
     use crate::playback::{
-        signal_path::{StageFacts, stage_describe::describe},
+        signal_path::{
+            StageFacts::{
+                self, Authentication, BitDepthConverter, Decoder, Effect, ExternalRenderer, Output,
+                Source, Transport, Volume,
+            },
+            describe_contract::check_describe_pair,
+        },
         volume::format_volume_db,
     };
 
-    /// Contract facts with expected wording needles for the table test.
-    fn describe_cases(dsp_db: &str) -> Vec<(StageFacts, &str)> {
+    fn describe_contract_cases(dsp_db: &str) -> Vec<(StageFacts, &str)> {
         vec![
             (
-                StageFacts::Source {
+                Source {
                     origin: String::from("File"),
                     codec: String::from("FLAC"),
                     sample_rate: Some(44100),
@@ -299,14 +307,14 @@ mod tests {
                 "FLAC",
             ),
             (
-                StageFacts::Authentication {
+                Authentication {
                     provider: String::from("Qobuz"),
                     verified: true,
                 },
                 "Qobuz",
             ),
             (
-                StageFacts::Decoder {
+                Decoder {
                     codec: String::from("FLAC"),
                     sample_rate: 44100,
                     channels: 2,
@@ -314,49 +322,49 @@ mod tests {
                 "PCM",
             ),
             (
-                StageFacts::BitDepthConverter {
+                BitDepthConverter {
                     input_bits: 24,
                     output_bits: 64,
                 },
                 "24bit to 64bit",
             ),
             (
-                StageFacts::Volume {
+                Volume {
                     volume: 0.5,
                     label: String::from("DSP volume"),
                 },
                 dsp_db,
             ),
             (
-                StageFacts::Effect {
+                Effect {
                     kind: String::from("Equalizer"),
                     summary: String::from("4 bands"),
                 },
                 "Equalizer",
             ),
             (
-                StageFacts::Effect {
+                Effect {
                     kind: String::from("Channel map"),
                     summary: String::from("Stereo to Mono"),
                 },
                 "Channel map",
             ),
             (
-                StageFacts::Transport {
+                Transport {
                     mode: String::from("ALSA direct exclusive"),
                     device_name: String::from("DAC"),
                 },
                 "ALSA",
             ),
             (
-                StageFacts::Output {
+                Output {
                     destination: String::from("Speakers"),
                     mode: String::from("Direct"),
                 },
                 "Speakers",
             ),
             (
-                StageFacts::ExternalRenderer {
+                ExternalRenderer {
                     title: String::from("HQPlayer"),
                     filter: None,
                     modulator: None,
@@ -364,7 +372,7 @@ mod tests {
                 "HQPlayer",
             ),
             (
-                StageFacts::Source {
+                Source {
                     origin: String::new(),
                     codec: String::new(),
                     sample_rate: None,
@@ -379,19 +387,9 @@ mod tests {
     #[test]
     fn describe_covers_every_family_with_io_and_db() -> Result<()> {
         let dsp_db = format_volume_db(0.5);
-        let cases = describe_cases(&dsp_db);
+        let cases = describe_contract_cases(&dsp_db);
         for (kind, needle) in &cases {
-            let (title, detail, explanation) = describe(kind);
-            let texts = [title.as_str(), detail.as_str(), explanation.as_str()];
-            ensure!(texts.iter().all(|text| !text.is_empty()), "empty");
-            let hit = detail.contains(needle) || explanation.contains(needle);
-            ensure!(hit, "missing {needle}");
-            ensure!(
-                !needle.contains(" to ") || detail.contains(" to "),
-                "converters need io"
-            );
-            let renderer = matches!(kind, StageFacts::ExternalRenderer { .. });
-            ensure!(!renderer || title == detail, "renderer stays title-only");
+            check_describe_pair(kind, needle).map_err(|e| anyhow!(e))?;
         }
         ensure!(cases.len() == 11, "every family covered");
         Ok(())

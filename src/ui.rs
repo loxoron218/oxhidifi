@@ -9,6 +9,7 @@ pub mod image_decode;
 pub mod key_bindings;
 pub mod navigation;
 pub mod osd_button;
+pub mod pane_modes;
 pub mod panes;
 pub mod player;
 pub mod preferences;

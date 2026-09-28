@@ -36,7 +36,7 @@ pub fn decode_cover_raw(path: &str, size: i32) -> Option<DecodedCover> {
     let pixbuf = match Pixbuf::from_file_at_scale(path, size, size, true) {
         Ok(p) => p,
         Err(e) => {
-            error!(error = %e, "Failed to decode cover art at {path}");
+            error!(error = %e, path, "Failed to decode cover art");
             return None;
         }
     };

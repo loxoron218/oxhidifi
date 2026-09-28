@@ -5,18 +5,27 @@
 //! newest snapshot wins; the whole chain swaps only when `generation` or
 //! track id changes, so gapless transitions never show mixed rows. Workers
 //! own all I/O (catalog lookup, lock clones, snapshot builds); the main
-//! thread only rebuilds rows from the ready snapshot.
+//! thread only rebuilds rows from the ready snapshot. [`wire_signal_tab`]
+//! connects every live service (mailbox, publisher, poll, overflow menu) in
+//! one call so no feed is left unwired.
 
 use std::{sync::Arc, time::Duration};
 
 use {
     async_channel::{Receiver, Sender, unbounded},
-    libadwaita::glib::{ControlFlow::Continue, timeout_add_local},
+    libadwaita::{
+        glib::{ControlFlow::Continue, timeout_add_local},
+        gtk::Window,
+    },
 };
 
 use crate::{
-    app::runtime::AppState, playback::signal_path::SignalPathSnapshot,
-    ui::signal_view::signal_tab::SignalTab,
+    app::runtime::AppState,
+    playback::signal_path::SignalPathSnapshot,
+    ui::signal_view::{
+        signal_menu::wire_signal_menu, signal_publish::spawn_snapshot_publisher,
+        signal_tab::SignalTab,
+    },
 };
 
 /// Poll cadence for the Signal tab mailbox drain (100–500 ms budget).
@@ -122,6 +131,25 @@ pub fn start_signal_poll(
         Continue
     });
     state.handles.lock().retain_source(source);
+}
+
+/// Connect every live service for one Signal tab.
+///
+/// Creates the per-subscriber snapshot mailbox, spawns the off-thread
+/// publisher feeding it, starts the poll loop draining it, and wires the
+/// overflow menu actions. A single call keeps the mailbox ends paired with
+/// their publisher and poll owners.
+///
+/// # Arguments
+///
+/// * `state` - Application state owning channels, handles, and settings.
+/// * `tab` - Signal tab handles to refresh and to wire the menu for.
+/// * `parent` - Parent window used to present the preferences dialog.
+pub fn wire_signal_tab(state: &Arc<AppState>, tab: &SignalTab, parent: &Window) {
+    let (snapshot_tx, snapshot_rx) = create_mailbox();
+    spawn_snapshot_publisher(&state.playback, &state.storage, snapshot_tx);
+    start_signal_poll(state, tab, snapshot_rx);
+    wire_signal_menu(tab, state, parent);
 }
 
 /// Apply one drained snapshot to the tab.

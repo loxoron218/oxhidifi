@@ -14,7 +14,7 @@ use {
     libadwaita::{
         gtk::{
             Box, Button, MenuButton, Orientation::Vertical, Popover, Window,
-            accessible::Property::Label as A11yLabel,
+            accessible::Property::Label,
         },
         prelude::{AccessibleExtManual, BoxExt, ButtonExt, WidgetExt},
     },
@@ -94,7 +94,7 @@ fn menu_action(label: &str) -> Button {
         .can_focus(true)
         .hexpand(true)
         .build();
-    button.update_property(&[A11yLabel(label)]);
+    button.update_property(&[Label(label)]);
     button
 }
 
@@ -122,7 +122,7 @@ pub fn build_signal_menu() -> SignalMenu {
         .can_focus(true)
         .popover(&popover)
         .build();
-    button.update_property(&[A11yLabel("Signal path options")]);
+    button.update_property(&[Label("Signal path options")]);
     SignalMenu {
         button,
         copy,

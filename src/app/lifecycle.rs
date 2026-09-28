@@ -84,8 +84,8 @@ fn spawn_signal_handlers(quit_tx: Sender<()>) {
         };
 
         select! {
-            _ = sigint.recv() => info!("SIGINT received, quitting gracefully"),
-            _ = sigterm.recv() => info!("SIGTERM received, quitting gracefully"),
+            _ = sigint.recv() => info!(signal = "SIGINT", "SIGINT received, quitting gracefully"),
+            _ = sigterm.recv() => info!(signal = "SIGTERM", "SIGTERM received, quitting gracefully"),
         }
 
         if let Err(e) = quit_tx.send(()).await {
@@ -144,7 +144,7 @@ fn run_gtk_application(state: &Arc<AppState>) -> ExitCode {
             }));
         }));
 
-    info!("Starting application");
+    info!(stage = "gtk_init", "Starting application");
     spawn_signal_handlers(quit_tx);
     app.run()
 }

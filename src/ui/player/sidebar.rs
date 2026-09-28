@@ -207,7 +207,7 @@ mod tests {
     };
 
     use crate::{
-        app::runtime::AppState,
+        app::{mocks::pump_in_test_runtime, runtime::AppState},
         ui::player::sidebar::{
             COVER_MIN_SIZE, MetaResult, PlaybackWidgets, TrackLabels, build_player_content,
             format_time,
@@ -280,7 +280,7 @@ mod tests {
     #[gtk_test]
     fn player_content_installs_child() -> Result<()> {
         let state = Arc::new(AppState::mock()?);
-        let scroll = build_player_content(&state);
+        let scroll = pump_in_test_runtime(|| build_player_content(&state))?;
         ensure!(
             scroll.child().is_some(),
             "player content must be installed in the scrolled window"

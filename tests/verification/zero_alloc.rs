@@ -247,8 +247,8 @@ fn main_test() -> Result<()> {
     ensure!(output_samples > 0, "no resampled output produced");
 
     info!(
-        "zero_alloc: {batches} batches, {output_samples} output samples — our pre-allocated \
-         buffers held constant capacity throughout"
+        batches,
+        output_samples, "zero_alloc steady-state buffers held constant capacity throughout"
     );
 
     drop(dir);

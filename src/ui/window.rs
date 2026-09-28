@@ -48,7 +48,7 @@ use crate::{
 /// content. The sidebar is hidden by default and auto-shown on
 /// playback start.
 pub fn build_window(app: &Application, state: &Arc<AppState>) -> ApplicationWindow {
-    info!("Building main application window");
+    info!(component = "window", "Building main application window");
 
     let (win_width, win_height, win_maximized) = state.storage.get_window_geometry();
     let window = ApplicationWindow::builder()
@@ -154,7 +154,10 @@ fn wire_close_request(app: &Application, window: &ApplicationWindow, state: &Arc
         .handles
         .lock()
         .retain_signal(window.connect_close_request(move |_| {
-            info!("Window close requested — persisting geometry and session");
+            info!(
+                reason = "close_request",
+                "Window close requested — persisting geometry and session"
+            );
             persist_geometry_and_session(
                 &persist_state,
                 persist_window.default_width(),
@@ -198,7 +201,10 @@ fn wire_sidebar_sync(
         .lock()
         .retain_signal(geom_window.connect_notify(Some("maximized"), move |w, _| {
             let Some(win) = w.downcast_ref::<ApplicationWindow>() else {
-                warn!("Maximized notification received for non-ApplicationWindow");
+                warn!(
+                    expected = "ApplicationWindow",
+                    "Maximized notification received for non-ApplicationWindow"
+                );
                 return;
             };
             let width = win.default_width();

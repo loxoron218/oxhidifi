@@ -14,24 +14,18 @@ use libadwaita::{
 
 use crate::{
     app::runtime::AppState,
-    storage::{
-        active_tab::ActiveTab::{Albums, Artists, Signal},
-        view_mode::ViewMode::{self, Column, Grid},
-    },
+    storage::active_tab::ActiveTab::{Albums, Artists, Signal},
     ui::{
         gallery::{
-            album_grid::{build_album_grid, lazy_build_album_mode},
-            artist_grid::{build_artist_grid, lazy_build_artist_mode},
-            narrow_flag::NarrowState,
+            album_grid::build_album_grid, artist_grid::build_artist_grid, narrow_flag::NarrowState,
         },
         header::build_view_toggle,
         navigation::handle_navigation_event,
+        pane_modes::switch_mode_for_active_tab,
         player::{sidebar::build_player_content, wire_sidebar_toggles},
         signal_view::{
-            signal_menu::wire_signal_menu,
-            signal_poll::{create_mailbox, start_signal_poll},
-            signal_publish::spawn_snapshot_publisher,
-            signal_tab::{SignalTab, build_signal_page},
+            signal_poll::wire_signal_tab, signal_tab::SignalTab,
+            signal_tab_build::build_signal_page,
         },
         status::StatusBar,
         switching::{handle_tab_switch, wire_tab_tracking},
@@ -171,10 +165,7 @@ fn build_content_pane(
         artist_stack,
         Arc::clone(narrow_state),
     );
-    let (snapshot_tx, snapshot_rx) = create_mailbox();
-    spawn_snapshot_publisher(&state.playback, &state.storage, snapshot_tx);
-    start_signal_poll(state, &signal_tab, snapshot_rx);
-    wire_signal_menu(&signal_tab, state, parent);
+    wire_signal_tab(state, &signal_tab, parent);
     let switcher = ViewSwitcher::builder()
         .policy(Wide)
         .stack(&stack)
@@ -292,51 +283,6 @@ pub fn build_content(
         close_button,
         switchers,
     )
-}
-
-/// Switch the currently active tab's mode stack to `mode`, building the
-/// view lazily if it doesn't exist yet.
-///
-/// Hidden tabs are skipped — they reconcile their mode when activated via
-/// [`handle_tab_switch`], so toggling modes never builds a view the user
-/// is not looking at.
-fn switch_mode_for_active_tab(
-    state: &Arc<AppState>,
-    mode: ViewMode,
-    album_stack: &Stack,
-    artist_stack: &Stack,
-    narrow_state: &Arc<NarrowState>,
-) {
-    let (stack, name) = match state.active_tab.borrow() {
-        Albums => (album_stack, "albums"),
-        Artists => (artist_stack, "artists"),
-        Signal => return,
-    };
-    switch_mode_for_stack(state, name, stack, narrow_state, mode);
-}
-
-/// Return the mode‑stack for a given tab name, or `None` if unknown.
-/// Switch the given tab's mode‑stack to `mode`, building the view
-/// lazily if it doesn't exist yet.
-fn switch_mode_for_stack(
-    state: &Arc<AppState>,
-    tab: &str,
-    stack: &Stack,
-    narrow_state: &Arc<NarrowState>,
-    mode: ViewMode,
-) {
-    let child = match mode {
-        Grid => "grid",
-        Column => "column",
-    };
-    if stack.child_by_name(child).is_none() {
-        match tab {
-            "albums" => lazy_build_album_mode(state, stack, narrow_state, mode),
-            "artists" => lazy_build_artist_mode(state, stack, mode),
-            _ => {}
-        }
-    }
-    stack.set_visible_child_name(child);
 }
 
 #[cfg(test)]

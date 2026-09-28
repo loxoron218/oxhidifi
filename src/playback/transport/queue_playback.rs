@@ -184,7 +184,11 @@ pub fn play_list(shared: &Arc<EngineShared>, queue: Vec<i64>) -> Result<(), Play
 /// Returns [`PlaybackError::TrackNotFound`] if the next track has no path.
 pub fn advance_next(shared: &Arc<EngineShared>) -> Result<(), PlaybackError> {
     let next_id = shared.queue.next().ok_or_else(|| {
-        info!("Next track failed — queue empty");
+        info!(
+            direction = "next",
+            queue_empty = true,
+            "Next track failed — queue empty"
+        );
         QueueEmpty
     })?;
     start_track(shared, next_id)?;
@@ -199,7 +203,11 @@ pub fn advance_next(shared: &Arc<EngineShared>) -> Result<(), PlaybackError> {
 /// Returns [`PlaybackError::TrackNotFound`] if the previous track has no path.
 pub fn advance_previous(shared: &Arc<EngineShared>) -> Result<(), PlaybackError> {
     let prev_id = shared.queue.previous().ok_or_else(|| {
-        info!("Previous track failed — queue empty");
+        info!(
+            direction = "previous",
+            queue_empty = true,
+            "Previous track failed — queue empty"
+        );
         QueueEmpty
     })?;
     start_track(shared, prev_id)?;

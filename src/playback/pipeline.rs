@@ -149,7 +149,7 @@ fn handle_empty_batch(
             dst_channels,
         );
         if let Err(e) = resampler_result {
-            warn!("Resampler reconfiguration failed: {e}");
+            warn!(error = %e, "Resampler reconfiguration failed");
             return None;
         }
     }

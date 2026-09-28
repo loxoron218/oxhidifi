@@ -4,7 +4,8 @@
 **Prerequisites**: plan.md, spec.md, research.md, data-model.md, contracts/snapshot.md, contracts/dialog.md, quickstart.md
 **Tests**: Included — required by constitution Principle II (every feature ships with tests; new contracts REQUIRE integration tests at the boundary) and asserted by `contracts/snapshot.md` invariants in `tests/signal_inspector.rs`.
 **Organization**: Tasks grouped by user story for independent implementation and testing.
-
+**Layout note**: the `signal_path` target is split for the 400-line file gate — `tests/signal_inspector.rs` (US1–US3) plus submodules `tests/signal_fixtures.rs` (shared inputs), `tests/signal_invariants.rs` (invariants 1–3), `tests/signal_us4.rs` (US4 contracts); wiring lives in `src/ui/signal_view/signal_poll.rs::wire_signal_tab`.
+pread
 ## Format: `[ID] [P?] [Story] Description`
 
 - **[P]**: Can run in parallel (different files, no dependencies)

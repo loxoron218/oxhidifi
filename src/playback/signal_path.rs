@@ -4,6 +4,7 @@
 //! into one [`SignalPathSnapshot`] per generation; the UI swaps atomically.
 //! The audio hot path is never instrumented.
 
+pub mod describe_contract;
 pub mod path_snapshot;
 pub mod path_verdict;
 pub mod stage_build;
@@ -304,14 +305,13 @@ mod tests {
 
     use crate::{
         playback::{
-            devices::OutputMode::BitPerfect as ModeBitPerfect,
+            devices::OutputMode::BitPerfect,
             signal_path::{
-                AuthFacts,
-                DeviceRole::Output,
-                PathStage,
-                QualityVerdict::{BitPerfect, Limited, Processed},
-                RenderingDevice, SignalPathError, SignalPathSnapshot, SnapshotInput, StageFacts,
+                AuthFacts, PathStage,
+                QualityVerdict::{BitPerfect as VerdictBitPerfect, Limited, Processed},
+                SignalPathError, SignalPathSnapshot, SnapshotInput, StageFacts,
                 StageKind::Source,
+                stage_output::lab_test_device,
             },
             state::{MuteState::Unmuted, PlaybackStatus::Playing},
         },
@@ -330,7 +330,7 @@ mod tests {
             resampler_channels: None,
             volume: 1.0,
             muted: Unmuted,
-            output_mode: ModeBitPerfect,
+            output_mode: BitPerfect,
             status: Playing,
             device_id: String::from("hw:0"),
             device_name: String::from("Test DAC"),
@@ -350,23 +350,17 @@ mod tests {
             generation: cloned.generation,
             track_id: cloned.track_id,
             zone_name: cloned.zone_name.clone(),
-            verdict: BitPerfect,
+            verdict: VerdictBitPerfect,
             stages: vec![PathStage {
                 position: 0,
                 kind: Source,
                 title: String::from("Source"),
                 detail: String::from("FLAC 44.1kHz 16-bit"),
                 explanation: String::from("Origin format."),
-                verdict: BitPerfect,
+                verdict: VerdictBitPerfect,
                 badge_icon: "audio-x-generic-symbolic",
             }],
-            devices: vec![RenderingDevice {
-                display_name: String::from("Test DAC"),
-                role: Output,
-                brand_visual: String::from("audio-card-symbolic"),
-                illustration: String::from("audio-speakers-symbolic"),
-                manual_url: None,
-            }],
+            devices: vec![lab_test_device()],
             processing_speed: None,
             playback_status: cloned.status,
         };

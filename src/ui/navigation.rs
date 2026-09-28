@@ -92,7 +92,7 @@ pub fn handle_navigation_event(
             nav_view.push(&page);
         }
         Back => {
-            info!("Navigating back to library view");
+            info!(target = "library", "Navigating back to library view");
             _ = nav_view.pop_to_tag("library");
             if let Some(stale) = nav_view.find_page("detail") {
                 nav_view.remove(&stale);

@@ -122,9 +122,15 @@ pub fn stage_row(stage: &PathStage) -> ListBoxRow {
 /// * `Option<Label>` - Explanation label when the row keeps its layout.
 #[must_use]
 pub fn explanation_label(row: &ListBoxRow) -> Option<Label> {
-    let layout = row.child()?.downcast::<Box>().ok()?;
+    let child = row.child()?;
+    let Ok(layout) = child.downcast::<Box>() else {
+        return None;
+    };
     let top = layout.first_child()?;
-    top.next_sibling()?.downcast::<Label>().ok()
+    let Ok(explanation) = top.next_sibling()?.downcast::<Label>() else {
+        return None;
+    };
+    Some(explanation)
 }
 
 /// Reveal or hide one row's inline explanation, leaving siblings untouched.

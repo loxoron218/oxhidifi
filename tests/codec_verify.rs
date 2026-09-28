@@ -175,7 +175,10 @@ mod tests {
     #[test]
     fn supported_formats_decode_via_symphonia_bridge() -> Result<()> {
         if !ffmpeg_available() {
-            warn!("ffmpeg not available; skipping multi-format verification");
+            warn!(
+                reason = "ffmpeg_missing",
+                "ffmpeg not available; skipping multi-format verification"
+            );
             return Ok(());
         }
 
@@ -198,9 +201,11 @@ mod tests {
         }
 
         if !unsupported_gaps.is_empty() {
+            let gaps = unsupported_gaps.join("; ");
             warn!(
-                "FR-016 gap (symphonia 0.6.1 does not decode these ffmpeg Ogg-family formats): {}",
-                unsupported_gaps.join("; ")
+                gaps = %gaps,
+                count = unsupported_gaps.len(),
+                "FR-016 gap (symphonia 0.6.1 does not decode these ffmpeg Ogg-family formats)"
             );
         }
 

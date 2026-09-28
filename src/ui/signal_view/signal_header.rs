@@ -5,16 +5,19 @@
 //! and the hint inviting stage selection. Owned by the tab page in
 //! [`signal_tab`](crate::ui::signal_view::signal_tab).
 
-use std::cell::Cell;
+use std::sync::Arc;
 
-use libadwaita::{
-    gtk::{
-        Align::Start,
-        Box, Image, Label,
-        Orientation::{Horizontal, Vertical},
-        accessible::Property::Label as A11yLabel,
+use {
+    libadwaita::{
+        gtk::{
+            Align::Start,
+            Box, Image, Label,
+            Orientation::{Horizontal, Vertical},
+            accessible::Property::Label as A11yLabel,
+        },
+        prelude::{AccessibleExtManual, BoxExt, WidgetExt},
     },
-    prelude::{AccessibleExtManual, BoxExt, WidgetExt},
+    parking_lot::Mutex,
 };
 
 use crate::{
@@ -36,7 +39,7 @@ pub struct SignalHeader {
     /// Processing-speed readout, visible iff alteration is active.
     speed: Label,
     /// Last verdict shown (`None` before the first snapshot).
-    last: Cell<Option<QualityVerdict>>,
+    last: Arc<Mutex<Option<QualityVerdict>>>,
 }
 
 impl SignalHeader {
@@ -57,7 +60,7 @@ impl SignalHeader {
     /// * `snapshot` - Newest rendered snapshot.
     pub fn apply_snapshot(&self, snapshot: &SignalPathSnapshot) {
         let next = snapshot.verdict;
-        if let Some(previous) = self.last.get()
+        if let Some(previous) = *self.last.lock()
             && previous != next
         {
             trace_verdict_flip(
@@ -68,7 +71,7 @@ impl SignalHeader {
                 "tab",
             );
         }
-        self.last.set(Some(next));
+        *self.last.lock() = Some(next);
         self.mark.set_icon_name(Some(verdict_icon(next)));
         self.verdict.set_label(next.label());
         self.zone.set_label(&snapshot.zone_name);
@@ -79,7 +82,7 @@ impl SignalHeader {
 
     /// Reset the header to the empty-state entry.
     pub fn show_idle(&self) {
-        self.last.set(None);
+        *self.last.lock() = None;
         self.mark.set_icon_name(Some("audio-x-generic-symbolic"));
         self.verdict.set_label("No Active Path");
         self.zone.set_label("");
@@ -87,11 +90,13 @@ impl SignalHeader {
     }
 
     /// Header verdict label text (badge/header parity hook).
+    #[must_use]
     pub fn verdict_text(&self) -> String {
         self.verdict.label().to_string()
     }
 
     /// Header zone name text (badge/header parity hook).
+    #[must_use]
     pub fn zone_text(&self) -> String {
         self.zone.label().to_string()
     }
@@ -104,6 +109,7 @@ impl SignalHeader {
     }
 
     /// Processing-speed readout text (empty while hidden).
+    #[must_use]
     pub fn speed_text(&self) -> String {
         self.speed.label().to_string()
     }
@@ -184,15 +190,16 @@ pub fn build_signal_header() -> SignalHeader {
         verdict,
         zone,
         speed,
-        last: Cell::new(None),
+        last: Arc::new(Mutex::new(None)),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use anyhow::{Result, ensure};
-
-    use libadwaita::gtk::{self, test};
+    use {
+        anyhow::{Result, ensure},
+        libadwaita::gtk::{self, test},
+    };
 
     use crate::{
         playback::{

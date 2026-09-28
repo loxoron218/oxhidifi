@@ -80,7 +80,10 @@ pub fn finalize_track(
                 .as_ref()
                 .is_some_and(|e| matches!(e, TrackFinished { .. }))
         {
-            info!("Playback finished — queue empty, entering idle state");
+            info!(
+                queue_empty = true,
+                "Playback finished — queue empty, entering idle state"
+            );
         }
     }
     *engine_shared.decode_tx.lock() = None;

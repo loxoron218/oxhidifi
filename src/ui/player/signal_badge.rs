@@ -6,7 +6,7 @@
 //! tab empty state. Live verdict flips arrive through a per-subscriber
 //! snapshot mailbox drained on a `timeout_add_local` poll; workers own I/O.
 
-use std::{cell::Cell, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 use {
     async_channel::Receiver,
@@ -18,6 +18,7 @@ use {
         },
         prelude::{AccessibleExtManual, BoxExt, ButtonExt, WidgetExt},
     },
+    parking_lot::Mutex,
     tracing::info,
 };
 
@@ -46,11 +47,12 @@ pub struct SignalBadge {
     /// Verdict text label (`Signal` while idle).
     label: Label,
     /// Last verdict shown (`None` while idle with no track).
-    verdict: Cell<Option<QualityVerdict>>,
+    verdict: Arc<Mutex<Option<QualityVerdict>>>,
 }
 
 impl SignalBadge {
     /// Button widget for embedding in the player area.
+    #[must_use]
     pub const fn widget(&self) -> &Button {
         &self.button
     }
@@ -60,6 +62,7 @@ impl SignalBadge {
     /// # Returns
     ///
     /// * `String` - Visible label (`Signal` while idle, verdict text live).
+    #[must_use]
     pub fn label_text(&self) -> String {
         self.label.label().to_string()
     }
@@ -90,12 +93,12 @@ impl SignalBadge {
             return;
         };
         let next = snapshot.verdict;
-        if let Some(previous) = self.verdict.get()
+        if let Some(previous) = *self.verdict.lock()
             && previous != next
         {
             trace_verdict_flip(previous, next, snapshot.generation, Some(track_id), "badge");
         }
-        self.verdict.set(Some(next));
+        *self.verdict.lock() = Some(next);
         self.label.set_label(next.label());
         self.icon.set_icon_name(Some(verdict_icon(next)));
         let announced = format!("Signal path is {} — open the Signal tab", next.label());
@@ -105,7 +108,7 @@ impl SignalBadge {
 
     /// Show the idle entry navigating to the tab empty state.
     fn show_idle(&self) {
-        self.verdict.set(None);
+        *self.verdict.lock() = None;
         self.label.set_label("Signal");
         self.icon.set_icon_name(Some(IDLE_ICON));
         self.button.set_tooltip_text(Some("Open the Signal tab"));
@@ -198,7 +201,7 @@ pub fn build_signal_badge(state: &Arc<AppState>) -> SignalBadge {
         button,
         icon,
         label,
-        verdict: Cell::new(None),
+        verdict: Arc::new(Mutex::new(None)),
     }
 }
 
@@ -251,7 +254,7 @@ mod tests {
         storage::active_tab::ActiveTab::Signal,
         ui::{
             player::signal_badge::{IDLE_ICON, build_signal_badge, verdict_icon},
-            signal_view::signal_tab::build_signal_page,
+            signal_view::signal_tab_build::build_signal_page,
         },
     };
 

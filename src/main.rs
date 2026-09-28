@@ -59,7 +59,7 @@ fn init_logging() -> Result<WorkerGuard> {
 /// Initializes logging and starts the Libadwaita application.
 fn main() -> Result<ExitCode> {
     let log_guard = init_logging().context("Failed to initialize logging")?;
-    info!("Application starting");
+    info!(app = "oxhidifi", "Application starting");
 
     let rt = Runtime::new().context("Failed to create tokio runtime")?;
     let result = rt

@@ -15,12 +15,12 @@ use symphonia::{
         },
         errors::Error::{DecodeError, IoError, ResetRequired},
         formats::{
-            FormatOptions, FormatReader, SeekMode::Accurate, SeekTo::Time as SeekTime,
-            TrackType::Audio, probe::Hint,
+            FormatOptions, FormatReader, SeekMode::Accurate, SeekTo::Time, TrackType::Audio,
+            probe::Hint,
         },
         io::{MediaSourceStream, MediaSourceStreamOptions},
         meta::MetadataOptions,
-        units::{Time, Timestamp},
+        units::{Time as UnitsTime, Timestamp},
     },
     default::{get_codecs, get_probe},
 };
@@ -245,14 +245,14 @@ impl Decoder {
     ///
     /// Returns [`DecoderError::SeekError`] if seeking fails.
     pub fn seek_to(&mut self, seconds: f64) -> Result<f64, DecoderError> {
-        let time = Time::try_from_secs_f64(seconds)
+        let time = UnitsTime::try_from_secs_f64(seconds)
             .ok_or_else(|| SeekError("invalid seek time".into()))?;
 
         let seeked_to = self
             .format
             .seek(
                 Accurate,
-                SeekTime {
+                Time {
                     time,
                     track_id: Some(self.track_id),
                 },

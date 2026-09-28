@@ -57,7 +57,7 @@ fn parent_window(btn: &Button) -> Option<Window> {
     let r = btn.root()?;
     r.downcast::<Window>().map_or_else(
         |_| {
-            warn!("Button has no parent window");
+            warn!(has_root = false, "Button has no parent window");
             None
         },
         Some,
@@ -89,7 +89,7 @@ fn add_music_folder(state: &Arc<AppState>, parent: Option<Window>) {
             };
 
             let Some(path) = folder.path() else {
-                info!("No folder path selected");
+                info!(selected = false, "No folder path selected");
                 return;
             };
 
