@@ -88,7 +88,8 @@ Read-only view — zero DSP editing. FR references are normative. Tab-only: no o
   every rebuild; setting changes as `VolumeChanged`/`OutputModeChanged`;
   device changes as `DeviceLost`/`OutputModeChanged`/`TrackStarted`; status
   changes as `Paused`/`Resumed`/`Stopped` (`PositionTick`, `QueueChanged`,
-  `Seeked`, `GaplessEnabledChanged`, and `Error` never rebuild);
+  `Seeked`, `GaplessEnabledChanged`, and `Error` never rebuild; mute toggles
+  emit no event — newly-muted state applies on the next rebuild, not live);
   gapless transitions never show mixed chains; paused/stopped retains
   `track_id` plus the last path with a status ribbon; empty state iff
   `track_id.is_none()` explains how to start playback; lost device is

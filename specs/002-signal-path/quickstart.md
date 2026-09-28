@@ -75,6 +75,17 @@ Map each scenario to its contract (`contracts/snapshot.md` = S,
    the verdict is NOT `Bit-Perfect`. Play the DSD file with volume applied
    → an explicit DSD-to-PCM stage is shown.
 
+## Known MVP limitations (validate as documented, do not file as regressions)
+
+- Mute toggles emit no event (`apply_muted`): a newly-muted/unmuted state is
+  classified on the next rebuild, not live (FR-011/T036).
+- Manual device reselection that emits none of `DeviceLost`/`OutputModeChanged`/
+  `TrackStarted` keeps the last rebuilt device until the next enumerated event
+  (FR-011/T036).
+- Kebab About action presents the existing PreferencesDialog default view as the
+  About-equivalent info landing; a dedicated About page is a separately-tracked
+  follow-up with no task in this feature (FR-014/T032).
+
 ## Automated checks
 
 ```bash

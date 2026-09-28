@@ -29,8 +29,9 @@ incl. volume-only) — `None` when bit-perfect and when Limited-only with no
 in-app alteration. The value is informational (snapshot-sampled, EMA α=0.3);
 contracts assert presence only, never the number.
 
-**State transitions**: rebuilt from scratch on track change, format change,
-setting change (DSP volume/output mode), device change, or
+**State transitions**: rebuilt from scratch on the enumerated triggering events only — track change, format change,
+setting change (DSP volume via `VolumeChanged` / output mode via `OutputModeChanged`), device change (via
+`DeviceLost`/`OutputModeChanged`/`TrackStarted`), or
 `PlaybackStatus` change (play/pause/stop); generation bumps each rebuild so the
 UI re-renders the status ribbon. Trigger mapping (no dedicated device/format
 events exist): track/format changes arrive as `TrackStarted` with new
@@ -41,8 +42,10 @@ resampler/device facts re-read on every rebuild; setting changes as
  `GaplessEnabledChanged`, and `Error` never rebuild). Explicitly out of scope
  for this feature (MUST NOT be expected to refresh the chain;
  separately-tracked follow-ups with no task in this feature): manual device
- reselection emitting none of these events, and mute toggles
- (`apply_muted` emits no event). Paused/stopped retains `track_id` plus the
+ reselection emitting none of these events (chain keeps the last rebuilt device
+ until the next enumerated event), and mute toggles
+ (`apply_muted` emits no event — a newly-muted/unmuted state is classified on
+ the next rebuild, not live; known MVP limitation). Paused/stopped retains `track_id` plus the
 last snapshot + status flag; empty state applies iff `track_id.is_none()`.
 Device loss rebuilds with the Output stage in lost-device state and verdict
 forced off Bit-Perfect.

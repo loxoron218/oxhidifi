@@ -85,9 +85,11 @@ badge button navigating to it.
 - **I. Code Quality**: PASS — new modules follow capability grouping
   (`playback::signal_path`, `ui::signal_view`), unique stems
    (`signal_path`, `path_snapshot`, `path_verdict`, `stage_build`,
-   `stage_output`, `stage_describe`, `signal_tab`, `signal_footer`,
-   `signal_publish`, `signal_poll`, `signal_badge`, plus contingency
-   `signal_header`, `signal_chain` iff the `signal_tab.rs` pre-split is taken —
+   `stage_output`, `stage_describe`, `describe_contract`, `signal_tab`,
+   `signal_header`, `signal_chain`, `signal_menu`, `signal_tab_build`,
+   `signal_footer`, `signal_publish`, `signal_poll`, `signal_badge`
+   (the `signal_tab.rs` pre-split into `signal_header`/`signal_chain` was taken;
+   `signal_menu`/`signal_tab_build`/`describe_contract` are part of the inventory —
    same uniqueness rules, verified under T038), parent-index style, ≤400 lines/file,
   depth ≤2, programmatic widgets, 4-block imports, `//!`/`///` docs, no
   hardcoding (device/manual data from runtime state, theme-aware styling).
@@ -96,18 +98,24 @@ badge button navigating to it.
    files are needed; deterministic snapshot/verdict tests (pure functions over
    cloned builder input, so the builder itself needs no concurrency simulation)
    plus a deterministic newest-wins unit test for the poll generation guard (T015 —
-   the one concurrency-sensitive swap rule; the pure-function test is the
-   review-accepted simulation-style coverage for this single rule); no audio-pipeline change ⇒ no new `criterion` bench required
+   the one concurrency-sensitive swap rule; coverage enumerates out-of-order,
+   duplicate-generation, and empty/stale-mailbox cases over a pure swap-decision
+   function — the documented simulation-style coverage for this single rule,
+   reviewer-accepted; no audio-pipeline concurrency is involved); no audio-pipeline change ⇒ no new `criterion` bench required
   (existing `throughput`/`conversion_baseline` keep passing).
 - **III. UX Consistency**: PASS — HIG tab (`ToolbarView`+`HeaderBar`, `ListBox`
   chain, `MenuButton` kebab popover as sole popover exception), overflow
   menu with exactly the 3 read-only actions, `Toast` on copy, adaptive
   `ViewStack` + `ViewSwitcher`/`ViewSwitcherBar` tab pattern (no overlay
-  dialog/popover/sheet), main-thread discipline (poll + `try_recv`
-  per-subscriber `async-channel` mailbox — the review-accepted satisfaction of
-  the per-subscriber-channel rule (`Lagged`/`Closed` broadcast semantics are
-  N/A to `async-channel`), workers own I/O), non-color verdict cues +
-  keyboard/AT support.
+   dialog/popover/sheet), main-thread discipline (poll + `try_recv`
+   per-subscriber `async-channel` mailbox, workers own I/O), non-color verdict cues +
+   keyboard/AT support.
+   *Decision record (Principle III per-subscriber-channel rule): the constitution's
+   `Lagged`/`Closed` vocabulary describes broadcast-channel semantics; this feature
+   uses one `async-channel` mailbox per subscriber instead, which satisfies the
+   rule's intent (no shared broadcast with mixed-speed subscribers, no
+   `spawn_local`+`recv().await`, `try_recv` drain with newest-wins). No broadcast
+   channel is introduced; reviewer sign-off covers the primitive substitution.*
 - **IV. Performance**: PASS — display-only; snapshot built off-thread from
   cloned state under minimal lock scopes; no hot-path allocation, locks, or
   callback instrumentation; approved primitives only
@@ -149,11 +157,16 @@ src/
 │       ├── path_verdict.rs       # Per-stage + whole-path verdict (Limited > Processed > Bit-Perfect)
 │       ├── stage_build.rs        # Source/decoder/converter/volume stage constructors behind build_snapshot
 │       ├── stage_output.rs       # Transport/output/footer-device stage constructors behind build_snapshot
-│       └── stage_describe.rs     # Titles, details, plain-language explanations per StageKind
+│       ├── stage_describe.rs     # Titles, details, plain-language explanations per StageKind
+│       └── describe_contract.rs  # Shared describe-contract helpers for builder + tests
 └── ui/
     ├── signal_view.rs            # Parent index: Signal tab capability (ViewStack page `signal`)
     ├── signal_view/
     │   ├── signal_tab.rs         # Tab page: header verdict, ListBox chain with inline explainers, MenuButton kebab
+    │   ├── signal_header.rs      # Tab header (verdict, zone, readout) — pre-split from signal_tab.rs (taken)
+    │   ├── signal_chain.rs       # Chain rows + inline explainers — pre-split from signal_tab.rs (taken)
+    │   ├── signal_menu.rs        # Overflow MenuButton actions (copy/settings/about)
+    │   ├── signal_tab_build.rs   # Tab widget-construction helpers
     │   ├── signal_footer.rs      # Device footer card(s), generic art + device name
     │   ├── signal_publish.rs     # Off-thread publisher: event subscription, rebuilds, per-subscriber mailbox feed
     │   └── signal_poll.rs        # timeout_add_local poll + try_recv drain, whole-snapshot swap
@@ -161,13 +174,18 @@ src/
         └── signal_badge.rs       # Player-area verdict badge button navigating to the Signal tab
 
 tests/
-└── signal_inspector.rs         # Acceptance tests (test target `signal_path`)
+├── signal_inspector.rs         # Acceptance entry (test target `signal_path`, US1–US3 sections)
+├── signal_fixtures.rs          # Shared SnapshotInput fixtures (submodule of the target)
+├── signal_invariants.rs        # Contract invariants 1–3 (submodule of the target)
+└── signal_us4.rs               # US4 device-footer + processing-speed contracts (submodule)
 ```
 
 **Structure Decision**: Single-project desktop-app layout. Name map: `playback::signal_path`
 (snapshot/verdict/describe truth) vs `ui::signal_view` (tab presentation: `signal_tab`,
-`signal_footer`, `signal_poll`) vs `ui::player::signal_badge` (entry badge) vs
-`tests/signal_inspector.rs` (acceptance file) run as test target `signal_path` vs
+`signal_header`, `signal_chain`, `signal_menu`, `signal_tab_build`, `signal_footer`,
+`signal_poll`, `signal_publish`) vs `ui::player::signal_badge` (entry badge) vs
+`tests/signal_inspector.rs` (acceptance entry) with submodules `tests/signal_fixtures.rs`,
+`tests/signal_invariants.rs`, `tests/signal_us4.rs` run as test target `signal_path` vs
 `contracts/dialog.md` (historic name — specifies the tab-only view, no dialog is built).
 Playback truth stays in `src/playback/` (engine/decoder/resampler/volume/output owners
 unchanged; new `signal_path/` capability group reads them). Presentation
@@ -179,9 +197,10 @@ round-trip — see tasks T013; T013 is authoritative for the full existing-calle
 plus a verdict badge button in `src/ui/player/` that navigates to the tab.
 No new top-level domains, no `models/`/`utils/` groupings, all new stems
 verified unique (`signal_handlers` is the only near-collision and is
- distinct). If `signal_tab.rs` approaches the 400-line gate, pre-split header +
- chain rows into `signal_header.rs` / `signal_chain.rs` (new stems must stay
- unique codebase-wide per the Constitution Check inventory above; verified under T038).
+ distinct). The `signal_tab.rs` pre-split was taken: header +
+ chain rows live in `signal_header.rs` / `signal_chain.rs` (plus `signal_menu.rs` /
+ `signal_tab_build.rs` helpers; new stems stay unique codebase-wide per the
+ Constitution Check inventory above; verified under T038).
 
 ## Complexity Tracking
 
