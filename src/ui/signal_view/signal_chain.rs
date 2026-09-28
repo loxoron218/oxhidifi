@@ -3,9 +3,9 @@
 //! One selectable [`ListBoxRow`] per [`PathStage`] in snapshot `position`
 //! order. The trailing verdict mark carries the per-stage quality indicator
 //! as an icon plus a text label, never color alone. Each row also owns a
-//! hidden plain-language explanation revealed inline directly under its
-//! title/detail lines on selection, without popovers, dialogs, or hiding
-//! surrounding rows. Rows are owned by the tab page in
+//! plain-language explanation shown inline directly under its title/detail
+//! lines by default, collapsible via activation, without popovers, dialogs,
+//! or hiding surrounding rows. Rows are owned by the tab page in
 //! [`signal_tab`](crate::ui::signal_view::signal_tab).
 
 use libadwaita::{
@@ -25,8 +25,8 @@ use crate::{playback::signal_path::PathStage, ui::player::signal_badge::verdict_
 ///
 /// The trailing verdict mark carries the per-stage quality indicator as an
 /// icon plus a text label, never color alone. The plain-language explanation
-/// starts hidden and is revealed inline under the title/detail lines on
-/// selection, keeping every surrounding row visible.
+/// starts visible inline under the title/detail lines, keeping every
+/// surrounding row visible, and toggles on activation.
 ///
 /// # Arguments
 ///
@@ -102,7 +102,7 @@ pub fn stage_row(stage: &PathStage) -> ListBoxRow {
         .margin_start(6)
         .margin_end(6)
         .margin_bottom(6)
-        .visible(false)
+        .visible(true)
         .build();
     let layout = Box::builder().orientation(Vertical).spacing(0).build();
     layout.append(&top);
@@ -170,9 +170,10 @@ pub fn toggle_row_expanded(row: &ListBoxRow) {
 
 /// Wire inline explainer toggling for every row of a chain list.
 ///
-/// Selecting a row reveals its explanation; activating a row toggles it.
-/// Expanding one row never collapses or hides surrounding rows. The returned
-/// handler ids are retained by the caller for later disconnection.
+/// Explanations start visible; selecting a row keeps it expanded while
+/// activating a row toggles it. Expanding one row never collapses or hides
+/// surrounding rows. The returned handler ids are retained by the caller
+/// for later disconnection.
 ///
 /// # Arguments
 ///
@@ -253,24 +254,25 @@ mod tests {
         let Some(explanation) = explanation_label(&row) else {
             bail!("row must own an inline explanation")
         };
-        ensure!(!explanation.is_visible(), "explanation starts hidden");
+        ensure!(explanation.is_visible(), "explanation starts visible");
         Ok(())
     }
 
     #[test]
-    fn explainer_expands_one_row_without_touching_siblings() -> Result<()> {
+    fn explainer_starts_expanded_and_toggles_one_row() -> Result<()> {
         let first = stage_row(&converter_stage());
         let second = stage_row(&converter_stage());
-        ensure!(!is_row_expanded(&first), "explanation starts hidden");
-        set_row_expanded(&first, true);
-        ensure!(is_row_expanded(&first), "selection reveals inline");
-        ensure!(!is_row_expanded(&second), "siblings stay collapsed");
+        ensure!(is_row_expanded(&first), "explanation starts expanded");
+        ensure!(is_row_expanded(&second), "siblings start expanded");
         toggle_row_expanded(&first);
         ensure!(!is_row_expanded(&first), "activation toggles closed");
-        ensure!(!is_row_expanded(&second), "toggle spares siblings");
+        ensure!(is_row_expanded(&second), "toggle spares siblings");
+        set_row_expanded(&first, true);
+        ensure!(is_row_expanded(&first), "selection reveals inline");
+        ensure!(is_row_expanded(&second), "siblings stay expanded");
         toggle_row_expanded(&second);
-        ensure!(is_row_expanded(&second), "each row toggles alone");
-        ensure!(!is_row_expanded(&first), "first row stays closed");
+        ensure!(!is_row_expanded(&second), "each row toggles alone");
+        ensure!(is_row_expanded(&first), "first row stays expanded");
         Ok(())
     }
 }

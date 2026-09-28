@@ -321,7 +321,7 @@ mod tests {
     }
 
     #[test]
-    fn explainer_expands_inline_on_selection_and_activation() -> Result<()> {
+    fn explainer_starts_expanded_and_toggles_inline() -> Result<()> {
         let tab = build_signal_page();
         tab.render_snapshot(&three_stage_snapshot());
         let Some(source) = tab.list.row_at_index(0) else {
@@ -330,10 +330,11 @@ mod tests {
         let Some(converter) = tab.list.row_at_index(1) else {
             bail!("chain must render a converter row")
         };
-        ensure!(!is_row_expanded(&source), "explanations start hidden");
+        ensure!(is_row_expanded(&source), "explanations start expanded");
+        ensure!(is_row_expanded(&converter), "siblings start expanded");
         tab.list.select_row(Some(&source));
-        ensure!(is_row_expanded(&source), "selection reveals inline");
-        ensure!(!is_row_expanded(&converter), "siblings stay collapsed");
+        ensure!(is_row_expanded(&source), "selection keeps inline");
+        ensure!(is_row_expanded(&converter), "siblings stay expanded");
         tab.list.select_row(Some(&converter));
         ensure!(is_row_expanded(&converter), "converter explains inline");
         ensure!(is_row_expanded(&source), "first row stays expanded");
