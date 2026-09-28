@@ -28,6 +28,7 @@ use crate::{
         navigation::handle_navigation_event,
         player::{sidebar::build_player_content, wire_sidebar_toggles},
         signal_view::{
+            signal_menu::wire_signal_menu,
             signal_poll::{create_mailbox, start_signal_poll},
             signal_publish::spawn_snapshot_publisher,
             signal_tab::{SignalTab, build_signal_page},
@@ -173,6 +174,7 @@ fn build_content_pane(
     let (snapshot_tx, snapshot_rx) = create_mailbox();
     spawn_snapshot_publisher(&state.playback, &state.storage, snapshot_tx);
     start_signal_poll(state, &signal_tab, snapshot_rx);
+    wire_signal_menu(&signal_tab, state, parent);
     let switcher = ViewSwitcher::builder()
         .policy(Wide)
         .stack(&stack)

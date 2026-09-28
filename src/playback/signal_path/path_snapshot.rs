@@ -28,7 +28,7 @@ use crate::playback::signal_path::{
 ///
 /// Informational only: contracts assert presence (`Some`/`None`), never the
 /// number. [`build_snapshot`] reports `Some` iff an in-app alteration is
-/// active; the exponential-moving-average sampler arrives with US4.
+/// active; the publisher worker smooths samples with its `SpeedEma` state.
 const PLACEHOLDER_SPEED: f64 = 32.0;
 
 /// Build one immutable snapshot from cloned engine/catalog state.

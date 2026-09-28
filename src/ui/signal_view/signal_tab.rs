@@ -8,7 +8,7 @@
 //! theme-aware styling, no hardcoded radii or colors, no overlay
 //! dialog/popover/sheet.
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 
 use libadwaita::{
     Banner, HeaderBar, StatusPage, ToolbarView, WindowTitle,
@@ -25,12 +25,14 @@ use libadwaita::{
 
 use crate::{
     playback::{
-        signal_path::SignalPathSnapshot,
+        signal_path::{SignalPathSnapshot, path_snapshot::summarize_text},
         state::PlaybackStatus::{Paused, Playing, Stopped},
     },
     ui::signal_view::{
         signal_chain::{stage_row, wire_explainer},
+        signal_footer::{SignalFooter, build_signal_footer},
         signal_header::{SignalHeader, build_signal_header},
+        signal_menu::{SignalMenu, build_signal_menu},
     },
 };
 
@@ -47,6 +49,12 @@ pub struct SignalTab {
     content: Stack,
     /// Header verdict, zone name, and explainer hint.
     header: SignalHeader,
+    /// Footer device card for the active rendering device.
+    footer: SignalFooter,
+    /// Overflow menu with the three read-only secondary actions.
+    menu: SignalMenu,
+    /// Last rendered path summary for the copy action.
+    summary: RefCell<String>,
     /// Generation currently on screen.
     generation: Cell<u64>,
     /// Track currently on screen (`None` for the empty state).
@@ -85,6 +93,8 @@ impl SignalTab {
             self.list.append(&stage_row(stage));
         }
         self.header.apply_snapshot(snapshot);
+        self.footer.apply_devices(&snapshot.devices);
+        drop(self.summary.replace(summarize_text(snapshot)));
         match snapshot.playback_status {
             Playing => self.banner.set_revealed(false),
             Paused => {
@@ -107,6 +117,8 @@ impl SignalTab {
     pub fn show_empty(&self) {
         self.banner.set_revealed(false);
         self.header.show_idle();
+        self.footer.hide();
+        drop(self.summary.replace(String::new()));
         self.content.set_visible_child_name("empty");
         self.track.set(None);
     }
@@ -137,6 +149,22 @@ impl SignalTab {
     pub fn header_icon_name(&self) -> String {
         self.header.header_icon_name()
     }
+
+    /// Footer device name text (empty while the card is hidden).
+    pub fn footer_device_text(&self) -> String {
+        self.footer.device_text()
+    }
+
+    /// Overflow menu with the three read-only secondary actions.
+    #[must_use]
+    pub const fn menu(&self) -> &SignalMenu {
+        &self.menu
+    }
+
+    /// Last rendered path summary for the copy action.
+    pub fn pending_summary(&self) -> String {
+        self.summary.borrow().clone()
+    }
 }
 
 /// Build the Signal tab page.
@@ -152,6 +180,8 @@ pub fn build_signal_page() -> SignalTab {
         "Signal Path",
         "Live audio path from source to output",
     )));
+    let menu = build_signal_menu();
+    header.pack_end(menu.menu_button());
     root.add_top_bar(&header);
 
     let banner = Banner::new("Paused — showing the last-known path");
@@ -203,6 +233,8 @@ pub fn build_signal_page() -> SignalTab {
     body.append(header.widget());
     body.append(&banner);
     body.append(&content);
+    let footer = build_signal_footer();
+    body.append(footer.widget());
     root.set_content(Some(&body));
 
     SignalTab {
@@ -211,6 +243,9 @@ pub fn build_signal_page() -> SignalTab {
         banner,
         content,
         header,
+        footer,
+        menu,
+        summary: RefCell::new(String::new()),
         generation: Cell::new(0),
         track: Cell::new(None),
     }
@@ -229,9 +264,10 @@ mod tests {
     use crate::{
         playback::{
             signal_path::{
+                DeviceRole::Output as DeviceOutput,
                 PathStage,
                 QualityVerdict::BitPerfect,
-                SignalPathSnapshot,
+                RenderingDevice, SignalPathSnapshot,
                 StageKind::{Output, Source, Transport},
             },
             state::PlaybackStatus::{Paused, Playing},
@@ -275,7 +311,13 @@ mod tests {
             zone_name: String::from("Test DAC"),
             verdict: BitPerfect,
             stages,
-            devices: Vec::new(),
+            devices: vec![RenderingDevice {
+                display_name: String::from("Test DAC"),
+                role: DeviceOutput,
+                brand_visual: String::from("audio-card-symbolic"),
+                illustration: String::from("audio-speakers-symbolic"),
+                manual_url: None,
+            }],
             processing_speed: None,
             playback_status: Playing,
         }
@@ -300,6 +342,14 @@ mod tests {
             tab.zone_text() == "Test DAC",
             "header must show the zone name"
         );
+        ensure!(
+            tab.footer_device_text() == "Test DAC",
+            "footer must name the rendering device"
+        );
+        ensure!(
+            tab.pending_summary().contains("Bit-Perfect"),
+            "copy summary must carry the header verdict"
+        );
         let paused = SignalPathSnapshot {
             playback_status: Paused,
             ..snapshot
@@ -312,6 +362,10 @@ mod tests {
             "empty tab must reset the header"
         );
         ensure!(tab.zone_text().is_empty(), "empty tab must clear the zone");
+        ensure!(
+            tab.pending_summary().is_empty(),
+            "empty tab must clear the copy summary"
+        );
         Ok(())
     }
 

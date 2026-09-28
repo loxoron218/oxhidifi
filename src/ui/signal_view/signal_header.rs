@@ -14,7 +14,7 @@ use libadwaita::{
         Orientation::{Horizontal, Vertical},
         accessible::Property::Label as A11yLabel,
     },
-    prelude::{AccessibleExtManual, BoxExt},
+    prelude::{AccessibleExtManual, BoxExt, WidgetExt},
 };
 
 use crate::{
@@ -33,6 +33,8 @@ pub struct SignalHeader {
     verdict: Label,
     /// Output/zone name.
     zone: Label,
+    /// Processing-speed readout, visible iff alteration is active.
+    speed: Label,
     /// Last verdict shown (`None` before the first snapshot).
     last: Cell<Option<QualityVerdict>>,
 }
@@ -70,6 +72,7 @@ impl SignalHeader {
         self.mark.set_icon_name(Some(verdict_icon(next)));
         self.verdict.set_label(next.label());
         self.zone.set_label(&snapshot.zone_name);
+        apply_speed(&self.speed, snapshot.processing_speed);
         let announced = format!("Signal path is {}", next.label());
         self.verdict.update_property(&[A11yLabel(&announced)]);
     }
@@ -80,6 +83,7 @@ impl SignalHeader {
         self.mark.set_icon_name(Some("audio-x-generic-symbolic"));
         self.verdict.set_label("No Active Path");
         self.zone.set_label("");
+        self.speed.set_visible(false);
     }
 
     /// Header verdict label text (badge/header parity hook).
@@ -98,6 +102,38 @@ impl SignalHeader {
             .icon_name()
             .map_or_else(String::new, |icon| icon.to_string())
     }
+
+    /// Processing-speed readout text (empty while hidden).
+    pub fn speed_text(&self) -> String {
+        self.speed.label().to_string()
+    }
+
+    /// Whether the processing-speed readout is currently visible.
+    #[must_use]
+    pub fn is_speed_visible(&self) -> bool {
+        self.speed.is_visible()
+    }
+}
+
+/// Apply one snapshot speed sample to the readout label.
+///
+/// Shows `Processing speed: {x.x}x` (one decimal) iff alteration is active,
+/// fully hidden when `None`; the readout is announced as text for assistive
+/// technologies.
+///
+/// # Arguments
+///
+/// * `label` - Readout label below the verdict/zone line.
+/// * `speed` - Snapshot throughput multiple, if any alteration is active.
+fn apply_speed(label: &Label, speed: Option<f64>) {
+    let Some(multiple) = speed else {
+        label.set_visible(false);
+        return;
+    };
+    label.set_label(&format!("Processing speed: {multiple:.1}x"));
+    let announced = format!("Processing speed {multiple:.1} times real time");
+    label.update_property(&[A11yLabel(&announced)]);
+    label.set_visible(true);
 }
 
 /// Build the Signal tab header widgets.
@@ -132,14 +168,76 @@ pub fn build_signal_header() -> SignalHeader {
     row.append(&mark);
     row.append(&verdict);
     row.append(&zone);
+    let speed = Label::builder()
+        .label("")
+        .css_classes(["dim-label", "caption"])
+        .halign(Start)
+        .visible(false)
+        .build();
     let summary = Box::builder().orientation(Vertical).spacing(0).build();
     summary.append(&row);
+    summary.append(&speed);
     summary.append(&hint);
     SignalHeader {
         summary,
         mark,
         verdict,
         zone,
+        speed,
         last: Cell::new(None),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use anyhow::{Result, ensure};
+
+    use libadwaita::gtk::{self, test};
+
+    use crate::{
+        playback::{
+            signal_path::{
+                QualityVerdict::{BitPerfect, Processed},
+                SignalPathSnapshot,
+            },
+            state::PlaybackStatus::Playing,
+        },
+        ui::signal_view::signal_header::build_signal_header,
+    };
+
+    fn header_snapshot(speed: Option<f64>) -> SignalPathSnapshot {
+        SignalPathSnapshot {
+            generation: 5,
+            track_id: Some(9),
+            zone_name: String::from("Lab DAC"),
+            verdict: if speed.is_some() {
+                Processed
+            } else {
+                BitPerfect
+            },
+            stages: Vec::new(),
+            devices: Vec::new(),
+            processing_speed: speed,
+            playback_status: Playing,
+        }
+    }
+
+    #[test]
+    fn speed_readout_shows_iff_alteration_active() -> Result<()> {
+        let header = build_signal_header();
+        ensure!(!header.is_speed_visible(), "readout starts hidden");
+        header.apply_snapshot(&header_snapshot(Some(35.24)));
+        ensure!(header.is_speed_visible(), "alteration shows the readout");
+        ensure!(
+            header.speed_text() == "Processing speed: 35.2x",
+            "readout keeps one decimal, got {}",
+            header.speed_text()
+        );
+        header.apply_snapshot(&header_snapshot(None));
+        ensure!(!header.is_speed_visible(), "bit-perfect hides the readout");
+        header.apply_snapshot(&header_snapshot(Some(8.0)));
+        header.show_idle();
+        ensure!(!header.is_speed_visible(), "idle hides the readout");
+        Ok(())
     }
 }

@@ -73,7 +73,16 @@ async fn persist_output_mode(storage: Arc<SqliteStorage>, mode: OutputMode) {
 }
 
 /// Build the Audio > Output and Audio > Playback group.
-pub fn build_audio_page(dialog: &PreferencesDialog, state: &Arc<AppState>) {
+///
+/// # Arguments
+///
+/// * `dialog` - Preferences dialog owning the new page.
+/// * `state` - Application state for device and playback settings.
+///
+/// # Returns
+///
+/// * `PreferencesPage` - The audio page for visible-page selection.
+pub fn build_audio_page(dialog: &PreferencesDialog, state: &Arc<AppState>) -> PreferencesPage {
     let page = PreferencesPage::new();
     page.set_title("Audio");
     page.set_icon_name(Some("audio-speakers-symbolic"));
@@ -175,6 +184,7 @@ pub fn build_audio_page(dialog: &PreferencesDialog, state: &Arc<AppState>) {
     build_playback_group(&page, state);
 
     dialog.add(&page);
+    page
 }
 
 /// Build the Playback preferences group.
