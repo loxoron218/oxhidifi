@@ -19,7 +19,7 @@ use crate::{
         gallery::{
             album_grid::build_album_grid, artist_grid::build_artist_grid, narrow_flag::NarrowState,
         },
-        header::build_view_toggle,
+        header::build_header_end_controls,
         navigation::handle_navigation_event,
         pane_modes::switch_mode_for_active_tab,
         player::{sidebar::build_player_content, wire_sidebar_toggles},
@@ -165,7 +165,7 @@ fn build_content_pane(
         artist_stack,
         Arc::clone(narrow_state),
     );
-    wire_signal_tab(state, &signal_tab, parent);
+    wire_signal_tab(state, &signal_tab);
     let switcher = ViewSwitcher::builder()
         .policy(Wide)
         .stack(&stack)
@@ -174,8 +174,9 @@ fn build_content_pane(
         .build();
     switcher.update_property(&[Label("Switch between Albums, Artists, and Signal views")]);
     content_header.set_title_widget(Some(&switcher));
-    let toggle = build_view_toggle(state, parent);
-    content_header.pack_end(&toggle);
+    let controls = build_header_end_controls(state, parent, &signal_tab);
+    content_header.pack_end(&controls.view_toggle);
+    content_header.pack_end(controls.signal_menu.menu_button());
     content_header.pack_start(toggle_button);
     content_toolbar.add_top_bar(&content_header);
     let nav_view = NavigationView::new();

@@ -53,18 +53,6 @@ pub fn show_preferences_dialog(state: &Arc<AppState>, parent: &Window) {
     dialog.present(Some(parent));
 }
 
-/// Build and present the preferences dialog on the audio page.
-///
-/// Used by the Signal tab overflow menu so output/device settings open
-/// directly on the audio page; the About action keeps the default view via
-/// [`show_preferences_dialog`].
-pub fn show_audio_preferences_dialog(state: &Arc<AppState>, parent: &Window) {
-    let (dialog, audio) = assemble_preferences_dialog(state, parent);
-    dialog.set_visible_page(&audio);
-
-    dialog.present(Some(parent));
-}
-
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;

@@ -1,19 +1,19 @@
-//! Signal tab overflow menu: three read-only secondary actions.
+//! Signal options for the main window header bar.
 //!
-//! The sole allowed popover in the tab-only view (FR-014): a three-dot
-//! `MenuButton` in the path header with exactly three keyboard-reachable
-//! actions — copy the path summary (clipboard plus `Toast` confirmation, no
-//! dialog), open output/device settings elsewhere (existing preferences
-//! dialog on the audio page, no inline DSP editing), and app info (existing
-//! preferences dialog default view). Owned by the tab page in
-//! [`signal_tab`](crate::ui::signal_view::signal_tab).
+//! The `Signal` tab owns no header bar or popover of its own. When it is
+//! active the window header swaps its view-switch `SplitButton` for a plain
+//! signal `MenuButton` carrying the copy action plus the shared preferences
+//! entry. Output-settings and About shortcuts are intentionally omitted: the
+//! generic preferences dialog already covers both landings.
 
 use std::sync::Arc;
 
 use {
     libadwaita::{
         gtk::{
-            Box, Button, MenuButton, Orientation::Vertical, Popover, Window,
+            Box, Button, MenuButton,
+            Orientation::{Horizontal, Vertical},
+            Popover, Separator, Window,
             accessible::Property::Label,
         },
         prelude::{AccessibleExtManual, BoxExt, ButtonExt, WidgetExt},
@@ -23,54 +23,43 @@ use {
 
 use crate::{
     app::runtime::AppState,
-    ui::{
-        preferences::{show_audio_preferences_dialog, show_preferences_dialog},
-        signal_view::signal_tab::SignalTab,
-    },
+    ui::{signal_view::signal_tab::SignalTab, toggle_popover::build_preferences_button},
 };
 
-/// Overflow menu with the three read-only secondary actions.
+/// Signal menu shown in the main header bar while the `Signal` tab is active.
 #[derive(Debug, Clone)]
-pub struct SignalMenu {
-    /// Three-dot button in the path header owning the popover.
+pub struct SignalHeaderMenu {
+    /// Plain menu button replacing the view-switch control on `Signal`.
     button: MenuButton,
-    /// Copies the path summary to the clipboard.
+    /// Copies the retained path summary to the clipboard.
     copy: Button,
-    /// Opens output/device settings on the audio page.
-    settings: Button,
-    /// Shows app info on the preferences default view.
-    about: Button,
+    /// Opens the shared preferences dialog.
+    prefs: Button,
 }
 
-impl SignalMenu {
-    /// Three-dot button for the path header bar.
+impl SignalHeaderMenu {
+    /// Menu button for the main header bar.
     #[must_use]
     pub const fn menu_button(&self) -> &MenuButton {
         &self.button
     }
 
-    /// Copy action button (test hook for the three-action contract).
+    /// Copy action button (test hook).
     #[must_use]
     pub const fn copy_button(&self) -> &Button {
         &self.copy
     }
 
-    /// Settings action button (test hook for the three-action contract).
+    /// Preferences action button (test hook).
     #[must_use]
-    pub const fn settings_button(&self) -> &Button {
-        &self.settings
+    pub const fn prefs_button(&self) -> &Button {
+        &self.prefs
     }
 
-    /// About action button (test hook for the three-action contract).
-    #[must_use]
-    pub const fn about_button(&self) -> &Button {
-        &self.about
-    }
-
-    /// Number of read-only actions parented in the popover (always three).
+    /// Number of actions parented in the popover (always two).
     #[must_use]
     pub fn action_count(&self) -> u32 {
-        let parented = [&self.copy, &self.settings, &self.about]
+        let parented = [&self.copy, &self.prefs]
             .iter()
             .filter(|button| button.parent().is_some())
             .count();
@@ -78,7 +67,7 @@ impl SignalMenu {
     }
 }
 
-/// Build one overflow action button with an accessible name.
+/// Build one flat action button with an accessible name.
 ///
 /// # Arguments
 ///
@@ -98,62 +87,56 @@ fn menu_action(label: &str) -> Button {
     button
 }
 
-/// Build the Signal tab overflow menu.
+/// Build the header-bar signal menu for the `Signal` tab.
 ///
-/// # Returns
-///
-/// * `SignalMenu` - Handles owning the `MenuButton` plus its three actions.
-#[must_use]
-pub fn build_signal_menu() -> SignalMenu {
-    let copy = menu_action("Copy path summary");
-    copy.set_tooltip_text(Some("Copy the signal path summary to the clipboard"));
-    let settings = menu_action("Output settings");
-    settings.set_tooltip_text(Some("Open output and device settings"));
-    let about = menu_action("About");
-    about.set_tooltip_text(Some("Show application information"));
-    let list = Box::builder().orientation(Vertical).spacing(6).build();
-    list.append(&copy);
-    list.append(&settings);
-    list.append(&about);
-    let popover = Popover::builder().child(&list).has_arrow(true).build();
-    let button = MenuButton::builder()
-        .icon_name("view-more-symbolic")
-        .tooltip_text("Signal path options")
-        .can_focus(true)
-        .popover(&popover)
-        .build();
-    button.update_property(&[Label("Signal path options")]);
-    SignalMenu {
-        button,
-        copy,
-        settings,
-        about,
-    }
-}
-
-/// Wire the three overflow actions for one Signal tab.
-///
-/// Copy writes the retained path summary to the clipboard and confirms with
-/// a `Toast`; settings presents the existing preferences dialog on the audio
-/// page; About presents the existing preferences default view. No dialog is
-/// built in the tab and no DSP editing happens here.
+/// Creates a plain `MenuButton` whose popover carries the copy action plus
+/// the shared preferences entry, and wires both actions. Copy writes the
+/// tab's retained summary to the clipboard with a `Toast` confirmation;
+/// preferences presents the existing preferences dialog.
 ///
 /// # Arguments
 ///
-/// * `tab` - Signal tab owning the menu and the retained summary.
 /// * `state` - Application state for toasts and dialog settings.
 /// * `parent` - Parent window used to present the preferences dialog.
-pub fn wire_signal_menu(tab: &SignalTab, state: &Arc<AppState>, parent: &Window) {
+/// * `tab` - Signal tab owning the retained path summary.
+///
+/// # Returns
+///
+/// * `SignalHeaderMenu` - Handles owning the `MenuButton` plus its actions.
+#[must_use]
+pub fn build_signal_header_menu(
+    state: &Arc<AppState>,
+    parent: &Window,
+    tab: &SignalTab,
+) -> SignalHeaderMenu {
+    let copy = menu_action("Copy path summary");
+    copy.set_tooltip_text(Some("Copy the signal path summary to the clipboard"));
+
+    let prefs = build_preferences_button(state, parent);
+
+    let list = Box::builder().orientation(Vertical).spacing(6).build();
+    list.append(&copy);
+    list.append(&Separator::new(Horizontal));
+    list.append(&prefs);
+    let popover = Popover::builder().child(&list).has_arrow(true).build();
+    let button = MenuButton::builder()
+        .icon_name("view-more-symbolic")
+        .tooltip_text("Signal options")
+        .can_focus(true)
+        .popover(&popover)
+        .build();
+    button.update_property(&[Label("Signal options")]);
+
     let copy_tab = tab.clone();
-    let copy_menu = tab.menu().clone();
+    let copy_button = button.clone();
     let copy_toasts = Arc::clone(state);
     state
         .handles
         .lock()
-        .retain_signal(tab.menu().copy_button().connect_clicked(move |_| {
-            copy_menu.menu_button().popdown();
+        .retain_signal(copy.connect_clicked(move |_| {
+            copy_button.popdown();
             let summary = copy_tab.pending_summary();
-            copy_menu.menu_button().clipboard().set_text(&summary);
+            copy_button.clipboard().set_text(&summary);
             if let Err(e) = copy_toasts
                 .toast_tx
                 .try_send(String::from("Signal path summary copied"))
@@ -161,65 +144,63 @@ pub fn wire_signal_menu(tab: &SignalTab, state: &Arc<AppState>, parent: &Window)
                 warn!(error = %e, "Failed to confirm the path copy");
             }
         }));
-    let settings_state = Arc::clone(state);
-    let settings_window = parent.clone();
-    let settings_menu = tab.menu().clone();
+
+    let prefs_pop = button.clone();
     state
         .handles
         .lock()
-        .retain_signal(tab.menu().settings_button().connect_clicked(move |_| {
-            settings_menu.menu_button().popdown();
-            show_audio_preferences_dialog(&settings_state, &settings_window);
+        .retain_signal(prefs.connect_clicked(move |_| {
+            prefs_pop.popdown();
         }));
-    let about_state = Arc::clone(state);
-    let about_window = parent.clone();
-    let about_menu = tab.menu().clone();
-    state
-        .handles
-        .lock()
-        .retain_signal(tab.menu().about_button().connect_clicked(move |_| {
-            about_menu.menu_button().popdown();
-            show_preferences_dialog(&about_state, &about_window);
-        }));
+
+    SignalHeaderMenu {
+        button,
+        copy,
+        prefs,
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use {
-        anyhow::{Result, ensure},
+        anyhow::{Context, Result, ensure},
         libadwaita::{
-            gtk::{self, test},
+            gtk::{self, Window, test},
             prelude::{ButtonExt, WidgetExt},
         },
     };
 
-    use crate::ui::signal_view::signal_menu::build_signal_menu;
+    use crate::{
+        app::runtime::AppState,
+        ui::signal_view::{
+            signal_menu::build_signal_header_menu, signal_tab_build::build_signal_page,
+        },
+    };
 
     #[test]
-    fn overflow_menu_carries_exactly_three_actions() -> Result<()> {
-        let menu = build_signal_menu();
-        ensure!(menu.action_count() == 3, "kebab must carry three actions");
-        let labels = [
-            menu.copy_button().label(),
-            menu.settings_button().label(),
-            menu.about_button().label(),
-        ];
+    fn signal_header_menu_carries_copy_and_preferences() -> Result<()> {
+        let state = Arc::new(AppState::mock().context("failed to build mock app state")?);
+        let parent = Window::new();
+        let tab = build_signal_page();
+        let menu = build_signal_header_menu(&state, &parent, &tab);
         ensure!(
-            labels
-                .iter()
-                .map(|label| label.as_deref().unwrap_or(""))
-                .collect::<Vec<_>>()
-                == ["Copy path summary", "Output settings", "About"],
-            "kebab must carry the read-only actions"
+            menu.action_count() == 2,
+            "signal menu must carry two actions"
         );
         ensure!(
-            [
-                &menu.copy_button(),
-                &menu.settings_button(),
-                &menu.about_button()
-            ]
-            .iter()
-            .all(|button| button.can_focus()),
+            menu.copy_button().label().as_deref() == Some("Copy path summary"),
+            "signal menu must carry the copy action"
+        );
+        ensure!(
+            menu.prefs_button().tooltip_text().as_deref() == Some("Open preferences"),
+            "signal menu must carry the preferences entry"
+        );
+        ensure!(
+            [menu.copy_button(), menu.prefs_button()]
+                .iter()
+                .all(|button| button.can_focus()),
             "every action must be keyboard-reachable"
         );
         Ok(())

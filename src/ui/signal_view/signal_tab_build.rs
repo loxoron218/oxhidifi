@@ -1,10 +1,12 @@
 //! Signal tab page builder.
 //!
 //! Constructs the live vertical stage chain widgets owned by
-//! [`SignalTab`](crate::ui::signal_view::signal_tab::SignalTab).
+//! [`SignalTab`](crate::ui::signal_view::signal_tab::SignalTab). The page is
+//! plain tab content without its own `HeaderBar`: window controls and the
+//! signal options menu live in the main window header bar.
 
 use libadwaita::{
-    Banner, HeaderBar, StatusPage, ToolbarView, WindowTitle,
+    Banner, StatusPage,
     gtk::{
         Box, ListBox,
         Orientation::{Horizontal, Vertical},
@@ -18,7 +20,7 @@ use libadwaita::{
 
 use crate::ui::signal_view::{
     signal_chain::wire_explainer, signal_footer::build_signal_footer,
-    signal_header::build_signal_header, signal_menu::build_signal_menu, signal_tab::SignalTab,
+    signal_header::build_signal_header, signal_tab::SignalTab,
 };
 
 /// Build the Signal tab page.
@@ -28,16 +30,6 @@ use crate::ui::signal_view::{
 /// * `SignalTab` - Handles owning the tab root widget.
 #[must_use]
 pub fn build_signal_page() -> SignalTab {
-    let root = ToolbarView::new();
-    let header_bar = HeaderBar::new();
-    header_bar.set_title_widget(Some(&WindowTitle::new(
-        "Signal Path",
-        "Live audio path from source to output",
-    )));
-    let menu = build_signal_menu();
-    header_bar.pack_end(menu.menu_button());
-    root.add_top_bar(&header_bar);
-
     let banner = Banner::new("Paused — showing the last-known path");
     banner.set_revealed(false);
 
@@ -78,7 +70,7 @@ pub fn build_signal_page() -> SignalTab {
     drop(content.add_named(&empty, Some("empty")));
     content.set_visible_child_name("empty");
 
-    let body = Box::builder()
+    let root = Box::builder()
         .orientation(Vertical)
         .spacing(6)
         .margin_start(12)
@@ -87,12 +79,11 @@ pub fn build_signal_page() -> SignalTab {
         .margin_bottom(6)
         .build();
     let header = build_signal_header();
-    body.append(header.widget());
-    body.append(&banner);
-    body.append(&content);
+    root.append(header.widget());
+    root.append(&banner);
+    root.append(&content);
     let footer = build_signal_footer();
-    body.append(footer.widget());
-    root.set_content(Some(&body));
+    root.append(footer.widget());
 
-    SignalTab::new(root.upcast(), list, banner, content, header, footer, menu)
+    SignalTab::new(root.upcast(), list, banner, content, header, footer)
 }

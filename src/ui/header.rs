@@ -7,7 +7,9 @@
 //! Provides a `SplitButton` to toggle between grid and column layout views
 //! with a popover containing zoom controls, sort configuration, and a
 //! preferences entry. The popover construction lives in the sibling
-//! [`toggle_popover`] module.
+//! [`toggle_popover`] module. While the `Signal` tab is active the view switch
+//! is hidden and a plain signal menu (copy plus preferences) is shown
+//! instead; its construction lives in the sibling [`signal_menu`] module.
 
 use std::sync::Arc;
 
@@ -27,8 +29,27 @@ use crate::{
         active_tab::ActiveTab::{Albums, Artists},
         view_mode::ViewMode,
     },
-    ui::toggle_popover::build_popover,
+    ui::{
+        signal_view::{
+            signal_menu::{SignalHeaderMenu, build_signal_header_menu},
+            signal_tab::SignalTab,
+        },
+        toggle_popover::build_popover,
+    },
 };
+
+/// End controls for the main window header bar.
+///
+/// Holds the library view-switch control plus the signal options menu. Only
+/// one is visible at a time: the toggle for Albums/Artists, the menu for
+/// `Signal`.
+#[derive(Debug, Clone)]
+pub struct HeaderEndControls {
+    /// View-switch `SplitButton` for the Albums/Artists tabs.
+    pub view_toggle: SplitButton,
+    /// Plain signal menu for the `Signal` tab.
+    pub signal_menu: SignalHeaderMenu,
+}
 
 /// Persist the view mode setting to storage, logging on failure.
 async fn save_view_mode(state: Arc<AppState>, mode: ViewMode) {
@@ -86,6 +107,55 @@ pub fn build_view_toggle(state: &Arc<AppState>, parent: &Window) -> SplitButton 
     subscribe_view_updates(state, &split_btn, &albums_sort, &artists_sort);
 
     split_btn
+}
+
+/// Build the header-bar end controls swapping view toggle and signal menu.
+///
+/// Shows the view-switch `SplitButton` for Albums/Artists and a plain
+/// signal `MenuButton` (copy plus preferences) for `Signal`. Visibility
+/// follows the active tab, initialized from storage.
+///
+/// # Arguments
+///
+/// * `state` - Application state containing storage with settings.
+/// * `parent` - Parent window used to present the preferences dialog.
+/// * `tab` - Signal tab owning the retained path summary for the copy action.
+///
+/// # Returns
+///
+/// * `HeaderEndControls` - View toggle plus signal menu with tab visibility wiring.
+#[must_use]
+pub fn build_header_end_controls(
+    state: &Arc<AppState>,
+    parent: &Window,
+    tab: &SignalTab,
+) -> HeaderEndControls {
+    let view_toggle = build_view_toggle(state, parent);
+    let signal_menu = build_signal_header_menu(state, parent, tab);
+
+    let is_signal = state.storage.get_active_tab().is_signal();
+    view_toggle.set_visible(!is_signal);
+    signal_menu.menu_button().set_visible(is_signal);
+
+    let toggle = view_toggle.clone();
+    let menu = signal_menu.menu_button().clone();
+    let tab_state = Arc::clone(state);
+    state
+        .handles
+        .lock()
+        .retain_task(spawn_future_local(async move {
+            let rx = tab_state.active_tab.subscribe();
+            while let Ok(tab) = rx.recv().await {
+                let signal = tab.is_signal();
+                toggle.set_visible(!signal);
+                menu.set_visible(signal);
+            }
+        }));
+
+    HeaderEndControls {
+        view_toggle,
+        signal_menu,
+    }
 }
 
 /// Subscribe to view mode and active tab changes to update split button icon

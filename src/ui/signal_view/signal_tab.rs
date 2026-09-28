@@ -5,8 +5,8 @@
 //! theme separator rails the badge icons on the left. Rows render in snapshot
 //! `position` order, source at the top and output at the bottom, with a bold
 //! title plus accent detail per row. Programmatic widgets only, 6 px spacing,
-//! theme-aware styling, no hardcoded radii or colors, no overlay
-//! dialog/popover/sheet.
+//! theme-aware styling, no hardcoded radii or colors. The tab itself owns no
+//! header bar or popover; signal actions live in the main window header bar.
 
 use std::sync::{
     Arc,
@@ -29,7 +29,6 @@ use crate::{
     },
     ui::signal_view::{
         signal_chain::stage_row, signal_footer::SignalFooter, signal_header::SignalHeader,
-        signal_menu::SignalMenu,
     },
 };
 
@@ -48,8 +47,6 @@ pub struct SignalTab {
     header: SignalHeader,
     /// Footer device card for the active rendering device.
     footer: SignalFooter,
-    /// Overflow menu with the three read-only secondary actions.
-    menu: SignalMenu,
     /// Last rendered path summary for the copy action.
     summary: Arc<Mutex<String>>,
     /// Generation currently on screen.
@@ -69,7 +66,6 @@ impl SignalTab {
     /// * `content` - Switcher between the chain and the empty state.
     /// * `header` - Header verdict, zone name, and explainer hint.
     /// * `footer` - Footer device card for the active rendering device.
-    /// * `menu` - Overflow menu with the three read-only secondary actions.
     ///
     /// # Returns
     ///
@@ -82,7 +78,6 @@ impl SignalTab {
         content: Stack,
         header: SignalHeader,
         footer: SignalFooter,
-        menu: SignalMenu,
     ) -> Self {
         Self {
             root,
@@ -91,7 +86,6 @@ impl SignalTab {
             content,
             header,
             footer,
-            menu,
             summary: Arc::new(Mutex::new(String::new())),
             generation: Arc::new(AtomicU64::new(0)),
             track: Arc::new(Mutex::new(None)),
@@ -193,12 +187,6 @@ impl SignalTab {
     #[must_use]
     pub fn footer_device_text(&self) -> String {
         self.footer.device_text()
-    }
-
-    /// Overflow menu with the three read-only secondary actions.
-    #[must_use]
-    pub const fn menu(&self) -> &SignalMenu {
-        &self.menu
     }
 
     /// Last rendered path summary for the copy action.

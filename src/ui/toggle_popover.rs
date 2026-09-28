@@ -31,6 +31,42 @@ use crate::{
     },
 };
 
+/// Build the shared preferences entry button.
+///
+/// # Arguments
+///
+/// * `state` - Application state for dialog settings.
+/// * `parent` - Parent window used to present the preferences dialog.
+///
+/// # Returns
+///
+/// * `Button` - Keyboard-focusable flat preferences button.
+#[must_use]
+pub fn build_preferences_button(state: &Arc<AppState>, parent: &Window) -> Button {
+    let prefs_btn = Button::builder()
+        .child(
+            &ButtonContent::builder()
+                .icon_name("preferences-system-symbolic")
+                .label("Preferences")
+                .build(),
+        )
+        .tooltip_text("Open preferences")
+        .css_classes(["flat"])
+        .can_focus(true)
+        .hexpand(true)
+        .build();
+    prefs_btn.update_property(&[PropertyLabel("Preferences")]);
+    let state_prefs = Arc::clone(state);
+    let parent_prefs = parent.clone();
+    state
+        .handles
+        .lock()
+        .retain_signal(prefs_btn.connect_clicked(move |_| {
+            show_preferences_dialog(&state_prefs, &parent_prefs);
+        }));
+    prefs_btn
+}
+
 /// Build the popover with zoom controls, sort lists, and a preferences entry.
 ///
 /// # Arguments
@@ -106,27 +142,7 @@ pub fn build_popover(state: &Arc<AppState>, parent: &Window) -> (Popover, Widget
     let prefs_separator = Separator::new(Horizontal);
     zoom_box.append(&prefs_separator);
 
-    let prefs_btn = Button::builder()
-        .child(
-            &ButtonContent::builder()
-                .icon_name("preferences-system-symbolic")
-                .label("Preferences")
-                .build(),
-        )
-        .tooltip_text("Open preferences")
-        .css_classes(["flat"])
-        .can_focus(true)
-        .hexpand(true)
-        .build();
-    prefs_btn.update_property(&[PropertyLabel("Preferences")]);
-    let state_prefs = Arc::clone(state);
-    let parent_prefs = parent.clone();
-    state
-        .handles
-        .lock()
-        .retain_signal(prefs_btn.connect_clicked(move |_| {
-            show_preferences_dialog(&state_prefs, &parent_prefs);
-        }));
+    let prefs_btn = build_preferences_button(state, parent);
     zoom_box.append(&prefs_btn);
 
     connect_zoom_handlers(state, &zoom_out_btn, &zoom_in_btn);
