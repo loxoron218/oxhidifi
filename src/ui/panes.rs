@@ -29,6 +29,7 @@ use crate::{
         },
         status::StatusBar,
         switching::{handle_tab_switch, wire_tab_tracking},
+        toggle_popover::notify_zoom_change,
     },
 };
 
@@ -148,6 +149,27 @@ fn wire_library_signals(
         }));
 }
 
+/// Fan out narrow-window changes as zoom notifications.
+///
+/// Both library grids resolve their cover size from the stored zoom level plus
+/// the narrow flag, so a breakpoint crossing must re-run the same preview +
+/// debounced in-place resize path as a zoom click. Reusing the zoom channels
+/// keeps narrow handling inside the existing coalescing loop instead of a
+/// second resize machinery: ready grids shrink/restore in place, unready ones
+/// rebuild from cache once their tab is shown.
+fn wire_narrow_fit(state: &Arc<AppState>, narrow_state: &Arc<NarrowState>) {
+    let rx = narrow_state.subscribe();
+    let fit_state = Arc::clone(state);
+    state
+        .handles
+        .lock()
+        .retain_task(spawn_future_local(async move {
+            while rx.recv().await.is_ok() {
+                notify_zoom_change(&fit_state);
+            }
+        }));
+}
+
 /// Build the content pane with library views and controls.
 fn build_content_pane(
     state: &Arc<AppState>,
@@ -158,6 +180,7 @@ fn build_content_pane(
     let content_toolbar = ToolbarView::new();
     let content_header = HeaderBar::new();
     let (stack, album_stack, artist_stack, signal_tab) = build_library_stack(state, narrow_state);
+    wire_narrow_fit(state, narrow_state);
     wire_library_signals(
         state,
         &stack,

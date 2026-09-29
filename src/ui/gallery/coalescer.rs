@@ -4,19 +4,77 @@ use std::sync::Arc;
 
 use {
     async_channel::{Receiver, Sender, unbounded},
-    libadwaita::glib::{spawn_future_local, timeout_future},
+    libadwaita::{
+        glib::{spawn_future_local, timeout_future},
+        gtk::Stack,
+    },
     tracing::warn,
 };
 
 use crate::{
     app::runtime::AppState,
     storage::database::SqliteStorage,
-    ui::gallery::rebuild_debounce::{
-        SORT_ZOOM_DEBOUNCE,
-        SortZoomEvent::{self, Preview, Rebuild},
-        listen_sort_zoom_loop,
+    ui::gallery::{
+        narrow_flag::NarrowState,
+        rebuild_debounce::{
+            SORT_ZOOM_DEBOUNCE,
+            SortZoomEvent::{self, Preview, Rebuild},
+            listen_sort_zoom_loop,
+        },
     },
 };
+
+/// Spawn the sort/zoom listener for one library grid.
+///
+/// Clones the state, mode stack, and narrow flag into the preview/rebuild
+/// closures so each grid's setup is a single call instead of repeated
+/// `Arc::clone` boilerplate. See [`spawn_listen_sort_zoom`] for the
+/// coalescing behavior.
+///
+/// # Arguments
+///
+/// * `state` - Application state owning the channels and handles.
+/// * `mode_stack` - The grid's mode stack resized or rebuilt on changes.
+/// * `narrow_state` - Narrow-width tracker read when resolving cover sizes.
+/// * `sort_rx` - This grid's sort-change channel.
+/// * `zoom_rx` - This grid's zoom-change channel.
+/// * `preview` - Immediate zoom preview receiving the state, mode stack, and narrow state.
+/// * `rebuild` - Debounced rebuild receiving the state, mode stack, narrow state, and the coalesced
+///   sort/zoom flags.
+pub fn spawn_grid_sort_zoom<P, R>(
+    state: &Arc<AppState>,
+    mode_stack: &Stack,
+    narrow_state: &Arc<NarrowState>,
+    sort_rx: Receiver<()>,
+    zoom_rx: Receiver<()>,
+    preview: P,
+    rebuild: R,
+) where
+    P: Fn(&Arc<AppState>, &Stack, &Arc<NarrowState>) + 'static,
+    R: Fn(&Arc<AppState>, &Stack, &Arc<NarrowState>, bool, bool) + 'static,
+{
+    let preview_state = Arc::clone(state);
+    let preview_stack = mode_stack.clone();
+    let preview_narrow = Arc::clone(narrow_state);
+    let rebuild_state = Arc::clone(state);
+    let rebuild_stack = mode_stack.clone();
+    let rebuild_narrow = Arc::clone(narrow_state);
+    spawn_listen_sort_zoom(
+        state,
+        sort_rx,
+        zoom_rx,
+        move || preview(&preview_state, &preview_stack, &preview_narrow),
+        move |sort_fired, zoom_fired| {
+            rebuild(
+                &rebuild_state,
+                &rebuild_stack,
+                &rebuild_narrow,
+                sort_fired,
+                zoom_fired,
+            );
+        },
+    );
+}
 
 /// Spawn a future that listens for sort-config and zoom changes and rebuilds the grid.
 ///

@@ -7,42 +7,29 @@
 
 use std::sync::{Arc, atomic::Ordering::Relaxed};
 
-use {
-    libadwaita::{
-        glib::{
-            ControlFlow::{self, Break, Continue},
-            idle_add_local, spawn_future_local,
-        },
-        gtk::{Box, FlowBox, Orientation::Vertical, Overlay, Stack, Widget},
-        prelude::{BoxExt, Cast},
-    },
-    tracing::warn,
-};
+use libadwaita::gtk::Stack;
 
 use crate::{
-    app::runtime::{AppState, CachedArtistData, NavigationEvent::ArtistDetail},
+    app::runtime::AppState,
     storage::{
-        Storage,
         active_tab::ActiveTab::Artists,
-        view_mode::ViewMode::{self, Column, Grid},
+        view_mode::ViewMode::{self, Grid},
     },
     ui::{
         gallery::{
-            avatar::build_artist_card,
-            coalescer::spawn_listen_sort_zoom,
-            empty::{LibraryGrid, add_scrolled, build_library_grid, show_library_empty},
-            grid_flow::{build_grid, fill_grid_batch, resize_grid_batched},
-            keyboard_nav::setup_flowbox_keyboard_nav,
+            artist_build::lazy_build_artist_mode,
+            coalescer::spawn_grid_sort_zoom,
+            empty::{LibraryGrid, build_library_grid},
+            grid_batch::resize_grid_batched,
+            grid_fit::{grid_is_current, upgrade_hidden_resize},
             narrow_flag::NarrowState,
-            precedence::artist_sort_indices,
             rebuild_debounce::{
                 RebuildAction::{DeferDirty, Resize},
                 decide_rebuild,
             },
-            stack_cache::{clear_mode_children, take_stale_mode_child, try_build_from_cache},
-            table::build_artist_column_view,
+            stack_cache::{clear_mode_children, take_stale_mode_child},
         },
-        zoom::grid_cover_size,
+        zoom::effective_grid_cover_size,
     },
 };
 
@@ -59,61 +46,104 @@ use crate::{
 pub fn build_artist_grid(state: &Arc<AppState>, narrow_state: &Arc<NarrowState>) -> LibraryGrid {
     let nm = Arc::clone(narrow_state);
     let populate =
-        |stack: &Stack, state: Arc<AppState>, _: Arc<NarrowState>, initial_mode: ViewMode| {
-            lazy_build_artist_mode(&state, stack, initial_mode);
+        |stack: &Stack, state: Arc<AppState>, narrow: Arc<NarrowState>, initial_mode: ViewMode| {
+            lazy_build_artist_mode(&state, stack, &narrow, initial_mode);
         };
     let lg = build_library_grid(state, &nm, populate);
 
-    let grid_state = Arc::clone(state);
-    let grid_stack = lg.mode_stack.clone();
-    let preview_state = Arc::clone(state);
-    let preview_stack = lg.mode_stack.clone();
-    spawn_listen_sort_zoom(
+    spawn_grid_sort_zoom(
         state,
+        &lg.mode_stack,
+        narrow_state,
         state.artists_sort_rx.clone(),
         state.artists_zoom_rx.clone(),
-        move || {
-            if preview_state.active_tab.borrow() == Artists
-                && preview_state.view_mode.borrow() == Grid
-                && preview_state.artist_grid.ready.load(Relaxed)
-            {
-                _ = resize_artist_grid(&preview_state, &preview_stack);
-            }
-        },
-        move |sort_fired, zoom_fired| {
-            rebuild_artist_current_mode(&grid_state, &grid_stack, sort_fired, zoom_fired);
-        },
+        preview_artist_resize,
+        rebuild_artist_current_mode,
     );
 
     lg
 }
 
+/// Resolve the artist avatar size to render for the current narrow state.
+///
+/// Mirrors the album grid's narrow snap so both grids stay visually in sync.
+///
+/// # Arguments
+///
+/// * `state` - Application state (stored zoom level source).
+/// * `narrow_state` - Narrow-width tracker.
+///
+/// # Returns
+///
+/// Avatar size in pixels to render.
+fn effective_artist_avatar(state: &Arc<AppState>, narrow_state: &Arc<NarrowState>) -> i32 {
+    effective_grid_cover_size(state.storage.get_grid_zoom_level(), narrow_state.get())
+}
+
+/// Preview a zoom or narrow-window change on the live artist grid.
+///
+/// Resizes avatars immediately when the grid is visible and ready; skips
+/// grids already rendering at the effective size.
+fn preview_artist_resize(
+    state: &Arc<AppState>,
+    mode_stack: &Stack,
+    narrow_state: &Arc<NarrowState>,
+) {
+    if state.active_tab.borrow() != Artists
+        || state.view_mode.borrow() != Grid
+        || !state.artist_grid.ready.load(Relaxed)
+    {
+        return;
+    }
+    let size = effective_artist_avatar(state, narrow_state);
+    if !grid_is_current(mode_stack, size) {
+        _ = resize_artist_grid(state, mode_stack, size);
+    }
+}
+
 /// Rebuild or resize the artist grid after a sort/zoom change.
 ///
 /// Zoom-only changes resize the existing cards in place (no widget churn,
-/// scroll position preserved). Sort changes — or any state that invalidates
-/// the current cards — fall back to a full rebuild from the in-memory cache.
-/// When the tab is hidden, marks the grid dirty so it is rebuilt on switch.
+/// scroll position preserved) — including on hidden tabs, so a stale
+/// oversized page never forces the window past its minimum. Sort changes — or
+/// any state that invalidates the current cards — fall back to a full rebuild
+/// from the in-memory cache. When the tab is hidden, marks the grid dirty so
+/// it is rebuilt on switch. Narrow-window changes arrive here as zoom
+/// notifications (see `wire_narrow_fit`) and take the same in-place path.
 fn rebuild_artist_current_mode(
     state: &Arc<AppState>,
     mode_stack: &Stack,
+    narrow_state: &Arc<NarrowState>,
     sort_fired: bool,
     zoom_fired: bool,
 ) {
-    let action = decide_rebuild(
-        state.active_tab.borrow(),
-        Artists,
-        state.view_mode.borrow(),
+    let action = upgrade_hidden_resize(
+        decide_rebuild(
+            state.active_tab.borrow(),
+            Artists,
+            state.view_mode.borrow(),
+            sort_fired,
+            zoom_fired,
+            state.artist_grid.ready.load(Relaxed),
+        ),
         sort_fired,
         zoom_fired,
+        state.view_mode.borrow(),
         state.artist_grid.ready.load(Relaxed),
+        mode_stack,
     );
     if action == DeferDirty {
         state.artist_grid.dirty.store(true, Relaxed);
         return;
     }
-    if action == Resize && resize_artist_grid(state, mode_stack) {
-        return;
+    if action == Resize {
+        let size = effective_artist_avatar(state, narrow_state);
+        if grid_is_current(mode_stack, size) {
+            return;
+        }
+        if resize_artist_grid(state, mode_stack, size) {
+            return;
+        }
     }
     let Some(mode) = take_stale_mode_child(state, Artists, mode_stack) else {
         state.artist_grid.dirty.store(true, Relaxed);
@@ -123,215 +153,88 @@ fn rebuild_artist_current_mode(
         clear_mode_children(mode_stack);
     }
     state.artist_grid.dirty.store(false, Relaxed);
-    lazy_build_artist_mode(state, mode_stack, mode);
+    lazy_build_artist_mode(state, mode_stack, narrow_state, mode);
 }
 
-/// Resize the live artist grid's cards to the current zoom level in place.
+/// Resize the live artist grid's cards to the given cover size in place.
 ///
 /// Schedules a batched in-place resize (see [`resize_grid_batched`]) that
 /// updates the `FlowBox` spacing and every card's avatar size across idle
 /// callbacks, so a zoom on a large library does not block the frame clock.
 /// Artists have no per-size cover art to decode, so no cover dispatch.
 ///
+/// # Arguments
+///
+/// * `cover_size` - Avatar size to resize to (already resolved for narrow windows by the caller).
+///
 /// # Returns
 ///
 /// `true` when the grid was located and a batch scheduled, `false` when the
 /// `FlowBox` could not be located (caller falls back to a full rebuild).
-fn resize_artist_grid(state: &Arc<AppState>, mode_stack: &Stack) -> bool {
+fn resize_artist_grid(state: &Arc<AppState>, mode_stack: &Stack, cover_size: i32) -> bool {
     let build_seq = state.artist_grid.build_seq.load(Relaxed);
     let stale_state = Arc::clone(state);
     resize_grid_batched(
         state,
         mode_stack,
+        cover_size,
         move || stale_state.artist_grid.build_seq.load(Relaxed) != build_seq,
         |_, _, _| {},
         |_, _| {},
     )
 }
 
-/// Populate a batch of artist cards into the flow box.
-///
-/// Bails out if `build_seq` no longer matches the current build generation
-/// (the build was superseded by a rebuild or refresh). On the final batch,
-/// marks the grid ready for in-place zoom resizing. Returns `Break` when
-/// done or stale.
-fn fill_artist_grid(
-    cached: &CachedArtistData,
-    remaining: &mut Vec<usize>,
-    overlays: &mut Vec<Overlay>,
-    flow: &FlowBox,
-    state: &Arc<AppState>,
-    build_seq: u64,
-) -> ControlFlow {
-    if fill_grid_batch(
-        state.artist_grid.build_seq.load(Relaxed) == build_seq,
-        state,
-        remaining,
-        |idx, size| {
-            let Some(artist) = cached.artists.get(idx) else {
-                return;
-            };
-            let (card, overlay) = build_artist_card(state, artist, size);
-            overlays.push(overlay);
-            flow.append(&card.upcast::<Widget>());
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, atomic::Ordering::Relaxed};
+
+    use {
+        anyhow::{Result, ensure},
+        libadwaita::{
+            glib::MainContext,
+            gtk::{self, FlowBox, Stack, test},
         },
-    ) == Continue
-    {
-        return Continue;
-    }
-    if state.artist_grid.build_seq.load(Relaxed) != build_seq {
-        return Break;
-    }
-    state.artist_grid.ready.store(true, Relaxed);
-    Break
-}
-
-/// Build the given `mode` view (grid or column) and add it to `stack`.
-///
-/// Borrows the shared artist data from `cached` and derives the display order
-/// from `indices`, so no deep clone is performed. Each mode is wrapped in
-/// its own `ScrolledWindow` so scroll positions are kept independent.
-///
-/// # Arguments
-///
-/// * `cached` - Shared artist data
-/// * `indices` - Display order of `cached.artists` (e.g. a sorted index vector)
-fn build_artist_mode(
-    state: &Arc<AppState>,
-    stack: &Stack,
-    mode: ViewMode,
-    cached: &CachedArtistData,
-    indices: &[usize],
-) {
-    let cover_size = grid_cover_size(state.storage.get_grid_zoom_level());
-    match mode {
-        Grid => {
-            state.artist_grid.ready.store(false, Relaxed);
-            let grid_container = Box::builder().orientation(Vertical).build();
-            let flow = build_grid(
-                "Artist library grid \u{2014} click an artist to view albums",
-                cover_size,
-            );
-            grid_container.append(&flow);
-            add_scrolled(stack, &grid_container, "grid");
-
-            let artist_ids: Vec<i64> = indices
-                .iter()
-                .filter_map(|&i| cached.artists.get(i).map(|artist| artist.id))
-                .collect();
-            setup_flowbox_keyboard_nav(&flow, state, artist_ids, ArtistDetail);
-
-            let cached_owned = CachedArtistData {
-                artists: Arc::clone(&cached.artists),
-            };
-            let state_fill = Arc::clone(state);
-            let build_seq = state_fill
-                .artist_grid
-                .build_seq
-                .fetch_add(1, Relaxed)
-                .wrapping_add(1);
-            let mut overlays: Vec<Overlay> = Vec::new();
-            let mut remaining: Vec<usize> = indices.iter().rev().copied().collect();
-
-            state.handles.lock().retain_source(idle_add_local(move || {
-                fill_artist_grid(
-                    &cached_owned,
-                    &mut remaining,
-                    &mut overlays,
-                    &flow,
-                    &state_fill,
-                    build_seq,
-                )
-            }));
-        }
-        Column => {
-            let column_view = build_artist_column_view(state, cached, indices);
-            add_scrolled(stack, &column_view, "column");
-        }
-    }
-}
-
-/// Show the empty‑artists state widget, replacing any existing grid child.
-///
-/// Two-state per FR-007: "No Music Library Configured" when no directories
-/// are configured, "No Music Found" when directories exist but contain no
-/// artists.
-fn show_artists_empty(state: &Arc<AppState>, stack: &Stack) {
-    state.artist_grid.ready.store(false, Relaxed);
-    show_library_empty(state, stack, "avatar-default-symbolic", "Artist icon");
-}
-
-/// Lazily build a view mode that wasn't constructed at startup.
-///
-/// Re‑fetches data from storage, builds the requested `mode` widget,
-/// adds it to `stack`, and switches to it.  No‑op if the child already
-/// exists (race‑guard).  The synchronous front half runs the race‑guard
-/// and cached‑build checks; the storage re‑fetch and widget construction
-/// run in a local future on the `GLib` main context.
-pub fn lazy_build_artist_mode(state: &Arc<AppState>, stack: &Stack, mode: ViewMode) {
-    let child_name = match mode {
-        Grid => "grid",
-        Column => "column",
     };
-    if stack.child_by_name(child_name).is_some() {
-        stack.set_visible_child_name(child_name);
-        return;
-    }
 
-    if try_build_from_cache(
-        &state.artist_grid.cache,
-        stack,
-        child_name,
-        |cached| cached.artists.is_empty(),
-        |cached| {
-            let indices = artist_sort_indices(state, cached);
-            build_artist_mode(state, stack, mode, cached, &indices);
+    use crate::{
+        app::{mocks::pump_in_test_runtime, runtime::AppState},
+        storage::catalog::Artist,
+        ui::gallery::{
+            artist_grid::rebuild_artist_current_mode, avatar::build_artist_card,
+            empty::add_scrolled, grid_fit::grid_is_current, grid_flow::build_grid,
+            narrow_flag::NarrowState,
         },
-        || show_artists_empty(state, stack),
-    ) {
-        return;
+    };
+
+    fn pump_main_context() {
+        let mut iterations: usize = 0;
+        while MainContext::default().iteration(false) && iterations < 1000 {
+            iterations = iterations.saturating_add(1);
+        }
     }
 
-    let state_cb = Arc::clone(state);
-    let stack_cb = stack.clone();
-    state
-        .handles
-        .lock()
-        .retain_task(spawn_future_local(async move {
-            let my_gen = state_cb.artist_grid.generation.load(Relaxed);
-            let artists = match state_cb.storage.get_all_artists().await {
-                Ok(a) => a
-                    .into_iter()
-                    .filter(|a| a.album_count > 0)
-                    .collect::<Vec<_>>(),
-                Err(e) => {
-                    warn!(error = %e, "Failed to load artists for lazy build");
-                    return;
-                }
-            };
-
-            if state_cb.artist_grid.generation.load(Relaxed) != my_gen {
-                return;
-            }
-            if stack_cb.child_by_name(child_name).is_some() {
-                stack_cb.set_visible_child_name(child_name);
-                return;
-            }
-
-            if artists.is_empty() {
-                *state_cb.artist_grid.cache.lock() = Some(CachedArtistData {
-                    artists: Arc::new(artists),
-                });
-                show_artists_empty(&state_cb, &stack_cb);
-                return;
-            }
-
-            let cached = CachedArtistData {
-                artists: Arc::new(artists),
-            };
-            let indices = artist_sort_indices(&state_cb, &cached);
-            build_artist_mode(&state_cb, &stack_cb, mode, &cached, &indices);
-            *state_cb.artist_grid.cache.lock() = Some(cached);
-            stack_cb.set_visible_child_name(child_name);
-        }));
+    #[test]
+    fn hidden_artist_grid_resizes_on_zoom_only_change() -> Result<()> {
+        let state = Arc::new(AppState::mock()?);
+        let stack = Stack::new();
+        let flow = build_grid("artist grid", 240);
+        let artist = Artist {
+            id: 1,
+            name: "Test Artist".into(),
+            album_count: 3,
+        };
+        let (card, _) = build_artist_card(&state, &artist, 240);
+        FlowBox::append(&flow, &card);
+        add_scrolled(&stack, &flow, "grid");
+        state.artist_grid.ready.store(true, Relaxed);
+        let narrow = NarrowState::new_shared();
+        narrow.set(true);
+        rebuild_artist_current_mode(&state, &stack, &narrow, false, true);
+        pump_in_test_runtime(pump_main_context)?;
+        ensure!(
+            grid_is_current(&stack, 120),
+            "a zoom-only change must shrink a built hidden grid in place"
+        );
+        Ok(())
+    }
 }

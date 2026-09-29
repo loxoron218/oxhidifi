@@ -11,11 +11,11 @@ use crate::{
     app::runtime::AppState,
     storage::{
         active_tab::ActiveTab::{Albums, Artists, Signal},
-        view_mode::ViewMode::{self, Column, Grid},
+        view_mode::ViewMode,
     },
     ui::gallery::{
-        album_grid::lazy_build_album_mode, artist_grid::lazy_build_artist_mode,
-        narrow_flag::NarrowState,
+        album_grid::lazy_build_album_mode, artist_build::lazy_build_artist_mode,
+        narrow_flag::NarrowState, stack_cache::mode_child_name,
     },
 };
 
@@ -63,14 +63,11 @@ pub fn switch_mode_for_stack(
     narrow_state: &Arc<NarrowState>,
     mode: ViewMode,
 ) {
-    let child = match mode {
-        Grid => "grid",
-        Column => "column",
-    };
+    let child = mode_child_name(mode);
     if stack.child_by_name(child).is_none() {
         match tab {
             "albums" => lazy_build_album_mode(state, stack, narrow_state, mode),
-            "artists" => lazy_build_artist_mode(state, stack, mode),
+            "artists" => lazy_build_artist_mode(state, stack, narrow_state, mode),
             _ => {}
         }
     }

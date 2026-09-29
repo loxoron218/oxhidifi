@@ -10,7 +10,11 @@ use {
     libadwaita::{
         glib::spawn_future_local,
         gtk::{
-            Align::Center, Box, Image, Label, Orientation::Vertical, ScrolledWindow, Stack, Widget,
+            Align::Center,
+            Box, Image, Label,
+            Orientation::Vertical,
+            PolicyType::{Automatic, Never},
+            ScrolledWindow, Stack, Widget,
             accessible::Property::Label as PropertyLabel,
         },
         prelude::{AccessibleExtManual, BoxExt, IsA, WidgetExt},
@@ -172,10 +176,16 @@ fn drain_receiver<T>(receiver: &Receiver<T>) {
 }
 
 /// Wrap `child` in a `ScrolledWindow` and add it to `stack` as a named page.
+///
+/// Horizontal scrolling stays disabled so a two-column card row can never clip
+/// past the viewport on narrow windows — the grid shrinks its covers instead
+/// (see [`crate::ui::zoom::effective_grid_cover_size`]).
 pub fn add_scrolled(stack: &Stack, child: &impl IsA<Widget>, name: &str) {
     let scrolled = ScrolledWindow::builder()
         .vexpand(true)
         .hexpand(true)
+        .hscrollbar_policy(Never)
+        .vscrollbar_policy(Automatic)
         .build();
     scrolled.set_child(Some(child));
     drop(stack.add_named(&scrolled, Some(name)));
@@ -274,17 +284,22 @@ mod tests {
     use std::sync::Arc;
 
     use {
-        anyhow::{Result, ensure},
+        anyhow::{Result, bail, ensure},
         libadwaita::{
-            gtk::{self, Box, Label, Orientation::Vertical, test},
-            prelude::{BoxExt, WidgetExt},
+            gtk::{
+                self, Box, Label,
+                Orientation::Vertical,
+                PolicyType::{Automatic, Never},
+                ScrolledWindow, Stack, test,
+            },
+            prelude::{BoxExt, Cast, WidgetExt},
         },
         parking_lot::Mutex,
     };
 
     use crate::{
         storage::view_mode::ViewMode::{Column, Grid},
-        ui::gallery::empty::{clear_container, update_mode},
+        ui::gallery::empty::{add_scrolled, clear_container, update_mode},
     };
 
     #[test]
@@ -307,6 +322,28 @@ mod tests {
         ensure!(
             container.first_child().is_none(),
             "container must be empty after clearing"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn add_scrolled_disables_horizontal_scrolling() -> Result<()> {
+        let stack = Stack::new();
+        let child = Label::new(Some("child"));
+        add_scrolled(&stack, &child, "grid");
+        let Some(page) = stack.child_by_name("grid") else {
+            bail!("stack must hold the grid page");
+        };
+        let Some(scrolled) = page.downcast_ref::<ScrolledWindow>() else {
+            bail!("grid page must be a scrolled window");
+        };
+        ensure!(
+            scrolled.hscrollbar_policy() == Never,
+            "library grids must never scroll horizontally"
+        );
+        ensure!(
+            scrolled.vscrollbar_policy() == Automatic,
+            "library grids must keep vertical scrolling"
         );
         Ok(())
     }

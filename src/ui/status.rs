@@ -14,6 +14,7 @@ use {
             Orientation::Horizontal,
             ProgressBar,
             accessible::Property::Label as PropertyLabel,
+            pango::EllipsizeMode::End as EllipsizeEnd,
         },
         prelude::{AccessibleExtManual, BoxExt, WidgetExt},
     },
@@ -59,6 +60,7 @@ impl StatusBar {
             .label("Ready")
             .hexpand(true)
             .halign(Start)
+            .ellipsize(EllipsizeEnd)
             .css_classes(["dim-label", "caption"])
             .can_focus(true)
             .tooltip_text("Current application status")
@@ -206,7 +208,7 @@ mod tests {
     use {
         anyhow::{Result, ensure},
         libadwaita::{
-            gtk::{self, test},
+            gtk::{self, pango::EllipsizeMode::End, test},
             prelude::WidgetExt,
         },
     };
@@ -227,6 +229,17 @@ mod tests {
         let status_bar = StatusBar::new(&state);
         status_bar.set_status("Scanning...");
         ensure!(status_bar.status_label.label() == "Scanning...");
+        Ok(())
+    }
+
+    #[test]
+    fn status_bar_label_ellipsizes() -> Result<()> {
+        let state = Arc::new(AppState::mock()?);
+        let status_bar = StatusBar::new(&state);
+        ensure!(
+            status_bar.status_label.ellipsize() == End,
+            "long scan texts must ellipsize instead of widening the window"
+        );
         Ok(())
     }
 }

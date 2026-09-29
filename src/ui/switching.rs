@@ -16,7 +16,7 @@ use crate::{
     },
     ui::{
         gallery::{
-            album_grid::lazy_build_album_mode, artist_grid::lazy_build_artist_mode,
+            album_grid::lazy_build_album_mode, artist_build::lazy_build_artist_mode,
             narrow_flag::NarrowState,
         },
         navigation::persist_active_tab,
@@ -65,7 +65,7 @@ pub fn handle_tab_switch(
     }
     match tab {
         Albums => lazy_build_album_mode(state, album_stack, narrow_state, mode),
-        Artists => lazy_build_artist_mode(state, artist_stack, mode),
+        Artists => lazy_build_artist_mode(state, artist_stack, narrow_state, mode),
         Signal => {}
     }
 }

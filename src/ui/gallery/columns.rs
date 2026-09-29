@@ -31,7 +31,7 @@ use {
 use crate::{
     app::runtime::AppState,
     ui::{
-        gallery::{boxed_data::AlbumData, grid_flow::GRID_BATCH_SIZE},
+        gallery::{boxed_data::AlbumData, grid_batch::GRID_BATCH_SIZE},
         image_decode::{DecodedCover, raw_to_texture},
         signal_handlers::UiHandles,
         texture_pool::CoverArtCache,

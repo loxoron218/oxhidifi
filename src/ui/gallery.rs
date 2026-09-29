@@ -2,15 +2,19 @@
 //! `GObject` boxed data, and `GtkColumnView` builders.
 
 pub mod album_grid;
+pub mod artist_build;
 pub mod artist_grid;
 pub mod avatar;
 pub mod boxed_data;
 pub mod card;
 pub mod coalescer;
 pub mod columns;
+pub mod cover_dispatch;
 pub mod empty;
 pub mod folder_picker;
 pub mod frame_resize;
+pub mod grid_batch;
+pub mod grid_fit;
 pub mod grid_flow;
 pub mod keyboard_nav;
 pub mod label_sizing;
