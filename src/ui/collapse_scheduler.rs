@@ -4,9 +4,13 @@
 //! pass; collapsing the split view there swaps its internal layout manager and
 //! toggles its shield widget mid-allocation, leaving libadwaita's bare
 //! `AdwGizmo` widgets in a draw-before-allocation state ("Trying to snapshot
-//! `AdwGizmo` without a current allocation"). This buffers the desired state
-//! and applies it from an idle callback, coalescing rapid breakpoint
-//! transitions into a single `set_collapsed` call off the allocation path.
+//! `AdwGizmo` without a current allocation"). The same holds for the narrow
+//! breakpoint's companions (narrow flag, header title swap, `ViewSwitcherBar`
+//! reveal), which would otherwise force `GtkRevealer`/`GtkScrolledWindow`
+//! re-measurement mid-allocation ("Trying to measure ... for width of 30").
+//! This buffers the desired state and applies it from an idle callback,
+//! coalescing rapid breakpoint transitions into a single call off the
+//! allocation path.
 
 use std::sync::{
     Arc,
@@ -15,12 +19,12 @@ use std::sync::{
 
 use libadwaita::{
     ApplicationWindow, Breakpoint, BreakpointCondition, BreakpointConditionLengthType::MaxWidth,
-    LengthUnit::Sp, OverlaySplitView, glib::idle_add_local_once, gtk::Widget,
-    prelude::AdwApplicationWindowExt,
+    LengthUnit::Sp, OverlaySplitView, glib::idle_add_local_once, prelude::AdwApplicationWindowExt,
 };
 
 use crate::ui::{
-    gallery::narrow_flag::NarrowState, panes::SwitcherGroup, signal_handlers::UiHandles,
+    gallery::narrow_flag::NarrowState, narrow_scheduler::NarrowScheduler, panes::SwitcherGroup,
+    signal_handlers::UiHandles,
 };
 
 /// Schedules deferred `OverlaySplitView` collapse changes.
@@ -89,11 +93,12 @@ impl CollapseScheduler {
 /// the bottom `ViewSwitcherBar` so the header keeps room for its
 /// controls on small windows.
 ///
-/// The collapse is *deferred* via [`CollapseScheduler`] instead of a
-/// declarative breakpoint setter: setters apply synchronously inside the
-/// window's size-allocate pass, and collapsing the split view there swaps its
-/// internal layout manager mid-allocation. Deferring the property change to
-/// an idle callback keeps the layout mutation off the allocation path.
+/// The collapse *and* the narrow-mode swaps are *deferred* via
+/// [`CollapseScheduler`] and [`NarrowScheduler`] instead of declarative
+/// breakpoint setters: setters apply synchronously inside the window's
+/// size-allocate pass, and mutating layout there triggers measure warnings.
+/// Deferring every property change to an idle callback keeps layout mutation
+/// off the allocation path.
 pub fn add_responsive_breakpoints(
     window: &ApplicationWindow,
     split_view: &OverlaySplitView,
@@ -101,6 +106,7 @@ pub fn add_responsive_breakpoints(
     switchers: &SwitcherGroup,
 ) {
     let collapse = CollapseScheduler::new(split_view);
+    let narrow_sched = NarrowScheduler::new(narrow_state);
 
     let mut handles = UiHandles::default();
     let sidebar_condition = BreakpointCondition::new_length(MaxWidth, 800.0, Sp);
@@ -122,27 +128,24 @@ pub fn add_responsive_breakpoints(
     let narrow_ctx = (
         Arc::clone(&collapse),
         split_view.clone(),
+        Arc::clone(&narrow_sched),
         Arc::clone(narrow_state),
         switchers.header.clone(),
         switchers.bar.clone(),
         switchers.switcher.clone(),
     );
     handles.retain_signal(narrow_bp.connect_apply({
-        let (collapse, sv, ns, header, bar, _) = narrow_ctx.clone();
+        let (collapse, sv, sched, ns, header, bar, switcher) = narrow_ctx.clone();
         move |_| {
             collapse.set(&sv, true);
-            ns.set(true);
-            header.set_title_widget(None::<&Widget>);
-            bar.set_reveal(true);
+            sched.set(&ns, &header, &bar, &switcher, true);
         }
     }));
     handles.retain_signal(narrow_bp.connect_unapply({
-        let (collapse, sv, ns, header, bar, switcher) = narrow_ctx;
+        let (collapse, sv, sched, ns, header, bar, switcher) = narrow_ctx;
         move |_| {
             collapse.set(&sv, false);
-            ns.set(false);
-            header.set_title_widget(Some(&switcher));
-            bar.set_reveal(false);
+            sched.set(&ns, &header, &bar, &switcher, false);
         }
     }));
     window.add_breakpoint(narrow_bp);
@@ -155,7 +158,8 @@ mod tests {
     use {
         anyhow::{Result, ensure},
         libadwaita::{
-            ApplicationWindow, OverlaySplitView,
+            ApplicationWindow, HeaderBar, OverlaySplitView, ViewStack, ViewSwitcher,
+            ViewSwitcherBar,
             glib::MainContext,
             gtk::{self, test as gtk_test},
         },
@@ -166,6 +170,7 @@ mod tests {
         ui::{
             collapse_scheduler::{CollapseScheduler, add_responsive_breakpoints},
             gallery::narrow_flag::NarrowState,
+            narrow_scheduler::NarrowScheduler,
             panes::SwitcherGroup,
         },
     };
@@ -190,6 +195,20 @@ mod tests {
 
     fn pump_with_tokio() -> Result<()> {
         pump_in_test_runtime(pump_main_context)
+    }
+
+    fn drive_collapse(
+        scheduler: &Arc<CollapseScheduler>,
+        split_view: &OverlaySplitView,
+        collapsed: bool,
+    ) -> Result<()> {
+        scheduler.set(split_view, collapsed);
+        pump_with_tokio()?;
+        ensure!(
+            split_view.is_collapsed() == collapsed,
+            "idle callback must settle the collapse on the final state"
+        );
+        Ok(())
     }
 
     #[gtk_test]
@@ -221,11 +240,7 @@ mod tests {
             "collapse must be deferred to an idle callback"
         );
 
-        pump_with_tokio()?;
-        ensure!(
-            split_view.is_collapsed(),
-            "idle callback must apply the collapse"
-        );
+        drive_collapse(&scheduler, &split_view, true)?;
         Ok(())
     }
 
@@ -234,9 +249,9 @@ mod tests {
         let split_view = OverlaySplitView::new();
         let scheduler = CollapseScheduler::new(&split_view);
 
-        scheduler.set(&split_view, true);
-        scheduler.set(&split_view, false);
-        scheduler.set(&split_view, true);
+        for collapsed in [true, false, true] {
+            scheduler.set(&split_view, collapsed);
+        }
 
         pump_with_tokio()?;
         ensure!(
@@ -251,15 +266,100 @@ mod tests {
         let split_view = OverlaySplitView::new();
         let scheduler = CollapseScheduler::new(&split_view);
 
-        scheduler.set(&split_view, true);
-        pump_with_tokio()?;
-        ensure!(split_view.is_collapsed());
+        drive_collapse(&scheduler, &split_view, true)?;
+        drive_collapse(&scheduler, &split_view, false)?;
+        Ok(())
+    }
 
-        scheduler.set(&split_view, false);
-        pump_with_tokio()?;
+    fn narrow_fixtures() -> (Arc<NarrowState>, HeaderBar, ViewSwitcherBar, ViewSwitcher) {
+        let narrow_state = NarrowState::new_shared();
+        let stack = ViewStack::new();
+        let header = HeaderBar::new();
+        let switcher = ViewSwitcher::builder().stack(&stack).build();
+        header.set_title_widget(Some(&switcher));
+        let bar = ViewSwitcherBar::builder().stack(&stack).build();
+        bar.set_reveal(false);
+        (narrow_state, header, bar, switcher)
+    }
+
+    fn assert_narrow_settled(
+        narrow_state: &Arc<NarrowState>,
+        bar: &ViewSwitcherBar,
+        narrow: bool,
+    ) -> Result<()> {
         ensure!(
-            !split_view.is_collapsed(),
-            "unapply must expand the split view"
+            narrow_state.get() == narrow,
+            "idle callback must settle the narrow flag on the final state"
+        );
+        ensure!(
+            bar.reveals() == narrow,
+            "idle callback must settle the switcher bar on the final state"
+        );
+        Ok(())
+    }
+
+    fn drive_narrow(
+        scheduler: &Arc<NarrowScheduler>,
+        narrow_state: &Arc<NarrowState>,
+        header: &HeaderBar,
+        bar: &ViewSwitcherBar,
+        switcher: &ViewSwitcher,
+        narrow: bool,
+    ) -> Result<()> {
+        scheduler.set(narrow_state, header, bar, switcher, narrow);
+        pump_with_tokio()?;
+        assert_narrow_settled(narrow_state, bar, narrow)
+    }
+
+    #[gtk_test]
+    fn narrow_scheduler_defers_swaps_to_idle() -> Result<()> {
+        let (narrow_state, header, bar, switcher) = narrow_fixtures();
+        let scheduler = NarrowScheduler::new(&narrow_state);
+
+        scheduler.set(&narrow_state, &header, &bar, &switcher, true);
+        ensure!(
+            !narrow_state.get(),
+            "narrow flag must not flip synchronously inside the breakpoint setter"
+        );
+        ensure!(
+            !bar.reveals(),
+            "switcher bar must not reveal synchronously inside the breakpoint setter"
+        );
+
+        pump_with_tokio()?;
+        assert_narrow_settled(&narrow_state, &bar, true)?;
+        ensure!(
+            header.title_widget().is_none(),
+            "idle callback must clear the header title widget"
+        );
+        Ok(())
+    }
+
+    #[gtk_test]
+    fn narrow_scheduler_coalesces_nested_transitions() -> Result<()> {
+        let (narrow_state, header, bar, switcher) = narrow_fixtures();
+        let scheduler = NarrowScheduler::new(&narrow_state);
+
+        for narrow in [true, false, true] {
+            scheduler.set(&narrow_state, &header, &bar, &switcher, narrow);
+        }
+
+        pump_with_tokio()?;
+        assert_narrow_settled(&narrow_state, &bar, true)?;
+        Ok(())
+    }
+
+    #[gtk_test]
+    fn narrow_scheduler_unapply_restores_header() -> Result<()> {
+        let (narrow_state, header, bar, switcher) = narrow_fixtures();
+        let scheduler = NarrowScheduler::new(&narrow_state);
+
+        drive_narrow(&scheduler, &narrow_state, &header, &bar, &switcher, true)?;
+
+        drive_narrow(&scheduler, &narrow_state, &header, &bar, &switcher, false)?;
+        ensure!(
+            header.title_widget().is_some(),
+            "unapply must restore the header title widget"
         );
         Ok(())
     }

@@ -38,6 +38,7 @@ use crate::{
         key_bindings::{handle_escape_key, handle_zoom_key},
         panes::build_content,
         player::wire_panel_events,
+        window_geometry::{MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH, clamp_geometry, snapshot_geometry},
     },
 };
 
@@ -47,10 +48,17 @@ use crate::{
 /// containing separate `ToolbarView` panes for the sidebar and
 /// content. The sidebar is hidden by default and auto-shown on
 /// playback start.
+///
+/// The window minimum is set explicitly to [`MIN_WINDOW_WIDTH`] by
+/// [`MIN_WINDOW_HEIGHT`]: breakpoints remove the automatic window minimum,
+/// without which the window can briefly measure children at ~30 px during
+/// startup, producing `Trying to measure GtkRevealer/GtkScrolledWindow for
+/// width of 30` warnings.
 pub fn build_window(app: &Application, state: &Arc<AppState>) -> ApplicationWindow {
     info!(component = "window", "Building main application window");
 
-    let (win_width, win_height, win_maximized) = state.storage.get_window_geometry();
+    let (stored_width, stored_height, win_maximized) = state.storage.get_window_geometry();
+    let (win_width, win_height) = clamp_geometry(stored_width, stored_height);
     let window = ApplicationWindow::builder()
         .application(app)
         .title("Oxhidifi")
@@ -60,6 +68,7 @@ pub fn build_window(app: &Application, state: &Arc<AppState>) -> ApplicationWind
     if win_maximized {
         window.maximize();
     }
+    window.set_size_request(MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT);
 
     load_hig_css();
 
@@ -141,6 +150,10 @@ fn add_key_controllers(
 
 /// Wire window-close persistence and application quit.
 ///
+/// Snapshots the actual allocation (see [`snapshot_geometry`]) so a
+/// compositor-tiled window, e.g. snapped right at 50% width, reopens at that
+/// pixel size instead of the stale pre-tile floating size.
+///
 /// # Arguments
 ///
 /// * `app` - Application to quit on close.
@@ -158,12 +171,8 @@ fn wire_close_request(app: &Application, window: &ApplicationWindow, state: &Arc
                 reason = "close_request",
                 "Window close requested — persisting geometry and session"
             );
-            persist_geometry_and_session(
-                &persist_state,
-                persist_window.default_width(),
-                persist_window.default_height(),
-                persist_window.is_maximized(),
-            );
+            let (width, height, maximized) = snapshot_geometry(&persist_window);
+            persist_geometry_and_session(&persist_state, width, height, maximized);
             let quit = quit_app.clone();
             persist_state
                 .handles
@@ -174,6 +183,10 @@ fn wire_close_request(app: &Application, window: &ApplicationWindow, state: &Arc
 }
 
 /// Synchronize sidebar toggle buttons and persist geometry changes.
+///
+/// State transitions (maximize, fullscreen) persist via [`snapshot_geometry`],
+/// which keeps the last floating size while the allocation is
+/// compositor-owned so un-maximizing restores correctly.
 ///
 /// # Arguments
 ///
@@ -196,6 +209,16 @@ fn wire_sidebar_sync(
     let close_button = close_button.clone();
     let geom_state = Arc::clone(state);
     let geom_window = window.clone();
+    let persist_on_state_change = move |w: &ApplicationWindow, reason: &str| {
+        let (width, height, maximized) = snapshot_geometry(w);
+        if let Err(e) = geom_state
+            .storage
+            .set_window_geometry_sync(width, height, maximized)
+        {
+            warn!(error = %e, reason, "Failed to persist window geometry");
+        }
+    };
+    let persist_maximized = persist_on_state_change.clone();
     state
         .handles
         .lock()
@@ -207,16 +230,25 @@ fn wire_sidebar_sync(
                 );
                 return;
             };
-            let width = win.default_width();
-            let height = win.default_height();
-            let maximized = win.is_maximized();
-            if let Err(e) = geom_state
-                .storage
-                .set_window_geometry_sync(width, height, maximized)
-            {
-                warn!(error = %e, "Failed to persist window geometry on maximize");
-            }
+            persist_maximized(win, "maximize");
         }));
+    let persist_fullscreen = persist_on_state_change.clone();
+    let fullscreen_window = window.clone();
+    state
+        .handles
+        .lock()
+        .retain_signal(
+            fullscreen_window.connect_notify(Some("fullscreened"), move |w, _| {
+                let Some(win) = w.downcast_ref::<ApplicationWindow>() else {
+                    warn!(
+                        expected = "ApplicationWindow",
+                        "Fullscreen notification received for non-ApplicationWindow"
+                    );
+                    return;
+                };
+                persist_fullscreen(win, "fullscreen");
+            }),
+        );
 
     state
         .handles
