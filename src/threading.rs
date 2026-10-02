@@ -86,7 +86,7 @@
 //! 8. Tokio runtime `shutdown_timeout(5s)` → any remaining tokio tasks time out
 //! 9. Rayon pool drains
 //! 10. Process exits
-
+//!
 //! # Exceptions
 //!
 //! - The **decode thread** (`engine.rs`) is intentionally NOT managed via `ThreadManager`. Its
