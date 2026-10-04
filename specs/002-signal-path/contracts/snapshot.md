@@ -15,7 +15,11 @@ REQUIRES updating the acceptance tests.
 /// * `input` - Cloned track facts (`Track.audio` / `TrackAudio` via async
 ///   `get_track`), decoder params (`AudioParams`), pipeline facts (resampler
 ///   in/out rates, channel counts), playback facts (volume, mute, output
-///   mode, status), and output facts (device id/name/rate/mode). Provider
+///   mode, status), device/hardware volume facts (ALSA read-back when
+///   available, else the engine-set slider value in `BitPerfect` mode),
+///   system/application volume facts (`MixerSample`: `Option<f64>` level +
+///   mute + `SystemMixerSource::{AlsaShared, Unknown}` — `None` renders as
+///   `unknown`, never fails), and output facts (device id/name/rate/mode). Provider
 ///   auth facts are optional input (`SnapshotInput::auth: Option<AuthFacts>`
 ///   with `AuthFacts { provider: String, verified: bool }`; MVP always `None`):
 ///   no Authentication stage is emitted when absent.
@@ -59,22 +63,28 @@ pub fn describe(kind: &StageFacts) -> (String, String, String);
 
 ## Invariants (MUST hold; asserted in `tests/signal_inspector.rs`, target `signal_path`)
 
-1. Bit-perfect input (native format, `BitPerfect` mode, unity/unmuted volume,
-   matching channels, device matching derived nativeness — track/decoder rate,
+1. Bit-perfect input (native format, `BitPerfect` mode, unity/unmuted volume
+   across ALL exposed families — no DSP scaling, no device/hardware
+   attenuation, no system attenuation and no `unknown` system disclosure on a
+   shared path — matching channels, device matching derived nativeness — track/decoder rate,
    depth, and channels equal device rate/channels under `OutputMode::BitPerfect`,
    no separate native-capability input) ⇒ verdict `Bit-Perfect` and
    `processing_speed.is_none()`.
-2. Any DSP-volume scaling (incl. volume-only), resample, bit-depth,
+2. Any DSP-volume scaling (incl. volume-only — gated on `Resampled` mode),
+   resample, bit-depth,
    channel-count (source-vs-device `FormatConverter` "Channel Conversion" —
    distinct from the channel-map `Effect`, which stays `describe()`-only), or
    DSD-to-PCM conversion ⇒ verdict ≥ `Processed` and
-   `processing_speed.is_some()`. (Leveling/headroom/EQ/effect inputs do not
+   `processing_speed.is_some()`. Device/hardware attenuation ⇒ verdict ≥
+   `Processed` with `processing_speed.is_none()` (never triggers the readout).
+   (Leveling/headroom/EQ/effect inputs do not
    exist in MVP; their `describe()` wording is covered by invariant 5, not by
    builder emission.)
-3. Shared-mixer transport, forced downsampling, or lost device ⇒ verdict
+3. System/application attenuation or `unknown` disclosure, shared-mixer
+   transport, forced downsampling, or lost device ⇒ verdict
    `Limited` even when enhancements are also present (`processing_speed`
-   still follows invariant 2: `Some` iff an in-app alteration is present,
-   else `None` for Limited-only paths).
+   still follows invariant 2: `Some` iff a DSP in-app alteration is present,
+   else `None` for device-only, system-only, and other Limited-only paths).
 4. `summarize_text` lists every stage exactly once, in order, with the header
    verdict on the first line.
 5. `describe` never returns empty strings (`explanation` = 1–2 plain sentences
@@ -82,4 +92,9 @@ pub fn describe(kind: &StageFacts) -> (String, String, String);
    `unknown`; authentication stages are emitted only when provider auth facts
    are present (MVP: always omitted); external-renderer stages are title-only
    in MVP (filter/modulator always `None` — no source fields exist);
-   DSD + volume/DSP input always yields a `FormatConverter` stage.
+   DSD + DSP/system input always yields a `FormatConverter` stage
+   (device/hardware attenuation alone does not); unreadable system levels
+   render the literal `unknown` detail (never fail, never guess); volume
+   emission is emit-if-attenuated per family (`< 1.0` or muted, dB detail,
+   `Muted (…)` when muted), ordered DSP → Device → System just before
+   Transport, omitted at unity except the shared-path `unknown` disclosure.

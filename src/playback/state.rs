@@ -142,3 +142,92 @@ pub enum PlaybackStatus {
     /// Stopped.
     Stopped,
 }
+
+/// Check whether a playback event can change the signal path.
+///
+/// Track, format, setting, device, and status changes rebuild the snapshot;
+/// position ticks, queue edits, seeks, gapless toggles, and errors never do.
+///
+/// # Arguments
+///
+/// * `event` - Engine event to classify.
+///
+/// # Returns
+///
+/// * `bool` - Whether the signal path needs a rebuild.
+#[must_use]
+pub const fn snapshot_event(event: &PlaybackEvent) -> bool {
+    matches!(
+        event,
+        PlaybackEvent::TrackStarted { .. }
+            | PlaybackEvent::TrackFormatReady { .. }
+            | PlaybackEvent::TrackFinished { .. }
+            | PlaybackEvent::Paused
+            | PlaybackEvent::Resumed
+            | PlaybackEvent::Stopped
+            | PlaybackEvent::VolumeChanged { .. }
+            | PlaybackEvent::OutputModeChanged { .. }
+            | PlaybackEvent::DeviceLost { .. }
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use anyhow::{Result, ensure};
+
+    use crate::playback::{
+        devices::OutputMode::{BitPerfect, Resampled},
+        state::{
+            PlaybackEvent::{
+                DeviceLost, Error, GaplessEnabledChanged, OutputModeChanged, Paused, PositionTick,
+                QueueChanged, Resumed, Seeked, Stopped, TrackFinished, TrackFormatReady,
+                TrackStarted, VolumeChanged,
+            },
+            snapshot_event,
+        },
+    };
+
+    #[test]
+    fn snapshot_event_classifies_path_changes() -> Result<()> {
+        let rebuilds = [
+            TrackStarted { track_id: 1 },
+            TrackFormatReady {
+                track_id: 1,
+                sample_rate: 48000,
+            },
+            TrackFinished { track_id: 1 },
+            Paused,
+            Resumed,
+            Stopped,
+            VolumeChanged { volume: 0.5 },
+            OutputModeChanged { mode: Resampled },
+            OutputModeChanged { mode: BitPerfect },
+            DeviceLost {
+                error: String::from("unplugged"),
+            },
+        ];
+        for event in &rebuilds {
+            let rebuild = snapshot_event(event);
+            ensure!(rebuild, "rebuilds classify");
+        }
+        let ignored = [
+            PositionTick {
+                elapsed_seconds: 1.0,
+                duration_seconds: 200.0,
+            },
+            QueueChanged { track_ids: vec![] },
+            Seeked {
+                position_seconds: 10.0,
+            },
+            Error {
+                error: String::from("decode failed"),
+            },
+            GaplessEnabledChanged { enabled: true },
+        ];
+        for event in &ignored {
+            let silent = snapshot_event(event);
+            ensure!(!silent, "others never rebuild");
+        }
+        Ok(())
+    }
+}

@@ -1,58 +1,42 @@
 //! Off-thread snapshot publisher for the Signal tab mailbox.
 //!
-//! Subscribes to playback events and rebuilds the immutable snapshot on
-//! track, format, setting, device, or status change. Each rebuild clones
-//! engine facts under minimal lock scopes, resolves the catalog audio facts
-//! asynchronously, captures snapshot timing fields, then builds and sends
-//! the snapshot; the tab drains it via
+//! Rebuilds the immutable snapshot on track, format, setting, device, or
+//! status change, plus a 500 ms mixer tick for OS-mixer moves. Workers own
+//! all I/O; the tab drains ready snapshots via
 //! [`signal_poll`](crate::ui::signal_view::signal_poll). Generation bumps on
-//! every rebuild; an idle engine yields an empty snapshot with retained zone
-//! name. Processing-speed smoothing state lives here across rebuilds and
-//! never in the immutable snapshot.
+//! every rebuild; speed smoothing lives here, never in the snapshot.
 
 use std::{
     sync::{Arc, atomic::Ordering::Relaxed},
-    time::{SystemTime, UNIX_EPOCH},
+    thread::{Builder, sleep},
+    time::Duration,
 };
 
 use {
-    async_channel::{Receiver, Sender},
-    tokio::spawn,
+    async_channel::{Receiver, Sender, bounded},
+    tokio::{select, spawn},
     tracing::warn,
 };
 
 use crate::{
     playback::{
+        alsa_mixer::{MixerSample, mixer_sample_changed},
         engine::PlaybackEngine,
         signal_path::{
             QualityVerdict::BitPerfect, SignalPathSnapshot, SnapshotInput,
             path_snapshot::build_snapshot,
         },
-        state::{
-            PlaybackEvent::{
-                self, DeviceLost, OutputModeChanged, Paused, Resumed, Stopped, TrackFinished,
-                TrackFormatReady, TrackStarted, VolumeChanged,
-            },
-            PlaybackStatus,
-        },
+        state::{PlaybackEvent, PlaybackStatus, snapshot_event},
         transport::PlaybackTransport,
     },
     storage::{Storage, database::SqliteStorage},
-    ui::signal_view::signal_source::{SpeedEma, resolve_live_source},
+    ui::signal_view::signal_source::{
+        MixerProbe, SpeedEma, resolve_live_source, sample_wall_nanos,
+    },
 };
 
-/// Sample monotonic wall-clock time in nanos for one snapshot.
-///
-/// # Returns
-///
-/// * `u64` - Nanos since the Unix epoch, or `u64::MAX` on clock failure.
-fn sample_wall_nanos() -> u64 {
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
-    u64::try_from(nanos).unwrap_or(u64::MAX)
-}
+/// Mixer tick interval: OS-mixer moves surface within ~1 s with the UI poll.
+const MIXER_TICK_INTERVAL: Duration = Duration::from_millis(500);
 
 /// Spawn the off-thread snapshot publisher for one mailbox.
 ///
@@ -72,13 +56,39 @@ pub fn spawn_snapshot_publisher(
     let engine = Arc::clone(playback);
     let catalog = Arc::clone(storage);
     let events = engine.subscribe();
-    drop(spawn(drive_publisher(engine, catalog, sender, events)));
+    let (tick_sender, tick_receiver) = bounded::<MixerSample>(1);
+    let tick_engine = Arc::clone(&engine);
+    if Builder::new()
+        .name(String::from("oxhidifi-mixer-tick"))
+        .spawn(move || {
+            while tick_sender
+                .send_blocking(MixerProbe::sample(&tick_engine))
+                .is_ok()
+            {
+                sleep(MIXER_TICK_INTERVAL);
+            }
+        })
+        .is_err()
+    {
+        warn!(
+            thread = "oxhidifi-mixer-tick",
+            "Signal path mixer tick failed to start"
+        );
+    }
+    drop(spawn(drive_publisher(
+        engine,
+        catalog,
+        sender,
+        events,
+        tick_receiver,
+    )));
 }
 
-/// Drive the publisher mailbox from playback events.
+/// Drive the publisher mailbox from events plus the mixer tick.
 ///
-/// Publishes once for the current engine state, then rebuilds on every
-/// path-changing event until the event fan-out closes.
+/// Publishes once for the current state, then rebuilds on path-changing
+/// events or changed mixer samples. Unchanged ticks cost nothing; generation
+/// bumps only on rebuild.
 ///
 /// # Arguments
 ///
@@ -86,36 +96,47 @@ pub fn spawn_snapshot_publisher(
 /// * `catalog` - Catalog backend for the async track lookup.
 /// * `sender` - Tab mailbox receiving ready snapshots.
 /// * `events` - Playback event fan-out subscription.
+/// * `ticks` - Bounded mixer-sample mailbox fed by the tick thread.
 async fn drive_publisher(
     engine: Arc<PlaybackEngine>,
     catalog: Arc<SqliteStorage>,
     sender: Sender<SignalPathSnapshot>,
     events: Receiver<PlaybackEvent>,
+    ticks: Receiver<MixerSample>,
 ) {
     let mut generation = 0_u64;
     let mut speed = SpeedEma::new();
-    publish_snapshot(&engine, &catalog, &sender, &mut generation, &mut speed).await;
-    while let Ok(event) = events.recv().await {
-        if snapshot_event(&event) {
-            publish_snapshot(&engine, &catalog, &sender, &mut generation, &mut speed).await;
+    let mut mixer = MixerProbe::sample(&engine);
+    publish_snapshot(
+        &engine,
+        &catalog,
+        &sender,
+        &mut generation,
+        &mut speed,
+        &mixer,
+    )
+    .await;
+    loop {
+        select! {
+            event = events.recv() => {
+                let Ok(event) = event else { break };
+                if snapshot_event(&event) {
+                    mixer = MixerProbe::sample(&engine);
+                    publish_snapshot(&engine, &catalog, &sender, &mut generation, &mut speed, &mixer)
+                        .await;
+                }
+            }
+            sample = ticks.recv() => {
+                if let Ok(sample) = sample
+                    && mixer_sample_changed(&mixer, &sample)
+                {
+                    mixer = sample;
+                    publish_snapshot(&engine, &catalog, &sender, &mut generation, &mut speed, &mixer)
+                        .await;
+                }
+            }
         }
     }
-}
-
-/// Check whether a playback event can change the signal path.
-const fn snapshot_event(event: &PlaybackEvent) -> bool {
-    matches!(
-        event,
-        TrackStarted { .. }
-            | TrackFormatReady { .. }
-            | TrackFinished { .. }
-            | Paused
-            | Resumed
-            | Stopped
-            | VolumeChanged { .. }
-            | OutputModeChanged { .. }
-            | DeviceLost { .. }
-    )
 }
 
 /// Publish one snapshot for the current engine state.
@@ -129,14 +150,11 @@ async fn publish_snapshot(
     sender: &Sender<SignalPathSnapshot>,
     generation: &mut u64,
     speed: &mut SpeedEma,
+    mixer: &MixerSample,
 ) {
     *generation = generation.wrapping_add(1);
-    let mut snapshot = snapshot_for_engine(engine, storage, *generation).await;
-    if let Some(instant) = snapshot.processing_speed {
-        snapshot.processing_speed = Some(speed.update(instant));
-    } else {
-        speed.reset();
-    }
+    let mut snapshot = snapshot_for_engine(engine, storage, *generation, mixer).await;
+    snapshot.processing_speed = speed.observe(snapshot.processing_speed);
     if let Err(e) = sender.try_send(snapshot) {
         warn!(error = %e, "Signal path mailbox closed, dropping snapshot");
     }
@@ -146,15 +164,13 @@ async fn publish_snapshot(
 ///
 /// Locks are held only for short clones; the async catalog lookup runs after
 /// every lock is released. Decoder facts stay `None` until the decode loop
-/// exposes them; resampler facts derive from the live source/device rates.
-/// The shared live rate is tagged with its owning track: a tag mismatch means
-/// `TrackStarted` fired before `Decoder::open` updated the rate, so the
-/// catalog rate is preferred until `TrackFormatReady` arrives.
-/// Timing fields are captured here for the snapshot-sampled speed estimate.
+/// exposes them; resampler facts derive from live source/device rates. Timing
+/// fields are captured here for the snapshot-sampled speed estimate.
 async fn snapshot_for_engine(
     engine: &Arc<PlaybackEngine>,
     storage: &Arc<SqliteStorage>,
     generation: u64,
+    mixer: &MixerSample,
 ) -> SignalPathSnapshot {
     let shared = &engine.shared;
     let state = {
@@ -222,6 +238,11 @@ async fn snapshot_for_engine(
         resampler_channels: None,
         volume: state.volume,
         muted: state.muted,
+        device_volume: mixer.device_volume,
+        device_muted: mixer.device_muted,
+        system_volume: mixer.system_volume,
+        system_muted: mixer.system_muted,
+        system_source: mixer.system_source,
         output_mode: state.output_mode,
         status: state.status,
         device_id,
@@ -262,84 +283,41 @@ fn empty_snapshot(generation: u64, zone_name: &str, status: PlaybackStatus) -> S
 mod tests {
     use anyhow::{Result, ensure};
 
-    use crate::{
-        playback::{
-            devices::OutputMode::{BitPerfect as ModeBitPerfect, Resampled},
-            state::PlaybackEvent::{
-                DeviceLost, Error, GaplessEnabledChanged, OutputModeChanged, Paused, PositionTick,
-                QueueChanged, Resumed, Seeked, Stopped, TrackFinished, TrackFormatReady,
-                TrackStarted, VolumeChanged,
-            },
-        },
-        ui::signal_view::signal_publish::{sample_wall_nanos, snapshot_event},
+    use crate::playback::alsa_mixer::{
+        MixerSample, SystemMixerSource::AlsaShared, mixer_sample_changed,
     };
 
     #[test]
-    fn path_changing_events_trigger_rebuild() -> Result<()> {
-        let rebuilds = [
-            TrackStarted { track_id: 1 },
-            TrackFormatReady {
-                track_id: 1,
-                sample_rate: 48000,
-            },
-            TrackFinished { track_id: 1 },
-            Paused,
-            Resumed,
-            Stopped,
-            VolumeChanged { volume: 0.5 },
-            OutputModeChanged {
-                mode: ModeBitPerfect,
-            },
-            OutputModeChanged { mode: Resampled },
-            DeviceLost {
-                error: String::from("unplugged"),
-            },
-        ];
-        for event in &rebuilds {
-            ensure!(
-                snapshot_event(event),
-                "path-changing event must rebuild, got {event:?}"
-            );
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn non_path_events_never_rebuild() -> Result<()> {
-        let ignored = [
-            PositionTick {
-                elapsed_seconds: 1.0,
-                duration_seconds: 200.0,
-            },
-            QueueChanged {
-                track_ids: vec![1, 2],
-            },
-            Seeked {
-                position_seconds: 10.0,
-            },
-            Error {
-                error: String::from("decode failed"),
-            },
-            GaplessEnabledChanged { enabled: true },
-        ];
-        for event in &ignored {
-            ensure!(
-                !snapshot_event(event),
-                "position, queue, seek, and error events must never rebuild, got {event:?}"
-            );
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn wall_clock_samples_monotonic_nanos() -> Result<()> {
-        let first = sample_wall_nanos();
-        let second = sample_wall_nanos();
-        ensure!(first > 0, "wall sample must be non-zero");
-        ensure!(
-            second >= first,
-            "wall samples must not go backwards, got {first} then {second}"
-        );
+    fn mixer_ticks_rebuild_only_on_real_change() -> Result<()> {
+        let base = MixerSample::unknown();
+        let same = mixer_sample_changed(&base, &base);
+        ensure!(!same, "identical samples never rebuild");
+        let mut drifted = base;
+        drifted.system_volume = Some(0.5);
+        drifted.system_source = AlsaShared;
+        let mut epsilon = drifted;
+        epsilon.system_volume = Some(0.5 + 1e-9);
+        let tiny = mixer_sample_changed(&drifted, &epsilon);
+        ensure!(!tiny, "sub-epsilon drift never rebuilds");
+        let mut louder = drifted;
+        louder.system_volume = Some(0.6);
+        let moved = mixer_sample_changed(&drifted, &louder);
+        ensure!(moved, "level moves rebuild");
+        let mut muted = drifted;
+        muted.system_muted = true;
+        let mute = mixer_sample_changed(&drifted, &muted);
+        ensure!(mute, "mute flips rebuild");
+        let mut readable = base;
+        readable.system_volume = Some(1.0);
+        readable.system_source = AlsaShared;
+        let gained = mixer_sample_changed(&base, &readable);
+        ensure!(gained, "readability flips rebuild");
+        let lost = mixer_sample_changed(&readable, &base);
+        ensure!(lost, "lost readability rebuilds");
+        let mut hardware = base;
+        hardware.device_volume = Some(0.5);
+        let moved_hw = mixer_sample_changed(&base, &hardware);
+        ensure!(moved_hw, "hardware moves rebuild");
         Ok(())
     }
 }

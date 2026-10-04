@@ -22,6 +22,7 @@ use crate::playback::signal_path::{
         push_source_stage, push_volume_stage,
     },
     stage_output::{output_device, push_output_stage, push_transport_stage},
+    stage_volume::{push_device_volume_stage, push_system_volume_stage},
 };
 
 /// Placeholder processing-speed multiple reported while real sampling lands.
@@ -37,8 +38,11 @@ const PLACEHOLDER_SPEED: f64 = 32.0;
 ///
 /// * `input` - Cloned track facts (`TrackAudio` via async `get_track`), decoder params
 ///   (`AudioParams`), pipeline facts (resampler in/out rates, channel counts), playback facts
-///   (volume, mute, output mode, status), and output facts (device id/name/rate/mode). Provider
-///   auth facts are optional input (`None` in MVP, so no Authentication stage is emitted).
+///   (volume, mute, output mode, status), device/hardware volume facts (ALSA read-back when
+///   available, else the engine-set slider value in `BitPerfect` mode), system/application volume
+///   facts (`MixerSample` level, mute, and source — unreadable levels render as `unknown`), and
+///   output facts (device id/name/rate/mode). Provider auth facts are optional input (`None` in
+///   MVP, so no Authentication stage is emitted).
 ///
 /// # Returns
 ///
@@ -56,12 +60,15 @@ pub fn build_snapshot(input: &SnapshotInput) -> Result<SignalPathSnapshot, Signa
     let dsd_emitted = push_dsd_stage(&mut stages, input);
     let resample_emitted = push_resample_stage(&mut stages, input);
     let channels_emitted = push_channel_stage(&mut stages, input);
-    let volume_emitted = push_volume_stage(&mut stages, input);
+    let dsp_volume_emitted = push_volume_stage(&mut stages, input);
+    push_device_volume_stage(&mut stages, input);
+    push_system_volume_stage(&mut stages, input);
     push_transport_stage(&mut stages, input);
     push_output_stage(&mut stages, input);
     let verdicts: Vec<QualityVerdict> = stages.iter().map(|stage| stage.verdict).collect();
     let verdict = resolve_verdict(&verdicts);
-    let alteration_active = dsd_emitted || resample_emitted || channels_emitted || volume_emitted;
+    let alteration_active =
+        dsd_emitted || resample_emitted || channels_emitted || dsp_volume_emitted;
     let processing_speed = alteration_active.then_some(PLACEHOLDER_SPEED);
     let zone_name = if input.zone_name.trim().is_empty() {
         output_device(input).display_name
@@ -117,6 +124,7 @@ mod tests {
 
     use crate::{
         playback::{
+            alsa_mixer::SystemMixerSource::Unknown,
             decoder::AudioParams,
             devices::OutputMode::BitPerfect,
             signal_path::{
@@ -160,6 +168,11 @@ mod tests {
             resampler_channels: None,
             volume: 1.0,
             muted: Unmuted,
+            device_volume: None,
+            device_muted: false,
+            system_volume: None,
+            system_muted: false,
+            system_source: Unknown,
             output_mode: BitPerfect,
             status: Playing,
             device_id: String::from("hw:1"),

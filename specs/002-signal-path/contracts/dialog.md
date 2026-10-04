@@ -48,7 +48,11 @@ Read-only view — zero DSP editing. FR references are normative. Tab-only: no o
 - One row per snapshot stage in `position` order: Source (origin + codec +
   rate + depth + channels), each active transformation (authentication omitted in
   MVP — `auth` always `None`; decoding, bit-depth/sample-rate/format conversions with
-  input→output wording, DSP-volume rows with dB, transport with MVP Linux mode wording:
+  input→output wording, volume rows — DSP `Volume` (`Processed`, `Resampled`
+  only), device/hardware `Device Volume` (`Processed`, `BitPerfect` only),
+  system/application `System Volume` (`Limited`, `unknown` detail when the OS
+  level is unreadable) — each emit-if-attenuated with dB detail, ordered
+  DSP → Device → System just before Transport, transport with MVP Linux mode wording:
   ALSA direct-exclusive, shared-mixer, or USB — network/streaming deferred), Output (destination kind) and terminal
   external-renderer step when audio hands off beyond the app (title-only in MVP).
 - Per-stage verdict indicator = icon/shape + text label (never color alone).
@@ -75,18 +79,24 @@ Read-only view — zero DSP editing. FR references are normative. Tab-only: no o
 ## Readout (FR-010)
 
 - `Processing speed: {x.x}x` line (one decimal, header area below the
-  verdict/zone line) iff `processing_speed.is_some()` (any in-app alteration
-  incl. volume-only); fully hidden when `None` (bit-perfect and Limited-only
-  without in-app alteration).
+  verdict/zone line) iff `processing_speed.is_some()` (DSP in-app alteration
+  incl. volume-only — device/hardware and system/application attenuation never
+  trigger it); fully hidden when `None` (bit-perfect, device-only,
+  system-only, and other Limited-only paths without DSP alteration).
 
 ## Liveness (FR-011 + edge cases)
 
 - Whole-snapshot swap on `generation` change (track/format/setting/device/
-  status; the builder bumps `generation` on `PlaybackStatus` change).
-  Trigger mapping (no dedicated device/format events exist): track/format
+  system-volume/status; the builder bumps `generation` on `PlaybackStatus` change
+  and on sampled system-volume change).
+  Trigger mapping (no dedicated device/format events exist, and no new event
+  variant is added for sampled mixer data): track/format
   changes arrive as `TrackStarted` with new resampler/device facts re-read on
   every rebuild; setting changes as `VolumeChanged`/`OutputModeChanged`;
-  device changes as `DeviceLost`/`OutputModeChanged`/`TrackStarted`; status
+  device changes as `DeviceLost`/`OutputModeChanged`/`TrackStarted`;
+  system-volume changes via the 500 ms worker tick (rebuild only when the
+  sample actually changes; unreadable mixer ⇒ `unknown` disclosure on
+  shared-mixer transports, never an error); status
   changes as `Paused`/`Resumed`/`Stopped` (`PositionTick`, `QueueChanged`,
   `Seeked`, `GaplessEnabledChanged`, and `Error` never rebuild; mute toggles
   emit no event — newly-muted state applies on the next rebuild, not live);

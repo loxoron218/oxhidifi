@@ -36,11 +36,28 @@ No new crates and no DB migration are required.
   software volume scaling (slider `1.0`/unmuted or hardware-mixer path only),
   no channel-count conversion, and device native support for the track format.
   Any resample, bit-depth/DSD conversion, source-vs-device channel-count
-  conversion (emitted as a `FormatConverter` "Channel Conversion" stage —
-  distinct from the channel-map `Effect`, which stays `describe()`-only in
-  MVP), or volume/EQ effect
-  yields Processed; shared-mixer output, forced downsampling, or a lost device
-  yields Limited (Limited wins over any enhancement present).
+   conversion (emitted as a `FormatConverter` "Channel Conversion" stage —
+   distinct from the channel-map `Effect`, which stays `describe()`-only in
+   MVP), DSP volume scaling, device/hardware attenuation, or volume/EQ effect
+   yields `Processed` (device/hardware volume never forces `Limited` on its
+   own); system/application volume, shared-mixer output, forced downsampling,
+   or a lost device yields `Limited` (Limited wins over any enhancement
+   present).
+   Post-clarification refinement (2026-09-28, three-way volume split): the old
+   single "DSP volume" input is now three families — (a) DSP volume
+   (`Resampled` path software scaling from the `volume` slider) ⇒ `Processed`;
+   (b) device/hardware volume (ALSA exclusive `Master`/`PCM` via
+   `AlsaVolumeControl`, engine-set from the same slider while `volume_atomic`
+   stays `1.0`) ⇒ `Processed` without forcing `Limited`; (c)
+   system/application volume (OS-level level outside the app) ⇒ `Limited`,
+   forcing the whole-path verdict. Bit-Perfect requires unity/unmuted across
+   ALL families the active path exposes plus an exclusive transport; any
+   shared-mixer transport stays `Limited` regardless of levels. Behavior
+   correction recorded here: the current `push_volume_stage` emits on
+   `volume < 1.0` regardless of `output_mode`, so BitPerfect-mode hardware
+   attenuation is misreported as DSP scaling (and wrongly arms the readout) —
+   the builder MUST gate DSP emission on `output_mode == Resampled` and route
+   BitPerfect attenuation to the new Device Volume stage instead.
 - **Rationale**: A pure, total function is trivially unit-testable
   (`anyhow::Result` + `ensure!`) and makes SC-002/SC-003 deterministic: every
   altering stage is classified, zero silent alterations.
@@ -54,12 +71,13 @@ No new crates and no DB migration are required.
   (frames decoded + resampled per wall-clock second ÷ device rate, smoothed),
   split across two owners: the off-thread builder returns the instantaneous
   presence signal (`Some` iff alteration active, else `None`), and the
-  publisher worker's `SpeedEma` (α=0.3) smooths `Some` samples across
-  rebuilds — never instrumented in the audio
-  callback. Shown iff any in-app alteration is active in MVP (DSP-volume scaling
-  incl. volume-only, resample, bit-depth/channel-count/DSD conversion;
-  effect/leveling/headroom families have no MVP inputs and are `describe()`-only
-  — see FR-010/T029); hidden when bit-perfect
+   publisher worker's `SpeedEma` (α=0.3) smooths `Some` samples across
+   rebuilds — never instrumented in the audio
+   callback. Shown iff any in-app DSP alteration is active in MVP (DSP-volume scaling
+   incl. volume-only, resample, bit-depth/channel-count/DSD conversion;
+   device/hardware volume and system/application volume NEVER trigger the
+   readout — FR-010 clarification 2026-09-28; effect/leveling/headroom families have no MVP inputs and are `describe()`-only
+   — see FR-010/T029); hidden when bit-perfect
   AND when Limited-only with no in-app alteration (shared-mixer/forced-downsample/lost-device
   alone keeps `processing_speed` as `None` — see `contracts/snapshot.md` invariants 2–3).
 - **Rationale**: Matches the clarified requirement (volume-only triggers the
@@ -186,6 +204,100 @@ No new crates and no DB migration are required.
   `Cargo.toml` and MUST NOT be assumed), no `unsafe`, no `#[allow]`/`#[expect]`
   suppressions, no `pub use` re-exports, no schema migration, no DSP editing
   in the view (read-only; overflow menu navigates to settings elsewhere).
+  This holds for the 2026-09-28 system-volume extension too: NO tokio feature
+  additions (`time` stays off — periodic mixer sampling uses a plain std
+  sleeper thread per the concurrency ladder, see R-12), and NO PipeWire/Pulse
+  native reader crate — PipeWire/Pulse app-volume polling is a deferred
+  follow-up; MVP samples the ALSA mixer via the existing `alsa` crate and uses
+  the spec's unknown-disclosure rule (`unknown` detail, never fail) wherever
+  the ALSA read is unavailable (see R-11).
 - **Rationale**: Keeps the change surface minimal and the quality gates green
   (`cargo collate`, pedantic+nursery clippy, `cargo test`; `cargo bench`
   only if the audio pipeline itself changes — it does not).
+
+## R-11: Three-way volume observation and sourcing (2026-09-28 clarification)
+
+- **Decision**: Sample all three volume families off-thread; reuse the
+  `volume < 1.0`/muted emission rule per family with dB detail via the
+  existing `format_volume_db` (`Muted (…)` when muted), ordered DSP →
+  Device → System just before Transport, omitted at unity:
+  (a) DSP volume comes from `PlaybackState::volume`/`muted` exactly as today
+  but is builder-gated on `output_mode == Resampled` (the BitPerfect-mode
+  misreport correction from R-02);
+  (b) device/hardware volume is the ALSA exclusive `Master`/`PCM` level,
+  read back via a new `alsa_mixer` read API (`Mixer::new` +
+  `find_selem` + `Selem::get_playback_volume`/`get_playback_switch` on the
+  first available channel — all in the already-depended `alsa 0.11` crate,
+  verified present in the vendored source), falling back to the engine-set
+  slider value when the read fails (the engine drove that level via
+  `AlsaVolumeControl::set_volume`, so slider truth is exact in BitPerfect
+  mode);
+  (c) system/application volume is the ALSA shared/default-mixer level read
+  the same way on `alsa_card_name(device_id)` when `is_shared_mixer` holds;
+  PipeWire/Pulse *native* app-volume reading has no supporting crate
+  (`Cargo.toml` carries none, R-10 forbids additions) and is a deferred
+  follow-up — MVP populates `SystemMixerSource::{AlsaShared, Unknown}` only
+  (`PipeWirePulse` reserved), and any unreadable level on a shared-mixer
+  transport emits the standing `unknown` disclosure stage (`Limited`) per
+  the spec's never-fail rule instead of guessing.
+- **Rationale**: Every read uses the already-vendored `alsa` crate behind the
+  existing `alsa_mixer` capability owner (no new deps, no subprocess
+  fragility like `pactl`/`pw-dump` parsing, no `regex`); read-back (rather
+  than slider trust) also catches external `alsamixer` moves behind the
+  app's back, which is the entire point of the clarification. The
+  unknown-disclosure keeps SC-003 honest on PipeWire-native sinks: the
+  verdict is still correctly `Limited` via Transport, and the chain says
+  `unknown` instead of silently omitting.
+- **Alternatives considered**: Trusting the slider for device volume
+  (rejected: misses external mixer moves); subprocess PipeWire queries
+  (rejected: fragile across desktops, heavy per-sample cost, needs parsing
+  without `regex`); adding a Pulse/PipeWire crate (rejected: violates R-10
+  minimal surface; parked as follow-up); inferring System Volume purely from
+  transport mode with no level (rejected: spec Q1/Q4 chose an explicit
+  leveled stage).
+
+## R-12: Periodic mixer sampling without new runtime features
+
+- **Decision**: A named std sleeper thread (`oxhidifi-mixer-tick`, first rung
+  of the constitution's concurrency ladder) loops on `thread::sleep(500 ms)`,
+  samples both ALSA levels via R-11, and `send_blocking`s the `MixerSample`
+  through a bounded(1) `async-channel` to `drive_publisher`, which
+  `select!`s event-fan-out vs. tick, change-compares each sample (level
+  epsilon + mute flips + readability flips) against the last published one,
+  and rebuilds (generation bump, same as event rebuilds) ONLY on change —
+  unchanged samples cause zero work and zero render churn. No new
+  `PlaybackEvent` variant (event enum stays stable; system changes arrive via
+  ticks). No `tokio::time` (stays off in `Cargo.toml`). All ALSA I/O stays
+  off the GTK main thread (sleeper + publisher only); the UI poll loop is
+  untouched.
+- **Rationale**: 500 ms sits at the top of the constitution's 100–500 ms poll
+  band — live enough for a volume display, cheap enough for a local mixer
+  read — while change-gating keeps the atomic-swap and newest-wins
+  guarantees (SC-006) intact. `send_blocking` on a bounded(1) channel gives
+  natural backpressure if event traffic floods.
+- **Alternatives considered**: `tokio::time::interval` (rejected: needs the
+  `time` feature added to the manifest); sampling inside the GTK poll
+  (rejected: I/O on the main thread, forbidden); rebuilding on every tick
+  (rejected: render churn, generation spam); a new `SystemVolumeChanged`
+  event (rejected: event-enum churn for sampled — not evented — data).
+
+## R-13: DSD trigger and readout presence under three-way volume
+
+- **Decision**: The explicit DSD-to-PCM `FormatConverter` stage triggers on
+  DSP-active (`Resampled` + attenuated/muted) or System-active
+  (shared-mixer attenuation/disclosure — a shared path cannot carry DSD) but
+  NOT on device/hardware attenuation alone (hardware attenuation preserves
+  the 1-bit stream; no conversion exists to disclose). `processing_speed`
+  presence (`Some`) follows DSP/vol-level rule only: DSP-volume scaling
+  (incl. volume-only), resample, bit-depth, channel-count, or DSD-to-PCM
+  conversion ⇒ `Some`; device-only or system-only attenuation ⇒ `None`
+  (still `Limited` via the System stage where applicable, per invariant
+  `Some`-iff-in-app-alteration).
+- **Rationale**: Keeps the no-silent-conversion edge case exact under the new
+  families without over-emitting: hardware-volume DSD passthrough is
+  genuinely unconverted, while any shared-mixer DSD path is genuinely
+  converted.
+- **Alternatives considered**: DSD stage on any volume family incl. hardware
+  (rejected: would fabricate a conversion that never happened); readout on
+  device/system attenuation (rejected: FR-010 limits the readout to DSP
+  headroom — hardware/OS levels cost no in-app processing).

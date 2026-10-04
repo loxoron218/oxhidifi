@@ -27,7 +27,17 @@ fn display_name(input: &SnapshotInput) -> String {
 }
 
 /// Check whether the output targets the shared system mixer.
-fn is_shared_mixer(device_id: &str, device_name: &str) -> bool {
+///
+/// # Arguments
+///
+/// * `device_id` - Stable output device identifier.
+/// * `device_name` - Human-readable output device name.
+///
+/// # Returns
+///
+/// * `bool` - Whether the path runs through the shared system mixer.
+#[must_use]
+pub fn is_shared_mixer(device_id: &str, device_name: &str) -> bool {
     if device_id == "default" || device_id.starts_with("default:") {
         return true;
     }

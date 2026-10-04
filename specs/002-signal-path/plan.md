@@ -11,13 +11,20 @@ Recreate Roon's Signal Path as a read-only, inspect-and-learn view for
 plus a persistent third library tab named `Signal` showing the live vertical
 stage chain from source file to output device, per-stage inline expandable
 explanations, a single-device footer card (manual link hidden in MVP), and a
-processing-speed readout whenever in-app alteration is active. MVP scope: single
+processing-speed readout whenever DSP in-app alteration is active (DSP volume
+only — device/hardware and system/application attenuation never trigger it).
+Volume is a three-way split: DSP `Volume` (`Processed`, `Resampled` only),
+device/hardware `Device Volume` (`Processed`, ALSA exclusive only, ALSA
+read-back with slider fallback), system/application `System Volume`
+(`Limited`, worker-sampled ALSA shared/default level with `unknown`
+disclosure when unreadable; PipeWire/Pulse native reading deferred). MVP scope: single
 active output device, no EQ/leveling/headroom engine inputs (display vocabulary
 with `describe()` coverage only), `auth` always `None`, `manual_url` always
 `None`, external-renderer title-only; multi-card chains, device-manual config,
-provider auth, and dedicated About content are deferred follow-ups. Approach from
+provider auth, PipeWire-native volume, and dedicated About content are deferred follow-ups. Approach from
 research: an immutable `SignalPathSnapshot` built off-thread from existing
-`EngineShared`/catalog state, classified by pure verdict/describe functions,
+`EngineShared`/catalog state plus worker-sampled mixer levels (500 ms std
+sleeper thread, change-gated rebuilds, no new event variant), classified by pure verdict/describe functions,
 polled atomically by a single responsive `ViewStack` tab page in
 `src/ui/signal_view/` (badge navigates to the tab) — no new crates, no schema
 migration, no audio-hot-path changes, no overlay dialog/popover/sheet except
@@ -61,9 +68,12 @@ network/streaming transports are deferred (no streaming-provider input — see F
 
 **Performance Goals**: Stage-selection explanation renders <1 s (SC-004);
 chain swaps atomically on gapless format change with zero mixed-frame display
-(SC-006); verdict identifiable <10 s on first use (SC-001); GTK main thread
+(SC-006); system-volume moves surface within ~1 s (500 ms mixer tick +
+100–500 ms UI poll); tick rebuilds are change-gated (level epsilon + mute/readability
+flips) so idle mixers cause zero work and zero render churn;
+verdict identifiable <10 s on first use (SC-001); GTK main thread
 never blocked (poll 100–500 ms `timeout_add_local` + `try_recv` drain;
-workers own I/O/decode); audio hot path untouched (zero-alloc, lock-free,
+workers own I/O/decode, ALSA reads live on the sleeper/publisher threads only); audio hot path untouched (zero-alloc, lock-free,
 `rtrb` transport preserved).
 
 **Constraints**: Constitution v1.2.0 gates — `cargo collate` clean;
@@ -74,8 +84,12 @@ hardcoded radii/colors); verdicts distinguishable without color vision;
 full keyboard + screen-reader operability.
 
 **Scale/Scope**: FR-001..FR-015 (15 requirements), 4 entities
-(`SignalPathSnapshot`, `PathStage`, `QualityVerdict`, `RenderingDevice`),
-chains of 1–8+ stages, footer with exactly one device card in MVP (multi-card chains deferred), one library tab + one player
+(`SignalPathSnapshot`, `PathStage`, `QualityVerdict`, `RenderingDevice`)
+plus volume input facts (`MixerSample`, `SystemMixerSource::{AlsaShared, Unknown}`
+— `PipeWirePulse` reserved) and one new stage kind (`SystemVolume`; DSP/device
+share `StageKind::Volume` with distinct titles),
+chains of 1–10 stages (three volume rows max, DSP → Device → System before
+Transport), footer with exactly one device card in MVP (multi-card chains deferred), one library tab + one player
 badge button navigating to it.
 
 ## Constitution Check
@@ -85,14 +99,20 @@ badge button navigating to it.
 - **I. Code Quality**: PASS — new modules follow capability grouping
   (`playback::signal_path`, `ui::signal_view`), unique stems
    (`signal_path`, `path_snapshot`, `path_verdict`, `stage_build`,
-   `stage_output`, `stage_describe`, `describe_contract`, `signal_tab`,
+   `stage_volume` (new: device/system volume stage constructors; `stage_build`
+   keeps DSP/converter constructors — both ≤400 lines, depth ≤2),
+   `stage_output`, `stage_describe`, `describe_contract`, `alsa_mixer` (extended
+   with a read-back API on the existing `alsa` crate — no new deps, no tokio
+   feature additions), `signal_tab`,
    `signal_header`, `signal_chain`, `signal_menu`, `signal_tab_build`,
-   `signal_footer`, `signal_publish`, `signal_poll`, `signal_badge`
+   `signal_footer`, `signal_publish` (tick `select!` + change-compare, sleeper
+   thread via std — first concurrency-ladder rung), `signal_poll`, `signal_badge`
    (the `signal_tab.rs` pre-split into `signal_header`/`signal_chain` was taken;
    `signal_menu`/`signal_tab_build`/`describe_contract` are part of the inventory —
    same uniqueness rules, verified under T038), parent-index style, ≤400 lines/file,
   depth ≤2, programmatic widgets, 4-block imports, `//!`/`///` docs, no
-  hardcoding (device/manual data from runtime state, theme-aware styling).
+  hardcoding (device/manual/mixer data from runtime state, theme-aware styling;
+  unreadable mixer renders `unknown`, never a guessed level).
 - **II. Testing Standards**: PASS — unit tests per new file; `tests/`
    acceptance with `//!` FR-001..FR-015 header; `tempfile` fixtures where
    files are needed; deterministic snapshot/verdict tests (pure functions over
@@ -117,18 +137,24 @@ badge button navigating to it.
    `spawn_local`+`recv().await`, `try_recv` drain with newest-wins). No broadcast
    channel is introduced; reviewer sign-off covers the primitive substitution.*
 - **IV. Performance**: PASS — display-only; snapshot built off-thread from
-  cloned state under minimal lock scopes; no hot-path allocation, locks, or
+  cloned state under minimal lock scopes; mixer sampling on a 500 ms std
+  sleeper thread with change-gated rebuilds (no render churn, bounded(1)
+  backpressure, no `tokio::time`); no hot-path allocation, locks, or
   callback instrumentation; approved primitives only
-  (`parking_lot`, `async-channel`, `tokio`); processing speed is
-  snapshot-sampled, not callback-measured.
+  (`thread::sleep` loop per the ladder, `parking_lot`, `async-channel`,
+  `tokio`); processing speed is
+  snapshot-sampled, not callback-measured (DSP-only presence).
 - **V. Observability & Error Handling**: PASS — structured `tracing` fields
   on snapshot builds/verdict flips; typed `thiserror` error enum for the
   builder (documented variants, `#[from]` sources); UI boundary uses
   `anyhow::Result` + `.context()`; no discarded errors.
 
-*Post-design re-check (after Phase 1): no violations introduced — data model
-is in-memory value types, contracts are Rust API + UI-behavior docs,
-quickstart is a validation guide. No Complexity Tracking entries needed.*
+*Post-design re-check (after Phase 1, incl. 2026-09-28 three-way volume
+extension): no violations introduced — data model
+is in-memory value types (new `MixerSample`/`SystemMixerSource` facts are
+ephemeral, never persisted), contracts are Rust API + UI-behavior docs,
+quickstart is a validation guide (new scenarios 2b/2c + PipeWire/unknown
+limitations). No Complexity Tracking entries needed. `tasks.md` Phase-8 (T039–T051, 2026-09-28+) already covers the three-way volume scope (new builder, mixer-sampling, publisher-tick, describe, and contract-test tasks) — the earlier "still describes the old single-DSP scope" note below is resolved and kept for history.*
 
 ## Project Structure
 
@@ -155,7 +181,8 @@ src/
 │   └── signal_path/
 │       ├── path_snapshot.rs      # Immutable snapshot builder from EngineShared + catalog
 │       ├── path_verdict.rs       # Per-stage + whole-path verdict (Limited > Processed > Bit-Perfect)
-│       ├── stage_build.rs        # Source/decoder/converter/volume stage constructors behind build_snapshot
+│       ├── stage_build.rs        # Source/decoder/converter/DSP-volume stage constructors behind build_snapshot
+│       ├── stage_volume.rs       # Device/system volume stage constructors + emission rules (DSP stays in stage_build)
 │       ├── stage_output.rs       # Transport/output/footer-device stage constructors behind build_snapshot
 │       ├── stage_describe.rs     # Titles, details, plain-language explanations per StageKind
 │       └── describe_contract.rs  # Shared describe-contract helpers for builder + tests

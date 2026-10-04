@@ -25,6 +25,7 @@ mod tests {
     use anyhow::{Result, anyhow, bail, ensure};
 
     use oxhidifi::playback::{
+        devices::OutputMode::Resampled,
         signal_path::{
             QualityVerdict::{self, BitPerfect, Limited, Processed},
             SignalPathError::NoActiveTrack,
@@ -54,10 +55,12 @@ mod tests {
         assert_built(&perfect, BitPerfect, false)?;
         let mut scaled = perfect.clone();
         scaled.generation = 12;
+        scaled.output_mode = Resampled;
         scaled.volume = 0.5;
         assert_built(&scaled, Processed, true)?;
         let mut muted = perfect.clone();
         muted.generation = 13;
+        muted.output_mode = Resampled;
         muted.muted = Muted;
         assert_built(&muted, Processed, true)?;
         let mut wide = perfect.clone();

@@ -9,11 +9,13 @@
 
 use crate::playback::{
     decoder::AudioParams,
+    devices::OutputMode::Resampled,
     signal_path::{
         PathStage,
         QualityVerdict::{self, BitPerfect, Limited, Processed},
         SnapshotInput,
         StageKind::{self, Decoder, FormatConverter, SampleRateConverter, Source, Volume},
+        stage_output::is_shared_mixer,
     },
     state::MuteState::Muted,
     volume::format_volume_db,
@@ -73,6 +75,41 @@ pub fn is_dsd_label(label: &str) -> bool {
 /// Check whether DSP-volume scaling is active, including volume-only paths.
 fn is_volume_active(input: &SnapshotInput) -> bool {
     input.volume < 1.0 || input.muted == Muted
+}
+
+/// Check whether DSP processing is active: resampling or Resampled scaling.
+///
+/// Device/hardware attenuation alone never counts: hardware preserves the
+/// 1-bit DSD stream, so no conversion exists to disclose.
+///
+/// # Arguments
+///
+/// * `input` - Snapshot facts with resampler and volume state.
+///
+/// # Returns
+///
+/// * `bool` - Whether DSP conversion or scaling applies.
+fn is_dsp_active(input: &SnapshotInput) -> bool {
+    (input.output_mode == Resampled && is_volume_active(input))
+        || resample_conversion(input).is_some()
+}
+
+/// Check whether system/application processing is active on the shared path.
+///
+/// A shared-mixer path cannot carry DSD: attenuation, muting, or the standing
+/// `unknown` disclosure all imply conversion to PCM.
+///
+/// # Arguments
+///
+/// * `input` - Snapshot facts with system mixer state.
+///
+/// # Returns
+///
+/// * `bool` - Whether OS-mixer processing applies.
+fn is_system_active(input: &SnapshotInput) -> bool {
+    input.system_muted
+        || input.system_volume.is_some_and(|level| level < 1.0)
+        || (input.system_volume.is_none() && is_shared_mixer(&input.device_id, &input.device_name))
 }
 
 /// Resolve the live source sample rate, preferring decoder truth.
@@ -170,17 +207,16 @@ pub fn push_decoder_stage(stages: &mut Vec<PathStage>, decoder: &Option<AudioPar
 
 /// Append the explicit DSD-to-PCM stage when DSD meets volume or DSP.
 ///
-/// Silent omission is a contract violation, so any DSD source undergoing
-/// volume scaling or resampling always produces this stage.
+/// Silent omission is a contract violation, so any DSD source undergoing DSP
+/// scaling, resampling, or shared-mixer processing always produces this stage.
+/// Device/hardware attenuation alone preserves the 1-bit stream and discloses
+/// nothing.
 pub fn push_dsd_stage(stages: &mut Vec<PathStage>, input: &SnapshotInput) -> bool {
     let dsd_source = input
         .track_audio
         .as_ref()
         .is_some_and(|audio| is_dsd_label(&audio.codec) || is_dsd_label(&audio.format));
-    let dsp_active = is_volume_active(input)
-        || input.resampler_in_rate.is_some()
-        || input.resampler_out_rate.is_some();
-    if !(dsd_source && dsp_active) {
+    if !(dsd_source && (is_dsp_active(input) || is_system_active(input))) {
         return false;
     }
     let out_rate = input.resampler_out_rate.unwrap_or(input.device_sample_rate);
@@ -216,17 +252,33 @@ fn defensive_resample(input: &SnapshotInput) -> Option<(u32, u32)> {
         .map(|rate| (rate, input.device_sample_rate))
 }
 
+/// Detect the active sample-rate conversion, if any.
+///
+/// Covers both explicit resampler facts and a defensive rate mismatch
+/// between the live source rate and the device rate, so no conversion is
+/// ever silent.
+///
+/// # Arguments
+///
+/// * `input` - Snapshot facts with resampler and device rates.
+///
+/// # Returns
+///
+/// * `Option<(u32, u32)>` - Input/output rates when conversion applies.
+fn resample_conversion(input: &SnapshotInput) -> Option<(u32, u32)> {
+    match (input.resampler_in_rate, input.resampler_out_rate) {
+        (Some(ins), Some(out)) if ins != out => Some((ins, out)),
+        _ => defensive_resample(input),
+    }
+}
+
 /// Append the sample-rate converter stage when conversion is active.
 ///
 /// Covers both explicit resampler facts and a defensive rate mismatch
 /// between the live source rate and the device rate, so no conversion is
 /// ever silent. Forced downsampling reports `Limited`.
 pub fn push_resample_stage(stages: &mut Vec<PathStage>, input: &SnapshotInput) -> bool {
-    let conversion = match (input.resampler_in_rate, input.resampler_out_rate) {
-        (Some(ins), Some(out)) if ins != out => Some((ins, out)),
-        _ => defensive_resample(input),
-    };
-    let Some((ins, out)) = conversion else {
+    let Some((ins, out)) = resample_conversion(input) else {
         return false;
     };
     let detail = format!("{} to {}", format_rate(ins), format_rate(out));
@@ -286,9 +338,13 @@ pub fn push_channel_stage(stages: &mut Vec<PathStage>, input: &SnapshotInput) ->
     true
 }
 
-/// Append the single DSP-volume stage iff software scaling is active.
+/// Append the DSP-volume stage iff software scaling is active on the path.
+///
+/// Gated on `Resampled` mode: BitPerfect-mode attenuation belongs to Device
+/// Volume (see `stage_volume`), so hardware moves neither misreport as DSP
+/// scaling nor arm the processing-speed readout.
 pub fn push_volume_stage(stages: &mut Vec<PathStage>, input: &SnapshotInput) -> bool {
-    if !is_volume_active(input) {
+    if input.output_mode != Resampled || !is_volume_active(input) {
         return false;
     }
     let detail = if input.muted == Muted {

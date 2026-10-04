@@ -9,6 +9,7 @@ use anyhow::{Result, bail};
 
 use oxhidifi::{
     playback::{
+        alsa_mixer::SystemMixerSource::Unknown,
         decoder::AudioParams,
         devices::OutputMode::BitPerfect,
         signal_path::{DeviceRole::Output, RenderingDevice, SnapshotInput},
@@ -35,6 +36,11 @@ pub fn bit_perfect_input() -> SnapshotInput {
         resampler_channels: None,
         volume: 1.0,
         muted: Unmuted,
+        device_volume: None,
+        device_muted: false,
+        system_volume: None,
+        system_muted: false,
+        system_source: Unknown,
         output_mode: BitPerfect,
         status: Playing,
         zone_name: String::from("Lab DAC"),

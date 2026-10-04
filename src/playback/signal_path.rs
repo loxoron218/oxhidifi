@@ -10,10 +10,12 @@ pub mod path_verdict;
 pub mod stage_build;
 pub mod stage_describe;
 pub mod stage_output;
+pub mod stage_volume;
 use thiserror::Error;
 
 use crate::{
     playback::{
+        alsa_mixer::SystemMixerSource,
         decoder::AudioParams,
         devices::OutputMode,
         state::{MuteState, PlaybackStatus},
@@ -154,6 +156,16 @@ pub struct SnapshotInput {
     pub volume: f64,
     /// Mute state from the playback engine.
     pub muted: MuteState,
+    /// Device/hardware read-back level (`None` falls back to the slider).
+    pub device_volume: Option<f64>,
+    /// Device/hardware mute switch state.
+    pub device_muted: bool,
+    /// System/application mixer level from 0.0 to 1.0 (`None` renders `unknown`).
+    pub system_volume: Option<f64>,
+    /// System/application mute switch state.
+    pub system_muted: bool,
+    /// Where the system level came from.
+    pub system_source: SystemMixerSource,
     /// Output path mode from the playback engine.
     pub output_mode: OutputMode,
     /// Live playback status from the playback engine.
@@ -233,12 +245,23 @@ pub enum StageFacts {
         /// Output format label.
         output_format: String,
     },
-    /// Volume handling with its decibel value; see the label vocabulary below.
+    /// Volume handling with its decibel value; the label vocabulary is `DSP
+    /// volume` for in-app scaling and `Device Volume` for hardware attenuation
+    /// (leveling/headroom labels stay `describe()`-only in MVP).
     Volume {
         /// Linear volume slider value from 0.0 to 1.0.
         volume: f64,
-        /// Volume family label such as Leveling, Headroom, or DSP volume.
+        /// Volume family label such as DSP volume or Device Volume.
         label: String,
+    },
+    /// System/application volume with its OS-mixer level; `None` renders `unknown`.
+    SystemVolume {
+        /// OS-mixer level from 0.0 to 1.0 (`None` when unreadable).
+        volume: Option<f64>,
+        /// OS-mixer mute switch state.
+        muted: bool,
+        /// Where the system level came from.
+        source: SystemMixerSource,
     },
     /// Effect with its setting summary; see the kind vocabulary below.
     Effect {
@@ -287,8 +310,10 @@ pub enum StageKind {
     SampleRateConverter,
     /// Format conversion such as DSD-to-PCM.
     FormatConverter,
-    /// Volume handling: leveling, headroom, or DSP volume.
+    /// Volume: DSP `Volume` plus hardware `Device Volume` (system is separate).
     Volume,
+    /// System/application volume: OS-mixer attenuation outside the app.
+    SystemVolume,
     /// Effect: equalizer, crossover, crossfeed, or channel map.
     Effect,
     /// Delivery transport with Linux output-mode wording.
@@ -303,19 +328,15 @@ pub enum StageKind {
 mod tests {
     use anyhow::{Result, ensure};
 
-    use crate::{
-        playback::{
-            devices::OutputMode::BitPerfect,
-            signal_path::{
-                AuthFacts, PathStage,
-                QualityVerdict::{BitPerfect as VerdictBitPerfect, Limited, Processed},
-                SignalPathError, SignalPathSnapshot, SnapshotInput, StageFacts,
-                StageKind::Source,
-                stage_output::lab_test_device,
-            },
-            state::{MuteState::Unmuted, PlaybackStatus::Playing},
+    use crate::playback::{
+        alsa_mixer::SystemMixerSource::Unknown,
+        devices::OutputMode::BitPerfect,
+        signal_path::{
+            QualityVerdict::{BitPerfect as VerdictBitPerfect, Limited, Processed},
+            SignalPathSnapshot, SnapshotInput,
+            stage_output::lab_test_device,
         },
-        storage::StorageError,
+        state::{MuteState::Unmuted, PlaybackStatus::Playing},
     };
 
     #[test]
@@ -325,11 +346,16 @@ mod tests {
             track_id: Some(7),
             track_audio: None,
             decoder_params: None,
-            resampler_in_rate: None,
-            resampler_out_rate: None,
-            resampler_channels: None,
-            volume: 1.0,
+            resampler_in_rate: Some(44100),
+            resampler_out_rate: Some(48000),
+            resampler_channels: Some(2),
+            volume: 0.8,
             muted: Unmuted,
+            device_volume: Some(0.8),
+            device_muted: false,
+            system_volume: None,
+            system_muted: false,
+            system_source: Unknown,
             output_mode: BitPerfect,
             status: Playing,
             device_id: String::from("hw:0"),
@@ -346,49 +372,23 @@ mod tests {
         let cloned = input.clone();
         ensure!(input.track_id == cloned.track_id, "clone keeps track");
         ensure!(cloned.auth.is_none(), "MVP omits auth");
+        ensure!(cloned.system_volume.is_none(), "mixer facts start unknown");
         let snapshot = SignalPathSnapshot {
             generation: cloned.generation,
             track_id: cloned.track_id,
             zone_name: cloned.zone_name.clone(),
             verdict: VerdictBitPerfect,
-            stages: vec![PathStage {
-                position: 0,
-                kind: Source,
-                title: String::from("Source"),
-                detail: String::from("FLAC 44.1kHz 16-bit"),
-                explanation: String::from("Origin format."),
-                verdict: VerdictBitPerfect,
-                badge_icon: "audio-x-generic-symbolic",
-            }],
+            stages: Vec::new(),
             devices: vec![lab_test_device()],
             processing_speed: None,
             playback_status: cloned.status,
         };
-        ensure!(snapshot.stages.len() == 1, "snapshot carries stages");
-        let hides_speed = snapshot.processing_speed.is_none();
-        ensure!(hides_speed, "bit-perfect hides speed");
+        ensure!(
+            snapshot.verdict == VerdictBitPerfect && snapshot.processing_speed.is_none(),
+            "bit-perfect shape with hidden speed"
+        );
         ensure!(Processed.label() == "Processed", "canonical processed");
         ensure!(Limited.label() == "Limited", "canonical limited");
-        let auth = AuthFacts {
-            provider: String::from("Qobuz"),
-            verified: false,
-        };
-        ensure!(!auth.verified, "auth round-trips flag");
-        let errors = [
-            SignalPathError::NoActiveTrack,
-            SignalPathError::CatalogLookup(StorageError::Database(String::from("db"))),
-            SignalPathError::SnapshotBuild(String::from("bad facts")),
-        ];
-        ensure!(errors.len() == 3, "errors cover failures");
-        let facts = StageFacts::Source {
-            origin: String::from("file"),
-            codec: String::from("FLAC"),
-            sample_rate: Some(44100),
-            bit_depth: Some(16),
-            channels: Some(2),
-        };
-        let is_source = matches!(facts, StageFacts::Source { .. });
-        ensure!(is_source, "source facts round-trip");
         Ok(())
     }
 }

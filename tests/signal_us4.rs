@@ -12,6 +12,7 @@ mod tests {
 
     use oxhidifi::playback::{
         decoder::AudioParams,
+        devices::OutputMode::Resampled,
         signal_path::{
             DeviceRole::TransportTarget,
             QualityVerdict::{BitPerfect, Limited, Processed},
@@ -82,6 +83,7 @@ mod tests {
         );
         let mut scaled = bit_perfect_input();
         scaled.generation = 43;
+        scaled.output_mode = Resampled;
         scaled.volume = 0.5;
         let volume_only = build_snapshot(&scaled)?;
         ensure!(volume_only.verdict == Processed, "volume-only is Processed");

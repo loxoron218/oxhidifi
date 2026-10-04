@@ -4,10 +4,11 @@
 //! non-empty triple; converters carry input, volumes dB.
 
 use crate::playback::{
+    alsa_mixer::SystemMixerSource::{self, AlsaShared, PipeWirePulse, Unknown},
     signal_path::{
         StageFacts::{
             self, Authentication, BitDepthConverter, Decoder, Effect, ExternalRenderer,
-            FormatConverter, Output, SampleRateConverter, Source, Transport, Volume,
+            FormatConverter, Output, SampleRateConverter, Source, SystemVolume, Transport, Volume,
         },
         stage_build::{format_channels, format_rate, is_dsd_label},
     },
@@ -73,6 +74,11 @@ pub fn describe(kind: &StageFacts) -> (String, String, String) {
             output_format,
         } => describe_format(input_format, output_format),
         Volume { volume, label } => describe_volume(*volume, label),
+        SystemVolume {
+            volume,
+            muted,
+            source,
+        } => describe_system_volume(*volume, *muted, *source),
         Effect { kind, summary } => describe_effect(kind, summary),
         Transport { mode, device_name } => describe_transport(mode, device_name),
         Output { destination, mode } => describe_output(destination, mode),
@@ -189,17 +195,75 @@ fn describe_format(input_format: &str, output_format: &str) -> (String, String, 
     }
 }
 
-/// Describe volume handling with its decibel value.
+/// Describe DSP or hardware volume handling with its decibel value.
+///
+/// `Device Volume` names the ALSA Master/PCM hardware path; every other label
+/// keeps the in-app scaling wording.
+///
+/// # Arguments
+///
+/// * `volume` - Linear slider value from 0.0 to 1.0.
+/// * `label` - Volume family label from the `Volume` vocabulary.
+///
+/// # Returns
+///
+/// * `(String, String, String)` - (title, detail, plain-language explanation).
 fn describe_volume(volume: f64, label: &str) -> (String, String, String) {
-    let label_text = known_or(label, "Volume");
-    let db = format_volume_db(volume);
-    let title = label_text.clone();
-    let detail = db.clone();
+    if label == "Device Volume" {
+        let db = format_volume_db(volume);
+        let explanation = format!(
+            "Controls the ALSA hardware mixer (Master/PCM element) at {db}. Attenuation here \
+             changes the output level without in-app processing."
+        );
+        (String::from("Device Volume"), db, explanation)
+    } else {
+        let label_text = known_or(label, "Volume");
+        let db = format_volume_db(volume);
+        let title = label_text.clone();
+        let detail = db.clone();
+        let explanation = format!(
+            "Applies {label_text} ({db}) by scaling samples. Lowering volume here intentionally \
+             alters the bit stream."
+        );
+        (title, detail, explanation)
+    }
+}
+
+/// Describe OS-mixer attenuation with its dB or `unknown` detail.
+///
+/// # Arguments
+///
+/// * `volume` - OS-mixer level from 0.0 to 1.0 (`None` when unreadable).
+/// * `muted` - Whether the OS-mixer mute switch is engaged.
+/// * `source` - Where the system level came from.
+///
+/// # Returns
+///
+/// * `(String, String, String)` - (title, detail, plain-language explanation).
+fn describe_system_volume(
+    volume: Option<f64>,
+    muted: bool,
+    source: SystemMixerSource,
+) -> (String, String, String) {
+    let detail = match volume {
+        Some(level) if muted => {
+            let db = format_volume_db(level);
+            format!("Muted ({db})")
+        }
+        Some(level) => format_volume_db(level),
+        None if muted => String::from("Muted (unknown)"),
+        None => String::from("unknown"),
+    };
+    let origin = match source {
+        AlsaShared => "the ALSA shared/system mixer",
+        PipeWirePulse => "the PipeWire/PulseAudio system mixer",
+        Unknown => "the operating-system mixer",
+    };
     let explanation = format!(
-        "Applies {label_text} ({db}) by scaling samples. Lowering volume here intentionally \
-         alters the bit stream."
+        "Reflects the OS-mixer level outside the app ({origin}) at {detail}. The shared mixer can \
+         change levels behind the app, so this path cannot stay bit-perfect."
     );
-    (title, detail, explanation)
+    (String::from("System Volume"), detail, explanation)
 }
 
 /// Describe an effect with its setting summary.
@@ -285,113 +349,50 @@ mod tests {
 
     use crate::playback::{
         signal_path::{
-            StageFacts::{
-                self, Authentication, BitDepthConverter, Decoder, Effect, ExternalRenderer, Output,
-                Source, Transport, Volume,
+            describe_contract::{
+                check_describe_pair, core_describe_cases, device_volume_needle,
+                system_volume_needle,
             },
-            describe_contract::check_describe_pair,
+            stage_describe::describe,
         },
         volume::format_volume_db,
     };
 
-    fn describe_contract_cases(dsp_db: &str) -> Vec<(StageFacts, &str)> {
-        vec![
-            (
-                Source {
-                    origin: String::from("File"),
-                    codec: String::from("FLAC"),
-                    sample_rate: Some(44100),
-                    bit_depth: Some(16),
-                    channels: Some(2),
-                },
-                "FLAC",
-            ),
-            (
-                Authentication {
-                    provider: String::from("Qobuz"),
-                    verified: true,
-                },
-                "Qobuz",
-            ),
-            (
-                Decoder {
-                    codec: String::from("FLAC"),
-                    sample_rate: 44100,
-                    channels: 2,
-                },
-                "PCM",
-            ),
-            (
-                BitDepthConverter {
-                    input_bits: 24,
-                    output_bits: 64,
-                },
-                "24bit to 64bit",
-            ),
-            (
-                Volume {
-                    volume: 0.5,
-                    label: String::from("DSP volume"),
-                },
-                dsp_db,
-            ),
-            (
-                Effect {
-                    kind: String::from("Equalizer"),
-                    summary: String::from("4 bands"),
-                },
-                "Equalizer",
-            ),
-            (
-                Effect {
-                    kind: String::from("Channel map"),
-                    summary: String::from("Stereo to Mono"),
-                },
-                "Channel map",
-            ),
-            (
-                Transport {
-                    mode: String::from("ALSA direct exclusive"),
-                    device_name: String::from("DAC"),
-                },
-                "ALSA",
-            ),
-            (
-                Output {
-                    destination: String::from("Speakers"),
-                    mode: String::from("Direct"),
-                },
-                "Speakers",
-            ),
-            (
-                ExternalRenderer {
-                    title: String::from("HQPlayer"),
-                    filter: None,
-                    modulator: None,
-                },
-                "HQPlayer",
-            ),
-            (
-                Source {
-                    origin: String::new(),
-                    codec: String::new(),
-                    sample_rate: None,
-                    bit_depth: None,
-                    channels: None,
-                },
-                "unknown",
-            ),
-        ]
-    }
-
     #[test]
     fn describe_covers_every_family_with_io_and_db() -> Result<()> {
-        let dsp_db = format_volume_db(0.5);
-        let cases = describe_contract_cases(&dsp_db);
+        let cases = core_describe_cases();
         for (kind, needle) in &cases {
             check_describe_pair(kind, needle).map_err(|e| anyhow!(e))?;
         }
         ensure!(cases.len() == 11, "every family covered");
+        Ok(())
+    }
+
+    #[test]
+    fn describe_device_and_system_volume_variants() -> Result<()> {
+        let expected_db = format_volume_db(0.5);
+        let (device_facts, device_needle) = device_volume_needle(0.5);
+        check_describe_pair(&device_facts, &device_needle).map_err(|e| anyhow!(e))?;
+        let (title, detail, _) = describe(&device_facts);
+        ensure!(title == "Device Volume", "device keeps its title");
+        ensure!(detail == expected_db, "device carries dB, got {detail}");
+        let (system_facts, system_needle) = system_volume_needle(Some(0.5), false);
+        check_describe_pair(&system_facts, &system_needle).map_err(|e| anyhow!(e))?;
+        let (title, detail, _) = describe(&system_facts);
+        ensure!(title == "System Volume", "system keeps its title");
+        ensure!(detail == expected_db, "system carries dB, got {detail}");
+        let (unknown_facts, unknown_needle) = system_volume_needle(None, false);
+        check_describe_pair(&unknown_facts, &unknown_needle).map_err(|e| anyhow!(e))?;
+        let (title, detail, _) = describe(&unknown_facts);
+        ensure!(title == "System Volume", "unknown keeps its title");
+        ensure!(detail == "unknown", "unreadable mixer reports unknown");
+        let (muted_facts, muted_needle) = system_volume_needle(Some(0.5), true);
+        check_describe_pair(&muted_facts, &muted_needle).map_err(|e| anyhow!(e))?;
+        let (_, detail, _) = describe(&muted_facts);
+        ensure!(
+            detail.starts_with("Muted ("),
+            "muted system names muting, got {detail}"
+        );
         Ok(())
     }
 }

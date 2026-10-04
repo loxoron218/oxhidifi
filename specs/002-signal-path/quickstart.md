@@ -33,19 +33,37 @@ Map each scenario to its contract (`contracts/snapshot.md` = S,
 
 ### 2. Processed chain with readout (Story 2 + 4; S §2, D readout)
 
-1. Lower the volume slightly (or enable resampling via output mode), keep playing.
+1. Switch output mode to resampled, lower the volume slightly, keep playing.
 2. **Expect**: verdict flips to `Processed` live without leaving the tab;
-   a volume row with dB value appears; `Processing speed: {x.x}x` readout (one
-   decimal, header area below the verdict/zone line) is visible (volume-only
-   MUST trigger it; hidden when bit-perfect and when Limited-only without
-   in-app alteration).
+   a `Volume` row with dB value appears; `Processing speed: {x.x}x` readout (one
+   decimal, header area below the verdict/zone line) is visible (DSP
+   volume-only MUST trigger it; hidden when bit-perfect and when Limited-only without
+   DSP alteration).
+
+### 2b. Device volume without readout (Story 2; S §2, D stages + readout)
+
+1. Switch output mode to bit-perfect (exclusive `hw:` device), lower the volume slightly.
+2. **Expect**: verdict `Processed` with a `Device Volume` row carrying the dB
+   value — and NO processing-speed readout (device/hardware attenuation never
+   triggers it). Return volume to maximum → row disappears (emit-if-attenuated).
+
+### 2c. System volume forces Limited (Story 2; S §3, D stages)
+
+1. Route playback through the shared system mixer (`default`/PipeWire device);
+   lower the OS mixer level (e.g. `alsamixer` on the shared card) below maximum.
+2. **Expect**: a `System Volume` row with dB value appears within ~1 s (500 ms
+   worker tick + poll) and the verdict reads `Limited`, with no readout unless
+   a DSP alteration is also active. On a sink whose mixer cannot be read,
+   the row shows the `unknown` detail instead of failing.
 
 ### 3. Limited chain wins (Story 2; S §3)
 
 1. Route playback through the shared system mixer (`default`/PipeWire device)
    or force a downsampling output.
 2. **Expect**: verdict `Limited` even if a DSP-volume enhancement is also
-   active (Limited > Processed > Bit-Perfect).
+   active (Limited > Processed > Bit-Perfect). At OS unity with a readable
+   mixer and no attenuation, no `System Volume` row appears (emit-if-attenuated)
+   while the shared transport still holds the verdict at `Limited`.
 
 ### 4. Stage explainer (Story 3; D stages)
 
@@ -79,6 +97,12 @@ Map each scenario to its contract (`contracts/snapshot.md` = S,
 
 - Mute toggles emit no event (`apply_muted`): a newly-muted/unmuted state is
   classified on the next rebuild, not live (FR-011/T036).
+- PipeWire/Pulse *native* app-volume reading is deferred (no supporting crate):
+  MVP samples the ALSA mixer only, so a PipeWire-native sink shows the
+  `System Volume`/`unknown` disclosure row; native dB tracking is a
+  separately-tracked follow-up with no task in this feature.
+- Unreadable mixer levels never error: the affected volume row shows `unknown`
+  (shared path) or falls back to the engine-set slider (exclusive hardware path).
 - Manual device reselection that emits none of `DeviceLost`/`OutputModeChanged`/
   `TrackStarted` keeps the last rebuilt device until the next enumerated event
   (FR-011/T036).

@@ -22,16 +22,19 @@ poll generation; the UI swaps instances atomically, never mutates them.
 | `playback_status` | `PlaybackStatus` (reused from `crate::playback::state`; do NOT redefine) | `Playing` / `Paused` / `Stopped` — retained last-known path shows a paused/stopped ribbon instead of vanishing. |
 
 **Validation**: `stages` is non-empty iff `track_id.is_some()`; first stage
-is always `StageKind::Source`; last stage is always `Output` or
+is always `StageKind::Source`; volume stages (DSP → Device → System) sit just
+before Transport; last stage is always `Output` or
 `ExternalRenderer`; `processing_speed.is_some()` iff at least one stage reflects
-an in-app alteration (resample, bit-depth/DSD conversion, or DSP-volume scaling
-incl. volume-only) — `None` when bit-perfect and when Limited-only with no
+an in-app DSP alteration (resample, bit-depth/DSD conversion, or DSP-volume scaling
+incl. volume-only) — `None` when bit-perfect, when device/hardware-only or
+system/application-only attenuation is present, and when Limited-only with no
 in-app alteration. The value is informational (snapshot-sampled, EMA α=0.3);
 contracts assert presence only, never the number.
 
 **State transitions**: rebuilt from scratch on the enumerated triggering events only — track change, format change,
 setting change (DSP volume via `VolumeChanged` / output mode via `OutputModeChanged`), device change (via
-`DeviceLost`/`OutputModeChanged`/`TrackStarted`), or
+`DeviceLost`/`OutputModeChanged`/`TrackStarted`), system-volume change (worker-sampled OS mixer level changed
+across the 500 ms tick: level epsilon, mute flip, or readability flip — no new event variant), or
 `PlaybackStatus` change (play/pause/stop); generation bumps each rebuild so the
 UI re-renders the status ribbon. Trigger mapping (no dedicated device/format
 events exist): track/format changes arrive as `TrackStarted` with new
@@ -57,7 +60,7 @@ One node in the chain, in execution order.
 | Field | Type | Description |
 |---|---|---|
 | `position` | `u32` | Zero-based order in `stages`. |
-| `kind` | `StageKind` | Source, Authentication (MVP: omitted), Decoder, BitDepthConverter, SampleRateConverter, FormatConverter (incl. DSD-to-PCM and source-vs-device Channel Conversion — both builder-emitted), Volume (MVP: DSP-volume only), Effect (MVP: `describe()`-only vocabulary, incl. channel-map — never builder-emitted), Transport (MVP: ALSA direct-exclusive/shared-mixer/USB), Output, ExternalRenderer (MVP: title-only). |
+| `kind` | `StageKind` | Source, Authentication (MVP: omitted), Decoder, BitDepthConverter, SampleRateConverter, FormatConverter (incl. DSD-to-PCM and source-vs-device Channel Conversion — both builder-emitted), Volume (DSP `Volume` gated on `Resampled` mode + device/hardware `Device Volume` gated on `BitPerfect` mode — titles `Volume` / `Device Volume`), SystemVolume (system/application `System Volume`, `Limited`), Effect (MVP: `describe()`-only vocabulary, incl. channel-map — never builder-emitted), Transport (MVP: ALSA direct-exclusive/shared-mixer/USB), Output, ExternalRenderer (MVP: title-only). |
 | `title` | `String` | Concise label, e.g. `Bit Depth Conversion 24bit to 64bit Float`, `ALSA Direct Output`. |
 | `detail` | `String` | Blue detail line: formats, `96kHz to 192kHz`-style input→output, dB values (`format_volume_db`), Linux transport modes. Unknown source fields render as `unknown`. |
 | `verdict` | `QualityVerdict` | Per-stage indicator (color/shape + text, never color alone). |
@@ -65,15 +68,27 @@ One node in the chain, in execution order.
 | `explanation` | `String` | Plain-language what-it-does + effect-on-quality text, incl. input→output values where applicable. |
 
 **Validation**: `title`/`detail`/`explanation` are non-empty (`explanation` = 1–2 plain sentences + input→output values where applicable); converter
-stages always carry both input and output values in `detail`; volume stages
-always carry the dB value; authentication stages appear only when provider auth
+stages always carry both input and output values in `detail`; DSP and device
+volume stages always carry the dB value (`format_volume_db`, `Muted (…)` when
+muted); system volume stages carry the dB value when the OS level is readable
+and the literal `unknown` detail otherwise (never fail, never guess);
+authentication stages appear only when provider auth
 facts are present, otherwise omitted (MVP: `auth` always `None`, stage omitted);
 external-renderer stages are title-only in MVP (filter/modulator always `None` —
-no output/device source fields exist); DSD sources undergoing volume/DSP always produce
-an explicit `FormatConverter` (DSD-to-PCM) stage — silent omission is a
-contract violation (SC-003: zero silent alterations). MVP omission: the builder
+no output/device source fields exist); DSD sources undergoing DSP or system
+volume/processing always produce
+an explicit `FormatConverter` (DSD-to-PCM) stage — device/hardware attenuation
+alone does NOT trigger it (hardware preserves the 1-bit stream) — and silent omission is a
+contract violation (SC-003: zero silent alterations). Emission (all three
+families): only when attenuating (`< 1.0` or muted), ordered DSP → Device →
+System just before Transport, omitted at unity — except an unreadable OS level
+on a shared-mixer transport, which emits the standing `System Volume`/`unknown`
+disclosure stage (`Limited`). DSP emission additionally requires
+`output_mode == Resampled` (BitPerfect attenuation belongs to Device Volume —
+see research R-02 correction). MVP omission: the builder
 never emits `Effect` stages or leveling/headroom `Volume` variants (no engine
-source); the `Volume` stage covers the single DSP volume control only, while
+source); the `Volume` stage covers DSP volume (`Resampled`) and device/hardware
+volume (`BitPerfect`) only, while
 `describe()` still covers every `StageFacts` variant at the pure-function level.
 
 ## 3. QualityVerdict (spec: Quality Verdict)
@@ -121,8 +136,14 @@ Inputs (read-only, owned elsewhere; the worker performs the async catalog
 `build_snapshot` — no async I/O runs inside the builder or while holding a lock):
 `Decoder::params` + `TrackAudio` (Source/Decoder facts), resampler in/out rates +
 channel counts (converter stages), `PlaybackState::volume/muted/output_mode`
-(DSP-volume + verdict facts; there are no leveling/headroom/EQ/crossover inputs —
-effect vocabulary is `describe()`-only in MVP), `AudioOutput` id/name/rate/channels/mode
+(DSP-volume gated on `Resampled` + verdict facts; there are no leveling/headroom/EQ/crossover inputs —
+effect vocabulary is `describe()`-only in MVP), device/hardware volume facts
+(ALSA read-back via `alsa_mixer` when available, else the engine-set slider value
+in `BitPerfect` mode; n/a in `Resampled` mode), system/application volume facts
+(`MixerSample { system_volume: Option<f64>, system_muted: bool, system_source: SystemMixerSource }`
+sampled by the 500 ms sleeper thread: `SystemMixerSource::{AlsaShared, Unknown}`
+in MVP — `PipeWirePulse` reserved for the deferred native-reader follow-up;
+`None` level ⇒ `unknown` detail, never fail), `AudioOutput` id/name/rate/channels/mode
 (transport/output/device facts; device nativeness for the bit-perfect rule is derived
 by comparing track/decoder rate, depth, and channels against device rate/channels
 under `OutputMode::BitPerfect` — no separate native-capability input),
