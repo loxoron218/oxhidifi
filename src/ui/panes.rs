@@ -62,8 +62,8 @@ fn build_sidebar(state: &Arc<AppState>, back_button: &ToggleButton) -> (ToolbarV
 
     let sidebar_header = HeaderBar::new();
     sidebar_header.set_title_widget(Some(&WindowTitle::new("Now Playing", "")));
-    sidebar_header.pack_start(back_button);
     sidebar_header.pack_end(&close_button);
+    sidebar_header.pack_end(back_button);
 
     sidebar_toolbar.add_top_bar(&sidebar_header);
 
