@@ -16,7 +16,7 @@ use {
     },
     parking_lot::Mutex,
     tokio::spawn,
-    tracing::error,
+    tracing::{error, warn},
 };
 
 use crate::{
@@ -99,9 +99,35 @@ fn update_name_cache(cache: &Arc<Mutex<Vec<(i64, String)>>>, names: &Vec<(i64, S
     cache.lock().clone_from(names);
 }
 
+/// Play the queue entry at `position`.
+///
+/// Uses `play_at` with the current queue order so the queue is preserved
+/// and playback jumps to the clicked row. Out-of-bounds positions are
+/// ignored; transport errors are logged.
+///
+/// # Arguments
+///
+/// * `state` - Application state owning the playback engine.
+/// * `queue` - Playback queue backing the list view (store order mirrors it).
+/// * `position` - Row position emitted by `ListView::activate`.
+fn play_queue_position(state: &AppState, queue: &PlaybackQueue, position: u32) {
+    let Ok(pos) = usize::try_from(position) else {
+        return;
+    };
+    let tracks = queue.tracks();
+    if pos >= tracks.len() {
+        return;
+    }
+    if let Err(e) = state.playback.play_at(tracks, pos) {
+        warn!(error = %e, pos, "Failed to play queued track");
+    }
+}
+
 /// Build the queue view using `ListView` with compact rows.
 ///
 /// Each row has a drag handle for reordering, track name, and remove button.
+/// Single-clicking (or pressing `Enter` on) a row jumps playback to that
+/// queue position via [`play_queue_position`].
 pub fn build_queue_view(state: &Arc<AppState>, queue: &PlaybackQueue) -> Box {
     let store = ListStore::builder()
         .item_type(BoxedAnyObject::static_type())
@@ -116,11 +142,20 @@ pub fn build_queue_view(state: &Arc<AppState>, queue: &PlaybackQueue) -> Box {
     let list_view = ListView::builder()
         .model(&model)
         .factory(&factory)
-        .single_click_activate(false)
+        .single_click_activate(true)
         .show_separators(true)
         .can_focus(true)
         .build();
     list_view.update_property(&[Label("Playback queue list")]);
+
+    let activate_state = Arc::clone(state);
+    let activate_queue = queue.clone();
+    state
+        .handles
+        .lock()
+        .retain_signal(list_view.connect_activate(move |_, position| {
+            play_queue_position(&activate_state, &activate_queue, position);
+        }));
 
     let container = Box::builder().orientation(Vertical).spacing(4).build();
 
