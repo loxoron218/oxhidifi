@@ -85,9 +85,48 @@ pub fn format_volume_db(volume: f64) -> String {
     }
 }
 
+/// Resolve the symbolic icon name for a volume level.
+///
+/// GNOME-style four-step mapping shared by every Signal-tab volume stage
+/// (DSP `Volume`, hardware `Device Volume`, OS-mixer `System Volume`) so the
+/// badge tracks the level automatically on each snapshot rebuild (e.g. 50 %
+/// renders half-full/medium).
+///
+/// # Arguments
+///
+/// * `level` - Linear level 0.0–1.0, or `None` when the OS mixer is unreadable.
+/// * `muted` - Whether the mute switch is engaged.
+///
+/// # Returns
+///
+/// * `&'static str` - `audio-volume-{muted,low,medium,high}-symbolic`; `None` maps to medium unless
+///   muted.
+#[must_use]
+pub const fn volume_icon_name(level: Option<f64>, muted: bool) -> &'static str {
+    if muted {
+        return "audio-volume-muted-symbolic";
+    }
+    let Some(value) = level else {
+        return "audio-volume-medium-symbolic";
+    };
+    if value <= 0.0 {
+        "audio-volume-muted-symbolic"
+    } else if value < 0.33 {
+        "audio-volume-low-symbolic"
+    } else if value < 0.66 {
+        "audio-volume-medium-symbolic"
+    } else {
+        "audio-volume-high-symbolic"
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::playback::volume::{format_volume_db, volume_to_db, volume_to_gain};
+    use anyhow::{Result, ensure};
+
+    use crate::playback::volume::{
+        format_volume_db, volume_icon_name, volume_to_db, volume_to_gain,
+    };
 
     #[test]
     fn volume_to_gain_endpoints() {
@@ -126,5 +165,42 @@ mod tests {
         assert_eq!(format_volume_db(0.0), "-∞ dB");
         assert_eq!(format_volume_db(1.0), "0 dB");
         assert_eq!(format_volume_db(0.5), "-30.0 dB");
+    }
+
+    #[test]
+    fn volume_icon_tracks_level_and_mute() -> Result<()> {
+        ensure!(
+            volume_icon_name(Some(0.5), false) == "audio-volume-medium-symbolic",
+            "50 % must render medium"
+        );
+        ensure!(
+            volume_icon_name(Some(1.0), false) == "audio-volume-high-symbolic",
+            "unity must render high"
+        );
+        ensure!(
+            volume_icon_name(Some(0.1), false) == "audio-volume-low-symbolic",
+            "low levels must render low"
+        );
+        ensure!(
+            volume_icon_name(Some(0.0), false) == "audio-volume-muted-symbolic",
+            "zero must render muted"
+        );
+        ensure!(
+            volume_icon_name(Some(0.9), true) == "audio-volume-muted-symbolic",
+            "muted flag must win over level"
+        );
+        ensure!(
+            volume_icon_name(None, false) == "audio-volume-medium-symbolic",
+            "unknown level must fall back to medium"
+        );
+        ensure!(
+            volume_icon_name(None, true) == "audio-volume-muted-symbolic",
+            "unknown level with mute must render muted"
+        );
+        ensure!(
+            volume_icon_name(Some(0.66), false) == "audio-volume-high-symbolic",
+            "upper third must render high"
+        );
+        Ok(())
     }
 }

@@ -20,7 +20,7 @@ use crate::playback::{
         stage_output::is_shared_mixer,
     },
     state::MuteState::Muted,
-    volume::format_volume_db,
+    volume::{format_volume_db, volume_icon_name},
 };
 
 /// Format one volume level as dB, or `Muted (...)` when muted.
@@ -63,6 +63,7 @@ pub fn push_device_volume_stage(stages: &mut Vec<PathStage>, input: &SnapshotInp
         "Controls the ALSA hardware mixer (Master/PCM element) at {detail}. Attenuation here \
          changes the output level without in-app processing."
     );
+    let badge_icon = volume_icon_name(Some(level), muted);
     push_stage(
         stages,
         Volume,
@@ -70,7 +71,7 @@ pub fn push_device_volume_stage(stages: &mut Vec<PathStage>, input: &SnapshotInp
         detail,
         explanation,
         Processed,
-        "audio-volume-high-symbolic",
+        badge_icon,
     );
 }
 
@@ -87,6 +88,7 @@ pub fn push_device_volume_stage(stages: &mut Vec<PathStage>, input: &SnapshotInp
 /// * `input` - Snapshot facts carrying the system level and mute state.
 pub fn push_system_volume_stage(stages: &mut Vec<PathStage>, input: &SnapshotInput) {
     let shared = is_shared_mixer(&input.device_id, &input.device_name);
+    let badge_icon = volume_icon_name(input.system_volume, input.system_muted);
     let detail = if let Some(level) = input.system_volume {
         if level >= 1.0 && !input.system_muted {
             return;
@@ -118,7 +120,7 @@ pub fn push_system_volume_stage(stages: &mut Vec<PathStage>, input: &SnapshotInp
         detail,
         explanation,
         Limited,
-        "audio-volume-medium-symbolic",
+        badge_icon,
     );
 }
 
@@ -202,6 +204,11 @@ mod tests {
             "device attenuation stays Processed"
         );
         ensure!(!stage.explanation.is_empty(), "explanation never empty");
+        ensure!(
+            stage.badge_icon == "audio-volume-medium-symbolic",
+            "50 % device must render medium, got {}",
+            stage.badge_icon
+        );
         Ok(())
     }
 
@@ -229,6 +236,33 @@ mod tests {
             stage.detail.starts_with("Muted ("),
             "muted hardware names muting, got {}",
             stage.detail
+        );
+        ensure!(
+            stage.badge_icon == "audio-volume-muted-symbolic",
+            "muted hardware must render muted, got {}",
+            stage.badge_icon
+        );
+        let mut low = volume_input();
+        low.device_volume = Some(0.1);
+        let stages = emit_device(&low);
+        let Some(stage) = stages.first() else {
+            bail!("low hardware must emit")
+        };
+        ensure!(
+            stage.badge_icon == "audio-volume-low-symbolic",
+            "low hardware must render low, got {}",
+            stage.badge_icon
+        );
+        let mut high = volume_input();
+        high.device_volume = Some(0.9);
+        let stages = emit_device(&high);
+        let Some(stage) = stages.first() else {
+            bail!("high hardware must emit")
+        };
+        ensure!(
+            stage.badge_icon == "audio-volume-high-symbolic",
+            "high hardware must render high, got {}",
+            stage.badge_icon
         );
         let unity = emit_device(&volume_input());
         ensure!(unity.is_empty(), "unity hardware emits nothing");
@@ -261,6 +295,11 @@ mod tests {
             stage.detail
         );
         ensure!(stage.verdict == Limited, "system attenuation is Limited");
+        ensure!(
+            stage.badge_icon == "audio-volume-medium-symbolic",
+            "50 % system must render medium, got {}",
+            stage.badge_icon
+        );
         let mut unknown = input.clone();
         unknown.system_volume = None;
         unknown.system_source = Unknown;
@@ -269,6 +308,11 @@ mod tests {
             bail!("unreadable shared mixer must disclose")
         };
         ensure!(stage.detail == "unknown", "disclosure reports unknown");
+        ensure!(
+            stage.badge_icon == "audio-volume-medium-symbolic",
+            "unknown system must fall back to medium, got {}",
+            stage.badge_icon
+        );
         let mut unity = input;
         unity.system_volume = Some(1.0);
         ensure!(emit_system(&unity).is_empty(), "unity system emits nothing");
@@ -301,9 +345,47 @@ mod tests {
         );
         ensure!(stage.verdict == Limited, "native attenuation is Limited");
         ensure!(
+            stage.badge_icon == "audio-volume-muted-symbolic",
+            "muted system must render muted, got {}",
+            stage.badge_icon
+        );
+        ensure!(
             stage.explanation.contains("PipeWire"),
             "native names its mixer, got {}",
             stage.explanation
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn volume_icons_track_levels_across_stages() -> Result<()> {
+        let mut low = volume_input();
+        low.device_id = String::from("default");
+        low.device_name = String::from("Default Output");
+        low.system_volume = Some(0.1);
+        low.system_source = AlsaShared;
+        let stages = emit_system(&low);
+        let Some(stage) = stages.first() else {
+            bail!("low system must emit")
+        };
+        ensure!(
+            stage.badge_icon == "audio-volume-low-symbolic",
+            "low system must render low, got {}",
+            stage.badge_icon
+        );
+        let mut high = volume_input();
+        high.device_id = String::from("default");
+        high.device_name = String::from("Default Output");
+        high.system_volume = Some(0.9);
+        high.system_source = AlsaShared;
+        let stages = emit_system(&high);
+        let Some(stage) = stages.first() else {
+            bail!("high system must emit")
+        };
+        ensure!(
+            stage.badge_icon == "audio-volume-high-symbolic",
+            "high system must render high, got {}",
+            stage.badge_icon
         );
         Ok(())
     }

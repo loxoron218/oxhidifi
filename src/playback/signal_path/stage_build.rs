@@ -18,7 +18,7 @@ use crate::playback::{
         stage_output::is_shared_mixer,
     },
     state::MuteState::Muted,
-    volume::format_volume_db,
+    volume::{format_volume_db, volume_icon_name},
 };
 
 /// Convert a catalog integer to a positive `u32` rate, if representable.
@@ -356,6 +356,7 @@ pub fn push_volume_stage(stages: &mut Vec<PathStage>, input: &SnapshotInput) -> 
         "Applies the DSP volume control ({detail}) by scaling samples in software. Lowering \
          volume here intentionally alters the bit stream."
     );
+    let badge_icon = volume_icon_name(Some(input.volume), input.muted == Muted);
     push_stage(
         stages,
         Volume,
@@ -363,7 +364,7 @@ pub fn push_volume_stage(stages: &mut Vec<PathStage>, input: &SnapshotInput) -> 
         detail,
         explanation,
         Processed,
-        "audio-volume-high-symbolic",
+        badge_icon,
     );
     true
 }

@@ -121,6 +121,7 @@ pub fn apply_muted(shared: &Arc<EngineShared>, muted: bool) -> Result<(), Playba
     }
     drop(guard);
     shared.state.lock().muted = new_state;
+    shared.send_event(&VolumeChanged { volume: vol });
     Ok(())
 }
 
@@ -192,12 +193,15 @@ pub fn seek_to_position(
 mod tests {
     use std::sync::Arc;
 
-    use anyhow::{Result, anyhow, bail};
+    use {
+        anyhow::{Result, anyhow, bail, ensure},
+        async_channel::unbounded,
+    };
 
     use crate::playback::{
         devices::OutputMode::{BitPerfect, Resampled},
         engine::EngineShared,
-        state::PlaybackStatus::Stopped,
+        state::{PlaybackEvent::VolumeChanged, PlaybackStatus::Stopped},
         transport::engine_controls::{
             apply_gapless, apply_muted, apply_output_mode, apply_volume, seek_to_position,
             stop_playback, toggle_pause_or_resume,
@@ -247,6 +251,20 @@ mod tests {
             bail!("slider volume must be preserved while muted");
         }
         apply_muted(&shared, false).map_err(|e| anyhow!("{e}"))?;
+        Ok(())
+    }
+
+    #[test]
+    fn apply_muted_emits_volume_event_for_signal_refresh() -> Result<()> {
+        let shared = Arc::new(EngineShared::default());
+        let (tx, rx) = unbounded();
+        shared.event_subs.lock().push(tx);
+        apply_muted(&shared, true).map_err(|e| anyhow!("{e}"))?;
+        let event = rx.try_recv().map_err(|e| anyhow!("{e}"))?;
+        ensure!(
+            matches!(event, VolumeChanged { .. }),
+            "mute must emit VolumeChanged so Signal icons refresh live"
+        );
         Ok(())
     }
 

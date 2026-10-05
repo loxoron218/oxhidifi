@@ -126,14 +126,17 @@ mod tests {
         playback::{
             alsa_mixer::SystemMixerSource::Unknown,
             decoder::AudioParams,
-            devices::OutputMode::BitPerfect,
+            devices::OutputMode::{BitPerfect, Resampled},
             signal_path::{
                 SignalPathError::NoActiveTrack,
                 SnapshotInput,
                 StageKind::{Decoder, Source},
                 path_snapshot::{build_snapshot, summarize_text},
             },
-            state::{MuteState::Unmuted, PlaybackStatus::Playing},
+            state::{
+                MuteState::{Muted, Unmuted},
+                PlaybackStatus::Playing,
+            },
         },
         storage::catalog::TrackAudio,
     };
@@ -243,6 +246,36 @@ mod tests {
             stage.detail.contains("44.1kHz"),
             "detail was: {}",
             stage.detail
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn dsp_volume_icon_tracks_level_and_mute() -> Result<()> {
+        let mut input = catalog_input();
+        input.output_mode = Resampled;
+        input.volume = 0.5;
+        let snapshot = build_snapshot(&input)?;
+        let Some(stage) = snapshot.stages.iter().find(|stage| stage.title == "Volume") else {
+            bail!("resampled attenuation must emit DSP Volume")
+        };
+        ensure!(
+            stage.badge_icon == "audio-volume-medium-symbolic",
+            "50 % DSP must render medium, got {}",
+            stage.badge_icon
+        );
+        let mut muted = catalog_input();
+        muted.output_mode = Resampled;
+        muted.volume = 0.5;
+        muted.muted = Muted;
+        let snapshot = build_snapshot(&muted)?;
+        let Some(stage) = snapshot.stages.iter().find(|stage| stage.title == "Volume") else {
+            bail!("muted DSP must emit Volume")
+        };
+        ensure!(
+            stage.badge_icon == "audio-volume-muted-symbolic",
+            "muted DSP must render muted, got {}",
+            stage.badge_icon
         );
         Ok(())
     }
