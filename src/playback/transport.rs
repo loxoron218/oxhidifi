@@ -16,10 +16,12 @@ use crate::playback::{
     state::{PlaybackEvent, PlaybackState},
     transport::{
         engine_controls::{
-            apply_gapless, apply_muted, apply_output_mode, apply_volume, seek_to_position,
-            stop_playback, toggle_pause_or_resume,
+            apply_gapless, apply_muted, apply_output_mode, apply_shuffle, apply_volume,
+            seek_to_position, stop_playback, toggle_pause_or_resume,
         },
-        queue_playback::{advance_next, advance_previous, play_list, play_list_at, play_single},
+        queue_playback::{
+            advance_next, advance_previous, play_list, play_list_at, play_list_fresh, play_single,
+        },
     },
 };
 
@@ -37,6 +39,11 @@ impl PlaybackTransport for PlaybackEngine {
     /// Play a list of track IDs as a queue.
     fn play_queue(&self, queue: Vec<i64>) -> Result<(), PlaybackError> {
         play_list(&self.shared, queue)
+    }
+
+    /// Play a list of track IDs as a fresh queue, always resetting playback.
+    fn play_queue_fresh(&self, queue: Vec<i64>) -> Result<(), PlaybackError> {
+        play_list_fresh(&self.shared, queue)
     }
 
     /// Toggle between play and pause.
@@ -79,6 +86,16 @@ impl PlaybackTransport for PlaybackEngine {
         apply_gapless(&self.shared, enabled)
     }
 
+    /// Enable or disable shuffle playback.
+    fn set_shuffle_enabled(&self, enabled: bool) -> Result<(), PlaybackError> {
+        apply_shuffle(&self.shared, enabled)
+    }
+
+    /// Whether shuffle playback is enabled.
+    fn shuffle_enabled(&self) -> bool {
+        self.shared.state.lock().shuffle_enabled
+    }
+
     /// Seek to a position in seconds.
     fn seek_to(&self, position_seconds: f64) -> Result<(), PlaybackError> {
         seek_to_position(&self.shared, position_seconds)
@@ -112,6 +129,17 @@ pub trait PlaybackTransport: Send + 'static {
     ///
     /// Returns [`PlaybackError`] if playback cannot start.
     fn play_queue(&self, queue: Vec<i64>) -> Result<(), PlaybackError>;
+
+    /// Play a list of track IDs as a fresh queue, always resetting playback.
+    ///
+    /// Unlike [`PlaybackTransport::play_queue`], the current queue is
+    /// unconditionally replaced even when every requested track is already
+    /// queued, so the given order always takes effect from the first track.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PlaybackError`] if playback cannot start.
+    fn play_queue_fresh(&self, queue: Vec<i64>) -> Result<(), PlaybackError>;
 
     /// Play a list of track IDs starting from `start_index`.
     ///
@@ -182,8 +210,21 @@ pub trait PlaybackTransport: Send + 'static {
     ///
     /// # Errors
     ///
-    /// Returns [`PlaybackError`] on failure.
+    /// Returns [`PlaybackError`] on failure (currently infallible).
     fn set_gapless_enabled(&self, enabled: bool) -> Result<(), PlaybackError>;
+
+    /// Enable or disable shuffle playback.
+    ///
+    /// When enabling, the upcoming queue is shuffled in place while the
+    /// current track is preserved.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PlaybackError`] on failure (currently infallible).
+    fn set_shuffle_enabled(&self, enabled: bool) -> Result<(), PlaybackError>;
+
+    /// Whether shuffle playback is enabled.
+    fn shuffle_enabled(&self) -> bool;
 
     /// Seek to a position in seconds.
     ///
@@ -195,7 +236,7 @@ pub trait PlaybackTransport: Send + 'static {
 
 #[cfg(test)]
 mod tests {
-    use anyhow::{Result, anyhow, bail};
+    use anyhow::{Result, anyhow, bail, ensure};
 
     use crate::playback::{engine::PlaybackEngine, transport::PlaybackTransport};
 
@@ -213,5 +254,27 @@ mod tests {
             bail!("volume should clamp to 1.0");
         }
         Ok(())
+    }
+
+    #[test]
+    fn transport_toggles_shuffle_flag() -> Result<()> {
+        let engine = PlaybackEngine::new();
+        ensure!(!engine.shuffle_enabled(), "shuffle must start disabled");
+        engine
+            .set_shuffle_enabled(true)
+            .map_err(|e| anyhow!("{e}"))?;
+        ensure!(engine.shuffle_enabled(), "shuffle must enable");
+        ensure!(engine.state().shuffle_enabled, "state must reflect shuffle");
+        engine
+            .set_shuffle_enabled(false)
+            .map_err(|e| anyhow!("{e}"))?;
+        ensure!(!engine.shuffle_enabled(), "shuffle must disable");
+        Ok(())
+    }
+
+    #[test]
+    fn transport_fresh_play_rejects_empty_queue() {
+        let engine = PlaybackEngine::new();
+        assert!(engine.play_queue_fresh(vec![]).is_err());
     }
 }

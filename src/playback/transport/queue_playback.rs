@@ -66,6 +66,23 @@ fn replace_queue(shared: &Arc<EngineShared>, queue: &[i64]) -> Result<(), Playba
         })
 }
 
+/// Replace the queue with `queue`, emit the change, and start its first track.
+///
+/// # Arguments
+///
+/// * `shared` - Engine state holding the queue
+/// * `queue` - Replacement track IDs in play order
+fn replace_and_start_first(
+    shared: &Arc<EngineShared>,
+    queue: Vec<i64>,
+) -> Result<(), PlaybackError> {
+    replace_queue(shared, &queue)?;
+    shared.send_event(&QueueChanged { track_ids: queue });
+    let first_id = shared.queue.current().ok_or(QueueEmpty)?;
+    start_track(shared, first_id)?;
+    Ok(())
+}
+
 /// Play a specific track by ID.
 ///
 /// # Errors
@@ -169,11 +186,33 @@ pub fn play_list(shared: &Arc<EngineShared>, queue: Vec<i64>) -> Result<(), Play
         start_track(shared, first_id)?;
         return Ok(());
     }
-    replace_queue(shared, &queue)?;
-    shared.send_event(&QueueChanged { track_ids: queue });
-    let first_id = shared.queue.current().ok_or(QueueEmpty)?;
-    start_track(shared, first_id)?;
-    Ok(())
+    replace_and_start_first(shared, queue)
+}
+
+/// Play a list of track IDs as a fresh queue, always resetting playback.
+///
+/// Unlike [`play_list`], the current queue is unconditionally replaced — even
+/// when every requested track is already queued — so callers like artist-wide
+/// Play/Shuffle always get exactly the order they built, starting from the
+/// first track. A `QueueChanged` event is always emitted.
+///
+/// # Errors
+///
+/// Returns [`PlaybackError::QueueEmpty`] if `queue` is empty or no current
+/// track can be resolved. Returns [`PlaybackError::QueueFull`] if the queue
+/// exceeds capacity. Returns [`PlaybackError::TrackNotFound`] if a path is
+/// missing.
+pub fn play_list_fresh(shared: &Arc<EngineShared>, queue: Vec<i64>) -> Result<(), PlaybackError> {
+    if queue.is_empty() {
+        warn!(
+            queue_len = queue.len(),
+            "Play fresh queue command with empty queue"
+        );
+        return Err(QueueEmpty);
+    }
+    let queue_len = queue.len();
+    info!(queue_len, "Play fresh queue command",);
+    replace_and_start_first(shared, queue)
 }
 
 /// Advance to the next track in the queue.
@@ -218,12 +257,18 @@ pub fn advance_previous(shared: &Arc<EngineShared>) -> Result<(), PlaybackError>
 mod tests {
     use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
-    use anyhow::{Result, anyhow, ensure};
+    use {
+        anyhow::{Result, anyhow, bail, ensure},
+        async_channel::unbounded,
+    };
 
     use crate::playback::{
-        PlaybackError::{QueueEmpty, TrackNotFound},
+        PlaybackError::{NoDeviceAvailable, Output, QueueEmpty, TrackNotFound},
         engine::EngineShared,
-        transport::queue_playback::{advance_next, advance_previous, play_list, play_list_at},
+        state::PlaybackEvent::QueueChanged,
+        transport::queue_playback::{
+            advance_next, advance_previous, play_list, play_list_at, play_list_fresh,
+        },
     };
 
     fn shared_with_paths(track_ids: &[i64]) -> Arc<EngineShared> {
@@ -260,6 +305,45 @@ mod tests {
             play_list(&shared, vec![42]),
             Err(TrackNotFound(42))
         ));
+    }
+
+    #[test]
+    fn play_list_fresh_rejects_empty_queue() {
+        let shared = Arc::new(EngineShared::default());
+        assert!(matches!(play_list_fresh(&shared, vec![]), Err(QueueEmpty)));
+    }
+
+    #[test]
+    fn play_list_fresh_replaces_contained_queue() -> Result<()> {
+        let shared = shared_with_paths(&[1, 2, 3]);
+        shared
+            .queue
+            .set_queue(vec![1, 2, 3])
+            .map_err(|e| anyhow!("{e}"))?;
+        shared.queue.set_current_index(2);
+        let (tx, rx) = unbounded();
+        shared.event_subs.lock().push(tx);
+        match play_list_fresh(&shared, vec![3, 2, 1]) {
+            Ok(()) | Err(NoDeviceAvailable | Output(_)) => {}
+            Err(e) => bail!("unexpected error: {e}"),
+        }
+        ensure!(
+            shared.queue.tracks() == vec![3, 2, 1],
+            "fresh play must replace the queue order"
+        );
+        ensure!(
+            shared.queue.current() == Some(3),
+            "fresh play must start from the first track"
+        );
+        let event = rx.try_recv().map_err(|e| anyhow!("{e}"))?;
+        let QueueChanged { track_ids } = event else {
+            bail!("fresh play must emit QueueChanged");
+        };
+        ensure!(
+            track_ids == vec![3, 2, 1],
+            "fresh play must emit the new queue order"
+        );
+        Ok(())
     }
 
     #[test]

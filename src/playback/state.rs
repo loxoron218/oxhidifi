@@ -78,6 +78,11 @@ pub enum PlaybackEvent {
         /// Whether gapless is now enabled.
         enabled: bool,
     },
+    /// Shuffle playback was enabled or disabled.
+    ShuffleChanged {
+        /// Whether shuffle is now enabled.
+        enabled: bool,
+    },
     /// Seeked to a new position.
     Seeked {
         /// New position in seconds.
@@ -113,6 +118,8 @@ pub struct PlaybackState {
     pub duration_seconds: f64,
     /// Gapless playback mode.
     pub gapless_mode: GaplessMode,
+    /// Whether shuffle playback is enabled.
+    pub shuffle_enabled: bool,
     /// Output mode: resampled (software volume) or bit-perfect (hardware volume).
     pub output_mode: OutputMode,
 }
@@ -129,6 +136,7 @@ impl Default for PlaybackState {
             elapsed_seconds: 0.0,
             duration_seconds: 0.0,
             gapless_mode: Enabled,
+            shuffle_enabled: false,
             output_mode: Resampled,
         }
     }
@@ -171,7 +179,8 @@ pub enum TrackStartReason {
 /// Check whether a playback event can change the signal path.
 ///
 /// Track, format, setting, device, and status changes rebuild the snapshot;
-/// position ticks, queue edits, seeks, gapless toggles, and errors never do.
+/// position ticks, queue edits, seeks, gapless toggles, shuffle toggles,
+/// and errors never do.
 ///
 /// # Arguments
 ///
@@ -205,8 +214,8 @@ mod tests {
         state::{
             PlaybackEvent::{
                 DeviceLost, Error, GaplessEnabledChanged, OutputModeChanged, Paused, PositionTick,
-                QueueChanged, Resumed, Seeked, Stopped, TrackFinished, TrackFormatReady,
-                TrackStarted, VolumeChanged,
+                QueueChanged, Resumed, Seeked, ShuffleChanged, Stopped, TrackFinished,
+                TrackFormatReady, TrackStarted, VolumeChanged,
             },
             TrackStartReason::{Playback, SessionRestore},
             snapshot_event,
@@ -260,6 +269,14 @@ mod tests {
         for event in &ignored {
             let silent = snapshot_event(event);
             ensure!(!silent, "others never rebuild");
+        }
+        let shuffle_ignored = [
+            ShuffleChanged { enabled: true },
+            ShuffleChanged { enabled: false },
+        ];
+        for event in &shuffle_ignored {
+            let silent = snapshot_event(event);
+            ensure!(!silent, "shuffle toggles never rebuild");
         }
         Ok(())
     }

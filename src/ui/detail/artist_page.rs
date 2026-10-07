@@ -5,28 +5,20 @@ use std::{collections::HashMap, sync::Arc};
 use {
     async_channel::Sender,
     libadwaita::{
-        glib::{idle_add_local, spawn_future_local},
+        glib::spawn_future_local,
         gtk::{
-            Align::Start,
-            Box, Button,
-            ContentFit::Cover,
-            GestureClick, Label, ListBox, ListBoxRow,
-            Orientation::{Horizontal, Vertical},
-            Picture, Widget,
-            accessible::Property::Label as PropertyLabel,
-            pango::EllipsizeMode::End,
+            Align::Start, Box, Label, ListBox, ListBoxRow, Orientation::Vertical, Widget,
+            accessible::Property::Label as PropertyLabel, pango::EllipsizeMode::End,
         },
-        prelude::{AccessibleExtManual, BoxExt, ButtonExt, Cast, GestureSingleExt, WidgetExt},
+        prelude::{AccessibleExtManual, BoxExt, ButtonExt, Cast, ToggleButtonExt},
     },
     tokio::join,
-    tracing::{info, warn},
+    tracing::{error, info, warn},
 };
 
 use crate::{
-    app::runtime::{
-        AppState,
-        NavigationEvent::{self, AlbumDetail},
-    },
+    app::runtime::{AppState, NavigationEvent},
+    playback::transport::PlaybackTransport,
     storage::{
         Storage,
         catalog::{Album, Track},
@@ -34,11 +26,11 @@ use crate::{
     },
     ui::{
         detail::{
-            cover_art::decode_cover_into_picture,
+            artist_actions::build_artist_actions,
+            artist_album_section::build_album_section,
             page::{build_detail_wrapper, build_scroll_content},
-            tracklist::fill_track_list_batch,
         },
-        gallery::play_action::play_artist,
+        gallery::play_action::{play_artist, play_artist_shuffled},
     },
 };
 
@@ -84,20 +76,15 @@ pub fn build_artist_detail(
     album_count_label.update_property(&[PropertyLabel("Album count")]);
     content.append(&album_count_label);
 
-    let play_all_button = Button::builder()
-        .label("Play All")
-        .icon_name("media-playback-start-symbolic")
-        .css_classes(["suggested-action", "pill"])
-        .halign(Start)
-        .tooltip_text("Play all albums by this artist")
-        .can_focus(true)
-        .build();
-    play_all_button.update_property(&[PropertyLabel("Play all albums by this artist")]);
+    let (actions, play_button, shuffle_button) =
+        build_artist_actions(state.playback.shuffle_enabled());
+    let shuffle_for_play = shuffle_button.clone();
     let play_state = Arc::clone(state);
     state
         .handles
         .lock()
-        .retain_signal(play_all_button.connect_clicked(move |_| {
+        .retain_signal(play_button.connect_clicked(move |_| {
+            shuffle_for_play.set_active(false);
             let state_cb = Arc::clone(&play_state);
             play_state
                 .handles
@@ -106,7 +93,24 @@ pub fn build_artist_detail(
                     play_artist(&state_cb, artist_id).await;
                 }));
         }));
-    content.append(&play_all_button);
+    let shuffle_state = Arc::clone(state);
+    state
+        .handles
+        .lock()
+        .retain_signal(shuffle_button.connect_toggled(move |button| {
+            if !button.is_active() {
+                disable_shuffle(&shuffle_state);
+                return;
+            }
+            let state_cb = Arc::clone(&shuffle_state);
+            shuffle_state
+                .handles
+                .lock()
+                .retain_task(spawn_future_local(async move {
+                    play_artist_shuffled(&state_cb, artist_id).await;
+                }));
+        }));
+    content.append(&actions);
 
     let albums_container = Box::builder().orientation(Vertical).spacing(18).build();
     content.append(&albums_container);
@@ -223,6 +227,20 @@ fn apply_artist_detail(
     }
 }
 
+/// Disable shuffle mode, logging failures.
+///
+/// Called when the shuffle toggle is switched off or when ordered playback
+/// starts via the Play button.
+///
+/// # Arguments
+///
+/// * `state` - Application state.
+fn disable_shuffle(state: &AppState) {
+    if let Err(e) = state.playback.set_shuffle_enabled(false) {
+        error!(error = %e, "Failed to disable shuffle mode");
+    }
+}
+
 /// When a row is selected in one album's track list, unselect all rows
 /// in the other albums' track lists to keep a single active highlight.
 fn clear_other_lists(row: Option<&ListBoxRow>, others: &[ListBox]) {
@@ -232,114 +250,6 @@ fn clear_other_lists(row: Option<&ListBoxRow>, others: &[ListBox]) {
     for other in others {
         other.unselect_all();
     }
-}
-
-/// Build a section for a single album in the artist detail page.
-///
-/// Creates a header with thumbnail, title, metadata and a track list. The
-/// header is clickable — clicking it navigates to the album's detail page per
-/// US5/AC4.
-///
-/// Returns the section widget and the track list box for selection management.
-/// Cover art is loaded asynchronously off the main thread.
-fn build_album_section(
-    state: &Arc<AppState>,
-    album: &Album,
-    format_info: &FormatInfo,
-    tracks: Vec<Track>,
-) -> (Box, ListBox) {
-    let section = Box::builder().orientation(Vertical).spacing(6).build();
-
-    let album_header = Box::builder()
-        .orientation(Horizontal)
-        .spacing(12)
-        .tooltip_text(format!("Open {}", album.title))
-        .can_focus(true)
-        .build();
-    album_header.update_property(&[PropertyLabel(&format!("Open album {}", album.title))]);
-
-    let album_id = album.id;
-    let nav_state = Arc::clone(state);
-    let gesture = GestureClick::new();
-    gesture.set_button(1);
-    state
-        .handles
-        .lock()
-        .retain_signal(gesture.connect_released(move |_, _, _, _| {
-            let ns = Arc::clone(&nav_state);
-            nav_state
-                .handles
-                .lock()
-                .retain_task(spawn_future_local(async move {
-                    ns.send_navigation_event(AlbumDetail(album_id)).await;
-                }));
-        }));
-    album_header.add_controller(gesture);
-
-    if let Some(art_path) = &album.artwork_path {
-        let thumb = Picture::builder()
-            .content_fit(Cover)
-            .can_shrink(true)
-            .width_request(60)
-            .height_request(60)
-            .css_classes(["album-cover"])
-            .build();
-        thumb.update_property(&[PropertyLabel(&format!("Artwork for {}", album.title))]);
-        album_header.append(&thumb);
-
-        decode_cover_into_picture(state, album.id, art_path.clone(), 60, &thumb);
-    }
-
-    let info_box = Box::builder()
-        .orientation(Vertical)
-        .spacing(3)
-        .hexpand(true)
-        .build();
-
-    let album_title = Label::builder()
-        .label(&album.title)
-        .css_classes(["title-4", "heading"])
-        .ellipsize(End)
-        .halign(Start)
-        .build();
-    album_title.update_property(&[PropertyLabel(&format!("Album: {}", album.title))]);
-    info_box.append(&album_title);
-
-    let album_meta = Label::builder()
-        .label(format!(
-            "{} tracks \u{2022} {}",
-            album.track_count,
-            format_info.summary_detailed()
-        ))
-        .css_classes(["dim-label", "caption"])
-        .halign(Start)
-        .build();
-    album_meta.update_property(&[PropertyLabel(&format!(
-        "{} tracks in {}",
-        album.track_count, album.title
-    ))]);
-    info_box.append(&album_meta);
-
-    album_header.append(&info_box);
-    section.append(&album_header);
-
-    let track_list = ListBox::builder().css_classes(["boxed-list"]).build();
-
-    let mut remaining_tracks: Vec<(Track, usize)> = tracks
-        .into_iter()
-        .enumerate()
-        .map(|(i, t)| (t, i.saturating_add(1)))
-        .collect();
-    remaining_tracks.reverse();
-
-    let tl = track_list.clone();
-    let state_cb = Arc::clone(state);
-    state.handles.lock().retain_source(idle_add_local(move || {
-        fill_track_list_batch(&mut remaining_tracks, &tl, &state_cb)
-    }));
-
-    section.append(&track_list);
-    (section, track_list)
 }
 
 #[cfg(test)]

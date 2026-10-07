@@ -16,6 +16,7 @@ pub mod queue_index;
 pub mod queue_manager;
 pub mod resampler;
 pub mod ring_push;
+pub mod shuffle;
 pub mod signal_path;
 pub mod state;
 pub mod stream;

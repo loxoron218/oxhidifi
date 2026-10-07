@@ -1,11 +1,16 @@
-//! Playback queue with current, next, and previous track navigation.
+//! Playback queue storing ordered track IDs with index tracking.
+
+pub mod navigate;
 
 use std::sync::Arc;
 
 use parking_lot::Mutex;
 
 use crate::{
-    playback::queue_index::{adjust_index_after_move, adjust_index_after_remove},
+    playback::{
+        queue_index::{adjust_index_after_move, adjust_index_after_remove},
+        shuffle::shuffle_slice,
+    },
     storage::StorageError::{self, QueueFull},
 };
 
@@ -126,65 +131,6 @@ impl PlaybackQueue {
             .map(|idx| adjust_index_after_move(idx, from, to));
     }
 
-    /// Get the next track ID without advancing.
-    #[must_use]
-    pub fn peek_next(&self) -> Option<i64> {
-        let inner = self.inner.lock();
-        let idx = inner.current_index?;
-        let next = idx.checked_add(1)?;
-        inner.tracks.get(next).copied()
-    }
-
-    /// Advance to the next track, returning its ID.
-    ///
-    /// Returns `None` if there is no next track.
-    #[must_use]
-    pub fn next(&self) -> Option<i64> {
-        let mut inner = self.inner.lock();
-        let next = inner.current_index.and_then(|idx| idx.checked_add(1))?;
-        let id = inner.tracks.get(next).copied()?;
-        inner.current_index = Some(next);
-        drop(inner);
-        Some(id)
-    }
-
-    /// Move to the previous track, returning its ID.
-    ///
-    /// Returns `None` if there is no previous track.
-    #[must_use]
-    pub fn previous(&self) -> Option<i64> {
-        let mut inner = self.inner.lock();
-        let prev = inner.current_index.and_then(|idx| idx.checked_sub(1))?;
-        let id = inner.tracks.get(prev).copied()?;
-        inner.current_index = Some(prev);
-        drop(inner);
-        Some(id)
-    }
-
-    /// Get the ID of the currently playing track.
-    #[must_use]
-    pub fn current(&self) -> Option<i64> {
-        let inner = self.inner.lock();
-        let idx = inner.current_index?;
-        inner.tracks.get(idx).copied()
-    }
-
-    /// Get the index of the currently playing track.
-    #[must_use]
-    pub fn current_index(&self) -> Option<usize> {
-        self.inner.lock().current_index
-    }
-
-    /// Get the track IDs of upcoming tracks (after the current one).
-    pub fn upcoming(&self) -> Vec<i64> {
-        let inner = self.inner.lock();
-        inner
-            .current_index
-            .and_then(|idx| idx.checked_add(1))
-            .and_then(|next| inner.tracks.get(next..))
-            .map_or_else(Vec::new, ToOwned::to_owned)
-    }
-
     /// Get all track IDs in the queue.
     #[must_use]
     pub fn tracks(&self) -> Vec<i64> {
@@ -204,6 +150,23 @@ impl PlaybackQueue {
     pub fn len(&self) -> usize {
         let inner = self.inner.lock();
         inner.tracks.len()
+    }
+
+    /// Shuffle the upcoming tracks, preserving the current track.
+    ///
+    /// Tracks at and before the current index keep their positions; tracks
+    /// after it are shuffled in place. When no track is current, the whole
+    /// queue is shuffled. An empty queue is left unchanged.
+    pub fn shuffle_upcoming(&self) {
+        let mut inner = self.inner.lock();
+        let start = inner
+            .current_index
+            .map_or(0, |index| index.saturating_add(1));
+        if start < inner.tracks.len() {
+            let (_, upcoming) = inner.tracks.split_at_mut(start);
+            shuffle_slice(upcoming);
+        }
+        drop(inner);
     }
 
     /// Clear the queue and reset the current index.
@@ -259,26 +222,6 @@ mod tests {
     }
 
     #[test]
-    fn next_advances_index() -> Result<()> {
-        let q = three_track_queue()?;
-        ensure!(q.next() == Some(20), "next should be Some(20)");
-        ensure!(q.next() == Some(30), "next should be Some(30)");
-        ensure!(q.next().is_none(), "next should be None at end");
-        Ok(())
-    }
-
-    #[test]
-    fn previous_goes_back() -> Result<()> {
-        let q = three_track_queue()?;
-        ensure!(q.next() == Some(20), "next should be Some(20)");
-        ensure!(q.next() == Some(30), "next should be Some(30)");
-        ensure!(q.previous() == Some(20), "previous should be Some(20)");
-        ensure!(q.previous() == Some(10), "previous should be Some(10)");
-        ensure!(q.previous().is_none(), "previous should be None at start");
-        Ok(())
-    }
-
-    #[test]
     fn append_adds_to_end() -> Result<()> {
         let q = PlaybackQueue::new();
         q.set_queue(vec![10, 20]).map_err(|e| anyhow!("{e}"))?;
@@ -314,35 +257,44 @@ mod tests {
     }
 
     #[test]
+    fn shuffle_upcoming_preserves_current_and_elements() -> Result<()> {
+        let q = three_track_queue()?;
+        q.shuffle_upcoming();
+        ensure!(q.current() == Some(10), "current must stay at first track");
+        let mut tracks = q.tracks();
+        tracks.sort_unstable();
+        ensure!(tracks == vec![10, 20, 30], "shuffle must preserve elements");
+        Ok(())
+    }
+
+    #[test]
+    fn shuffle_upcoming_keeps_played_prefix_in_place() -> Result<()> {
+        let q = PlaybackQueue::new();
+        q.set_queue(vec![10, 20, 30, 40, 50])
+            .map_err(|e| anyhow!("{e}"))?;
+        q.set_current_index(1);
+        q.shuffle_upcoming();
+        let tracks = q.tracks();
+        ensure!(
+            tracks.first() == Some(&10) && tracks.get(1) == Some(&20),
+            "played prefix must keep its positions"
+        );
+        ensure!(q.current() == Some(20), "current must stay at index 1");
+        let Some(tail) = tracks.get(2..) else {
+            return Err(anyhow!("queue must keep its upcoming tail"));
+        };
+        let mut tail = tail.to_vec();
+        tail.sort_unstable();
+        ensure!(tail == vec![30, 40, 50], "upcoming must preserve elements");
+        Ok(())
+    }
+
+    #[test]
     fn set_current_index_updates_current() -> Result<()> {
         let q = three_track_queue()?;
         q.set_current_index(1);
         ensure!(q.current() == Some(20), "current should be Some(20)");
         ensure!(q.current_index() == Some(1), "index should be Some(1)");
-        Ok(())
-    }
-
-    #[test]
-    fn peek_next_returns_upcoming_without_advancing() -> Result<()> {
-        let q = three_track_queue()?;
-        ensure!(q.peek_next() == Some(20), "peek_next should be Some(20)");
-        ensure!(
-            q.peek_next() == Some(20),
-            "peek_next should still be Some(20)"
-        );
-        ensure!(q.current_index() == Some(0), "index should remain Some(0)");
-        Ok(())
-    }
-
-    #[test]
-    fn peek_next_none_at_end_or_single_track() -> Result<()> {
-        let q = three_track_queue()?;
-        q.set_current_index(2);
-        ensure!(q.peek_next().is_none(), "assert failed");
-
-        let single = PlaybackQueue::new();
-        single.set_queue(vec![42]).map_err(|e| anyhow!("{e}"))?;
-        ensure!(single.peek_next().is_none(), "assert failed");
         Ok(())
     }
 

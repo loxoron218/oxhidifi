@@ -4,6 +4,7 @@
 pub mod album_grid;
 pub mod artist_build;
 pub mod artist_grid;
+pub mod artist_sort;
 pub mod avatar;
 pub mod boxed_data;
 pub mod card;

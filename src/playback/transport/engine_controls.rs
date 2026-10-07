@@ -17,7 +17,10 @@ use crate::playback::{
     pause_resume::toggle_play_pause,
     state::{
         MuteState::{Muted, Unmuted},
-        PlaybackEvent::{GaplessEnabledChanged, OutputModeChanged, Seeked, Stopped, VolumeChanged},
+        PlaybackEvent::{
+            GaplessEnabledChanged, OutputModeChanged, Seeked, ShuffleChanged, Stopped,
+            VolumeChanged,
+        },
         PlaybackStatus::Stopped as StatusStopped,
     },
     transport::queue_playback::play_single,
@@ -164,6 +167,26 @@ pub fn apply_gapless(shared: &Arc<EngineShared>, enabled: bool) -> Result<(), Pl
     Ok(())
 }
 
+/// Enable or disable shuffle playback.
+///
+/// When enabling, the upcoming portion of the queue is shuffled in place
+/// while the current track is preserved, so `Next`/`Previous` and
+/// auto-advance follow the shuffled order. Disabling only clears the flag —
+/// the current order is kept because the original order is not retained.
+///
+/// # Errors
+///
+/// Returns [`PlaybackError`] on failure (currently infallible).
+pub fn apply_shuffle(shared: &Arc<EngineShared>, enabled: bool) -> Result<(), PlaybackError> {
+    info!(enabled, "Shuffle toggled",);
+    if enabled {
+        shared.queue.shuffle_upcoming();
+    }
+    shared.state.lock().shuffle_enabled = enabled;
+    shared.send_event(&ShuffleChanged { enabled });
+    Ok(())
+}
+
 /// Seek to a position in seconds, clamped to the track duration.
 ///
 /// # Errors
@@ -201,10 +224,13 @@ mod tests {
     use crate::playback::{
         devices::OutputMode::{BitPerfect, Resampled},
         engine::EngineShared,
-        state::{PlaybackEvent::VolumeChanged, PlaybackStatus::Stopped},
+        state::{
+            PlaybackEvent::{ShuffleChanged, VolumeChanged},
+            PlaybackStatus::Stopped,
+        },
         transport::engine_controls::{
-            apply_gapless, apply_muted, apply_output_mode, apply_volume, seek_to_position,
-            stop_playback, toggle_pause_or_resume,
+            apply_gapless, apply_muted, apply_output_mode, apply_shuffle, apply_volume,
+            seek_to_position, stop_playback, toggle_pause_or_resume,
         },
     };
 
@@ -275,6 +301,50 @@ mod tests {
         apply_output_mode(&shared, Resampled).map_err(|e| anyhow!("{e}"))?;
         apply_gapless(&shared, true).map_err(|e| anyhow!("{e}"))?;
         apply_gapless(&shared, false).map_err(|e| anyhow!("{e}"))?;
+        Ok(())
+    }
+
+    #[test]
+    fn apply_shuffle_toggles_flag_and_emits_event() -> Result<()> {
+        let shared = Arc::new(EngineShared::default());
+        let (tx, rx) = unbounded();
+        shared.event_subs.lock().push(tx);
+        apply_shuffle(&shared, true).map_err(|e| anyhow!("{e}"))?;
+        ensure!(
+            shared.state.lock().shuffle_enabled,
+            "shuffle flag must be set"
+        );
+        let event = rx.try_recv().map_err(|e| anyhow!("{e}"))?;
+        ensure!(
+            matches!(event, ShuffleChanged { enabled: true }),
+            "shuffle must emit ShuffleChanged"
+        );
+        apply_shuffle(&shared, false).map_err(|e| anyhow!("{e}"))?;
+        ensure!(
+            !shared.state.lock().shuffle_enabled,
+            "shuffle flag must clear"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn apply_shuffle_preserves_current_track() -> Result<()> {
+        let shared = Arc::new(EngineShared::default());
+        shared
+            .queue
+            .set_queue(vec![1, 2, 3, 4, 5])
+            .map_err(|e| anyhow!("{e}"))?;
+        apply_shuffle(&shared, true).map_err(|e| anyhow!("{e}"))?;
+        ensure!(
+            shared.queue.current() == Some(1),
+            "current track must be preserved"
+        );
+        let mut tracks = shared.queue.tracks();
+        tracks.sort_unstable();
+        ensure!(
+            tracks == vec![1, 2, 3, 4, 5],
+            "shuffle must preserve queue elements"
+        );
         Ok(())
     }
 
