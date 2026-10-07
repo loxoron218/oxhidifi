@@ -21,10 +21,13 @@ use {
             spawn_future_local,
         },
         gtk::{
-            Button, CssProvider, EventControllerKey, STYLE_PROVIDER_PRIORITY_APPLICATION,
+            Button, CssProvider, EventControllerKey, PropagationPhase, STYLE_PROVIDER_PRIORITY_APPLICATION,
             ToggleButton, Window, style_context_add_provider_for_display,
         },
-        prelude::{AdwApplicationWindowExt, ButtonExt, GtkWindowExt, ToggleButtonExt, WidgetExt},
+        prelude::{
+            AdwApplicationWindowExt, ButtonExt, EventControllerExt, GtkWindowExt, ToggleButtonExt,
+            WidgetExt,
+        },
     },
     tracing::{info, warn},
 };
@@ -34,7 +37,7 @@ use crate::{
     ui::{
         collapse_scheduler::add_responsive_breakpoints,
         gallery::narrow_flag::NarrowState,
-        key_bindings::{handle_escape_key, handle_zoom_key},
+        key_bindings::{focus_is_text_entry, handle_escape_key, handle_play_pause_key, handle_zoom_key},
         navigation::is_detail_visible,
         panes::build_content,
         player::wire_panel_events,
@@ -113,16 +116,22 @@ pub fn build_window(app: &Application, state: &Arc<AppState>) -> ApplicationWind
     window
 }
 
-/// Add Escape and zoom key controllers to the window.
+/// Add Escape, zoom, and play/pause key controllers to the window.
 ///
 /// Zoom via `Ctrl+`/`Ctrl-` is ignored while a detail page is pushed, since
 /// detail covers use fixed sizes and mutating the background grid zoom would
 /// surprise the user on `Back`.
 ///
+/// Plain `Space` toggles play/pause while the player panel is shown. The
+/// controller uses the `Capture` phase so it runs before the gallery
+/// `FlowBox` card-activation handler, making `Space` always toggle instead of
+/// navigating. Text-input focus and a hidden sidebar fall through to the old
+/// behavior.
+///
 /// # Arguments
 ///
 /// * `window` - Window receiving the controllers.
-/// * `split_view` - Split view used for Escape-key handling.
+/// * `split_view` - Split view used for Escape-key and play/pause handling.
 /// * `nav_view` - Navigation view checked for pushed detail pages.
 /// * `state` - Application state owning the retained signal handles.
 /// * `sidebar_intent` - Shared last sidebar intent, cleared when Escape hides the panel so
@@ -169,6 +178,31 @@ fn add_key_controllers(
             }),
         );
     window.add_controller(zoom_controller);
+
+    let space_state = Arc::clone(state);
+    let space_split = split_view.clone();
+    let space_window = window.clone();
+    let space_controller = EventControllerKey::new();
+    space_controller.set_propagation_phase(PropagationPhase::Capture);
+    state
+        .handles
+        .lock()
+        .retain_signal(
+            space_controller.connect_key_pressed(move |_, key, _, modifiers| {
+                if key != Key::space {
+                    return Proceed;
+                }
+                if focus_is_text_entry(space_window.focus().as_ref()) {
+                    return Proceed;
+                }
+                if handle_play_pause_key(&space_state, &space_split, key, modifiers) {
+                    Stop
+                } else {
+                    Proceed
+                }
+            }),
+        );
+    window.add_controller(space_controller);
 }
 
 /// Synchronize sidebar toggle buttons and persist geometry changes.
