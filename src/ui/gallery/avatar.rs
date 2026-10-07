@@ -15,7 +15,12 @@ use crate::{
     app::runtime::{AppState, NavigationEvent::ArtistDetail},
     storage::catalog::Artist,
     ui::{
-        gallery::{build_navigation_gesture, card::build_card_box, play_action::play_artist},
+        gallery::{
+            build_navigation_gesture,
+            card::build_card_box,
+            label_sizing::{format_max_chars, title_max_chars},
+            play_action::play_artist,
+        },
         osd_button::build_album_play_button,
     },
 };
@@ -39,10 +44,18 @@ fn build_artist_avatar(size: i32) -> Widget {
 ///
 /// Returns a `Box` containing a vertical layout with avatar,
 /// name, and album count labels. Matches the album card structural
-/// pattern (Overlay wrapper) for consistent card sizing.
+/// pattern (Overlay wrapper) for consistent card sizing. Label caps
+/// scale with `size` like album cards so long names ellipsize instead
+/// of inflating the card.
 ///
 /// Also returns the `Overlay` wrapping the avatar so zoom can resize it
 /// in place without rebuilding the card.
+///
+/// # Arguments
+///
+/// * `state` - Application state
+/// * `artist` - Artist data
+/// * `size` - Avatar size in pixels (derived from the grid zoom level)
 pub fn build_artist_card(state: &Arc<AppState>, artist: &Artist, size: i32) -> (Box, Overlay) {
     let tooltip = format!("View albums by {}", artist.name);
     let card = build_card_box(size, &tooltip);
@@ -104,7 +117,7 @@ pub fn build_artist_card(state: &Arc<AppState>, artist: &Artist, size: i32) -> (
     let name_label = Label::builder()
         .label(&artist.name)
         .ellipsize(End)
-        .max_width_chars(20)
+        .max_width_chars(title_max_chars(size))
         .css_classes(["heading", "title"])
         .halign(Start)
         .build();
@@ -113,7 +126,7 @@ pub fn build_artist_card(state: &Arc<AppState>, artist: &Artist, size: i32) -> (
     let album_count_label = Label::builder()
         .label(format!("{} albums", artist.album_count))
         .ellipsize(End)
-        .max_width_chars(20)
+        .max_width_chars(format_max_chars(size))
         .css_classes(["dim-label", "caption"])
         .halign(Start)
         .build();

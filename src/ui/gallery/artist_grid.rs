@@ -22,6 +22,7 @@ use crate::{
             empty::{LibraryGrid, build_library_grid},
             grid_batch::resize_grid_batched,
             grid_fit::{grid_is_current, upgrade_hidden_resize},
+            label_sizing::resize_artist_card,
             narrow_flag::NarrowState,
             rebuild_debounce::{
                 RebuildAction::{DeferDirty, Resize},
@@ -159,9 +160,9 @@ fn rebuild_artist_current_mode(
 /// Resize the live artist grid's cards to the given cover size in place.
 ///
 /// Schedules a batched in-place resize (see [`resize_grid_batched`]) that
-/// updates the `FlowBox` spacing and every card's avatar size across idle
-/// callbacks, so a zoom on a large library does not block the frame clock.
-/// Artists have no per-size cover art to decode, so no cover dispatch.
+/// updates the `FlowBox` spacing and every card's avatar size plus label caps
+/// across idle callbacks, so a zoom on a large library does not block the
+/// frame clock. Artists have no per-size cover art to decode, so no cover dispatch.
 ///
 /// # Arguments
 ///
@@ -183,7 +184,7 @@ fn resize_artist_grid(state: &Arc<AppState>, mode_stack: &Stack, cover_size: i32
             stale_state.artist_grid.build_seq.load(Relaxed) != build_seq
                 || stale_state.artist_grid.zoom_seq.load(Relaxed) != zoom_seq
         },
-        |_, _, _| {},
+        |_, overlay, size| resize_artist_card(overlay, size),
         |_, _| {},
     )
 }
