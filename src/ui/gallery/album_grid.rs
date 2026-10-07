@@ -29,6 +29,7 @@ use crate::{
     ui::{
         gallery::{
             coalescer::spawn_grid_sort_zoom,
+            cover_dispatch::album_covers_ready,
             empty::{LibraryGrid, add_scrolled, build_library_grid, show_library_empty},
             frame_resize::{
                 AlbumFillContext, apply_album_resize, fill_album_grid, resize_album_grid,
@@ -128,11 +129,15 @@ fn preview_album_resize(
 ///
 /// Zoom-only changes resize the existing cards in place (no widget churn,
 /// scroll position preserved) — including on hidden tabs, so a stale
-/// oversized page never forces the window past its minimum. Sort changes — or
-/// any state that invalidates the current cards — fall back to a full rebuild
-/// from the in-memory cache. When the tab is hidden, marks the grid dirty so
-/// it is rebuilt on switch. Narrow-window changes arrive here as zoom
-/// notifications (see `wire_narrow_fit`) and take the same in-place path.
+/// oversized page never forces the window past its minimum. The in-place
+/// resize is skipped only when both the geometry and the exact-size covers
+/// are already current: the preview flips geometry without decoding, so a
+/// geometry-only check would strand cards on oversized interim textures.
+/// Sort changes — or any state that invalidates the current cards — fall back
+/// to a full rebuild from the in-memory cache. When the tab is hidden, marks
+/// the grid dirty so it is rebuilt on switch. Narrow-window changes arrive
+/// here as zoom notifications (see `wire_narrow_fit`) and take the same
+/// in-place path.
 fn rebuild_album_current_mode(
     state: &Arc<AppState>,
     mode_stack: &Stack,
@@ -161,7 +166,7 @@ fn rebuild_album_current_mode(
     }
     if action == Resize {
         let size = effective_album_cover(state, narrow_state);
-        if grid_is_current(mode_stack, size) {
+        if grid_is_current(mode_stack, size) && album_covers_ready(state, size) {
             return;
         }
         if resize_album_grid(state, mode_stack, size) {

@@ -3,72 +3,33 @@
 use std::sync::Arc;
 
 use {
-    tokio::{
-        spawn,
-        sync::mpsc::UnboundedReceiver,
-        task::{JoinHandle, spawn_blocking},
-    },
+    tokio::task::spawn_blocking,
     tracing::{info, warn},
 };
 
 use crate::{
     app::runtime::AppState,
-    library::{
-        artwork::{check_cache_version, repair::repair_missing_artwork},
-        watcher::{LibraryWatcher, WatcherEvent},
-    },
+    library::artwork::{check_cache_version, repair::repair_missing_artwork},
     playback::{
         devices::startup_device_check,
         state::PlaybackEvent::{Paused, PositionTick, QueueChanged, TrackStarted},
         transport::PlaybackTransport,
     },
-    storage::database::SqliteStorage,
 };
-
-/// Run the filesystem watcher loop in the background.
-///
-/// Takes `Arc<LibraryWatcher>` with interior mut for `watch`/`unwatch`.
-/// Returns a `JoinHandle` so the caller can await graceful shutdown after
-/// calling [`LibraryWatcher::shutdown`]. The loop exits when the channel
-/// closes (shared `event_tx` taken) and discards queued events after a
-/// cancellation signal.
-async fn watcher_loop(
-    watcher: Arc<LibraryWatcher<SqliteStorage>>,
-    mut watcher_rx: UnboundedReceiver<WatcherEvent>,
-) {
-    while !watcher.is_cancelled() {
-        let Some(event) = watcher_rx.recv().await else {
-            break;
-        };
-        watcher.process_event(event).await;
-    }
-}
-
-/// Run the filesystem watcher loop in the background.
-///
-/// Takes `Arc<LibraryWatcher>` with interior mut for `watch`/`unwatch`.
-/// Returns a `JoinHandle` so the caller can await graceful shutdown after
-/// calling [`LibraryWatcher::shutdown`]. The loop exits when the channel
-/// closes (shared `event_tx` taken) and discards queued events after a
-/// cancellation signal.
-pub fn spawn_watcher_loop(
-    watcher: Arc<LibraryWatcher<SqliteStorage>>,
-    watcher_rx: UnboundedReceiver<WatcherEvent>,
-) -> JoinHandle<()> {
-    spawn(watcher_loop(watcher, watcher_rx))
-}
 
 /// Check artwork cache version, repair stale artwork paths, and test audio
 /// device at startup.
 ///
 /// A cache wipe invalidates stored `artwork_path` rows, so missing artwork is
 /// re-extracted from embedded audio tags before the gallery dispatches cover
-/// decodes.
+/// decodes. When paths changed, publishes `refresh` so the gallery refetches
+/// fresh `artwork_path` rows instead of dispatching decodes for stale files.
 ///
 /// # Arguments
 ///
-/// * `storage` - Storage backend holding albums and tracks for the repair job.
-pub async fn run_startup_checks(storage: Arc<SqliteStorage>) {
+/// * `state` - Application state (storage for the repair job, refresh signal to notify the gallery
+///   when artwork paths changed).
+pub async fn run_startup_checks(state: Arc<AppState>) {
     let wiped = match spawn_blocking(check_cache_version).await {
         Ok(wiped) => wiped,
         Err(e) => {
@@ -82,7 +43,7 @@ pub async fn run_startup_checks(storage: Arc<SqliteStorage>) {
             "Artwork cache version changed, wiped cache and repairing paths"
         );
     }
-    let summary = repair_missing_artwork(&*storage).await;
+    let summary = repair_missing_artwork(&*state.storage).await;
     if summary.repaired > 0 || summary.cleared > 0 || summary.failed > 0 {
         info!(
             checked = summary.checked,
@@ -91,6 +52,9 @@ pub async fn run_startup_checks(storage: Arc<SqliteStorage>) {
             failed = summary.failed,
             "Startup artwork repair finished"
         );
+    }
+    if summary.repaired > 0 || summary.cleared > 0 {
+        state.refresh.publish();
     }
     match spawn_blocking(startup_device_check).await {
         Ok(Some(msg)) => {
@@ -159,12 +123,10 @@ mod tests {
 
     use crate::{
         app::{
-            bootstrap::{
-                emit_session_events, persist_session_on_shutdown, run_startup_checks,
-                spawn_watcher_loop,
-            },
+            bootstrap::{emit_session_events, persist_session_on_shutdown, run_startup_checks},
             mocks::{build_app_state, fresh_storage},
             runtime::AppState,
+            watch_loop::spawn_watcher_loop,
         },
         library::watcher::LibraryWatcher,
         playback::{
@@ -317,7 +279,7 @@ mod tests {
     fn run_startup_checks_signature() {
         fn assert_shape<F, Fut>(_: F)
         where
-            F: Fn(Arc<SqliteStorage>) -> Fut,
+            F: Fn(Arc<AppState>) -> Fut,
             Fut: Future<Output = ()>,
         {
         }

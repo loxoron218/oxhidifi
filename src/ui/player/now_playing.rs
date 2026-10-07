@@ -102,10 +102,10 @@ pub fn update_cover_from_cache(
     if playback.state().current_track_id != Some(tid) {
         return;
     }
-    let Some(texture) = cover_cache.get_by_track(tid) else {
+    let Some(texture) = cover_cache.get_by_track_best(tid, COVER_MIN_SIZE) else {
         return;
     };
-    if texture.width() < COVER_MIN_SIZE && texture.height() < COVER_MIN_SIZE {
+    if texture.width() < COVER_MIN_SIZE || texture.height() < COVER_MIN_SIZE {
         return;
     }
     artwork.set_paintable(Some(&*texture));
@@ -240,7 +240,7 @@ pub fn process_metadata(
 
     if album_id >= 0 {
         cover_cache.record_track_album(tid, album_id);
-        if let Some(texture) = cover_cache.get_any(album_id) {
+        if let Some(texture) = cover_cache.get_best(album_id, cover_size) {
             widgets.artwork_image.set_paintable(Some(&*texture));
             return;
         }

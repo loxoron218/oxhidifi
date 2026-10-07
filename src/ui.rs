@@ -23,3 +23,4 @@ pub mod toggle_popover;
 pub mod window;
 pub mod window_geometry;
 pub mod zoom;
+pub mod zoom_buttons;

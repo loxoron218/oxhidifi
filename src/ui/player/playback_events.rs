@@ -32,7 +32,7 @@ use crate::{
             now_playing::{
                 handle_status_change, process_cover_art, process_metadata, update_cover_from_cache,
             },
-            sidebar::{MetaResult, PlaybackWidgets, format_time},
+            sidebar::{MetaResult, PLAYER_COVER_SIZE, PlaybackWidgets, format_time},
         },
         texture_pool::CoverArtCache,
     },
@@ -72,7 +72,7 @@ pub fn spawn_async_listeners(state: &Arc<AppState>, widgets: PlaybackWidgets) {
         .lock()
         .retain_task(MainContext::default().spawn_local(async move {
             while let Ok((tid, meta)) = meta_rx.recv().await {
-                process_metadata(tid, meta, &mw, &mp, &mc, &cover_tx, 280);
+                process_metadata(tid, meta, &mw, &mp, &mc, &cover_tx, PLAYER_COVER_SIZE);
             }
         }));
 

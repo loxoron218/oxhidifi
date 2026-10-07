@@ -227,7 +227,12 @@ pub fn build_album_column_view(
 }
 
 /// Dispatch decode requests for the covers collected while filling the
-/// album column store, skipping albums that already have a cached texture.
+/// album column store, skipping albums that already have a usable cached texture.
+///
+/// Uses size-aware [`CoverArtCache::get_best`] (smallest cached size at or
+/// above `cover_size`) instead of [`CoverArtCache::has_any`]: a grid-size
+/// texture satisfies a smaller list request via downscale, but a smaller
+/// thumbnail must not suppress the exact-size decode.
 fn dispatch_column_covers(
     state: &Arc<AppState>,
     pending_widgets: &Arc<Mutex<PendingCovers>>,
@@ -236,7 +241,7 @@ fn dispatch_column_covers(
 ) {
     let uncached: Vec<(i64, String)> = take(covers)
         .into_iter()
-        .filter(|(id, _)| !state.cover_art_cache.has_any(*id))
+        .filter(|(id, _)| state.cover_art_cache.get_best(*id, cover_size).is_none())
         .collect();
     if !uncached.is_empty() {
         start_cover_batch_decode(

@@ -4,6 +4,7 @@
 pub mod bootstrap;
 pub mod lifecycle;
 pub mod runtime;
+pub mod watch_loop;
 pub mod xdg_paths;
 
 #[cfg(test)]

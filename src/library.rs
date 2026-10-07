@@ -5,3 +5,4 @@ pub mod dedup;
 pub mod metadata;
 pub mod scanner;
 pub mod watcher;
+pub mod watcher_event;

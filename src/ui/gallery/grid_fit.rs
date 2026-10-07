@@ -37,6 +37,13 @@ pub fn grid_rendered_size(flow: &FlowBox) -> Option<i32> {
 
 /// Report whether the grid already renders cards at `cover_size`.
 ///
+/// Walks every card instead of sampling the first: the zoom preview resizes
+/// in `GRID_BATCH_SIZE` idle batches, so after a single zoom the first card
+/// can already report the new size while the tail still renders the old one.
+/// Checking all cards keeps the debounced rebuild from early-returning on a
+/// half-resized grid (which left `card`/`format_row` widths and label caps
+/// desynced from the cover, i.e. the grey right margin).
+///
 /// Used to skip no-op resizes: zoom clicks that snap to the same narrowed
 /// size (and duplicate narrow notifications) must not walk the grid.
 ///
@@ -47,10 +54,39 @@ pub fn grid_rendered_size(flow: &FlowBox) -> Option<i32> {
 ///
 /// # Returns
 ///
-/// `true` when a card is present and renders at `cover_size`.
+/// `true` when at least one card is present and every card renders at
+/// `cover_size`.
 #[must_use]
 pub fn grid_is_current(mode_stack: &Stack, cover_size: i32) -> bool {
-    grid_flow_box(mode_stack).is_some_and(|flow| grid_rendered_size(&flow) == Some(cover_size))
+    grid_flow_box(mode_stack).is_some_and(|flow| grid_all_at_size(&flow, cover_size))
+}
+
+/// Report whether every card in the flow box renders at `cover_size`.
+///
+/// # Arguments
+///
+/// * `flow` - The grid's `FlowBox`.
+/// * `cover_size` - Cover size to compare against.
+///
+/// # Returns
+///
+/// `true` when at least one card exists and all report `cover_size`,
+/// `false` for an empty grid, an unexpected widget tree, or any mismatch.
+fn grid_all_at_size(flow: &FlowBox, cover_size: i32) -> bool {
+    let mut index: usize = 0;
+    let mut seen_any = false;
+    loop {
+        let grid_index = i32::try_from(index).unwrap_or(i32::MAX);
+        let Some(overlay) = flowbox_card_overlay(flow, grid_index) else {
+            break;
+        };
+        seen_any = true;
+        if overlay.width_request() != cover_size {
+            return false;
+        }
+        index = index.saturating_add(1);
+    }
+    seen_any
 }
 
 /// Reconsider a deferred rebuild as an in-place resize when the change is
@@ -141,6 +177,14 @@ mod tests {
         FlowBox::append(flow, &card);
     }
 
+    fn stack_with_grid(flow: &FlowBox) -> Stack {
+        let stack = Stack::new();
+        let scrolled = ScrolledWindow::new();
+        scrolled.set_child(Some(flow));
+        drop(stack.add_named(&scrolled, Some("grid")));
+        stack
+    }
+
     #[test]
     fn narrowed_two_column_row_fits_minimum_window() -> Result<()> {
         let state = Arc::new(AppState::mock()?);
@@ -199,9 +243,7 @@ mod tests {
         );
         let flow = build_grid("grid", 150);
         append_overlay_card(&flow, 150);
-        let scrolled = ScrolledWindow::new();
-        scrolled.set_child(Some(&flow));
-        drop(stack.add_named(&scrolled, Some("grid")));
+        let stack = stack_with_grid(&flow);
         ensure!(
             grid_is_current(&stack, 150),
             "a matching size must report current"
@@ -209,6 +251,23 @@ mod tests {
         ensure!(
             !grid_is_current(&stack, 180),
             "a different size must not report current"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn grid_is_current_rejects_half_resized_grid() -> Result<()> {
+        let flow = build_grid("grid", 180);
+        append_overlay_card(&flow, 180);
+        append_overlay_card(&flow, 150);
+        let stack = stack_with_grid(&flow);
+        ensure!(
+            !grid_is_current(&stack, 180),
+            "a grid with a stale tail card must not report current"
+        );
+        ensure!(
+            !grid_is_current(&stack, 150),
+            "a grid with a resized head card must not report current"
         );
         Ok(())
     }
@@ -222,9 +281,7 @@ mod tests {
             "a hidden tab without a built grid must keep deferring"
         );
         let flow = build_grid("grid", 240);
-        let scrolled = ScrolledWindow::new();
-        scrolled.set_child(Some(&flow));
-        drop(stack.add_named(&scrolled, Some("grid")));
+        let stack = stack_with_grid(&flow);
         assert_eq!(
             upgrade_hidden_resize(DeferDirty, false, true, Grid, true, &stack),
             Resize,
@@ -234,11 +291,8 @@ mod tests {
 
     #[test]
     fn upgrade_hidden_resize_keeps_other_decisions() {
-        let stack = Stack::new();
         let flow = build_grid("grid", 240);
-        let scrolled = ScrolledWindow::new();
-        scrolled.set_child(Some(&flow));
-        drop(stack.add_named(&scrolled, Some("grid")));
+        let stack = stack_with_grid(&flow);
         for (sort_fired, zoom_fired, mode, ready) in [
             (true, true, Grid, true),
             (false, false, Grid, true),

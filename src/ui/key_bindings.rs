@@ -35,22 +35,28 @@ pub fn handle_escape_key(split_view: &OverlaySplitView) -> bool {
 /// determines whether the grid or list zoom level changes, matching the
 /// popover zoom buttons. Zooming the active view fans out through
 /// [`notify_zoom_change`] so the coalescer resizes (grid) or rebuilds
-/// (column) the live view.
+/// (column) the live view. At the zoom limits no notification is sent, so
+/// at-limit key presses never trigger spurious rebuilds or disk writes.
 ///
 /// # Returns
 ///
-/// `true` when the key was handled (a zoom occurred), `false` otherwise.
+/// `true` when the zoom level actually changed, `false` otherwise (wrong
+/// modifiers, unrelated key, or already at the limit).
 pub fn handle_zoom_key(state: &AppState, key: Key, modifiers: ModifierType) -> bool {
     if !modifiers.intersects(ModifierType::CONTROL_MASK) {
         return false;
     }
     let mode = state.storage.get_view_mode();
     if key == Key::plus || key == Key::KP_Add {
-        apply_zoom_in(state, mode);
+        if !apply_zoom_in(state, mode) {
+            return false;
+        }
         notify_zoom_change(state);
         true
     } else if key == Key::minus || key == Key::KP_Subtract {
-        apply_zoom_out(state, mode);
+        if !apply_zoom_out(state, mode) {
+            return false;
+        }
         notify_zoom_change(state);
         true
     } else {
@@ -186,20 +192,36 @@ mod tests {
 
     #[test]
     fn ctrl_plus_clamps_grid_at_max() -> Result<()> {
-        let state = zoom_grid_state(GRID_ZOOM_MAX, Key::plus)?;
+        let state = grid_state(GRID_ZOOM_MAX)?;
+        ensure!(
+            !handle_zoom_key(&state, Key::plus, ModifierType::CONTROL_MASK),
+            "Ctrl+ at the maximum must be unhandled so no rebuild fires"
+        );
         ensure!(
             state.storage.get_grid_zoom_level() == GRID_ZOOM_MAX,
             "Ctrl+ must clamp at the maximum grid zoom"
+        );
+        ensure!(
+            state.albums_zoom_rx.is_empty(),
+            "at-limit key presses must not notify the grids"
         );
         Ok(())
     }
 
     #[test]
     fn ctrl_minus_clamps_grid_at_min() -> Result<()> {
-        let state = zoom_grid_state(GRID_ZOOM_MIN, Key::minus)?;
+        let state = grid_state(GRID_ZOOM_MIN)?;
+        ensure!(
+            !handle_zoom_key(&state, Key::minus, ModifierType::CONTROL_MASK),
+            "Ctrl- at the minimum must be unhandled so no rebuild fires"
+        );
         ensure!(
             state.storage.get_grid_zoom_level() == GRID_ZOOM_MIN,
             "Ctrl- must clamp at the minimum grid zoom"
+        );
+        ensure!(
+            state.albums_zoom_rx.is_empty(),
+            "at-limit key presses must not notify the grids"
         );
         Ok(())
     }
@@ -216,7 +238,11 @@ mod tests {
 
     #[test]
     fn ctrl_minus_in_column_view_clamps_list_at_min() -> Result<()> {
-        let state = zoom_column_state(LIST_ZOOM_MIN, Key::minus)?;
+        let state = column_state(LIST_ZOOM_MIN)?;
+        ensure!(
+            !handle_zoom_key(&state, Key::minus, ModifierType::CONTROL_MASK),
+            "Ctrl- at the minimum must be unhandled so no rebuild fires"
+        );
         ensure!(
             state.storage.get_list_zoom_level() == LIST_ZOOM_MIN,
             "Ctrl- in column view must clamp at the minimum list zoom"
@@ -237,7 +263,11 @@ mod tests {
 
     #[test]
     fn ctrl_plus_in_column_view_clamps_list_at_max() -> Result<()> {
-        let state = zoom_column_state(LIST_ZOOM_MAX, Key::plus)?;
+        let state = column_state(LIST_ZOOM_MAX)?;
+        ensure!(
+            !handle_zoom_key(&state, Key::plus, ModifierType::CONTROL_MASK),
+            "Ctrl+ at the maximum must be unhandled so no rebuild fires"
+        );
         ensure!(
             state.storage.get_list_zoom_level() == LIST_ZOOM_MAX,
             "Ctrl+ in column view must clamp at the maximum list zoom"

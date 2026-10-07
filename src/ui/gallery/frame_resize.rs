@@ -8,7 +8,7 @@ use std::{
 
 use libadwaita::{
     glib::ControlFlow::{self, Break, Continue},
-    gtk::{FlowBox, Overlay, Picture, Stack, Widget},
+    gtk::{FlowBox, Overlay, Stack, Widget},
     prelude::Cast,
 };
 
@@ -16,8 +16,8 @@ use crate::{
     app::runtime::{AppState, CachedAlbumData},
     ui::{
         gallery::{
-            card::{build_album_card, build_placeholder},
-            cover_dispatch::{apply_texture, load_cover_art_async},
+            card::build_album_card,
+            cover_dispatch::{load_cover_art_async, resolve_cover_at},
             grid_batch::{fill_grid_batch, resize_grid_batched},
             label_sizing::resize_album_card,
         },
@@ -46,6 +46,8 @@ pub struct AlbumFillContext<'a> {
 struct AlbumResizeSnapshot {
     /// Build sequence captured when the snapshot was taken.
     build_seq: u64,
+    /// Zoom sequence captured when the snapshot was taken.
+    zoom_seq: u64,
     /// Reverse map: overlay index → album ID.
     idx_to_album: Arc<HashMap<usize, i64>>,
     /// Shared decoded-cover cache.
@@ -120,11 +122,13 @@ pub fn fill_album_grid(
 /// without re-reading shared state.
 fn album_resize_snapshot(state: &Arc<AppState>) -> AlbumResizeSnapshot {
     let build_seq = state.album_grid.build_seq.load(Relaxed);
+    let zoom_seq = state.album_grid.zoom_seq.load(Relaxed);
     let cover_data = Arc::clone(&*state.album_grid_covers.lock());
     let idx_to_album: Arc<HashMap<usize, i64>> =
         Arc::new(cover_data.iter().map(|&(aid, idx, _)| (idx, aid)).collect());
     AlbumResizeSnapshot {
         build_seq,
+        zoom_seq,
         idx_to_album,
         cover_cache: Arc::clone(&state.cover_art_cache),
         state: Arc::clone(state),
@@ -168,12 +172,12 @@ fn album_cover_resolver(
 pub fn apply_album_resize(state: &Arc<AppState>, mode_stack: &Stack, cover_size: i32) -> bool {
     let snapshot = album_resize_snapshot(state);
     let resolve_cards = album_cover_resolver(&snapshot.idx_to_album, &snapshot.cover_cache);
-    let stale_state = Arc::clone(&snapshot.state);
+    let is_stale = album_resize_stale_predicate(&snapshot);
     resize_grid_batched(
         state,
         mode_stack,
         cover_size,
-        move || stale_state.album_grid.build_seq.load(Relaxed) != snapshot.build_seq,
+        is_stale,
         resolve_cards,
         |_, _| {},
     )
@@ -205,42 +209,191 @@ pub fn resize_album_grid(state: &Arc<AppState>, mode_stack: &Stack, cover_size: 
             load_cover_art_async(&state, &cover_data, &overlays, &cover_cache, size);
         }
     };
-    let stale_state = Arc::clone(&snapshot.state);
+    let is_stale = album_resize_stale_predicate(&snapshot);
     resize_grid_batched(
         state,
         mode_stack,
         cover_size,
-        move || stale_state.album_grid.build_seq.load(Relaxed) != snapshot.build_seq,
+        is_stale,
         resolve_cards,
         dispatch_covers,
     )
 }
 
-/// Resolve a single card's cover from the grid's cover snapshot, if it has
-/// one. Applied during a batched zoom resize after the card's geometry pass.
-fn resolve_cover_at(
-    idx_to_album: &HashMap<usize, i64>,
-    cover_cache: &CoverArtCache,
-    idx: usize,
-    overlay: &Overlay,
-    size: i32,
-) {
-    if let Some(&album_id) = idx_to_album.get(&idx) {
-        resolve_cover_widget(cover_cache, overlay, album_id, size);
+/// Build the staleness predicate for a batched album resize.
+///
+/// Bails when a newer build or zoom superseded the snapshot, so a preview
+/// traversal aborts instead of fighting the debounced resize for the same
+/// `FlowBox`.
+fn album_resize_stale_predicate(snapshot: &AlbumResizeSnapshot) -> impl Fn() -> bool + use<> {
+    let state = Arc::clone(&snapshot.state);
+    let build_seq = snapshot.build_seq;
+    let zoom_seq = snapshot.zoom_seq;
+    move || {
+        state.album_grid.build_seq.load(Relaxed) != build_seq
+            || state.album_grid.zoom_seq.load(Relaxed) != zoom_seq
     }
 }
 
-/// Resolve a single card's cover widget to `size`: apply a cached texture or
-/// swap in a placeholder. Does not dispatch new decode requests.
-fn resolve_cover_widget(cache: &CoverArtCache, overlay: &Overlay, album_id: i64, size: i32) {
-    if let Some(texture) = cache.get(album_id, size) {
-        apply_texture(overlay, &texture, size);
-        return;
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use {
+        anyhow::{Result, ensure},
+        libadwaita::{
+            gdk::MemoryFormat::R8g8b8a8,
+            gtk::{self, Orientation::Horizontal, Picture, test},
+            prelude::{Cast, WidgetExt},
+        },
+        tempfile::NamedTempFile,
+    };
+
+    use crate::{
+        app::runtime::AppState,
+        storage::{catalog::Album, formats::FormatInfo},
+        ui::{
+            gallery::{
+                card::build_album_card,
+                cover_dispatch::{album_covers_ready, resolve_cover_widget},
+                grid_flow::resize_overlay_cover,
+                label_sizing::resize_album_card,
+            },
+            image_decode::{DecodedCover, raw_to_texture},
+        },
+    };
+
+    fn covers_state(entries: Vec<(i64, usize, String)>) -> Result<AppState> {
+        let state = AppState::mock()?;
+        *state.album_grid_covers.lock() = Arc::new(entries);
+        Ok(state)
     }
-    if overlay
-        .child()
-        .is_some_and(|child| child.downcast_ref::<Picture>().is_some())
-    {
-        overlay.set_child(Some(&build_placeholder(size)));
+
+    fn sized_cover(size: i32) -> DecodedCover {
+        DecodedCover {
+            width: size,
+            height: size,
+            rowstride: usize::try_from(size).unwrap_or(0).saturating_mul(4),
+            format: R8g8b8a8,
+            data: vec![
+                0;
+                usize::try_from(size)
+                    .unwrap_or(0)
+                    .saturating_mul(usize::try_from(size).unwrap_or(0))
+                    .saturating_mul(4)
+            ],
+        }
+    }
+
+    #[test]
+    fn covers_ready_when_no_artwork() -> Result<()> {
+        let state = covers_state(Vec::new())?;
+        ensure!(
+            album_covers_ready(&state, 180),
+            "an empty cover snapshot must report ready"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn covers_ready_when_all_cached() -> Result<()> {
+        let cover = NamedTempFile::new()?;
+        let path = cover.path().to_string_lossy().to_string();
+        let state = covers_state(vec![(1, 0, path)])?;
+        state
+            .cover_art_cache
+            .insert(1, 180, raw_to_texture(&sized_cover(180)));
+        ensure!(
+            album_covers_ready(&state, 180),
+            "an exact cached size must report ready"
+        );
+        ensure!(
+            !album_covers_ready(&state, 150),
+            "a missing size with an existing file must report not ready"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn covers_ready_ignores_missing_files() -> Result<()> {
+        let state = covers_state(vec![(1, 0, "/nonexistent-oxhidifi-cover.jpg".to_string())])?;
+        ensure!(
+            album_covers_ready(&state, 180),
+            "a missing file must not block the fast path"
+        );
+        Ok(())
+    }
+
+    fn zoomed_card_natural_width(
+        state: &Arc<AppState>,
+        cached_sizes: &[i32],
+        from_size: i32,
+        to_size: i32,
+    ) -> (i32, bool) {
+        for size in cached_sizes {
+            state
+                .cover_art_cache
+                .insert(7, *size, raw_to_texture(&sized_cover(*size)));
+        }
+        let album = Album {
+            id: 7,
+            title: "Test Album".into(),
+            artist_id: 1,
+            year: Some(2024),
+            genre: None,
+            artwork_path: Some("/nonexistent-oxhidifi-cover.jpg".into()),
+            track_count: 12,
+            total_duration: 3600.0,
+            format_summary: "FLAC".into(),
+            lossless: true,
+            format: "FLAC".into(),
+            bit_depth: Some(24),
+            sample_rate: Some(96000),
+        };
+        let (card, overlay) = build_album_card(
+            state,
+            &album,
+            "Test Artist",
+            &FormatInfo::default(),
+            from_size,
+        );
+        resize_overlay_cover(&overlay, to_size);
+        resize_album_card(&overlay, to_size);
+        resolve_cover_widget(&state.cover_art_cache, &overlay, 7, to_size);
+        let shows_art = overlay
+            .child()
+            .is_some_and(|child| child.downcast_ref::<Picture>().is_some());
+        let (_, natural, _, _) = card.measure(Horizontal, -1);
+        (natural, shows_art)
+    }
+
+    #[test]
+    fn zoom_out_first_visit_keeps_card_width() -> Result<()> {
+        let state = Arc::new(covers_state(Vec::new())?);
+        let (natural, shows_art) = zoomed_card_natural_width(&state, &[240], 240, 150);
+        ensure!(
+            natural == 150,
+            "a larger interim texture must not inflate the card, got {natural} px"
+        );
+        ensure!(
+            !shows_art,
+            "with only a larger texture cached the card must show a placeholder"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn zoom_out_uses_smaller_interim_without_inflation() -> Result<()> {
+        let state = Arc::new(covers_state(Vec::new())?);
+        let (natural, shows_art) = zoomed_card_natural_width(&state, &[120, 240], 240, 150);
+        ensure!(
+            natural == 150,
+            "a smaller interim texture must keep the card width, got {natural} px"
+        );
+        ensure!(
+            shows_art,
+            "a smaller cached texture must be shown as interim art"
+        );
+        Ok(())
     }
 }

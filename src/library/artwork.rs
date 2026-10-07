@@ -29,7 +29,7 @@ const ARTWORK_CACHE_DIR: &str = "oxhidifi/artwork";
 const ARTWORK_EXTENSIONS: &[&str] = &["jpg", "png", "webp"];
 
 /// Current cache format version.  Bump to force re-extraction of all artwork.
-const CACHE_VERSION: &str = "3";
+const CACHE_VERSION: &str = "4";
 
 /// Errors occurring during artwork operations.
 #[derive(Debug, Error)]

@@ -16,18 +16,18 @@ use crate::{
     ui::{
         image_decode::{DecodedCover, decode_cover_raw},
         texture_pool::CoverArtCache,
-        zoom::GRID_ZOOM_MAX,
     },
 };
 
 /// Maximum number of decoded sizes retained per album.
 ///
-/// Covers every grid zoom level (0–[`GRID_ZOOM_MAX`]) so a full zoom sweep
-/// never re-decodes a size that was already decoded this session — repeated
-/// zoom toggling stops re-dispatching after the first sweep. Column-view
-/// list sizes are smaller and evicted by grid covers, which is acceptable:
-/// grid/list switches are rare, and a re-decode on switch is bounded.
-pub const MAX_SIZES_PER_ALBUM: u8 = GRID_ZOOM_MAX + 1;
+/// Covers all five grid zoom levels plus the player (560 px) and detail
+/// (320 px) surfaces with one spare slot, so browsing the grid never evicts
+/// the large player cover and forces a blurry upscale or re-decode.
+/// Column-view list sizes are smaller and may still be evicted by grid
+/// covers, which is acceptable: grid/list switches are rare, and a re-decode
+/// on switch is bounded.
+pub const MAX_SIZES_PER_ALBUM: u8 = 8;
 
 /// Number of worker threads decoding cover art.
 ///

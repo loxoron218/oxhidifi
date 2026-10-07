@@ -67,6 +67,53 @@ impl CoverArtCache {
         inner.textures.get(&(album_id, size)).cloned()
     }
 
+    /// Return the smallest cached texture at or above `min_size`.
+    ///
+    /// Never upscales: textures smaller than `min_size` are ignored so a
+    /// 48 px list thumbnail is never painted into a 280 px player panel.
+    /// Returns the exact size when present, otherwise the smallest sufficient
+    /// size, or `None` when only smaller textures are cached.
+    ///
+    /// # Arguments
+    ///
+    /// * `album_id` - Album whose cached cover should be resolved.
+    /// * `min_size` - Minimum acceptable decode size in pixels.
+    ///
+    /// # Returns
+    ///
+    /// The best cached texture, or `None` when a re-decode is required.
+    pub fn get_best(&self, album_id: i64, min_size: i32) -> Option<Arc<MemoryTexture>> {
+        let inner = self.inner.lock();
+        let sizes = inner.sizes.get(&album_id)?;
+        let best = sizes.iter().copied().filter(|s| *s >= min_size).min()?;
+        inner.textures.get(&(album_id, best)).cloned()
+    }
+
+    /// Return the largest cached texture at or below `max_size`.
+    ///
+    /// Layout-safe interim for grid zoom: a paintable larger than the card
+    /// inflates the card's natural width past the cover size (grey margin
+    /// until the exact size decodes), while a smaller paintable upscales
+    /// inside the fixed requests without changing layout. Returns the exact
+    /// size when present, otherwise the largest smaller size, or `None` when
+    /// only larger textures are cached (caller falls back to a placeholder).
+    ///
+    /// # Arguments
+    ///
+    /// * `album_id` - Album whose cached cover should be resolved.
+    /// * `max_size` - Maximum acceptable decode size in pixels.
+    ///
+    /// # Returns
+    ///
+    /// The largest fitting cached texture, or `None` when a re-decode (or
+    /// placeholder) is required.
+    pub fn get_fitting(&self, album_id: i64, max_size: i32) -> Option<Arc<MemoryTexture>> {
+        let inner = self.inner.lock();
+        let sizes = inner.sizes.get(&album_id)?;
+        let fitting = sizes.iter().copied().filter(|s| *s <= max_size).max()?;
+        inner.textures.get(&(album_id, fitting)).cloned()
+    }
+
     /// Check whether any texture is cached for the given album.
     pub fn has_any(&self, album_id: i64) -> bool {
         self.inner.lock().sizes.contains_key(&album_id)
@@ -106,6 +153,25 @@ impl CoverArtCache {
     pub fn get_by_track(&self, track_id: i64) -> Option<Arc<MemoryTexture>> {
         let album_id = *self.track_to_album.lock().get(&track_id)?;
         self.get_any(album_id)
+    }
+
+    /// Look up the smallest cached cover at or above `min_size` by track ID.
+    ///
+    /// Size-aware variant of [`CoverArtCache::get_by_track`] for large
+    /// display surfaces (e.g. the player panel) that must never upscale a
+    /// small grid/list thumbnail.
+    ///
+    /// # Arguments
+    ///
+    /// * `track_id` - Track whose album cover should be resolved.
+    /// * `min_size` - Minimum acceptable decode size in pixels.
+    ///
+    /// # Returns
+    ///
+    /// The best cached texture, or `None` when a re-decode is required.
+    pub fn get_by_track_best(&self, track_id: i64, min_size: i32) -> Option<Arc<MemoryTexture>> {
+        let album_id = *self.track_to_album.lock().get(&track_id)?;
+        self.get_best(album_id, min_size)
     }
 
     /// Return the cached album ID for a track, if previously recorded.
@@ -198,19 +264,19 @@ pub mod tests {
     #[test]
     fn eviction_keeps_only_newest_sizes() -> Result<()> {
         let cache = make_cache();
-        for size in [120, 150, 180, 210, 240, 32] {
+        for size in [32, 48, 64, 120, 150, 180, 210, 240, 560] {
             cache.insert(1, size, raw_to_texture(&mock_decoded_cover()));
         }
         ensure!(
-            cache.get(1, 120).is_none(),
+            cache.get(1, 32).is_none(),
             "the oldest size must be evicted past MAX_SIZES_PER_ALBUM"
         );
         ensure!(
-            cache.get(1, 150).is_some(),
+            cache.get(1, 48).is_some(),
             "the second-oldest size must survive eviction"
         );
         ensure!(
-            cache.get(1, 32).is_some(),
+            cache.get(1, 560).is_some(),
             "the newest size must survive eviction"
         );
         Ok(())
@@ -256,6 +322,73 @@ pub mod tests {
         ensure!(
             cache.get_by_track(10).is_some(),
             "a mapped track must resolve to a cached cover"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn get_best_returns_smallest_sufficient_size() -> Result<()> {
+        let cache = make_cache();
+        ensure!(
+            cache.get_best(1, 280).is_none(),
+            "empty cache must return None"
+        );
+        cache.insert(1, 48, raw_to_texture(&mock_decoded_cover()));
+        cache.insert(1, 180, raw_to_texture(&mock_decoded_cover()));
+        cache.insert(1, 560, raw_to_texture(&mock_decoded_cover()));
+        ensure!(
+            cache.get_best(1, 280).is_some(),
+            "a sufficient size must be found"
+        );
+        ensure!(
+            cache.get_best(1, 280) == cache.get(1, 560),
+            "get_best must prefer the smallest size at or above the minimum"
+        );
+        ensure!(
+            cache.get_best(1, 561).is_none(),
+            "only smaller textures must return None to force a re-decode"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn get_fitting_returns_largest_size_within_max() -> Result<()> {
+        let cache = make_cache();
+        ensure!(
+            cache.get_fitting(1, 150).is_none(),
+            "empty cache must return None"
+        );
+        cache.insert(1, 120, raw_to_texture(&mock_decoded_cover()));
+        cache.insert(1, 180, raw_to_texture(&mock_decoded_cover()));
+        cache.insert(1, 240, raw_to_texture(&mock_decoded_cover()));
+        ensure!(
+            cache.get_fitting(1, 150) == cache.get(1, 120),
+            "get_fitting must prefer the largest size at or below the maximum"
+        );
+        ensure!(
+            cache.get_fitting(1, 240) == cache.get(1, 240),
+            "an exact size must resolve to itself"
+        );
+        ensure!(
+            cache.get_fitting(1, 100).is_none(),
+            "only larger textures must return None so no layout inflation occurs"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn get_by_track_best_never_upscales_thumbnails() -> Result<()> {
+        let cache = make_cache();
+        cache.record_track_album(10, 100);
+        cache.insert(100, 48, raw_to_texture(&mock_decoded_cover()));
+        ensure!(
+            cache.get_by_track_best(10, 280).is_none(),
+            "a 48 px thumbnail must not satisfy a 280 px player request"
+        );
+        cache.insert(100, 560, raw_to_texture(&mock_decoded_cover()));
+        ensure!(
+            cache.get_by_track_best(10, 280).is_some(),
+            "a 560 px cover must satisfy a 280 px player request"
         );
         Ok(())
     }

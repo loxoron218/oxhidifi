@@ -1,11 +1,12 @@
 //! View-toggle popover: zoom controls, sort configuration lists, and a
 //! preferences entry.
 
-use std::sync::Arc;
+use std::sync::{Arc, atomic::Ordering::Relaxed};
 
 use {
     libadwaita::{
         ButtonContent,
+        glib::spawn_future_local,
         gtk::{
             Align::{Center, End},
             Box, Button, Label,
@@ -27,7 +28,8 @@ use crate::{
     ui::{
         drag::{build_albums_drag_list, build_artists_drag_list},
         preferences::show_preferences_dialog,
-        zoom::{GRID_ZOOM_MAX, GRID_ZOOM_MIN, LIST_ZOOM_MAX, LIST_ZOOM_MIN},
+        zoom::{GRID_ZOOM_MAX, LIST_ZOOM_MAX},
+        zoom_buttons::update_zoom_sensitivity,
     },
 };
 
@@ -147,30 +149,16 @@ pub fn build_popover(state: &Arc<AppState>, parent: &Window) -> (Popover, Widget
 
     connect_zoom_handlers(state, &zoom_out_btn, &zoom_in_btn);
 
-    (
-        Popover::builder().child(&zoom_box).has_arrow(true).build(),
-        albums_sort,
-        artists_sort,
-    )
-}
+    let popover = Popover::builder().child(&zoom_box).has_arrow(true).build();
+    let sync_state = Arc::clone(state);
+    state
+        .handles
+        .lock()
+        .retain_signal(popover.connect_show(move |_| {
+            update_zoom_sensitivity(&sync_state, &zoom_out_btn, &zoom_in_btn);
+        }));
 
-/// Update zoom button sensitivity based on current view mode and zoom level.
-fn update_zoom_sensitivity(state: &Arc<AppState>, zoom_out_btn: &Button, zoom_in_btn: &Button) {
-    let mode = state.storage.get_view_mode();
-    let (min_zoom, max_zoom, current_zoom) = match mode {
-        Grid => (
-            GRID_ZOOM_MIN,
-            GRID_ZOOM_MAX,
-            state.storage.get_grid_zoom_level(),
-        ),
-        Column => (
-            LIST_ZOOM_MIN,
-            LIST_ZOOM_MAX,
-            state.storage.get_list_zoom_level(),
-        ),
-    };
-    zoom_out_btn.set_sensitive(current_zoom > min_zoom);
-    zoom_in_btn.set_sensitive(current_zoom < max_zoom);
+    (popover, albums_sort, artists_sort)
 }
 
 /// Decrease the zoom level for the current view mode.
@@ -178,15 +166,24 @@ fn update_zoom_sensitivity(state: &Arc<AppState>, zoom_out_btn: &Button, zoom_in
 /// Only updates in-memory settings; the debounced disk write happens once
 /// per zoom episode in `spawn_listen_sort_zoom` (see `common.rs`), so rapid
 /// clicking never spawns a write task per click.
-pub fn apply_zoom_out(state: &AppState, mode: ViewMode) {
+///
+/// # Returns
+///
+/// `true` when the level actually changed, `false` at the minimum.
+#[must_use]
+pub fn apply_zoom_out(state: &AppState, mode: ViewMode) -> bool {
     match mode {
         Grid => {
-            let level = state.storage.get_grid_zoom_level().saturating_sub(1);
+            let current = state.storage.get_grid_zoom_level();
+            let level = current.saturating_sub(1);
             state.storage.set_grid_zoom_level_memory(level);
+            level != current
         }
         Column => {
-            let level = state.storage.get_list_zoom_level().saturating_sub(1);
+            let current = state.storage.get_list_zoom_level();
+            let level = current.saturating_sub(1);
             state.storage.set_list_zoom_level_memory(level);
+            level != current
         }
     }
 }
@@ -195,23 +192,24 @@ pub fn apply_zoom_out(state: &AppState, mode: ViewMode) {
 ///
 /// Only updates in-memory settings; the debounced disk write happens once
 /// per zoom episode in `spawn_listen_sort_zoom` (see `common.rs`).
-pub fn apply_zoom_in(state: &AppState, mode: ViewMode) {
+///
+/// # Returns
+///
+/// `true` when the level actually changed, `false` at the maximum.
+#[must_use]
+pub fn apply_zoom_in(state: &AppState, mode: ViewMode) -> bool {
     match mode {
         Grid => {
-            let level = state
-                .storage
-                .get_grid_zoom_level()
-                .saturating_add(1)
-                .min(GRID_ZOOM_MAX);
+            let current = state.storage.get_grid_zoom_level();
+            let level = current.saturating_add(1).min(GRID_ZOOM_MAX);
             state.storage.set_grid_zoom_level_memory(level);
+            level != current
         }
         Column => {
-            let level = state
-                .storage
-                .get_list_zoom_level()
-                .saturating_add(1)
-                .min(LIST_ZOOM_MAX);
+            let current = state.storage.get_list_zoom_level();
+            let level = current.saturating_add(1).min(LIST_ZOOM_MAX);
             state.storage.set_list_zoom_level_memory(level);
+            level != current
         }
     }
 }
@@ -222,7 +220,12 @@ pub fn apply_zoom_in(state: &AppState, mode: ViewMode) {
 /// so each grid subscribes to its own channel and every zoom change must be
 /// fanned out to all of them — otherwise the grid not currently active would
 /// silently miss (and drop) every other notification.
+///
+/// Bumps both grids' `zoom_seq` so superseded batched resize traversals bail
+/// via their staleness predicate instead of fighting the debounced resize.
 pub fn notify_zoom_change(state: &AppState) {
+    _ = state.album_grid.zoom_seq.fetch_add(1, Relaxed);
+    _ = state.artist_grid.zoom_seq.fetch_add(1, Relaxed);
     for tx in [&state.albums_zoom_tx, &state.artists_zoom_tx] {
         if let Err(e) = tx.try_send(()) {
             warn!(error = %e, "Failed to send zoom change");
@@ -230,7 +233,13 @@ pub fn notify_zoom_change(state: &AppState) {
     }
 }
 
-/// Connect zoom button click handlers.
+/// Connect zoom button click handlers and view-mode sensitivity sync.
+///
+/// Click handlers apply the zoom for the mode active at press time, fan out
+/// only on real changes, and refresh sensitivity with local button clones.
+/// A view-mode subscription keeps the buttons in sync when the range changes
+/// under them (grid `0–4` vs list `0–2`); key-driven changes are picked up on
+/// the next popover open via the show handler in [`build_popover`].
 fn connect_zoom_handlers(state: &Arc<AppState>, zoom_out_btn: &Button, zoom_in_btn: &Button) {
     let s_zo = Arc::clone(state);
     let out_btn = zoom_out_btn.clone();
@@ -240,8 +249,9 @@ fn connect_zoom_handlers(state: &Arc<AppState>, zoom_out_btn: &Button, zoom_in_b
         .lock()
         .retain_signal(zoom_out_btn.connect_clicked(move |_| {
             let mode = s_zo.storage.get_view_mode();
-            apply_zoom_out(&s_zo, mode);
-            notify_zoom_change(&s_zo);
+            if apply_zoom_out(&s_zo, mode) {
+                notify_zoom_change(&s_zo);
+            }
             update_zoom_sensitivity(&s_zo, &out_btn, &in_btn);
         }));
 
@@ -253,9 +263,23 @@ fn connect_zoom_handlers(state: &Arc<AppState>, zoom_out_btn: &Button, zoom_in_b
         .lock()
         .retain_signal(zoom_in_btn.connect_clicked(move |_| {
             let mode = s_zin.storage.get_view_mode();
-            apply_zoom_in(&s_zin, mode);
-            notify_zoom_change(&s_zin);
+            if apply_zoom_in(&s_zin, mode) {
+                notify_zoom_change(&s_zin);
+            }
             update_zoom_sensitivity(&s_zin, &out_btn2, &in_btn2);
+        }));
+
+    let sub_state = Arc::clone(state);
+    let sub_out = zoom_out_btn.clone();
+    let sub_in = zoom_in_btn.clone();
+    state
+        .handles
+        .lock()
+        .retain_task(spawn_future_local(async move {
+            let mode_rx = sub_state.view_mode.subscribe();
+            while mode_rx.recv().await.is_ok() {
+                update_zoom_sensitivity(&sub_state, &sub_out, &sub_in);
+            }
         }));
 }
 
@@ -296,12 +320,12 @@ mod tests {
     fn apply_zoom_in_clamps_grid_at_max() -> Result<()> {
         let state = Arc::new(AppState::mock().context("failed to build mock app state")?);
         state.storage.set_grid_zoom_level_memory(GRID_ZOOM_MAX - 1);
-        apply_zoom_in(&state, Grid);
+        _ = apply_zoom_in(&state, Grid);
         ensure!(
             state.storage.get_grid_zoom_level() == GRID_ZOOM_MAX,
             "zoom in must raise the grid zoom to the maximum"
         );
-        apply_zoom_in(&state, Grid);
+        _ = apply_zoom_in(&state, Grid);
         ensure!(
             state.storage.get_grid_zoom_level() == GRID_ZOOM_MAX,
             "zoom in must clamp at the maximum grid zoom"
@@ -313,12 +337,12 @@ mod tests {
     fn apply_zoom_out_clamps_grid_at_min() -> Result<()> {
         let state = Arc::new(AppState::mock().context("failed to build mock app state")?);
         state.storage.set_grid_zoom_level_memory(1);
-        apply_zoom_out(&state, Grid);
+        _ = apply_zoom_out(&state, Grid);
         ensure!(
             state.storage.get_grid_zoom_level() == 0,
             "zoom out must lower the grid zoom to the minimum"
         );
-        apply_zoom_out(&state, Grid);
+        _ = apply_zoom_out(&state, Grid);
         ensure!(
             state.storage.get_grid_zoom_level() == 0,
             "zoom out must clamp at the minimum grid zoom"
@@ -330,12 +354,12 @@ mod tests {
     fn apply_zoom_in_clamps_list_at_max() -> Result<()> {
         let state = Arc::new(AppState::mock().context("failed to build mock app state")?);
         state.storage.set_list_zoom_level_memory(LIST_ZOOM_MAX - 1);
-        apply_zoom_in(&state, Column);
+        _ = apply_zoom_in(&state, Column);
         ensure!(
             state.storage.get_list_zoom_level() == LIST_ZOOM_MAX,
             "zoom in must raise the list zoom to the maximum"
         );
-        apply_zoom_in(&state, Column);
+        _ = apply_zoom_in(&state, Column);
         ensure!(
             state.storage.get_list_zoom_level() == LIST_ZOOM_MAX,
             "zoom in must clamp at the maximum list zoom"
@@ -347,12 +371,12 @@ mod tests {
     fn apply_zoom_out_clamps_list_at_min() -> Result<()> {
         let state = Arc::new(AppState::mock().context("failed to build mock app state")?);
         state.storage.set_list_zoom_level_memory(1);
-        apply_zoom_out(&state, Column);
+        _ = apply_zoom_out(&state, Column);
         ensure!(
             state.storage.get_list_zoom_level() == 0,
             "zoom out must lower the list zoom to the minimum"
         );
-        apply_zoom_out(&state, Column);
+        _ = apply_zoom_out(&state, Column);
         ensure!(
             state.storage.get_list_zoom_level() == 0,
             "zoom out must clamp at the minimum list zoom"

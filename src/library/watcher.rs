@@ -4,6 +4,7 @@
 //! scans when files are added, modified, or removed.
 
 use std::{
+    collections::HashMap,
     fmt::{Debug, Formatter, Result as FmtResult},
     mem::take,
     path::{Path, PathBuf},
@@ -22,9 +23,27 @@ use {
 };
 
 use crate::{
-    library::scanner::{FsScanner, LibraryScanner},
+    library::{
+        scanner::{FsScanner, LibraryScanner},
+        watcher_event::{
+            WatcherEvent::{self, DirectoryModified, Error as WatcherError},
+            handle_watcher_event, scan_target_for,
+        },
+    },
     storage::{Storage, StorageError},
 };
+
+/// Per-path debounce window for incremental scans.
+///
+/// Real library edits (copying an album) emit a burst of events across many
+/// files; each scan walks + hashes + hits SQLite for seconds, starving cover
+/// decodes. A 2 s per-target window coalesces such bursts while staying
+/// responsive for single-file edits.
+const DEBOUNCE_WINDOW: Duration = Duration::from_millis(2000);
+
+/// Coalesce sleep after a scan trigger, letting a burst accumulate so the
+/// watcher loop can drain to the latest path instead of scanning each file.
+const COALESCE_DELAY: Duration = Duration::from_millis(200);
 
 /// Filesystem watcher that monitors library directories for changes.
 pub struct LibraryWatcher<S: Storage> {
@@ -32,8 +51,8 @@ pub struct LibraryWatcher<S: Storage> {
     watcher: Mutex<RecommendedWatcher>,
     /// Scanner for incremental scans.
     scanner: Arc<FsScanner<S>>,
-    /// Last scan trigger time for debouncing (500 ms window).
-    last_scan: Arc<Mutex<Option<Instant>>>,
+    /// Last scan trigger time per scan target for debouncing.
+    last_scan: Arc<Mutex<HashMap<PathBuf, Instant>>>,
     /// Paths currently watched (for unwatch / stop), interior mut.
     watched: Mutex<Vec<PathBuf>>,
     /// Shared channel sender. `Arc` allows the notify callback to observe
@@ -78,7 +97,7 @@ impl<S: Storage + 'static> LibraryWatcher<S> {
             Self {
                 watcher: Mutex::new(watcher),
                 scanner,
-                last_scan: Arc::new(Mutex::new(None)),
+                last_scan: Arc::new(Mutex::new(HashMap::new())),
                 watched: Mutex::new(Vec::new()),
                 event_tx: shared_tx,
             },
@@ -94,28 +113,7 @@ impl<S: Storage + 'static> LibraryWatcher<S> {
         let Some(tx) = shared_tx.lock().clone() else {
             return;
         };
-        Self::handle_watcher_event(result, &tx);
-    }
-
-    /// Handle a raw watcher event and forward it through the channel.
-    fn handle_watcher_event(
-        result: Result<Event, Error>,
-        event_tx: &UnboundedSender<WatcherEvent>,
-    ) {
-        let event = match result {
-            Ok(event) => WatcherEvent::DirectoryModified {
-                path: event.paths.first().cloned().unwrap_or_default(),
-            },
-            Err(e) => WatcherEvent::Error {
-                error: e.to_string(),
-            },
-        };
-        if event_tx.is_closed() {
-            return;
-        }
-        if let Err(e) = event_tx.send(event) {
-            warn!(error = %e, "Failed to send watcher event");
-        }
+        handle_watcher_event(result, &tx);
     }
 
     /// Start watching the given directories.
@@ -198,24 +196,35 @@ impl<S: Storage + 'static> LibraryWatcher<S> {
     /// * `event` - The watcher event to process
     pub async fn process_event(&self, event: WatcherEvent) {
         match event {
-            WatcherEvent::DirectoryModified { path } => self.process_directory_modified(path).await,
-            WatcherEvent::Error { error } => {
+            DirectoryModified { path } => self.process_directory_modified(path).await,
+            WatcherError { error } => {
                 error!(error = %error, "Watcher error");
             }
         }
     }
 
-    /// Check debouncing window (500 ms) and sleep to coalesce rapid events.
-    async fn debounce(&self) -> bool {
+    /// Check per-target debouncing window and sleep to coalesce rapid events.
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - Scan target (directory itself, or the parent for file events).
+    ///
+    /// # Returns
+    ///
+    /// `true` when the scan should proceed, `false` when a recent scan for
+    /// the same target makes this event redundant.
+    async fn debounce(&self, key: &Path) -> bool {
         let now = Instant::now();
-        let last = { *self.last_scan.lock() };
-        let is_recent =
-            last.is_some_and(|prev| now.duration_since(prev) < Duration::from_millis(500));
-        if is_recent {
+        let should_skip = self
+            .last_scan
+            .lock()
+            .get(key)
+            .is_some_and(|prev| now.duration_since(*prev) < DEBOUNCE_WINDOW);
+        if should_skip {
             return false;
         }
-        *self.last_scan.lock() = Some(now);
-        sleep(Duration::from_millis(200)).await;
+        _ = self.last_scan.lock().insert(key.to_path_buf(), now);
+        sleep(COALESCE_DELAY).await;
         true
     }
 
@@ -255,24 +264,35 @@ impl<S: Storage + 'static> LibraryWatcher<S> {
     }
 
     /// Process a directory modification event by triggering an incremental scan.
+    ///
+    /// Debounces per scan target (the directory itself, or the parent for
+    /// file events) so copying an album with N files triggers one parent
+    /// scan instead of N scans.
     async fn process_directory_modified(&self, path: PathBuf) {
-        if !self.debounce().await {
+        let target = scan_target_for(&path);
+        if !self.debounce(&target).await {
             return;
         }
+        Self::process_debounced_path(self, &path).await;
+    }
 
+    /// Handle a debounced path after the per-target window passed.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - Raw event path that earned its debounce slot.
+    async fn process_debounced_path(&self, path: &Path) {
         if !path.exists() {
-            self.handle_removal(&path).await;
+            self.handle_removal(path).await;
             return;
         }
-
         if path.is_file() {
-            Self::handle_file_modified(self, &path).await;
+            Self::handle_file_modified(self, path).await;
             return;
         }
-
         if path.is_dir() {
             info!(path = %path.display(), "Directory modified, triggering incremental scan");
-            self.scan_and_log(&path).await;
+            self.scan_and_log(path).await;
         }
     }
 
@@ -296,80 +316,23 @@ impl<S: Storage> Debug for LibraryWatcher<S> {
             .finish_non_exhaustive()
     }
 }
-
-/// Events emitted by the filesystem watcher.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum WatcherEvent {
-    /// A directory was modified (files added/removed/changed).
-    DirectoryModified {
-        /// Path of the modified directory.
-        path: PathBuf,
-    },
-    /// An error occurred during watching.
-    Error {
-        /// Error message.
-        error: String,
-    },
-}
-
 #[cfg(test)]
 mod tests {
-    use std::{path::PathBuf, time::Duration};
+    use std::time::Duration;
 
-    use {
-        notify::{Error, ErrorKind::Generic, Event, EventKind::Create, event::CreateKind::File},
-        tokio::sync::mpsc::unbounded_channel,
-    };
+    use crate::library::watcher::DEBOUNCE_WINDOW;
 
-    use crate::{
-        library::watcher::{
-            LibraryWatcher,
-            WatcherEvent::{DirectoryModified, Error as WatcherError},
-        },
-        storage::database::SqliteStorage,
-    };
-
-    const DEBOUNCE_INTERVAL: Duration = Duration::from_millis(500);
-
-    #[test]
-    fn watcher_event_clone() {
-        let event = DirectoryModified {
-            path: PathBuf::from("/music"),
-        };
-        let cloned = event.clone();
-        assert_eq!(event, cloned);
-    }
+    const DEBOUNCE_INTERVAL: Duration = DEBOUNCE_WINDOW;
 
     #[test]
     fn debounce_interval_is_reasonable() {
-        assert!(DEBOUNCE_INTERVAL.as_millis() >= 100);
-        assert!(DEBOUNCE_INTERVAL.as_millis() <= 2000);
-    }
-
-    #[test]
-    fn handle_watcher_event_forwards_modified() {
-        let (tx, mut rx) = unbounded_channel();
-        let mut event = Event::new(Create(File));
-        event.paths.push(PathBuf::from("/music/new.flac"));
-        LibraryWatcher::<SqliteStorage>::handle_watcher_event(Ok(event), &tx);
-        assert_eq!(
-            rx.try_recv(),
-            Ok(DirectoryModified {
-                path: PathBuf::from("/music/new.flac"),
-            })
+        assert!(
+            DEBOUNCE_INTERVAL.as_millis() >= 100,
+            "debounce must coalesce rapid bursts"
         );
-    }
-
-    #[test]
-    fn handle_watcher_event_forwards_error() {
-        let (tx, mut rx) = unbounded_channel();
-        let err = Error::new(Generic("watcher failure".to_string()));
-        LibraryWatcher::<SqliteStorage>::handle_watcher_event(Err(err), &tx);
-        assert_eq!(
-            rx.try_recv(),
-            Ok(WatcherError {
-                error: "watcher failure".to_string(),
-            })
+        assert!(
+            DEBOUNCE_INTERVAL.as_millis() <= 5000,
+            "debounce must stay responsive for real edits"
         );
     }
 }

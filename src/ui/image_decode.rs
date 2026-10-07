@@ -9,10 +9,19 @@ use {
             MemoryTexture,
         },
         glib::Bytes,
-        gtk::gdk_pixbuf::Pixbuf,
+        gtk::gdk_pixbuf::{InterpType::Hyper, Pixbuf},
     },
     tracing::warn,
 };
+
+use crate::library::artwork::thumbnail::scaled_dimensions;
+
+/// Minimum decode size using the high-quality scaling path.
+///
+/// Player (560 px) and detail (320 px) covers decode from the full original
+/// with `Hyper` interpolation so `HiDPI` panels stay sharp. Smaller grid/list
+/// thumbnails keep the fast `from_file_at_scale` path.
+const HIGH_QUALITY_MIN_SIZE: i32 = 280;
 
 /// Decoded cover art as raw pixel data (Send-safe).
 #[derive(Debug)]
@@ -31,6 +40,10 @@ pub struct DecodedCover {
 
 /// Decode an image file at a given size into raw pixel data.
 ///
+/// Large covers (`size >= 280`) decode the full original and downscale with
+/// high-quality `Hyper` interpolation; smaller sizes keep the fast loader
+/// path to avoid slowing full-grid waves.
+///
 /// Returns `None` if the file could not be loaded or decoded.
 /// A missing file is an expected condition after an artwork cache wipe
 /// (see `check_cache_version`) and is skipped silently so a full grid of
@@ -44,11 +57,15 @@ pub fn decode_cover_raw(path: &str, size: i32) -> Option<DecodedCover> {
     if !Path::new(path).exists() {
         return None;
     }
-    let pixbuf = match Pixbuf::from_file_at_scale(path, size, size, true) {
-        Ok(p) => p,
-        Err(e) => {
-            warn!(error = %e, path, "Failed to decode cover art");
-            return None;
+    let pixbuf = if size >= HIGH_QUALITY_MIN_SIZE {
+        decode_high_quality(path, size)?
+    } else {
+        match Pixbuf::from_file_at_scale(path, size, size, true) {
+            Ok(p) => p,
+            Err(e) => {
+                warn!(error = %e, path, "Failed to decode cover art");
+                return None;
+            }
         }
     };
     let format = if pixbuf.has_alpha() { R8g8b8a8 } else { R8g8b8 };
@@ -60,6 +77,39 @@ pub fn decode_cover_raw(path: &str, size: i32) -> Option<DecodedCover> {
         format,
         data: bytes.to_vec(),
     })
+}
+
+/// Decode the full original and downscale with high-quality interpolation.
+///
+/// Preserves aspect ratio, fitting the longer edge to `size`.
+///
+/// # Arguments
+///
+/// * `path` - Image file to decode.
+/// * `size` - Target bounding size in pixels.
+///
+/// # Returns
+///
+/// The downscaled `Pixbuf`, or `None` on load/scale failure.
+fn decode_high_quality(path: &str, size: i32) -> Option<Pixbuf> {
+    let full = match Pixbuf::from_file(path) {
+        Ok(p) => p,
+        Err(e) => {
+            warn!(error = %e, path, "Failed to decode cover art");
+            return None;
+        }
+    };
+    let (target_w, target_h) = scaled_dimensions(full.width(), full.height(), size);
+    full.scale_simple(target_w, target_h, Hyper).map_or_else(
+        || {
+            warn!(
+                path,
+                size, "Failed to scale cover art with high-quality filter"
+            );
+            None
+        },
+        Some,
+    )
 }
 
 /// Convert raw decoded pixel data into a `MemoryTexture` for painting.

@@ -81,6 +81,7 @@ pub fn build_cover_column(
 
     let cache = Arc::clone(cache);
     let pending = Arc::clone(pending_widgets);
+    let bind_size = cover_size;
 
     let mut handles = UiHandles::default();
     handles.retain_signal(factory.connect_setup(move |_, item: &Object| {
@@ -111,7 +112,10 @@ pub fn build_cover_column(
 
             let album_id = data.id;
 
-            if let Some(texture) = cache.get_any(album_id) {
+            if let Some(texture) = cache
+                .get_best(album_id, bind_size)
+                .or_else(|| cache.get_any(album_id))
+            {
                 picture_ref.set_paintable(Some(&*texture));
                 return;
             }
@@ -134,9 +138,10 @@ pub fn build_cover_column(
 
 /// Apply a decoded cover to the cache and update any waiting widgets.
 ///
-/// Skips results for a list-zoom size that is no longer current — the column
-/// view is rebuilt on a zoom change and dispatches its own decode wave, so a
-/// stale result must not allocate a texture or evict a useful cache entry.
+/// The texture is always inserted, even for a superseded list-zoom size, so
+/// an `A→B→A` zoom warms the cache instead of wasting the decode. Widgets
+/// are only updated when `size` still matches the current list zoom — the
+/// column view rebuilds on zoom and the new build dispatches its own wave.
 fn apply_cover_to_widgets(
     state: &AppState,
     album_id: i64,
@@ -145,11 +150,11 @@ fn apply_cover_to_widgets(
     cover_cache: &CoverArtCache,
     pending_widgets: &Mutex<PendingCovers>,
 ) {
+    let texture = raw_to_texture(decoded);
+    cover_cache.insert(album_id, size, texture.clone());
     if size != list_cover_size(state.storage.get_list_zoom_level()) {
         return;
     }
-    let texture = raw_to_texture(decoded);
-    cover_cache.insert(album_id, size, texture.clone());
 
     let pictures = pending_widgets
         .lock()

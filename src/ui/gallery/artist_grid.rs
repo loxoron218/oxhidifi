@@ -173,12 +173,16 @@ fn rebuild_artist_current_mode(
 /// `FlowBox` could not be located (caller falls back to a full rebuild).
 fn resize_artist_grid(state: &Arc<AppState>, mode_stack: &Stack, cover_size: i32) -> bool {
     let build_seq = state.artist_grid.build_seq.load(Relaxed);
+    let zoom_seq = state.artist_grid.zoom_seq.load(Relaxed);
     let stale_state = Arc::clone(state);
     resize_grid_batched(
         state,
         mode_stack,
         cover_size,
-        move || stale_state.artist_grid.build_seq.load(Relaxed) != build_seq,
+        move || {
+            stale_state.artist_grid.build_seq.load(Relaxed) != build_seq
+                || stale_state.artist_grid.zoom_seq.load(Relaxed) != zoom_seq
+        },
         |_, _, _| {},
         |_, _| {},
     )

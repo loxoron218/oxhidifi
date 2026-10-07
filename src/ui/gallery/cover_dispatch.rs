@@ -3,7 +3,7 @@
 //! Dispatches missing cover sizes to the decoder pool and applies results to
 //! card overlays, skipping sizes that became stale while decoding.
 
-use std::sync::Arc;
+use std::{collections::HashMap, hash::BuildHasher, path::Path, sync::Arc};
 
 use {
     async_channel::{Sender, unbounded},
@@ -19,6 +19,7 @@ use {
 use crate::{
     app::runtime::AppState,
     ui::{
+        gallery::card::build_placeholder,
         image_decode::{DecodedCover, raw_to_texture},
         texture_pool::{CoverArtCache, dispatch::ArtworkDecodeRequest},
     },
@@ -122,12 +123,13 @@ pub fn load_cover_art_async(
         }));
 }
 
-/// Insert a decoded cover into the cache and apply it, skipping sizes that
-/// became stale before the texture was allocated.
+/// Insert a decoded cover into the cache and apply it when still current.
 ///
-/// Staleness is read from the card itself: a zoom or narrow-window fit resize
-/// since dispatch changed the overlay's minimum width, so a size mismatch
-/// means a newer size (with its own decode wave) owns the card.
+/// The texture is always inserted, even when the overlay already resized to
+/// a newer zoom size: a superseded `A→B→A` wave still warms the cache so the
+/// return to `A` hits instead of re-decoding. Application to the widget is
+/// skipped when stale (the card's `width_request` moved on and its own wave
+/// owns it).
 fn apply_decoded_cover_if_current(
     cache: &CoverArtCache,
     overlays: &[Overlay],
@@ -136,14 +138,14 @@ fn apply_decoded_cover_if_current(
     decoded: &DecodedCover,
     size: i32,
 ) {
+    let texture = raw_to_texture(decoded);
+    cache.insert(album_id, size, texture.clone());
     let Some(overlay) = overlays.get(index) else {
         return;
     };
     if overlay.width_request() != size {
         return;
     }
-    let texture = raw_to_texture(decoded);
-    cache.insert(album_id, size, texture.clone());
     apply_decoded_cover(overlays, index, &texture, size);
 }
 
@@ -155,6 +157,80 @@ fn apply_decoded_cover(overlays: &[Overlay], index: usize, texture: &MemoryTextu
     {
         apply_texture(overlay, texture, size);
     }
+}
+
+/// Resolve a single card's cover from the grid's cover snapshot, if it has
+/// one. Applied during a batched zoom resize after the card's geometry pass.
+pub fn resolve_cover_at(
+    idx_to_album: &HashMap<usize, i64, impl BuildHasher>,
+    cover_cache: &CoverArtCache,
+    idx: usize,
+    overlay: &Overlay,
+    size: i32,
+) {
+    if let Some(&album_id) = idx_to_album.get(&idx) {
+        resolve_cover_widget(cover_cache, overlay, album_id, size);
+    }
+}
+
+/// Resolve a single card's cover widget to `size` without ever inflating layout.
+///
+/// Applies the exact cached texture when present, otherwise the largest
+/// cached size at or below `size` (upscales inside the fixed requests
+/// without changing layout). A larger cached texture is never applied as an
+/// interim: its paintable intrinsic size would inflate the card's natural
+/// width past the cover, showing an oversized card until the exact size
+/// decodes. When no fitting texture exists, an oversized `Picture` is swapped
+/// back to a fixed-size placeholder while an existing placeholder (already
+/// resized by the geometry pass) is left untouched.
+/// Does not dispatch new decode requests; the debounced resize dispatches
+/// the decode wave after the traversal completes.
+pub fn resolve_cover_widget(cache: &CoverArtCache, overlay: &Overlay, album_id: i64, size: i32) {
+    if let Some(texture) = cache.get(album_id, size) {
+        apply_texture(overlay, &texture, size);
+        return;
+    }
+    if let Some(texture) = cache.get_fitting(album_id, size) {
+        apply_texture(overlay, &texture, size);
+        return;
+    }
+    if overlay
+        .child()
+        .is_some_and(|child| child.downcast_ref::<Picture>().is_some())
+    {
+        overlay.set_child(Some(&build_placeholder(size)));
+    }
+}
+
+/// Report whether every album cover is decoded at `size`.
+///
+/// Geometry alone cannot tell a completed zoom from a half-done one: the
+/// preview flips all overlays to `size` without dispatching decodes, so a
+/// geometry-only check would skip the debounced resize that owns the decode
+/// wave. Cards left on a larger interim texture keep a paintable whose
+/// intrinsic size exceeds `size`, inflating the card's natural width past the
+/// cover (grey margin on the right). Both geometry and covers must be ready
+/// to skip the resize.
+///
+/// Entries whose files no longer exist are ignored: their decodes are
+/// dropped silently and would otherwise block the fast path forever.
+///
+/// # Arguments
+///
+/// * `state` - Application state (cover snapshot + decode cache).
+/// * `size` - Cover size the debounced resize would dispatch.
+///
+/// # Returns
+///
+/// `true` when every album with artwork either has `size` cached or its file
+/// is gone.
+#[must_use]
+pub fn album_covers_ready(state: &AppState, size: i32) -> bool {
+    let covers = Arc::clone(&*state.album_grid_covers.lock());
+    let cache = Arc::clone(&state.cover_art_cache);
+    covers.iter().all(|(album_id, _, path)| {
+        cache.get(*album_id, size).is_some() || !Path::new(path).exists()
+    })
 }
 
 #[cfg(test)]

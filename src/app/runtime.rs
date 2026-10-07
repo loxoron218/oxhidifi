@@ -287,6 +287,11 @@ pub struct GridState<T, C = ()> {
     /// the value at schedule time and bail if a newer build started, so a
     /// superseded build can't write stale state.
     pub build_seq: AtomicU64,
+    /// Incremented on every zoom change. Batched resize traversals capture
+    /// the value at schedule time and bail if a newer zoom arrived, so a
+    /// superseded preview can't fight the debounced resize for the same
+    /// `FlowBox`.
+    pub zoom_seq: AtomicU64,
     /// Incremented whenever the library is refreshed. Build futures capture
     /// the value before their DB awaits and bail afterwards if it changed,
     /// so a stale in-flight build can't add a duplicate mode child or commit
@@ -305,6 +310,7 @@ impl<T, C> Default for GridState<T, C> {
             dirty: AtomicBool::new(false),
             ready: AtomicBool::new(false),
             build_seq: AtomicU64::new(0),
+            zoom_seq: AtomicU64::new(0),
             generation: AtomicU64::new(0),
             memo: Mutex::new(None),
         }

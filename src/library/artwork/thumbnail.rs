@@ -6,16 +6,42 @@
 use std::path::Path;
 
 use {
-    libadwaita::gtk::gdk_pixbuf::{InterpType::Bilinear, PixbufLoader, prelude::PixbufLoaderExt},
+    libadwaita::gtk::gdk_pixbuf::{InterpType::Hyper, PixbufLoader, prelude::PixbufLoaderExt},
     tracing::warn,
 };
 
-/// Thumbnail sizes generated for grid/column views (px).
+/// Thumbnail sizes generated for grid/column views, player, and detail (px).
 ///
-/// Covers the default grid (180 px) and list (48 px) sizes plus the extremes so
-/// every zoom level has a close thumbnail on disk. The full-size original is
-/// always cached alongside these.
-const THUMBNAIL_SIZES: &[i32] = &[32, 48, 64, 120, 150, 180, 210, 240];
+/// Covers every list/grid zoom level plus the player (280 px logical,
+/// 560 px `HiDPI`) and detail (320 px) surfaces so large panels never upscale
+/// a small thumbnail. The full-size original is always cached alongside these.
+const THUMBNAIL_SIZES: &[i32] = &[32, 48, 64, 120, 150, 180, 210, 240, 280, 320, 560];
+
+/// Compute scaled dimensions preserving aspect ratio, fitting within `size`.
+///
+/// The longer edge is scaled to `size`; the shorter edge is scaled
+/// proportionally. Both dimensions are at least 1. Shared with high-quality
+/// cover decoding so both paths agree on the target size for a given
+/// original.
+#[must_use]
+pub fn scaled_dimensions(orig_w: i32, orig_h: i32, size: i32) -> (i32, i32) {
+    if orig_w <= 0 || orig_h <= 0 || size <= 0 {
+        return (1, 1);
+    }
+    if orig_w >= orig_h {
+        let denom = i64::from(orig_w).max(1);
+        let numer = i64::from(orig_h).saturating_mul(i64::from(size));
+        let raw = numer.checked_div(denom).unwrap_or(1);
+        let h = raw.max(1).min(i64::from(size));
+        (size, i32::try_from(h).unwrap_or(size))
+    } else {
+        let denom = i64::from(orig_h).max(1);
+        let numer = i64::from(orig_w).saturating_mul(i64::from(size));
+        let raw = numer.checked_div(denom).unwrap_or(1);
+        let w = raw.max(1).min(i64::from(size));
+        (i32::try_from(w).unwrap_or(size), size)
+    }
+}
 
 /// Generate downscaled thumbnails for grid/column views.
 ///
@@ -45,7 +71,7 @@ pub fn generate_thumbnails(cache_dir: &Path, key: &str, data: &[u8], ext: &str) 
     }
     for &size in THUMBNAIL_SIZES {
         let (thumb_w, thumb_h) = scaled_dimensions(orig_w, orig_h, size);
-        let Some(scaled) = pixbuf.scale_simple(thumb_w, thumb_h, Bilinear) else {
+        let Some(scaled) = pixbuf.scale_simple(thumb_w, thumb_h, Hyper) else {
             warn!(key, size, "Failed to scale artwork thumbnail");
             continue;
         };
@@ -61,22 +87,26 @@ pub fn generate_thumbnails(cache_dir: &Path, key: &str, data: &[u8], ext: &str) 
     }
 }
 
-/// Compute scaled dimensions preserving aspect ratio, fitting within `size`.
-///
-/// The longer edge is scaled to `size`; the shorter edge is scaled
-/// proportionally. Both dimensions are at least 1.
-fn scaled_dimensions(orig_w: i32, orig_h: i32, size: i32) -> (i32, i32) {
-    if orig_w >= orig_h {
-        let denom = i64::from(orig_w).max(1);
-        let numer = i64::from(orig_h).saturating_mul(i64::from(size));
-        let raw = numer.checked_div(denom).unwrap_or(1);
-        let h = raw.max(1).min(i64::from(size));
-        (size, i32::try_from(h).unwrap_or(size))
-    } else {
-        let denom = i64::from(orig_h).max(1);
-        let numer = i64::from(orig_w).saturating_mul(i64::from(size));
-        let raw = numer.checked_div(denom).unwrap_or(1);
-        let w = raw.max(1).min(i64::from(size));
-        (i32::try_from(w).unwrap_or(size), size)
+#[cfg(test)]
+mod tests {
+    use anyhow::{Result, ensure};
+
+    use crate::library::artwork::thumbnail::scaled_dimensions;
+
+    #[test]
+    fn scaled_dimensions_fit_longer_edge() -> Result<()> {
+        for ((w, h, size), expected) in [
+            ((400, 200, 100), (100, 50)),
+            ((200, 400, 100), (50, 100)),
+            ((300, 300, 150), (150, 150)),
+            ((0, 200, 100), (1, 1)),
+            ((200, 200, 0), (1, 1)),
+        ] {
+            ensure!(
+                scaled_dimensions(w, h, size) == expected,
+                "artwork scaling must fit the longer edge"
+            );
+        }
+        Ok(())
     }
 }

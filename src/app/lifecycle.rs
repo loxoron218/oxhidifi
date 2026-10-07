@@ -26,11 +26,9 @@ use {
 
 use crate::{
     app::{
-        bootstrap::{
-            emit_session_events, persist_session_on_shutdown, run_startup_checks,
-            spawn_watcher_loop,
-        },
+        bootstrap::{emit_session_events, persist_session_on_shutdown, run_startup_checks},
         runtime::{AppState, build_app_channels, build_broadcast_channels},
+        watch_loop::spawn_watcher_loop,
         xdg_paths::data_dir,
     },
     library::{scanner::FsScanner, watcher::LibraryWatcher},
@@ -127,11 +125,11 @@ fn run_gtk_application(state: &Arc<AppState>) -> ExitCode {
         .lock()
         .retain_signal(app.connect_activate(move |app| {
             build_window(app, &startup_state).present();
-            let repair_storage = Arc::clone(&startup_state.storage);
+            let repair_state = Arc::clone(&startup_state);
             startup_state
                 .handles
                 .lock()
-                .retain_task(spawn_future_local(run_startup_checks(repair_storage)));
+                .retain_task(spawn_future_local(run_startup_checks(repair_state)));
 
             let quit_app = app.clone();
             let quit_rx = quit_rx.clone();

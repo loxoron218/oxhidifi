@@ -33,12 +33,24 @@ use crate::{
     },
 };
 
-/// Minimum texture dimension (width or height) required to use a cached
-/// cover in the player panel (displayed at 280×280).
+/// Logical display size of the player cover in pixels.
 ///
-/// Textures decoded at 36 px by the column view are rejected, forcing a
+/// The `Picture` widget requests this size; the decoded texture is larger
+/// (see [`PLAYER_COVER_SIZE`]) so `HiDPI` displays stay sharp.
+pub const PLAYER_COVER_LOGICAL_SIZE: i32 = 280;
+
+/// Decoded size for the player cover in pixels.
+///
+/// Twice the logical size so a 2x scale factor still renders 1:1 source
+/// pixels instead of upscaling a 280 px texture.
+pub const PLAYER_COVER_SIZE: i32 = 560;
+
+/// Minimum texture dimension (width or height) required to use a cached
+/// cover in the player panel (displayed at 280×280 logical px).
+///
+/// Textures decoded for the column/grid views are rejected, forcing a
 /// proper-sized decode via the async metadata path.
-pub const COVER_MIN_SIZE: i32 = 180;
+pub const COVER_MIN_SIZE: i32 = PLAYER_COVER_LOGICAL_SIZE;
 
 /// Tuple of resolved metadata: `(title, artist, album, artwork_path, format_info, album_id)`.
 pub type MetaResult = (String, String, String, Option<String>, String, i64);
@@ -146,8 +158,8 @@ fn build_artwork_placeholder() -> Picture {
         .content_fit(Cover)
         .can_shrink(true)
         .halign(Center)
-        .width_request(280)
-        .height_request(280)
+        .width_request(PLAYER_COVER_LOGICAL_SIZE)
+        .height_request(PLAYER_COVER_LOGICAL_SIZE)
         .css_classes(["album-cover"])
         .build();
     artwork.update_property(&[PropertyLabel("Album artwork")]);
@@ -209,8 +221,8 @@ mod tests {
     use crate::{
         app::{mocks::pump_in_test_runtime, runtime::AppState},
         ui::player::sidebar::{
-            COVER_MIN_SIZE, MetaResult, PlaybackWidgets, TrackLabels, build_player_content,
-            format_time,
+            COVER_MIN_SIZE, MetaResult, PLAYER_COVER_LOGICAL_SIZE, PLAYER_COVER_SIZE,
+            PlaybackWidgets, TrackLabels, build_player_content, format_time,
         },
     };
 
@@ -232,8 +244,12 @@ mod tests {
     #[test]
     fn cover_min_size_is_documented_floor() {
         assert_eq!(
-            COVER_MIN_SIZE, 180,
-            "cover size floor must stay 180 px per the documented threshold"
+            COVER_MIN_SIZE, PLAYER_COVER_LOGICAL_SIZE,
+            "cover size floor must match the player logical size to avoid upscaling thumbnails"
+        );
+        assert_eq!(
+            PLAYER_COVER_SIZE, 560,
+            "player decode size must stay 2x logical for HiDPI sharpness"
         );
     }
 
