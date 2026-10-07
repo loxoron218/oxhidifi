@@ -7,7 +7,7 @@ use libadwaita::{
     ViewStack, ViewSwitcher, ViewSwitcherBar,
     ViewSwitcherPolicy::Wide,
     WindowTitle,
-    glib::spawn_future_local,
+    glib::{object::ObjectExt, spawn_future_local},
     gtk::{Button, Stack, ToggleButton, Window, accessible::Property::Label},
     prelude::{AccessibleExtManual, WidgetExt},
 };
@@ -47,9 +47,20 @@ pub struct SwitcherGroup {
 
 /// Build the sidebar panel with player content.
 ///
-/// Returns the `ToolbarView` and a close button that is shown in
-/// collapsed mode (see `build_window`).
-fn build_sidebar(state: &Arc<AppState>, back_button: &ToggleButton) -> (ToolbarView, Button) {
+/// # Arguments
+///
+/// * `state` - Application state owning storage and signal handles.
+/// * `back_button` - Sidebar toggle button for the player panel.
+///
+/// # Returns
+///
+/// * `(ToolbarView, Button, HeaderBar)` - Sidebar toolbar, close button shown in collapsed mode
+///   (see `build_window`), and sidebar header owning both buttons for collapsed-driven
+///   repositioning.
+fn build_sidebar(
+    state: &Arc<AppState>,
+    back_button: &ToggleButton,
+) -> (ToolbarView, Button, HeaderBar) {
     let sidebar_toolbar = ToolbarView::new();
 
     let close_button = Button::builder()
@@ -70,7 +81,28 @@ fn build_sidebar(state: &Arc<AppState>, back_button: &ToggleButton) -> (ToolbarV
     let player_content = build_player_content(state);
     sidebar_toolbar.set_content(Some(&player_content));
 
-    (sidebar_toolbar, close_button)
+    (sidebar_toolbar, close_button, sidebar_header)
+}
+
+/// Position the sidebar toggle based on close-button visibility.
+///
+/// Places the "Hide player panel" toggle at the far left (`pack_start`)
+/// when the close button is visible (collapsed overlay mode) so the right
+/// edge stays uncluttered, and back at the right (`pack_end`, left of the
+/// close button) otherwise.
+///
+/// # Arguments
+///
+/// * `header` - Sidebar header bar owning both buttons.
+/// * `back_button` - Sidebar toggle button to reposition.
+/// * `close_visible` - Whether the close button is visible.
+fn place_sidebar_toggle(header: &HeaderBar, back_button: &ToggleButton, close_visible: bool) {
+    header.remove(back_button);
+    if close_visible {
+        header.pack_start(back_button);
+    } else {
+        header.pack_end(back_button);
+    }
 }
 
 /// Build the library `ViewStack` with album, artist, and signal pages.
@@ -266,7 +298,7 @@ pub fn build_content(
     back_button.update_property(&[Label("Hide player panel")]);
     back_button.set_visible(sidebar_visible);
 
-    let (sidebar_toolbar, close_button) = build_sidebar(state, &back_button);
+    let (sidebar_toolbar, close_button, sidebar_header) = build_sidebar(state, &back_button);
 
     let toggle_button = ToggleButton::builder()
         .icon_name("view-dual-symbolic")
@@ -293,6 +325,20 @@ pub fn build_content(
         .tooltip_text("Player panel — toggle with button in header")
         .build();
     split_view.update_property(&[Label("Main player panel with sidebar and content area")]);
+
+    {
+        let header = sidebar_header.clone();
+        let back = back_button.clone();
+        state
+            .handles
+            .lock()
+            .retain_signal(
+                split_view.connect_notify_local(Some("collapsed"), move |sv, _| {
+                    place_sidebar_toggle(&header, &back, sv.is_collapsed());
+                }),
+            );
+        place_sidebar_toggle(&sidebar_header, &back_button, split_view.is_collapsed());
+    }
 
     wire_sidebar_toggles(
         state,
