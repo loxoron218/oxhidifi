@@ -6,10 +6,13 @@ use std::{
     sync::{Arc, atomic::Ordering::Relaxed},
 };
 
-use libadwaita::{
-    glib::ControlFlow::{self, Break, Continue},
-    gtk::{FlowBox, Overlay, Stack, Widget},
-    prelude::Cast,
+use {
+    libadwaita::{
+        glib::ControlFlow::{self, Break, Continue},
+        gtk::{FlowBox, Overlay, Stack, Widget},
+        prelude::Cast,
+    },
+    tracing::warn,
 };
 
 use crate::{
@@ -115,11 +118,8 @@ pub fn fill_album_grid(
 
 /// Snapshot the album grid's cover state for an in-place zoom resize.
 ///
-/// Reads the build sequence, the cover data (`album ID`, `overlay index`,
-/// `artwork path`) to derive the reverse map (overlay index → album ID), the
-/// shared cover cache, and the app state into a single snapshot. Shared by
-/// the preview and full resize paths so both resize the same live grid
-/// without re-reading shared state.
+/// Captures build/zoom sequences, the overlay→album map, cover cache, and
+/// state so preview and full resizes share one view of the live grid.
 fn album_resize_snapshot(state: &Arc<AppState>) -> AlbumResizeSnapshot {
     let build_seq = state.album_grid.build_seq.load(Relaxed);
     let zoom_seq = state.album_grid.zoom_seq.load(Relaxed);
@@ -137,9 +137,8 @@ fn album_resize_snapshot(state: &Arc<AppState>) -> AlbumResizeSnapshot {
 
 /// Build the per-card cover-resolve closure for a batched zoom resize.
 ///
-/// Clones the reverse map and cover cache into a `'static` closure that
-/// resolves each card's cover to the new size or a cached texture — without
-/// dispatching new decode requests.
+/// Resolves each card's cover to the new size from cache without dispatching
+/// new decode requests; cards with an unexpected tree are logged and skipped.
 fn album_cover_resolver(
     idx_to_album: &Arc<HashMap<usize, i64>>,
     cover_cache: &Arc<CoverArtCache>,
@@ -147,28 +146,26 @@ fn album_cover_resolver(
     let idx_to_album = Arc::clone(idx_to_album);
     let cover_cache = Arc::clone(cover_cache);
     move |idx: usize, overlay: &Overlay, size: i32| {
-        resize_album_card(overlay, size);
+        if let Err(e) = resize_album_card(overlay, size) {
+            warn!(error = %e, idx, size, "Skipping album card resize");
+        }
         resolve_cover_at(&idx_to_album, &cover_cache, idx, overlay, size);
     }
 }
 
 /// Resize the live album grid's cards and resolve their cover widgets.
 ///
-/// Schedules a batched in-place resize (see [`resize_grid_batched`]) that
-/// resizes every card's cover to `cover_size` and resolves each
-/// to its cached texture or a placeholder — without dispatching new decode
-/// requests. Shared by the zoom preview (instant feedback without per-click
-/// decode waves) and [`resize_album_grid`] (which adds the debounced decode
-/// dispatch after the traversal completes).
+/// Batched in-place resize without new decode requests, shared by the zoom
+/// preview and [`resize_album_grid`] (which adds debounced decode dispatch).
 ///
 /// # Arguments
 ///
-/// * `cover_size` - Cover size to resize to (already resolved for narrow windows by the caller).
+/// * `cover_size` - Cover size to resize to (narrow-resolved by the caller).
 ///
 /// # Returns
 ///
-/// `true` when the grid was located and a batch scheduled, `false` when the
-/// `FlowBox` could not be located (caller falls back to a full rebuild).
+/// `true` when a batch was scheduled, `false` when the grid is absent and
+/// the caller must rebuild instead.
 pub fn apply_album_resize(state: &Arc<AppState>, mode_stack: &Stack, cover_size: i32) -> bool {
     let snapshot = album_resize_snapshot(state);
     let resolve_cards = album_cover_resolver(&snapshot.idx_to_album, &snapshot.cover_cache);
@@ -185,19 +182,17 @@ pub fn apply_album_resize(state: &Arc<AppState>, mode_stack: &Stack, cover_size:
 
 /// Resize the live album grid's cards and dispatch cover decoding.
 ///
-/// Schedules a batched in-place resize (see [`resize_grid_batched`]) and,
-/// once the traversal completes, dispatches cover decoding for the new size
-/// for any art not yet cached. The cover metadata (album ID → artwork path,
-/// in card order) is read from state.
+/// Batched in-place resize that dispatches decoding for uncached art once
+/// the traversal completes.
 ///
 /// # Arguments
 ///
-/// * `cover_size` - Cover size to resize to (already resolved for narrow windows by the caller).
+/// * `cover_size` - Cover size to resize to (narrow-resolved by the caller).
 ///
 /// # Returns
 ///
-/// `true` when the grid was located and a batch scheduled, `false` when the
-/// `FlowBox` could not be located (caller falls back to a full rebuild).
+/// `true` when a batch was scheduled, `false` when the grid is absent and
+/// the caller must rebuild instead.
 pub fn resize_album_grid(state: &Arc<AppState>, mode_stack: &Stack, cover_size: i32) -> bool {
     let snapshot = album_resize_snapshot(state);
     let resolve_cards = album_cover_resolver(&snapshot.idx_to_album, &snapshot.cover_cache);
@@ -247,6 +242,7 @@ mod tests {
             prelude::{Cast, WidgetExt},
         },
         tempfile::NamedTempFile,
+        tracing::warn,
     };
 
     use crate::{
@@ -358,7 +354,9 @@ mod tests {
             from_size,
         );
         resize_overlay_cover(&overlay, to_size);
-        resize_album_card(&overlay, to_size);
+        if let Err(e) = resize_album_card(&overlay, to_size) {
+            warn!(error = %e, to_size, "Test card resize hit an unexpected tree");
+        }
         resolve_cover_widget(&state.cover_art_cache, &overlay, 7, to_size);
         let shows_art = overlay
             .child()

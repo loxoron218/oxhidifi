@@ -54,9 +54,7 @@ pub struct SwitcherGroup {
 ///
 /// # Returns
 ///
-/// * `(ToolbarView, Button, HeaderBar)` - Sidebar toolbar, close button shown in collapsed mode
-///   (see `build_window`), and sidebar header owning both buttons for collapsed-driven
-///   repositioning.
+/// Sidebar toolbar, collapsed-mode close button, and owning header.
 fn build_sidebar(
     state: &Arc<AppState>,
     back_button: &ToggleButton,
@@ -86,10 +84,8 @@ fn build_sidebar(
 
 /// Position the sidebar toggle based on close-button visibility.
 ///
-/// Places the "Hide player panel" toggle at the far left (`pack_start`)
-/// when the close button is visible (collapsed overlay mode) so the right
-/// edge stays uncluttered, and back at the right (`pack_end`, left of the
-/// close button) otherwise.
+/// Packs at the far left when the close button is visible (collapsed
+/// overlay mode), otherwise back at the right.
 ///
 /// # Arguments
 ///
@@ -113,21 +109,19 @@ fn build_library_stack(
     let stack = ViewStack::new();
     stack.set_vexpand(true);
     let album_grid = build_album_grid(state, narrow_state);
-    let ac = stack.add_titled_with_icon(
+    drop(stack.add_titled_with_icon(
         &album_grid.mode_stack,
         Some("albums"),
         "Albums",
         "view-grid-symbolic",
-    );
-    ac.set_icon_name(Some("view-grid-symbolic"));
+    ));
     let artist_grid = build_artist_grid(state, narrow_state);
-    let ar = stack.add_titled_with_icon(
+    drop(stack.add_titled_with_icon(
         &artist_grid.mode_stack,
         Some("artists"),
         "Artists",
         "avatar-default-symbolic",
-    );
-    ar.set_icon_name(Some("avatar-default-symbolic"));
+    ));
     let signal_tab = build_signal_page();
     drop(stack.add_titled_with_icon(
         signal_tab.widget(),
@@ -140,8 +134,12 @@ fn build_library_stack(
         Signal => stack.set_visible_child_name("signal"),
         Albums => {}
     }
-    let modes = (album_grid.mode_stack, artist_grid.mode_stack, signal_tab);
-    (stack, modes.0, modes.1, modes.2)
+    (
+        stack,
+        album_grid.mode_stack,
+        artist_grid.mode_stack,
+        signal_tab,
+    )
 }
 
 /// Wire tab and view-mode signals for the library stack.
@@ -183,12 +181,8 @@ fn wire_library_signals(
 
 /// Fan out narrow-window changes as zoom notifications.
 ///
-/// Both library grids resolve their cover size from the stored zoom level plus
-/// the narrow flag, so a breakpoint crossing must re-run the same preview +
-/// debounced in-place resize path as a zoom click. Reusing the zoom channels
-/// keeps narrow handling inside the existing coalescing loop instead of a
-/// second resize machinery: ready grids shrink/restore in place, unready ones
-/// rebuild from cache once their tab is shown.
+/// Reuses the zoom channels so ready grids resize in place and unready ones
+/// rebuild from cache once shown.
 fn wire_narrow_fit(state: &Arc<AppState>, narrow_state: &Arc<NarrowState>) {
     let rx = narrow_state.subscribe();
     let fit_state = Arc::clone(state);
@@ -257,18 +251,17 @@ fn build_content_pane(
 
 /// Build split-view content with sidebar and content panes.
 ///
-/// Returns `(ToastOverlay, OverlaySplitView, toggle_button, back_button,
-/// close_button, switchers, nav_view)` for `build_window`. The `nav_view`
-/// is returned so window-level key controllers can ignore `Ctrl+`/`Ctrl-`
-/// zoom while a detail page is pushed.
+/// Returns the toast overlay, split view, toggle buttons, close button,
+/// switchers, and nav view for `build_window` (the nav view lets key
+/// controllers ignore zoom while a detail page is pushed).
 ///
 /// # Arguments
 ///
 /// * `state` - Application state owning storage and signal handles.
 /// * `narrow_state` - Shared narrow-mode flag for adaptive wiring.
 /// * `parent` - Parent window for dialogs spawned from the content pane.
-/// * `sidebar_intent` - Shared last sidebar intent, seeded from persisted settings by the caller
-///   and updated by toggles and playback events.
+/// * `sidebar_intent` - Last sidebar intent, seeded from settings and updated by toggles and
+///   playback events.
 pub fn build_content(
     state: &Arc<AppState>,
     narrow_state: &Arc<NarrowState>,
@@ -374,48 +367,15 @@ pub fn build_content(
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Arc, atomic::AtomicBool};
-
     use {
         anyhow::{Result, ensure},
         libadwaita::{
-            HeaderBar, NavigationView, OverlaySplitView, ToastOverlay, ViewStack, ViewSwitcher,
-            ViewSwitcherBar,
-            gtk::{self, Button, ToggleButton, Window, test},
+            HeaderBar, ViewStack, ViewSwitcher, ViewSwitcherBar,
+            gtk::{self, test},
         },
     };
 
-    use crate::{
-        app::runtime::AppState,
-        ui::{
-            gallery::narrow_flag::NarrowState,
-            panes::{SwitcherGroup, build_content},
-        },
-    };
-
-    #[test]
-    fn build_content_signature_shape() {
-        fn assert_shape<
-            F: Fn(
-                &Arc<AppState>,
-                &Arc<NarrowState>,
-                &Window,
-                &Arc<AtomicBool>,
-            ) -> (
-                ToastOverlay,
-                OverlaySplitView,
-                ToggleButton,
-                ToggleButton,
-                Button,
-                SwitcherGroup,
-                NavigationView,
-            ),
-        >(
-            _: F,
-        ) {
-        }
-        assert_shape(build_content);
-    }
+    use crate::ui::panes::SwitcherGroup;
 
     #[test]
     fn switcher_group_fields_are_accessible() -> Result<()> {

@@ -77,7 +77,9 @@ pub fn persist_active_tab(
 /// `true` when the visible page is tagged `detail`, `false` otherwise.
 #[must_use]
 pub fn is_detail_visible(nav_view: &NavigationView) -> bool {
-    nav_view.visible_page_tag().is_some_and(|tag| tag == "detail")
+    nav_view
+        .visible_page_tag()
+        .is_some_and(|tag| tag == "detail")
 }
 
 /// Build the `library` navigation page hosting the library view stack.

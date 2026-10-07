@@ -323,14 +323,48 @@ fn listen_for_toasts(state: &Arc<AppState>, toast_overlay: &ToastOverlay) {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use std::sync::{Arc, atomic::AtomicBool};
 
     use {
         anyhow::{Result, ensure},
-        libadwaita::{Application, ApplicationWindow},
+        libadwaita::{
+            Application, ApplicationWindow, NavigationView, OverlaySplitView, ToastOverlay,
+            gtk::{Button, ToggleButton, Window},
+        },
     };
 
-    use crate::{app::runtime::AppState, ui::window::build_window};
+    use crate::{
+        app::runtime::AppState,
+        ui::{
+            gallery::narrow_flag::NarrowState,
+            panes::{SwitcherGroup, build_content},
+            window::build_window,
+        },
+    };
+
+    #[test]
+    fn build_content_signature_shape() {
+        fn assert_shape<
+            F: Fn(
+                &Arc<AppState>,
+                &Arc<NarrowState>,
+                &Window,
+                &Arc<AtomicBool>,
+            ) -> (
+                ToastOverlay,
+                OverlaySplitView,
+                ToggleButton,
+                ToggleButton,
+                Button,
+                SwitcherGroup,
+                NavigationView,
+            ),
+        >(
+            _: F,
+        ) {
+        }
+        assert_shape(build_content);
+    }
 
     #[test]
     fn window_builds_with_state() -> Result<()> {

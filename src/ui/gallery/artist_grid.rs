@@ -7,7 +7,7 @@
 
 use std::sync::{Arc, atomic::Ordering::Relaxed};
 
-use libadwaita::gtk::Stack;
+use {libadwaita::gtk::Stack, tracing::warn};
 
 use crate::{
     app::runtime::AppState,
@@ -184,7 +184,11 @@ fn resize_artist_grid(state: &Arc<AppState>, mode_stack: &Stack, cover_size: i32
             stale_state.artist_grid.build_seq.load(Relaxed) != build_seq
                 || stale_state.artist_grid.zoom_seq.load(Relaxed) != zoom_seq
         },
-        |_, overlay, size| resize_artist_card(overlay, size),
+        |_, overlay, size| {
+            if let Err(e) = resize_artist_card(overlay, size) {
+                warn!(error = %e, size, "Skipping artist card resize");
+            }
+        },
         |_, _| {},
     )
 }

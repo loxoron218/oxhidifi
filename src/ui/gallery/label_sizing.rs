@@ -3,10 +3,36 @@
 //! Provides character-limit helpers and card resize logic
 //! used to scale album and artist card layouts with cover size.
 
-use libadwaita::{
-    gtk::{Box as GtkBox, Label, Overlay, Widget},
-    prelude::{Cast, WidgetExt},
+use {
+    libadwaita::{
+        gtk::{Box as GtkBox, Label, Overlay, Widget},
+        prelude::{Cast, WidgetExt},
+    },
+    thiserror::Error,
 };
+
+/// Errors from album and artist card widget-tree lookups.
+#[derive(Debug, Clone, Copy, Error)]
+pub enum LabelSizingError {
+    /// Overlay has no parent card container.
+    #[error("card widget tree mismatch at {context}: missing parent container")]
+    MissingParent {
+        /// Lookup site (e.g. `"album card"`) for log context.
+        context: &'static str,
+    },
+    /// Expected sibling widget is absent.
+    #[error("card widget tree mismatch at {context}: missing sibling widget")]
+    MissingSibling {
+        /// Lookup site (e.g. `"album title"`) for log context.
+        context: &'static str,
+    },
+    /// Widget exists but has an unexpected type.
+    #[error("card widget tree mismatch at {context}: unexpected widget type")]
+    UnexpectedType {
+        /// Lookup site (e.g. `"album title"`) for log context.
+        context: &'static str,
+    },
+}
 
 /// Calculate the title label's character limit for a cover size.
 #[must_use]
@@ -28,71 +54,102 @@ pub fn format_max_chars(size: i32) -> i32 {
 
 /// Return the card containing `overlay`.
 ///
-/// Looks up the overlay's parent and downcasts it to the card `Box`.
-/// Returns `None` for an unexpected widget tree.
-fn card_container(overlay: &Overlay) -> Option<GtkBox> {
-    overlay.parent()?.downcast().ok()
+/// # Arguments
+///
+/// * `overlay` - Cover/avatar overlay whose parent card is needed.
+/// * `context` - Lookup site for error context.
+fn card_container(overlay: &Overlay, context: &'static str) -> Result<GtkBox, LabelSizingError> {
+    let parent = overlay
+        .parent()
+        .ok_or(LabelSizingError::MissingParent { context })?;
+    let Ok(card) = parent.downcast::<GtkBox>() else {
+        return Err(LabelSizingError::UnexpectedType { context });
+    };
+    Ok(card)
 }
 
 /// Return the `Label` immediately following `anchor` in its card.
 ///
-/// Returns `None` for a missing sibling or an unexpected widget type.
-fn sibling_label(anchor: &Widget) -> Option<Label> {
-    anchor.next_sibling()?.downcast().ok()
+/// # Arguments
+///
+/// * `anchor` - Widget preceding the wanted label.
+/// * `context` - Lookup site for error context.
+fn sibling_label(anchor: &Widget, context: &'static str) -> Result<Label, LabelSizingError> {
+    let sibling = anchor
+        .next_sibling()
+        .ok_or(LabelSizingError::MissingSibling { context })?;
+    let Ok(label) = sibling.downcast::<Label>() else {
+        return Err(LabelSizingError::UnexpectedType { context });
+    };
+    Ok(label)
 }
 
 /// Resize an album card's layout and metadata constraints to `size`.
-pub fn resize_album_card(overlay: &Overlay, size: i32) {
-    let Some(card) = card_container(overlay) else {
-        return;
-    };
+///
+/// # Arguments
+///
+/// * `overlay` - Cover overlay anchoring the card's widget tree.
+/// * `size` - Cover size in pixels.
+///
+/// # Errors
+///
+/// Returns [`LabelSizingError`] naming the failing lookup when the widget
+/// tree is missing a widget or has an unexpected type.
+pub fn resize_album_card(overlay: &Overlay, size: i32) -> Result<(), LabelSizingError> {
+    let card = card_container(overlay, "album card")?;
     card.set_width_request(size);
 
-    let Some(title) = sibling_label(overlay.upcast_ref()) else {
-        return;
-    };
+    let title = sibling_label(overlay.upcast_ref(), "album title")?;
     title.set_max_width_chars(title_max_chars(size));
 
-    let Some(artist) = sibling_label(title.upcast_ref()) else {
-        return;
-    };
+    let artist = sibling_label(title.upcast_ref(), "album artist")?;
     artist.set_max_width_chars(artist_max_chars(size));
 
-    let Some(next) = artist.next_sibling() else {
-        return;
-    };
+    let next = artist
+        .next_sibling()
+        .ok_or(LabelSizingError::MissingSibling {
+            context: "format row",
+        })?;
     let Ok(format_row) = next.downcast::<GtkBox>() else {
-        return;
+        return Err(LabelSizingError::UnexpectedType {
+            context: "format row",
+        });
     };
     format_row.set_width_request(size);
-    if let Some(child) = format_row.first_child()
-        && let Ok(format_label) = child.downcast::<Label>()
-    {
+    if let Some(child) = format_row.first_child() {
+        let Ok(format_label) = child.downcast::<Label>() else {
+            return Err(LabelSizingError::UnexpectedType {
+                context: "format label",
+            });
+        };
         format_label.set_max_width_chars(format_max_chars(size));
     }
+    Ok(())
 }
 
 /// Resize an artist card's layout and metadata constraints to `size`.
 ///
-/// Mirrors [`resize_album_card`] for the two-label artist structure
-/// (overlay, name, album count). The name cap matches the album title cap
-/// and the count cap matches the album format cap so both grids stay
-/// visually in sync and long names cannot inflate the card beyond `size`.
-pub fn resize_artist_card(overlay: &Overlay, size: i32) {
-    let Some(card) = card_container(overlay) else {
-        return;
-    };
+/// Mirrors [`resize_album_card`] for the two-label artist structure.
+///
+/// # Arguments
+///
+/// * `overlay` - Avatar overlay anchoring the card's widget tree.
+/// * `size` - Avatar size in pixels.
+///
+/// # Errors
+///
+/// Returns [`LabelSizingError`] naming the failing lookup when the widget
+/// tree is missing a widget or has an unexpected type.
+pub fn resize_artist_card(overlay: &Overlay, size: i32) -> Result<(), LabelSizingError> {
+    let card = card_container(overlay, "artist card")?;
     card.set_width_request(size);
 
-    let Some(name) = sibling_label(overlay.upcast_ref()) else {
-        return;
-    };
+    let name = sibling_label(overlay.upcast_ref(), "artist name")?;
     name.set_max_width_chars(title_max_chars(size));
 
-    let Some(count) = sibling_label(name.upcast_ref()) else {
-        return;
-    };
+    let count = sibling_label(name.upcast_ref(), "artist count")?;
     count.set_max_width_chars(format_max_chars(size));
+    Ok(())
 }
 
 #[cfg(test)]
@@ -100,10 +157,14 @@ mod tests {
     use std::sync::Arc;
 
     use {
-        anyhow::{Result, bail, ensure},
+        anyhow::{Context, Result, bail, ensure},
         libadwaita::{
-            gtk::{self, Box, Label, Orientation::Horizontal, Overlay, test},
-            prelude::{Cast, WidgetExt},
+            gtk::{
+                self, Box, Button, Label,
+                Orientation::{Horizontal, Vertical},
+                Overlay, test,
+            },
+            prelude::{BoxExt, Cast, WidgetExt},
         },
     };
 
@@ -117,8 +178,8 @@ mod tests {
             avatar::build_artist_card,
             card::build_album_card,
             label_sizing::{
-                artist_max_chars, format_max_chars, resize_album_card, resize_artist_card,
-                title_max_chars,
+                LabelSizingError, artist_max_chars, format_max_chars, resize_album_card,
+                resize_artist_card, title_max_chars,
             },
         },
     };
@@ -192,7 +253,8 @@ mod tests {
     fn resize_album_card_scales_layout_and_labels() -> Result<()> {
         let (card, overlay) = build_mock_card(120)?;
         for size in [120, 200, 40] {
-            resize_album_card(&overlay, size);
+            resize_album_card(&overlay, size)
+                .with_context(|| format!("resize album card to {size} px"))?;
             ensure!(
                 card.width_request() == size,
                 "card width must follow the cover size"
@@ -245,7 +307,8 @@ mod tests {
         let artist = long_named_artist();
         let (card, overlay) = build_artist_card(&state, &artist, 120);
         for size in [120, 200, 40] {
-            resize_artist_card(&overlay, size);
+            resize_artist_card(&overlay, size)
+                .with_context(|| format!("resize artist card to {size} px"))?;
             ensure!(
                 card.width_request() == size,
                 "card width must follow the avatar size"
@@ -269,6 +332,36 @@ mod tests {
                 "album count must cap at {cap} chars for avatar size {size}"
             );
         }
+        Ok(())
+    }
+
+    #[test]
+    fn resize_orphan_overlay_reports_missing_parent() -> Result<()> {
+        let overlay = Overlay::new();
+        let album_err = resize_album_card(&overlay, 120);
+        ensure!(
+            matches!(album_err, Err(LabelSizingError::MissingParent { .. })),
+            "orphan album overlay must report a missing parent"
+        );
+        let artist_err = resize_artist_card(&overlay, 120);
+        ensure!(
+            matches!(artist_err, Err(LabelSizingError::MissingParent { .. })),
+            "orphan artist overlay must report a missing parent"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn resize_wrong_sibling_type_reports_unexpected_type() -> Result<()> {
+        let card = Box::new(Vertical, 0);
+        let overlay = Overlay::new();
+        card.append(&overlay);
+        card.append(&Button::new());
+        let err = resize_artist_card(&overlay, 120);
+        ensure!(
+            matches!(err, Err(LabelSizingError::UnexpectedType { .. })),
+            "a non-label sibling must report an unexpected widget type"
+        );
         Ok(())
     }
 
