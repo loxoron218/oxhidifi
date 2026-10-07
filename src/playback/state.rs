@@ -23,6 +23,8 @@ pub enum PlaybackEvent {
     TrackStarted {
         /// Track ID.
         track_id: i64,
+        /// Why the track started (fresh start, auto-advance, restore).
+        reason: TrackStartReason,
     },
     /// Live decoder facts are ready for a track.
     ///
@@ -143,6 +145,29 @@ pub enum PlaybackStatus {
     Stopped,
 }
 
+/// Why a track-start event was emitted.
+///
+/// Lets consumers tell real playback apart from automatic continuations and
+/// the startup restore: only a fresh [`PlaybackEvent::TrackStarted`] with
+/// [`TrackStartReason::Playback`] auto-shows the side panel.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TrackStartReason {
+    /// Automatic advance to the next track during uninterrupted playback.
+    ///
+    /// Content-only: widgets and album tracking update, panel visibility is
+    /// left untouched so a user-dismissed panel stays dismissed.
+    AutoAdvance,
+    /// Fresh playback start (user pressed play or the queue started from stop).
+    ///
+    /// Auto-shows the side panel.
+    Playback,
+    /// Startup session restore re-announcing the current track.
+    ///
+    /// No playback began: the panel keeps its persisted visibility while
+    /// widgets and album tracking repopulate.
+    SessionRestore,
+}
+
 /// Check whether a playback event can change the signal path.
 ///
 /// Track, format, setting, device, and status changes rebuild the snapshot;
@@ -183,6 +208,7 @@ mod tests {
                 QueueChanged, Resumed, Seeked, Stopped, TrackFinished, TrackFormatReady,
                 TrackStarted, VolumeChanged,
             },
+            TrackStartReason::{Playback, SessionRestore},
             snapshot_event,
         },
     };
@@ -190,7 +216,14 @@ mod tests {
     #[test]
     fn snapshot_event_classifies_path_changes() -> Result<()> {
         let rebuilds = [
-            TrackStarted { track_id: 1 },
+            TrackStarted {
+                track_id: 1,
+                reason: Playback,
+            },
+            TrackStarted {
+                track_id: 1,
+                reason: SessionRestore,
+            },
             TrackFormatReady {
                 track_id: 1,
                 sample_rate: 48000,

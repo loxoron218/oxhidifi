@@ -30,9 +30,10 @@ fn configure_preferences(store: &mut SettingsStore) {
         s.volume = 0.42;
         s.view_mode = Column;
         s.active_tab = Artists;
-        s.window_width = 960;
-        s.window_height = 640;
-        s.window_maximized = true;
+        s.window.width = 960;
+        s.window.height = 640;
+        s.window.maximized = true;
+        s.window.sidebar_visible = true;
         s.gapless_enabled = false;
         s.show_album_labels = false;
         s.output_mode = BitPerfect;
@@ -80,9 +81,10 @@ mod tests {
         );
         ensure!(s.view_mode == Column, "view mode not restored");
         ensure!(s.active_tab == Artists, "active tab not restored");
-        ensure!(s.window_width == 960, "window width not restored");
-        ensure!(s.window_height == 640, "window height not restored");
-        ensure!(s.window_maximized, "window maximized not restored");
+        ensure!(s.window.width == 960, "window width not restored");
+        ensure!(s.window.height == 640, "window height not restored");
+        ensure!(s.window.maximized, "window maximized not restored");
+        ensure!(s.window.sidebar_visible, "sidebar visibility not restored");
         ensure!(!s.gapless_enabled, "gapless toggle not restored");
         ensure!(!s.show_album_labels, "album labels not restored");
         ensure!(s.output_mode == BitPerfect, "output mode not restored");

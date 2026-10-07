@@ -9,6 +9,7 @@ pub mod migrations;
 pub mod settings;
 pub mod sort_rules;
 pub mod view_mode;
+pub mod window_state;
 
 use std::{collections::HashMap, path::Path};
 

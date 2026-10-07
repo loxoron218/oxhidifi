@@ -1,6 +1,6 @@
 //! Sidebar and content panes.
 
-use std::sync::Arc;
+use std::sync::{Arc, atomic::AtomicBool};
 
 use libadwaita::{
     HeaderBar, NavigationPage, NavigationView, OverlaySplitView, ToastOverlay, ToolbarView,
@@ -22,7 +22,7 @@ use crate::{
         header::build_header_end_controls,
         navigation::handle_navigation_event,
         pane_modes::switch_mode_for_active_tab,
-        player::{sidebar::build_player_content, wire_sidebar_toggles},
+        player::{sidebar::build_player_content, sidebar_toggles::wire_sidebar_toggles},
         signal_view::{
             signal_poll::wire_signal_tab, signal_tab::SignalTab,
             signal_tab_build::build_signal_page,
@@ -232,10 +232,19 @@ fn build_content_pane(
 ///
 /// Returns `(ToastOverlay, OverlaySplitView, toggle_button, back_button,
 /// close_button, switchers)` for `build_window`.
+///
+/// # Arguments
+///
+/// * `state` - Application state owning storage and signal handles.
+/// * `narrow_state` - Shared narrow-mode flag for adaptive wiring.
+/// * `parent` - Parent window for dialogs spawned from the content pane.
+/// * `sidebar_intent` - Shared last sidebar intent, seeded from persisted settings by the caller
+///   and updated by toggles and playback events.
 pub fn build_content(
     state: &Arc<AppState>,
     narrow_state: &Arc<NarrowState>,
     parent: &Window,
+    sidebar_intent: &Arc<AtomicBool>,
 ) -> (
     ToastOverlay,
     OverlaySplitView,
@@ -245,27 +254,29 @@ pub fn build_content(
     SwitcherGroup,
 ) {
     let toast_overlay = ToastOverlay::new();
+    let sidebar_visible = state.storage.get_sidebar_visible();
 
     let back_button = ToggleButton::builder()
         .icon_name("view-dual-symbolic")
         .css_classes(["flat"])
         .tooltip_text("Hide player panel")
-        .active(true)
+        .active(sidebar_visible)
         .can_focus(true)
         .build();
     back_button.update_property(&[Label("Hide player panel")]);
-    back_button.set_visible(false);
+    back_button.set_visible(sidebar_visible);
 
     let (sidebar_toolbar, close_button) = build_sidebar(state, &back_button);
 
     let toggle_button = ToggleButton::builder()
         .icon_name("view-dual-symbolic")
         .tooltip_text("Toggle player panel")
-        .active(false)
+        .active(sidebar_visible)
         .css_classes(["flat"])
         .can_focus(true)
         .build();
     toggle_button.update_property(&[Label("Toggle player panel")]);
+    toggle_button.set_visible(!sidebar_visible);
 
     let (content_toolbar, stack, nav_view, switchers) =
         build_content_pane(state, &toggle_button, narrow_state, parent);
@@ -277,13 +288,19 @@ pub fn build_content(
         .content(&content_toolbar)
         .min_sidebar_width(320.0)
         .max_sidebar_width(400.0)
-        .show_sidebar(false)
+        .show_sidebar(sidebar_visible)
         .pin_sidebar(true)
         .tooltip_text("Player panel — toggle with button in header")
         .build();
     split_view.update_property(&[Label("Main player panel with sidebar and content area")]);
 
-    wire_sidebar_toggles(state, &split_view, &toggle_button, &back_button);
+    wire_sidebar_toggles(
+        state,
+        &split_view,
+        &toggle_button,
+        &back_button,
+        sidebar_intent,
+    );
 
     toast_overlay.set_child(Some(&split_view));
 
@@ -311,7 +328,7 @@ pub fn build_content(
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use std::sync::{Arc, atomic::AtomicBool};
 
     use {
         anyhow::{Result, ensure},
@@ -336,6 +353,7 @@ mod tests {
                 &Arc<AppState>,
                 &Arc<NarrowState>,
                 &Window,
+                &Arc<AtomicBool>,
             ) -> (
                 ToastOverlay,
                 OverlaySplitView,

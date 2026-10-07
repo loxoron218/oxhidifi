@@ -11,6 +11,7 @@ pub mod playback_events;
 pub mod playlist;
 pub mod row_factory;
 pub mod sidebar;
+pub mod sidebar_toggles;
 pub mod signal_badge;
 
 use std::sync::{
@@ -20,12 +21,7 @@ use std::sync::{
 
 use {
     async_channel::{Receiver, Sender, unbounded},
-    libadwaita::{
-        OverlaySplitView,
-        glib::{MainContext, object::ObjectExt},
-        gtk::ToggleButton,
-        prelude::ToggleButtonExt,
-    },
+    libadwaita::{OverlaySplitView, glib::MainContext},
     tokio::spawn,
     tracing::error,
 };
@@ -34,7 +30,10 @@ use crate::{
     app::runtime::AppState,
     metrics::GLOBAL_PANEL_REVEAL,
     playback::{
-        state::PlaybackEvent::{self, Stopped, TrackFinished, TrackStarted},
+        state::{
+            PlaybackEvent::{self, Stopped, TrackFinished, TrackStarted},
+            TrackStartReason::Playback,
+        },
         transport::PlaybackTransport,
     },
     storage::{Storage, database::SqliteStorage},
@@ -54,24 +53,37 @@ fn spawn_fetch_album_id(storage: Arc<SqliteStorage>, track_id: i64, tx: Sender<(
 }
 
 /// Handle a single playback event for sidebar visibility and album tracking.
+///
+/// Only a fresh [`Playback`](TrackStartReason::Playback) start auto-shows the
+/// sidebar; automatic advances and the startup restore update content and
+/// album tracking without touching visibility, so a dismissed panel stays
+/// dismissed and a restore keeps its persisted state. Every visibility change
+/// records the shared sidebar intent so collapse-restore agrees with the last
+/// change from any source.
 fn handle_panel_event(
     event: &PlaybackEvent,
     state: &AppState,
     split_view: &OverlaySplitView,
     album_tx: &Sender<(i64, i64)>,
+    sidebar_intent: &AtomicBool,
 ) {
     match event {
-        TrackStarted { track_id } => {
-            split_view.set_show_sidebar(true);
-            GLOBAL_PANEL_REVEAL.record_visible();
+        TrackStarted { track_id, reason } => {
+            if *reason == Playback {
+                split_view.set_show_sidebar(true);
+                sidebar_intent.store(true, Relaxed);
+                GLOBAL_PANEL_REVEAL.record_visible();
+            }
             spawn_fetch_album_id(Arc::clone(&state.storage), *track_id, album_tx.clone());
         }
         Stopped => {
             split_view.set_show_sidebar(false);
+            sidebar_intent.store(false, Relaxed);
             state.playback.reset_album_id();
         }
         TrackFinished { .. } if state.playback.queue().is_empty() => {
             split_view.set_show_sidebar(false);
+            sidebar_intent.store(false, Relaxed);
             state.playback.reset_album_id();
         }
         _ => {}
@@ -81,76 +93,31 @@ fn handle_panel_event(
 /// Wire the player panel to playback events.
 ///
 /// Subscribes to `PlaybackEvent` to:
-/// - Auto-show the sidebar on playback start
+/// - Auto-show the sidebar on fresh playback start (automatic advances and the startup restore keep
+///   the current visibility)
 /// - Auto-hide the sidebar on stop when queue is empty
 /// - Track the currently playing album ID
-pub fn wire_panel_events(state: &Arc<AppState>, split_view: &OverlaySplitView) {
-    let sv = split_view.clone();
-    let state_ref = Arc::clone(state);
-    let rx = state.playback.subscribe();
-
-    let (album_tx, album_rx) = unbounded::<(i64, i64)>();
-
-    spawn_panel_event_listener(rx, Arc::clone(&state_ref), sv, album_tx);
-    spawn_album_id_listener(album_rx, state_ref);
-}
-
-/// Synchronize the sidebar toggle buttons with the split view.
-///
-/// Both toggle buttons reflect and drive the sidebar visibility, and an
-/// unconsumed collapse notification restores the user's last intent.
 ///
 /// # Arguments
 ///
 /// * `state` - Application state owning the retained signal handles.
 /// * `split_view` - Split view whose sidebar is synchronized.
-/// * `toggle_button` - Header toggle button for the player panel.
-/// * `back_button` - Sidebar back button mirroring the toggle state.
-pub fn wire_sidebar_toggles(
+/// * `sidebar_intent` - Shared last sidebar intent, updated on every visibility change so
+///   collapse-restore agrees with it.
+pub fn wire_panel_events(
     state: &Arc<AppState>,
     split_view: &OverlaySplitView,
-    toggle_button: &ToggleButton,
-    back_button: &ToggleButton,
+    sidebar_intent: &Arc<AtomicBool>,
 ) {
-    let user_wants_sidebar = Arc::new(AtomicBool::new(false));
-
     let sv = split_view.clone();
-    let intended = Arc::clone(&user_wants_sidebar);
-    state
-        .handles
-        .lock()
-        .retain_signal(toggle_button.connect_toggled(move |btn| {
-            intended.store(btn.is_active(), Relaxed);
-            if sv.shows_sidebar() != btn.is_active() {
-                sv.set_show_sidebar(btn.is_active());
-            }
-        }));
+    let state_ref = Arc::clone(state);
+    let intent = Arc::clone(sidebar_intent);
+    let rx = state.playback.subscribe();
 
-    let sv_back = split_view.clone();
-    let intended_back = Arc::clone(&user_wants_sidebar);
-    state
-        .handles
-        .lock()
-        .retain_signal(back_button.connect_toggled(move |btn| {
-            intended_back.store(btn.is_active(), Relaxed);
-            if sv_back.shows_sidebar() != btn.is_active() {
-                sv_back.set_show_sidebar(btn.is_active());
-            }
-        }));
+    let (album_tx, album_rx) = unbounded::<(i64, i64)>();
 
-    let intended_collapse = Arc::clone(&user_wants_sidebar);
-    state
-        .handles
-        .lock()
-        .retain_signal(split_view.connect_notify(Some("collapsed"), move |sv, _| {
-            if sv.is_collapsed() {
-                return;
-            }
-            let wants = intended_collapse.load(Relaxed);
-            if sv.shows_sidebar() != wants {
-                sv.set_show_sidebar(wants);
-            }
-        }));
+    spawn_panel_event_listener(rx, Arc::clone(&state_ref), sv, album_tx, intent);
+    spawn_album_id_listener(album_rx, state_ref);
 }
 
 /// Spawn a local future that listens for playback events and updates the panel.
@@ -159,6 +126,7 @@ fn spawn_panel_event_listener(
     state: Arc<AppState>,
     split_view: OverlaySplitView,
     album_tx: Sender<(i64, i64)>,
+    sidebar_intent: Arc<AtomicBool>,
 ) {
     let state_lock = Arc::clone(&state);
     state_lock
@@ -166,7 +134,7 @@ fn spawn_panel_event_listener(
         .lock()
         .retain_task(MainContext::default().spawn_local(async move {
             while let Ok(event) = rx.recv().await {
-                handle_panel_event(&event, &state, &split_view, &album_tx);
+                handle_panel_event(&event, &state, &split_view, &album_tx, &sidebar_intent);
             }
         }));
 }
@@ -186,7 +154,10 @@ fn spawn_album_id_listener(rx: Receiver<(i64, i64)>, state: Arc<AppState>) {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering::Relaxed},
+    };
 
     use {
         anyhow::{Result, ensure},
@@ -205,6 +176,7 @@ mod tests {
                 PlaybackEvent::{QueueChanged, Stopped, TrackFinished, TrackStarted},
                 PlaybackState,
                 PlaybackStatus::{Playing, Stopped as StatusStopped},
+                TrackStartReason::{self, AutoAdvance, Playback, SessionRestore},
             },
             transport::PlaybackTransport,
         },
@@ -215,7 +187,8 @@ mod tests {
     fn wire_panel_events_spawns_both_listeners() -> Result<()> {
         let state = Arc::new(AppState::mock()?);
         let split_view = make_split_view();
-        wire_panel_events(&state, &split_view);
+        let intent = make_intent(false);
+        wire_panel_events(&state, &split_view, &intent);
         ensure!(
             format!("{:?}", state.handles.lock()).contains("tasks: 2"),
             "both panel listeners should be spawned"
@@ -248,6 +221,34 @@ mod tests {
         unbounded::<(i64, i64)>().0
     }
 
+    fn make_intent(visible: bool) -> Arc<AtomicBool> {
+        Arc::new(AtomicBool::new(visible))
+    }
+
+    fn drive_track_started(
+        track_id: i64,
+        reason: TrackStartReason,
+        check: impl FnOnce(&Arc<AppState>, &OverlaySplitView, &Arc<AtomicBool>) -> Result<()>,
+    ) -> Result<()> {
+        let rt = Runtime::new()?;
+        let guard = rt.enter();
+        let state = Arc::new(AppState::mock()?);
+        let split_view = make_split_view();
+        split_view.set_show_sidebar(false);
+        let album_tx = make_album_tx();
+        let intent = make_intent(false);
+        handle_panel_event(
+            &TrackStarted { track_id, reason },
+            &state,
+            &split_view,
+            &album_tx,
+            &intent,
+        );
+        let result = check(&state, &split_view, &intent);
+        drop(guard);
+        result
+    }
+
     #[test]
     fn handle_panel_event_stopped_hides_sidebar() -> Result<()> {
         let state = Arc::new(AppState::mock()?);
@@ -255,8 +256,10 @@ mod tests {
         let split_view = make_split_view();
         split_view.set_show_sidebar(true);
         let album_tx = make_album_tx();
-        handle_panel_event(&Stopped, &state, &split_view, &album_tx);
+        let intent = make_intent(true);
+        handle_panel_event(&Stopped, &state, &split_view, &album_tx, &intent);
         ensure!(!split_view.shows_sidebar());
+        ensure!(!intent.load(Relaxed), "hide must clear the intent");
         ensure!(state.playback.state().current_album_id == -1);
         Ok(())
     }
@@ -267,13 +270,16 @@ mod tests {
         let split_view = make_split_view();
         split_view.set_show_sidebar(true);
         let album_tx = make_album_tx();
+        let intent = make_intent(true);
         handle_panel_event(
             &TrackFinished { track_id: 1 },
             &state,
             &split_view,
             &album_tx,
+            &intent,
         );
         ensure!(!split_view.shows_sidebar());
+        ensure!(!intent.load(Relaxed), "hide must clear the intent");
         Ok(())
     }
 
@@ -283,31 +289,54 @@ mod tests {
         let split_view = make_split_view();
         split_view.set_show_sidebar(false);
         let album_tx = make_album_tx();
+        let intent = make_intent(false);
         handle_panel_event(
             &QueueChanged { track_ids: vec![1] },
             &state,
             &split_view,
             &album_tx,
+            &intent,
         );
         ensure!(!split_view.shows_sidebar());
         Ok(())
     }
 
     #[test]
-    fn handle_panel_event_track_started_shows_sidebar() -> Result<()> {
-        let rt = Runtime::new()?;
-        let guard = rt.enter();
-        let state = Arc::new(AppState::mock()?);
-        let split_view = make_split_view();
-        let album_tx = make_album_tx();
-        handle_panel_event(
-            &TrackStarted { track_id: 1 },
-            &state,
-            &split_view,
-            &album_tx,
-        );
-        ensure!(split_view.shows_sidebar());
-        drop(guard);
-        Ok(())
+    fn handle_panel_event_fresh_start_shows_sidebar() -> Result<()> {
+        drive_track_started(1, Playback, |_, split_view, intent| {
+            ensure!(split_view.shows_sidebar());
+            ensure!(intent.load(Relaxed), "show must record the intent");
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn handle_panel_event_restore_keeps_hidden_sidebar() -> Result<()> {
+        drive_track_started(1, SessionRestore, |_, split_view, intent| {
+            ensure!(
+                !split_view.shows_sidebar(),
+                "the restore event must keep the persisted hidden sidebar"
+            );
+            ensure!(
+                !intent.load(Relaxed),
+                "the restore event must not touch the intent"
+            );
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn handle_panel_event_auto_advance_keeps_dismissed_sidebar() -> Result<()> {
+        drive_track_started(1, AutoAdvance, |_, split_view, intent| {
+            ensure!(
+                !split_view.shows_sidebar(),
+                "an automatic advance must not reopen a dismissed panel"
+            );
+            ensure!(
+                !intent.load(Relaxed),
+                "an automatic advance must not touch the intent"
+            );
+            Ok(())
+        })
     }
 }

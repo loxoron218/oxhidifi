@@ -29,6 +29,7 @@ use crate::{
         state::{
             PlaybackEvent::{DeviceLost, Resumed, TrackFormatReady, TrackStarted},
             PlaybackStatus::{Paused, Playing},
+            TrackStartReason::{AutoAdvance, Playback},
         },
     },
 };
@@ -244,7 +245,10 @@ fn init_decode_thread_loop(
             Some((next_id, next_path)) => {
                 let (cmd_tx, new_cmd_rx) = channel(4);
 
-                engine_shared.send_event(&TrackStarted { track_id: next_id });
+                engine_shared.send_event(&TrackStarted {
+                    track_id: next_id,
+                    reason: AutoAdvance,
+                });
 
                 send_preload_next(engine_shared, &cmd_tx);
 
@@ -353,7 +357,10 @@ pub fn start_playback(shared: &Arc<EngineShared>, track_id: i64, path: PathBuf) 
         "Playback started",
     );
 
-    shared.send_event(&TrackStarted { track_id });
+    shared.send_event(&TrackStarted {
+        track_id,
+        reason: Playback,
+    });
 
     let thread_name = format!("decode-{track_id}");
     match Builder::new().name(thread_name).spawn(move || {

@@ -158,7 +158,7 @@ fn on_playback_event(
     meta_tx: &Sender<(i64, MetaResult)>,
 ) {
     match event {
-        TrackStarted { track_id } => {
+        TrackStarted { track_id, .. } => {
             widgets.artwork_image.set_paintable(None::<&MemoryTexture>);
             update_cover_from_cache(
                 Some(*track_id),

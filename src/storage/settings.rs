@@ -8,6 +8,7 @@ use crate::{
         active_tab::ActiveTab::{self, Albums},
         sort_rules::{AlbumSortItem, ArtistSortItem, default_albums_sort, default_artists_sort},
         view_mode::ViewMode::{self, Grid},
+        window_state::WindowState,
     },
 };
 
@@ -29,12 +30,9 @@ pub struct UserSettings {
     pub view_mode: ViewMode,
     /// Last active tab.
     pub active_tab: ActiveTab,
-    /// Stored window width.
-    pub window_width: i32,
-    /// Stored window height.
-    pub window_height: i32,
-    /// Whether window is maximized.
-    pub window_maximized: bool,
+    /// Window geometry and side panel visibility (flattened in JSON).
+    #[serde(flatten)]
+    pub window: WindowState,
     /// Whether gapless playback is enabled.
     pub gapless_enabled: bool,
     /// Whether to show album title/artist/format labels under cover art.
@@ -68,9 +66,7 @@ impl Default for UserSettings {
             volume: 1.0,
             view_mode: Grid,
             active_tab: Albums,
-            window_width: 1200,
-            window_height: 800,
-            window_maximized: false,
+            window: WindowState::default(),
             gapless_enabled: true,
             show_album_labels: true,
             output_mode: Resampled,
@@ -114,6 +110,7 @@ mod tests {
                 default_albums_sort,
             },
             view_mode::ViewMode::{Column, Grid},
+            window_state::WindowState,
         },
     };
 
@@ -123,9 +120,12 @@ mod tests {
             volume: 0.25,
             view_mode: Column,
             active_tab: Artists,
-            window_width: 900,
-            window_height: 600,
-            window_maximized: true,
+            window: WindowState {
+                width: 900,
+                height: 600,
+                maximized: true,
+                sidebar_visible: true,
+            },
             gapless_enabled: false,
             show_album_labels: false,
             output_mode: BitPerfect,
@@ -176,16 +176,15 @@ mod tests {
             "active_tab should round-trip"
         );
         ensure!(
-            restored.window_width == original.window_width,
-            "window_width should round-trip"
+            restored.window.width == original.window.width
+                && restored.window.height == original.window.height
+                && restored.window.maximized == original.window.maximized
+                && restored.window.sidebar_visible == original.window.sidebar_visible,
+            "window state should round-trip"
         );
         ensure!(
-            restored.window_height == original.window_height,
-            "window_height should round-trip"
-        );
-        ensure!(
-            restored.window_maximized == original.window_maximized,
-            "window_maximized should round-trip"
+            json.contains("\"window_width\"") && json.contains("\"sidebar_visible\""),
+            "window state must stay flat in JSON for stable settings files"
         );
         ensure!(
             restored.gapless_enabled == original.gapless_enabled,
@@ -261,6 +260,14 @@ mod tests {
             (settings.volume - 1.0).abs() < f64::EPSILON,
             "missing volume must fall back to defaults"
         );
+        ensure!(
+            !settings.window.sidebar_visible,
+            "missing sidebar_visible must fall back to hidden"
+        );
+        ensure!(
+            settings.window.width == 1200 && settings.window.height == 800,
+            "missing window geometry must fall back to defaults"
+        );
         Ok(())
     }
 
@@ -290,6 +297,14 @@ mod tests {
         ensure!(
             settings.grid_zoom_level == DEFAULT_GRID_ZOOM,
             "a legacy file without zoom fields must use the default zoom"
+        );
+        ensure!(
+            !settings.window.sidebar_visible,
+            "a legacy file without sidebar state must default to hidden"
+        );
+        ensure!(
+            settings.window.width == 1200 && !settings.window.maximized,
+            "a legacy file must preserve its window geometry"
         );
         Ok(())
     }
@@ -323,8 +338,9 @@ mod tests {
         assert!((settings.volume - 1.0).abs() < f64::EPSILON);
         assert_eq!(settings.view_mode, Grid);
         assert_eq!(settings.active_tab, Albums);
-        assert_eq!(settings.window_width, 1200);
-        assert!(!settings.window_maximized);
+        assert_eq!(settings.window.width, 1200);
+        assert!(!settings.window.maximized);
+        assert!(!settings.window.sidebar_visible);
         assert_eq!(settings.output_mode, Resampled);
     }
 

@@ -5,7 +5,10 @@
 //! Keyboard shortcuts and responsive breakpoints live in the sibling
 //! [`key_bindings`] and [`collapse_scheduler`] modules.
 
-use std::sync::Arc;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering::Relaxed},
+};
 
 use {
     libadwaita::{
@@ -14,7 +17,6 @@ use {
         gdk::{Display, Key},
         glib::{
             Propagation::{Proceed, Stop},
-            idle_add_local_once,
             object::{Cast, ObjectExt},
             spawn_future_local,
         },
@@ -22,10 +24,7 @@ use {
             Button, CssProvider, EventControllerKey, STYLE_PROVIDER_PRIORITY_APPLICATION,
             ToggleButton, Window, style_context_add_provider_for_display,
         },
-        prelude::{
-            AdwApplicationWindowExt, ApplicationExt, ButtonExt, GtkWindowExt, ToggleButtonExt,
-            WidgetExt,
-        },
+        prelude::{AdwApplicationWindowExt, ButtonExt, GtkWindowExt, ToggleButtonExt, WidgetExt},
     },
     tracing::{info, warn},
 };
@@ -38,6 +37,7 @@ use crate::{
         key_bindings::{handle_escape_key, handle_zoom_key},
         panes::build_content,
         player::wire_panel_events,
+        window_close::wire_close_request,
         window_geometry::{MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH, clamp_geometry, snapshot_geometry},
     },
 };
@@ -46,8 +46,9 @@ use crate::{
 ///
 /// Creates an `AdwApplicationWindow` with `AdwOverlaySplitView`
 /// containing separate `ToolbarView` panes for the sidebar and
-/// content. The sidebar is hidden by default and auto-shown on
-/// playback start.
+/// content. The sidebar restores its persisted visibility from settings;
+/// fresh playback starts auto-show it while automatic advances and the
+/// startup restore leave it untouched.
 ///
 /// The window minimum is set explicitly to [`MIN_WINDOW_WIDTH`] by
 /// [`MIN_WINDOW_HEIGHT`]: breakpoints remove the automatic window minimum,
@@ -73,19 +74,25 @@ pub fn build_window(app: &Application, state: &Arc<AppState>) -> ApplicationWind
     load_hig_css();
 
     let narrow_state = NarrowState::new_shared();
+    let sidebar_intent = Arc::new(AtomicBool::new(state.storage.get_sidebar_visible()));
     let (toast_overlay, split_view, toggle_button, back_button, close_button, switchers) =
-        build_content(state, &narrow_state, window.upcast_ref::<Window>());
+        build_content(
+            state,
+            &narrow_state,
+            window.upcast_ref::<Window>(),
+            &sidebar_intent,
+        );
     window.set_content(Some(&toast_overlay));
 
     listen_for_toasts(state, &toast_overlay);
 
     add_responsive_breakpoints(&window, &split_view, &narrow_state, &switchers);
 
-    wire_panel_events(state, &split_view);
+    wire_panel_events(state, &split_view, &sidebar_intent);
 
-    add_key_controllers(&window, &split_view, state);
+    add_key_controllers(&window, &split_view, state, &sidebar_intent);
 
-    wire_close_request(app, &window, state);
+    wire_close_request(app, &window, &split_view, state);
 
     wire_sidebar_sync(
         state,
@@ -112,18 +119,23 @@ pub fn build_window(app: &Application, state: &Arc<AppState>) -> ApplicationWind
 /// * `window` - Window receiving the controllers.
 /// * `split_view` - Split view used for Escape-key handling.
 /// * `state` - Application state owning the retained signal handles.
+/// * `sidebar_intent` - Shared last sidebar intent, cleared when Escape hides the panel so
+///   collapse-restore does not resurrect it.
 fn add_key_controllers(
     window: &ApplicationWindow,
     split_view: &OverlaySplitView,
     state: &Arc<AppState>,
+    sidebar_intent: &Arc<AtomicBool>,
 ) {
     let esc_split = split_view.clone();
+    let esc_intent = Arc::clone(sidebar_intent);
     let esc_controller = EventControllerKey::new();
     state
         .handles
         .lock()
         .retain_signal(esc_controller.connect_key_pressed(move |_, key, _, _| {
             if key == Key::Escape && handle_escape_key(&esc_split) {
+                esc_intent.store(false, Relaxed);
                 Stop
             } else {
                 Proceed
@@ -148,45 +160,13 @@ fn add_key_controllers(
     window.add_controller(zoom_controller);
 }
 
-/// Wire window-close persistence and application quit.
-///
-/// Snapshots the actual allocation (see [`snapshot_geometry`]) so a
-/// compositor-tiled window, e.g. snapped right at 50% width, reopens at that
-/// pixel size instead of the stale pre-tile floating size.
-///
-/// # Arguments
-///
-/// * `app` - Application to quit on close.
-/// * `window` - Window whose close request is handled.
-/// * `state` - Application state owning the retained signal handles.
-fn wire_close_request(app: &Application, window: &ApplicationWindow, state: &Arc<AppState>) {
-    let persist_state = Arc::clone(state);
-    let persist_window = window.clone();
-    let quit_app = app.clone();
-    state
-        .handles
-        .lock()
-        .retain_signal(window.connect_close_request(move |_| {
-            info!(
-                reason = "close_request",
-                "Window close requested — persisting geometry and session"
-            );
-            let (width, height, maximized) = snapshot_geometry(&persist_window);
-            persist_geometry_and_session(&persist_state, width, height, maximized);
-            let quit = quit_app.clone();
-            persist_state
-                .handles
-                .lock()
-                .retain_source(idle_add_local_once(move || quit.quit()));
-            Proceed
-        }));
-}
-
 /// Synchronize sidebar toggle buttons and persist geometry changes.
 ///
 /// State transitions (maximize, fullscreen) persist via [`snapshot_geometry`],
 /// which keeps the last floating size while the allocation is
-/// compositor-owned so un-maximizing restores correctly.
+/// compositor-owned so un-maximizing restores correctly. Sidebar visibility
+/// changes persist via a debounced background write; the close-request path
+/// re-snapshots synchronously so the final state is durable.
 ///
 /// # Arguments
 ///
@@ -250,6 +230,7 @@ fn wire_sidebar_sync(
             }),
         );
 
+    let sidebar_state = Arc::clone(state);
     state
         .handles
         .lock()
@@ -260,6 +241,8 @@ fn wire_sidebar_sync(
             toggle_button.set_active(showing);
             back_button.set_visible(showing);
             back_button.set_active(showing);
+            sidebar_state.storage.set_sidebar_visible_memory(showing);
+            sidebar_state.storage.save_settings();
         }));
 
     let window_close = window.clone();
@@ -269,22 +252,6 @@ fn wire_sidebar_sync(
         .retain_signal(close_button.connect_clicked(move |_| {
             window_close.close();
         }));
-}
-
-/// Persist window geometry and playback session synchronously.
-///
-/// Runs on the `GLib` main thread during `close_request` so the data is
-/// durable before `Application::quit` exits the main loop.
-fn persist_geometry_and_session(state: &AppState, width: i32, height: i32, maximized: bool) {
-    if let Err(e) = state
-        .storage
-        .set_window_geometry_sync(width, height, maximized)
-    {
-        warn!(error = %e, "Failed to persist window geometry");
-    }
-    if let Err(e) = state.persist_playback_session() {
-        warn!(error = %e, "Failed to persist session on window close");
-    }
 }
 
 /// Load HIG-compliant CSS transitions (200 ms ease) and style rules.

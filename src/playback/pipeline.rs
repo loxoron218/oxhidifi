@@ -23,7 +23,10 @@ use crate::playback::{
     output::AudioOutput,
     resampler::{algorithm::create_resampler, converter::AudioResampler},
     ring_push::process_decoded_batch as ring_push_process_decoded_batch,
-    state::PlaybackEvent::{self, Error, TrackFinished, TrackStarted},
+    state::{
+        PlaybackEvent::{self, Error, TrackFinished, TrackStarted},
+        TrackStartReason::AutoAdvance,
+    },
 };
 
 /// Mutable decode loop state updated by gapless transitions.
@@ -259,7 +262,10 @@ pub fn process_decode_frame(
                 }
                 Some(new_id) => {
                     *track_id = new_id;
-                    engine_shared.send_event(&TrackStarted { track_id: new_id });
+                    engine_shared.send_event(&TrackStarted {
+                        track_id: new_id,
+                        reason: AutoAdvance,
+                    });
                     preload_next_upcoming(engine_shared);
                     false
                 }

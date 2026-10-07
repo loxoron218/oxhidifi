@@ -12,7 +12,10 @@ use crate::{
     library::artwork::{check_cache_version, repair::repair_missing_artwork},
     playback::{
         devices::startup_device_check,
-        state::PlaybackEvent::{Paused, PositionTick, QueueChanged, TrackStarted},
+        state::{
+            PlaybackEvent::{Paused, PositionTick, QueueChanged, TrackStarted},
+            TrackStartReason::SessionRestore,
+        },
         transport::PlaybackTransport,
     },
 };
@@ -71,6 +74,10 @@ pub async fn run_startup_checks(state: Arc<AppState>) {
 }
 
 /// Emit playback events on startup to reflect the restored session in the UI.
+///
+/// The re-emitted `TrackStarted` carries [`TrackStartReason::SessionRestore`]
+/// so widgets and album tracking repopulate without auto-showing the side
+/// panel, which restores its persisted visibility at build time.
 pub fn emit_session_events(state: &AppState) {
     let track_ids = state.playback.queue().tracks();
     if track_ids.is_empty() {
@@ -86,7 +93,10 @@ pub fn emit_session_events(state: &AppState) {
     let Some(track_id) = s.current_track_id else {
         return;
     };
-    state.playback.shared.send_event(&TrackStarted { track_id });
+    state.playback.shared.send_event(&TrackStarted {
+        track_id,
+        reason: SessionRestore,
+    });
     state.playback.shared.send_event(&Paused);
     state.playback.shared.send_event(&PositionTick {
         elapsed_seconds: s.elapsed_seconds,
@@ -133,6 +143,7 @@ mod tests {
             state::{
                 PlaybackEvent::{Paused, PositionTick, QueueChanged, TrackStarted},
                 PlaybackStatus::Stopped,
+                TrackStartReason::SessionRestore,
             },
             transport::PlaybackTransport,
         },
@@ -246,7 +257,8 @@ mod tests {
         ));
         ensure!(matches!(
             rx.try_recv()?,
-            TrackStarted { track_id } if track_id == 20
+            TrackStarted { track_id, reason }
+                if track_id == 20 && reason == SessionRestore
         ));
         ensure!(matches!(rx.try_recv()?, Paused));
         ensure!(matches!(

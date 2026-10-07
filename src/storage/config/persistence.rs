@@ -131,6 +131,12 @@ impl SettingsStore {
         self.settings.output_mode
     }
 
+    /// Get whether the side player panel (sidebar) is visible.
+    #[must_use]
+    pub const fn get_sidebar_visible(&self) -> bool {
+        self.settings.window.sidebar_visible
+    }
+
     /// Get the last playback session data.
     #[must_use]
     pub fn get_last_session(&self) -> (Vec<i64>, Option<usize>, Option<i64>, f64, f64) {
@@ -183,7 +189,7 @@ mod tests {
     }
 
     #[test]
-    fn show_album_labels_defaults_and_round_trips() {
+    fn bool_display_prefs_default_and_round_trip() {
         let Ok(dir) = tempdir() else { return };
         let mut store = SettingsStore {
             settings_path: dir.path().join("settings.json"),
@@ -193,15 +199,33 @@ mod tests {
             store.get_show_album_labels(),
             "album labels should default to visible"
         );
-        store.update_memory(|s| s.show_album_labels = false);
+        assert!(
+            !store.get_sidebar_visible(),
+            "sidebar should default to hidden"
+        );
+        store.update_memory(|s| {
+            s.show_album_labels = false;
+            s.window.sidebar_visible = true;
+        });
         assert!(
             !store.get_show_album_labels(),
             "album labels should reflect update_memory"
         );
-        store.update_memory(|s| s.show_album_labels = true);
+        assert!(
+            store.get_sidebar_visible(),
+            "sidebar should reflect update_memory"
+        );
+        store.update_memory(|s| {
+            s.show_album_labels = true;
+            s.window.sidebar_visible = false;
+        });
         assert!(
             store.get_show_album_labels(),
             "album labels should be re-enabled"
+        );
+        assert!(
+            !store.get_sidebar_visible(),
+            "sidebar should be hideable again"
         );
     }
 
