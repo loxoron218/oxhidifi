@@ -18,9 +18,7 @@ use crate::{
     storage::{
         Storage,
         catalog::Album,
-        sort_rules::ArtistPlayOrder::{
-            self, DateAsc, DateDesc, TitleAsc, TitleDesc,
-        },
+        sort_rules::ArtistPlayOrder::{self, DateAsc, DateDesc, TitleAsc, TitleDesc},
     },
 };
 

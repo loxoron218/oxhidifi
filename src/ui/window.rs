@@ -12,7 +12,7 @@ use std::sync::{
 
 use {
     libadwaita::{
-        Application, ApplicationWindow, OverlaySplitView, Toast, ToastOverlay,
+        Application, ApplicationWindow, NavigationView, OverlaySplitView, Toast, ToastOverlay,
         ToastPriority::Normal,
         gdk::{Display, Key},
         glib::{
@@ -35,6 +35,7 @@ use crate::{
         collapse_scheduler::add_responsive_breakpoints,
         gallery::narrow_flag::NarrowState,
         key_bindings::{handle_escape_key, handle_zoom_key},
+        navigation::is_detail_visible,
         panes::build_content,
         player::wire_panel_events,
         window_close::wire_close_request,
@@ -75,7 +76,7 @@ pub fn build_window(app: &Application, state: &Arc<AppState>) -> ApplicationWind
 
     let narrow_state = NarrowState::new_shared();
     let sidebar_intent = Arc::new(AtomicBool::new(state.storage.get_sidebar_visible()));
-    let (toast_overlay, split_view, toggle_button, back_button, close_button, switchers) =
+    let (toast_overlay, split_view, toggle_button, back_button, close_button, switchers, nav_view) =
         build_content(
             state,
             &narrow_state,
@@ -90,7 +91,7 @@ pub fn build_window(app: &Application, state: &Arc<AppState>) -> ApplicationWind
 
     wire_panel_events(state, &split_view, &sidebar_intent);
 
-    add_key_controllers(&window, &split_view, state, &sidebar_intent);
+    add_key_controllers(&window, &split_view, &nav_view, state, &sidebar_intent);
 
     wire_close_request(app, &window, &split_view, state);
 
@@ -114,16 +115,22 @@ pub fn build_window(app: &Application, state: &Arc<AppState>) -> ApplicationWind
 
 /// Add Escape and zoom key controllers to the window.
 ///
+/// Zoom via `Ctrl+`/`Ctrl-` is ignored while a detail page is pushed, since
+/// detail covers use fixed sizes and mutating the background grid zoom would
+/// surprise the user on `Back`.
+///
 /// # Arguments
 ///
 /// * `window` - Window receiving the controllers.
 /// * `split_view` - Split view used for Escape-key handling.
+/// * `nav_view` - Navigation view checked for pushed detail pages.
 /// * `state` - Application state owning the retained signal handles.
 /// * `sidebar_intent` - Shared last sidebar intent, cleared when Escape hides the panel so
 ///   collapse-restore does not resurrect it.
 fn add_key_controllers(
     window: &ApplicationWindow,
     split_view: &OverlaySplitView,
+    nav_view: &NavigationView,
     state: &Arc<AppState>,
     sidebar_intent: &Arc<AtomicBool>,
 ) {
@@ -144,12 +151,16 @@ fn add_key_controllers(
     window.add_controller(esc_controller);
 
     let zoom_state = Arc::clone(state);
+    let zoom_nav = nav_view.clone();
     let zoom_controller = EventControllerKey::new();
     state
         .handles
         .lock()
         .retain_signal(
             zoom_controller.connect_key_pressed(move |_, key, _, modifiers| {
+                if is_detail_visible(&zoom_nav) {
+                    return Proceed;
+                }
                 if handle_zoom_key(&zoom_state, key, modifiers) {
                     Stop
                 } else {

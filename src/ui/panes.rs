@@ -3,8 +3,8 @@
 use std::sync::{Arc, atomic::AtomicBool};
 
 use libadwaita::{
-    HeaderBar, NavigationPage, NavigationView, OverlaySplitView, ToastOverlay, ToolbarView,
-    ViewStack, ViewSwitcher, ViewSwitcherBar,
+    HeaderBar, NavigationView, OverlaySplitView, ToastOverlay, ToolbarView, ViewStack,
+    ViewSwitcher, ViewSwitcherBar,
     ViewSwitcherPolicy::Wide,
     WindowTitle,
     glib::{object::ObjectExt, spawn_future_local},
@@ -20,7 +20,7 @@ use crate::{
             album_grid::build_album_grid, artist_grid::build_artist_grid, narrow_flag::NarrowState,
         },
         header::build_header_end_controls,
-        navigation::handle_navigation_event,
+        navigation::{build_library_page, handle_navigation_event},
         pane_modes::switch_mode_for_active_tab,
         player::{sidebar::build_player_content, sidebar_toggles::wire_sidebar_toggles},
         signal_view::{
@@ -229,19 +229,14 @@ fn build_content_pane(
         .build();
     switcher.update_property(&[Label("Switch between Albums, Artists, and Signal views")]);
     content_header.set_title_widget(Some(&switcher));
-    let controls = build_header_end_controls(state, parent, &signal_tab);
+    let nav_view = NavigationView::new();
+    nav_view.set_pop_on_escape(true);
+    nav_view.add(&build_library_page(&stack));
+    let controls = build_header_end_controls(state, parent, &signal_tab, &nav_view);
     content_header.pack_end(&controls.view_toggle);
     content_header.pack_end(controls.signal_menu.menu_button());
     content_header.pack_start(toggle_button);
     content_toolbar.add_top_bar(&content_header);
-    let nav_view = NavigationView::new();
-    nav_view.set_pop_on_escape(true);
-    let library_page = NavigationPage::builder()
-        .child(&stack)
-        .title("Library")
-        .tag("library")
-        .build();
-    nav_view.add(&library_page);
     content_toolbar.set_content(Some(&nav_view));
     let switcher_bar = ViewSwitcherBar::builder()
         .stack(&stack)
@@ -263,7 +258,9 @@ fn build_content_pane(
 /// Build split-view content with sidebar and content panes.
 ///
 /// Returns `(ToastOverlay, OverlaySplitView, toggle_button, back_button,
-/// close_button, switchers)` for `build_window`.
+/// close_button, switchers, nav_view)` for `build_window`. The `nav_view`
+/// is returned so window-level key controllers can ignore `Ctrl+`/`Ctrl-`
+/// zoom while a detail page is pushed.
 ///
 /// # Arguments
 ///
@@ -284,6 +281,7 @@ pub fn build_content(
     ToggleButton,
     Button,
     SwitcherGroup,
+    NavigationView,
 ) {
     let toast_overlay = ToastOverlay::new();
     let sidebar_visible = state.storage.get_sidebar_visible();
@@ -352,13 +350,14 @@ pub fn build_content(
 
     let nav_tx = state.navigation_tx.clone();
     let nav_state = Arc::clone(state);
+    let nav_view_loop = nav_view.clone();
     state
         .handles
         .lock()
         .retain_task(spawn_future_local(async move {
             let rx = nav_state.navigation_rx.clone();
             while let Ok(event) = rx.recv().await {
-                handle_navigation_event(&nav_state, &nav_view, &nav_tx, event);
+                handle_navigation_event(&nav_state, &nav_view_loop, &nav_tx, event);
             }
         }));
 
@@ -369,6 +368,7 @@ pub fn build_content(
         back_button,
         close_button,
         switchers,
+        nav_view,
     )
 }
 
@@ -379,7 +379,8 @@ mod tests {
     use {
         anyhow::{Result, ensure},
         libadwaita::{
-            HeaderBar, OverlaySplitView, ToastOverlay, ViewStack, ViewSwitcher, ViewSwitcherBar,
+            HeaderBar, NavigationView, OverlaySplitView, ToastOverlay, ViewStack, ViewSwitcher,
+            ViewSwitcherBar,
             gtk::{self, Button, ToggleButton, Window, test},
         },
     };
@@ -407,6 +408,7 @@ mod tests {
                 ToggleButton,
                 Button,
                 SwitcherGroup,
+                NavigationView,
             ),
         >(
             _: F,

@@ -75,6 +75,41 @@ pub struct AlbumSortItem {
     pub order: SortOrder,
 }
 
+/// Preferred album ordering for artist-wide playback ("Play all albums").
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ArtistPlayOrder {
+    /// Oldest first: year ascending, then title, then id.
+    #[default]
+    DateAsc,
+    /// Newest first: year descending, then title, then id.
+    DateDesc,
+    /// Alphabetical by title ascending, then year, then id.
+    TitleAsc,
+    /// Alphabetical by title descending, then year, then id.
+    TitleDesc,
+}
+
+impl ArtistPlayOrder {
+    /// Ordered options backing the preferences combo, in combo-index order.
+    #[must_use]
+    pub const fn options() -> [Self; 4] {
+        [
+            Self::DateAsc,
+            Self::DateDesc,
+            Self::TitleAsc,
+            Self::TitleDesc,
+        ]
+    }
+}
+
+impl_criteria_helpers!(ArtistPlayOrder {
+    DateAsc => (0, "Date: Oldest First"),
+    DateDesc => (1, "Date: Newest First"),
+    TitleAsc => (2, "Title: A–Z"),
+    TitleDesc => (3, "Title: Z–A"),
+});
+
 /// Criteria for sorting the artist grid view.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ArtistSortCriteria {
@@ -106,36 +141,6 @@ pub enum SortOrder {
     Ascending,
     /// Descending sort order.
     Descending,
-}
-
-/// Preferred album ordering for artist-wide playback ("Play all albums").
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ArtistPlayOrder {
-    /// Oldest first: year ascending, then title, then id.
-    #[default]
-    DateAsc,
-    /// Newest first: year descending, then title, then id.
-    DateDesc,
-    /// Alphabetical by title ascending, then year, then id.
-    TitleAsc,
-    /// Alphabetical by title descending, then year, then id.
-    TitleDesc,
-}
-
-impl_criteria_helpers!(ArtistPlayOrder {
-    DateAsc => (0, "Date: Oldest First"),
-    DateDesc => (1, "Date: Newest First"),
-    TitleAsc => (2, "Title: A–Z"),
-    TitleDesc => (3, "Title: Z–A"),
-});
-
-impl ArtistPlayOrder {
-    /// Ordered options backing the preferences combo, in combo-index order.
-    #[must_use]
-    pub const fn options() -> [Self; 4] {
-        [Self::DateAsc, Self::DateDesc, Self::TitleAsc, Self::TitleDesc]
-    }
 }
 
 /// Default albums grid sort configuration.
@@ -314,8 +319,15 @@ mod tests {
             assert_eq!(order.to_string(), label, "order label must match UI");
         }
         assert_eq!(ArtistPlayOrder::from_discriminator(4), None);
-        assert_eq!(ArtistPlayOrder::default(), DateAsc, "default must be DateAsc");
-        assert_eq!(ArtistPlayOrder::options(), [DateAsc, DateDesc, TitleAsc, TitleDesc]);
+        assert_eq!(
+            ArtistPlayOrder::default(),
+            DateAsc,
+            "default must be DateAsc"
+        );
+        assert_eq!(
+            ArtistPlayOrder::options(),
+            [DateAsc, DateDesc, TitleAsc, TitleDesc]
+        );
     }
 
     #[test]

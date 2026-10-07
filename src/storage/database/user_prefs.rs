@@ -242,10 +242,7 @@ impl SqliteStorage {
     /// # Errors
     ///
     /// Returns an error if settings cannot be saved.
-    pub async fn set_artist_play_order(
-        &self,
-        order: ArtistPlayOrder,
-    ) -> Result<(), StorageError> {
+    pub async fn set_artist_play_order(&self, order: ArtistPlayOrder) -> Result<(), StorageError> {
         self.settings
             .write()
             .update_memory(|s| s.artist_play_order = order);
@@ -379,7 +376,10 @@ mod tests {
         let dir = tempdir()?;
         let storage = storage_in(&dir).await?;
         storage.set_active_tab(Artists).await?;
-        ensure!(storage.get_active_tab() == Artists, "active tab must round-trip");
+        ensure!(
+            storage.get_active_tab() == Artists,
+            "active tab must round-trip"
+        );
         Ok(())
     }
 
@@ -387,9 +387,15 @@ mod tests {
     async fn artist_play_order_round_trips() -> Result<()> {
         let dir = tempdir()?;
         let storage = storage_in(&dir).await?;
-        ensure!(storage.get_artist_play_order() == DateAsc, "default must be DateAsc");
+        ensure!(
+            storage.get_artist_play_order() == DateAsc,
+            "default must be DateAsc"
+        );
         storage.set_artist_play_order(TitleDesc).await?;
-        ensure!(storage.get_artist_play_order() == TitleDesc, "order must round-trip");
+        ensure!(
+            storage.get_artist_play_order() == TitleDesc,
+            "order must round-trip"
+        );
         Ok(())
     }
 }

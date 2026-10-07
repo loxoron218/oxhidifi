@@ -178,7 +178,8 @@ mod tests {
     };
 
     use crate::storage::{
-        config::persistence::SettingsStore, settings::UserSettings,
+        config::persistence::SettingsStore,
+        settings::UserSettings,
         sort_rules::ArtistPlayOrder::{DateAsc, TitleDesc},
     };
 
@@ -229,9 +230,15 @@ mod tests {
             s.show_album_labels = true;
             s.window.sidebar_visible = false;
         });
-        assert!(store.get_artist_play_order() == DateAsc, "play order defaults DateAsc");
+        assert!(
+            store.get_artist_play_order() == DateAsc,
+            "play order defaults DateAsc"
+        );
         store.update_memory(|s| s.artist_play_order = TitleDesc);
-        assert!(store.get_artist_play_order() == TitleDesc, "play order reflects update");
+        assert!(
+            store.get_artist_play_order() == TitleDesc,
+            "play order reflects update"
+        );
         assert!(
             store.get_show_album_labels(),
             "album labels should be re-enabled"

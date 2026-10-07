@@ -290,18 +290,23 @@ fn build_playback_group(page: &PreferencesPage, state: &Arc<AppState>) {
         state.storage.get_artist_play_order(),
     ));
     let state_order = Arc::clone(state);
-    state.handles.lock().retain_signal(order_row.connect_selected_notify(
-        move |row| {
+    state
+        .handles
+        .lock()
+        .retain_signal(order_row.connect_selected_notify(move |row| {
             let Some(order) = artist_play_order_from_index(row.selected()) else {
                 warn!(selected = row.selected(), "Unknown artist playback order");
                 return;
             };
             info!(order = ?order, "Artist playback order changed");
-            state_order.handles.lock().retain_task(spawn_future_local(
-                save_artist_play_order(Arc::clone(&state_order), order),
-            ));
-        },
-    ));
+            state_order
+                .handles
+                .lock()
+                .retain_task(spawn_future_local(save_artist_play_order(
+                    Arc::clone(&state_order),
+                    order,
+                )));
+        }));
     playback_group.add(&order_row);
     page.add(&playback_group);
 }
@@ -377,9 +382,15 @@ mod tests {
     fn artist_play_order_index_round_trips() -> Result<()> {
         for order in ArtistPlayOrder::options() {
             let idx = artist_play_order_to_index(order);
-            ensure!(artist_play_order_from_index(idx) == Some(order), "idx {idx} must round-trip");
+            ensure!(
+                artist_play_order_from_index(idx) == Some(order),
+                "idx {idx} must round-trip"
+            );
         }
-        ensure!(artist_play_order_from_index(99).is_none(), "unknown idx must be None");
+        ensure!(
+            artist_play_order_from_index(99).is_none(),
+            "unknown idx must be None"
+        );
         Ok(())
     }
 }

@@ -38,6 +38,11 @@ pub fn handle_escape_key(split_view: &OverlaySplitView) -> bool {
 /// (column) the live view. At the zoom limits no notification is sent, so
 /// at-limit key presses never trigger spurious rebuilds or disk writes.
 ///
+/// Detail pages are guarded by the caller (`add_key_controllers` in
+/// `window.rs` returns `Proceed` while a `detail` page is pushed), since
+/// detail covers use fixed sizes and this handler only mutates the
+/// background library zoom.
+///
 /// # Returns
 ///
 /// `true` when the zoom level actually changed, `false` otherwise (wrong
