@@ -26,7 +26,7 @@ use crate::{
         },
         transport::PlaybackTransport,
     },
-    storage::database::SqliteStorage,
+    storage::{database::SqliteStorage, sort_rules::ArtistPlayOrder},
 };
 
 /// Save the audio device selection for the given combo index.
@@ -69,6 +69,39 @@ async fn save_gapless_setting(state: Arc<AppState>, enabled: bool) {
 async fn persist_output_mode(storage: Arc<SqliteStorage>, mode: OutputMode) {
     if let Err(e) = storage.set_output_mode(mode).await {
         warn!(error = %e, "Failed to persist output mode");
+    }
+}
+
+/// Map a combo index to its artist playback order, if valid.
+///
+/// # Arguments
+///
+/// * `idx` - Selected combo row index.
+///
+/// # Returns
+///
+/// * `Option<ArtistPlayOrder>` - Order for valid indices, `None` otherwise.
+fn artist_play_order_from_index(idx: u32) -> Option<ArtistPlayOrder> {
+    ArtistPlayOrder::from_discriminator(u8::try_from(idx).unwrap_or(u8::MAX))
+}
+
+/// Map an artist playback order to its combo index.
+///
+/// # Arguments
+///
+/// * `order` - Current artist playback order.
+///
+/// # Returns
+///
+/// * `u32` - Combo row index for the order.
+fn artist_play_order_to_index(order: ArtistPlayOrder) -> u32 {
+    u32::from(order.discriminator())
+}
+
+/// Persist the artist playback order, logging on failure.
+async fn save_artist_play_order(state: Arc<AppState>, order: ArtistPlayOrder) {
+    if let Err(e) = state.storage.set_artist_play_order(order).await {
+        error!(error = %e, "Failed to save artist playback order");
     }
 }
 
@@ -241,6 +274,35 @@ fn build_playback_group(page: &PreferencesPage, state: &Arc<AppState>) {
         }));
 
     playback_group.add(&gapless_row);
+
+    let order_labels: Vec<String> = ArtistPlayOrder::options()
+        .iter()
+        .map(ToString::to_string)
+        .collect();
+    let order_refs: Vec<&str> = order_labels.iter().map(String::as_str).collect();
+    let order_model = StringList::new(&order_refs);
+    let order_row = ComboRow::builder()
+        .title("Artist Playback Order")
+        .subtitle("Album order when playing all albums by an artist")
+        .model(&order_model)
+        .build();
+    order_row.set_selected(artist_play_order_to_index(
+        state.storage.get_artist_play_order(),
+    ));
+    let state_order = Arc::clone(state);
+    state.handles.lock().retain_signal(order_row.connect_selected_notify(
+        move |row| {
+            let Some(order) = artist_play_order_from_index(row.selected()) else {
+                warn!(selected = row.selected(), "Unknown artist playback order");
+                return;
+            };
+            info!(order = ?order, "Artist playback order changed");
+            state_order.handles.lock().retain_task(spawn_future_local(
+                save_artist_play_order(Arc::clone(&state_order), order),
+            ));
+        },
+    ));
+    playback_group.add(&order_row);
     page.add(&playback_group);
 }
 
@@ -255,7 +317,13 @@ mod tests {
         },
     };
 
-    use crate::{playback::devices::DeviceInfo, ui::preferences::audio::set_preferred_device};
+    use crate::{
+        playback::devices::DeviceInfo,
+        storage::sort_rules::ArtistPlayOrder,
+        ui::preferences::audio::{
+            artist_play_order_from_index, artist_play_order_to_index, set_preferred_device,
+        },
+    };
 
     fn mock_devices() -> Vec<DeviceInfo> {
         vec![
@@ -302,6 +370,16 @@ mod tests {
         let before = combo.selected();
         set_preferred_device(&combo, &mock_devices(), None);
         ensure!(combo.selected() == before);
+        Ok(())
+    }
+
+    #[test]
+    fn artist_play_order_index_round_trips() -> Result<()> {
+        for order in ArtistPlayOrder::options() {
+            let idx = artist_play_order_to_index(order);
+            ensure!(artist_play_order_from_index(idx) == Some(order), "idx {idx} must round-trip");
+        }
+        ensure!(artist_play_order_from_index(99).is_none(), "unknown idx must be None");
         Ok(())
     }
 }

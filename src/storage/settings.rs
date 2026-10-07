@@ -6,7 +6,10 @@ use crate::{
     playback::devices::OutputMode::{self, Resampled},
     storage::{
         active_tab::ActiveTab::{self, Albums},
-        sort_rules::{AlbumSortItem, ArtistSortItem, default_albums_sort, default_artists_sort},
+        sort_rules::{
+            AlbumSortItem, ArtistPlayOrder, ArtistSortItem, default_albums_sort,
+            default_artists_sort,
+        },
         view_mode::ViewMode::{self, Grid},
         window_state::WindowState,
     },
@@ -57,6 +60,8 @@ pub struct UserSettings {
     pub grid_zoom_level: u8,
     /// List view zoom level (0–2).
     pub list_zoom_level: u8,
+    /// Album ordering for artist-wide playback ("Play all albums").
+    pub artist_play_order: ArtistPlayOrder,
 }
 
 impl Default for UserSettings {
@@ -79,6 +84,7 @@ impl Default for UserSettings {
             artists_sort: default_artists_sort(),
             grid_zoom_level: DEFAULT_GRID_ZOOM,
             list_zoom_level: DEFAULT_LIST_ZOOM,
+            artist_play_order: ArtistPlayOrder::default(),
         }
     }
 }
@@ -104,6 +110,7 @@ mod tests {
             sort_rules::{
                 AlbumSortCriteria::{BitDepth, Title},
                 AlbumSortItem,
+                ArtistPlayOrder::{DateAsc, TitleDesc},
                 ArtistSortCriteria::Name,
                 ArtistSortItem,
                 SortOrder::{Ascending, Descending},
@@ -150,6 +157,7 @@ mod tests {
             }],
             grid_zoom_level: 3,
             list_zoom_level: 2,
+            artist_play_order: TitleDesc,
         }
     }
 
@@ -234,6 +242,10 @@ mod tests {
             restored.list_zoom_level == original.list_zoom_level,
             "list_zoom_level should round-trip"
         );
+        ensure!(
+            restored.artist_play_order == original.artist_play_order,
+            "artist_play_order should round-trip"
+        );
         Ok(())
     }
 
@@ -267,6 +279,10 @@ mod tests {
         ensure!(
             settings.window.width == 1200 && settings.window.height == 800,
             "missing window geometry must fall back to defaults"
+        );
+        ensure!(
+            settings.artist_play_order == DateAsc,
+            "missing artist_play_order must default to DateAsc"
         );
         Ok(())
     }
@@ -305,6 +321,10 @@ mod tests {
         ensure!(
             settings.window.width == 1200 && !settings.window.maximized,
             "a legacy file must preserve its window geometry"
+        );
+        ensure!(
+            settings.artist_play_order == DateAsc,
+            "a legacy file without play order must default to DateAsc"
         );
         Ok(())
     }

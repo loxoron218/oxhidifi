@@ -183,7 +183,11 @@ impl SqliteStorage {
             .collect())
     }
 
-    /// Fetch all album rows by artist, ordered by year.
+    /// Fetch all album rows by artist, ordered by year, title, then id.
+    ///
+    /// The secondary keys keep same-year and unknown-year (`NULL`, sorted
+    /// first like the playback `DateAsc` order) albums deterministic and in
+    /// sync with the artist detail display and artist-wide playback.
     ///
     /// # Errors
     ///
@@ -192,7 +196,7 @@ impl SqliteStorage {
         query_as::<_, Album>(concat!(
             "SELECT al.id, al.title, al.artist_id, al.year, al.genre, al.artwork_path, ",
             album_meta_cols!(),
-            " WHERE al.artist_id = ? ORDER BY al.year",
+            " WHERE al.artist_id = ? ORDER BY al.year, al.title, al.id",
         ))
         .bind(artist_id)
         .fetch_all(&self.pool)

@@ -108,6 +108,36 @@ pub enum SortOrder {
     Descending,
 }
 
+/// Preferred album ordering for artist-wide playback ("Play all albums").
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ArtistPlayOrder {
+    /// Oldest first: year ascending, then title, then id.
+    #[default]
+    DateAsc,
+    /// Newest first: year descending, then title, then id.
+    DateDesc,
+    /// Alphabetical by title ascending, then year, then id.
+    TitleAsc,
+    /// Alphabetical by title descending, then year, then id.
+    TitleDesc,
+}
+
+impl_criteria_helpers!(ArtistPlayOrder {
+    DateAsc => (0, "Date: Oldest First"),
+    DateDesc => (1, "Date: Newest First"),
+    TitleAsc => (2, "Title: A–Z"),
+    TitleDesc => (3, "Title: Z–A"),
+});
+
+impl ArtistPlayOrder {
+    /// Ordered options backing the preferences combo, in combo-index order.
+    #[must_use]
+    pub const fn options() -> [Self; 4] {
+        [Self::DateAsc, Self::DateDesc, Self::TitleAsc, Self::TitleDesc]
+    }
+}
+
 /// Default albums grid sort configuration.
 #[must_use]
 pub fn default_albums_sort() -> Vec<AlbumSortItem> {
@@ -165,6 +195,7 @@ mod tests {
         AlbumSortCriteria,
         AlbumSortCriteria::{Artist, BitDepth, Format, SampleRate, Title, Year},
         AlbumSortItem,
+        ArtistPlayOrder::{self, DateAsc, DateDesc, TitleAsc, TitleDesc},
         ArtistSortCriteria::{self, AlbumCount, Name},
         ArtistSortItem,
         SortOrder::{Ascending, Descending},
@@ -267,6 +298,33 @@ mod tests {
         );
         let orders: Vec<_> = sort.iter().map(|item| item.order).collect();
         assert_eq!(orders, vec![Ascending, Descending]);
+    }
+
+    #[test]
+    fn artist_play_order_discriminator_and_labels() {
+        let cases = [
+            (DateAsc, 0, "Date: Oldest First"),
+            (DateDesc, 1, "Date: Newest First"),
+            (TitleAsc, 2, "Title: A–Z"),
+            (TitleDesc, 3, "Title: Z–A"),
+        ];
+        for (order, disc, label) in cases {
+            assert_eq!(order.discriminator(), disc, "order must keep discriminator");
+            assert_eq!(ArtistPlayOrder::from_discriminator(disc), Some(order));
+            assert_eq!(order.to_string(), label, "order label must match UI");
+        }
+        assert_eq!(ArtistPlayOrder::from_discriminator(4), None);
+        assert_eq!(ArtistPlayOrder::default(), DateAsc, "default must be DateAsc");
+        assert_eq!(ArtistPlayOrder::options(), [DateAsc, DateDesc, TitleAsc, TitleDesc]);
+    }
+
+    #[test]
+    fn artist_play_order_round_trips_through_serde() -> Result<()> {
+        let json = to_string(&TitleDesc)?;
+        ensure!(json.contains("title_desc"), "json was: {json}");
+        ensure!(from_str::<ArtistPlayOrder>(&json)? == TitleDesc);
+        ensure!(from_str::<ArtistPlayOrder>("\"date_asc\"")? == DateAsc);
+        Ok(())
     }
 
     #[test]

@@ -15,6 +15,7 @@ use crate::{
         active_tab::ActiveTab,
         config::corrupt_recovery::{ensure_parent_dir, load_settings_with_fallback},
         settings::UserSettings,
+        sort_rules::ArtistPlayOrder,
     },
 };
 
@@ -131,6 +132,12 @@ impl SettingsStore {
         self.settings.output_mode
     }
 
+    /// Get the preferred album ordering for artist-wide playback.
+    #[must_use]
+    pub const fn get_artist_play_order(&self) -> ArtistPlayOrder {
+        self.settings.artist_play_order
+    }
+
     /// Get whether the side player panel (sidebar) is visible.
     #[must_use]
     pub const fn get_sidebar_visible(&self) -> bool {
@@ -170,7 +177,10 @@ mod tests {
         tokio::test as tokio_test,
     };
 
-    use crate::storage::{config::persistence::SettingsStore, settings::UserSettings};
+    use crate::storage::{
+        config::persistence::SettingsStore, settings::UserSettings,
+        sort_rules::ArtistPlayOrder::{DateAsc, TitleDesc},
+    };
 
     fn store_in(dir: &Path) -> SettingsStore {
         SettingsStore {
@@ -219,6 +229,9 @@ mod tests {
             s.show_album_labels = true;
             s.window.sidebar_visible = false;
         });
+        assert!(store.get_artist_play_order() == DateAsc, "play order defaults DateAsc");
+        store.update_memory(|s| s.artist_play_order = TitleDesc);
+        assert!(store.get_artist_play_order() == TitleDesc, "play order reflects update");
         assert!(
             store.get_show_album_labels(),
             "album labels should be re-enabled"
