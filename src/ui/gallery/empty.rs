@@ -225,8 +225,10 @@ pub fn show_library_empty(
                     icon_label,
                     heading: "No Music Library Configured",
                     heading_label: "No music library configured",
-                    description: "Add a music folder via Preferences > Library to get started.",
-                    description_label: "Add a music folder via Preferences to get started.",
+                    description: "Add a music folder to get started. You can also add more \
+                                  library paths later via the Preferences dialog (Library).",
+                    description_label: "Add a music folder to get started. You can also add more \
+                                        library paths later via the Preferences dialog.",
                 }
             } else {
                 EmptyStateParams {
