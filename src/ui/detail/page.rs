@@ -9,6 +9,7 @@ use {
             Align::Start,
             Box, Button, EventControllerKey, Label,
             Orientation::{Horizontal, Vertical},
+            PolicyType::{Automatic, Never},
             ScrolledWindow,
             accessible::Property::Label as PropertyLabel,
         },
@@ -72,11 +73,17 @@ pub fn setup_back_navigation(widget: &impl WidgetExt, nav_tx: Sender<NavigationE
 }
 
 /// Build a scrollable content area with standard margins and spacing.
+///
+/// Horizontal scrolling stays disabled so detail pages can never scroll
+/// sideways on the 360 px minimum window; content must shrink or wrap to fit
+/// instead (see the artist action wrap box and ellipsized album headers).
 #[must_use]
 pub fn build_scroll_content() -> (ScrolledWindow, Box) {
     let scroll = ScrolledWindow::builder()
         .vexpand(true)
         .hexpand(true)
+        .hscrollbar_policy(Never)
+        .vscrollbar_policy(Automatic)
         .build();
 
     let content = Box::builder()
@@ -123,11 +130,16 @@ mod tests {
     use {
         anyhow::{Result, ensure},
         async_channel::unbounded,
+        libadwaita::gtk::{
+            self,
+            PolicyType::{Automatic, Never},
+            test,
+        },
     };
 
     use crate::{
         app::runtime::NavigationEvent::{self, Back},
-        ui::detail::page::try_send_back,
+        ui::detail::page::{build_scroll_content, try_send_back},
     };
 
     #[test]
@@ -135,6 +147,20 @@ mod tests {
         let (tx, rx) = unbounded::<NavigationEvent>();
         try_send_back(&tx);
         ensure!(matches!(rx.try_recv(), Ok(Back)));
+        Ok(())
+    }
+
+    #[test]
+    fn scroll_content_never_scrolls_horizontally() -> Result<()> {
+        let (scroll, _) = build_scroll_content();
+        ensure!(
+            scroll.hscrollbar_policy() == Never,
+            "detail pages must never scroll horizontally"
+        );
+        ensure!(
+            scroll.vscrollbar_policy() == Automatic,
+            "detail pages must keep vertical scrolling"
+        );
         Ok(())
     }
 }

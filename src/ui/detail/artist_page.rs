@@ -82,6 +82,7 @@ pub fn build_artist_detail(
     let name_label = Label::builder()
         .css_classes(["title-2", "heading"])
         .ellipsize(End)
+        .hexpand(true)
         .halign(Start)
         .build();
     name_label.update_property(&[PropertyLabel("Artist name")]);
@@ -89,6 +90,7 @@ pub fn build_artist_detail(
 
     let album_count_label = Label::builder()
         .css_classes(["dim-label", "body"])
+        .hexpand(true)
         .halign(Start)
         .build();
     album_count_label.update_property(&[PropertyLabel("Album count")]);

@@ -9,3 +9,6 @@ pub mod body_compose;
 pub mod cover_art;
 pub mod page;
 pub mod tracklist;
+
+#[cfg(test)]
+pub mod min_width;

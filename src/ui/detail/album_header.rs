@@ -50,7 +50,11 @@ pub fn build_album_header(
     format_info: &FormatInfo,
     expanded: bool,
 ) -> (Box, ToggleButton, Button) {
-    let header = Box::builder().orientation(Horizontal).spacing(12).build();
+    let header = Box::builder()
+        .orientation(Horizontal)
+        .spacing(12)
+        .hexpand(true)
+        .build();
     header.update_property(&[PropertyLabel(&format!("Album {}", album.title))]);
 
     let toggle = ToggleButton::builder()
@@ -115,6 +119,7 @@ fn build_album_info(album: &Album, format_info: &FormatInfo) -> Box {
         .label(&album.title)
         .css_classes(["title-4", "heading"])
         .ellipsize(End)
+        .hexpand(true)
         .halign(Start)
         .build();
     title.update_property(&[PropertyLabel(&format!("Album: {}", album.title))]);
@@ -126,6 +131,8 @@ fn build_album_info(album: &Album, format_info: &FormatInfo) -> Box {
             format_info.summary_detailed()
         ))
         .css_classes(["dim-label", "caption"])
+        .ellipsize(End)
+        .hexpand(true)
         .halign(Start)
         .build();
     meta.update_property(&[PropertyLabel(&format!(
@@ -171,5 +178,49 @@ pub fn toggle_label(title: &str, expanded: bool) -> String {
         format!("Collapse album {title}")
     } else {
         format!("Expand album {title}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use {
+        anyhow::Result,
+        libadwaita::gtk::{self, test},
+    };
+
+    use crate::{
+        app::runtime::AppState,
+        storage::{catalog::Album, formats::FormatInfo},
+        ui::detail::{album_header::build_album_header, min_width::assert_fits_minimum_window},
+    };
+
+    #[test]
+    fn album_header_fits_minimum_window() -> Result<()> {
+        let state = Arc::new(AppState::mock()?);
+        let album = Album {
+            id: 1,
+            title: "Selected Ambient Works Volume II With A Very Long Title".into(),
+            artist_id: 1,
+            year: Some(1994),
+            genre: None,
+            artwork_path: None,
+            track_count: 25,
+            total_duration: 3000.0,
+            format_summary: String::new(),
+            lossless: true,
+            format: "FLAC".into(),
+            bit_depth: Some(24),
+            sample_rate: Some(96_000),
+        };
+        let format_info = FormatInfo {
+            formats: vec!["FLAC".into()],
+            sample_rates: vec![96_000],
+            bit_depths: vec![24],
+            channels: vec![2],
+        };
+        let (header, _, _) = build_album_header(&state, &album, &format_info, true);
+        assert_fits_minimum_window(&header, "album header")
     }
 }

@@ -1,17 +1,15 @@
 //! Artist detail playback and layout actions: Play, Shuffle, Collapse-all pills.
 //!
-//! Groups the artist header actions in a single horizontal box per the GNOME
-//! HIG: the primary `Play` action keeps `suggested-action`, while the
-//! secondary `Shuffle` and `Collapse all` toggles are plain `pill`s so only
-//! one action is emphasized.
+//! Groups the artist header actions in a wrapping box per the GNOME HIG: the
+//! primary `Play` action keeps `suggested-action`, while the secondary
+//! `Shuffle` and `Collapse all` toggles are plain `pill`s so only one action
+//! is emphasized. `AdwWrapBox` flows the third pill onto a second line on the
+//! 360 px minimum window instead of clipping it.
 
 use libadwaita::{
-    ButtonContent,
-    gtk::{
-        Align::Start, Box, Button, Orientation::Horizontal, ToggleButton,
-        accessible::Property::Label,
-    },
-    prelude::{AccessibleExtManual, BoxExt, ButtonExt, ToggleButtonExt, WidgetExt},
+    ButtonContent, WrapBox,
+    gtk::{Align::Start, Button, ToggleButton, accessible::Property::Label},
+    prelude::{AccessibleExtManual, ButtonExt, ToggleButtonExt, WidgetExt},
 };
 
 /// Tooltip and accessible label for ordered artist playback.
@@ -192,7 +190,7 @@ pub fn set_collapse_all_state(button: &ToggleButton, expanded: bool) {
     refresh_collapse_all_visual(button, expanded);
 }
 
-/// Build the artist header action box with Play, Shuffle, and Collapse-all.
+/// Build the artist header action wrap box with Play, Shuffle, and Collapse-all.
 ///
 /// # Arguments
 ///
@@ -201,16 +199,16 @@ pub fn set_collapse_all_state(button: &ToggleButton, expanded: bool) {
 ///
 /// # Returns
 ///
-/// * `(Box, Button, ToggleButton, ToggleButton)` - Horizontal action box with the play button, the
-///   shuffle toggle, and the collapse-all toggle.
+/// * `(WrapBox, Button, ToggleButton, ToggleButton)` - Wrapping action box with the play button,
+///   the shuffle toggle, and the collapse-all toggle.
 #[must_use]
 pub fn build_artist_actions(
     shuffle_active: bool,
     albums_expanded: bool,
-) -> (Box, Button, ToggleButton, ToggleButton) {
-    let actions = Box::builder()
-        .orientation(Horizontal)
-        .spacing(12)
+) -> (WrapBox, Button, ToggleButton, ToggleButton) {
+    let actions = WrapBox::builder()
+        .child_spacing(12)
+        .line_spacing(12)
         .halign(Start)
         .build();
     actions.update_property(&[Label("Artist playback actions")]);
@@ -238,10 +236,13 @@ mod tests {
         },
     };
 
-    use crate::ui::detail::artist_actions::{
-        PLAY_TOOLTIP, SHUFFLE_TOOLTIP, build_artist_actions, build_artist_play_button,
-        build_artist_shuffle_button, build_collapse_all_button, refresh_collapse_all_visual,
-        set_collapse_all_state,
+    use crate::ui::detail::{
+        artist_actions::{
+            PLAY_TOOLTIP, SHUFFLE_TOOLTIP, build_artist_actions, build_artist_play_button,
+            build_artist_shuffle_button, build_collapse_all_button, refresh_collapse_all_visual,
+            set_collapse_all_state,
+        },
+        min_width::assert_fits_minimum_window,
     };
 
     fn button_content(button: &impl ButtonExt) -> Result<ButtonContent> {
@@ -363,6 +364,16 @@ mod tests {
             count == 3,
             "action box must hold play, shuffle, and collapse-all"
         );
+        ensure!(
+            actions.child_spacing() == 12 && actions.line_spacing() == 12,
+            "action wrap box must keep 12 px spacing"
+        );
         Ok(())
+    }
+
+    #[test]
+    fn action_wrap_box_fits_minimum_window() -> Result<()> {
+        let (actions, _, _, _) = build_artist_actions(false, true);
+        assert_fits_minimum_window(&actions, "wrapped actions")
     }
 }

@@ -122,7 +122,9 @@ fn build_track_content(track: &Track, display_number: usize) -> Box {
     let fmt_label = Label::builder()
         .label(&track_format)
         .css_classes(["dim-label", "caption"])
+        .ellipsize(EllipsizeEnd)
         .width_chars(13)
+        .max_width_chars(13)
         .xalign(0.0)
         .build();
     fmt_label.update_property(&[PropertyLabel(&format!(
@@ -132,7 +134,9 @@ fn build_track_content(track: &Track, display_number: usize) -> Box {
     let duration_label = Label::builder()
         .label(format_duration(track.duration))
         .css_classes(["dim-label", "caption"])
+        .ellipsize(EllipsizeEnd)
         .width_chars(5)
+        .max_width_chars(5)
         .xalign(0.0)
         .build();
     duration_label.update_property(&[PropertyLabel(&format!(
@@ -283,7 +287,10 @@ mod tests {
     use crate::{
         app::runtime::AppState,
         storage::catalog::Track,
-        ui::detail::tracklist::{build_track_row, format_duration},
+        ui::detail::{
+            min_width::assert_fits_minimum_window,
+            tracklist::{build_track_row, format_duration},
+        },
     };
 
     #[test]
@@ -313,5 +320,14 @@ mod tests {
         ensure!(row.observe_controllers().n_items() == 3);
         ensure!(row.child().is_some());
         Ok(())
+    }
+
+    #[test]
+    fn track_row_fits_minimum_window() -> Result<()> {
+        let state = Arc::new(AppState::mock()?);
+        let mut track = Track::test_fixture();
+        track.title = "A Very Long Track Title That Must Ellipsize On Narrow Windows".into();
+        let row = build_track_row(&state, &track, 1);
+        assert_fits_minimum_window(&row, "track row")
     }
 }
