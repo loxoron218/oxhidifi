@@ -1,6 +1,7 @@
 //! Detail pages for albums and artists.
 
 pub mod album_header;
+pub mod album_meta;
 pub mod album_page;
 pub mod artist_actions;
 pub mod artist_album_section;

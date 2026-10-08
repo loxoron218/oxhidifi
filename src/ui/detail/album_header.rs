@@ -17,13 +17,18 @@ use libadwaita::{
         accessible::Property::Label as PropertyLabel,
         pango::EllipsizeMode::End,
     },
-    prelude::{AccessibleExtManual, BoxExt},
+    prelude::{AccessibleExtManual, BoxExt, WidgetExt},
 };
 
 use crate::{
     app::runtime::AppState,
     storage::{catalog::Album, formats::FormatInfo},
-    ui::detail::cover_art::decode_cover_into_picture,
+    ui::detail::{
+        album_meta::{
+            album_format_label, album_meta_label, album_meta_primary, album_meta_secondary,
+        },
+        cover_art::decode_cover_into_picture,
+    },
 };
 
 /// Icon for an expanded (revealed) album section.
@@ -101,6 +106,11 @@ pub fn build_album_header(
 
 /// Build the title/metadata box for the album header.
 ///
+/// Shows the album title plus two single-line metadata labels: primary
+/// `"{year} • N tracks"` and secondary `{format details}`, each ellipsized
+/// independently so the year and track count stay visible on narrow windows.
+/// The format line is hidden when empty.
+///
 /// # Arguments
 ///
 /// * `album` - Album to display.
@@ -108,7 +118,7 @@ pub fn build_album_header(
 ///
 /// # Returns
 ///
-/// * `Box` - Vertical box with title and metadata labels.
+/// * `Box` - Vertical box with title and two metadata labels.
 fn build_album_info(album: &Album, format_info: &FormatInfo) -> Box {
     let info_box = Box::builder()
         .orientation(Vertical)
@@ -124,23 +134,35 @@ fn build_album_info(album: &Album, format_info: &FormatInfo) -> Box {
         .build();
     title.update_property(&[PropertyLabel(&format!("Album: {}", album.title))]);
     info_box.append(&title);
+    let primary = build_meta_label(&album_meta_primary(album), &album_meta_label(album));
+    info_box.append(&primary);
+    let secondary_text = album_meta_secondary(format_info);
+    let secondary = build_meta_label(&secondary_text, &album_format_label(album, &secondary_text));
+    secondary.set_visible(!secondary_text.is_empty());
+    info_box.append(&secondary);
+    info_box
+}
+
+/// Build a single-line dimmed metadata label.
+///
+/// # Arguments
+///
+/// * `text` - Visible label text.
+/// * `accessible` - Accessible label text.
+///
+/// # Returns
+///
+/// * `Label` - Ellipsized metadata label.
+fn build_meta_label(text: &str, accessible: &str) -> Label {
     let meta = Label::builder()
-        .label(format!(
-            "{} tracks \u{2022} {}",
-            album.track_count,
-            format_info.summary_detailed()
-        ))
+        .label(text)
         .css_classes(["dim-label", "caption"])
         .ellipsize(End)
         .hexpand(true)
         .halign(Start)
         .build();
-    meta.update_property(&[PropertyLabel(&format!(
-        "{} tracks in {}",
-        album.track_count, album.title
-    ))]);
-    info_box.append(&meta);
-    info_box
+    meta.update_property(&[PropertyLabel(accessible)]);
+    meta
 }
 
 /// Tooltip for the disclosure toggle.
@@ -186,41 +208,89 @@ mod tests {
     use std::sync::Arc;
 
     use {
-        anyhow::Result,
-        libadwaita::gtk::{self, test},
+        anyhow::{Result, anyhow, bail, ensure},
+        libadwaita::{
+            gtk::{self, Box, Label, test},
+            prelude::{Cast, WidgetExt},
+        },
     };
 
     use crate::{
         app::runtime::AppState,
-        storage::{catalog::Album, formats::FormatInfo},
-        ui::detail::{album_header::build_album_header, min_width::assert_fits_minimum_window},
+        storage::formats::FormatInfo,
+        ui::detail::{
+            album_header::build_album_header,
+            album_meta::tests::{fixture_album, flac_info},
+            min_width::assert_fits_minimum_window,
+        },
     };
+
+    fn header_meta_lines(header: &Box) -> Result<(String, String, bool)> {
+        let Some(toggle) = header.first_child() else {
+            bail!("header must start with a toggle")
+        };
+        let Some(info_widget) = toggle.next_sibling() else {
+            bail!("header must hold an info box")
+        };
+        let Ok(info) = info_widget.downcast::<Box>() else {
+            bail!("header info must be a box")
+        };
+        let Some(title) = info.first_child() else {
+            bail!("info must start with a title")
+        };
+        let Some(primary_widget) = title.next_sibling() else {
+            bail!("info must hold a primary label")
+        };
+        let Some(secondary_widget) = primary_widget.next_sibling() else {
+            bail!("info must hold a secondary label")
+        };
+        let Ok(primary) = primary_widget.downcast::<Label>() else {
+            bail!("primary must be a label")
+        };
+        let Ok(secondary) = secondary_widget.downcast::<Label>() else {
+            bail!("secondary must be a label")
+        };
+        Ok((
+            primary.label().to_string(),
+            secondary.label().to_string(),
+            secondary.is_visible(),
+        ))
+    }
+
+    fn header_box(state: &Arc<AppState>, year: Option<i32>, info: &FormatInfo) -> Result<Box> {
+        let (header, _, _) = build_album_header(state, &fixture_album(year), info, true);
+        header
+            .downcast::<Box>()
+            .map_err(|widget| anyhow!("header must be a box, got {widget:?}"))
+    }
+
+    #[test]
+    fn header_widget_shows_two_lines() -> Result<()> {
+        let state = Arc::new(AppState::mock()?);
+        let (primary, secondary, visible) =
+            header_meta_lines(&header_box(&state, Some(1994), &flac_info())?)?;
+        ensure!(primary == "1994 \u{2022} 25 tracks", "primary: {primary}");
+        ensure!(secondary.contains("FLAC"), "secondary: {secondary}");
+        ensure!(visible, "format line must be visible");
+        Ok(())
+    }
+
+    #[test]
+    fn header_widget_hides_empty_format() -> Result<()> {
+        let state = Arc::new(AppState::mock()?);
+        let (primary, secondary, visible) =
+            header_meta_lines(&header_box(&state, Some(2024), &FormatInfo::default())?)?;
+        ensure!(primary == "2024 \u{2022} 25 tracks", "primary: {primary}");
+        ensure!(secondary.is_empty() && !visible, "empty format must hide");
+        Ok(())
+    }
 
     #[test]
     fn album_header_fits_minimum_window() -> Result<()> {
         let state = Arc::new(AppState::mock()?);
-        let album = Album {
-            id: 1,
-            title: "Selected Ambient Works Volume II With A Very Long Title".into(),
-            artist_id: 1,
-            year: Some(1994),
-            genre: None,
-            artwork_path: None,
-            track_count: 25,
-            total_duration: 3000.0,
-            format_summary: String::new(),
-            lossless: true,
-            format: "FLAC".into(),
-            bit_depth: Some(24),
-            sample_rate: Some(96_000),
-        };
-        let format_info = FormatInfo {
-            formats: vec!["FLAC".into()],
-            sample_rates: vec![96_000],
-            bit_depths: vec![24],
-            channels: vec![2],
-        };
-        let (header, _, _) = build_album_header(&state, &album, &format_info, true);
+        let mut album = fixture_album(Some(1994));
+        album.title = "Selected Ambient Works Volume II With A Very Long Title".into();
+        let (header, _, _) = build_album_header(&state, &album, &flac_info(), true);
         assert_fits_minimum_window(&header, "album header")
     }
 }
