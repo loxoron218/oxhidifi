@@ -16,6 +16,7 @@ pub mod pane_modes;
 pub mod panes;
 pub mod player;
 pub mod preferences;
+pub mod shortcuts;
 pub mod signal_handlers;
 pub mod signal_view;
 pub mod status;

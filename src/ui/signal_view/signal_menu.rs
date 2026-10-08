@@ -3,8 +3,9 @@
 //! The `Signal` tab owns no header bar or popover of its own. When it is
 //! active the window header swaps its view-switch `SplitButton` for a plain
 //! signal `MenuButton` carrying the copy action plus the shared preferences
-//! entry. Output-settings and About shortcuts are intentionally omitted: the
-//! generic preferences dialog already covers both landings.
+//! and keyboard shortcuts entries. Output-settings and About shortcuts are
+//! intentionally omitted: the generic preferences dialog already covers both
+//! landings.
 
 use std::sync::Arc;
 
@@ -23,7 +24,10 @@ use {
 
 use crate::{
     app::runtime::AppState,
-    ui::{signal_view::signal_tab::SignalTab, toggle_popover::build_preferences_button},
+    ui::{
+        shortcuts::build_shortcuts_button, signal_view::signal_tab::SignalTab,
+        toggle_popover::build_preferences_button,
+    },
 };
 
 /// Signal menu shown in the main header bar while the `Signal` tab is active.
@@ -35,6 +39,8 @@ pub struct SignalHeaderMenu {
     copy: Button,
     /// Opens the shared preferences dialog.
     prefs: Button,
+    /// Opens the keyboard shortcuts dialog.
+    shortcuts: Button,
 }
 
 impl SignalHeaderMenu {
@@ -56,10 +62,16 @@ impl SignalHeaderMenu {
         &self.prefs
     }
 
-    /// Number of actions parented in the popover (always two).
+    /// Shortcuts action button (test hook).
+    #[must_use]
+    pub const fn shortcuts_button(&self) -> &Button {
+        &self.shortcuts
+    }
+
+    /// Number of actions parented in the popover (always three).
     #[must_use]
     pub fn action_count(&self) -> u32 {
-        let parented = [&self.copy, &self.prefs]
+        let parented = [&self.copy, &self.prefs, &self.shortcuts]
             .iter()
             .filter(|button| button.parent().is_some())
             .count();
@@ -90,9 +102,10 @@ fn menu_action(label: &str) -> Button {
 /// Build the header-bar signal menu for the `Signal` tab.
 ///
 /// Creates a plain `MenuButton` whose popover carries the copy action plus
-/// the shared preferences entry, and wires both actions. Copy writes the
-/// tab's retained summary to the clipboard with a `Toast` confirmation;
-/// preferences presents the existing preferences dialog.
+/// the shared preferences and keyboard shortcuts entries, and wires all
+/// actions. Copy writes the tab's retained summary to the clipboard with a
+/// `Toast` confirmation; preferences presents the existing preferences
+/// dialog; shortcuts presents the shortcuts dialog.
 ///
 /// # Arguments
 ///
@@ -113,11 +126,13 @@ pub fn build_signal_header_menu(
     copy.set_tooltip_text(Some("Copy the signal path summary to the clipboard"));
 
     let prefs = build_preferences_button(state, parent);
+    let shortcuts = build_shortcuts_button(state, parent);
 
     let list = Box::builder().orientation(Vertical).spacing(6).build();
     list.append(&copy);
     list.append(&Separator::new(Horizontal));
     list.append(&prefs);
+    list.append(&shortcuts);
     let popover = Popover::builder().child(&list).has_arrow(true).build();
     let button = MenuButton::builder()
         .icon_name("view-more-symbolic")
@@ -153,10 +168,19 @@ pub fn build_signal_header_menu(
             prefs_pop.popdown();
         }));
 
+    let shortcuts_pop = button.clone();
+    state
+        .handles
+        .lock()
+        .retain_signal(shortcuts.connect_clicked(move |_| {
+            shortcuts_pop.popdown();
+        }));
+
     SignalHeaderMenu {
         button,
         copy,
         prefs,
+        shortcuts,
     }
 }
 
@@ -180,14 +204,14 @@ mod tests {
     };
 
     #[test]
-    fn signal_header_menu_carries_copy_and_preferences() -> Result<()> {
+    fn signal_header_menu_carries_copy_preferences_and_shortcuts() -> Result<()> {
         let state = Arc::new(AppState::mock().context("failed to build mock app state")?);
         let parent = Window::new();
         let tab = build_signal_page();
         let menu = build_signal_header_menu(&state, &parent, &tab);
         ensure!(
-            menu.action_count() == 2,
-            "signal menu must carry two actions"
+            menu.action_count() == 3,
+            "signal menu must carry three actions"
         );
         ensure!(
             menu.copy_button().label().as_deref() == Some("Copy path summary"),
@@ -198,9 +222,18 @@ mod tests {
             "signal menu must carry the preferences entry"
         );
         ensure!(
-            [menu.copy_button(), menu.prefs_button()]
-                .iter()
-                .all(|button| button.can_focus()),
+            menu.shortcuts_button().tooltip_text().as_deref()
+                == Some("Open keyboard shortcuts (Ctrl+?)"),
+            "signal menu must carry the shortcuts entry"
+        );
+        ensure!(
+            [
+                menu.copy_button(),
+                menu.prefs_button(),
+                menu.shortcuts_button()
+            ]
+            .iter()
+            .all(|button| button.can_focus()),
             "every action must be keyboard-reachable"
         );
         Ok(())

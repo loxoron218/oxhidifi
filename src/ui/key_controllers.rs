@@ -10,7 +10,7 @@ use libadwaita::{
     ApplicationWindow, NavigationView, OverlaySplitView,
     gdk::{Key, ModifierType},
     glib::Propagation::{Proceed, Stop},
-    gtk::{EventControllerKey, PropagationPhase::Capture},
+    gtk::{EventControllerKey, PropagationPhase::Capture, Window},
     prelude::{EventControllerExt, GtkWindowExt, WidgetExt},
 };
 
@@ -26,6 +26,7 @@ use crate::{
             zoom_key::handle_zoom_key,
         },
         navigation::is_detail_visible,
+        shortcuts::{is_shortcuts_key, show_shortcuts_dialog},
     },
 };
 
@@ -73,8 +74,38 @@ fn add_view_toggle_controller(
     window.add_controller(view_controller);
 }
 
-/// Add Escape, sidebar toggle, zoom, view toggle, tab switch, and play/pause key controllers to the
-/// window.
+/// Add the `Ctrl+?` shortcuts-dialog controller to the window.
+///
+/// Works from anywhere, including text entries (`Ctrl+?` has no editing
+/// function to preserve) and pushed detail pages, matching the tab-switch
+/// precedent.
+///
+/// # Arguments
+///
+/// * `window` - Window receiving the controller.
+/// * `parent` - Parent window used to present the shortcuts dialog.
+/// * `state` - Application state owning the retained signal handles.
+fn add_shortcuts_controller(window: &ApplicationWindow, parent: &Window, state: &Arc<AppState>) {
+    let dialog_parent = parent.clone();
+    let shortcuts_controller = EventControllerKey::new();
+    state
+        .handles
+        .lock()
+        .retain_signal(
+            shortcuts_controller.connect_key_pressed(move |_, key, _, modifiers| {
+                if is_shortcuts_key(key, modifiers) {
+                    show_shortcuts_dialog(&dialog_parent);
+                    Stop
+                } else {
+                    Proceed
+                }
+            }),
+        );
+    window.add_controller(shortcuts_controller);
+}
+
+/// Add Escape, sidebar toggle, zoom, view toggle, tab switch, play/pause, and shortcuts-dialog key
+/// controllers to the window.
 ///
 /// `Ctrl+B` toggles the player panel on every page (including pushed detail
 /// pages). Text-input focus wins so `Ctrl+B` keeps its native editing
@@ -100,6 +131,9 @@ fn add_view_toggle_controller(
 /// navigating. Text-input focus and a hidden sidebar fall through to the old
 /// behavior.
 ///
+/// `Ctrl+?` opens the keyboard shortcuts dialog from anywhere, including
+/// text entries and pushed detail pages.
+///
 /// # Arguments
 ///
 /// * `window` - Window receiving the controllers.
@@ -108,12 +142,14 @@ fn add_view_toggle_controller(
 /// * `state` - Application state owning the retained signal handles.
 /// * `sidebar_intent` - Shared last sidebar intent, cleared when Escape hides the panel so
 ///   collapse-restore does not resurrect it.
+/// * `parent` - Parent window used to present the shortcuts dialog.
 pub fn add_key_controllers(
     window: &ApplicationWindow,
     split_view: &OverlaySplitView,
     nav_view: &NavigationView,
     state: &Arc<AppState>,
     sidebar_intent: &Arc<AtomicBool>,
+    parent: &Window,
 ) {
     let esc_split = split_view.clone();
     let esc_intent = Arc::clone(sidebar_intent);
@@ -219,4 +255,6 @@ pub fn add_key_controllers(
             }),
         );
     window.add_controller(tab_controller);
+
+    add_shortcuts_controller(window, parent, state);
 }

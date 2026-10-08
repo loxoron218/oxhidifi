@@ -5,14 +5,15 @@
 //! replaced by a bottom `ViewSwitcherBar` in narrow windows per GNOME HIG.
 //!
 //! Provides a `SplitButton` to toggle between grid and column layout views
-//! with a popover containing zoom controls, sort configuration, and a
-//! preferences entry. The popover construction lives in the sibling
-//! [`toggle_popover`] module. While the `Signal` tab is active the view switch
-//! is hidden and a plain signal menu (copy plus preferences) is shown
-//! instead; its construction lives in the sibling [`signal_menu`] module.
-//! While an album/artist detail page is pushed (tag `detail` in the
-//! `NavigationView`) both controls are hidden: zoom and sort are no-ops
-//! there since detail covers use fixed sizes.
+//! with a popover containing zoom controls, sort configuration, a
+//! preferences entry, and a keyboard shortcuts entry. The popover
+//! construction lives in the sibling [`toggle_popover`] module. While the
+//! `Signal` tab is active the view switch is hidden and a plain signal menu
+//! (copy plus preferences and shortcuts) is shown instead; its construction
+//! lives in the sibling [`signal_menu`] module. While an album/artist detail
+//! page is pushed (tag `detail` in the `NavigationView`) both controls are
+//! hidden: zoom and sort are no-ops there since detail covers use fixed
+//! sizes.
 
 use std::sync::Arc;
 
@@ -89,7 +90,7 @@ async fn save_view_mode(state: Arc<AppState>, mode: ViewMode) {
 /// Creates a `SplitButton` that switches between grid and column layout
 /// on main button click. The arrow dropdown shows a popover with zoom
 /// controls (zoom out/in), sort configuration lists (albums/artists),
-/// and a preferences entry.
+/// a preferences entry, and a keyboard shortcuts entry.
 ///
 /// # Arguments
 ///
@@ -138,7 +139,7 @@ pub fn build_view_toggle(state: &Arc<AppState>, parent: &Window) -> SplitButton 
 /// Build the header-bar end controls swapping view toggle and signal menu.
 ///
 /// Shows the view-switch `SplitButton` for Albums/Artists and a plain
-/// signal `MenuButton` (copy plus preferences) for `Signal`. Visibility
+/// signal `MenuButton` (copy plus preferences and shortcuts) for `Signal`. Visibility
 /// follows the active tab, initialized from storage. Both controls are
 /// hidden while a detail page is pushed, since zoom and sort are no-ops
 /// there; visibility is restored when the detail page is popped, covering

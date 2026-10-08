@@ -86,7 +86,14 @@ pub fn build_window(app: &Application, state: &Arc<AppState>) -> ApplicationWind
 
     wire_panel_events(state, &split_view, &sidebar_intent);
 
-    add_key_controllers(&window, &split_view, &nav_view, state, &sidebar_intent);
+    add_key_controllers(
+        &window,
+        &split_view,
+        &nav_view,
+        state,
+        &sidebar_intent,
+        window.upcast_ref::<Window>(),
+    );
 
     wire_close_request(app, &window, &split_view, state);
 

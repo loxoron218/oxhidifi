@@ -1,5 +1,5 @@
-//! View-toggle popover: zoom controls, sort configuration lists, and a
-//! preferences entry.
+//! View-toggle popover: zoom controls, sort configuration lists, a
+//! preferences entry, and a keyboard shortcuts entry.
 
 use std::sync::{Arc, atomic::Ordering::Relaxed};
 
@@ -28,6 +28,7 @@ use crate::{
     ui::{
         drag::{build_albums_drag_list, build_artists_drag_list},
         preferences::show_preferences_dialog,
+        shortcuts::build_shortcuts_button,
         zoom::{GRID_ZOOM_MAX, LIST_ZOOM_MAX},
         zoom_buttons::update_zoom_sensitivity,
     },
@@ -69,7 +70,8 @@ pub fn build_preferences_button(state: &Arc<AppState>, parent: &Window) -> Butto
     prefs_btn
 }
 
-/// Build the popover with zoom controls, sort lists, and a preferences entry.
+/// Build the popover with zoom controls, sort lists, and preferences and
+/// shortcuts entries.
 ///
 /// # Arguments
 ///
@@ -146,6 +148,9 @@ pub fn build_popover(state: &Arc<AppState>, parent: &Window) -> (Popover, Widget
 
     let prefs_btn = build_preferences_button(state, parent);
     zoom_box.append(&prefs_btn);
+
+    let shortcuts_btn = build_shortcuts_button(state, parent);
+    zoom_box.append(&shortcuts_btn);
 
     connect_zoom_handlers(state, &zoom_out_btn, &zoom_in_btn);
 
