@@ -7,8 +7,9 @@ use {
     libadwaita::{
         glib::spawn_future_local,
         gtk::{
-            Align::Start, Box, Label, ListBox, ListBoxRow, Orientation::Vertical, ToggleButton,
-            Widget, accessible::Property::Label as PropertyLabel, pango::EllipsizeMode::End,
+            Align::Start, Box, Frame, Label, ListBox, ListBoxRow, Orientation::Vertical,
+            ToggleButton, Widget, accessible::Property::Label as PropertyLabel,
+            pango::EllipsizeMode::End,
         },
         prelude::{AccessibleExtManual, BoxExt, ButtonExt, Cast, ToggleButtonExt, WidgetExt},
     },
@@ -30,9 +31,13 @@ use crate::{
                 build_artist_actions, refresh_collapse_all_visual, set_collapse_all_state,
             },
             artist_album_section::{build_album_section, persist_collapse_preference},
+            body_compose::DETAIL_COVER_SIZE,
             page::{build_detail_wrapper, build_scroll_content},
         },
-        gallery::play_action::{play_artist, play_artist_shuffled},
+        gallery::{
+            avatar::build_artist_avatar,
+            play_action::{play_artist, play_artist_shuffled},
+        },
     },
 };
 
@@ -62,6 +67,17 @@ pub fn build_artist_detail(
     let wrapper = build_detail_wrapper(nav_tx, "Artist");
 
     let (scroll, content) = build_scroll_content();
+
+    let artist_image = build_artist_avatar(DETAIL_COVER_SIZE);
+    let artist_frame = Frame::builder()
+        .child(&artist_image)
+        .width_request(DETAIL_COVER_SIZE)
+        .height_request(DETAIL_COVER_SIZE)
+        .halign(Start)
+        .css_classes(["card"])
+        .build();
+    artist_frame.update_property(&[PropertyLabel("Artist image")]);
+    content.append(&artist_frame);
 
     let name_label = Label::builder()
         .css_classes(["title-2", "heading"])

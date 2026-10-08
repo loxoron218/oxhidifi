@@ -27,8 +27,10 @@ use crate::{
 
 /// Build the avatar widget for an artist.
 ///
-/// Returns an `Image` with a generic artist icon.
-fn build_artist_avatar(size: i32) -> Widget {
+/// Returns an `Image` with a generic artist icon. Shared by artist cards
+/// and the artist detail page header so both show the same placeholder.
+#[must_use]
+pub fn build_artist_avatar(size: i32) -> Widget {
     let avatar = Image::builder()
         .icon_name("avatar-default-symbolic")
         .pixel_size(size / 2)
