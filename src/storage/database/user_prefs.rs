@@ -6,7 +6,7 @@ use crate::{
         StorageError::{self, Database},
         active_tab::ActiveTab,
         database::SqliteStorage,
-        sort_rules::{AlbumSortItem, ArtistPlayOrder, ArtistSortItem},
+        sort_rules::{AlbumSortItem, ArtistSortItem},
         view_mode::ViewMode,
     },
 };
@@ -230,36 +230,6 @@ impl SqliteStorage {
             .write()
             .update_memory(|s| s.output_mode = mode);
     }
-
-    /// Get the preferred album ordering for artist-wide playback.
-    pub fn get_artist_play_order(&self) -> ArtistPlayOrder {
-        self.settings.read().get_artist_play_order()
-    }
-
-    /// Set the preferred album ordering for artist-wide playback.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if settings cannot be saved.
-    pub async fn set_artist_play_order(&self, order: ArtistPlayOrder) -> Result<(), StorageError> {
-        self.settings
-            .write()
-            .update_memory(|s| s.artist_play_order = order);
-        self.save_settings_async()
-            .await
-            .map_err(|e| Database(format!("Failed to save artist play order: {e}")))?;
-        Ok(())
-    }
-
-    /// Set the preferred album ordering for artist-wide playback in memory.
-    ///
-    /// The debounced disk write is triggered via [`Self::save_settings`],
-    /// which runs in the background so callers are not blocked.
-    pub fn set_artist_play_order_memory(&self, order: ArtistPlayOrder) {
-        self.settings
-            .write()
-            .update_memory(|s| s.artist_play_order = order);
-    }
 }
 
 #[cfg(test)]
@@ -278,7 +248,6 @@ mod tests {
             sort_rules::{
                 AlbumSortCriteria::{BitDepth, Title},
                 AlbumSortItem,
-                ArtistPlayOrder::{DateAsc, TitleDesc},
                 ArtistSortCriteria::Name,
                 ArtistSortItem,
                 SortOrder::{Ascending, Descending},
@@ -378,22 +347,6 @@ mod tests {
         ensure!(
             storage.get_active_tab() == Artists,
             "active tab must round-trip"
-        );
-        Ok(())
-    }
-
-    #[test]
-    async fn artist_play_order_round_trips() -> Result<()> {
-        let dir = tempdir()?;
-        let storage = storage_in(&dir).await?;
-        ensure!(
-            storage.get_artist_play_order() == DateAsc,
-            "default must be DateAsc"
-        );
-        storage.set_artist_play_order(TitleDesc).await?;
-        ensure!(
-            storage.get_artist_play_order() == TitleDesc,
-            "order must round-trip"
         );
         Ok(())
     }

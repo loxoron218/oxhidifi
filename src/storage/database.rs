@@ -6,6 +6,7 @@
 //! and settings without duplicating accessors.
 
 pub mod albums;
+pub mod artist_prefs;
 pub mod artists;
 pub mod disk_sync;
 pub mod geometry_session;

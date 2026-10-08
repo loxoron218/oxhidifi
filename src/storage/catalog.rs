@@ -210,6 +210,42 @@ pub struct TrackAudio {
     pub last_modified: String,
 }
 
+/// Deterministic track fixture for widget and row tests.
+#[cfg(test)]
+impl Track {
+    /// Build a lossless FLAC track fixture.
+    ///
+    /// # Returns
+    ///
+    /// * `Track` - Fixed track pointing at `/tmp/song.flac`.
+    #[must_use]
+    pub fn test_fixture() -> Self {
+        Self {
+            id: 1,
+            title: "Song".into(),
+            number: Some(1),
+            disc_number: Some(1),
+            duration: 200.0,
+            audio: TrackAudio {
+                file_path: "/tmp/song.flac".into(),
+                content_hash: None,
+                format: "FLAC".into(),
+                sample_rate: 96_000,
+                bit_depth: Some(24),
+                channels: 2,
+                codec: "FLAC".into(),
+                lossless: true,
+                bitrate: None,
+                album_id: Some(1),
+                artist_id: Some(1),
+                file_size: 1000,
+                last_modified: String::new(),
+            },
+            created_at: String::new(),
+        }
+    }
+}
+
 /// Partial update fields for a track.
 #[derive(Debug, Clone, Default)]
 pub struct TrackUpdate {

@@ -62,6 +62,8 @@ pub struct UserSettings {
     pub list_zoom_level: u8,
     /// Album ordering for artist-wide playback ("Play all albums").
     pub artist_play_order: ArtistPlayOrder,
+    /// Whether album sections on artist detail pages start collapsed.
+    pub artist_albums_collapsed: bool,
 }
 
 impl Default for UserSettings {
@@ -85,21 +87,16 @@ impl Default for UserSettings {
             grid_zoom_level: DEFAULT_GRID_ZOOM,
             list_zoom_level: DEFAULT_LIST_ZOOM,
             artist_play_order: ArtistPlayOrder::default(),
+            artist_albums_collapsed: false,
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        fs::{File, write},
-        io::BufReader,
-    };
-
     use {
         anyhow::{Result, ensure},
-        serde_json::{from_reader, from_str, to_string_pretty},
-        tempfile::tempdir,
+        serde_json::{from_str, to_string_pretty},
     };
 
     use crate::{
@@ -158,6 +155,7 @@ mod tests {
             grid_zoom_level: 3,
             list_zoom_level: 2,
             artist_play_order: TitleDesc,
+            artist_albums_collapsed: true,
         }
     }
 
@@ -246,6 +244,10 @@ mod tests {
             restored.artist_play_order == original.artist_play_order,
             "artist_play_order should round-trip"
         );
+        ensure!(
+            restored.artist_albums_collapsed == original.artist_albums_collapsed,
+            "artist_albums_collapsed should round-trip"
+        );
         Ok(())
     }
 
@@ -283,6 +285,10 @@ mod tests {
         ensure!(
             settings.artist_play_order == DateAsc,
             "missing artist_play_order must default to DateAsc"
+        );
+        ensure!(
+            !settings.artist_albums_collapsed,
+            "missing artist_albums_collapsed must default to expanded"
         );
         Ok(())
     }
@@ -326,6 +332,10 @@ mod tests {
             settings.artist_play_order == DateAsc,
             "a legacy file without play order must default to DateAsc"
         );
+        ensure!(
+            !settings.artist_albums_collapsed,
+            "a legacy file without collapse state must default to expanded"
+        );
         Ok(())
     }
 
@@ -362,35 +372,6 @@ mod tests {
         assert!(!settings.window.maximized);
         assert!(!settings.window.sidebar_visible);
         assert_eq!(settings.output_mode, Resampled);
-    }
-
-    #[test]
-    fn settings_round_trip() {
-        let Ok(dir) = tempdir() else { return };
-        let settings_path = dir.path().join("settings.json");
-
-        let original = UserSettings {
-            volume: 0.5,
-            view_mode: Column,
-            ..UserSettings::default()
-        };
-
-        let Ok(json) = to_string_pretty(&original) else {
-            return;
-        };
-        let Ok(()) = write(&settings_path, &json) else {
-            return;
-        };
-
-        let Ok(file) = File::open(&settings_path) else {
-            return;
-        };
-        let reader = BufReader::new(file);
-        let Ok(restored) = from_reader::<_, UserSettings>(reader) else {
-            return;
-        };
-
-        assert!((restored.volume - 0.5).abs() < f64::EPSILON);
-        assert_eq!(restored.view_mode, Column);
+        assert!(!settings.artist_albums_collapsed);
     }
 }

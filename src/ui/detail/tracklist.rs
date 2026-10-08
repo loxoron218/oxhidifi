@@ -282,35 +282,9 @@ mod tests {
 
     use crate::{
         app::runtime::AppState,
-        storage::catalog::{Track, TrackAudio},
+        storage::catalog::Track,
         ui::detail::tracklist::{build_track_row, format_duration},
     };
-
-    fn mock_track() -> Track {
-        Track {
-            id: 1,
-            title: "Song".into(),
-            number: Some(1),
-            disc_number: Some(1),
-            duration: 200.0,
-            audio: TrackAudio {
-                file_path: "/tmp/song.flac".into(),
-                content_hash: None,
-                format: "FLAC".into(),
-                sample_rate: 96000,
-                bit_depth: Some(24),
-                channels: 2,
-                codec: "FLAC".into(),
-                lossless: true,
-                bitrate: None,
-                album_id: Some(1),
-                artist_id: Some(1),
-                file_size: 1000,
-                last_modified: String::new(),
-            },
-            created_at: String::new(),
-        }
-    }
 
     #[test]
     fn format_duration_zero() {
@@ -335,7 +309,7 @@ mod tests {
     #[test]
     fn build_track_row_attaches_controllers_and_content() -> Result<()> {
         let state = Arc::new(AppState::mock()?);
-        let row = build_track_row(&state, &mock_track(), 1);
+        let row = build_track_row(&state, &Track::test_fixture(), 1);
         ensure!(row.observe_controllers().n_items() == 3);
         ensure!(row.child().is_some());
         Ok(())

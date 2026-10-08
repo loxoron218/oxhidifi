@@ -138,6 +138,12 @@ impl SettingsStore {
         self.settings.artist_play_order
     }
 
+    /// Get whether album sections on artist detail pages start collapsed.
+    #[must_use]
+    pub const fn get_artist_albums_collapsed(&self) -> bool {
+        self.settings.artist_albums_collapsed
+    }
+
     /// Get whether the side player panel (sidebar) is visible.
     #[must_use]
     pub const fn get_sidebar_visible(&self) -> bool {

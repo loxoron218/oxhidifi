@@ -1,9 +1,9 @@
-//! Artist detail playback actions: Play and Shuffle pill buttons.
+//! Artist detail playback and layout actions: Play, Shuffle, Collapse-all pills.
 //!
 //! Groups the artist header actions in a single horizontal box per the GNOME
 //! HIG: the primary `Play` action keeps `suggested-action`, while the
-//! secondary `Shuffle` toggle is a plain `pill` so only one action is
-//! emphasized.
+//! secondary `Shuffle` and `Collapse all` toggles are plain `pill`s so only
+//! one action is emphasized.
 
 use libadwaita::{
     ButtonContent,
@@ -11,7 +11,7 @@ use libadwaita::{
         Align::Start, Box, Button, Orientation::Horizontal, ToggleButton,
         accessible::Property::Label,
     },
-    prelude::{AccessibleExtManual, BoxExt},
+    prelude::{AccessibleExtManual, BoxExt, ButtonExt, ToggleButtonExt, WidgetExt},
 };
 
 /// Tooltip and accessible label for ordered artist playback.
@@ -87,18 +87,127 @@ pub fn build_artist_shuffle_button(active: bool) -> ToggleButton {
     button
 }
 
-/// Build the artist header action box with Play and Shuffle buttons.
+/// Tooltip for the collapse-all toggle.
+///
+/// # Arguments
+///
+/// * `expanded` - Whether album sections are currently revealed.
+///
+/// # Returns
+///
+/// * `String` - Collapse tooltip when revealed, expand tooltip when hidden.
+fn collapse_all_tooltip(expanded: bool) -> String {
+    if expanded {
+        String::from("Collapse all albums")
+    } else {
+        String::from("Expand all albums")
+    }
+}
+
+/// Accessible label for the collapse-all toggle.
+///
+/// # Arguments
+///
+/// * `expanded` - Whether album sections are currently revealed.
+///
+/// # Returns
+///
+/// * `String` - Collapse label when revealed, expand label when hidden.
+fn collapse_all_a11y(expanded: bool) -> String {
+    if expanded {
+        String::from("Collapse all albums")
+    } else {
+        String::from("Expand all albums")
+    }
+}
+
+/// Labeled icon content for the collapse-all toggle.
+///
+/// # Arguments
+///
+/// * `expanded` - Whether album sections are currently revealed.
+///
+/// # Returns
+///
+/// * `ButtonContent` - `Collapse all` content when revealed, `Expand all` content when hidden.
+fn collapse_all_content(expanded: bool) -> ButtonContent {
+    if expanded {
+        action_content("Collapse all", "pan-down-symbolic")
+    } else {
+        action_content("Expand all", "pan-end-symbolic")
+    }
+}
+
+/// Build the collapse-all toggle pill button.
+///
+/// Active means album sections are revealed, matching the per-section
+/// disclosure toggles (`active` = expanded everywhere) so the master and the
+/// sections share one polarity.
+///
+/// # Arguments
+///
+/// * `expanded` - Whether album sections start revealed.
+///
+/// # Returns
+///
+/// * `ToggleButton` - Plain `pill` toggle driving every album section.
+#[must_use]
+pub fn build_collapse_all_button(expanded: bool) -> ToggleButton {
+    let button = ToggleButton::builder()
+        .css_classes(["pill"])
+        .tooltip_text(collapse_all_tooltip(expanded))
+        .can_focus(true)
+        .active(expanded)
+        .child(&collapse_all_content(expanded))
+        .build();
+    button.update_property(&[Label(&collapse_all_a11y(expanded))]);
+    button
+}
+
+/// Refresh the collapse-all label, icon, tooltip, and accessible name.
+///
+/// Updates visuals only; does not touch `active` so signal handlers can call
+/// it without recursing into `toggled`.
+///
+/// # Arguments
+///
+/// * `button` - Collapse-all toggle to refresh.
+/// * `expanded` - Whether album sections are currently revealed.
+pub fn refresh_collapse_all_visual(button: &ToggleButton, expanded: bool) {
+    button.set_child(Some(&collapse_all_content(expanded)));
+    button.set_tooltip_text(Some(&collapse_all_tooltip(expanded)));
+    button.update_property(&[Label(&collapse_all_a11y(expanded))]);
+}
+
+/// Set the collapse-all toggle state and refresh its visuals.
+///
+/// # Arguments
+///
+/// * `button` - Collapse-all toggle to update.
+/// * `expanded` - Whether album sections should be revealed.
+pub fn set_collapse_all_state(button: &ToggleButton, expanded: bool) {
+    if button.is_active() != expanded {
+        button.set_active(expanded);
+    }
+    refresh_collapse_all_visual(button, expanded);
+}
+
+/// Build the artist header action box with Play, Shuffle, and Collapse-all.
 ///
 /// # Arguments
 ///
 /// * `shuffle_active` - Initial active state for the shuffle toggle.
+/// * `albums_expanded` - Whether album sections start revealed.
 ///
 /// # Returns
 ///
-/// * `(Box, Button, ToggleButton)` - Horizontal action box with the play button and the shuffle
-///   toggle in order.
+/// * `(Box, Button, ToggleButton, ToggleButton)` - Horizontal action box with the play button, the
+///   shuffle toggle, and the collapse-all toggle.
 #[must_use]
-pub fn build_artist_actions(shuffle_active: bool) -> (Box, Button, ToggleButton) {
+pub fn build_artist_actions(
+    shuffle_active: bool,
+    albums_expanded: bool,
+) -> (Box, Button, ToggleButton, ToggleButton) {
     let actions = Box::builder()
         .orientation(Horizontal)
         .spacing(12)
@@ -112,7 +221,10 @@ pub fn build_artist_actions(shuffle_active: bool) -> (Box, Button, ToggleButton)
     let shuffle_button = build_artist_shuffle_button(shuffle_active);
     actions.append(&shuffle_button);
 
-    (actions, play_button, shuffle_button)
+    let collapse_button = build_collapse_all_button(albums_expanded);
+    actions.append(&collapse_button);
+
+    (actions, play_button, shuffle_button, collapse_button)
 }
 
 #[cfg(test)]
@@ -128,7 +240,8 @@ mod tests {
 
     use crate::ui::detail::artist_actions::{
         PLAY_TOOLTIP, SHUFFLE_TOOLTIP, build_artist_actions, build_artist_play_button,
-        build_artist_shuffle_button,
+        build_artist_shuffle_button, build_collapse_all_button, refresh_collapse_all_visual,
+        set_collapse_all_state,
     };
 
     fn button_content(button: &impl ButtonExt) -> Result<ButtonContent> {
@@ -197,14 +310,58 @@ mod tests {
     }
 
     #[test]
-    fn action_box_groups_play_before_shuffle() -> Result<()> {
-        let (actions, _, _) = build_artist_actions(false);
-        let first = actions.first_child();
-        let second = first.as_ref().and_then(WidgetExt::next_sibling);
-        let third = second.as_ref().and_then(WidgetExt::next_sibling);
+    fn collapse_all_button_marks_expanded_state() -> Result<()> {
+        let expanded = build_collapse_all_button(true);
+        ensure!(expanded.is_active(), "expanded must start active");
         ensure!(
-            first.is_some() && second.is_some() && third.is_none(),
-            "action box must hold exactly play and shuffle"
+            button_content(&expanded)?.label() == "Collapse all",
+            "expanded must offer collapse"
+        );
+        ensure!(
+            expanded
+                .tooltip_text()
+                .is_some_and(|tip| tip.contains("Collapse")),
+            "expanded needs a collapse tooltip"
+        );
+        let collapsed = build_collapse_all_button(false);
+        ensure!(!collapsed.is_active(), "collapsed must start inactive");
+        ensure!(
+            button_content(&collapsed)?.label() == "Expand all",
+            "collapsed must offer expand"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn collapse_all_visual_refresh_flips_label() -> Result<()> {
+        let button = build_collapse_all_button(true);
+        refresh_collapse_all_visual(&button, false);
+        ensure!(
+            button_content(&button)?.label() == "Expand all",
+            "refresh must swap to the expand label"
+        );
+        ensure!(button.is_active(), "refresh must not touch active state");
+        set_collapse_all_state(&button, false);
+        ensure!(!button.is_active(), "state setter must flip active");
+        ensure!(
+            button_content(&button)?.label() == "Expand all",
+            "state setter must keep the expand label"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn action_box_groups_play_shuffle_and_collapse() -> Result<()> {
+        let (actions, _, _, _) = build_artist_actions(false, true);
+        let mut count: usize = 0;
+        let mut next = actions.first_child();
+        while let Some(child) = next {
+            count = count.saturating_add(1);
+            next = child.next_sibling();
+        }
+        ensure!(
+            count == 3,
+            "action box must hold play, shuffle, and collapse-all"
         );
         Ok(())
     }

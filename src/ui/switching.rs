@@ -19,7 +19,7 @@ use crate::{
             album_grid::lazy_build_album_mode, artist_build::lazy_build_artist_mode,
             narrow_flag::NarrowState,
         },
-        navigation::persist_active_tab,
+        navigation::{is_detail_visible, persist_active_tab},
     },
 };
 
@@ -98,14 +98,15 @@ pub fn wire_tab_tracking(state: &Arc<AppState>, stack: &ViewStack, nav_view: &Na
         .handles
         .lock()
         .retain_signal(stack.connect_visible_child_notify(move |_| {
-            if tab_nav_view.find_page("detail").is_none()
+            if !is_detail_visible(&tab_nav_view)
                 && let Some(name) = tab_stack.visible_child_name()
             {
                 info!(tab_name = name.as_str(), "Tab switched",);
                 persist_active_tab(&tab_storage, &tab_active_tab, name.as_str());
             }
-            let is_on_detail = tab_nav_view.find_page("detail").is_some();
-            if is_on_detail && let Err(err) = tab_nav_tx.try_send(Back) {
+            if is_detail_visible(&tab_nav_view)
+                && let Err(err) = tab_nav_tx.try_send(Back)
+            {
                 error!(error = %err, "Failed to send Back navigation event");
             }
         }));

@@ -7,10 +7,10 @@ use {
     libadwaita::{
         glib::spawn_future_local,
         gtk::{
-            Align::Start, Box, Label, ListBox, ListBoxRow, Orientation::Vertical, Widget,
-            accessible::Property::Label as PropertyLabel, pango::EllipsizeMode::End,
+            Align::Start, Box, Label, ListBox, ListBoxRow, Orientation::Vertical, ToggleButton,
+            Widget, accessible::Property::Label as PropertyLabel, pango::EllipsizeMode::End,
         },
-        prelude::{AccessibleExtManual, BoxExt, ButtonExt, Cast, ToggleButtonExt},
+        prelude::{AccessibleExtManual, BoxExt, ButtonExt, Cast, ToggleButtonExt, WidgetExt},
     },
     tokio::join,
     tracing::{error, info, warn},
@@ -26,8 +26,10 @@ use crate::{
     },
     ui::{
         detail::{
-            artist_actions::build_artist_actions,
-            artist_album_section::build_album_section,
+            artist_actions::{
+                build_artist_actions, refresh_collapse_all_visual, set_collapse_all_state,
+            },
+            artist_album_section::{build_album_section, persist_collapse_preference},
             page::{build_detail_wrapper, build_scroll_content},
         },
         gallery::play_action::{play_artist, play_artist_shuffled},
@@ -76,8 +78,9 @@ pub fn build_artist_detail(
     album_count_label.update_property(&[PropertyLabel("Album count")]);
     content.append(&album_count_label);
 
-    let (actions, play_button, shuffle_button) =
-        build_artist_actions(state.playback.shuffle_enabled());
+    let albums_expanded = !state.storage.get_artist_albums_collapsed();
+    let (actions, play_button, shuffle_button, collapse_button) =
+        build_artist_actions(state.playback.shuffle_enabled(), albums_expanded);
     let shuffle_for_play = shuffle_button.clone();
     let play_state = Arc::clone(state);
     state
@@ -118,6 +121,8 @@ pub fn build_artist_detail(
     scroll.set_child(Some(&content));
     wrapper.append(&scroll);
 
+    wire_collapse_all(state, &collapse_button, &albums_container);
+
     let sc = Arc::clone(state);
     state
         .handles
@@ -128,6 +133,7 @@ pub fn build_artist_detail(
                     &name_label,
                     &album_count_label,
                     &albums_container,
+                    &collapse_button,
                     &sc,
                     data,
                 );
@@ -135,6 +141,67 @@ pub fn build_artist_detail(
         }));
 
     wrapper.upcast()
+}
+
+/// Set every loaded album section to the shared expanded state.
+///
+/// Walks the albums container instead of sharing a widget registry, so no
+/// cross-thread state is needed: toggling before data loads simply persists
+/// the preference that sections initialize from.
+///
+/// # Arguments
+///
+/// * `container` - Albums container holding one section box per album.
+/// * `expanded` - Whether sections should be revealed.
+fn set_all_sections(container: &Box, expanded: bool) {
+    let mut next = container.first_child();
+    while let Some(child) = next {
+        next = child.next_sibling();
+        let Ok(section) = child.downcast::<Box>() else {
+            continue;
+        };
+        let Some(header) = section.first_child() else {
+            continue;
+        };
+        let Ok(header) = header.downcast::<Box>() else {
+            continue;
+        };
+        let Some(toggle) = header.first_child() else {
+            continue;
+        };
+        let Ok(toggle) = toggle.downcast::<ToggleButton>() else {
+            continue;
+        };
+        if toggle.is_active() != expanded {
+            toggle.set_active(expanded);
+        }
+    }
+}
+
+/// Wire the collapse-all toggle to every album section.
+///
+/// Driving each section toggle reuses its own visibility-only handler, so the
+/// master fans out the shared state and is the sole writer of the persisted
+/// default; the debounced saver coalesces the burst.
+///
+/// # Arguments
+///
+/// * `state` - Application state owning signal handles and settings.
+/// * `master` - Collapse-all toggle in the header actions.
+/// * `container` - Albums container holding the section boxes.
+fn wire_collapse_all(state: &Arc<AppState>, master: &ToggleButton, container: &Box) {
+    let sections = container.clone();
+    let persist = Arc::clone(state);
+    state
+        .handles
+        .lock()
+        .retain_signal(master.connect_toggled(move |button| {
+            let expanded = button.is_active();
+            refresh_collapse_all_visual(button, expanded);
+            info!(expanded, "Artist albums collapse-all toggled",);
+            set_all_sections(&sections, expanded);
+            persist_collapse_preference(&persist, !expanded);
+        }));
 }
 
 /// Load artist detail data from storage.
@@ -193,6 +260,7 @@ fn apply_artist_detail(
     name_label: &Label,
     album_count_label: &Label,
     albums_container: &Box,
+    collapse_button: &ToggleButton,
     state: &Arc<AppState>,
     data: ArtistDetailData,
 ) {
@@ -201,6 +269,7 @@ fn apply_artist_detail(
 
     let mut tracks_by_album = data.tracks_by_album;
     let mut track_lists: Vec<ListBox> = Vec::new();
+    let expanded = !state.storage.get_artist_albums_collapsed();
     for album in &data.albums {
         let fi = data
             .format_info_map
@@ -208,10 +277,11 @@ fn apply_artist_detail(
             .cloned()
             .unwrap_or_default();
         let tracks = tracks_by_album.remove(&album.id).unwrap_or_default();
-        let (section, listbox) = build_album_section(state, album, &fi, tracks);
+        let (section, listbox, _) = build_album_section(state, album, &fi, tracks, expanded);
         track_lists.push(listbox);
         albums_container.append(&section);
     }
+    set_collapse_all_state(collapse_button, expanded);
 
     for (i, tb) in track_lists.iter().enumerate() {
         let others: Vec<ListBox> = track_lists
