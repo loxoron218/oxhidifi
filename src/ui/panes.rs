@@ -293,7 +293,7 @@ pub fn build_content(
 
     let toggle_button = ToggleButton::builder()
         .icon_name("view-dual-symbolic")
-        .tooltip_text("Toggle player panel")
+        .tooltip_text("Toggle player panel (Ctrl+B)")
         .active(sidebar_visible)
         .css_classes(["flat"])
         .can_focus(true)

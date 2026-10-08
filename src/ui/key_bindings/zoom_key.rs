@@ -1,0 +1,234 @@
+//! Zoom shortcuts for the main window.
+//!
+//! `Ctrl+`/`Ctrl-` (including the numpad) zoom the active view. Handlers
+//! return whether the key was handled so the window's key controllers can
+//! stop propagation.
+
+use libadwaita::gdk::{Key, ModifierType};
+
+use crate::{
+    app::runtime::AppState,
+    ui::toggle_popover::{apply_zoom_in, apply_zoom_out, notify_zoom_change},
+};
+
+/// Zoom the active view in or out on `Ctrl+`/`Ctrl-` (including the numpad).
+///
+/// Only acts when the `Ctrl` modifier is pressed (ignoring unrelated
+/// modifiers such as `ShiftLock`). The current view mode — grid or column —
+/// determines whether the grid or list zoom level changes, matching the
+/// popover zoom buttons. Zooming the active view fans out through
+/// [`notify_zoom_change`] so the coalescer resizes (grid) or rebuilds
+/// (column) the live view. At the zoom limits no notification is sent, so
+/// at-limit key presses never trigger spurious rebuilds or disk writes.
+///
+/// Detail pages are guarded by the caller (`add_key_controllers` in
+/// [`key_controllers`](crate::ui::key_controllers) returns `Proceed` while a
+/// `detail` page is pushed), since detail covers use fixed sizes and this
+/// handler only mutates the background library zoom.
+///
+/// # Returns
+///
+/// `true` when the zoom level actually changed, `false` otherwise (wrong
+/// modifiers, unrelated key, or already at the limit).
+pub fn handle_zoom_key(state: &AppState, key: Key, modifiers: ModifierType) -> bool {
+    if !modifiers.intersects(ModifierType::CONTROL_MASK) {
+        return false;
+    }
+    let mode = state.storage.get_view_mode();
+    if key == Key::plus || key == Key::KP_Add {
+        if !apply_zoom_in(state, mode) {
+            return false;
+        }
+        notify_zoom_change(state);
+        true
+    } else if key == Key::minus || key == Key::KP_Subtract {
+        if !apply_zoom_out(state, mode) {
+            return false;
+        }
+        notify_zoom_change(state);
+        true
+    } else {
+        false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use {
+        anyhow::{Result, ensure},
+        libadwaita::gdk::{Key, ModifierType},
+    };
+
+    use crate::{
+        app::{mocks::isolated_app_state, runtime::AppState},
+        storage::view_mode::ViewMode::{Column, Grid},
+        ui::{
+            key_bindings::zoom_key::handle_zoom_key,
+            zoom::{GRID_ZOOM_MAX, GRID_ZOOM_MIN, LIST_ZOOM_MAX, LIST_ZOOM_MIN},
+        },
+    };
+
+    fn grid_state(zoom: u8) -> Result<Arc<AppState>> {
+        let state = Arc::new(isolated_app_state()?);
+        state.storage.set_view_mode_memory(Grid);
+        state.storage.set_grid_zoom_level_memory(zoom);
+        Ok(state)
+    }
+
+    fn column_state(zoom: u8) -> Result<Arc<AppState>> {
+        let state = Arc::new(isolated_app_state()?);
+        state.storage.set_view_mode_memory(Column);
+        state.storage.set_list_zoom_level_memory(zoom);
+        Ok(state)
+    }
+
+    fn zoom_grid_state(zoom: u8, key: Key) -> Result<Arc<AppState>> {
+        let state = grid_state(zoom)?;
+        ensure!(handle_zoom_key(&state, key, ModifierType::CONTROL_MASK));
+        Ok(state)
+    }
+
+    fn zoom_column_state(zoom: u8, key: Key) -> Result<Arc<AppState>> {
+        let state = column_state(zoom)?;
+        ensure!(handle_zoom_key(&state, key, ModifierType::CONTROL_MASK));
+        Ok(state)
+    }
+
+    #[test]
+    fn ctrl_plus_zooms_in_grid() -> Result<()> {
+        let state = zoom_grid_state(2, Key::plus)?;
+        ensure!(
+            state.storage.get_grid_zoom_level() == 3,
+            "Ctrl+ must raise the grid zoom level"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn ctrl_minus_zooms_out_grid() -> Result<()> {
+        let state = zoom_grid_state(2, Key::minus)?;
+        ensure!(
+            state.storage.get_grid_zoom_level() == 1,
+            "Ctrl- must lower the grid zoom level"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn ctrl_numpad_add_zooms_in_grid() -> Result<()> {
+        let state = zoom_grid_state(GRID_ZOOM_MIN, Key::KP_Add)?;
+        ensure!(
+            state.storage.get_grid_zoom_level() == GRID_ZOOM_MIN + 1,
+            "Ctrl+KP_Add must raise the grid zoom level"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn ctrl_numpad_subtract_zooms_out_grid() -> Result<()> {
+        let state = zoom_grid_state(GRID_ZOOM_MAX, Key::KP_Subtract)?;
+        ensure!(
+            state.storage.get_grid_zoom_level() == GRID_ZOOM_MAX - 1,
+            "Ctrl+KP_Subtract must lower the grid zoom level"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn ctrl_plus_without_control_modifier_ignored() -> Result<()> {
+        let state = grid_state(2)?;
+        ensure!(!handle_zoom_key(&state, Key::plus, ModifierType::empty()));
+        ensure!(
+            state.storage.get_grid_zoom_level() == 2,
+            "zoom must not change without the Ctrl modifier"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn ctrl_plus_clamps_grid_at_max() -> Result<()> {
+        let state = grid_state(GRID_ZOOM_MAX)?;
+        ensure!(
+            !handle_zoom_key(&state, Key::plus, ModifierType::CONTROL_MASK),
+            "Ctrl+ at the maximum must be unhandled so no rebuild fires"
+        );
+        ensure!(
+            state.storage.get_grid_zoom_level() == GRID_ZOOM_MAX,
+            "Ctrl+ must clamp at the maximum grid zoom"
+        );
+        ensure!(
+            state.albums_zoom_rx.is_empty(),
+            "at-limit key presses must not notify the grids"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn ctrl_minus_clamps_grid_at_min() -> Result<()> {
+        let state = grid_state(GRID_ZOOM_MIN)?;
+        ensure!(
+            !handle_zoom_key(&state, Key::minus, ModifierType::CONTROL_MASK),
+            "Ctrl- at the minimum must be unhandled so no rebuild fires"
+        );
+        ensure!(
+            state.storage.get_grid_zoom_level() == GRID_ZOOM_MIN,
+            "Ctrl- must clamp at the minimum grid zoom"
+        );
+        ensure!(
+            state.albums_zoom_rx.is_empty(),
+            "at-limit key presses must not notify the grids"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn ctrl_plus_in_column_view_zooms_list() -> Result<()> {
+        let state = zoom_column_state(1, Key::plus)?;
+        ensure!(
+            state.storage.get_list_zoom_level() == 2,
+            "Ctrl+ in column view must raise the list zoom level"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn ctrl_minus_in_column_view_clamps_list_at_min() -> Result<()> {
+        let state = column_state(LIST_ZOOM_MIN)?;
+        ensure!(
+            !handle_zoom_key(&state, Key::minus, ModifierType::CONTROL_MASK),
+            "Ctrl- at the minimum must be unhandled so no rebuild fires"
+        );
+        ensure!(
+            state.storage.get_list_zoom_level() == LIST_ZOOM_MIN,
+            "Ctrl- in column view must clamp at the minimum list zoom"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn unrelated_key_returns_false() -> Result<()> {
+        let state = grid_state(2)?;
+        ensure!(!handle_zoom_key(&state, Key::a, ModifierType::CONTROL_MASK));
+        ensure!(
+            state.storage.get_grid_zoom_level() == 2,
+            "an unrelated Ctrl key must not zoom"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn ctrl_plus_in_column_view_clamps_list_at_max() -> Result<()> {
+        let state = column_state(LIST_ZOOM_MAX)?;
+        ensure!(
+            !handle_zoom_key(&state, Key::plus, ModifierType::CONTROL_MASK),
+            "Ctrl+ at the maximum must be unhandled so no rebuild fires"
+        );
+        ensure!(
+            state.storage.get_list_zoom_level() == LIST_ZOOM_MAX,
+            "Ctrl+ in column view must clamp at the maximum list zoom"
+        );
+        Ok(())
+    }
+}

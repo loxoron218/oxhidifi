@@ -7,6 +7,7 @@ pub mod gallery;
 pub mod header;
 pub mod image_decode;
 pub mod key_bindings;
+pub mod key_controllers;
 pub mod narrow_scheduler;
 pub mod navigation;
 pub mod osd_button;
