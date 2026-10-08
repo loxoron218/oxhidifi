@@ -22,13 +22,59 @@ use crate::{
             sidebar_keys::{handle_escape_key, handle_sidebar_toggle},
             tab_switch_key::handle_tab_switch_key,
             text_entry::focus_is_text_entry,
+            view_toggle_key::handle_view_toggle_key,
             zoom_key::handle_zoom_key,
         },
         navigation::is_detail_visible,
     },
 };
 
-/// Add Escape, sidebar toggle, zoom, tab switch, and play/pause key controllers to the window.
+/// Add `Ctrl+G` grid/column toggle controller to the window.
+///
+/// Ignored while a detail page is pushed (detail covers use fixed sizes) and
+/// in text entries so typing keeps working. The `Signal` tab no-op lives in
+/// [`handle_view_toggle_key`]. On handled keys the debounced settings write
+/// is scheduled; the `view_mode` fan-out already happened synchronously in
+/// the handler.
+///
+/// # Arguments
+///
+/// * `window` - Window receiving the controller.
+/// * `nav_view` - Navigation view checked for pushed detail pages.
+/// * `state` - Application state owning the retained signal handles.
+fn add_view_toggle_controller(
+    window: &ApplicationWindow,
+    nav_view: &NavigationView,
+    state: &Arc<AppState>,
+) {
+    let view_state = Arc::clone(state);
+    let view_nav = nav_view.clone();
+    let view_window = window.clone();
+    let view_controller = EventControllerKey::new();
+    state
+        .handles
+        .lock()
+        .retain_signal(
+            view_controller.connect_key_pressed(move |_, key, _, modifiers| {
+                if is_detail_visible(&view_nav) {
+                    return Proceed;
+                }
+                if focus_is_text_entry(view_window.focus().as_ref()) {
+                    return Proceed;
+                }
+                if handle_view_toggle_key(&view_state, key, modifiers) {
+                    view_state.storage.save_settings();
+                    Stop
+                } else {
+                    Proceed
+                }
+            }),
+        );
+    window.add_controller(view_controller);
+}
+
+/// Add Escape, sidebar toggle, zoom, view toggle, tab switch, and play/pause key controllers to the
+/// window.
 ///
 /// `Ctrl+B` toggles the player panel on every page (including pushed detail
 /// pages). Text-input focus wins so `Ctrl+B` keeps its native editing
@@ -40,13 +86,13 @@ use crate::{
 /// detail reports `Back` via tab tracking, landing on the library with the
 /// new tab visible.
 ///
-/// Zoom via `Ctrl+`/`Ctrl-` is ignored while a detail page is pushed, since
-/// detail covers use fixed sizes and mutating the background grid zoom would
-/// surprise the user on `Back`.
+/// Zoom via `Ctrl+`/`Ctrl-` is ignored on the `Signal` tab and while a detail
+/// page is pushed, since detail covers use fixed sizes and mutating the
+/// background grid zoom would surprise the user on `Back`.
 ///
-/// Zoom via `Ctrl+`/`Ctrl-` is ignored while a detail page is pushed, since
-/// detail covers use fixed sizes and mutating the background grid zoom would
-/// surprise the user on `Back`.
+/// `Ctrl+G` toggles grid/column on Albums/Artists. It is ignored on the
+/// `Signal` tab and while a detail page is pushed, matching the hidden
+/// view-switch control, and text-input focus wins so typing keeps working.
 ///
 /// Plain `Space` toggles play/pause while the player panel is shown. The
 /// controller uses the `Capture` phase so it runs before the gallery
@@ -129,6 +175,8 @@ pub fn add_key_controllers(
             }),
         );
     window.add_controller(zoom_controller);
+
+    add_view_toggle_controller(window, nav_view, state);
 
     let space_state = Arc::clone(state);
     let space_split = split_view.clone();

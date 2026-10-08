@@ -14,7 +14,9 @@ use crate::{
 /// Zoom the active view in or out on `Ctrl+`/`Ctrl-` (including the numpad).
 ///
 /// Only acts when the `Ctrl` modifier is pressed (ignoring unrelated
-/// modifiers such as `ShiftLock`). The current view mode — grid or column —
+/// modifiers such as `ShiftLock`). Returns `false` on the `Signal` tab since
+/// the view-switch zoom control is hidden there and mutating the background
+/// zoom would surprise the user. The current view mode — grid or column —
 /// determines whether the grid or list zoom level changes, matching the
 /// popover zoom buttons. Zooming the active view fans out through
 /// [`notify_zoom_change`] so the coalescer resizes (grid) or rebuilds
@@ -28,9 +30,12 @@ use crate::{
 ///
 /// # Returns
 ///
-/// `true` when the zoom level actually changed, `false` otherwise (wrong
-/// modifiers, unrelated key, or already at the limit).
+/// `true` when the zoom level actually changed, `false` otherwise (Signal
+/// tab, wrong modifiers, unrelated key, or already at the limit).
 pub fn handle_zoom_key(state: &AppState, key: Key, modifiers: ModifierType) -> bool {
+    if state.active_tab.borrow().is_signal() {
+        return false;
+    }
     if !modifiers.intersects(ModifierType::CONTROL_MASK) {
         return false;
     }
@@ -63,7 +68,10 @@ mod tests {
 
     use crate::{
         app::{mocks::isolated_app_state, runtime::AppState},
-        storage::view_mode::ViewMode::{Column, Grid},
+        storage::{
+            active_tab::ActiveTab::Signal,
+            view_mode::ViewMode::{Column, Grid},
+        },
         ui::{
             key_bindings::zoom_key::handle_zoom_key,
             zoom::{GRID_ZOOM_MAX, GRID_ZOOM_MIN, LIST_ZOOM_MAX, LIST_ZOOM_MIN},
@@ -228,6 +236,40 @@ mod tests {
         ensure!(
             state.storage.get_list_zoom_level() == LIST_ZOOM_MAX,
             "Ctrl+ in column view must clamp at the maximum list zoom"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn ctrl_plus_on_signal_tab_is_ignored() -> Result<()> {
+        let state = grid_state(2)?;
+        state.active_tab.send(Signal);
+        ensure!(
+            !handle_zoom_key(&state, Key::plus, ModifierType::CONTROL_MASK),
+            "Ctrl+ on the Signal tab must be ignored"
+        );
+        ensure!(
+            state.storage.get_grid_zoom_level() == 2,
+            "zoom must not change on the Signal tab"
+        );
+        ensure!(
+            state.albums_zoom_rx.is_empty(),
+            "ignored Signal-tab zoom must not notify the grids"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn ctrl_minus_on_signal_tab_is_ignored() -> Result<()> {
+        let state = column_state(1)?;
+        state.active_tab.send(Signal);
+        ensure!(
+            !handle_zoom_key(&state, Key::minus, ModifierType::CONTROL_MASK),
+            "Ctrl- on the Signal tab must be ignored"
+        );
+        ensure!(
+            state.storage.get_list_zoom_level() == 1,
+            "list zoom must not change on the Signal tab"
         );
         Ok(())
     }

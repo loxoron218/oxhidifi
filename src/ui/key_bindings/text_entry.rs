@@ -1,8 +1,8 @@
 //! Text-input focus guard for global shortcuts.
 //!
 //! Typing in an entry must win over single-key shortcuts, so the window's
-//! key controllers consult this helper before handling `Space` play/pause or
-//! `Ctrl+B` panel toggle.
+//! key controllers consult this helper before handling `Space` play/pause,
+//! `Ctrl+B` panel toggle, or `Ctrl+G` view toggle.
 
 use libadwaita::{
     glib::object::Cast,
