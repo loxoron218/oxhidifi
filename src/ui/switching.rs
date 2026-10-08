@@ -37,11 +37,7 @@ pub fn handle_tab_switch(
     artist_stack: &Stack,
     narrow_state: &Arc<NarrowState>,
 ) {
-    stack.set_visible_child_name(match tab {
-        Albums => "albums",
-        Artists => "artists",
-        Signal => "signal",
-    });
+    stack.set_visible_child_name(tab.stack_name());
     let mode = state.view_mode.borrow();
     let child_name = match mode {
         Grid => "grid",

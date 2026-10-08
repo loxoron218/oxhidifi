@@ -17,13 +17,7 @@ use crate::{
         AppState,
         NavigationEvent::{self, AlbumDetail, ArtistDetail, Back},
     },
-    storage::{
-        active_tab::{
-            ActiveTab,
-            ActiveTab::{Albums, Artists, Signal},
-        },
-        database::SqliteStorage,
-    },
+    storage::{active_tab::ActiveTab, database::SqliteStorage},
     ui::{
         detail::{album_page::build_album_detail, artist_page::build_artist_detail},
         nav_tags::{detail_album_tag, detail_artist_tag, is_detail_tag},
@@ -40,13 +34,7 @@ pub fn persist_active_tab(
     active_tab: &ValueSignal<ActiveTab>,
     name: &str,
 ) {
-    let tab = if name == "artists" {
-        Artists
-    } else if name == "signal" {
-        Signal
-    } else {
-        Albums
-    };
+    let tab = ActiveTab::from_stack_name(name);
     let s = Arc::clone(storage);
     let mut handles = UiHandles::default();
     handles.retain_task(spawn_future_local(async move {

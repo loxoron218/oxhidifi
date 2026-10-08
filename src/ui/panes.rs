@@ -219,7 +219,7 @@ fn build_content_pane(
         .policy(Wide)
         .stack(&stack)
         .can_focus(true)
-        .tooltip_text("Switch between Albums, Artists, and Signal views")
+        .tooltip_text("Switch between Albums, Artists, and Signal views (Ctrl+Tab)")
         .build();
     switcher.update_property(&[Label("Switch between Albums, Artists, and Signal views")]);
     content_header.set_title_widget(Some(&switcher));
@@ -235,7 +235,7 @@ fn build_content_pane(
     let switcher_bar = ViewSwitcherBar::builder()
         .stack(&stack)
         .can_focus(true)
-        .tooltip_text("Switch between Albums, Artists, and Signal views")
+        .tooltip_text("Switch between Albums, Artists, and Signal views (Ctrl+Tab)")
         .build();
     switcher_bar.update_property(&[Label("Switch between Albums, Artists, and Signal views")]);
     content_toolbar.add_bottom_bar(&switcher_bar);

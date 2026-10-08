@@ -20,6 +20,7 @@ use crate::{
         key_bindings::{
             play_pause_key::handle_play_pause_key,
             sidebar_keys::{handle_escape_key, handle_sidebar_toggle},
+            tab_switch_key::handle_tab_switch_key,
             text_entry::focus_is_text_entry,
             zoom_key::handle_zoom_key,
         },
@@ -27,11 +28,21 @@ use crate::{
     },
 };
 
-/// Add Escape, sidebar toggle, zoom, and play/pause key controllers to the window.
+/// Add Escape, sidebar toggle, zoom, tab switch, and play/pause key controllers to the window.
 ///
 /// `Ctrl+B` toggles the player panel on every page (including pushed detail
 /// pages). Text-input focus wins so `Ctrl+B` keeps its native editing
 /// behavior there.
+///
+/// `Ctrl+Tab` cycles library tabs forward and `Ctrl+Shift+Tab` cycles back,
+/// wrapping around. It works from text entries (`Ctrl+Tab` has no editing
+/// function) and while a detail page is pushed: the stack change behind the
+/// detail reports `Back` via tab tracking, landing on the library with the
+/// new tab visible.
+///
+/// Zoom via `Ctrl+`/`Ctrl-` is ignored while a detail page is pushed, since
+/// detail covers use fixed sizes and mutating the background grid zoom would
+/// surprise the user on `Back`.
 ///
 /// Zoom via `Ctrl+`/`Ctrl-` is ignored while a detail page is pushed, since
 /// detail covers use fixed sizes and mutating the background grid zoom would
@@ -143,4 +154,21 @@ pub fn add_key_controllers(
             }),
         );
     window.add_controller(space_controller);
+
+    let tab_state = Arc::clone(state);
+    let tab_controller = EventControllerKey::new();
+    tab_controller.set_propagation_phase(Capture);
+    state
+        .handles
+        .lock()
+        .retain_signal(
+            tab_controller.connect_key_pressed(move |_, key, _, modifiers| {
+                if handle_tab_switch_key(&tab_state, key, modifiers) {
+                    Stop
+                } else {
+                    Proceed
+                }
+            }),
+        );
+    window.add_controller(tab_controller);
 }
