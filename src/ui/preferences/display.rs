@@ -52,7 +52,16 @@ async fn save_active_tab_setting(state: Arc<AppState>, tab: ActiveTab) {
 /// Rows keep their default widget classes (`activatable`, `combo`) alongside
 /// custom ones: dropping them removes hover/press feedback or leaves the
 /// selected value with a black background.
-pub fn build_view_page(dialog: &PreferencesDialog, state: &Arc<AppState>) {
+///
+/// # Arguments
+///
+/// * `dialog` - Preferences dialog owning the new page.
+/// * `state` - Application state for display settings.
+///
+/// # Returns
+///
+/// * `PreferencesPage` - The view page for page-cycle ordering.
+pub fn build_view_page(dialog: &PreferencesDialog, state: &Arc<AppState>) -> PreferencesPage {
     let page = PreferencesPage::builder()
         .title("View")
         .icon_name("preferences-desktop-display-symbolic")
@@ -155,6 +164,7 @@ pub fn build_view_page(dialog: &PreferencesDialog, state: &Arc<AppState>) {
     page.add(&display_group);
 
     dialog.add(&page);
+    page
 }
 
 #[cfg(test)]
@@ -167,7 +177,7 @@ mod tests {
             ComboRow, PreferencesDialog, PreferencesGroup, SwitchRow,
             glib::object::Cast,
             gtk::{self, Widget, test},
-            prelude::{PreferencesDialogExt, WidgetExt},
+            prelude::{PreferencesDialogExt, PreferencesPageExt, WidgetExt},
         },
     };
 
@@ -179,7 +189,11 @@ mod tests {
     fn view_parts() -> Result<Widget> {
         let state = Arc::new(isolated_app_state()?);
         let dialog = PreferencesDialog::new();
-        build_view_page(&dialog, &state);
+        let built = build_view_page(&dialog, &state);
+        ensure!(
+            built.title() == "View",
+            "view builder must return the view page"
+        );
         let Some(page) = dialog.visible_page() else {
             bail!("view page must be visible");
         };

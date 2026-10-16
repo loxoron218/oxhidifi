@@ -150,7 +150,21 @@ fn on_folder_selected(state: &Arc<AppState>, result: Result<File, Error>) {
 }
 
 /// Build the Library > Directories page.
-pub fn build_library_page(dialog: &PreferencesDialog, state: &Arc<AppState>, parent: &Window) {
+///
+/// # Arguments
+///
+/// * `dialog` - Preferences dialog owning the new page.
+/// * `state` - Application state for directory settings.
+/// * `parent` - Parent window for the folder chooser.
+///
+/// # Returns
+///
+/// * `PreferencesPage` - The library page for page-cycle ordering.
+pub fn build_library_page(
+    dialog: &PreferencesDialog,
+    state: &Arc<AppState>,
+    parent: &Window,
+) -> PreferencesPage {
     let page = PreferencesPage::builder()
         .title("Library")
         .icon_name("folder-music-symbolic")
@@ -212,6 +226,7 @@ pub fn build_library_page(dialog: &PreferencesDialog, state: &Arc<AppState>, par
 
     page.add(&group);
     dialog.add(&page);
+    page
 }
 
 #[cfg(test)]
@@ -224,7 +239,7 @@ mod tests {
             PreferencesDialog, PreferencesGroup,
             glib::object::Cast,
             gtk::{self, Widget, Window, accessible::Property::Label, test},
-            prelude::{AccessibleExtManual, PreferencesDialogExt, WidgetExt},
+            prelude::{AccessibleExtManual, PreferencesDialogExt, PreferencesPageExt, WidgetExt},
         },
     };
 
@@ -242,7 +257,11 @@ mod tests {
             .build();
         parent.update_property(&[Label("Test parent window")]);
         let dialog = PreferencesDialog::new();
-        build_library_page(&dialog, &state, &parent);
+        let built = build_library_page(&dialog, &state, &parent);
+        ensure!(
+            built.title() == "Library",
+            "library builder must return the library page"
+        );
         let Some(page) = dialog.visible_page() else {
             bail!("library page must be visible");
         };

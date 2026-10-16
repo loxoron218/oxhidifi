@@ -10,10 +10,13 @@ use std::sync::{
 };
 
 use libadwaita::{
-    ApplicationWindow, NavigationView, OverlaySplitView,
+    ApplicationWindow, NavigationView, OverlaySplitView, PreferencesDialog,
     gdk::{Key, ModifierType},
-    glib::Propagation::{Proceed, Stop},
-    gtk::{EventControllerKey, PropagationPhase::Capture, Window},
+    glib::{
+        Propagation::{Proceed, Stop},
+        object::Cast,
+    },
+    gtk::{EventControllerKey, PropagationPhase::Capture, Widget, Window},
     prelude::{EventControllerExt, GtkWindowExt, WidgetExt},
 };
 
@@ -79,10 +82,35 @@ fn add_view_toggle_controller(
     window.add_controller(view_controller);
 }
 
+/// Whether focus is inside a preferences dialog.
+///
+/// Walks up the widget ancestry so inner rows of a `PreferencesDialog` still
+/// count. When `true` the main-window tab switcher yields so the dialog can
+/// cycle its own library, audio, and view pages instead.
+///
+/// # Arguments
+///
+/// * `focused` - Currently focused widget, if any.
+///
+/// # Returns
+///
+/// `true` when the focused widget lives inside a preferences dialog.
+fn focus_is_in_prefs_dialog(focused: Option<&Widget>) -> bool {
+    let mut current = focused.cloned();
+    while let Some(widget) = current {
+        if widget.dynamic_cast_ref::<PreferencesDialog>().is_some() {
+            return true;
+        }
+        current = widget.parent();
+    }
+    false
+}
+
 /// Add the `Ctrl+Tab` tab-switch controller to the window.
 ///
 /// Works from text entries (`Ctrl+Tab` has no editing function) and while a
-/// detail page is pushed. On handled keys the debounced settings write is
+/// detail page is pushed. Yields when focus is inside a preferences dialog so
+/// the dialog cycles its own pages. On handled keys the debounced settings write is
 /// scheduled; the `active_tab` fan-out already happened synchronously in
 /// the handler.
 ///
@@ -92,6 +120,7 @@ fn add_view_toggle_controller(
 /// * `state` - Application state owning the retained signal handles.
 fn add_tab_switch_controller(window: &ApplicationWindow, state: &Arc<AppState>) {
     let tab_state = Arc::clone(state);
+    let tab_window = window.clone();
     let tab_controller = EventControllerKey::new();
     tab_controller.set_propagation_phase(Capture);
     state
@@ -99,6 +128,9 @@ fn add_tab_switch_controller(window: &ApplicationWindow, state: &Arc<AppState>) 
         .lock()
         .retain_signal(
             tab_controller.connect_key_pressed(move |_, key, _, modifiers| {
+                if focus_is_in_prefs_dialog(tab_window.focus().as_ref()) {
+                    return Proceed;
+                }
                 if handle_tab_switch_key(&tab_state, key, modifiers) {
                     tab_state.storage.save_settings();
                     Stop
@@ -121,7 +153,8 @@ fn add_tab_switch_controller(window: &ApplicationWindow, state: &Arc<AppState>) 
 /// wrapping around. It works from text entries (`Ctrl+Tab` has no editing
 /// function) and while a detail page is pushed: the stack change behind the
 /// detail reports `Back` via tab tracking, landing on the library with the
-/// new tab visible.
+/// new tab visible. Inside a preferences dialog it yields so the dialog cycles
+/// its own library, audio, and view pages instead.
 ///
 /// Zoom via `Ctrl+`/`Ctrl-` is ignored on the `Signal` tab and while a detail
 /// page is pushed, since detail covers use fixed sizes and mutating the
