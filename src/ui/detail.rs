@@ -7,6 +7,7 @@ pub mod artist_actions;
 pub mod artist_album_section;
 pub mod artist_load;
 pub mod artist_page;
+pub mod artist_selection;
 pub mod body_compose;
 pub mod cover_art;
 pub mod page;

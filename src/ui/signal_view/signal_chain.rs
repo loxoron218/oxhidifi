@@ -19,7 +19,7 @@ use libadwaita::{
     prelude::{AccessibleExtManual, BoxExt, Cast, ListBoxRowExt, WidgetExt},
 };
 
-use crate::{playback::signal_path::PathStage, ui::player::signal_badge::verdict_icon};
+use crate::{playback::signal_path::PathStage, ui::signal_view::verdict::verdict_icon};
 
 /// Build the title/detail text column for one chain row.
 ///

@@ -27,17 +27,11 @@ use crate::{
         transport::PlaybackTransport,
     },
     storage::Storage,
-    ui::{player::row_factory::build_row_factory, signal_handlers::UiHandles},
+    ui::{
+        player::{queue_entry::QueueItemData, row_factory::build_row_factory},
+        signal_handlers::UiHandles,
+    },
 };
-
-/// Data for a single queue entry.
-#[derive(Clone, Debug)]
-pub struct QueueItemData {
-    /// Display name for the track.
-    pub name: String,
-    /// Whether this is the currently playing track.
-    pub is_current: bool,
-}
 
 /// Spawn fetching track names in a background thread.
 fn spawn_fetch_queue_names(state: &Arc<AppState>, ids: Vec<i64>, tx: Sender<Vec<(i64, String)>>) {
@@ -242,8 +236,9 @@ mod tests {
     use crate::{
         app::runtime::AppState,
         playback::queue_manager::PlaybackQueue,
-        ui::player::playlist::{
-            QueueItemData, build_queue_view, populate_store, update_name_cache,
+        ui::player::{
+            playlist::{build_queue_view, populate_store, update_name_cache},
+            queue_entry::QueueItemData,
         },
     };
 

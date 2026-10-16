@@ -13,7 +13,7 @@ use crate::playback::{
         QualityVerdict::{BitPerfect as VerdictBitPerfect, Limited, Processed},
         RenderingDevice, SnapshotInput,
         StageKind::{Output as KindOutput, Transport},
-        stage_build::push_stage,
+        stage_assemble::{is_shared_mixer, push_stage},
     },
 };
 
@@ -24,28 +24,6 @@ fn display_name(input: &SnapshotInput) -> String {
     } else {
         input.device_name.clone()
     }
-}
-
-/// Check whether the output targets the shared system mixer.
-///
-/// # Arguments
-///
-/// * `device_id` - Stable output device identifier.
-/// * `device_name` - Human-readable output device name.
-///
-/// # Returns
-///
-/// * `bool` - Whether the path runs through the shared system mixer.
-#[must_use]
-pub fn is_shared_mixer(device_id: &str, device_name: &str) -> bool {
-    if device_id == "default" || device_id.starts_with("default:") {
-        return true;
-    }
-    let lower = device_name.to_lowercase();
-    lower.contains("pipewire")
-        || lower.contains("pulse")
-        || lower.contains("system mixer")
-        || lower.contains("default")
 }
 
 /// Check whether the output device connects over USB.

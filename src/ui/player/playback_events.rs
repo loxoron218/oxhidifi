@@ -32,7 +32,7 @@ use crate::{
             now_playing::{
                 handle_status_change, process_cover_art, process_metadata, update_cover_from_cache,
             },
-            sidebar::{MetaResult, PLAYER_COVER_SIZE, PlaybackWidgets, format_time},
+            panel_widgets::{MetaResult, PLAYER_COVER_SIZE, PlaybackWidgets, format_time},
         },
         texture_pool::CoverArtCache,
     },
@@ -219,7 +219,7 @@ mod tests {
 
     use crate::{
         app::runtime::AppState,
-        ui::player::{playback_events::spawn_async_listeners, sidebar::PlaybackWidgets},
+        ui::player::{panel_widgets::PlaybackWidgets, playback_events::spawn_async_listeners},
     };
 
     #[test]

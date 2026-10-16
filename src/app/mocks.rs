@@ -32,7 +32,7 @@ use crate::{
     playback::engine::PlaybackEngine,
     storage::{active_tab::ActiveTab::Albums, database::SqliteStorage, view_mode::ViewMode::Grid},
     threading::ThreadManager,
-    ui::player::sidebar::{PlaybackWidgets, TrackLabels},
+    ui::player::panel_widgets::{PlaybackWidgets, TrackLabels},
 };
 
 /// Shared Tokio runtime used to drive the `GLib` main context in tests.

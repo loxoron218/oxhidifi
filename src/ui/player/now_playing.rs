@@ -26,7 +26,7 @@ use crate::{
     storage::{Storage, database::SqliteStorage},
     ui::{
         image_decode::{DecodedCover, raw_to_texture},
-        player::sidebar::{COVER_MIN_SIZE, MetaResult, PlaybackWidgets, TrackLabels},
+        player::panel_widgets::{COVER_MIN_SIZE, MetaResult, PlaybackWidgets, TrackLabels},
         signal_handlers::UiHandles,
         texture_pool::CoverArtCache,
     },

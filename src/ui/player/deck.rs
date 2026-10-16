@@ -21,7 +21,7 @@ use {
 use crate::{
     app::runtime::AppState,
     playback::{engine::PlaybackEngine, transport::PlaybackTransport},
-    ui::player::{playlist::build_queue_view, sidebar::format_time},
+    ui::player::{panel_widgets::format_time, playlist::build_queue_view},
 };
 
 /// Build the playback control buttons (prev, play/pause, next).

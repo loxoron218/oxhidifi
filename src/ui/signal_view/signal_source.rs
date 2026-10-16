@@ -16,7 +16,7 @@ use crate::playback::{
     native_support::{
         mixer_open_allowed, native_level_readable, note_mixer_result, sample_pipewire_system,
     },
-    signal_path::stage_output::is_shared_mixer,
+    signal_path::stage_assemble::is_shared_mixer,
 };
 
 /// Exponential-moving-average factor for processing-speed smoothing.

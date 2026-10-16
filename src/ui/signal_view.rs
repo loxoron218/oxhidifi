@@ -13,3 +13,4 @@ pub mod signal_publish;
 pub mod signal_source;
 pub mod signal_tab;
 pub mod signal_tab_build;
+pub mod verdict;

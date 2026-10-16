@@ -27,7 +27,7 @@ mod tests {
             transport::PlaybackTransport,
             write_wav_header,
         },
-        ui::player::sidebar::format_time,
+        ui::player::panel_widgets::format_time,
     };
 
     #[test]

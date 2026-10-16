@@ -19,16 +19,18 @@ use {
         prelude::{AccessibleExtManual, BoxExt, ButtonExt, ObjectExt},
     },
     parking_lot::Mutex,
-    tracing::info,
 };
 
 use crate::{
     app::runtime::AppState,
-    playback::signal_path::{
-        QualityVerdict::{self, BitPerfect, Limited, Processed},
-        SignalPathSnapshot,
+    playback::signal_path::{QualityVerdict, SignalPathSnapshot},
+    ui::{
+        navigation::persist_active_tab,
+        signal_view::{
+            signal_poll::drain_newest,
+            verdict::{trace_verdict_flip, verdict_icon},
+        },
     },
-    ui::{navigation::persist_active_tab, signal_view::signal_poll::drain_newest},
 };
 
 /// Idle icon shown when no track is playing.
@@ -116,53 +118,6 @@ impl SignalBadge {
         self.button
             .update_property(&[A11yLabel("Open the Signal tab")]);
     }
-}
-
-/// Dedicated indicator icon per verdict state (never color alone).
-///
-/// # Arguments
-///
-/// * `verdict` - Whole-path verdict to illustrate.
-///
-/// # Returns
-///
-/// * `&'static str` - Symbolic icon name with a distinct shape per state.
-#[must_use]
-pub const fn verdict_icon(verdict: QualityVerdict) -> &'static str {
-    match verdict {
-        BitPerfect => "media-optical-cd-audio-symbolic",
-        Processed => "audio-card-symbolic",
-        Limited => "dialog-warning-symbolic",
-    }
-}
-
-/// Emit structured tracing fields for a whole-path verdict flip.
-///
-/// Both live surfaces (player badge and tab header) report through here so
-/// DSP-volume and output-mode changes are observable without leaving the tab.
-///
-/// # Arguments
-///
-/// * `previous` - Verdict previously shown on the surface.
-/// * `next` - Verdict carried by the incoming snapshot.
-/// * `generation` - Snapshot generation carrying the flip.
-/// * `track_id` - Track carried by the snapshot, if any.
-/// * `surface` - UI surface reporting the flip.
-pub fn trace_verdict_flip(
-    previous: QualityVerdict,
-    next: QualityVerdict,
-    generation: u64,
-    track_id: Option<i64>,
-    surface: &str,
-) {
-    info!(
-        previous_verdict = previous.label(),
-        new_verdict = next.label(),
-        generation,
-        track_id,
-        surface,
-        "Signal path verdict changed",
-    );
 }
 
 /// Build the player-area signal path badge button.
@@ -272,8 +227,8 @@ mod tests {
         },
         storage::active_tab::ActiveTab::Signal,
         ui::{
-            player::signal_badge::{IDLE_ICON, build_signal_badge, verdict_icon},
-            signal_view::signal_tab_build::build_signal_page,
+            player::signal_badge::{IDLE_ICON, build_signal_badge},
+            signal_view::{signal_tab_build::build_signal_page, verdict::verdict_icon},
         },
     };
 

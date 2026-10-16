@@ -24,7 +24,7 @@ use crate::{
     },
     ui::detail::{
         artist_actions::set_collapse_all_state, artist_album_section::build_album_section,
-        artist_page::clear_other_lists,
+        artist_selection::clear_other_lists,
     },
 };
 

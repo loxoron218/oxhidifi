@@ -22,7 +22,7 @@ use {
 
 use crate::{
     playback::signal_path::{QualityVerdict, SignalPathSnapshot},
-    ui::player::signal_badge::{trace_verdict_flip, verdict_icon},
+    ui::signal_view::verdict::{trace_verdict_flip, verdict_icon},
 };
 
 /// Live header widgets for the Signal tab page.

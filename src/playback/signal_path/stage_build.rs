@@ -12,10 +12,10 @@ use crate::playback::{
     devices::OutputMode::Resampled,
     signal_path::{
         PathStage,
-        QualityVerdict::{self, BitPerfect, Limited, Processed},
+        QualityVerdict::{BitPerfect, Limited, Processed},
         SnapshotInput,
-        StageKind::{self, Decoder, FormatConverter, SampleRateConverter, Source, Volume},
-        stage_output::is_shared_mixer,
+        StageKind::{Decoder, FormatConverter, SampleRateConverter, Source, Volume},
+        stage_assemble::{is_shared_mixer, push_stage},
     },
     state::MuteState::Muted,
     volume::{format_volume_db, volume_icon_name},
@@ -121,28 +121,6 @@ fn live_rate_hz(input: &SnapshotInput) -> Option<u32> {
         return catalog_rate(audio.sample_rate);
     }
     None
-}
-
-/// Append one stage, assigning the next `position` in chain order.
-pub fn push_stage(
-    stages: &mut Vec<PathStage>,
-    kind: StageKind,
-    title: String,
-    detail: String,
-    explanation: String,
-    verdict: QualityVerdict,
-    badge_icon: &'static str,
-) {
-    let position = u32::try_from(stages.len()).unwrap_or(u32::MAX);
-    stages.push(PathStage {
-        position,
-        kind,
-        title,
-        detail,
-        explanation,
-        verdict,
-        badge_icon,
-    });
 }
 
 /// Append the always-present Source stage from catalog/decoder facts.

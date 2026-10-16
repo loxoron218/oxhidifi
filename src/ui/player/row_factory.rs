@@ -19,7 +19,7 @@ use {
 
 use crate::{
     playback::queue_manager::PlaybackQueue,
-    ui::{player::playlist::QueueItemData, signal_handlers::UiHandles},
+    ui::{player::queue_entry::QueueItemData, signal_handlers::UiHandles},
 };
 
 /// Reorder an item within both the queue model and the `ListStore`.

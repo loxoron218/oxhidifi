@@ -7,9 +7,8 @@ use {
     libadwaita::{
         glib::spawn_future_local,
         gtk::{
-            Align::Start, Box, Frame, Label, ListBox, ListBoxRow, Orientation::Vertical,
-            ToggleButton, Widget, accessible::Property::Label as PropertyLabel,
-            pango::EllipsizeMode::End,
+            Align::Start, Box, Frame, Label, Orientation::Vertical, ToggleButton, Widget,
+            accessible::Property::Label as PropertyLabel, pango::EllipsizeMode::End,
         },
         prelude::{AccessibleExtManual, BoxExt, ButtonExt, Cast, ToggleButtonExt, WidgetExt},
     },
@@ -221,22 +220,6 @@ fn disable_shuffle(state: &AppState) {
     }
 }
 
-/// When a row is selected in one album's track list, unselect all rows
-/// in the other albums' track lists to keep a single active highlight.
-///
-/// # Arguments
-///
-/// * `row` - Newly selected row, or `None` when the selection was cleared.
-/// * `others` - Track lists belonging to sibling album sections.
-pub fn clear_other_lists(row: Option<&ListBoxRow>, others: &[ListBox]) {
-    if row.is_none() {
-        return;
-    }
-    for other in others {
-        other.unselect_all();
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::slice::from_ref;
@@ -249,7 +232,7 @@ mod tests {
         },
     };
 
-    use crate::ui::detail::artist_page::clear_other_lists;
+    use crate::ui::detail::artist_selection::clear_other_lists;
 
     #[test]
     fn clear_other_lists_keeps_active_selection() -> Result<()> {

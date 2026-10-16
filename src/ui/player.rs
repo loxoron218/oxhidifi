@@ -7,8 +7,10 @@
 pub mod acoustic_fader;
 pub mod deck;
 pub mod now_playing;
+pub mod panel_widgets;
 pub mod playback_events;
 pub mod playlist;
+pub mod queue_entry;
 pub mod row_factory;
 pub mod sidebar;
 pub mod sidebar_toggles;
