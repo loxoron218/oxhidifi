@@ -13,7 +13,7 @@ use std::sync::Arc;
 use libadwaita::{
     ButtonContent,
     gdk::{Key, ModifierType},
-    gtk::{Button, Window, accessible::Property::Label},
+    gtk::{Align::Start, Button, Window, accessible::Property::Label},
     prelude::{AccessibleExtManual, AdwDialogExt, ButtonExt},
 };
 
@@ -45,6 +45,7 @@ pub fn build_shortcuts_button(state: &Arc<AppState>, parent: &Window) -> Button 
             &ButtonContent::builder()
                 .icon_name("preferences-desktop-keyboard-shortcuts-symbolic")
                 .label("Keyboard Shortcuts")
+                .halign(Start)
                 .css_classes(["shortcuts-content"])
                 .tooltip_text("Keyboard shortcuts content")
                 .build(),

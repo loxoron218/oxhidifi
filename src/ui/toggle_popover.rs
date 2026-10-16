@@ -6,8 +6,11 @@ use std::sync::Arc;
 use libadwaita::{
     ButtonContent,
     gtk::{
-        Align::Center, Box, Button, Label, Orientation::Horizontal, Popover, Separator, Widget,
-        Window, accessible::Property::Label as PropertyLabel,
+        Align::{Center, Start},
+        Box, Button, Label,
+        Orientation::Horizontal,
+        Popover, Separator, Widget, Window,
+        accessible::Property::Label as PropertyLabel,
     },
     prelude::{AccessibleExtManual, BoxExt, ButtonExt, Cast, WidgetExt},
 };
@@ -41,6 +44,7 @@ pub fn build_preferences_button(state: &Arc<AppState>, parent: &Window) -> Butto
             &ButtonContent::builder()
                 .icon_name("preferences-system-symbolic")
                 .label("Preferences")
+                .halign(Start)
                 .css_classes(["prefs-content"])
                 .tooltip_text("Preferences content")
                 .build(),
