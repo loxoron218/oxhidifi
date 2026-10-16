@@ -50,8 +50,12 @@ pub fn next_tab_for_key(
 
 /// Cycle the library tab on `Ctrl+Tab` / `Ctrl+Shift+Tab`.
 ///
-/// Persists through [`persist_active_tab`] so storage and the tab signal
-/// stay in sync exactly like pointer-driven switches. Intentionally works
+/// Only updates in-memory settings and fans out through the `active_tab`
+/// signal so storage and the tab signal stay in sync exactly like
+/// pointer-driven switches. The caller persists via debounced
+/// [`SqliteStorage::save_settings`](crate::storage::database::SqliteStorage::save_settings),
+/// keeping this handler synchronous and unit-testable without a Tokio or
+/// `GLib` main context. Intentionally works
 /// while a detail page is pushed (unlike zoom): the stack change behind the
 /// detail fires tab tracking, which sends `Back` and lands on the library
 /// with the new tab visible. Also intentionally works from text entries:
@@ -145,6 +149,10 @@ mod tests {
         ensure!(
             state.active_tab.borrow() == Artists,
             "Ctrl+Tab must advance from the initial albums tab"
+        );
+        ensure!(
+            state.storage.get_active_tab() == Artists,
+            "Ctrl+Tab must update in-memory storage synchronously"
         );
         ensure!(matches!(rx.try_recv(), Ok(Artists)));
         Ok(())

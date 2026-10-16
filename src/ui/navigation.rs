@@ -2,41 +2,35 @@
 
 use std::sync::Arc;
 
-use {
-    libadwaita::{
-        NavigationPage, NavigationView,
-        glib::{object::IsA, spawn_future_local},
-        gtk::{Widget, accessible::Property::Label},
-        prelude::AccessibleExtManual,
-    },
-    tracing::warn,
+use libadwaita::{
+    NavigationPage, NavigationView,
+    glib::object::IsA,
+    gtk::{Widget, accessible::Property::Label},
+    prelude::AccessibleExtManual,
 };
 
 use crate::{
     storage::{active_tab::ActiveTab, database::SqliteStorage},
-    ui::{
-        nav_tags::is_detail_tag,
-        signal_handlers::{UiHandles, ValueSignal},
-    },
+    ui::{nav_tags::is_detail_tag, signal_handlers::ValueSignal},
 };
 
-/// Save the active tab to storage asynchronously and notify subscribers.
+/// Save the active tab to memory and notify subscribers.
 ///
 /// Maps the visible stack child name (`albums`, `artists`, `signal`) to its
 /// tab; unknown names fall back to the albums tab.
+///
+/// Only updates in-memory settings and fans out through the `active_tab`
+/// signal. The caller persists via debounced
+/// [`SqliteStorage::save_settings`](crate::storage::database::SqliteStorage::save_settings),
+/// keeping this function synchronous and unit-testable without a Tokio or
+/// `GLib` main context.
 pub fn persist_active_tab(
     storage: &Arc<SqliteStorage>,
     active_tab: &ValueSignal<ActiveTab>,
     name: &str,
 ) {
     let tab = ActiveTab::from_stack_name(name);
-    let s = Arc::clone(storage);
-    let mut handles = UiHandles::default();
-    handles.retain_task(spawn_future_local(async move {
-        if let Err(e) = s.set_active_tab(tab).await {
-            warn!(error = %e, "Failed to save active tab");
-        }
-    }));
+    storage.set_active_tab_memory(tab);
     active_tab.send(tab);
 }
 
@@ -160,6 +154,7 @@ pub mod tests {
         let rx = state.active_tab.subscribe();
         persist_active_tab(&state.storage, &state.active_tab, "artists");
         ensure!(state.active_tab.borrow() == Artists);
+        ensure!(state.storage.get_active_tab() == Artists);
         ensure!(matches!(rx.try_recv(), Ok(Artists)));
         Ok(())
     }
@@ -171,6 +166,7 @@ pub mod tests {
         state.active_tab.send(Artists);
         persist_active_tab(&state.storage, &state.active_tab, "albums");
         ensure!(state.active_tab.borrow() == Albums);
+        ensure!(state.storage.get_active_tab() == Albums);
         ensure!(matches!(rx.try_recv(), Ok(Artists)));
         ensure!(matches!(rx.try_recv(), Ok(Albums)));
         Ok(())
@@ -182,6 +178,7 @@ pub mod tests {
         let rx = state.active_tab.subscribe();
         persist_active_tab(&state.storage, &state.active_tab, "signal");
         ensure!(state.active_tab.borrow() == Signal);
+        ensure!(state.storage.get_active_tab() == Signal);
         ensure!(matches!(rx.try_recv(), Ok(Signal)));
         Ok(())
     }

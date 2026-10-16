@@ -102,6 +102,14 @@ impl SqliteStorage {
         self.settings.read().get_active_tab()
     }
 
+    /// Set the active tab preference in memory.
+    ///
+    /// The debounced disk write is triggered via [`Self::save_settings`],
+    /// which runs in the background so callers are not blocked.
+    pub fn set_active_tab_memory(&self, tab: ActiveTab) {
+        self.settings.write().update_memory(|s| s.active_tab = tab);
+    }
+
     /// Set the active tab preference.
     ///
     /// # Errors

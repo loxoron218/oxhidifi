@@ -214,6 +214,7 @@ pub fn build_signal_badge(state: &Arc<AppState>) -> SignalBadge {
         .lock()
         .retain_signal(button.connect_clicked(move |_| {
             persist_active_tab(&navigator.storage, &navigator.active_tab, "signal");
+            navigator.storage.save_settings();
         }));
     SignalBadge {
         button,

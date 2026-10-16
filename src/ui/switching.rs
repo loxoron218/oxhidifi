@@ -99,6 +99,7 @@ pub fn wire_tab_tracking(state: &Arc<AppState>, stack: &ViewStack, nav_view: &Na
             {
                 info!(tab_name = name.as_str(), "Tab switched",);
                 persist_active_tab(&tab_storage, &tab_active_tab, name.as_str());
+                tab_storage.save_settings();
             }
             if is_detail_visible(&tab_nav_view)
                 && let Err(err) = tab_nav_tx.try_send(Back)

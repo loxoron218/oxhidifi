@@ -9,7 +9,7 @@ use std::{
 use {
     serde_json::to_string_pretty,
     tokio::{
-        spawn,
+        runtime::Handle,
         task::spawn_blocking,
         time::{Duration, sleep},
     },
@@ -71,10 +71,15 @@ impl SqliteStorage {
     ///
     /// In-memory settings are committed synchronously by the `*_memory`
     /// setters; this method coalesces rapid changes into a single disk
-    /// write.  Errors are logged on the background task.
+    /// write. Errors are logged on the background task. No-op without a
+    /// Tokio runtime (plain `#[test]` unit tests): memory already holds the
+    /// latest value, and disk persistence is covered by async tests.
     pub fn save_settings(self: &Arc<Self>) {
+        let Ok(handle) = Handle::try_current() else {
+            return;
+        };
         let me = Arc::clone(self);
-        drop(spawn(async move {
+        drop(handle.spawn(async move {
             Self::persist_settings(&me).await;
         }));
     }

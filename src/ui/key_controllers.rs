@@ -104,6 +104,37 @@ fn add_shortcuts_controller(window: &ApplicationWindow, parent: &Window, state: 
     window.add_controller(shortcuts_controller);
 }
 
+/// Add the `Ctrl+Tab` tab-switch controller to the window.
+///
+/// Works from text entries (`Ctrl+Tab` has no editing function) and while a
+/// detail page is pushed. On handled keys the debounced settings write is
+/// scheduled; the `active_tab` fan-out already happened synchronously in
+/// the handler.
+///
+/// # Arguments
+///
+/// * `window` - Window receiving the controller.
+/// * `state` - Application state owning the retained signal handles.
+fn add_tab_switch_controller(window: &ApplicationWindow, state: &Arc<AppState>) {
+    let tab_state = Arc::clone(state);
+    let tab_controller = EventControllerKey::new();
+    tab_controller.set_propagation_phase(Capture);
+    state
+        .handles
+        .lock()
+        .retain_signal(
+            tab_controller.connect_key_pressed(move |_, key, _, modifiers| {
+                if handle_tab_switch_key(&tab_state, key, modifiers) {
+                    tab_state.storage.save_settings();
+                    Stop
+                } else {
+                    Proceed
+                }
+            }),
+        );
+    window.add_controller(tab_controller);
+}
+
 /// Add Escape, sidebar toggle, zoom, view toggle, tab switch, play/pause, and shortcuts-dialog key
 /// controllers to the window.
 ///
@@ -239,22 +270,7 @@ pub fn add_key_controllers(
         );
     window.add_controller(space_controller);
 
-    let tab_state = Arc::clone(state);
-    let tab_controller = EventControllerKey::new();
-    tab_controller.set_propagation_phase(Capture);
-    state
-        .handles
-        .lock()
-        .retain_signal(
-            tab_controller.connect_key_pressed(move |_, key, _, modifiers| {
-                if handle_tab_switch_key(&tab_state, key, modifiers) {
-                    Stop
-                } else {
-                    Proceed
-                }
-            }),
-        );
-    window.add_controller(tab_controller);
+    add_tab_switch_controller(window, state);
 
     add_shortcuts_controller(window, parent, state);
 }
