@@ -189,6 +189,7 @@ pub fn build_library_page(dialog: &PreferencesDialog, state: &Arc<AppState>, par
         .use_underline(true)
         .css_classes(["suggested-action", "text-button"])
         .tooltip_text("Add a new music directory to scan")
+        .margin_top(12)
         .build();
     add_btn.update_property(&[Label("Add Directory")]);
     group.add(&add_btn);
