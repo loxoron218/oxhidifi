@@ -11,7 +11,7 @@ use {
         gdk::MemoryTexture,
         glib::MainContext,
         gtk::accessible::Property::Label,
-        prelude::{AccessibleExtManual, ButtonExt, RangeExt, WidgetExt},
+        prelude::{AccessibleExtManual, ButtonExt, ObjectExt, RangeExt},
     },
 };
 
@@ -198,7 +198,7 @@ fn on_playback_event(
             widgets.output_mode_btn.set_icon_name(mode.icon_name());
             widgets
                 .output_mode_btn
-                .set_tooltip_text(Some(mode_button_tooltip(*mode)));
+                .set_property("tooltip-text", mode_button_tooltip(*mode));
             widgets
                 .output_mode_btn
                 .update_property(&[Label(mode_button_tooltip(*mode))]);

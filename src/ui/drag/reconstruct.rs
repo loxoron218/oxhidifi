@@ -91,8 +91,8 @@ mod tests {
     use {
         anyhow::{Result, ensure},
         libadwaita::{
-            gtk::{self, ListBox, ListBoxRow, test},
-            prelude::WidgetExt,
+            gtk::{self, ListBox, ListBoxRow, accessible::Property::Label, test},
+            prelude::{AccessibleExtManual, WidgetExt},
         },
     };
 
@@ -106,13 +106,21 @@ mod tests {
     };
 
     fn row_named(name: &str) -> ListBoxRow {
-        let row = ListBoxRow::new();
+        let row = ListBoxRow::builder()
+            .css_classes(["test-row"])
+            .tooltip_text("Test row")
+            .build();
+        row.update_property(&[Label("Test row")]);
         row.set_widget_name(name);
         row
     }
 
     fn albums_list_box(names: &[&str]) -> ListBox {
-        let list_box = ListBox::new();
+        let list_box = ListBox::builder()
+            .css_classes(["test-list"])
+            .tooltip_text("Test list")
+            .build();
+        list_box.update_property(&[Label("Test list")]);
         for name in names {
             list_box.append(&row_named(name));
         }
@@ -159,7 +167,11 @@ mod tests {
 
     #[test]
     fn reconstruct_artists_sort_preserves_box_order() -> Result<()> {
-        let list_box = ListBox::new();
+        let list_box = ListBox::builder()
+            .css_classes(["test-list"])
+            .tooltip_text("Test list")
+            .build();
+        list_box.update_property(&[Label("Test list")]);
         list_box.append(&row_named("sort:1"));
         list_box.append(&row_named("sort:0"));
         let mut order_map = HashMap::new();

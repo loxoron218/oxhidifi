@@ -33,8 +33,7 @@ pub fn build_add_folder_button(state: &Arc<AppState>) -> Button {
     let add_folder_button = Button::builder()
         .label("Add Music Folder")
         .use_underline(true)
-        .css_classes(["suggested-action"])
-        .can_focus(true)
+        .css_classes(["suggested-action", "text-button"])
         .tooltip_text("Open a file chooser to select your music folder")
         .build();
     add_folder_button.update_property(&[Label("Add Music Folder")]);
@@ -127,14 +126,21 @@ async fn scan_directory_and_refresh(
 mod tests {
     use {
         anyhow::{Result, ensure},
-        libadwaita::gtk::{self, Button, test},
+        libadwaita::{
+            gtk::{self, Button, accessible::Property::Label, test},
+            prelude::AccessibleExtManual,
+        },
     };
 
     use crate::ui::gallery::folder_picker::parent_window;
 
     #[test]
     fn parent_window_none_when_unattached() -> Result<()> {
-        let button = Button::new();
+        let button = Button::builder()
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test button")
+            .build();
+        button.update_property(&[Label("Test button")]);
         ensure!(parent_window(&button).is_none());
         Ok(())
     }

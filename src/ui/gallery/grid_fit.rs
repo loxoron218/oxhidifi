@@ -140,16 +140,15 @@ mod tests {
         anyhow::{Result, ensure},
         libadwaita::{
             gtk::{
-                self, Box, FlowBox,
-                Orientation::{Horizontal, Vertical},
-                Overlay, ScrolledWindow, Stack, test,
+                self, FlowBox, Orientation::Horizontal, Overlay, ScrolledWindow, Stack,
+                accessible::Property::Label, test,
             },
-            prelude::{BoxExt, WidgetExt},
+            prelude::{AccessibleExtManual, BoxExt, WidgetExt},
         },
     };
 
     use crate::{
-        app::runtime::AppState,
+        app::{mocks::test_card, runtime::AppState},
         storage::{
             catalog::Album,
             formats::FormatInfo,
@@ -168,18 +167,28 @@ mod tests {
     };
 
     fn append_overlay_card(flow: &FlowBox, size: i32) {
-        let card = Box::new(Vertical, 0);
+        let card = test_card();
         let overlay = Overlay::builder()
             .width_request(size)
             .height_request(size)
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test overlay")
             .build();
+        overlay.update_property(&[Label("Test overlay")]);
         card.append(&overlay);
         FlowBox::append(flow, &card);
     }
 
     fn stack_with_grid(flow: &FlowBox) -> Stack {
-        let stack = Stack::new();
-        let scrolled = ScrolledWindow::new();
+        let stack = Stack::builder()
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test stack")
+            .build();
+        stack.update_property(&[Label("Test stack")]);
+        let scrolled = ScrolledWindow::builder()
+            .css_classes(["test-fixture", "frame"])
+            .tooltip_text("Test scrolled view")
+            .build();
         scrolled.set_child(Some(flow));
         drop(stack.add_named(&scrolled, Some("grid")));
         stack
@@ -236,7 +245,11 @@ mod tests {
 
     #[test]
     fn grid_is_current_matches_rendered_size() -> Result<()> {
-        let stack = Stack::new();
+        let stack = Stack::builder()
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test stack")
+            .build();
+        stack.update_property(&[Label("Test stack")]);
         ensure!(
             !grid_is_current(&stack, 150),
             "a missing grid must not report current"
@@ -274,7 +287,11 @@ mod tests {
 
     #[test]
     fn upgrade_hidden_resize_enables_zoom_only_resize() {
-        let stack = Stack::new();
+        let stack = Stack::builder()
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test stack")
+            .build();
+        stack.update_property(&[Label("Test stack")]);
         assert_eq!(
             upgrade_hidden_resize(DeferDirty, false, true, Grid, true, &stack),
             DeferDirty,

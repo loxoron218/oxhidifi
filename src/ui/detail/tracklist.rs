@@ -58,7 +58,7 @@ pub fn fill_track_list_batch(
 pub fn build_track_row(state: &Arc<AppState>, track: &Track, display_number: usize) -> ListBoxRow {
     let row = ListBoxRow::builder()
         .activatable(true)
-        .can_focus(true)
+        .css_classes(["track-row"])
         .tooltip_text("Click to play, right-click to add to queue")
         .build();
 
@@ -83,13 +83,17 @@ fn build_track_content(track: &Track, display_number: usize) -> Box {
         .margin_bottom(6)
         .margin_start(12)
         .margin_end(12)
+        .css_classes(["track-content"])
+        .tooltip_text("Track details")
         .build();
+    hbox.update_property(&[PropertyLabel(&format!("Track {display_number} details"))]);
 
     let number_label = Label::builder()
         .label(display_number.to_string())
         .width_request(30)
         .css_classes(["dim-label", "caption"])
         .halign(Start)
+        .tooltip_text("Track number")
         .build();
     number_label.update_property(&[PropertyLabel(&format!("Track {display_number}"))]);
     hbox.append(&number_label);
@@ -99,6 +103,8 @@ fn build_track_content(track: &Track, display_number: usize) -> Box {
         .ellipsize(EllipsizeEnd)
         .hexpand(true)
         .halign(Start)
+        .css_classes(["track-title"])
+        .tooltip_text("Track title")
         .build();
     title_lbl.update_property(&[PropertyLabel(&format!("Track: {}", track.title))]);
     hbox.append(&title_lbl);
@@ -126,6 +132,7 @@ fn build_track_content(track: &Track, display_number: usize) -> Box {
         .width_chars(13)
         .max_width_chars(13)
         .xalign(0.0)
+        .tooltip_text("Track format")
         .build();
     fmt_label.update_property(&[PropertyLabel(&format!(
         "Track {display_number} format: {track_format}"
@@ -138,6 +145,7 @@ fn build_track_content(track: &Track, display_number: usize) -> Box {
         .width_chars(5)
         .max_width_chars(5)
         .xalign(0.0)
+        .tooltip_text("Track duration")
         .build();
     duration_label.update_property(&[PropertyLabel(&format!(
         "Track {display_number} duration: {}",
@@ -149,7 +157,10 @@ fn build_track_content(track: &Track, display_number: usize) -> Box {
         .spacing(6)
         .halign(End)
         .margin_start(12)
+        .css_classes(["track-meta"])
+        .tooltip_text("Track metadata")
         .build();
+    meta_box.update_property(&[PropertyLabel(&format!("Track {display_number} metadata"))]);
     meta_box.append(&fmt_label);
     meta_box.append(&duration_label);
     hbox.append(&meta_box);

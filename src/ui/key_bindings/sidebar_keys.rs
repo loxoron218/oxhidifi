@@ -40,7 +40,8 @@ mod tests {
         anyhow::{Result, ensure},
         libadwaita::{
             OverlaySplitView,
-            gtk::{self, test as gtk_test},
+            gtk::{self, accessible::Property::Label, test as gtk_test},
+            prelude::AccessibleExtManual,
         },
     };
 
@@ -56,7 +57,11 @@ mod tests {
 
     #[gtk_test]
     fn escape_key_hides_shown_sidebar() -> Result<()> {
-        let split_view = OverlaySplitView::new();
+        let split_view = OverlaySplitView::builder()
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test escape shown")
+            .build();
+        split_view.update_property(&[Label("Test escape shown")]);
         split_view.set_show_sidebar(true);
         ensure!(
             handle_escape_key(&split_view),
@@ -71,7 +76,11 @@ mod tests {
 
     #[gtk_test]
     fn escape_key_ignores_hidden_sidebar() -> Result<()> {
-        let split_view = OverlaySplitView::new();
+        let split_view = OverlaySplitView::builder()
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test escape hidden")
+            .build();
+        split_view.update_property(&[Label("Test escape hidden")]);
         split_view.set_show_sidebar(false);
         ensure!(
             !handle_escape_key(&split_view),
@@ -83,7 +92,11 @@ mod tests {
 
     #[gtk_test]
     fn sidebar_toggle_hides_shown_sidebar() -> Result<()> {
-        let split_view = OverlaySplitView::new();
+        let split_view = OverlaySplitView::builder()
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test toggle hide")
+            .build();
+        split_view.update_property(&[Label("Test toggle hide")]);
         split_view.set_show_sidebar(true);
         handle_sidebar_toggle(&split_view);
         ensure!(
@@ -95,7 +108,11 @@ mod tests {
 
     #[gtk_test]
     fn sidebar_toggle_shows_hidden_sidebar() -> Result<()> {
-        let split_view = OverlaySplitView::new();
+        let split_view = OverlaySplitView::builder()
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test toggle show")
+            .build();
+        split_view.update_property(&[Label("Test toggle show")]);
         split_view.set_show_sidebar(false);
         handle_sidebar_toggle(&split_view);
         ensure!(

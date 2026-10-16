@@ -11,144 +11,13 @@
 use std::sync::Arc;
 
 use libadwaita::{
-    ButtonContent, ShortcutsDialog, ShortcutsItem, ShortcutsSection,
+    ButtonContent,
     gdk::{Key, ModifierType},
     gtk::{Button, Window, accessible::Property::Label},
     prelude::{AccessibleExtManual, AdwDialogExt, ButtonExt},
 };
 
-use crate::app::runtime::AppState;
-
-/// Build one shortcuts item with a title, context subtitle, and accelerator.
-///
-/// # Arguments
-///
-/// * `title` - Short action description shown in the dialog.
-/// * `subtitle` - Context note naming when the shortcut is ignored.
-/// * `accelerator` - Accelerator string in `AdwShortcutLabel` format.
-///
-/// # Returns
-///
-/// * `ShortcutsItem` - Item carrying the title, subtitle, and accelerator.
-fn shortcuts_item(title: &str, subtitle: &str, accelerator: &str) -> ShortcutsItem {
-    let item = ShortcutsItem::new(title, accelerator);
-    item.set_subtitle(subtitle);
-    item
-}
-
-/// Build the General section: panel, tab cycling, and the dialog opener.
-///
-/// # Returns
-///
-/// * `ShortcutsSection` - General section with five items.
-fn build_general_section() -> ShortcutsSection {
-    let section = ShortcutsSection::new(Some("General"));
-    section.add(shortcuts_item(
-        "Toggle player panel",
-        "Disabled while typing",
-        "<Control>b",
-    ));
-    section.add(shortcuts_item(
-        "Hide player panel",
-        "Only while the panel is shown",
-        "Escape",
-    ));
-    section.add(shortcuts_item(
-        "Next library tab",
-        "Albums, Artists, Signal; wraps around",
-        "<Control>Tab",
-    ));
-    section.add(shortcuts_item(
-        "Previous library tab",
-        "Albums, Artists, Signal; wraps around",
-        "<Control><Shift>Tab",
-    ));
-    section.add(shortcuts_item(
-        "Keyboard shortcuts",
-        "Open this dialog",
-        "<Control>question",
-    ));
-    section
-}
-
-/// Build the Playback section: the play/pause toggle.
-///
-/// # Returns
-///
-/// * `ShortcutsSection` - Playback section with one item.
-fn build_playback_section() -> ShortcutsSection {
-    let section = ShortcutsSection::new(Some("Playback"));
-    section.add(shortcuts_item(
-        "Play / pause",
-        "Only while the player panel is shown",
-        "space",
-    ));
-    section
-}
-
-/// Build the Library section: zoom and grid/column toggle.
-///
-/// # Returns
-///
-/// * `ShortcutsSection` - Library section with three items.
-fn build_library_section() -> ShortcutsSection {
-    let section = ShortcutsSection::new(Some("Library"));
-    section.add(shortcuts_item(
-        "Zoom in",
-        "Albums and Artists; numpad + works too",
-        "<Control>plus",
-    ));
-    section.add(shortcuts_item(
-        "Zoom out",
-        "Albums and Artists; numpad − works too",
-        "<Control>minus",
-    ));
-    section.add(shortcuts_item(
-        "Toggle grid / column view",
-        "Albums and Artists only",
-        "<Control>g",
-    ));
-    section
-}
-
-/// Build the Navigation section: card activation and going back.
-///
-/// # Returns
-///
-/// * `ShortcutsSection` - Navigation section with two items.
-fn build_navigation_section() -> ShortcutsSection {
-    let section = ShortcutsSection::new(Some("Navigation"));
-    section.add(shortcuts_item(
-        "Open album or artist",
-        "Enter or Space on a focused card",
-        "Return",
-    ));
-    section.add(shortcuts_item(
-        "Go back",
-        "From album or artist detail pages",
-        "Escape",
-    ));
-    section
-}
-
-/// Build the keyboard shortcuts dialog.
-///
-/// Assembles the General, Playback, Library, and Navigation sections into an
-/// `AdwShortcutsDialog` per GNOME HIG: sections group related shortcuts and
-/// every item carries an accelerator plus a context subtitle.
-///
-/// # Returns
-///
-/// * `ShortcutsDialog` - Dialog listing every application keybinding.
-#[must_use]
-pub fn build_shortcuts_dialog() -> ShortcutsDialog {
-    let dialog = ShortcutsDialog::new();
-    dialog.add(build_general_section());
-    dialog.add(build_playback_section());
-    dialog.add(build_library_section());
-    dialog.add(build_navigation_section());
-    dialog
-}
+use crate::{app::runtime::AppState, ui::shortcut_sections::build_shortcuts_dialog};
 
 /// Build and present the keyboard shortcuts dialog.
 ///
@@ -176,11 +45,12 @@ pub fn build_shortcuts_button(state: &Arc<AppState>, parent: &Window) -> Button 
             &ButtonContent::builder()
                 .icon_name("preferences-desktop-keyboard-shortcuts-symbolic")
                 .label("Keyboard Shortcuts")
+                .css_classes(["shortcuts-content"])
+                .tooltip_text("Keyboard shortcuts content")
                 .build(),
         )
         .tooltip_text("Open keyboard shortcuts (Ctrl+?)")
         .css_classes(["flat"])
-        .can_focus(true)
         .hexpand(true)
         .build();
     shortcuts_btn.update_property(&[Label("Keyboard Shortcuts")]);
@@ -225,17 +95,19 @@ mod tests {
         anyhow::{Result, ensure},
         libadwaita::{
             gdk::{Key, ModifierType},
-            gtk::{self, Window, test},
-            prelude::{ListModelExt, WidgetExt},
+            gtk::{self, Window, accessible::Property::Label, test},
+            prelude::{AccessibleExtManual, ListModelExt, WidgetExt},
         },
     };
 
     use crate::{
         app::runtime::AppState,
-        ui::shortcuts::{
-            build_general_section, build_library_section, build_navigation_section,
-            build_playback_section, build_shortcuts_button, build_shortcuts_dialog,
-            is_shortcuts_key, shortcuts_item,
+        ui::{
+            shortcut_sections::{
+                build_general_section, build_library_section, build_navigation_section,
+                build_playback_section, build_shortcuts_dialog, shortcuts_item,
+            },
+            shortcuts::{build_shortcuts_button, is_shortcuts_key},
         },
     };
 
@@ -354,7 +226,11 @@ mod tests {
     #[test]
     fn build_shortcuts_button_is_keyboard_reachable() -> Result<()> {
         let state = Arc::new(AppState::mock()?);
-        let parent = Window::new();
+        let parent = Window::builder()
+            .css_classes(["test-fixture", "background"])
+            .tooltip_text("Test parent")
+            .build();
+        parent.update_property(&[Label("Test parent")]);
         let button = build_shortcuts_button(&state, &parent);
         ensure!(
             button.tooltip_text().as_deref() == Some("Open keyboard shortcuts (Ctrl+?)"),

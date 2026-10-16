@@ -144,7 +144,8 @@ pub fn build_queue_view(state: &Arc<AppState>, queue: &PlaybackQueue) -> Box {
         .factory(&factory)
         .single_click_activate(true)
         .show_separators(true)
-        .can_focus(true)
+        .css_classes(["queue-list", "separators", "view"])
+        .tooltip_text("Playback queue list")
         .build();
     list_view.update_property(&[Label("Playback queue list")]);
 
@@ -157,7 +158,12 @@ pub fn build_queue_view(state: &Arc<AppState>, queue: &PlaybackQueue) -> Box {
             play_queue_position(&activate_state, &activate_queue, position);
         }));
 
-    let container = Box::builder().orientation(Vertical).spacing(4).build();
+    let container = Box::builder()
+        .orientation(Vertical)
+        .spacing(4)
+        .css_classes(["queue-container"])
+        .tooltip_text("Playback queue")
+        .build();
 
     container.append(&list_view);
 

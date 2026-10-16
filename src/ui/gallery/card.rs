@@ -39,7 +39,6 @@ pub fn build_card_box(size: i32, tooltip: &str) -> Box {
         .orientation(Vertical)
         .spacing(6)
         .css_classes(["card"])
-        .can_focus(true)
         .width_request(size)
         .tooltip_text(tooltip)
         .build();
@@ -59,6 +58,7 @@ pub fn build_placeholder(size: i32) -> Widget {
         .width_request(size)
         .height_request(size)
         .css_classes(["album-cover", "dim-label"])
+        .tooltip_text("Album cover placeholder")
         .build();
     placeholder.update_property(&[PropertyLabel("Album cover placeholder")]);
     placeholder.upcast()
@@ -72,9 +72,11 @@ fn build_card_overlay(state: &Arc<AppState>, album_id: i64, size: i32) -> Overla
         .width_request(size)
         .height_request(size)
         .halign(Start)
+        .css_classes(["cover-overlay"])
+        .tooltip_text("Album cover overlay")
         .build();
     overlay.set_child(Some(&cover_art));
-    overlay.set_css_classes(&["cover-overlay"]);
+    overlay.update_property(&[PropertyLabel("Album cover overlay")]);
 
     let play_button = build_album_play_button();
     play_button.set_visible(false);
@@ -165,6 +167,7 @@ pub fn build_album_card(
         .max_width_chars(title_max_chars(size))
         .css_classes(["heading", "title"])
         .halign(Start)
+        .tooltip_text("Album title")
         .build();
     title_label.update_property(&[PropertyLabel(&format!("Album: {}", album.title))]);
 
@@ -174,6 +177,7 @@ pub fn build_album_card(
         .max_width_chars(artist_max_chars(size))
         .css_classes(["dim-label", "caption"])
         .halign(Start)
+        .tooltip_text("Album artist")
         .build();
     artist_label.update_property(&[PropertyLabel(&format!("Artist: {artist_name}"))]);
 
@@ -181,6 +185,8 @@ pub fn build_album_card(
         .orientation(Horizontal)
         .spacing(6)
         .width_request(size)
+        .css_classes(["format-row"])
+        .tooltip_text("Album format")
         .build();
 
     let (format_text, format_tooltip) = if format_info.is_mixed() {
@@ -205,6 +211,7 @@ pub fn build_album_card(
         .label(album.year.map_or(String::new(), |y| y.to_string()))
         .css_classes(["dim-label", "caption"])
         .halign(End)
+        .tooltip_text("Release year")
         .build();
     year_label.update_property(&[PropertyLabel("Release year")]);
 

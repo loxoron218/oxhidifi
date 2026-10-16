@@ -8,7 +8,7 @@ use libadwaita::gdk::{Key, ModifierType};
 
 use crate::{
     app::runtime::AppState,
-    ui::toggle_popover::{apply_zoom_in, apply_zoom_out, notify_zoom_change},
+    ui::popover_zoom::{apply_zoom_in, apply_zoom_out, notify_zoom_change},
 };
 
 /// Zoom the active view in or out on `Ctrl+`/`Ctrl-` (including the numpad).

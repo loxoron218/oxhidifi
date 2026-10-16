@@ -48,8 +48,11 @@ mod tests {
         anyhow::{Result, ensure},
         libadwaita::{
             glib::object::Cast,
-            gtk::{self, Entry, Label, SearchEntry, TextView, Widget, test as gtk_test},
-            prelude::TextViewExt,
+            gtk::{
+                self, Entry, Label, SearchEntry, TextView, Widget,
+                accessible::Property::Label as PropertyLabel, test as gtk_test,
+            },
+            prelude::{AccessibleExtManual, TextViewExt},
         },
     };
 
@@ -72,7 +75,12 @@ mod tests {
 
     #[gtk_test]
     fn focus_plain_label_is_not_text_entry() -> Result<()> {
-        let label = Label::new(Some("Title"));
+        let label = Label::builder()
+            .label("Title")
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test label")
+            .build();
+        label.update_property(&[PropertyLabel("Test label")]);
         ensure!(
             !focus_is_text_entry(Some(label.upcast_ref())),
             "a label must not count as text input"
@@ -82,7 +90,11 @@ mod tests {
 
     #[gtk_test]
     fn focus_entry_counts_as_text_entry() -> Result<()> {
-        let entry = Entry::new();
+        let entry = Entry::builder()
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test entry")
+            .build();
+        entry.update_property(&[PropertyLabel("Test entry")]);
         ensure!(
             focus_is_text_entry(Some(entry.upcast_ref())),
             "an entry must win over Space play/pause"
@@ -92,7 +104,11 @@ mod tests {
 
     #[gtk_test]
     fn focus_search_entry_counts_as_text_entry() -> Result<()> {
-        let entry = SearchEntry::new();
+        let entry = SearchEntry::builder()
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test search entry")
+            .build();
+        entry.update_property(&[PropertyLabel("Test search entry")]);
         ensure!(
             focus_is_text_entry(Some(entry.upcast_ref())),
             "a search entry must win over Space play/pause"
@@ -102,7 +118,11 @@ mod tests {
 
     #[gtk_test]
     fn focus_editable_text_view_counts_as_text_entry() -> Result<()> {
-        let view = TextView::new();
+        let view = TextView::builder()
+            .css_classes(["test-fixture", "view"])
+            .tooltip_text("Test editable view")
+            .build();
+        view.update_property(&[PropertyLabel("Test editable view")]);
         view.set_editable(true);
         ensure!(
             focus_is_text_entry(Some(view.upcast_ref())),
@@ -113,7 +133,11 @@ mod tests {
 
     #[gtk_test]
     fn focus_readonly_text_view_is_not_text_entry() -> Result<()> {
-        let view = TextView::new();
+        let view = TextView::builder()
+            .css_classes(["test-fixture", "view"])
+            .tooltip_text("Test readonly view")
+            .build();
+        view.update_property(&[PropertyLabel("Test readonly view")]);
         view.set_editable(false);
         ensure!(
             !focus_is_text_entry(Some(view.upcast_ref())),

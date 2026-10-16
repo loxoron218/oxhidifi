@@ -21,6 +21,79 @@ use libadwaita::{
 
 use crate::{playback::signal_path::PathStage, ui::player::signal_badge::verdict_icon};
 
+/// Build the title/detail text column for one chain row.
+///
+/// # Arguments
+///
+/// * `stage` - Snapshot stage to render.
+///
+/// # Returns
+///
+/// * `Box` - Vertical box with title and detail labels.
+fn stage_text(stage: &PathStage) -> Box {
+    let text = Box::builder()
+        .orientation(Vertical)
+        .spacing(0)
+        .css_classes(["signal-stage-text"])
+        .tooltip_text(stage.detail.as_str())
+        .build();
+    text.update_property(&[A11yLabel(stage.detail.as_str())]);
+    let title = Label::builder()
+        .label(stage.title.as_str())
+        .css_classes(["heading"])
+        .halign(Start)
+        .tooltip_text(stage.title.as_str())
+        .build();
+    let detail = Label::builder()
+        .label(stage.detail.as_str())
+        .css_classes(["accent"])
+        .halign(Start)
+        .wrap(true)
+        .tooltip_text(stage.detail.as_str())
+        .build();
+    text.append(&title);
+    text.append(&detail);
+    text.set_hexpand(true);
+    text
+}
+
+/// Build the trailing verdict mark for one chain row.
+///
+/// # Arguments
+///
+/// * `stage` - Snapshot stage to render.
+///
+/// # Returns
+///
+/// * `Box` - Vertical box with verdict icon and label.
+fn stage_mark(stage: &PathStage) -> Box {
+    let mark = Box::builder()
+        .orientation(Vertical)
+        .spacing(0)
+        .halign(End)
+        .css_classes(["signal-stage-mark"])
+        .tooltip_text(stage.verdict.label())
+        .build();
+    mark.update_property(&[A11yLabel(stage.verdict.label())]);
+    mark.append(
+        &Image::builder()
+            .icon_name(verdict_icon(stage.verdict))
+            .pixel_size(16)
+            .css_classes(["signal-verdict-icon"])
+            .tooltip_text(stage.verdict.label())
+            .build(),
+    );
+    mark.append(
+        &Label::builder()
+            .label(stage.verdict.label())
+            .css_classes(["caption", "dim-label"])
+            .halign(End)
+            .tooltip_text(stage.verdict.label())
+            .build(),
+    );
+    mark
+}
+
 /// Build one chain row: badge icon plus title/detail lines.
 ///
 /// The trailing verdict mark carries the per-stage quality indicator as an
@@ -40,7 +113,8 @@ pub fn stage_row(stage: &PathStage) -> ListBoxRow {
     let row = ListBoxRow::builder()
         .activatable(true)
         .selectable(true)
-        .can_focus(true)
+        .css_classes(["signal-stage-row"])
+        .tooltip_text(stage.title.as_str())
         .build();
     row.update_property(&[A11yLabel(&format!("{} — {}", stage.title, stage.detail))]);
     let top = Box::builder()
@@ -50,47 +124,18 @@ pub fn stage_row(stage: &PathStage) -> ListBoxRow {
         .margin_end(6)
         .margin_top(6)
         .margin_bottom(6)
+        .css_classes(["signal-stage-top"])
+        .tooltip_text(stage.title.as_str())
         .build();
     let badge = Image::builder()
         .icon_name(stage.badge_icon)
         .pixel_size(32)
+        .css_classes(["signal-stage-badge"])
         .tooltip_text(stage.title.as_str())
         .build();
     badge.update_property(&[A11yLabel(stage.title.as_str())]);
-    let text = Box::builder().orientation(Vertical).spacing(0).build();
-    let title = Label::builder()
-        .label(stage.title.as_str())
-        .css_classes(["heading"])
-        .halign(Start)
-        .build();
-    let detail = Label::builder()
-        .label(stage.detail.as_str())
-        .css_classes(["accent"])
-        .halign(Start)
-        .wrap(true)
-        .build();
-    text.append(&title);
-    text.append(&detail);
-    text.set_hexpand(true);
-    let mark = Box::builder()
-        .orientation(Vertical)
-        .spacing(0)
-        .halign(End)
-        .build();
-    mark.append(
-        &Image::builder()
-            .icon_name(verdict_icon(stage.verdict))
-            .pixel_size(16)
-            .tooltip_text(stage.verdict.label())
-            .build(),
-    );
-    mark.append(
-        &Label::builder()
-            .label(stage.verdict.label())
-            .css_classes(["caption", "dim-label"])
-            .halign(End)
-            .build(),
-    );
+    let text = stage_text(stage);
+    let mark = stage_mark(stage);
     top.append(&badge);
     top.append(&text);
     top.append(&mark);
@@ -103,8 +148,14 @@ pub fn stage_row(stage: &PathStage) -> ListBoxRow {
         .margin_end(6)
         .margin_bottom(6)
         .visible(true)
+        .tooltip_text(stage.explanation.as_str())
         .build();
-    let layout = Box::builder().orientation(Vertical).spacing(0).build();
+    let layout = Box::builder()
+        .orientation(Vertical)
+        .spacing(0)
+        .css_classes(["signal-stage-layout"])
+        .tooltip_text(stage.title.as_str())
+        .build();
     layout.append(&top);
     layout.append(&explanation);
     row.set_child(Some(&layout));

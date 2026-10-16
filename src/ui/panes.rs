@@ -4,10 +4,7 @@ use std::sync::{Arc, atomic::AtomicBool};
 
 use libadwaita::{
     HeaderBar, NavigationView, OverlaySplitView, ToastOverlay, ToolbarView, ViewStack,
-    ViewSwitcher, ViewSwitcherBar,
-    ViewSwitcherPolicy::Wide,
-    WindowTitle,
-    glib::{object::ObjectExt, spawn_future_local},
+    glib::{Object, object::ObjectExt, spawn_future_local},
     gtk::{Button, Stack, ToggleButton, Window, accessible::Property::Label},
     prelude::{AccessibleExtManual, WidgetExt},
 };
@@ -16,97 +13,36 @@ use crate::{
     app::runtime::AppState,
     storage::active_tab::ActiveTab::{Albums, Artists, Signal},
     ui::{
+        detail_nav::handle_navigation_event,
         gallery::{
             album_grid::build_album_grid, artist_grid::build_artist_grid, narrow_flag::NarrowState,
         },
         header::build_header_end_controls,
-        navigation::{build_library_page, handle_navigation_event},
+        navigation::build_library_page,
         pane_modes::switch_mode_for_active_tab,
-        player::{sidebar::build_player_content, sidebar_toggles::wire_sidebar_toggles},
+        pane_sidebar::{build_sidebar, place_sidebar_toggle},
+        pane_switcher::{SwitcherGroup, build_switcher_group},
+        player::sidebar_toggles::wire_sidebar_toggles,
+        popover_zoom::notify_zoom_change,
         signal_view::{
             signal_poll::wire_signal_tab, signal_tab::SignalTab,
             signal_tab_build::build_signal_page,
         },
         status::StatusBar,
         switching::{handle_tab_switch, wire_tab_tracking},
-        toggle_popover::notify_zoom_change,
     },
 };
-
-/// Library view switcher widgets shared with the window shell for adaptive
-/// narrow-mode wiring.
-#[derive(Debug)]
-pub struct SwitcherGroup {
-    /// Header bar holding the wide-mode `ViewSwitcher` in its title slot.
-    pub header: HeaderBar,
-    /// Wide-mode switcher shown in the header bar title slot.
-    pub switcher: ViewSwitcher,
-    /// Narrow-mode `ViewSwitcherBar` shown at the bottom of the content pane.
-    pub bar: ViewSwitcherBar,
-}
-
-/// Build the sidebar panel with player content.
-///
-/// # Arguments
-///
-/// * `state` - Application state owning storage and signal handles.
-/// * `back_button` - Sidebar toggle button for the player panel.
-///
-/// # Returns
-///
-/// Sidebar toolbar, collapsed-mode close button, and owning header.
-fn build_sidebar(
-    state: &Arc<AppState>,
-    back_button: &ToggleButton,
-) -> (ToolbarView, Button, HeaderBar) {
-    let sidebar_toolbar = ToolbarView::new();
-
-    let close_button = Button::builder()
-        .icon_name("window-close-symbolic")
-        .tooltip_text("Close application")
-        .css_classes(["flat"])
-        .can_focus(true)
-        .build();
-    close_button.update_property(&[Label("Close application")]);
-
-    let sidebar_header = HeaderBar::new();
-    sidebar_header.set_title_widget(Some(&WindowTitle::new("Now Playing", "")));
-    sidebar_header.pack_end(&close_button);
-    sidebar_header.pack_end(back_button);
-
-    sidebar_toolbar.add_top_bar(&sidebar_header);
-
-    let player_content = build_player_content(state);
-    sidebar_toolbar.set_content(Some(&player_content));
-
-    (sidebar_toolbar, close_button, sidebar_header)
-}
-
-/// Position the sidebar toggle based on close-button visibility.
-///
-/// Packs at the far left when the close button is visible (collapsed
-/// overlay mode), otherwise back at the right.
-///
-/// # Arguments
-///
-/// * `header` - Sidebar header bar owning both buttons.
-/// * `back_button` - Sidebar toggle button to reposition.
-/// * `close_visible` - Whether the close button is visible.
-fn place_sidebar_toggle(header: &HeaderBar, back_button: &ToggleButton, close_visible: bool) {
-    header.remove(back_button);
-    if close_visible {
-        header.pack_start(back_button);
-    } else {
-        header.pack_end(back_button);
-    }
-}
 
 /// Build the library `ViewStack` with album, artist, and signal pages.
 fn build_library_stack(
     state: &Arc<AppState>,
     narrow_state: &Arc<NarrowState>,
 ) -> (ViewStack, Stack, Stack, SignalTab) {
-    let stack = ViewStack::new();
+    let stack = ViewStack::builder()
+        .css_classes(["library-stack"])
+        .tooltip_text("Library views")
+        .build();
+    stack.update_property(&[Label("Library views")]);
     stack.set_vexpand(true);
     let album_grid = build_album_grid(state, narrow_state);
     drop(stack.add_titled_with_icon(
@@ -203,8 +139,14 @@ fn build_content_pane(
     narrow_state: &Arc<NarrowState>,
     parent: &Window,
 ) -> (ToolbarView, ViewStack, NavigationView, SwitcherGroup) {
-    let content_toolbar = ToolbarView::new();
-    let content_header = HeaderBar::new();
+    let content_toolbar = ToolbarView::builder()
+        .css_classes(["content-toolbar"])
+        .tooltip_text("Library toolbar")
+        .build();
+    let content_header = HeaderBar::builder()
+        .css_classes(["content-header"])
+        .tooltip_text("Library header")
+        .build();
     let (stack, album_stack, artist_stack, signal_tab) = build_library_stack(state, narrow_state);
     wire_narrow_fit(state, narrow_state);
     wire_library_signals(
@@ -215,15 +157,13 @@ fn build_content_pane(
         Arc::clone(narrow_state),
     );
     wire_signal_tab(state, &signal_tab);
-    let switcher = ViewSwitcher::builder()
-        .policy(Wide)
-        .stack(&stack)
-        .can_focus(true)
-        .tooltip_text("Switch between Albums, Artists, and Signal views (Ctrl+Tab)")
-        .build();
-    switcher.update_property(&[Label("Switch between Albums, Artists, and Signal views")]);
+    let (switcher, switcher_bar) = build_switcher_group(&stack);
     content_header.set_title_widget(Some(&switcher));
-    let nav_view = NavigationView::new();
+    let nav_view = NavigationView::builder()
+        .css_classes(["library-nav"])
+        .tooltip_text("Library navigation")
+        .build();
+    nav_view.update_property(&[Label("Library navigation")]);
     nav_view.set_pop_on_escape(true);
     nav_view.add(&build_library_page(&stack));
     let controls = build_header_end_controls(state, parent, &signal_tab, &nav_view);
@@ -232,12 +172,6 @@ fn build_content_pane(
     content_header.pack_start(toggle_button);
     content_toolbar.add_top_bar(&content_header);
     content_toolbar.set_content(Some(&nav_view));
-    let switcher_bar = ViewSwitcherBar::builder()
-        .stack(&stack)
-        .can_focus(true)
-        .tooltip_text("Switch between Albums, Artists, and Signal views (Ctrl+Tab)")
-        .build();
-    switcher_bar.update_property(&[Label("Switch between Albums, Artists, and Signal views")]);
     content_toolbar.add_bottom_bar(&switcher_bar);
     let status_bar = StatusBar::new(state);
     content_toolbar.add_bottom_bar(status_bar.widget());
@@ -253,7 +187,9 @@ fn build_content_pane(
 ///
 /// Returns the toast overlay, split view, toggle buttons, close button,
 /// switchers, and nav view for `build_window` (the nav view lets key
-/// controllers ignore zoom while a detail page is pushed).
+/// controllers ignore zoom while a detail page is pushed). The overlay uses
+/// the generic object builder since libadwaita 0.9.2 generates no
+/// `ToastOverlay` builder, like `AboutWindow`.
 ///
 /// # Arguments
 ///
@@ -276,15 +212,19 @@ pub fn build_content(
     SwitcherGroup,
     NavigationView,
 ) {
-    let toast_overlay = ToastOverlay::new();
+    let toast_overlay = Object::builder::<ToastOverlay>()
+        .property("css-classes", vec![String::from("toast-overlay")])
+        .property("tooltip-text", "Notifications")
+        .property("can-focus", true)
+        .build();
+    toast_overlay.update_property(&[Label("Notification overlay")]);
     let sidebar_visible = state.storage.get_sidebar_visible();
 
     let back_button = ToggleButton::builder()
         .icon_name("view-dual-symbolic")
-        .css_classes(["flat"])
+        .css_classes(["flat", "toggle"])
         .tooltip_text("Hide player panel")
         .active(sidebar_visible)
-        .can_focus(true)
         .build();
     back_button.update_property(&[Label("Hide player panel")]);
     back_button.set_visible(sidebar_visible);
@@ -295,8 +235,7 @@ pub fn build_content(
         .icon_name("view-dual-symbolic")
         .tooltip_text("Toggle player panel (Ctrl+B)")
         .active(sidebar_visible)
-        .css_classes(["flat"])
-        .can_focus(true)
+        .css_classes(["flat", "toggle"])
         .build();
     toggle_button.update_property(&[Label("Toggle player panel")]);
     toggle_button.set_visible(!sidebar_visible);
@@ -313,6 +252,7 @@ pub fn build_content(
         .max_sidebar_width(400.0)
         .show_sidebar(sidebar_visible)
         .pin_sidebar(true)
+        .css_classes(["main-split"])
         .tooltip_text("Player panel — toggle with button in header")
         .build();
     split_view.update_property(&[Label("Main player panel with sidebar and content area")]);
@@ -367,32 +307,49 @@ pub fn build_content(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{Arc, atomic::AtomicBool};
+
     use {
         anyhow::{Result, ensure},
         libadwaita::{
-            HeaderBar, ViewStack, ViewSwitcher, ViewSwitcherBar,
-            gtk::{self, test},
+            gtk::{self, Window, accessible::Property::Label, test},
+            prelude::{AccessibleExtManual, WidgetExt},
         },
     };
 
-    use crate::ui::panes::SwitcherGroup;
+    use crate::{
+        app::{mocks::pump_in_test_runtime, runtime::AppState},
+        ui::{gallery::narrow_flag::NarrowState, panes::build_content},
+    };
 
     #[test]
-    fn switcher_group_fields_are_accessible() -> Result<()> {
-        let stack = ViewStack::new();
-        let group = SwitcherGroup {
-            header: HeaderBar::new(),
-            switcher: ViewSwitcher::builder().stack(&stack).build(),
-            bar: ViewSwitcherBar::builder().stack(&stack).build(),
-        };
-        ensure!(
-            group.switcher.stack().is_some(),
-            "switcher must be bound to a stack"
-        );
-        ensure!(
-            group.bar.stack().is_some(),
-            "switcher bar must be bound to a stack"
-        );
-        Ok(())
+    fn content_shell_stays_in_focus_chain() -> Result<()> {
+        pump_in_test_runtime(|| {
+            let state = Arc::new(AppState::mock()?);
+            let narrow_state = NarrowState::new_shared();
+            let parent = Window::builder()
+                .css_classes(["test-parent", "background"])
+                .tooltip_text("Test parent window")
+                .build();
+            parent.update_property(&[Label("Test parent window")]);
+            let intent = Arc::new(AtomicBool::new(true));
+            let (overlay, split, _, _, _, _, nav_view) =
+                build_content(&state, &narrow_state, &parent, &intent);
+            ensure!(
+                overlay.can_focus(),
+                "toast overlay must stay focusable so keyboard focus (and Escape) reaches the \
+                 library"
+            );
+            ensure!(
+                split.can_focus(),
+                "split view must stay focusable so keyboard focus (and Escape) reaches the library"
+            );
+            ensure!(
+                nav_view.can_focus(),
+                "navigation view must stay focusable so keyboard focus (and Escape-to-back) \
+                 reaches pushed detail pages"
+            );
+            Ok(())
+        })?
     }
 }

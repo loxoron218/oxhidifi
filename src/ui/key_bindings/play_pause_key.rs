@@ -67,7 +67,8 @@ mod tests {
         libadwaita::{
             OverlaySplitView,
             gdk::{Key, ModifierType},
-            gtk::{self, test as gtk_test},
+            gtk::{self, accessible::Property::Label, test as gtk_test},
+            prelude::AccessibleExtManual,
         },
     };
 
@@ -104,7 +105,11 @@ mod tests {
     }
 
     fn shown_sidebar() -> OverlaySplitView {
-        let split_view = OverlaySplitView::new();
+        let split_view = OverlaySplitView::builder()
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test play sidebar")
+            .build();
+        split_view.update_property(&[Label("Test play sidebar")]);
         split_view.set_show_sidebar(true);
         split_view
     }
@@ -125,7 +130,11 @@ mod tests {
         unhandled_message: &str,
         unchanged_message: &str,
     ) -> Result<()> {
-        let split_view = OverlaySplitView::new();
+        let split_view = OverlaySplitView::builder()
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test ignored key")
+            .build();
+        split_view.update_property(&[Label("Test ignored key")]);
         split_view.set_show_sidebar(sidebar_shown);
         ensure!(
             !handle_play_pause_key(state, &split_view, key, modifiers),

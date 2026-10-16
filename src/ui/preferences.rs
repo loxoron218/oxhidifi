@@ -1,6 +1,7 @@
 //! `PreferencesDialog` orchestration for library, audio, and view pages.
 
 pub mod audio;
+pub mod audio_playback;
 pub mod directories;
 pub mod display;
 
@@ -60,8 +61,8 @@ mod tests {
     use {
         anyhow::{Result, ensure},
         libadwaita::{
-            gtk::{self, Window, test},
-            prelude::{PreferencesDialogExt, PreferencesPageExt},
+            gtk::{self, Window, accessible::Property::Label, test},
+            prelude::{AccessibleExtManual, PreferencesDialogExt, PreferencesPageExt},
         },
     };
 
@@ -70,7 +71,11 @@ mod tests {
     #[test]
     fn preferences_land_on_audio_or_default_view() -> Result<()> {
         let state = Arc::new(AppState::mock()?);
-        let parent = Window::new();
+        let parent = Window::builder()
+            .css_classes(["test-parent", "background"])
+            .tooltip_text("Test parent window")
+            .build();
+        parent.update_property(&[Label("Test parent window")]);
         let (dialog, audio) = assemble_preferences_dialog(&state, &parent);
         ensure!(
             dialog

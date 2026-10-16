@@ -161,6 +161,7 @@ fn build_artwork_placeholder() -> Picture {
         .width_request(PLAYER_COVER_LOGICAL_SIZE)
         .height_request(PLAYER_COVER_LOGICAL_SIZE)
         .css_classes(["album-cover"])
+        .tooltip_text("Album artwork")
         .build();
     artwork.update_property(&[PropertyLabel("Album artwork")]);
     artwork
@@ -176,6 +177,7 @@ fn build_track_info() -> (Label, Label, Label, Label) {
         .ellipsize(End)
         .max_width_chars(35)
         .halign(Start)
+        .tooltip_text("Track title")
         .build();
     title.update_property(&[PropertyLabel("Track title")]);
 
@@ -185,6 +187,7 @@ fn build_track_info() -> (Label, Label, Label, Label) {
         .ellipsize(End)
         .max_width_chars(35)
         .halign(Start)
+        .tooltip_text("Artist name")
         .build();
     artist.update_property(&[PropertyLabel("Artist name")]);
 
@@ -194,6 +197,7 @@ fn build_track_info() -> (Label, Label, Label, Label) {
         .ellipsize(End)
         .max_width_chars(35)
         .halign(Start)
+        .tooltip_text("Album name")
         .build();
     album.update_property(&[PropertyLabel("Album name")]);
 
@@ -203,6 +207,7 @@ fn build_track_info() -> (Label, Label, Label, Label) {
         .ellipsize(End)
         .max_width_chars(35)
         .halign(Start)
+        .tooltip_text("Audio format information")
         .build();
     format.update_property(&[PropertyLabel("Audio format information")]);
 

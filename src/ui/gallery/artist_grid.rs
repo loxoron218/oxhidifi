@@ -201,7 +201,8 @@ mod tests {
         anyhow::{Result, ensure},
         libadwaita::{
             glib::MainContext,
-            gtk::{self, FlowBox, Stack, test},
+            gtk::{self, FlowBox, Stack, accessible::Property::Label, test},
+            prelude::AccessibleExtManual,
         },
     };
 
@@ -225,7 +226,11 @@ mod tests {
     #[test]
     fn hidden_artist_grid_resizes_on_zoom_only_change() -> Result<()> {
         let state = Arc::new(AppState::mock()?);
-        let stack = Stack::new();
+        let stack = Stack::builder()
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test artist grid stack")
+            .build();
+        stack.update_property(&[Label("Test artist grid stack")]);
         let flow = build_grid("artist grid", 240);
         let artist = Artist {
             id: 1,

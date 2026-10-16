@@ -9,7 +9,7 @@
 use libadwaita::{
     ButtonContent, WrapBox,
     gtk::{Align::Start, Button, ToggleButton, accessible::Property::Label},
-    prelude::{AccessibleExtManual, ButtonExt, ToggleButtonExt, WidgetExt},
+    prelude::{AccessibleExtManual, ButtonExt, ObjectExt, ToggleButtonExt},
 };
 
 /// Tooltip and accessible label for ordered artist playback.
@@ -32,11 +32,15 @@ const SHUFFLE_TOOLTIP: &str = "Shuffle all songs by this artist";
 ///
 /// * `ButtonContent` - Icon-plus-label content with mnemonics enabled.
 fn action_content(label: &str, icon_name: &str) -> ButtonContent {
-    ButtonContent::builder()
+    let content = ButtonContent::builder()
         .label(label)
         .icon_name(icon_name)
         .use_underline(true)
-        .build()
+        .css_classes(["action-content"])
+        .tooltip_text(label)
+        .build();
+    content.update_property(&[Label(label)]);
+    content
 }
 
 /// Build the primary ordered-playback pill button.
@@ -49,7 +53,6 @@ pub fn build_artist_play_button() -> Button {
     let button = Button::builder()
         .css_classes(["suggested-action", "pill"])
         .tooltip_text(PLAY_TOOLTIP)
-        .can_focus(true)
         .child(&action_content("Play", "media-playback-start-symbolic"))
         .build();
     button.update_property(&[Label(PLAY_TOOLTIP)]);
@@ -72,9 +75,8 @@ pub fn build_artist_play_button() -> Button {
 #[must_use]
 pub fn build_artist_shuffle_button(active: bool) -> ToggleButton {
     let button = ToggleButton::builder()
-        .css_classes(["pill"])
+        .css_classes(["pill", "toggle"])
         .tooltip_text(SHUFFLE_TOOLTIP)
-        .can_focus(true)
         .active(active)
         .child(&action_content(
             "Shuffle",
@@ -152,9 +154,8 @@ fn collapse_all_content(expanded: bool) -> ButtonContent {
 #[must_use]
 pub fn build_collapse_all_button(expanded: bool) -> ToggleButton {
     let button = ToggleButton::builder()
-        .css_classes(["pill"])
+        .css_classes(["pill", "toggle"])
         .tooltip_text(collapse_all_tooltip(expanded))
-        .can_focus(true)
         .active(expanded)
         .child(&collapse_all_content(expanded))
         .build();
@@ -173,7 +174,7 @@ pub fn build_collapse_all_button(expanded: bool) -> ToggleButton {
 /// * `expanded` - Whether album sections are currently revealed.
 pub fn refresh_collapse_all_visual(button: &ToggleButton, expanded: bool) {
     button.set_child(Some(&collapse_all_content(expanded)));
-    button.set_tooltip_text(Some(&collapse_all_tooltip(expanded)));
+    button.set_property("tooltip-text", collapse_all_tooltip(expanded));
     button.update_property(&[Label(&collapse_all_a11y(expanded))]);
 }
 
@@ -210,6 +211,8 @@ pub fn build_artist_actions(
         .child_spacing(12)
         .line_spacing(12)
         .halign(Start)
+        .css_classes(["artist-actions"])
+        .tooltip_text("Artist playback actions")
         .build();
     actions.update_property(&[Label("Artist playback actions")]);
 

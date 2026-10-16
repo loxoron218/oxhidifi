@@ -18,9 +18,12 @@ use {
         },
         gtk::{
             Button, CssProvider, STYLE_PROVIDER_PRIORITY_APPLICATION, ToggleButton, Window,
-            style_context_add_provider_for_display,
+            accessible::Property::Label, style_context_add_provider_for_display,
         },
-        prelude::{AdwApplicationWindowExt, ButtonExt, GtkWindowExt, ToggleButtonExt, WidgetExt},
+        prelude::{
+            AccessibleExtManual, AdwApplicationWindowExt, ButtonExt, GtkWindowExt, ToggleButtonExt,
+            WidgetExt,
+        },
     },
     tracing::{info, warn},
 };
@@ -51,6 +54,9 @@ use crate::{
 /// without which the window can briefly measure children at ~30 px during
 /// startup, producing `Trying to measure GtkRevealer/GtkScrolledWindow for
 /// width of 30` warnings.
+///
+/// The window keeps the default `background` class: replacing it removes the
+/// window backdrop and leaves header bars and lists transparent.
 pub fn build_window(app: &Application, state: &Arc<AppState>) -> ApplicationWindow {
     info!(component = "window", "Building main application window");
 
@@ -61,7 +67,10 @@ pub fn build_window(app: &Application, state: &Arc<AppState>) -> ApplicationWind
         .title("Oxhidifi")
         .default_width(win_width)
         .default_height(win_height)
+        .css_classes(["background", "main-window"])
+        .tooltip_text("Oxhidifi music player")
         .build();
+    window.update_property(&[Label("Oxhidifi music player")]);
     if win_maximized {
         window.maximize();
     }
@@ -273,15 +282,15 @@ mod tests {
         anyhow::{Result, ensure},
         libadwaita::{
             Application, ApplicationWindow, NavigationView, OverlaySplitView, ToastOverlay,
-            gtk::{Button, ToggleButton, Window},
+            gtk::{self, Button, ToggleButton, Window, test as gtk_test},
+            prelude::WidgetExt,
         },
     };
 
     use crate::{
-        app::runtime::AppState,
+        app::{mocks::pump_in_test_runtime, runtime::AppState},
         ui::{
-            gallery::narrow_flag::NarrowState,
-            panes::{SwitcherGroup, build_content},
+            gallery::narrow_flag::NarrowState, pane_switcher::SwitcherGroup, panes::build_content,
             window::build_window,
         },
     };
@@ -325,5 +334,26 @@ mod tests {
     fn window_builder_signature_shape() {
         fn assert_shape<F: Fn(&Application, &Arc<AppState>) -> ApplicationWindow>(_: F) {}
         assert_shape(build_window);
+    }
+
+    #[gtk_test]
+    fn main_window_keeps_background_class() -> Result<()> {
+        pump_in_test_runtime(|| {
+            let app = Application::builder()
+                .application_id("com.github.oxhidifi.window-test")
+                .build();
+            let state = Arc::new(AppState::mock()?);
+            let window = build_window(&app, &state);
+            let classes = window.css_classes();
+            ensure!(
+                classes.contains(&"background".into()),
+                "main window must keep the default `background` class"
+            );
+            ensure!(
+                classes.contains(&"main-window".into()),
+                "main window must carry the `main-window` class"
+            );
+            Ok(())
+        })?
     }
 }

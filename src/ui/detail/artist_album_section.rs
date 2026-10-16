@@ -12,7 +12,7 @@ use {
         gtk::{
             Box, Button, ListBox, Orientation::Vertical, ToggleButton, accessible::Property::Label,
         },
-        prelude::{AccessibleExtManual, BoxExt, ButtonExt, ToggleButtonExt, WidgetExt},
+        prelude::{AccessibleExtManual, BoxExt, ButtonExt, ObjectExt, ToggleButtonExt, WidgetExt},
     },
     tokio::runtime::Handle,
     tracing::info,
@@ -63,7 +63,13 @@ pub fn build_album_section(
     tracks: Vec<Track>,
     expanded: bool,
 ) -> (Box, ListBox, ToggleButton) {
-    let section = Box::builder().orientation(Vertical).spacing(6).build();
+    let section = Box::builder()
+        .orientation(Vertical)
+        .spacing(6)
+        .css_classes(["album-section"])
+        .tooltip_text("Album section")
+        .build();
+    section.update_property(&[Label(&format!("Album section {}", album.title))]);
     let (header, toggle, open_button) = build_album_header(state, album, format_info, expanded);
     wire_open_button(state, &open_button, album.id);
     section.append(&header);
@@ -85,7 +91,11 @@ pub fn build_album_section(
 ///
 /// * `ListBox` - Track list populated in batches off the critical path.
 fn build_track_list(state: &Arc<AppState>, tracks: Vec<Track>, expanded: bool) -> ListBox {
-    let track_list = ListBox::builder().css_classes(["boxed-list"]).build();
+    let track_list = ListBox::builder()
+        .css_classes(["boxed-list"])
+        .tooltip_text("Album track list")
+        .build();
+    track_list.update_property(&[Label("Album track list")]);
     track_list.set_visible(expanded);
     let mut remaining: Vec<(Track, usize)> = tracks
         .into_iter()
@@ -156,7 +166,7 @@ fn wire_expand_toggle(
             } else {
                 COLLAPSED_ICON
             });
-            button.set_tooltip_text(Some(&toggle_tooltip(&toggle_title, is_expanded)));
+            button.set_property("tooltip-text", toggle_tooltip(&toggle_title, is_expanded));
             button.update_property(&[Label(&toggle_label(&toggle_title, is_expanded))]);
             list.set_visible(is_expanded);
             info!(album_id, is_expanded, "Artist album section toggled",);

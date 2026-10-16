@@ -1,35 +1,25 @@
 //! View-toggle popover: zoom controls, sort configuration lists, a
 //! preferences entry, and a keyboard shortcuts entry.
 
-use std::sync::{Arc, atomic::Ordering::Relaxed};
+use std::sync::Arc;
 
-use {
-    libadwaita::{
-        ButtonContent,
-        glib::spawn_future_local,
-        gtk::{
-            Align::{Center, End},
-            Box, Button, Label,
-            Orientation::{Horizontal, Vertical},
-            Popover, Separator, Widget, Window,
-            accessible::Property::Label as PropertyLabel,
-        },
-        prelude::{AccessibleExtManual, BoxExt, ButtonExt, Cast, WidgetExt},
+use libadwaita::{
+    ButtonContent,
+    gtk::{
+        Align::Center, Box, Button, Label, Orientation::Horizontal, Popover, Separator, Widget,
+        Window, accessible::Property::Label as PropertyLabel,
     },
-    tracing::warn,
+    prelude::{AccessibleExtManual, BoxExt, ButtonExt, Cast, WidgetExt},
 };
 
 use crate::{
     app::runtime::AppState,
-    storage::{
-        active_tab::ActiveTab::{Albums, Artists},
-        view_mode::ViewMode::{self, Column, Grid},
-    },
+    storage::active_tab::ActiveTab::{Albums, Artists},
     ui::{
         drag::{build_albums_drag_list, build_artists_drag_list},
+        popover_zoom::{build_zoom_box, connect_zoom_handlers},
         preferences::show_preferences_dialog,
         shortcuts::build_shortcuts_button,
-        zoom::{GRID_ZOOM_MAX, LIST_ZOOM_MAX},
         zoom_buttons::update_zoom_sensitivity,
     },
 };
@@ -51,11 +41,12 @@ pub fn build_preferences_button(state: &Arc<AppState>, parent: &Window) -> Butto
             &ButtonContent::builder()
                 .icon_name("preferences-system-symbolic")
                 .label("Preferences")
+                .css_classes(["prefs-content"])
+                .tooltip_text("Preferences content")
                 .build(),
         )
         .tooltip_text("Open preferences")
         .css_classes(["flat"])
-        .can_focus(true)
         .hexpand(true)
         .build();
     prefs_btn.update_property(&[PropertyLabel("Preferences")]);
@@ -82,56 +73,27 @@ pub fn build_preferences_button(state: &Arc<AppState>, parent: &Window) -> Butto
 ///
 /// The popover and the albums/artists sort list widgets for visibility toggling.
 pub fn build_popover(state: &Arc<AppState>, parent: &Window) -> (Popover, Widget, Widget) {
-    let zoom_box = Box::builder()
-        .orientation(Vertical)
-        .spacing(6)
-        .margin_start(6)
-        .margin_end(6)
-        .margin_top(6)
-        .margin_bottom(6)
-        .build();
+    let (zoom_box, zoom_out_btn, zoom_in_btn) = build_zoom_box(state);
 
-    let zoom_controls_box = Box::builder().orientation(Horizontal).spacing(6).build();
-    let icon_size_label = Label::builder().label("Icon Size").build();
-    zoom_controls_box.append(&icon_size_label);
-
-    let zoom_buttons_box = Box::builder()
+    let separator = Separator::builder()
         .orientation(Horizontal)
-        .css_classes(["linked", "flat"])
-        .hexpand(true)
-        .halign(End)
+        .css_classes(["separator"])
+        .tooltip_text("Separator")
         .build();
-
-    let zoom_out_btn = Button::builder()
-        .icon_name("zoom-out-symbolic")
-        .tooltip_text("Zoom Out")
-        .css_classes(["flat"])
-        .build();
-
-    let zoom_in_btn = Button::builder()
-        .icon_name("zoom-in-symbolic")
-        .tooltip_text("Zoom In")
-        .css_classes(["flat"])
-        .build();
-
-    update_zoom_sensitivity(state, &zoom_out_btn, &zoom_in_btn);
-
-    zoom_buttons_box.append(&zoom_out_btn);
-    zoom_buttons_box.append(&zoom_in_btn);
-    zoom_controls_box.append(&zoom_buttons_box);
-    zoom_box.append(&zoom_controls_box);
-
-    let separator = Separator::new(Horizontal);
     zoom_box.append(&separator);
 
     let sort_label = Label::builder()
         .label("Sort by")
         .halign(Center)
         .css_classes(["subtitle"])
+        .tooltip_text("Sort options")
         .build();
     zoom_box.append(&sort_label);
 
-    let sort_box = Box::builder().build();
+    let sort_box = Box::builder()
+        .css_classes(["sort-box"])
+        .tooltip_text("Sort options")
+        .build();
     let albums_sort = build_albums_drag_list(state).upcast::<Widget>();
     let artists_sort = build_artists_drag_list(state).upcast::<Widget>();
 
@@ -143,7 +105,11 @@ pub fn build_popover(state: &Arc<AppState>, parent: &Window) -> (Popover, Widget
     sort_box.append(&artists_sort);
     zoom_box.append(&sort_box);
 
-    let prefs_separator = Separator::new(Horizontal);
+    let prefs_separator = Separator::builder()
+        .orientation(Horizontal)
+        .css_classes(["separator"])
+        .tooltip_text("Separator")
+        .build();
     zoom_box.append(&prefs_separator);
 
     let prefs_btn = build_preferences_button(state, parent);
@@ -154,7 +120,13 @@ pub fn build_popover(state: &Arc<AppState>, parent: &Window) -> (Popover, Widget
 
     connect_zoom_handlers(state, &zoom_out_btn, &zoom_in_btn);
 
-    let popover = Popover::builder().child(&zoom_box).has_arrow(true).build();
+    let popover = Popover::builder()
+        .child(&zoom_box)
+        .has_arrow(true)
+        .css_classes(["view-popover"])
+        .tooltip_text("View options popover")
+        .build();
+    popover.update_property(&[PropertyLabel("View options popover")]);
     let sync_state = Arc::clone(state);
     state
         .handles
@@ -164,128 +136,6 @@ pub fn build_popover(state: &Arc<AppState>, parent: &Window) -> (Popover, Widget
         }));
 
     (popover, albums_sort, artists_sort)
-}
-
-/// Decrease the zoom level for the current view mode.
-///
-/// Only updates in-memory settings; the debounced disk write happens once
-/// per zoom episode in `spawn_listen_sort_zoom` (see `common.rs`), so rapid
-/// clicking never spawns a write task per click.
-///
-/// # Returns
-///
-/// `true` when the level actually changed, `false` at the minimum.
-#[must_use]
-pub fn apply_zoom_out(state: &AppState, mode: ViewMode) -> bool {
-    match mode {
-        Grid => {
-            let current = state.storage.get_grid_zoom_level();
-            let level = current.saturating_sub(1);
-            state.storage.set_grid_zoom_level_memory(level);
-            level != current
-        }
-        Column => {
-            let current = state.storage.get_list_zoom_level();
-            let level = current.saturating_sub(1);
-            state.storage.set_list_zoom_level_memory(level);
-            level != current
-        }
-    }
-}
-
-/// Increase the zoom level for the current view mode.
-///
-/// Only updates in-memory settings; the debounced disk write happens once
-/// per zoom episode in `spawn_listen_sort_zoom` (see `common.rs`).
-///
-/// # Returns
-///
-/// `true` when the level actually changed, `false` at the maximum.
-#[must_use]
-pub fn apply_zoom_in(state: &AppState, mode: ViewMode) -> bool {
-    match mode {
-        Grid => {
-            let current = state.storage.get_grid_zoom_level();
-            let level = current.saturating_add(1).min(GRID_ZOOM_MAX);
-            state.storage.set_grid_zoom_level_memory(level);
-            level != current
-        }
-        Column => {
-            let current = state.storage.get_list_zoom_level();
-            let level = current.saturating_add(1).min(LIST_ZOOM_MAX);
-            state.storage.set_list_zoom_level_memory(level);
-            level != current
-        }
-    }
-}
-
-/// Send a zoom change notification to every library grid.
-///
-/// `async_channel` receivers compete for messages rather than broadcasting,
-/// so each grid subscribes to its own channel and every zoom change must be
-/// fanned out to all of them — otherwise the grid not currently active would
-/// silently miss (and drop) every other notification.
-///
-/// Bumps both grids' `zoom_seq` so superseded batched resize traversals bail
-/// via their staleness predicate instead of fighting the debounced resize.
-pub fn notify_zoom_change(state: &AppState) {
-    _ = state.album_grid.zoom_seq.fetch_add(1, Relaxed);
-    _ = state.artist_grid.zoom_seq.fetch_add(1, Relaxed);
-    for tx in [&state.albums_zoom_tx, &state.artists_zoom_tx] {
-        if let Err(e) = tx.try_send(()) {
-            warn!(error = %e, "Failed to send zoom change");
-        }
-    }
-}
-
-/// Connect zoom button click handlers and view-mode sensitivity sync.
-///
-/// Click handlers apply the zoom for the mode active at press time, fan out
-/// only on real changes, and refresh sensitivity with local button clones.
-/// A view-mode subscription keeps the buttons in sync when the range changes
-/// under them (grid `0–4` vs list `0–2`); key-driven changes are picked up on
-/// the next popover open via the show handler in [`build_popover`].
-fn connect_zoom_handlers(state: &Arc<AppState>, zoom_out_btn: &Button, zoom_in_btn: &Button) {
-    let s_zo = Arc::clone(state);
-    let out_btn = zoom_out_btn.clone();
-    let in_btn = zoom_in_btn.clone();
-    state
-        .handles
-        .lock()
-        .retain_signal(zoom_out_btn.connect_clicked(move |_| {
-            let mode = s_zo.storage.get_view_mode();
-            if apply_zoom_out(&s_zo, mode) {
-                notify_zoom_change(&s_zo);
-            }
-            update_zoom_sensitivity(&s_zo, &out_btn, &in_btn);
-        }));
-
-    let s_zin = Arc::clone(state);
-    let out_btn2 = zoom_out_btn.clone();
-    let in_btn2 = zoom_in_btn.clone();
-    state
-        .handles
-        .lock()
-        .retain_signal(zoom_in_btn.connect_clicked(move |_| {
-            let mode = s_zin.storage.get_view_mode();
-            if apply_zoom_in(&s_zin, mode) {
-                notify_zoom_change(&s_zin);
-            }
-            update_zoom_sensitivity(&s_zin, &out_btn2, &in_btn2);
-        }));
-
-    let sub_state = Arc::clone(state);
-    let sub_out = zoom_out_btn.clone();
-    let sub_in = zoom_in_btn.clone();
-    state
-        .handles
-        .lock()
-        .retain_task(spawn_future_local(async move {
-            let mode_rx = sub_state.view_mode.subscribe();
-            while mode_rx.recv().await.is_ok() {
-                update_zoom_sensitivity(&sub_state, &sub_out, &sub_in);
-            }
-        }));
 }
 
 #[cfg(test)]
@@ -301,7 +151,7 @@ mod tests {
         app::runtime::AppState,
         storage::view_mode::ViewMode::{Column, Grid},
         ui::{
-            toggle_popover::{apply_zoom_in, apply_zoom_out, notify_zoom_change},
+            popover_zoom::{apply_zoom_in, apply_zoom_out, notify_zoom_change},
             zoom::{GRID_ZOOM_MAX, LIST_ZOOM_MAX},
         },
     };

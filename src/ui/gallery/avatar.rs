@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use libadwaita::{
-    glib::spawn_future_local,
+    glib::{object::ObjectExt, spawn_future_local},
     gtk::{
         Align::Start, Box, EventControllerMotion, Image, Label, Overlay, Widget,
         accessible::Property::Label as PropertyLabel, pango::EllipsizeMode::End,
@@ -37,6 +37,7 @@ pub fn build_artist_avatar(size: i32) -> Widget {
         .width_request(size)
         .height_request(size)
         .css_classes(["artist-avatar", "dim-label"])
+        .tooltip_text("Artist icon")
         .build();
     avatar.update_property(&[PropertyLabel("Artist icon")]);
     avatar.upcast()
@@ -68,13 +69,17 @@ pub fn build_artist_card(state: &Arc<AppState>, artist: &Artist, size: i32) -> (
         .width_request(size)
         .height_request(size)
         .halign(Start)
+        .css_classes(["cover-overlay"])
+        .tooltip_text("Artist avatar overlay")
         .build();
     overlay.set_child(Some(&avatar));
-    overlay.set_css_classes(&["cover-overlay"]);
 
     let play_button = build_album_play_button();
     play_button.set_icon_name("media-playback-start-symbolic");
-    play_button.set_tooltip_text(Some(&format!("Play all albums by {}", artist.name)));
+    play_button.set_property(
+        "tooltip-text",
+        format!("Play all albums by {}", artist.name),
+    );
     play_button.update_property(&[PropertyLabel(&format!(
         "Play all albums by {}",
         artist.name
@@ -122,6 +127,7 @@ pub fn build_artist_card(state: &Arc<AppState>, artist: &Artist, size: i32) -> (
         .max_width_chars(title_max_chars(size))
         .css_classes(["heading", "title"])
         .halign(Start)
+        .tooltip_text("Artist name")
         .build();
     name_label.update_property(&[PropertyLabel(&format!("Artist: {}", artist.name))]);
 
@@ -131,6 +137,7 @@ pub fn build_artist_card(state: &Arc<AppState>, artist: &Artist, size: i32) -> (
         .max_width_chars(format_max_chars(size))
         .css_classes(["dim-label", "caption"])
         .halign(Start)
+        .tooltip_text("Album count")
         .build();
     album_count_label.update_property(&[PropertyLabel(&format!(
         "{} albums by {}",

@@ -75,7 +75,7 @@ pub fn build_grid(tooltip: &str, cover_size: i32) -> FlowBox {
         .row_spacing(spacing)
         .column_spacing(spacing)
         .selection_mode(SelectionNone)
-        .can_focus(true)
+        .css_classes(["library-grid"])
         .tooltip_text(tooltip)
         .build();
     flow.update_property(&[Label(tooltip)]);
@@ -87,17 +87,20 @@ mod tests {
     use {
         anyhow::{Result, bail, ensure},
         libadwaita::{
-            gtk::{self, Box, Image, Orientation::Vertical, Overlay, test},
-            prelude::{BoxExt, Cast, WidgetExt},
+            gtk::{self, Image, Overlay, accessible::Property::Label, test},
+            prelude::{AccessibleExtManual, BoxExt, Cast, WidgetExt},
         },
     };
 
-    use crate::ui::{
-        gallery::{
-            card::build_placeholder,
-            grid_flow::{build_grid, grid_spacing, resize_overlay_cover},
+    use crate::{
+        app::mocks::test_card,
+        ui::{
+            gallery::{
+                card::build_placeholder,
+                grid_flow::{build_grid, grid_spacing, resize_overlay_cover},
+            },
+            zoom::{GRID_ZOOM_MAX, grid_cover_size},
         },
-        zoom::{GRID_ZOOM_MAX, grid_cover_size},
     };
 
     #[test]
@@ -139,9 +142,13 @@ mod tests {
 
     #[test]
     fn resize_overlay_cover_resizes_card_and_cover() -> Result<()> {
-        let card = Box::new(Vertical, 0);
+        let card = test_card();
         let cover = build_placeholder(120);
-        let overlay = Overlay::new();
+        let overlay = Overlay::builder()
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test overlay")
+            .build();
+        overlay.update_property(&[Label("Test overlay")]);
         overlay.set_child(Some(&cover));
         card.append(&overlay);
         resize_overlay_cover(&overlay, 240);

@@ -10,11 +10,10 @@ use libadwaita::{
 pub fn build_album_play_button() -> Button {
     let btn = Button::builder()
         .icon_name("media-playback-start-symbolic")
-        .css_classes(["circular", "osd"])
+        .css_classes(["circular", "osd", "image-button"])
         .halign(Center)
         .valign(Center)
         .tooltip_text("Play or pause album")
-        .can_focus(true)
         .build();
     btn.update_property(&[Label("Play or pause album")]);
     btn

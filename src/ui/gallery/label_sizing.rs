@@ -162,44 +162,37 @@ mod tests {
             gtk::{
                 self, Box, Button, Label,
                 Orientation::{Horizontal, Vertical},
-                Overlay, test,
+                Overlay,
+                accessible::Property::Label as A11yLabel,
+                test,
             },
-            prelude::{BoxExt, Cast, WidgetExt},
+            prelude::{AccessibleExtManual, BoxExt, Cast, WidgetExt},
         },
     };
 
     use crate::{
         app::runtime::AppState,
-        storage::{
-            catalog::{Album, Artist},
-            formats::FormatInfo,
-        },
-        ui::gallery::{
-            avatar::build_artist_card,
-            card::build_album_card,
-            label_sizing::{
-                LabelSizingError, artist_max_chars, format_max_chars, resize_album_card,
-                resize_artist_card, title_max_chars,
+        storage::{catalog::Artist, formats::FormatInfo},
+        ui::{
+            detail::album_meta::tests::fixture_album,
+            gallery::{
+                avatar::build_artist_card,
+                card::build_album_card,
+                label_sizing::{
+                    LabelSizingError, artist_max_chars, format_max_chars, resize_album_card,
+                    resize_artist_card, title_max_chars,
+                },
             },
         },
     };
 
     fn build_mock_card(size: i32) -> Result<(Box, Overlay)> {
-        let album = Album {
-            id: 7,
-            title: "Test Album".into(),
-            artist_id: 1,
-            year: Some(2024),
-            genre: None,
-            artwork_path: None,
-            track_count: 12,
-            total_duration: 3600.0,
-            format_summary: "FLAC".into(),
-            lossless: true,
-            format: "FLAC".into(),
-            bit_depth: Some(24),
-            sample_rate: Some(96000),
-        };
+        let mut album = fixture_album(Some(2024));
+        album.id = 7;
+        album.title = "Test Album".into();
+        album.track_count = 12;
+        album.total_duration = 3600.0;
+        album.format_summary = "FLAC".into();
         let state = Arc::new(AppState::mock()?);
         Ok(build_album_card(
             &state,
@@ -209,7 +202,6 @@ mod tests {
             size,
         ))
     }
-
     fn long_named_artist() -> Artist {
         Artist {
             id: 1,
@@ -337,7 +329,11 @@ mod tests {
 
     #[test]
     fn resize_orphan_overlay_reports_missing_parent() -> Result<()> {
-        let overlay = Overlay::new();
+        let overlay = Overlay::builder()
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test overlay")
+            .build();
+        overlay.update_property(&[A11yLabel("Test overlay")]);
         let album_err = resize_album_card(&overlay, 120);
         ensure!(
             matches!(album_err, Err(LabelSizingError::MissingParent { .. })),
@@ -350,13 +346,25 @@ mod tests {
         );
         Ok(())
     }
-
     #[test]
     fn resize_wrong_sibling_type_reports_unexpected_type() -> Result<()> {
-        let card = Box::new(Vertical, 0);
-        let overlay = Overlay::new();
+        let card = Box::builder()
+            .orientation(Vertical)
+            .spacing(0)
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test card")
+            .build();
+        let overlay = Overlay::builder()
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test overlay")
+            .build();
         card.append(&overlay);
-        card.append(&Button::new());
+        let button = Button::builder()
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test button")
+            .build();
+        button.update_property(&[A11yLabel("Test button")]);
+        card.append(&button);
         let err = resize_artist_card(&overlay, 120);
         ensure!(
             matches!(err, Err(LabelSizingError::UnexpectedType { .. })),

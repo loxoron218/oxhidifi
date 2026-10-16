@@ -59,6 +59,8 @@ pub fn build_album_header(
         .orientation(Horizontal)
         .spacing(12)
         .hexpand(true)
+        .css_classes(["album-header"])
+        .tooltip_text("Album header")
         .build();
     header.update_property(&[PropertyLabel(&format!("Album {}", album.title))]);
 
@@ -70,9 +72,8 @@ pub fn build_album_header(
         })
         .active(expanded)
         .tooltip_text(toggle_tooltip(&album.title, expanded))
-        .css_classes(["flat", "circular"])
+        .css_classes(["flat", "circular", "toggle"])
         .valign(Center)
-        .can_focus(true)
         .build();
     toggle.update_property(&[PropertyLabel(&toggle_label(&album.title, expanded))]);
     header.append(&toggle);
@@ -84,6 +85,7 @@ pub fn build_album_header(
             .width_request(60)
             .height_request(60)
             .css_classes(["album-cover"])
+            .tooltip_text("Album artwork")
             .build();
         thumb.update_property(&[PropertyLabel(&format!("Artwork for {}", album.title))]);
         header.append(&thumb);
@@ -95,9 +97,8 @@ pub fn build_album_header(
     let open_button = Button::builder()
         .icon_name("go-next-symbolic")
         .tooltip_text(format!("Open {}", album.title))
-        .css_classes(["flat", "circular"])
+        .css_classes(["flat", "circular", "image-button"])
         .valign(Center)
-        .can_focus(true)
         .build();
     open_button.update_property(&[PropertyLabel(&format!("Open album {}", album.title))]);
     header.append(&open_button);
@@ -124,13 +125,17 @@ fn build_album_info(album: &Album, format_info: &FormatInfo) -> Box {
         .orientation(Vertical)
         .spacing(3)
         .hexpand(true)
+        .css_classes(["album-info"])
+        .tooltip_text("Album information")
         .build();
+    info_box.update_property(&[PropertyLabel(&format!("Album {}", album.title))]);
     let title = Label::builder()
         .label(&album.title)
         .css_classes(["title-4", "heading"])
         .ellipsize(End)
         .hexpand(true)
         .halign(Start)
+        .tooltip_text("Album title")
         .build();
     title.update_property(&[PropertyLabel(&format!("Album: {}", album.title))]);
     info_box.append(&title);
@@ -160,6 +165,7 @@ fn build_meta_label(text: &str, accessible: &str) -> Label {
         .ellipsize(End)
         .hexpand(true)
         .halign(Start)
+        .tooltip_text(accessible)
         .build();
     meta.update_property(&[PropertyLabel(accessible)]);
     meta

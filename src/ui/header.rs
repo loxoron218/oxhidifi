@@ -20,7 +20,7 @@ use std::sync::Arc;
 use {
     libadwaita::{
         NavigationView, SplitButton,
-        glib::spawn_future_local,
+        glib::{object::ObjectExt, spawn_future_local},
         gtk::{MenuButton, Widget, Window, accessible::Property::Label},
         prelude::{AccessibleExtManual, WidgetExt},
     },
@@ -106,8 +106,8 @@ pub fn build_view_toggle(state: &Arc<AppState>, parent: &Window) -> SplitButton 
 
     let split_btn = SplitButton::builder()
         .icon_name(initial_mode.icon_name())
+        .css_classes(["view-toggle", "image-button"])
         .tooltip_text("Toggle View")
-        .can_focus(true)
         .build();
     split_btn.update_property(&[Label(initial_mode.tooltip())]);
 
@@ -122,7 +122,7 @@ pub fn build_view_toggle(state: &Arc<AppState>, parent: &Window) -> SplitButton 
             let current_mode = state_clone.storage.get_view_mode();
             let mode = current_mode.toggle();
             btn.set_icon_name(mode.icon_name());
-            btn.set_tooltip_text(Some(mode.tooltip()));
+            btn.set_property("tooltip-text", mode.tooltip());
             let sc = Arc::clone(&state_clone);
             state_clone
                 .handles
@@ -226,7 +226,7 @@ fn subscribe_view_updates(
             let vm_rx = s.view_mode.subscribe();
             while let Ok(mode) = vm_rx.recv().await {
                 btn.set_icon_name(mode.icon_name());
-                btn.set_tooltip_text(Some(mode.tooltip()));
+                btn.set_property("tooltip-text", mode.tooltip());
             }
         }));
 
@@ -253,8 +253,8 @@ mod tests {
         anyhow::{Result, ensure},
         libadwaita::{
             NavigationView,
-            gtk::{self, Window, test},
-            prelude::WidgetExt,
+            gtk::{self, Window, accessible::Property::Label, test},
+            prelude::{AccessibleExtManual, WidgetExt},
         },
     };
 
@@ -265,8 +265,9 @@ mod tests {
         },
         storage::view_mode::ViewMode::{Column, Grid},
         ui::{
+            detail_nav::handle_navigation_event,
             header::{build_header_end_controls, build_view_toggle},
-            navigation::{handle_navigation_event, tests::add_library_page},
+            navigation::tests::add_library_page,
             signal_view::signal_tab_build::build_signal_page,
         },
     };
@@ -286,7 +287,11 @@ mod tests {
     #[test]
     fn build_view_toggle_sets_initial_icon() -> Result<()> {
         let state = Arc::new(isolated_app_state()?);
-        let window = Window::new();
+        let window = Window::builder()
+            .css_classes(["test-fixture", "background"])
+            .tooltip_text("Test window")
+            .build();
+        window.update_property(&[Label("Test window")]);
         let toggle = build_view_toggle(&state, &window);
         ensure!(toggle.icon_name().as_deref() == Some("view-grid-symbolic"));
         Ok(())
@@ -295,9 +300,16 @@ mod tests {
     #[test]
     fn header_toggle_visible_on_library_hidden_on_detail() -> Result<()> {
         let state = Arc::new(isolated_app_state()?);
-        let parent = Window::new();
+        let parent = Window::builder()
+            .css_classes(["test-fixture", "background"])
+            .tooltip_text("Test parent window")
+            .build();
+        parent.update_property(&[Label("Test parent window")]);
         let signal_tab = build_signal_page();
-        let nav_view = NavigationView::new();
+        let nav_view = NavigationView::builder()
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test navigation view")
+            .build();
         let nav_tx = add_library_page(&nav_view, &state);
         let controls = build_header_end_controls(&state, &parent, &signal_tab, &nav_view);
         ensure!(

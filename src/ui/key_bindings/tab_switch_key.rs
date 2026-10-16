@@ -83,7 +83,7 @@ mod tests {
     };
 
     use crate::{
-        app::mocks::isolated_app_state,
+        app::{mocks::isolated_app_state, runtime::AppState},
         storage::active_tab::ActiveTab::{Albums, Artists, Signal},
         ui::key_bindings::tab_switch_key::{handle_tab_switch_key, next_tab_for_key},
     };
@@ -135,7 +135,7 @@ mod tests {
 
     #[test]
     fn handle_switches_active_tab_and_notifies() -> Result<()> {
-        let state = isolated_app_state()?;
+        let state: AppState = isolated_app_state()?;
         let rx = state.active_tab.subscribe();
         ensure!(handle_tab_switch_key(
             &state,
@@ -152,7 +152,7 @@ mod tests {
 
     #[test]
     fn handle_returns_false_without_ctrl() -> Result<()> {
-        let state = isolated_app_state()?;
+        let state: AppState = isolated_app_state()?;
         ensure!(!handle_tab_switch_key(
             &state,
             Key::Tab,

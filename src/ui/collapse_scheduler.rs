@@ -23,8 +23,8 @@ use libadwaita::{
 };
 
 use crate::ui::{
-    gallery::narrow_flag::NarrowState, narrow_scheduler::NarrowScheduler, panes::SwitcherGroup,
-    signal_handlers::UiHandles,
+    gallery::narrow_flag::NarrowState, narrow_scheduler::NarrowScheduler,
+    pane_switcher::SwitcherGroup, signal_handlers::UiHandles,
 };
 
 /// Schedules deferred `OverlaySplitView` collapse changes.
@@ -161,7 +161,8 @@ mod tests {
             ApplicationWindow, HeaderBar, OverlaySplitView, ViewStack, ViewSwitcher,
             ViewSwitcherBar,
             glib::MainContext,
-            gtk::{self, test as gtk_test},
+            gtk::{self, accessible::Property::Label, test as gtk_test},
+            prelude::AccessibleExtManual,
         },
     };
 
@@ -171,7 +172,7 @@ mod tests {
             collapse_scheduler::{CollapseScheduler, add_responsive_breakpoints},
             gallery::narrow_flag::NarrowState,
             narrow_scheduler::NarrowScheduler,
-            panes::SwitcherGroup,
+            pane_switcher::SwitcherGroup,
         },
     };
 
@@ -197,6 +198,15 @@ mod tests {
         pump_in_test_runtime(pump_main_context)
     }
 
+    fn test_split_view(tooltip: &str) -> OverlaySplitView {
+        let split_view = OverlaySplitView::builder()
+            .css_classes(["test-fixture"])
+            .tooltip_text(tooltip)
+            .build();
+        split_view.update_property(&[Label(tooltip)]);
+        split_view
+    }
+
     fn drive_collapse(
         scheduler: &Arc<CollapseScheduler>,
         split_view: &OverlaySplitView,
@@ -213,7 +223,7 @@ mod tests {
 
     #[gtk_test]
     fn collapse_scheduler_initializes_from_current_state() -> Result<()> {
-        let split_view = OverlaySplitView::new();
+        let split_view = test_split_view("Test collapse init");
         let scheduler = CollapseScheduler::new(&split_view);
         ensure!(
             scheduler.desired.load(Relaxed) == split_view.is_collapsed(),
@@ -230,7 +240,7 @@ mod tests {
 
     #[gtk_test]
     fn collapse_scheduler_applies_from_idle() -> Result<()> {
-        let split_view = OverlaySplitView::new();
+        let split_view = test_split_view("Test collapse idle");
         let scheduler = CollapseScheduler::new(&split_view);
         ensure!(!split_view.is_collapsed());
 
@@ -246,7 +256,7 @@ mod tests {
 
     #[gtk_test]
     fn collapse_scheduler_coalesces_nested_transitions() -> Result<()> {
-        let split_view = OverlaySplitView::new();
+        let split_view = test_split_view("Test collapse coalesce");
         let scheduler = CollapseScheduler::new(&split_view);
 
         for collapsed in [true, false, true] {
@@ -263,7 +273,7 @@ mod tests {
 
     #[gtk_test]
     fn collapse_scheduler_unapply_expands_split_view() -> Result<()> {
-        let split_view = OverlaySplitView::new();
+        let split_view = test_split_view("Test collapse unapply");
         let scheduler = CollapseScheduler::new(&split_view);
 
         drive_collapse(&scheduler, &split_view, true)?;
@@ -273,11 +283,26 @@ mod tests {
 
     fn narrow_fixtures() -> (Arc<NarrowState>, HeaderBar, ViewSwitcherBar, ViewSwitcher) {
         let narrow_state = NarrowState::new_shared();
-        let stack = ViewStack::new();
-        let header = HeaderBar::new();
-        let switcher = ViewSwitcher::builder().stack(&stack).build();
+        let stack = ViewStack::builder()
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test narrow stack")
+            .build();
+        stack.update_property(&[Label("Test narrow stack")]);
+        let header = HeaderBar::builder()
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test narrow header")
+            .build();
+        let switcher = ViewSwitcher::builder()
+            .stack(&stack)
+            .css_classes(["test-fixture", "narrow"])
+            .tooltip_text("Test narrow switcher")
+            .build();
         header.set_title_widget(Some(&switcher));
-        let bar = ViewSwitcherBar::builder().stack(&stack).build();
+        let bar = ViewSwitcherBar::builder()
+            .stack(&stack)
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test narrow bar")
+            .build();
         bar.set_reveal(false);
         (narrow_state, header, bar, switcher)
     }

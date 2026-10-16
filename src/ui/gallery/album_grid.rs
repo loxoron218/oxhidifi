@@ -12,8 +12,8 @@ use std::{
 use {
     libadwaita::{
         glib::idle_add_local,
-        gtk::{Box, Orientation::Vertical, Overlay, Stack},
-        prelude::BoxExt,
+        gtk::{Box, Orientation::Vertical, Overlay, Stack, accessible::Property::Label},
+        prelude::{AccessibleExtManual, BoxExt},
     },
     tokio::join,
     tracing::warn,
@@ -210,20 +210,20 @@ fn build_album_mode(
         Grid => {
             state.album_grid.ready.store(false, Relaxed);
             *state.album_grid_covers.lock() = Arc::new(Vec::new());
-            let grid_container = Box::builder().orientation(Vertical).build();
-            let flow = build_grid(
-                "Album library grid \u{2014} click an album to play",
-                cover_size,
-            );
+            let grid_container = Box::builder()
+                .orientation(Vertical)
+                .css_classes(["album-grid"])
+                .tooltip_text("Album grid")
+                .build();
+            grid_container.update_property(&[Label("Album grid")]);
+            let flow = build_grid("Album library grid — click an album to play", cover_size);
             grid_container.append(&flow);
             add_scrolled(stack, &grid_container, "grid");
-
             let album_ids: Vec<i64> = indices
                 .iter()
                 .filter_map(|&i| cached.albums.get(i).map(|album| album.id))
                 .collect();
             setup_flowbox_keyboard_nav(&flow, state, album_ids, AlbumDetail);
-
             let cached_owned = CachedAlbumData {
                 albums: Arc::clone(&cached.albums),
                 artist_names: Arc::clone(&cached.artist_names),

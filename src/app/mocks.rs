@@ -13,7 +13,16 @@ use std::{
 
 use {
     anyhow::{Context, Result, anyhow},
-    libadwaita::gtk::{Button, Label, Orientation::Horizontal, Picture, Scale},
+    libadwaita::{
+        glib::object::{Cast, IsA},
+        gtk::{
+            Adjustment, Box, Button, Label,
+            Orientation::{Horizontal, Vertical},
+            Picture, Scale, Widget,
+            accessible::Property::Label as PropertyLabel,
+        },
+        prelude::{AccessibleExtManual, WidgetExt},
+    },
     tokio::runtime::Runtime,
 };
 
@@ -63,15 +72,52 @@ impl PlaybackWidgets {
     /// Build deterministic widgets for listener tests.
     #[must_use]
     pub fn test_fixture() -> Self {
+        let seek_adjustment = Adjustment::new(0.0, 0.0, 100.0, 1.0, 10.0, 0.0);
+        let volume_adjustment = Adjustment::new(0.0, 0.0, 1.0, 0.01, 0.1, 0.0);
+        let artwork_image = Picture::builder()
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test artwork image")
+            .build();
+        artwork_image.update_property(&[PropertyLabel("Test artwork image")]);
+        let play_button = Button::builder()
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test play button")
+            .build();
+        let seek_scale = Scale::builder()
+            .orientation(Horizontal)
+            .adjustment(&seek_adjustment)
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test seek scale")
+            .build();
+        let current_time = Label::builder()
+            .label("00:00")
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test current time")
+            .build();
+        let total_time = Label::builder()
+            .label("00:00")
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test total time")
+            .build();
+        let output_mode_btn = Button::builder()
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test output mode button")
+            .build();
+        let volume_scale = Scale::builder()
+            .orientation(Horizontal)
+            .adjustment(&volume_adjustment)
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test volume scale")
+            .build();
         Self {
             labels: TrackLabels::test_fixture(),
-            artwork_image: Picture::new(),
-            play_button: Button::new(),
-            seek_scale: Scale::with_range(Horizontal, 0.0, 100.0, 1.0),
-            current_time: Label::new(Some("00:00")),
-            total_time: Label::new(Some("00:00")),
-            output_mode_btn: Button::new(),
-            volume_scale: Scale::with_range(Horizontal, 0.0, 1.0, 0.01),
+            artwork_image,
+            play_button,
+            seek_scale,
+            current_time,
+            total_time,
+            output_mode_btn,
+            volume_scale,
         }
     }
 }
@@ -80,11 +126,32 @@ impl TrackLabels {
     /// Build deterministic labels for widget tests.
     #[must_use]
     pub fn test_fixture() -> Self {
+        let title = Label::builder()
+            .label("Title")
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test title label")
+            .build();
+        title.update_property(&[PropertyLabel("Test title label")]);
+        let artist = Label::builder()
+            .label("Artist")
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test artist label")
+            .build();
+        let album = Label::builder()
+            .label("Album")
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test album label")
+            .build();
+        let format = Label::builder()
+            .label("FLAC")
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test format label")
+            .build();
         Self {
-            title: Label::new(Some("Title")),
-            artist: Label::new(Some("Artist")),
-            album: Label::new(Some("Album")),
-            format: Label::new(Some("FLAC")),
+            title,
+            artist,
+            album,
+            format,
         }
     }
 }
@@ -184,4 +251,51 @@ pub fn pump_in_test_runtime<T>(pump: impl FnOnce() -> T) -> Result<T> {
     let result = pump();
     drop(guard);
     Ok(result)
+}
+
+/// Collect all descendants of type `T` under `root` in tree order.
+///
+/// Shared by focus-chain and CSS-class regression tests to avoid copy-pasted
+/// tree walkers across drag, gallery, and preferences modules.
+///
+/// # Arguments
+///
+/// * `root` - Widget subtree to walk.
+///
+/// # Returns
+///
+/// * `Vec<T>` - All matching descendants in tree order.
+#[must_use]
+pub fn find_descendants<T>(root: &Widget) -> Vec<T>
+where
+    T: IsA<Widget>,
+{
+    let mut found = Vec::new();
+    let mut next = root.first_child();
+    while let Some(child) = next {
+        next = child.next_sibling();
+        found.extend(child.clone().downcast::<T>());
+        found.extend(find_descendants::<T>(&child));
+    }
+    found
+}
+
+/// Build a vertical test card for gallery overlay tests.
+///
+/// Shared by grid-fit and grid-flow regression tests to avoid copy-pasted
+/// card builders.
+///
+/// # Returns
+///
+/// * `Box` - Card with `test-fixture` class and accessibility label.
+#[must_use]
+pub fn test_card() -> Box {
+    let card = Box::builder()
+        .orientation(Vertical)
+        .spacing(0)
+        .css_classes(["test-fixture"])
+        .tooltip_text("Test card")
+        .build();
+    card.update_property(&[PropertyLabel("Test card")]);
+    card
 }

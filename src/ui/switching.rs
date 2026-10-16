@@ -116,7 +116,8 @@ mod tests {
         anyhow::{Result, ensure},
         libadwaita::{
             ViewStack,
-            gtk::{self, Label, Stack, test},
+            gtk::{self, Label, Stack, accessible::Property::Label as PropertyLabel, test},
+            prelude::AccessibleExtManual,
         },
     };
 
@@ -127,25 +128,49 @@ mod tests {
     };
 
     fn add_page(stack: &ViewStack, name: &str) {
-        drop(stack.add_named(&Label::new(Some(name)), Some(name)));
+        let label = Label::builder()
+            .label(name)
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test page")
+            .build();
+        label.update_property(&[PropertyLabel("Test page")]);
+        drop(stack.add_named(&label, Some(name)));
     }
 
     fn add_stack_page(stack: &Stack, name: &str) {
-        drop(stack.add_named(&Label::new(Some(name)), Some(name)));
+        let label = Label::builder()
+            .label(name)
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test stack page")
+            .build();
+        label.update_property(&[PropertyLabel("Test stack page")]);
+        drop(stack.add_named(&label, Some(name)));
     }
 
     #[test]
     fn tab_switch_shows_matching_page() -> Result<()> {
         let state = Arc::new(AppState::mock()?);
         let narrow = NarrowState::new_shared();
-        let view_stack = ViewStack::new();
+        let view_stack = ViewStack::builder()
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test view stack")
+            .build();
+        view_stack.update_property(&[PropertyLabel("Test view stack")]);
         add_page(&view_stack, "albums");
         add_page(&view_stack, "artists");
         add_page(&view_stack, "signal");
-        let album_stack = Stack::new();
+        let album_stack = Stack::builder()
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test album stack")
+            .build();
+        album_stack.update_property(&[PropertyLabel("Test album stack")]);
         add_stack_page(&album_stack, "grid");
         add_stack_page(&album_stack, "column");
-        let artist_stack = Stack::new();
+        let artist_stack = Stack::builder()
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test artist stack")
+            .build();
+        artist_stack.update_property(&[PropertyLabel("Test artist stack")]);
         add_stack_page(&artist_stack, "grid");
         add_stack_page(&artist_stack, "column");
         handle_tab_switch(

@@ -16,7 +16,7 @@ use {
             Box, Button, Image, Label, Orientation::Horizontal,
             accessible::Property::Label as A11yLabel,
         },
-        prelude::{AccessibleExtManual, BoxExt, ButtonExt, WidgetExt},
+        prelude::{AccessibleExtManual, BoxExt, ButtonExt, ObjectExt},
     },
     parking_lot::Mutex,
     tracing::info,
@@ -102,7 +102,7 @@ impl SignalBadge {
         self.label.set_label(next.label());
         self.icon.set_icon_name(Some(verdict_icon(next)));
         let announced = format!("Signal path is {} — open the Signal tab", next.label());
-        self.button.set_tooltip_text(Some(&announced));
+        self.button.set_property("tooltip-text", announced.clone());
         self.button.update_property(&[A11yLabel(&announced)]);
     }
 
@@ -111,7 +111,8 @@ impl SignalBadge {
         *self.verdict.lock() = None;
         self.label.set_label("Signal");
         self.icon.set_icon_name(Some(IDLE_ICON));
-        self.button.set_tooltip_text(Some("Open the Signal tab"));
+        self.button
+            .set_property("tooltip-text", "Open the Signal tab");
         self.button
             .update_property(&[A11yLabel("Open the Signal tab")]);
     }
@@ -179,15 +180,32 @@ pub fn trace_verdict_flip(
 /// * `SignalBadge` - Handles owning the badge button.
 #[must_use]
 pub fn build_signal_badge(state: &Arc<AppState>) -> SignalBadge {
-    let icon = Image::builder().icon_name(IDLE_ICON).pixel_size(16).build();
-    let label = Label::builder().label("Signal").build();
-    let content = Box::builder().orientation(Horizontal).spacing(6).build();
+    let icon = Image::builder()
+        .icon_name(IDLE_ICON)
+        .pixel_size(16)
+        .css_classes(["signal-badge-icon"])
+        .tooltip_text("Signal path status")
+        .build();
+    icon.update_property(&[A11yLabel("Signal path status")]);
+    let label = Label::builder()
+        .label("Signal")
+        .css_classes(["signal-badge-label"])
+        .tooltip_text("Signal path verdict")
+        .build();
+    label.update_property(&[A11yLabel("Signal path verdict")]);
+    let content = Box::builder()
+        .orientation(Horizontal)
+        .spacing(6)
+        .css_classes(["signal-badge-content"])
+        .tooltip_text("Signal path summary")
+        .build();
+    content.update_property(&[A11yLabel("Signal path summary")]);
     content.append(&icon);
     content.append(&label);
     let button = Button::builder()
         .child(&content)
+        .css_classes(["signal-badge-button"])
         .tooltip_text("Open the Signal tab")
-        .can_focus(true)
         .build();
     button.update_property(&[A11yLabel("Open the Signal tab")]);
     let navigator = Arc::clone(state);

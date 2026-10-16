@@ -7,8 +7,10 @@ use std::sync::Arc;
 
 use {
     libadwaita::{
-        gtk::{Box, Button, Orientation::Horizontal, Scale, accessible::Property::Label},
-        prelude::{AccessibleExtManual, BoxExt, ButtonExt, RangeExt, ScaleExt, WidgetExt},
+        gtk::{
+            Adjustment, Box, Button, Orientation::Horizontal, Scale, accessible::Property::Label,
+        },
+        prelude::{AccessibleExtManual, BoxExt, ButtonExt, ObjectExt, RangeExt, WidgetExt},
     },
     tracing::error,
 };
@@ -29,13 +31,17 @@ use crate::{
 /// Returns the container box, the mode toggle button, and the volume scale
 /// (for event-driven visual updates by the panel).
 pub fn build_volume(state: &Arc<AppState>) -> (Box, Button, Scale) {
-    let vol_box = Box::builder().orientation(Horizontal).spacing(6).build();
+    let vol_box = Box::builder()
+        .orientation(Horizontal)
+        .spacing(6)
+        .css_classes(["volume-controls"])
+        .tooltip_text("Volume and output mode controls")
+        .build();
 
     let mute_button = Button::builder()
         .icon_name("audio-volume-high-symbolic")
-        .css_classes(["flat"])
+        .css_classes(["flat", "image-button"])
         .tooltip_text("Mute or unmute")
-        .can_focus(true)
         .build();
     mute_button.update_property(&[Label("Mute or unmute")]);
     let state_mute = Arc::clone(state);
@@ -59,13 +65,16 @@ pub fn build_volume(state: &Arc<AppState>) -> (Box, Button, Scale) {
     vol_box.append(&mute_button);
 
     let initial_volume = state.playback.state().volume;
-    let volume_scale = Scale::with_range(Horizontal, 0.0, 1.0, 0.01);
-    volume_scale.set_value(initial_volume);
-    volume_scale.set_draw_value(false);
-    volume_scale.set_hexpand(true);
-    volume_scale.set_can_focus(true);
     let initial_db = format_volume_db(initial_volume);
-    volume_scale.set_tooltip_text(Some(&format!("Volume: {initial_db}")));
+    let volume_adjustment = Adjustment::new(initial_volume, 0.0, 1.0, 0.01, 0.1, 0.0);
+    let volume_scale = Scale::builder()
+        .orientation(Horizontal)
+        .adjustment(&volume_adjustment)
+        .draw_value(false)
+        .hexpand(true)
+        .css_classes(["volume-scale"])
+        .tooltip_text(format!("Volume: {initial_db}"))
+        .build();
     volume_scale.update_property(&[Label(&format!("Adjust volume ({initial_db})"))]);
     let state_vol = Arc::clone(state);
     let vol_ref = volume_scale.clone();
@@ -78,7 +87,7 @@ pub fn build_volume(state: &Arc<AppState>) -> (Box, Button, Scale) {
                 error!(error = %e, "Failed to set volume");
             }
             let db = format_volume_db(value);
-            vol_ref.set_tooltip_text(Some(&format!("Volume: {db}")));
+            vol_ref.set_property("tooltip-text", format!("Volume: {db}"));
             vol_ref.update_property(&[Label(&format!("Adjust volume ({db})"))]);
             state_vol.storage.set_volume_memory(value);
             state_vol.storage.save_settings();
@@ -88,9 +97,8 @@ pub fn build_volume(state: &Arc<AppState>) -> (Box, Button, Scale) {
     let initial_mode = state.playback.state().output_mode;
     let mode_button = Button::builder()
         .icon_name(initial_mode.icon_name())
-        .css_classes(["flat", "caption"])
+        .css_classes(["flat", "caption", "image-button"])
         .tooltip_text(mode_button_tooltip(initial_mode))
-        .can_focus(true)
         .build();
     mode_button.update_property(&[Label(mode_button_tooltip(initial_mode))]);
     let state_mode = Arc::clone(state);
@@ -109,7 +117,7 @@ pub fn build_volume(state: &Arc<AppState>) -> (Box, Button, Scale) {
             }
             persist_toggle_output_mode(&state_mode.storage, new_mode);
             btn.set_icon_name(new_mode.icon_name());
-            btn.set_tooltip_text(Some(mode_button_tooltip(new_mode)));
+            btn.set_property("tooltip-text", mode_button_tooltip(new_mode));
             btn.update_property(&[Label(mode_button_tooltip(new_mode))]);
             update_volume_scale_visual(&scale_for_click, new_mode);
         }));
@@ -130,15 +138,16 @@ pub fn update_volume_scale_visual(scale: &Scale, mode: OutputMode) {
         Resampled => {
             scale.set_sensitive(true);
             let db = format_volume_db(scale.value());
-            scale.set_tooltip_text(Some(&format!("Volume: {db}")));
+            scale.set_property("tooltip-text", format!("Volume: {db}"));
             scale.update_property(&[Label(&format!("Adjust volume ({db})"))]);
         }
         BitPerfect => {
             scale.set_sensitive(false);
-            scale.set_tooltip_text(Some(
+            scale.set_property(
+                "tooltip-text",
                 "Volume controlled via hardware mixer \u{2014} switch to Resampled for software \
                  volume",
-            ));
+            );
             scale.update_property(&[Label(
                 "Volume controlled via hardware mixer, switch to Resampled for software volume",
             )]);
@@ -168,8 +177,10 @@ mod tests {
     use {
         anyhow::{Result, ensure},
         libadwaita::{
-            gtk::{self, Orientation::Horizontal, Scale, test},
-            prelude::WidgetExt,
+            gtk::{
+                self, Adjustment, Orientation::Horizontal, Scale, accessible::Property::Label, test,
+            },
+            prelude::{AccessibleExtManual, WidgetExt},
         },
     };
 
@@ -190,7 +201,14 @@ mod tests {
 
     #[test]
     fn update_volume_scale_visual_toggles_sensitivity() -> Result<()> {
-        let scale = Scale::with_range(Horizontal, 0.0, 1.0, 0.01);
+        let adjustment = Adjustment::new(0.0, 0.0, 1.0, 0.01, 0.1, 0.0);
+        let scale = Scale::builder()
+            .orientation(Horizontal)
+            .adjustment(&adjustment)
+            .css_classes(["volume-scale"])
+            .tooltip_text("Volume control")
+            .build();
+        scale.update_property(&[Label("Volume control")]);
         update_volume_scale_visual(&scale, Resampled);
         ensure!(scale.is_sensitive());
         update_volume_scale_visual(&scale, BitPerfect);

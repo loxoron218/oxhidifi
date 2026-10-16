@@ -4,13 +4,13 @@ use std::sync::Arc;
 
 use {
     libadwaita::{
-        ComboRow, PreferencesDialog, PreferencesGroup, PreferencesPage, SpinRow, SwitchRow,
+        ComboRow, PreferencesDialog, PreferencesGroup, PreferencesPage,
         gio::spawn_blocking,
         glib::spawn_future_local,
-        gtk::{Adjustment, StringList},
+        gtk::{StringList, accessible::Property::Label},
         prelude::{
-            ActionRowExt, ComboRowExt, ObjectExt, PreferencesDialogExt, PreferencesGroupExt,
-            PreferencesPageExt, PreferencesRowExt,
+            AccessibleExtManual, ComboRowExt, PreferencesDialogExt, PreferencesGroupExt,
+            PreferencesPageExt,
         },
     },
     tracing::{error, info, warn},
@@ -26,7 +26,8 @@ use crate::{
         },
         transport::PlaybackTransport,
     },
-    storage::{database::SqliteStorage, sort_rules::ArtistPlayOrder},
+    storage::database::SqliteStorage,
+    ui::preferences::audio_playback::build_playback_group,
 };
 
 /// Save the audio device selection for the given combo index.
@@ -42,7 +43,7 @@ async fn set_audio_device(state: &Arc<AppState>, idx: u32) {
     }
     info!(
         audio_device = name.as_deref().unwrap_or("default"),
-        "Audio device selection changed",
+        "Audio device selection changed"
     );
     if let Err(e) = state.storage.set_audio_device(name).await {
         error!(error = %e, "Failed to save audio device selection");
@@ -58,13 +59,6 @@ fn set_preferred_device(combo: &ComboRow, devices: &[DeviceInfo], preferred: Opt
     }
 }
 
-/// Persist gapless playback setting, logging on failure.
-async fn save_gapless_setting(state: Arc<AppState>, enabled: bool) {
-    if let Err(e) = state.storage.set_gapless_enabled(enabled).await {
-        error!(error = %e, "Failed to save gapless setting");
-    }
-}
-
 /// Persist output mode, logging on failure.
 async fn persist_output_mode(storage: Arc<SqliteStorage>, mode: OutputMode) {
     if let Err(e) = storage.set_output_mode(mode).await {
@@ -72,40 +66,10 @@ async fn persist_output_mode(storage: Arc<SqliteStorage>, mode: OutputMode) {
     }
 }
 
-/// Map a combo index to its artist playback order, if valid.
-///
-/// # Arguments
-///
-/// * `idx` - Selected combo row index.
-///
-/// # Returns
-///
-/// * `Option<ArtistPlayOrder>` - Order for valid indices, `None` otherwise.
-fn artist_play_order_from_index(idx: u32) -> Option<ArtistPlayOrder> {
-    ArtistPlayOrder::from_discriminator(u8::try_from(idx).unwrap_or(u8::MAX))
-}
-
-/// Map an artist playback order to its combo index.
-///
-/// # Arguments
-///
-/// * `order` - Current artist playback order.
-///
-/// # Returns
-///
-/// * `u32` - Combo row index for the order.
-fn artist_play_order_to_index(order: ArtistPlayOrder) -> u32 {
-    u32::from(order.discriminator())
-}
-
-/// Persist the artist playback order, logging on failure.
-async fn save_artist_play_order(state: Arc<AppState>, order: ArtistPlayOrder) {
-    if let Err(e) = state.storage.set_artist_play_order(order).await {
-        error!(error = %e, "Failed to save artist playback order");
-    }
-}
-
 /// Build the Audio > Output and Audio > Playback group.
+///
+/// Combo rows keep the default `combo` class alongside custom ones: dropping
+/// it leaves the selected value with a black background.
 ///
 /// # Arguments
 ///
@@ -116,16 +80,26 @@ async fn save_artist_play_order(state: Arc<AppState>, order: ArtistPlayOrder) {
 ///
 /// * `PreferencesPage` - The audio page for visible-page selection.
 pub fn build_audio_page(dialog: &PreferencesDialog, state: &Arc<AppState>) -> PreferencesPage {
-    let page = PreferencesPage::new();
-    page.set_title("Audio");
-    page.set_icon_name(Some("audio-speakers-symbolic"));
+    let page = PreferencesPage::builder()
+        .title("Audio")
+        .icon_name("audio-speakers-symbolic")
+        .css_classes(["audio-page"])
+        .tooltip_text("Audio output settings")
+        .build();
+    page.update_property(&[Label("Audio output settings")]);
 
-    let output_group = PreferencesGroup::new();
-    output_group.set_title("Output");
-    output_group.set_description(Some("Audio output device"));
+    let output_group = PreferencesGroup::builder()
+        .title("Output")
+        .description("Audio output device")
+        .css_classes(["output-group"])
+        .tooltip_text("Audio output device settings")
+        .build();
 
-    let device_combo = ComboRow::new();
-    device_combo.set_title("Audio Device");
+    let device_combo = ComboRow::builder()
+        .title("Audio Device")
+        .css_classes(["combo", "audio-device-row"])
+        .tooltip_text("Select audio output device")
+        .build();
 
     let state_devices = Arc::clone(state);
     let combo = device_combo.clone();
@@ -133,16 +107,12 @@ pub fn build_audio_page(dialog: &PreferencesDialog, state: &Arc<AppState>) -> Pr
         .handles
         .lock()
         .retain_task(spawn_future_local(async move {
-            let devices = match spawn_blocking(list_output_devices).await {
-                Ok(Ok(devices)) => devices,
-                Ok(Err(e)) => {
-                    warn!(error = %e, "Failed to enumerate audio devices");
-                    return;
-                }
-                Err(e) => {
-                    warn!(error = ?e, "Failed to enumerate audio devices");
-                    return;
-                }
+            let Ok(Ok(devices)) = spawn_blocking(list_output_devices).await else {
+                warn!(
+                    context = "audio-devices",
+                    "Failed to enumerate audio devices"
+                );
+                return;
             };
 
             let names: Vec<&str> = devices.iter().map(|d| d.name.as_str()).collect();
@@ -153,15 +123,14 @@ pub fn build_audio_page(dialog: &PreferencesDialog, state: &Arc<AppState>) -> Pr
             set_preferred_device(&combo, &devices, preferred.as_ref());
         }));
 
-    let state_devices = Arc::clone(state);
+    let state_selected = Arc::clone(state);
     state
         .handles
         .lock()
         .retain_signal(device_combo.connect_selected_notify(move |combo| {
             let idx = combo.selected();
-            let state = Arc::clone(&state_devices);
-            let state_cb = Arc::clone(&state);
-            state
+            let state_cb = Arc::clone(&state_selected);
+            state_selected
                 .handles
                 .lock()
                 .retain_task(spawn_future_local(async move {
@@ -172,6 +141,10 @@ pub fn build_audio_page(dialog: &PreferencesDialog, state: &Arc<AppState>) -> Pr
     output_group.add(&device_combo);
 
     let mode_model = StringList::new(&["Resampled", "BitPerfect"]);
+    let mode_selected = match state.storage.get_output_mode() {
+        Resampled => 0,
+        BitPerfect => 1,
+    };
     let mode_combo = ComboRow::builder()
         .title("Output Mode")
         .subtitle(
@@ -179,11 +152,10 @@ pub fn build_audio_page(dialog: &PreferencesDialog, state: &Arc<AppState>) -> Pr
              hardware volume via ALSA mixer",
         )
         .model(&mode_model)
+        .selected(mode_selected)
+        .css_classes(["combo", "output-mode-row"])
+        .tooltip_text("Select bit-perfect or resampled output")
         .build();
-    mode_combo.set_selected(match state.storage.get_output_mode() {
-        Resampled => 0,
-        BitPerfect => 1,
-    });
 
     let state_mode = Arc::clone(state);
     state
@@ -195,10 +167,7 @@ pub fn build_audio_page(dialog: &PreferencesDialog, state: &Arc<AppState>) -> Pr
             } else {
                 BitPerfect
             };
-            info!(
-                output_mode = ?mode,
-                "Output mode changed",
-            );
+            info!(output_mode = ?mode, "Output mode changed");
             if let Err(e) = state_mode.playback.set_output_mode(mode) {
                 warn!(error = %e, "Failed to set output mode");
             }
@@ -220,113 +189,27 @@ pub fn build_audio_page(dialog: &PreferencesDialog, state: &Arc<AppState>) -> Pr
     page
 }
 
-/// Build the Playback preferences group.
-fn build_playback_group(page: &PreferencesPage, state: &Arc<AppState>) {
-    let playback_group = PreferencesGroup::new();
-    playback_group.set_title("Playback");
-    playback_group.set_description(Some("Playback behavior"));
-
-    let initial_vol = (state.storage.get_settings_volume() * 100.0).round();
-    let adjustment = Adjustment::new(initial_vol, 0.0, 100.0, 1.0, 10.0, 0.0);
-    let volume_row = SpinRow::builder()
-        .title("Volume")
-        .subtitle("Playback volume level (0\u{2013}100)")
-        .adjustment(&adjustment)
-        .digits(0)
-        .build();
-
-    let state_vol = Arc::clone(state);
-    state
-        .handles
-        .lock()
-        .retain_signal(
-            volume_row.connect_notify_local(Some("value"), move |row, _| {
-                let vol = row.value() / 100.0;
-                if let Err(e) = state_vol.playback.set_volume(vol) {
-                    warn!(error = %e, "Failed to set volume from preferences");
-                }
-            }),
-        );
-
-    playback_group.add(&volume_row);
-
-    let gapless_row = SwitchRow::new();
-    gapless_row.set_title("Gapless Playback");
-    gapless_row.set_subtitle("Seamless transitions between tracks");
-    gapless_row.set_active(state.storage.get_gapless_enabled());
-
-    let state_gapless = Arc::clone(state);
-    state
-        .handles
-        .lock()
-        .retain_signal(gapless_row.connect_active_notify(move |row| {
-            let enabled = row.is_active();
-            if let Err(e) = state_gapless.playback.set_gapless_enabled(enabled) {
-                warn!(error = %e, "Failed to toggle gapless playback");
-            }
-            state_gapless
-                .handles
-                .lock()
-                .retain_task(spawn_future_local(save_gapless_setting(
-                    Arc::clone(&state_gapless),
-                    enabled,
-                )));
-        }));
-
-    playback_group.add(&gapless_row);
-
-    let order_labels: Vec<String> = ArtistPlayOrder::options()
-        .iter()
-        .map(ToString::to_string)
-        .collect();
-    let order_refs: Vec<&str> = order_labels.iter().map(String::as_str).collect();
-    let order_model = StringList::new(&order_refs);
-    let order_row = ComboRow::builder()
-        .title("Artist Playback Order")
-        .subtitle("Album order when playing all albums by an artist")
-        .model(&order_model)
-        .build();
-    order_row.set_selected(artist_play_order_to_index(
-        state.storage.get_artist_play_order(),
-    ));
-    let state_order = Arc::clone(state);
-    state
-        .handles
-        .lock()
-        .retain_signal(order_row.connect_selected_notify(move |row| {
-            let Some(order) = artist_play_order_from_index(row.selected()) else {
-                warn!(selected = row.selected(), "Unknown artist playback order");
-                return;
-            };
-            info!(order = ?order, "Artist playback order changed");
-            state_order
-                .handles
-                .lock()
-                .retain_task(spawn_future_local(save_artist_play_order(
-                    Arc::clone(&state_order),
-                    order,
-                )));
-        }));
-    playback_group.add(&order_row);
-    page.add(&playback_group);
-}
-
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use {
         anyhow::{Result, ensure},
         libadwaita::{
-            ComboRow,
-            gtk::{self, StringList, test},
-            prelude::ComboRowExt,
+            ComboRow, PreferencesDialog,
+            glib::object::Cast,
+            gtk::{self, StringList, Widget, accessible::Property::Label, test},
+            prelude::{AccessibleExtManual, ComboRowExt, WidgetExt},
         },
     };
 
     use crate::{
+        app::mocks::{find_descendants, isolated_app_state},
         playback::devices::DeviceInfo,
         storage::sort_rules::ArtistPlayOrder,
-        ui::preferences::audio::{
-            artist_play_order_from_index, artist_play_order_to_index, set_preferred_device,
+        ui::preferences::{
+            audio::{build_audio_page, set_preferred_device},
+            audio_playback::{artist_play_order_from_index, artist_play_order_to_index},
         },
     };
 
@@ -344,17 +227,68 @@ mod tests {
     }
 
     fn combo_with_devices() -> ComboRow {
-        let combo = ComboRow::new();
         let model = StringList::new(&["PipeWire", "HDMI"]);
-        combo.set_model(Some(&model));
+        let combo = ComboRow::builder()
+            .model(&model)
+            .css_classes(["combo", "test-device-row"])
+            .tooltip_text("Test audio device selection")
+            .build();
+        combo.update_property(&[Label("Test audio device selection")]);
         combo
+    }
+
+    #[test]
+    fn combo_row_keeps_combo_class() -> Result<()> {
+        let combo = combo_with_devices();
+        let classes = combo.css_classes();
+        ensure!(
+            classes.contains(&"combo".into()),
+            "device combo must keep the default `combo` class"
+        );
+        ensure!(
+            classes.contains(&"test-device-row".into()),
+            "device combo must carry the `test-device-row` class"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn audio_page_stays_in_focus_chain() -> Result<()> {
+        let state = Arc::new(isolated_app_state()?);
+        let dialog = PreferencesDialog::new();
+        let page = build_audio_page(&dialog, &state);
+        ensure!(
+            page.can_focus(),
+            "audio page must stay focusable so preferences rows keep keyboard focus for \
+             Escape-to-close"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn audio_page_combos_keep_combo_class() -> Result<()> {
+        let state = Arc::new(isolated_app_state()?);
+        let dialog = PreferencesDialog::new();
+        let page = build_audio_page(&dialog, &state);
+        let root: Widget = page.upcast();
+        let combos = find_descendants::<ComboRow>(&root);
+        ensure!(
+            combos.len() == 3,
+            "audio page must own the device, mode, and artist order combos"
+        );
+        for combo in &combos {
+            ensure!(
+                combo.css_classes().contains(&"combo".into()),
+                "audio page combos must keep the default `combo` class"
+            );
+        }
+        Ok(())
     }
 
     #[test]
     fn set_preferred_device_selects_matching_index() -> Result<()> {
         let combo = combo_with_devices();
-        let preferred = "HDMI".to_string();
-        set_preferred_device(&combo, &mock_devices(), Some(&preferred));
+        set_preferred_device(&combo, &mock_devices(), Some(&String::from("HDMI")));
         ensure!(combo.selected() == 1);
         Ok(())
     }
@@ -363,8 +297,7 @@ mod tests {
     fn set_preferred_device_leaves_default_on_no_match() -> Result<()> {
         let combo = combo_with_devices();
         let before = combo.selected();
-        let preferred = "Missing".to_string();
-        set_preferred_device(&combo, &mock_devices(), Some(&preferred));
+        set_preferred_device(&combo, &mock_devices(), Some(&String::from("Missing")));
         ensure!(combo.selected() == before);
         Ok(())
     }

@@ -2,6 +2,7 @@
 
 pub mod collapse_scheduler;
 pub mod detail;
+pub mod detail_nav;
 pub mod drag;
 pub mod gallery;
 pub mod header;
@@ -13,9 +14,13 @@ pub mod nav_tags;
 pub mod navigation;
 pub mod osd_button;
 pub mod pane_modes;
+pub mod pane_sidebar;
+pub mod pane_switcher;
 pub mod panes;
 pub mod player;
+pub mod popover_zoom;
 pub mod preferences;
+pub mod shortcut_sections;
 pub mod shortcuts;
 pub mod signal_handlers;
 pub mod signal_view;

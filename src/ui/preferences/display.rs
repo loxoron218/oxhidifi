@@ -6,10 +6,10 @@ use {
     libadwaita::{
         ComboRow, PreferencesDialog, PreferencesGroup, PreferencesPage, SwitchRow,
         glib::spawn_future_local,
-        gtk::StringList,
+        gtk::{StringList, accessible::Property::Label},
         prelude::{
-            ActionRowExt, ComboRowExt, PreferencesDialogExt, PreferencesGroupExt,
-            PreferencesPageExt, PreferencesRowExt,
+            AccessibleExtManual, ComboRowExt, PreferencesDialogExt, PreferencesGroupExt,
+            PreferencesPageExt,
         },
     },
     tracing::warn,
@@ -48,19 +48,33 @@ async fn save_active_tab_setting(state: Arc<AppState>, tab: ActiveTab) {
 }
 
 /// Build the View > Display page.
+///
+/// Rows keep their default widget classes (`activatable`, `combo`) alongside
+/// custom ones: dropping them removes hover/press feedback or leaves the
+/// selected value with a black background.
 pub fn build_view_page(dialog: &PreferencesDialog, state: &Arc<AppState>) {
-    let page = PreferencesPage::new();
-    page.set_title("View");
-    page.set_icon_name(Some("preferences-desktop-display-symbolic"));
+    let page = PreferencesPage::builder()
+        .title("View")
+        .icon_name("preferences-desktop-display-symbolic")
+        .css_classes(["view-page"])
+        .tooltip_text("View display settings")
+        .build();
+    page.update_property(&[Label("View display settings")]);
 
-    let display_group = PreferencesGroup::new();
-    display_group.set_title("Display");
-    display_group.set_description(Some("Grid card appearance"));
+    let display_group = PreferencesGroup::builder()
+        .title("Display")
+        .description("Grid card appearance")
+        .css_classes(["display-group"])
+        .tooltip_text("Grid card appearance settings")
+        .build();
 
-    let labels_row = SwitchRow::new();
-    labels_row.set_title("Album Labels");
-    labels_row.set_subtitle("Show album title, artist, and format under cover art");
-    labels_row.set_active(state.storage.get_show_album_labels());
+    let labels_row = SwitchRow::builder()
+        .title("Album Labels")
+        .subtitle("Show album title, artist, and format under cover art")
+        .active(state.storage.get_show_album_labels())
+        .css_classes(["activatable", "album-labels-row"])
+        .tooltip_text("Toggle album labels")
+        .build();
 
     let state_labels = Arc::clone(state);
     state
@@ -84,6 +98,8 @@ pub fn build_view_page(dialog: &PreferencesDialog, state: &Arc<AppState>) {
         .title("Default View Mode")
         .subtitle("Initial layout for Albums and Artists views")
         .model(&view_mode_model)
+        .css_classes(["combo", "view-mode-row"])
+        .tooltip_text("Select default view mode")
         .build();
     view_mode_row.set_selected(match state.storage.get_view_mode() {
         Grid => 0,
@@ -108,6 +124,8 @@ pub fn build_view_page(dialog: &PreferencesDialog, state: &Arc<AppState>) {
         .title("Default Active Tab")
         .subtitle("Initial tab shown when the library opens")
         .model(&tab_model)
+        .css_classes(["combo", "active-tab-row"])
+        .tooltip_text("Select default active tab")
         .build();
     tab_row.set_selected(match state.storage.get_active_tab() {
         Albums => 0,
@@ -137,4 +155,83 @@ pub fn build_view_page(dialog: &PreferencesDialog, state: &Arc<AppState>) {
     page.add(&display_group);
 
     dialog.add(&page);
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use {
+        anyhow::{Result, bail, ensure},
+        libadwaita::{
+            ComboRow, PreferencesDialog, PreferencesGroup, SwitchRow,
+            glib::object::Cast,
+            gtk::{self, Widget, test},
+            prelude::{PreferencesDialogExt, WidgetExt},
+        },
+    };
+
+    use crate::{
+        app::mocks::{find_descendants, isolated_app_state},
+        ui::preferences::display::build_view_page,
+    };
+
+    fn view_parts() -> Result<Widget> {
+        let state = Arc::new(isolated_app_state()?);
+        let dialog = PreferencesDialog::new();
+        build_view_page(&dialog, &state);
+        let Some(page) = dialog.visible_page() else {
+            bail!("view page must be visible");
+        };
+        let root: Widget = page.upcast();
+        Ok(root)
+    }
+
+    #[test]
+    fn view_page_stays_in_focus_chain() -> Result<()> {
+        let root = view_parts()?;
+        ensure!(
+            root.can_focus(),
+            "view page must stay focusable so preferences rows keep keyboard focus for \
+             Escape-to-close"
+        );
+        let groups = find_descendants::<PreferencesGroup>(&root);
+        ensure!(groups.len() == 1, "view page must own the display group");
+        for group in &groups {
+            ensure!(
+                group.can_focus(),
+                "display group must stay focusable so preferences rows keep keyboard focus for \
+                 Escape-to-close"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn view_rows_keep_type_classes() -> Result<()> {
+        let root = view_parts()?;
+        let combos = find_descendants::<ComboRow>(&root);
+        ensure!(
+            combos.len() == 2,
+            "view page must own the view mode and active tab combos"
+        );
+        for combo in &combos {
+            ensure!(
+                combo.css_classes().contains(&"combo".into()),
+                "view page combos must keep the default `combo` class"
+            );
+        }
+        let switches = find_descendants::<SwitchRow>(&root);
+        ensure!(
+            switches.len() == 1,
+            "view page must own the album labels switch row"
+        );
+        for switch in &switches {
+            ensure!(
+                switch.css_classes().contains(&"activatable".into()),
+                "album labels row must keep the default `activatable` class"
+            );
+        }
+        Ok(())
+    }
 }

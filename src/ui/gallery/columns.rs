@@ -90,6 +90,7 @@ pub fn build_cover_column(
             .width_request(cover_size)
             .height_request(cover_size)
             .css_classes(["album-cover", "dim-label"])
+            .tooltip_text("Album cover art")
             .build();
         picture.update_property(&[PropertyLabel("Album cover art")]);
         if let Some(list_item) = item.downcast_ref::<ListItem>() {
@@ -238,6 +239,7 @@ pub fn build_artist_icon_column() -> ColumnViewColumn {
             .width_request(32)
             .height_request(32)
             .css_classes(["artist-avatar", "dim-label"])
+            .tooltip_text("Artist icon")
             .build();
         image.update_property(&[PropertyLabel("Artist icon")]);
         if let Some(list_item) = item.downcast_ref::<ListItem>() {
@@ -268,7 +270,9 @@ pub fn build_label_column<T: Clone + Send + 'static>(
             .ellipsize(End)
             .halign(Start)
             .css_classes(["body"])
+            .tooltip_text("Column value")
             .build();
+        label.update_property(&[PropertyLabel("Column value")]);
         if let Some(list_item) = item.downcast_ref::<ListItem>() {
             list_item.set_child(Some(&label.upcast::<Widget>()));
         }

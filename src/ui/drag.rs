@@ -2,8 +2,10 @@
 //!
 //! Provides a draggable `ListBox` for configuring grid view sorting criteria.
 //! Row-order reconstruction lives in the sibling [`reconstruct`] module.
+//! Row construction and drop reordering live in the sibling [`sort_rows`] module.
 
 pub mod reconstruct;
+pub mod sort_rows;
 
 use std::{
     collections::HashMap,
@@ -12,32 +14,14 @@ use std::{
     sync::Arc,
 };
 
-use {
-    libadwaita::{
-        glib::Value,
-        gtk::{
-            Align::{Center, Start},
-            Box, Button, DragSource, DropTarget, Image, Label, ListBox, ListBoxRow,
-            Orientation::Horizontal,
-            SelectionMode::None,
-            gdk::{ContentProvider, DragAction},
-        },
-        prelude::{BoxExt, ButtonExt, ListBoxRowExt, StaticType, ToValue, WidgetExt},
-    },
-    parking_lot::Mutex,
-    tracing::error,
-};
+use {libadwaita::gtk::ListBox, parking_lot::Mutex, tracing::error};
 
 use crate::{
     app::runtime::AppState,
     storage::sort_rules::{
-        AlbumSortCriteria, AlbumSortItem, ArtistSortCriteria, ArtistSortItem,
-        SortOrder::{self, Ascending, Descending},
+        AlbumSortCriteria, AlbumSortItem, ArtistSortCriteria, ArtistSortItem, SortOrder,
     },
-    ui::{
-        drag::reconstruct::{reconstruct_albums_sort, reconstruct_artists_sort},
-        signal_handlers::UiHandles,
-    },
+    ui::drag::reconstruct::{reconstruct_albums_sort, reconstruct_artists_sort},
 };
 
 /// Implements `SortItem` trait for a sort item type.
@@ -133,170 +117,6 @@ where
     reconstruct: F,
     /// Callback to persist the new sort order.
     update: U,
-}
-
-impl<T, F, U> SortListBuilder<T, F, U>
-where
-    T: SortListBounds,
-    T::Criteria: 'static,
-    F: Fn(&ListBox, &HashMap<T::Criteria, SortOrder>) -> Vec<T> + Clone + 'static,
-    U: Fn(Vec<T>) + Clone + 'static,
-{
-    /// Add a single sort row to the list box.
-    fn add_row(&self, item: &T) {
-        let row = ListBoxRow::builder().css_classes(["sort-row"]).build();
-        row.set_widget_name(&format!("sort:{}", item.discriminator()));
-
-        let row_box = Box::builder()
-            .orientation(Horizontal)
-            .spacing(12)
-            .margin_start(12)
-            .margin_end(12)
-            .margin_top(8)
-            .margin_bottom(8)
-            .build();
-
-        let drag_handle = Image::builder()
-            .icon_name("list-drag-handle-symbolic")
-            .css_classes(["dim-label"])
-            .build();
-        row_box.append(&drag_handle);
-
-        let label = Label::builder()
-            .label(item.criteria().to_string())
-            .halign(Start)
-            .hexpand(true)
-            .build();
-        row_box.append(&label);
-
-        let toggle = Button::builder()
-            .icon_name(if item.order() == &Ascending {
-                "pan-up-symbolic"
-            } else {
-                "pan-down-symbolic"
-            })
-            .css_classes(["flat", "circular"])
-            .valign(Center)
-            .build();
-
-        let criteria_clone = item.criteria().clone();
-        let toggle_clone = toggle.clone();
-        let lb_clone = self.list_box.clone();
-        let om_clone = Arc::clone(&self.order_map);
-        let reconstruct_click = self.reconstruct.clone();
-        let update_click = self.update.clone();
-
-        let mut handles = UiHandles::default();
-        handles.retain_signal(toggle.connect_clicked(move |_| {
-            let mut om = om_clone.lock();
-            let new_order = match om.get(&criteria_clone).unwrap_or(&Ascending) {
-                Ascending => Descending,
-                Descending => Ascending,
-            };
-            _ = om.insert(criteria_clone.clone(), new_order);
-            toggle_clone.set_icon_name(match new_order {
-                Ascending => "pan-up-symbolic",
-                Descending => "pan-down-symbolic",
-            });
-
-            let new_sort = reconstruct_click(&lb_clone, &om);
-            update_click(new_sort);
-            drop(om);
-        }));
-
-        row_box.append(&toggle);
-        row.set_child(Some(&row_box));
-
-        let drag_source = DragSource::new();
-        drag_source.set_actions(DragAction::MOVE);
-        let row_clone = row.clone();
-        handles.retain_signal(drag_source.connect_prepare(move |_, _, _| {
-            Some(ContentProvider::for_value(&row_clone.to_value()))
-        }));
-        row.add_controller(drag_source);
-
-        let drop_target = DropTarget::new(ListBoxRow::static_type(), DragAction::MOVE);
-        drop_target.set_preload(true);
-        let lb_clone2 = self.list_box.clone();
-        let target_row_clone = row.clone();
-        let om_clone2 = Arc::clone(&self.order_map);
-        let reconstruct_drop = self.reconstruct.clone();
-        let update_drop = self.update.clone();
-
-        let lb = lb_clone2;
-        let target = target_row_clone;
-        let om = om_clone2;
-        let reconstruct = reconstruct_drop;
-        let update = update_drop;
-        handles.retain_signal(drop_target.connect_drop(move |_, value, _, _| {
-            Self::on_sort_row_drop(value, &lb, target.index(), &om, &reconstruct, &update)
-        }));
-        row.add_controller(drop_target);
-
-        self.list_box.append(&row);
-    }
-
-    /// Handle a drop event for reordering sort rows.
-    fn on_sort_row_drop(
-        value: &Value,
-        lb: &ListBox,
-        target_idx: i32,
-        om: &Mutex<HashMap<T::Criteria, SortOrder>>,
-        reconstruct: &F,
-        update: &U,
-    ) -> bool
-    where
-        F: Fn(&ListBox, &HashMap<T::Criteria, SortOrder>) -> Vec<T>,
-        U: Fn(Vec<T>),
-    {
-        let Ok(row) = value.get::<ListBoxRow>() else {
-            return true;
-        };
-        let source_idx = row.index();
-        if source_idx == target_idx {
-            return true;
-        }
-        lb.remove(&row);
-        lb.insert(&row, adjust_insert_index(source_idx, target_idx));
-        let om_guard = om.lock();
-        let new_sort = reconstruct(lb, &om_guard);
-        update(new_sort);
-        drop(om_guard);
-        true
-    }
-
-    /// Build a sort‑configuration list box from the given items.
-    ///
-    /// # Arguments
-    ///
-    /// * `sort_items` - The sort items to render as rows
-    /// * `reconstruct` - Callback that rebuilds the sort vector from box order
-    /// * `update` - Callback that persists a new sort vector
-    pub fn build(sort_items: &[T], reconstruct: F, update: U) -> ListBox {
-        let list_box = ListBox::builder()
-            .selection_mode(None)
-            .css_classes(["boxed-list", "sort-list"])
-            .build();
-
-        let order_map: Arc<Mutex<HashMap<T::Criteria, SortOrder>>> =
-            Arc::new(Mutex::new(HashMap::with_capacity(sort_items.len())));
-        for item in sort_items {
-            let mut om = order_map.lock();
-            _ = om.insert(item.criteria().clone(), *item.order());
-        }
-
-        let builder = Self {
-            list_box,
-            order_map,
-            reconstruct,
-            update,
-        };
-        for item in sort_items {
-            builder.add_row(item);
-        }
-
-        builder.list_box
-    }
 }
 
 impl<T, F, U> Debug for SortListBuilder<T, F, U>

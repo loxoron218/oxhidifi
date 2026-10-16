@@ -80,7 +80,8 @@ mod tests {
         async_channel::unbounded,
         libadwaita::{
             glib::ControlFlow::{Break, Continue},
-            gtk::{self, Picture, test},
+            gtk::{self, Picture, accessible::Property::Label, test},
+            prelude::AccessibleExtManual,
         },
     };
 
@@ -91,6 +92,15 @@ mod tests {
             cover_send_forwards_decoded, cover_send_none_is_noop, mock_decoded_cover,
         },
     };
+
+    fn test_picture() -> Picture {
+        let picture = Picture::builder()
+            .css_classes(["test-picture"])
+            .tooltip_text("Test picture")
+            .build();
+        picture.update_property(&[Label("Test picture")]);
+        picture
+    }
 
     #[test]
     fn try_send_cover_none_is_noop() -> Result<()> {
@@ -105,7 +115,7 @@ mod tests {
     #[test]
     fn poll_artwork_breaks_on_decoded_cover() -> Result<()> {
         let (tx, rx) = unbounded::<DecodedCover>();
-        let artwork = Picture::new();
+        let artwork = test_picture();
         tx.try_send(mock_decoded_cover())
             .map_err(|e| anyhow!("{e}"))?;
         ensure!(poll_artwork(&rx, &artwork) == Break);
@@ -115,7 +125,7 @@ mod tests {
     #[test]
     fn poll_artwork_continues_while_waiting() -> Result<()> {
         let (tx, rx) = unbounded::<DecodedCover>();
-        let artwork = Picture::new();
+        let artwork = test_picture();
         ensure!(poll_artwork(&rx, &artwork) == Continue);
         drop(tx);
         Ok(())
@@ -125,7 +135,7 @@ mod tests {
     fn poll_artwork_breaks_on_closed_channel() -> Result<()> {
         let (tx, rx) = unbounded::<DecodedCover>();
         drop(tx);
-        let artwork = Picture::new();
+        let artwork = test_picture();
         ensure!(poll_artwork(&rx, &artwork) == Break);
         Ok(())
     }

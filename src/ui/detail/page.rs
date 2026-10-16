@@ -26,7 +26,11 @@ use crate::{
 /// Build the wrapper box with back navigation and header bar for a detail page.
 #[must_use]
 pub fn build_detail_wrapper(nav_tx: &Sender<NavigationEvent>, title: &str) -> Box {
-    let wrapper = Box::builder().orientation(Vertical).can_focus(true).build();
+    let wrapper = Box::builder()
+        .orientation(Vertical)
+        .css_classes(["detail-page"])
+        .tooltip_text("Detail page")
+        .build();
     wrapper.update_property(&[PropertyLabel(&format!("{title} detail page"))]);
     let back_button = setup_back_navigation(&wrapper, nav_tx.clone());
     let header_bar = build_detail_header(&back_button, title);
@@ -46,8 +50,7 @@ pub fn setup_back_navigation(widget: &impl WidgetExt, nav_tx: Sender<NavigationE
     let back_button = Button::builder()
         .icon_name("go-previous-symbolic")
         .tooltip_text("Back to library")
-        .css_classes(["flat"])
-        .can_focus(true)
+        .css_classes(["flat", "image-button"])
         .build();
     back_button.update_property(&[PropertyLabel("Back to library")]);
 
@@ -84,7 +87,10 @@ pub fn build_scroll_content() -> (ScrolledWindow, Box) {
         .hexpand(true)
         .hscrollbar_policy(Never)
         .vscrollbar_policy(Automatic)
+        .css_classes(["detail-scroll", "frame"])
+        .tooltip_text("Detail content")
         .build();
+    scroll.update_property(&[PropertyLabel("Detail content")]);
 
     let content = Box::builder()
         .orientation(Vertical)
@@ -93,7 +99,10 @@ pub fn build_scroll_content() -> (ScrolledWindow, Box) {
         .margin_bottom(12)
         .margin_start(18)
         .margin_end(18)
+        .css_classes(["detail-content"])
+        .tooltip_text("Detail content box")
         .build();
+    content.update_property(&[PropertyLabel("Detail content box")]);
 
     (scroll, content)
 }
@@ -109,7 +118,9 @@ pub fn build_detail_header(back_button: &Button, title: &str) -> Box {
         .margin_start(6)
         .margin_end(6)
         .css_classes(["toolbar"])
+        .tooltip_text("Detail header")
         .build();
+    header.update_property(&[PropertyLabel("Detail header")]);
 
     header.append(back_button);
 
@@ -118,6 +129,7 @@ pub fn build_detail_header(back_button: &Button, title: &str) -> Box {
         .css_classes(["title-4", "heading"])
         .hexpand(true)
         .halign(Start)
+        .tooltip_text("Detail title")
         .build();
     title_label.update_property(&[PropertyLabel(&format!("{title} detail page"))]);
     header.append(&title_label);
@@ -130,10 +142,13 @@ mod tests {
     use {
         anyhow::{Result, ensure},
         async_channel::unbounded,
-        libadwaita::gtk::{
-            self,
-            PolicyType::{Automatic, Never},
-            test,
+        libadwaita::{
+            gtk::{
+                self,
+                PolicyType::{Automatic, Never},
+                test,
+            },
+            prelude::WidgetExt,
         },
     };
 
@@ -147,6 +162,17 @@ mod tests {
         let (tx, rx) = unbounded::<NavigationEvent>();
         try_send_back(&tx);
         ensure!(matches!(rx.try_recv(), Ok(Back)));
+        Ok(())
+    }
+
+    #[test]
+    fn scroll_content_stays_in_focus_chain() -> Result<()> {
+        let (scroll, _) = build_scroll_content();
+        ensure!(
+            scroll.can_focus(),
+            "detail scroll must stay focusable so keyboard focus (and Escape-to-back) reaches \
+             detail content"
+        );
         Ok(())
     }
 

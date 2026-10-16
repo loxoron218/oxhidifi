@@ -93,13 +93,14 @@ pub fn build_row_factory(queue: &PlaybackQueue, store: &ListStore) -> SignalList
             .margin_bottom(3)
             .margin_start(6)
             .margin_end(6)
+            .css_classes(["queue-row"])
+            .tooltip_text("Queue track row")
             .build();
 
         let handle = Button::builder()
             .icon_name("list-drag-handle-symbolic")
-            .css_classes(["flat"])
+            .css_classes(["flat", "image-button"])
             .tooltip_text("Drag to reorder")
-            .can_focus(true)
             .build();
         handle.update_property(&[PropertyLabel("Drag handle")]);
 
@@ -118,14 +119,15 @@ pub fn build_row_factory(queue: &PlaybackQueue, store: &ListStore) -> SignalList
             .max_width_chars(25)
             .halign(Start)
             .hexpand(true)
+            .css_classes(["queue-track-name"])
+            .tooltip_text("Track name in queue")
             .build();
         label.update_property(&[PropertyLabel("Track name in queue")]);
 
         let remove = Button::builder()
             .icon_name("window-close-symbolic")
-            .css_classes(["flat"])
+            .css_classes(["flat", "image-button"])
             .tooltip_text("Remove from queue")
-            .can_focus(true)
             .build();
         remove.update_property(&[PropertyLabel("Remove from queue")]);
 
@@ -193,11 +195,11 @@ fn bind_row(list_item: &ListItem) {
 
     label.set_label(&data.name);
 
-    let mut classes: Vec<&str> = vec![];
     if data.is_current {
-        classes.push("heading");
+        label.add_css_class("heading");
+    } else {
+        label.remove_css_class("heading");
     }
-    label.set_css_classes(&classes);
 }
 
 #[cfg(test)]
@@ -207,8 +209,11 @@ mod tests {
         libadwaita::{
             gio::ListStore,
             glib::{BoxedAnyObject, MainContext, object::Cast},
-            gtk::{self, Label, ListView, NoSelection, Widget, Window, test},
-            prelude::{GtkWindowExt, ListModelExt, StaticType, WidgetExt},
+            gtk::{
+                self, Label, ListView, NoSelection, Widget, Window,
+                accessible::Property::Label as A11yLabel, test,
+            },
+            prelude::{AccessibleExtManual, GtkWindowExt, ListModelExt, StaticType, WidgetExt},
         },
     };
 
@@ -319,9 +324,19 @@ mod tests {
         let (queue, store) = queue_and_store()?;
         let factory = build_row_factory(&queue, &store);
         let selection = NoSelection::new(Some(store));
-        let list_view = ListView::new(Some(selection), Some(factory));
-        let window = Window::new();
-        window.set_child(Some(&list_view));
+        let list_view = ListView::builder()
+            .model(&selection)
+            .factory(&factory)
+            .css_classes(["queue-test-list", "view"])
+            .tooltip_text("Test queue list")
+            .build();
+        list_view.update_property(&[A11yLabel("Test queue list")]);
+        let window = Window::builder()
+            .child(&list_view)
+            .css_classes(["queue-test-window", "background"])
+            .tooltip_text("Test queue window")
+            .build();
+        window.update_property(&[A11yLabel("Test queue window")]);
         window.present();
         pump_until_ready(&list_view)?;
         window.close();

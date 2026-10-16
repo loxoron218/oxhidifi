@@ -12,8 +12,11 @@ use {
             ControlFlow::{self, Break, Continue},
             idle_add_local,
         },
-        gtk::{Box, FlowBox, Orientation::Vertical, Overlay, Stack, Widget},
-        prelude::{BoxExt, Cast},
+        gtk::{
+            Box, FlowBox, Orientation::Vertical, Overlay, Stack, Widget,
+            accessible::Property::Label,
+        },
+        prelude::{AccessibleExtManual, BoxExt, Cast},
     },
     tracing::warn,
 };
@@ -109,7 +112,12 @@ fn build_artist_mode(
     match mode {
         Grid => {
             state.artist_grid.ready.store(false, Relaxed);
-            let grid_container = Box::builder().orientation(Vertical).build();
+            let grid_container = Box::builder()
+                .orientation(Vertical)
+                .css_classes(["artist-grid"])
+                .tooltip_text("Artist grid")
+                .build();
+            grid_container.update_property(&[Label("Artist grid")]);
             let flow = build_grid(
                 "Artist library grid \u{2014} click an artist to view albums",
                 cover_size,

@@ -164,7 +164,8 @@ mod tests {
         async_channel::{Sender, unbounded},
         libadwaita::{
             OverlaySplitView,
-            gtk::{self, test},
+            gtk::{self, accessible::Property::Label, test},
+            prelude::AccessibleExtManual,
         },
         tokio::runtime::Runtime,
     };
@@ -214,7 +215,12 @@ mod tests {
     }
 
     fn make_split_view() -> OverlaySplitView {
-        OverlaySplitView::new()
+        let split_view = OverlaySplitView::builder()
+            .css_classes(["player-split-view"])
+            .tooltip_text("Player side panel")
+            .build();
+        split_view.update_property(&[Label("Player side panel")]);
+        split_view
     }
 
     fn make_album_tx() -> Sender<(i64, i64)> {

@@ -72,12 +72,14 @@ pub fn build_empty_state(state: &Arc<AppState>, params: &EmptyStateParams) -> Bo
         .icon_name(params.icon_name)
         .pixel_size(96)
         .css_classes(["icon-drop-shadow", "dim-label"])
+        .tooltip_text(params.icon_label)
         .build();
     icon.update_property(&[PropertyLabel(params.icon_label)]);
 
     let heading = Label::builder()
         .label(params.heading)
         .css_classes(["title-1", "accent"])
+        .tooltip_text(params.heading)
         .build();
     heading.update_property(&[PropertyLabel(params.heading_label)]);
 
@@ -86,6 +88,7 @@ pub fn build_empty_state(state: &Arc<AppState>, params: &EmptyStateParams) -> Bo
         .wrap(true)
         .max_width_chars(40)
         .css_classes(["dim-label", "body"])
+        .tooltip_text(params.description)
         .build();
     description.update_property(&[PropertyLabel(params.description_label)]);
 
@@ -126,7 +129,11 @@ pub fn build_library_grid(
     let initial_mode = state.view_mode.borrow();
     let current_mode = Arc::new(Mutex::new(initial_mode));
     let nm = Arc::clone(narrow_state);
-    let mode_stack = Stack::new();
+    let mode_stack = Stack::builder()
+        .css_classes(["library-grid"])
+        .tooltip_text("Library grid")
+        .build();
+    mode_stack.update_property(&[PropertyLabel("Library grid")]);
     setup_fn(&mode_stack, Arc::clone(state), nm, initial_mode);
 
     let refresh_rx = state.refresh.subscribe();
@@ -186,7 +193,10 @@ pub fn add_scrolled(stack: &Stack, child: &impl IsA<Widget>, name: &str) {
         .hexpand(true)
         .hscrollbar_policy(Never)
         .vscrollbar_policy(Automatic)
+        .css_classes(["library-scrolled", "frame"])
+        .tooltip_text("Library scrolled view")
         .build();
+    scrolled.update_property(&[PropertyLabel("Library scrolled view")]);
     scrolled.set_child(Some(child));
     drop(stack.add_named(&scrolled, Some(name)));
 }
@@ -271,14 +281,18 @@ pub fn clear_container(container: &Box) {
 /// * `state` - Application state (reserved for future use)
 #[must_use]
 pub fn build_empty_container(_: &Arc<AppState>) -> Box {
-    Box::builder()
+    let container = Box::builder()
         .orientation(Vertical)
         .spacing(18)
         .valign(Center)
         .halign(Center)
         .vexpand(true)
         .hexpand(true)
-        .build()
+        .css_classes(["empty-state"])
+        .tooltip_text("Empty library message")
+        .build();
+    container.update_property(&[PropertyLabel("Empty library message")]);
+    container
 }
 
 #[cfg(test)]
@@ -292,9 +306,11 @@ mod tests {
                 self, Box, Label,
                 Orientation::Vertical,
                 PolicyType::{Automatic, Never},
-                ScrolledWindow, Stack, test,
+                ScrolledWindow, Stack,
+                accessible::Property::Label as A11yLabel,
+                test,
             },
-            prelude::{BoxExt, Cast, WidgetExt},
+            prelude::{AccessibleExtManual, BoxExt, Cast, WidgetExt},
         },
         parking_lot::Mutex,
     };
@@ -314,8 +330,20 @@ mod tests {
 
     #[test]
     fn clear_container_removes_children() -> Result<()> {
-        let container = Box::new(Vertical, 0);
-        container.append(&Label::new(Some("child")));
+        let container = Box::builder()
+            .orientation(Vertical)
+            .spacing(0)
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test container")
+            .build();
+        container.update_property(&[A11yLabel("Test container")]);
+        let child = Label::builder()
+            .label("child")
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test child")
+            .build();
+        child.update_property(&[A11yLabel("Test child")]);
+        container.append(&child);
         ensure!(
             container.first_child().is_some(),
             "container must hold a child before clearing"
@@ -330,8 +358,17 @@ mod tests {
 
     #[test]
     fn add_scrolled_disables_horizontal_scrolling() -> Result<()> {
-        let stack = Stack::new();
-        let child = Label::new(Some("child"));
+        let stack = Stack::builder()
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test stack")
+            .build();
+        stack.update_property(&[A11yLabel("Test stack")]);
+        let child = Label::builder()
+            .label("child")
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test child")
+            .build();
+        child.update_property(&[A11yLabel("Test child")]);
         add_scrolled(&stack, &child, "grid");
         let Some(page) = stack.child_by_name("grid") else {
             bail!("stack must hold the grid page");

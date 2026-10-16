@@ -136,23 +136,48 @@ pub fn build_signal_footer() -> SignalFooter {
     let art = Image::builder()
         .icon_name(FALLBACK_BRAND_ICON)
         .pixel_size(32)
+        .css_classes(["footer-brand-icon"])
+        .tooltip_text("Rendering device brand")
         .build();
+    art.update_property(&[A11yLabel("Rendering device brand")]);
     let name = Label::builder()
         .label("")
         .css_classes(["heading"])
         .halign(Start)
+        .tooltip_text("Rendering device name")
         .build();
+    name.update_property(&[A11yLabel("Rendering device name")]);
     let illustration = Image::builder()
         .icon_name(FALLBACK_ART_ICON)
         .pixel_size(32)
+        .css_classes(["footer-device-illustration"])
+        .tooltip_text("Rendering device illustration")
         .build();
-    let manual = LinkButton::with_label("about:blank", "View Product Manual");
+    illustration.update_property(&[A11yLabel("Rendering device illustration")]);
+    let manual = LinkButton::builder()
+        .uri("about:blank")
+        .label("View Product Manual")
+        .css_classes(["manual-link", "link"])
+        .tooltip_text("Open product manual")
+        .build();
+    manual.update_property(&[A11yLabel("Open product manual")]);
     manual.set_visible(false);
-    let row = Box::builder().orientation(Horizontal).spacing(6).build();
+    let row = Box::builder()
+        .orientation(Horizontal)
+        .spacing(6)
+        .css_classes(["footer-device-row"])
+        .tooltip_text("Rendering device details")
+        .build();
     row.append(&art);
     row.append(&name);
     row.append(&illustration);
-    let root = Box::builder().orientation(Vertical).spacing(6).build();
+    let root = Box::builder()
+        .orientation(Vertical)
+        .spacing(6)
+        .css_classes(["signal-footer-card"])
+        .tooltip_text("Rendering device card")
+        .build();
+    root.update_property(&[A11yLabel("Rendering device card")]);
     root.append(&row);
     root.append(&manual);
     root.set_visible(false);

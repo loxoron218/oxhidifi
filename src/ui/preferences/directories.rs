@@ -111,13 +111,14 @@ fn add_directory_row(group: &PreferencesGroup, state: &Arc<AppState>, dir: &Libr
     let row = ActionRow::builder()
         .title(&dir.path)
         .activatable_widget(group)
+        .css_classes(["directory-row"])
+        .tooltip_text("Library directory")
         .build();
     let remove_btn = Button::builder()
         .label("Remove")
         .use_underline(true)
-        .css_classes(["destructive-action", "flat"])
+        .css_classes(["destructive-action", "flat", "text-button"])
         .tooltip_text("Remove this directory from the library")
-        .can_focus(true)
         .build();
     remove_btn.update_property(&[Label("Remove directory")]);
     row.add_suffix(&remove_btn);
@@ -150,13 +151,19 @@ fn on_folder_selected(state: &Arc<AppState>, result: Result<File, Error>) {
 
 /// Build the Library > Directories page.
 pub fn build_library_page(dialog: &PreferencesDialog, state: &Arc<AppState>, parent: &Window) {
-    let page = PreferencesPage::new();
-    page.set_title("Library");
-    page.set_icon_name(Some("folder-music-symbolic"));
+    let page = PreferencesPage::builder()
+        .title("Library")
+        .icon_name("folder-music-symbolic")
+        .css_classes(["library-page"])
+        .tooltip_text("Library directory settings")
+        .build();
 
-    let group = PreferencesGroup::new();
-    group.set_title("Directories");
-    group.set_description(Some("Music directories to scan for audio files"));
+    let group = PreferencesGroup::builder()
+        .title("Directories")
+        .description("Music directories to scan for audio files")
+        .css_classes(["directories-group"])
+        .tooltip_text("Music directories to scan")
+        .build();
 
     let state_clone = Arc::clone(state);
     let group_clone = group.clone();
@@ -180,9 +187,8 @@ pub fn build_library_page(dialog: &PreferencesDialog, state: &Arc<AppState>, par
     let add_btn = Button::builder()
         .label("Add Directory")
         .use_underline(true)
-        .css_classes(["suggested-action"])
+        .css_classes(["suggested-action", "text-button"])
         .tooltip_text("Add a new music directory to scan")
-        .can_focus(true)
         .build();
     add_btn.update_property(&[Label("Add Directory")]);
     group.add(&add_btn);
@@ -205,4 +211,58 @@ pub fn build_library_page(dialog: &PreferencesDialog, state: &Arc<AppState>, par
 
     page.add(&group);
     dialog.add(&page);
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use {
+        anyhow::{Result, bail, ensure},
+        libadwaita::{
+            PreferencesDialog, PreferencesGroup,
+            glib::object::Cast,
+            gtk::{self, Widget, Window, accessible::Property::Label, test},
+            prelude::{AccessibleExtManual, PreferencesDialogExt, WidgetExt},
+        },
+    };
+
+    use crate::{
+        app::mocks::{find_descendants, isolated_app_state},
+        ui::preferences::directories::build_library_page,
+    };
+
+    #[test]
+    fn library_page_stays_in_focus_chain() -> Result<()> {
+        let state = Arc::new(isolated_app_state()?);
+        let parent = Window::builder()
+            .css_classes(["test-parent", "background"])
+            .tooltip_text("Test parent window")
+            .build();
+        parent.update_property(&[Label("Test parent window")]);
+        let dialog = PreferencesDialog::new();
+        build_library_page(&dialog, &state, &parent);
+        let Some(page) = dialog.visible_page() else {
+            bail!("library page must be visible");
+        };
+        ensure!(
+            page.can_focus(),
+            "library page must stay focusable so preferences rows keep keyboard focus for \
+             Escape-to-close"
+        );
+        let root: Widget = page.upcast();
+        let groups = find_descendants::<PreferencesGroup>(&root);
+        ensure!(
+            groups.len() == 1,
+            "library page must own the directories group"
+        );
+        for group in &groups {
+            ensure!(
+                group.can_focus(),
+                "directories group must stay focusable so preferences rows keep keyboard focus \
+                 for Escape-to-close"
+            );
+        }
+        Ok(())
+    }
 }

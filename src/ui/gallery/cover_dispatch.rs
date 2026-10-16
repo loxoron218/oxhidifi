@@ -39,6 +39,7 @@ pub fn apply_texture(overlay: &Overlay, texture: &MemoryTexture, size: i32) {
             .width_request(size)
             .height_request(size)
             .css_classes(["album-cover"])
+            .tooltip_text("Album cover art")
             .build();
         picture.update_property(&[Label("Album cover art")]);
         overlay.set_child(Some(&picture));

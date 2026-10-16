@@ -152,25 +152,38 @@ pub fn build_signal_header() -> SignalHeader {
     let mark = Image::builder()
         .icon_name("audio-x-generic-symbolic")
         .pixel_size(16)
+        .css_classes(["signal-header-icon"])
+        .tooltip_text("Signal path verdict")
         .build();
+    mark.update_property(&[A11yLabel("Signal path verdict")]);
     let verdict = Label::builder()
         .label("No Active Path")
         .css_classes(["heading"])
         .halign(Start)
+        .tooltip_text("Whole-path verdict")
         .build();
     verdict.update_property(&[A11yLabel("No active signal path")]);
     let zone = Label::builder()
         .label("")
         .css_classes(["dim-label"])
         .halign(Start)
+        .tooltip_text("Output zone name")
         .build();
+    zone.update_property(&[A11yLabel("Output zone name")]);
     let hint = Label::builder()
         .label("Click on any stage of the path to learn more")
         .css_classes(["dim-label", "caption"])
         .halign(Start)
         .wrap(true)
+        .tooltip_text("Select a stage to learn more")
         .build();
-    let row = Box::builder().orientation(Horizontal).spacing(6).build();
+    hint.update_property(&[A11yLabel("Select a stage to learn more")]);
+    let row = Box::builder()
+        .orientation(Horizontal)
+        .spacing(6)
+        .css_classes(["signal-header-row"])
+        .tooltip_text("Signal path summary")
+        .build();
     row.append(&mark);
     row.append(&verdict);
     row.append(&zone);
@@ -179,8 +192,14 @@ pub fn build_signal_header() -> SignalHeader {
         .css_classes(["dim-label", "caption"])
         .halign(Start)
         .visible(false)
+        .tooltip_text("Processing speed")
         .build();
-    let summary = Box::builder().orientation(Vertical).spacing(0).build();
+    let summary = Box::builder()
+        .orientation(Vertical)
+        .spacing(0)
+        .css_classes(["signal-header-summary"])
+        .tooltip_text("Signal path header")
+        .build();
     summary.append(&row);
     summary.append(&speed);
     summary.append(&hint);

@@ -92,39 +92,60 @@ fn time_operation(action: &'static str, f: impl FnOnce()) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use {
         anyhow::{Context, Result},
         libadwaita::{
             NavigationPage, NavigationView, ViewStack,
-            gtk::{Box, Orientation::Vertical, Stack, init},
+            gtk::{Box, Orientation::Vertical, Stack, accessible::Property::Label, init},
+            prelude::AccessibleExtManual,
         },
     };
 
     use oxhidifi::{
-        app::runtime::NavigationEvent::{AlbumDetail, Back},
+        app::runtime::{
+            AppState,
+            NavigationEvent::{AlbumDetail, Back},
+        },
         storage::{
-            active_tab::ActiveTab::{Albums, Artists},
+            active_tab::ActiveTab::{self, Albums, Artists},
             view_mode::ViewMode::{Column, Grid},
         },
         ui::{
-            gallery::narrow_flag::NarrowState, navigation::handle_navigation_event,
+            detail_nav::handle_navigation_event, gallery::narrow_flag::NarrowState,
             switching::handle_tab_switch,
         },
     };
 
     use crate::{mock_state, time_operation};
 
-    #[test]
-    fn ui_navigation_response_under_threshold() -> Result<()> {
-        init().context("failed to initialize GTK")?;
+    fn timing_stacks() -> (ViewStack, Stack, Stack) {
+        let stack = ViewStack::builder()
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test view stack")
+            .build();
+        stack.update_property(&[Label("Test view stack")]);
+        let album_stack = Stack::builder()
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test album stack")
+            .build();
+        album_stack.update_property(&[Label("Test album stack")]);
+        let artist_stack = Stack::builder()
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test artist stack")
+            .build();
+        artist_stack.update_property(&[Label("Test artist stack")]);
+        (stack, album_stack, artist_stack)
+    }
 
-        let state = mock_state()?;
-
-        let stack = ViewStack::new();
-        let album_stack = Stack::new();
-        let artist_stack = Stack::new();
-        let narrow_state = NarrowState::new_shared();
-
+    fn warm_switches(
+        state: &Arc<AppState>,
+        stack: &ViewStack,
+        album_stack: &Stack,
+        artist_stack: &Stack,
+        narrow_state: &Arc<NarrowState>,
+    ) {
         for (tab, m) in [
             (Albums, Grid),
             (Albums, Column),
@@ -132,37 +153,50 @@ mod tests {
             (Artists, Column),
         ] {
             state.view_mode.send(m);
-            handle_tab_switch(
-                &stack,
-                &state,
-                tab,
-                &album_stack,
-                &artist_stack,
-                &narrow_state,
-            );
+            handle_tab_switch(stack, state, tab, album_stack, artist_stack, narrow_state);
         }
         state.view_mode.send(Grid);
+    }
 
-        time_operation("tab_albums_to_artists", || {
-            handle_tab_switch(
-                &stack,
-                &state,
-                Artists,
-                &album_stack,
-                &artist_stack,
-                &narrow_state,
-            );
-        })?;
-        time_operation("tab_artists_to_albums", || {
-            handle_tab_switch(
-                &stack,
-                &state,
-                Albums,
-                &album_stack,
-                &artist_stack,
-                &narrow_state,
-            );
-        })?;
+    fn time_switch(
+        label: &'static str,
+        state: &Arc<AppState>,
+        stack: &ViewStack,
+        tab: ActiveTab,
+        album_stack: &Stack,
+        artist_stack: &Stack,
+        narrow_state: &Arc<NarrowState>,
+    ) -> Result<()> {
+        time_operation(label, || {
+            handle_tab_switch(stack, state, tab, album_stack, artist_stack, narrow_state);
+        })
+    }
+
+    #[test]
+    fn ui_navigation_response_under_threshold() -> Result<()> {
+        init().context("failed to initialize GTK")?;
+        let state = mock_state()?;
+        let (stack, album_stack, artist_stack) = timing_stacks();
+        let narrow_state = NarrowState::new_shared();
+        warm_switches(&state, &stack, &album_stack, &artist_stack, &narrow_state);
+        time_switch(
+            "tab_albums_to_artists",
+            &state,
+            &stack,
+            Artists,
+            &album_stack,
+            &artist_stack,
+            &narrow_state,
+        )?;
+        time_switch(
+            "tab_artists_to_albums",
+            &state,
+            &stack,
+            Albums,
+            &album_stack,
+            &artist_stack,
+            &narrow_state,
+        )?;
 
         time_operation("toggle_grid_to_column", || {
             state.view_mode.send(Column);
@@ -187,12 +221,23 @@ mod tests {
             );
         })?;
 
-        let nav_view = NavigationView::new();
-        let library_box = Box::new(Vertical, 0);
+        let nav_view = NavigationView::builder()
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test navigation")
+            .build();
+        nav_view.update_property(&[Label("Test navigation")]);
+        let library_box = Box::builder()
+            .orientation(Vertical)
+            .spacing(0)
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test library")
+            .build();
         let library_page = NavigationPage::builder()
             .child(&library_box)
             .title("Library")
             .tag("library")
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test library page")
             .build();
         nav_view.add(&library_page);
         let nav_tx = state.navigation_tx.clone();

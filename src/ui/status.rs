@@ -54,6 +54,7 @@ impl StatusBar {
             .orientation(Horizontal)
             .spacing(12)
             .css_classes(["status-bar"])
+            .tooltip_text("Application status bar")
             .build();
 
         let status_label = Label::builder()
@@ -62,7 +63,6 @@ impl StatusBar {
             .halign(Start)
             .ellipsize(EllipsizeEnd)
             .css_classes(["dim-label", "caption"])
-            .can_focus(true)
             .tooltip_text("Current application status")
             .build();
         status_label.update_property(&[PropertyLabel("Status: Ready")]);
@@ -71,6 +71,7 @@ impl StatusBar {
             .hexpand(false)
             .halign(End)
             .show_text(false)
+            .css_classes(["scan-progress"])
             .tooltip_text("Progress of music library scanning")
             .build();
         progress_bar.update_property(&[PropertyLabel("Scanning progress")]);

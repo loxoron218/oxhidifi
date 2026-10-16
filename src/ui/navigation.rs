@@ -3,24 +3,19 @@
 use std::sync::Arc;
 
 use {
-    async_channel::Sender,
     libadwaita::{
         NavigationPage, NavigationView,
         glib::{object::IsA, spawn_future_local},
-        gtk::Widget,
+        gtk::{Widget, accessible::Property::Label},
+        prelude::AccessibleExtManual,
     },
-    tracing::{info, warn},
+    tracing::warn,
 };
 
 use crate::{
-    app::runtime::{
-        AppState,
-        NavigationEvent::{self, AlbumDetail, ArtistDetail, Back},
-    },
     storage::{active_tab::ActiveTab, database::SqliteStorage},
     ui::{
-        detail::{album_page::build_album_detail, artist_page::build_artist_detail},
-        nav_tags::{detail_album_tag, detail_artist_tag, is_detail_tag},
+        nav_tags::is_detail_tag,
         signal_handlers::{UiHandles, ValueSignal},
     },
 };
@@ -86,72 +81,15 @@ pub fn is_detail_visible(nav_view: &NavigationView) -> bool {
 /// A `NavigationPage` tagged `library` titled `Library`.
 #[must_use]
 pub fn build_library_page(child: &impl IsA<Widget>) -> NavigationPage {
-    NavigationPage::builder()
+    let page = NavigationPage::builder()
         .child(child)
         .title("Library")
         .tag("library")
-        .build()
-}
-
-/// Handle navigation events (album/artist detail, back navigation).
-///
-/// Page stacks are managed via [`NavigationView`]: detail pages are pushed
-/// as [`NavigationPage`]s with unique per-entity tags
-/// (`detail-album-{id}`, `detail-artist-{id}`), and back navigation pops a
-/// single page so drill-down unwinds one level at a time (album → artist →
-/// library). Unique tags allow drill-down (artist → album) without
-/// triggering `Duplicate page tag in AdwNavigationView: detail`. This
-/// satisfies Constitution III which mandates `AdwNavigationView` for
-/// push/pop stacks.
-pub fn handle_navigation_event(
-    nav_state: &Arc<AppState>,
-    nav_view: &NavigationView,
-    nav_tx: &Sender<NavigationEvent>,
-    event: NavigationEvent,
-) {
-    match event {
-        AlbumDetail(album_id) => {
-            info!(album_id, "Navigating to album detail",);
-            let tag = detail_album_tag(album_id);
-            if nav_view
-                .visible_page_tag()
-                .is_some_and(|visible| visible.as_str() == tag)
-            {
-                info!(album_id, "Album detail already visible",);
-                return;
-            }
-            let detail = build_album_detail(nav_state, album_id, nav_tx);
-            let page = NavigationPage::builder()
-                .child(&detail)
-                .title("Album")
-                .tag(&tag)
-                .build();
-            nav_view.push(&page);
-        }
-        ArtistDetail(artist_id) => {
-            info!(artist_id, "Navigating to artist detail",);
-            let tag = detail_artist_tag(artist_id);
-            if nav_view
-                .visible_page_tag()
-                .is_some_and(|visible| visible.as_str() == tag)
-            {
-                info!(artist_id, "Artist detail already visible",);
-                return;
-            }
-            let detail = build_artist_detail(nav_state, artist_id, nav_tx);
-            let page = NavigationPage::builder()
-                .child(&detail)
-                .title("Artist")
-                .tag(&tag)
-                .build();
-            nav_view.push(&page);
-        }
-        Back => {
-            let previous = nav_view.visible_page_tag().map(|tag| tag.to_string());
-            info!(previous_tag = previous, "Navigating back one level",);
-            _ = nav_view.pop();
-        }
-    }
+        .css_classes(["library-page"])
+        .tooltip_text("Library content")
+        .build();
+    page.update_property(&[Label("Library")]);
+    page
 }
 
 /// Unit tests for navigation events, detail visibility, and test helpers.
@@ -160,11 +98,12 @@ pub mod tests {
     use std::sync::Arc;
 
     use {
-        anyhow::{Result, ensure},
+        anyhow::{Result, bail, ensure},
         async_channel::Sender,
         libadwaita::{
             NavigationView,
-            gtk::{self, Box, Orientation::Vertical, test},
+            gtk::{self, Box, Orientation::Vertical, accessible::Property::Label, test},
+            prelude::{AccessibleExtManual, WidgetExt},
         },
     };
 
@@ -175,18 +114,44 @@ pub mod tests {
         },
         storage::active_tab::ActiveTab::{Albums, Artists, Signal},
         ui::{
+            detail_nav::handle_navigation_event,
             nav_tags::{detail_album_tag, detail_artist_tag},
-            navigation::{
-                build_library_page, handle_navigation_event, is_detail_visible, persist_active_tab,
-            },
+            navigation::{build_library_page, is_detail_visible, persist_active_tab},
         },
     };
 
     fn test_nav_view() -> Result<(Arc<AppState>, NavigationView, Sender<NavigationEvent>)> {
         let state = Arc::new(AppState::mock()?);
-        let nav_view = NavigationView::new();
+        let nav_view = NavigationView::builder()
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test nav view")
+            .build();
+        nav_view.update_property(&[Label("Test nav view")]);
         let nav_tx = add_library_page(&nav_view, &state);
         Ok((state, nav_view, nav_tx))
+    }
+
+    #[test]
+    fn navigation_pages_stay_in_focus_chain() -> Result<()> {
+        let (state, nav_view, nav_tx) = test_nav_view()?;
+        handle_navigation_event(&state, &nav_view, &nav_tx, AlbumDetail(1));
+        let album_tag = detail_album_tag(1);
+        ensure!(
+            nav_view.can_focus(),
+            "navigation view must stay focusable so keyboard focus (and Escape-to-back) reaches \
+             pushed detail pages"
+        );
+        for tag in ["library", album_tag.as_str()] {
+            let Some(page) = nav_view.find_page(tag) else {
+                bail!("page {tag} must exist");
+            };
+            ensure!(
+                page.can_focus(),
+                "page {tag} must stay focusable so keyboard focus (and Escape-to-back) reaches \
+                 pushed detail content"
+            );
+        }
+        Ok(())
     }
 
     #[test]
@@ -328,9 +293,13 @@ pub mod tests {
 
     #[test]
     fn is_detail_visible_false_on_library_only() -> Result<()> {
-        let nav_view = NavigationView::new();
-        let library = Box::builder().orientation(Vertical).spacing(0).build();
-        nav_view.add(&build_library_page(&library));
+        let state = Arc::new(AppState::mock()?);
+        let nav_view = NavigationView::builder()
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test nav detail")
+            .build();
+        nav_view.update_property(&[Label("Test nav detail")]);
+        drop(add_library_page(&nav_view, &state));
         ensure!(
             !is_detail_visible(&nav_view),
             "library-only stack must not report a detail page"
@@ -355,7 +324,13 @@ pub mod tests {
         nav_view: &NavigationView,
         state: &Arc<AppState>,
     ) -> Sender<NavigationEvent> {
-        let library = Box::builder().orientation(Vertical).spacing(0).build();
+        let library = Box::builder()
+            .orientation(Vertical)
+            .spacing(0)
+            .css_classes(["test-fixture"])
+            .tooltip_text("Test lib box")
+            .build();
+        library.update_property(&[Label("Test lib box")]);
         nav_view.add(&build_library_page(&library));
         state.navigation_tx.clone()
     }

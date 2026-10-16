@@ -6,15 +6,14 @@ use {
     libadwaita::{
         glib::Propagation::Proceed,
         gtk::{
+            Adjustment,
             Align::{Center, End, Start},
             Box, Button, GestureClick, Label,
             Orientation::{Horizontal, Vertical},
             Scale,
             accessible::Property::Label as PropertyLabel,
         },
-        prelude::{
-            AccessibleExtManual, BoxExt, ButtonExt, GestureSingleExt, RangeExt, ScaleExt, WidgetExt,
-        },
+        prelude::{AccessibleExtManual, BoxExt, ButtonExt, GestureSingleExt, RangeExt, WidgetExt},
     },
     tracing::error,
 };
@@ -33,13 +32,14 @@ pub fn build_transport(state: &Arc<AppState>) -> (Box, Button) {
         .orientation(Horizontal)
         .spacing(12)
         .halign(Center)
+        .css_classes(["transport-controls"])
+        .tooltip_text("Playback controls")
         .build();
 
     let prev_button = Button::builder()
         .icon_name("media-skip-backward-symbolic")
-        .css_classes(["flat"])
+        .css_classes(["flat", "image-button"])
         .tooltip_text("Previous track")
-        .can_focus(true)
         .build();
     prev_button.update_property(&[PropertyLabel("Previous track")]);
     let state_prev = Arc::clone(state);
@@ -55,9 +55,8 @@ pub fn build_transport(state: &Arc<AppState>) -> (Box, Button) {
 
     let play_button = Button::builder()
         .icon_name("media-playback-start-symbolic")
-        .css_classes(["suggested-action", "circular"])
+        .css_classes(["suggested-action", "circular", "image-button"])
         .tooltip_text("Play or pause")
-        .can_focus(true)
         .build();
     play_button.update_property(&[PropertyLabel("Play or pause")]);
     let state_play = Arc::clone(state);
@@ -73,9 +72,8 @@ pub fn build_transport(state: &Arc<AppState>) -> (Box, Button) {
 
     let next_button = Button::builder()
         .icon_name("media-skip-forward-symbolic")
-        .css_classes(["flat"])
+        .css_classes(["flat", "image-button"])
         .tooltip_text("Next track")
-        .can_focus(true)
         .build();
     next_button.update_property(&[PropertyLabel("Next track")]);
     let state_next = Arc::clone(state);
@@ -109,14 +107,24 @@ fn seek_to_scale_value(playback: &PlaybackEngine, scale: &Scale) {
 ///
 /// Returns the container, seek scale, current time label, and total time label.
 pub fn build_seek_section(state: &Arc<AppState>) -> (Box, Scale, Label, Label) {
-    let seek_box = Box::builder().orientation(Vertical).spacing(4).build();
-    let time_row = Box::builder().orientation(Horizontal).build();
+    let seek_box = Box::builder()
+        .orientation(Vertical)
+        .spacing(4)
+        .css_classes(["seek-section"])
+        .tooltip_text("Seek controls")
+        .build();
+    let time_row = Box::builder()
+        .orientation(Horizontal)
+        .css_classes(["time-row"])
+        .tooltip_text("Playback time")
+        .build();
 
     let current_time = Label::builder()
         .label("00:00")
         .css_classes(["dim-label", "caption"])
         .halign(Start)
         .hexpand(true)
+        .tooltip_text("Current playback position")
         .build();
     current_time.update_property(&[PropertyLabel("Current playback position")]);
     time_row.append(&current_time);
@@ -125,15 +133,20 @@ pub fn build_seek_section(state: &Arc<AppState>) -> (Box, Scale, Label, Label) {
         .label("00:00")
         .css_classes(["dim-label", "caption"])
         .halign(End)
+        .tooltip_text("Total track duration")
         .build();
     total_time.update_property(&[PropertyLabel("Total track duration")]);
     time_row.append(&total_time);
 
-    let seek_scale = Scale::with_range(Horizontal, 0.0, 100.0, 1.0);
-    seek_scale.set_draw_value(false);
-    seek_scale.set_hexpand(true);
-    seek_scale.set_can_focus(true);
-    seek_scale.set_tooltip_text(Some("Seek through the track"));
+    let seek_adjustment = Adjustment::new(0.0, 0.0, 100.0, 1.0, 10.0, 0.0);
+    let seek_scale = Scale::builder()
+        .orientation(Horizontal)
+        .adjustment(&seek_adjustment)
+        .draw_value(false)
+        .hexpand(true)
+        .css_classes(["seek-scale"])
+        .tooltip_text("Seek through the track")
+        .build();
 
     let is_seeking = Arc::clone(&state.is_seeking);
     let gesture = GestureClick::new();
@@ -194,12 +207,18 @@ pub fn build_seek_section(state: &Arc<AppState>) -> (Box, Scale, Label, Label) {
 
 /// Build the queue section with label and queue view.
 pub fn build_queue_section(state: &Arc<AppState>) -> Box {
-    let section = Box::builder().orientation(Vertical).spacing(4).build();
+    let section = Box::builder()
+        .orientation(Vertical)
+        .spacing(4)
+        .css_classes(["queue-section"])
+        .tooltip_text("Playback queue")
+        .build();
 
     let queue_label = Label::builder()
         .label("Queue")
         .css_classes(["heading", "dim-label"])
         .halign(Start)
+        .tooltip_text("Playback queue section")
         .build();
     queue_label.update_property(&[PropertyLabel("Playback queue section")]);
     section.append(&queue_label);

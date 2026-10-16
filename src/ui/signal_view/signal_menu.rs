@@ -17,7 +17,7 @@ use {
             Popover, Separator, Window,
             accessible::Property::Label,
         },
-        prelude::{AccessibleExtManual, BoxExt, ButtonExt, WidgetExt},
+        prelude::{AccessibleExtManual, BoxExt, ButtonExt, ObjectExt, WidgetExt},
     },
     tracing::warn,
 };
@@ -91,8 +91,8 @@ impl SignalHeaderMenu {
 fn menu_action(label: &str) -> Button {
     let button = Button::builder()
         .label(label)
-        .css_classes(["flat"])
-        .can_focus(true)
+        .css_classes(["flat", "text-button"])
+        .tooltip_text(label)
         .hexpand(true)
         .build();
     button.update_property(&[Label(label)]);
@@ -123,21 +123,39 @@ pub fn build_signal_header_menu(
     tab: &SignalTab,
 ) -> SignalHeaderMenu {
     let copy = menu_action("Copy path summary");
-    copy.set_tooltip_text(Some("Copy the signal path summary to the clipboard"));
+    copy.set_property(
+        "tooltip-text",
+        "Copy the signal path summary to the clipboard",
+    );
 
     let prefs = build_preferences_button(state, parent);
     let shortcuts = build_shortcuts_button(state, parent);
 
-    let list = Box::builder().orientation(Vertical).spacing(6).build();
+    let list = Box::builder()
+        .orientation(Vertical)
+        .spacing(6)
+        .css_classes(["signal-menu-list"])
+        .tooltip_text("Signal options list")
+        .build();
     list.append(&copy);
-    list.append(&Separator::new(Horizontal));
+    let separator = Separator::builder()
+        .orientation(Horizontal)
+        .css_classes(["signal-menu-separator"])
+        .tooltip_text("Menu separator")
+        .build();
+    list.append(&separator);
     list.append(&prefs);
     list.append(&shortcuts);
-    let popover = Popover::builder().child(&list).has_arrow(true).build();
+    let popover = Popover::builder()
+        .child(&list)
+        .has_arrow(true)
+        .css_classes(["signal-menu-popover"])
+        .tooltip_text("Signal options menu")
+        .build();
     let button = MenuButton::builder()
         .icon_name("view-more-symbolic")
+        .css_classes(["signal-menu-button", "popup"])
         .tooltip_text("Signal options")
-        .can_focus(true)
         .popover(&popover)
         .build();
     button.update_property(&[Label("Signal options")]);
@@ -191,8 +209,8 @@ mod tests {
     use {
         anyhow::{Context, Result, ensure},
         libadwaita::{
-            gtk::{self, Window, test},
-            prelude::{ButtonExt, WidgetExt},
+            gtk::{self, Window, accessible::Property::Label, test},
+            prelude::{AccessibleExtManual, ButtonExt, WidgetExt},
         },
     };
 
@@ -206,7 +224,11 @@ mod tests {
     #[test]
     fn signal_header_menu_carries_copy_preferences_and_shortcuts() -> Result<()> {
         let state = Arc::new(AppState::mock().context("failed to build mock app state")?);
-        let parent = Window::new();
+        let parent = Window::builder()
+            .css_classes(["test-parent", "background"])
+            .tooltip_text("Test parent window")
+            .build();
+        parent.update_property(&[Label("Test parent window")]);
         let tab = build_signal_page();
         let menu = build_signal_header_menu(&state, &parent, &tab);
         ensure!(

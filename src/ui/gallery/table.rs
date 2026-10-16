@@ -47,6 +47,9 @@ use crate::{
 const STORE_BATCH_SIZE: usize = 50;
 
 /// Create a `ColumnView` with sort model and no selection from a store.
+///
+/// The view stays focusable so keyboard navigation and row activation keep
+/// working.
 fn setup_column_view(store: ListStore) -> ColumnView {
     let model: ListModel = store.upcast();
     let sort_model = SortListModel::new(Some(model), None::<CustomSorter>);
@@ -56,6 +59,8 @@ fn setup_column_view(store: ListStore) -> ColumnView {
         .model(&selection)
         .hexpand(true)
         .vexpand(true)
+        .css_classes(["album-column-view"])
+        .tooltip_text("Album library")
         .build();
     column_view.update_property(&[Label("Album library")]);
     column_view
@@ -356,4 +361,29 @@ fn id_at_position<T: Clone + Send + 'static>(
     let item = sort_model.item(position)?;
     let boxed = item.downcast_ref::<BoxedAnyObject>()?;
     Some(get_id(&boxed.borrow::<T>()))
+}
+
+#[cfg(test)]
+mod tests {
+    use {
+        anyhow::{Result, ensure},
+        libadwaita::{
+            gio::ListStore,
+            glib::BoxedAnyObject,
+            gtk::{self, test},
+            prelude::WidgetExt,
+        },
+    };
+
+    use crate::ui::gallery::table::setup_column_view;
+
+    #[test]
+    fn column_view_keeps_keyboard_focus() -> Result<()> {
+        let view = setup_column_view(ListStore::new::<BoxedAnyObject>());
+        ensure!(
+            view.can_focus(),
+            "album column view must stay focusable for keyboard navigation"
+        );
+        Ok(())
+    }
 }
