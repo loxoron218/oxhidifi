@@ -18,9 +18,10 @@ use {
 use crate::{
     app::runtime::AppState,
     storage::{
-        active_tab::ActiveTab::{self, Albums, Artists, Signal},
+        active_tab::ActiveTab::{Albums, Artists, Signal},
         view_mode::ViewMode::{self, Column, Grid},
     },
+    ui::navigation::request_active_tab,
 };
 
 /// Persist album labels visibility setting and trigger a grid rebuild.
@@ -37,14 +38,6 @@ async fn save_view_mode_setting(state: Arc<AppState>, mode: ViewMode) {
         warn!(error = %e, "Failed to save view mode");
     }
     state.view_mode.send(mode);
-}
-
-/// Persist active tab and notify listeners.
-async fn save_active_tab_setting(state: Arc<AppState>, tab: ActiveTab) {
-    if let Err(e) = state.storage.set_active_tab(tab).await {
-        warn!(error = %e, "Failed to save active tab");
-    }
-    state.active_tab.send(tab);
 }
 
 /// Build the View > Display page.
@@ -153,11 +146,7 @@ pub fn build_view_page(dialog: &PreferencesDialog, state: &Arc<AppState>) -> Pre
             } else {
                 Signal
             };
-            let s = Arc::clone(&state_tab);
-            state_tab
-                .handles
-                .lock()
-                .retain_task(spawn_future_local(save_active_tab_setting(s, tab)));
+            request_active_tab(&state_tab, tab);
         }));
     display_group.add(&tab_row);
 

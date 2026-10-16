@@ -1,40 +1,48 @@
 //! Window navigation events and active-tab persistence.
 
-use std::sync::Arc;
-
-use libadwaita::{
-    NavigationPage, NavigationView,
-    glib::object::IsA,
-    gtk::{Widget, accessible::Property::Label},
-    prelude::AccessibleExtManual,
-};
+use {libadwaita::NavigationView, tracing::info};
 
 use crate::{
-    storage::{active_tab::ActiveTab, database::SqliteStorage},
-    ui::{
-        nav_tags::{DetailTarget, is_detail_tag, parse_detail_tag},
-        signal_handlers::ValueSignal,
-    },
+    app::runtime::AppState,
+    storage::active_tab::ActiveTab,
+    ui::nav_tags::{DetailTarget, is_detail_tag, parse_detail_tag},
 };
 
-/// Save the active tab to memory and notify subscribers.
+/// Request an active-tab transition; the model is the single authority.
+///
+/// Compares against the current signal value. When unchanged, only the
+/// storage mirror is resynced and nothing is sent, scheduled, or logged, so
+/// redundant observations converge instead of echoing. Otherwise the
+/// in-memory setting is committed, the `active_tab` signal fans out, a
+/// debounced disk write is scheduled centrally, and the switch is logged —
+/// callers persist and log nothing themselves.
+///
+/// # Arguments
+///
+/// * `state` - Application state owning storage and the tab signal.
+/// * `tab` - Requested tab.
+pub fn request_active_tab(state: &AppState, tab: ActiveTab) {
+    if state.active_tab.borrow() == tab {
+        state.storage.set_active_tab_memory(tab);
+        return;
+    }
+    state.storage.set_active_tab_memory(tab);
+    state.active_tab.send(tab);
+    state.storage.save_settings();
+    info!(tab_name = tab.stack_name(), "Tab switched",);
+}
+
+/// Observe a visible-stack change and request the matching tab.
 ///
 /// Maps the visible stack child name (`albums`, `artists`, `signal`) to its
 /// tab; unknown names fall back to the albums tab.
 ///
-/// Only updates in-memory settings and fans out through the `active_tab`
-/// signal. The caller persists via debounced
-/// [`SqliteStorage::save_settings`](crate::storage::database::SqliteStorage::save_settings),
-/// keeping this function synchronous and unit-testable without a Tokio or
-/// `GLib` main context.
-pub fn persist_active_tab(
-    storage: &Arc<SqliteStorage>,
-    active_tab: &ValueSignal<ActiveTab>,
-    name: &str,
-) {
-    let tab = ActiveTab::from_stack_name(name);
-    storage.set_active_tab_memory(tab);
-    active_tab.send(tab);
+/// # Arguments
+///
+/// * `state` - Application state owning storage and the tab signal.
+/// * `name` - Visible stack child name (`albums`, `artists`, `signal`).
+pub fn persist_active_tab(state: &AppState, name: &str) {
+    request_active_tab(state, ActiveTab::from_stack_name(name));
 }
 
 /// Check whether a detail page is currently visible.
@@ -84,32 +92,6 @@ pub fn visible_detail_target(nav_view: &NavigationView) -> Option<DetailTarget> 
     parse_detail_tag(tag.as_str())
 }
 
-/// Build the `library` navigation page hosting the library view stack.
-///
-/// Centralizes the tag/title pairing so production code and tests never
-/// drift apart (a pushed-tag/`pop` mismatch would silently break detail
-/// navigation and header visibility).
-///
-/// # Arguments
-///
-/// * `child` - Library content widget (usually the tab `ViewStack`).
-///
-/// # Returns
-///
-/// A `NavigationPage` tagged `library` titled `Library`.
-#[must_use]
-pub fn build_library_page(child: &impl IsA<Widget>) -> NavigationPage {
-    let page = NavigationPage::builder()
-        .child(child)
-        .title("Library")
-        .tag("library")
-        .css_classes(["library-page"])
-        .tooltip_text("Library content")
-        .build();
-    page.update_property(&[Label("Library")]);
-    page
-}
-
 /// Unit tests for navigation events, detail visibility, and test helpers.
 #[cfg(test)]
 pub mod tests {
@@ -133,13 +115,12 @@ pub mod tests {
         storage::active_tab::ActiveTab::{Albums, Artists, Signal},
         ui::{
             detail_nav::handle_navigation_event,
+            library_stack::build_library_page,
             nav_tags::{
                 DetailTarget::{Album, Artist},
                 detail_album_tag, detail_artist_tag,
             },
-            navigation::{
-                build_library_page, is_detail_visible, persist_active_tab, visible_detail_target,
-            },
+            navigation::{is_detail_visible, persist_active_tab, visible_detail_target},
         },
     };
 
@@ -181,7 +162,7 @@ pub mod tests {
     fn persist_active_tab_maps_artists() -> Result<()> {
         let state = Arc::new(AppState::mock()?);
         let rx = state.active_tab.subscribe();
-        persist_active_tab(&state.storage, &state.active_tab, "artists");
+        persist_active_tab(&state, "artists");
         ensure!(state.active_tab.borrow() == Artists);
         ensure!(state.storage.get_active_tab() == Artists);
         ensure!(matches!(rx.try_recv(), Ok(Artists)));
@@ -193,7 +174,7 @@ pub mod tests {
         let state = Arc::new(AppState::mock()?);
         let rx = state.active_tab.subscribe();
         state.active_tab.send(Artists);
-        persist_active_tab(&state.storage, &state.active_tab, "albums");
+        persist_active_tab(&state, "albums");
         ensure!(state.active_tab.borrow() == Albums);
         ensure!(state.storage.get_active_tab() == Albums);
         ensure!(matches!(rx.try_recv(), Ok(Artists)));
@@ -202,10 +183,25 @@ pub mod tests {
     }
 
     #[test]
+    fn persist_active_tab_ignores_redundant_switch() -> Result<()> {
+        let state = Arc::new(AppState::mock()?);
+        let rx = state.active_tab.subscribe();
+        persist_active_tab(&state, "artists");
+        persist_active_tab(&state, "artists");
+        ensure!(state.active_tab.borrow() == Artists);
+        ensure!(matches!(rx.try_recv(), Ok(Artists)));
+        ensure!(
+            rx.try_recv().is_err(),
+            "redundant switch must not fan out to subscribers"
+        );
+        Ok(())
+    }
+
+    #[test]
     fn persist_active_tab_maps_signal() -> Result<()> {
         let state = Arc::new(AppState::mock()?);
         let rx = state.active_tab.subscribe();
-        persist_active_tab(&state.storage, &state.active_tab, "signal");
+        persist_active_tab(&state, "signal");
         ensure!(state.active_tab.borrow() == Signal);
         ensure!(state.storage.get_active_tab() == Signal);
         ensure!(matches!(rx.try_recv(), Ok(Signal)));

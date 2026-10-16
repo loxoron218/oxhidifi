@@ -5,7 +5,7 @@ use std::sync::{Arc, atomic::Ordering::Relaxed};
 use {
     async_channel::Sender,
     libadwaita::{NavigationView, ViewStack, gtk::Stack},
-    tracing::{error, info, warn},
+    tracing::{error, warn},
 };
 
 use crate::{
@@ -29,6 +29,11 @@ use crate::{
 /// tab is), so switching here lazily builds the current mode child when it
 /// is missing. When the mode child already exists, only a pending sort/zoom
 /// change (`dirty`) triggers a rebuild.
+///
+/// The caller guarantees freshness: the library signal task drops queued
+/// values superseded by a newer model, so a stale request never reaches this
+/// function. As a final guard the already-visible child is left untouched,
+/// keeping redundant notifications from re-entering the model.
 pub fn handle_tab_switch(
     stack: &ViewStack,
     state: &Arc<AppState>,
@@ -37,7 +42,12 @@ pub fn handle_tab_switch(
     artist_stack: &Stack,
     narrow_state: &Arc<NarrowState>,
 ) {
-    stack.set_visible_child_name(tab.stack_name());
+    let already_visible = stack
+        .visible_child_name()
+        .is_some_and(|current| current.as_str() == tab.stack_name());
+    if !already_visible {
+        stack.set_visible_child_name(tab.stack_name());
+    }
     let mode = state.view_mode.borrow();
     let child_name = match mode {
         Grid => "grid",
@@ -88,8 +98,7 @@ pub fn wire_tab_tracking(state: &Arc<AppState>, stack: &ViewStack, nav_view: &Na
     let tab_nav_tx = state.navigation_tx.clone();
     let tab_nav_view = nav_view.clone();
     let tab_stack = stack.clone();
-    let tab_storage = Arc::clone(&state.storage);
-    let tab_active_tab = state.active_tab.clone();
+    let tab_state = Arc::clone(state);
     state
         .handles
         .lock()
@@ -97,9 +106,7 @@ pub fn wire_tab_tracking(state: &Arc<AppState>, stack: &ViewStack, nav_view: &Na
             if !is_detail_visible(&tab_nav_view)
                 && let Some(name) = tab_stack.visible_child_name()
             {
-                info!(tab_name = name.as_str(), "Tab switched",);
-                persist_active_tab(&tab_storage, &tab_active_tab, name.as_str());
-                tab_storage.save_settings();
+                persist_active_tab(&tab_state, name.as_str());
             }
             if is_detail_visible(&tab_nav_view)
                 && let Err(err) = tab_nav_tx.try_send(Back)
@@ -111,7 +118,10 @@ pub fn wire_tab_tracking(state: &Arc<AppState>, stack: &ViewStack, nav_view: &Na
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicU32, Ordering::Relaxed},
+    };
 
     use {
         anyhow::{Result, ensure},
@@ -148,10 +158,7 @@ mod tests {
         drop(stack.add_named(&label, Some(name)));
     }
 
-    #[test]
-    fn tab_switch_shows_matching_page() -> Result<()> {
-        let state = Arc::new(AppState::mock()?);
-        let narrow = NarrowState::new_shared();
+    fn test_stacks() -> (ViewStack, Stack, Stack) {
         let view_stack = ViewStack::builder()
             .css_classes(["test-fixture"])
             .tooltip_text("Test view stack")
@@ -174,6 +181,14 @@ mod tests {
         artist_stack.update_property(&[PropertyLabel("Test artist stack")]);
         add_stack_page(&artist_stack, "grid");
         add_stack_page(&artist_stack, "column");
+        (view_stack, album_stack, artist_stack)
+    }
+
+    #[test]
+    fn tab_switch_shows_matching_page() -> Result<()> {
+        let state = Arc::new(AppState::mock()?);
+        let narrow = NarrowState::new_shared();
+        let (view_stack, album_stack, artist_stack) = test_stacks();
         handle_tab_switch(
             &view_stack,
             &state,
@@ -215,6 +230,46 @@ mod tests {
                 .visible_child_name()
                 .is_some_and(|n| n == "signal"),
             "signal tab must become visible without touching the grids"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn redundant_tab_switch_skips_visible_child_set() -> Result<()> {
+        let state = Arc::new(AppState::mock()?);
+        let narrow = NarrowState::new_shared();
+        let (view_stack, album_stack, artist_stack) = test_stacks();
+        view_stack.set_visible_child_name("artists");
+        let notifications = Arc::new(AtomicU32::new(0));
+        let counted = Arc::clone(&notifications);
+        state
+            .handles
+            .lock()
+            .retain_signal(view_stack.connect_visible_child_notify(move |_| {
+                _ = counted.fetch_add(1, Relaxed);
+            }));
+        state.artist_grid.dirty.store(true, Relaxed);
+        handle_tab_switch(
+            &view_stack,
+            &state,
+            Artists,
+            &album_stack,
+            &artist_stack,
+            &narrow,
+        );
+        ensure!(
+            notifications.load(Relaxed) == 0,
+            "redundant switch must not re-emit visible-child-notify"
+        );
+        ensure!(
+            view_stack
+                .visible_child_name()
+                .is_some_and(|n| n == "artists"),
+            "redundant switch must keep the artists tab visible"
+        );
+        ensure!(
+            state.artists_sort_rx.try_recv().is_ok(),
+            "redundant switch must still rebuild a dirty grid"
         );
         Ok(())
     }

@@ -24,8 +24,9 @@ use {
 use crate::{
     app::runtime::AppState,
     playback::signal_path::{QualityVerdict, SignalPathSnapshot},
+    storage::active_tab::ActiveTab::Signal,
     ui::{
-        navigation::persist_active_tab,
+        navigation::request_active_tab,
         signal_view::{
             signal_poll::drain_newest,
             verdict::{trace_verdict_flip, verdict_icon},
@@ -168,8 +169,7 @@ pub fn build_signal_badge(state: &Arc<AppState>) -> SignalBadge {
         .handles
         .lock()
         .retain_signal(button.connect_clicked(move |_| {
-            persist_active_tab(&navigator.storage, &navigator.active_tab, "signal");
-            navigator.storage.save_settings();
+            request_active_tab(&navigator, Signal);
         }));
     SignalBadge {
         button,

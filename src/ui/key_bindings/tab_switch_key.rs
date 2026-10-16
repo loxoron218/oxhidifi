@@ -7,7 +7,7 @@
 use libadwaita::gdk::{Key, ModifierType};
 
 use crate::{
-    app::runtime::AppState, storage::active_tab::ActiveTab, ui::navigation::persist_active_tab,
+    app::runtime::AppState, storage::active_tab::ActiveTab, ui::navigation::request_active_tab,
 };
 
 /// Resolve the destination tab for a `Ctrl+Tab` key press.
@@ -50,12 +50,12 @@ pub fn next_tab_for_key(
 
 /// Cycle the library tab on `Ctrl+Tab` / `Ctrl+Shift+Tab`.
 ///
-/// Only updates in-memory settings and fans out through the `active_tab`
-/// signal so storage and the tab signal stay in sync exactly like
-/// pointer-driven switches. The caller persists via debounced
-/// [`SqliteStorage::save_settings`](crate::storage::database::SqliteStorage::save_settings),
-/// keeping this handler synchronous and unit-testable without a Tokio or
-/// `GLib` main context. Intentionally works
+/// Requests a model transition through
+/// [`request_active_tab`](crate::ui::navigation::request_active_tab), which
+/// persists centrally on change. Key auto-repeat stays enabled: repeats are
+/// ordinary requests and the model authority plus stale-drop in the library
+/// signal task keep bursts converging on the latest tab instead of echoing.
+/// Intentionally works
 /// while a detail page is pushed (unlike zoom): the stack change behind the
 /// detail fires tab tracking, which sends `Back` and lands on the library
 /// with the new tab visible. Also intentionally works from text entries:
@@ -75,7 +75,7 @@ pub fn handle_tab_switch_key(state: &AppState, key: Key, modifiers: ModifierType
     let Some(next) = next_tab_for_key(state.active_tab.borrow(), key, modifiers) else {
         return false;
     };
-    persist_active_tab(&state.storage, &state.active_tab, next.stack_name());
+    request_active_tab(state, next);
     true
 }
 

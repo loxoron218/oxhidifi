@@ -9,6 +9,7 @@ pub mod header;
 pub mod image_decode;
 pub mod key_bindings;
 pub mod key_controllers;
+pub mod library_stack;
 pub mod narrow_scheduler;
 pub mod nav_tags;
 pub mod navigation;

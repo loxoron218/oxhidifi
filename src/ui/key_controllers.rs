@@ -110,9 +110,8 @@ fn focus_is_in_prefs_dialog(focused: Option<&Widget>) -> bool {
 ///
 /// Works from text entries (`Ctrl+Tab` has no editing function) and while a
 /// detail page is pushed. Yields when focus is inside a preferences dialog so
-/// the dialog cycles its own pages. On handled keys the debounced settings write is
-/// scheduled; the `active_tab` fan-out already happened synchronously in
-/// the handler.
+/// the dialog cycles its own pages. The model transition persists centrally,
+/// so no separate settings write is scheduled here.
 ///
 /// # Arguments
 ///
@@ -132,7 +131,6 @@ fn add_tab_switch_controller(window: &ApplicationWindow, state: &Arc<AppState>) 
                     return Proceed;
                 }
                 if handle_tab_switch_key(&tab_state, key, modifiers) {
-                    tab_state.storage.save_settings();
                     Stop
                 } else {
                     Proceed

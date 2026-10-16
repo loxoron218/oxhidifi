@@ -5,115 +5,26 @@ use std::sync::{Arc, atomic::AtomicBool};
 use libadwaita::{
     HeaderBar, NavigationView, OverlaySplitView, ToastOverlay, ToolbarView, ViewStack,
     glib::{Object, object::ObjectExt, spawn_future_local},
-    gtk::{Button, Stack, ToggleButton, Window, accessible::Property::Label},
+    gtk::{Button, ToggleButton, Window, accessible::Property::Label},
     prelude::{AccessibleExtManual, WidgetExt},
 };
 
 use crate::{
     app::runtime::AppState,
-    storage::active_tab::ActiveTab::{Albums, Artists, Signal},
     ui::{
         detail_nav::handle_navigation_event,
-        gallery::{
-            album_grid::build_album_grid, artist_grid::build_artist_grid, narrow_flag::NarrowState,
-        },
+        gallery::narrow_flag::NarrowState,
         header::build_header_end_controls,
-        navigation::build_library_page,
-        pane_modes::switch_mode_for_active_tab,
+        library_stack::{build_library_page, build_library_stack, wire_library_signals},
         pane_sidebar::{build_sidebar, place_sidebar_toggle},
         pane_switcher::{SwitcherGroup, build_switcher_group},
         player::sidebar_toggles::wire_sidebar_toggles,
         popover_zoom::notify_zoom_change,
-        signal_view::{
-            signal_poll::wire_signal_tab, signal_tab::SignalTab,
-            signal_tab_build::build_signal_page,
-        },
+        signal_view::signal_poll::wire_signal_tab,
         status::StatusBar,
-        switching::{handle_tab_switch, wire_tab_tracking},
+        switching::wire_tab_tracking,
     },
 };
-
-/// Build the library `ViewStack` with album, artist, and signal pages.
-fn build_library_stack(
-    state: &Arc<AppState>,
-    narrow_state: &Arc<NarrowState>,
-) -> (ViewStack, Stack, Stack, SignalTab) {
-    let stack = ViewStack::builder()
-        .css_classes(["library-stack"])
-        .tooltip_text("Library views")
-        .build();
-    stack.update_property(&[Label("Library views")]);
-    stack.set_vexpand(true);
-    let album_grid = build_album_grid(state, narrow_state);
-    drop(stack.add_titled_with_icon(
-        &album_grid.mode_stack,
-        Some("albums"),
-        "Albums",
-        "view-grid-symbolic",
-    ));
-    let artist_grid = build_artist_grid(state, narrow_state);
-    drop(stack.add_titled_with_icon(
-        &artist_grid.mode_stack,
-        Some("artists"),
-        "Artists",
-        "avatar-default-symbolic",
-    ));
-    let signal_tab = build_signal_page();
-    drop(stack.add_titled_with_icon(
-        signal_tab.widget(),
-        Some("signal"),
-        "Signal",
-        "audio-x-generic-symbolic",
-    ));
-    match state.storage.get_active_tab() {
-        Artists => stack.set_visible_child_name("artists"),
-        Signal => stack.set_visible_child_name("signal"),
-        Albums => {}
-    }
-    (
-        stack,
-        album_grid.mode_stack,
-        artist_grid.mode_stack,
-        signal_tab,
-    )
-}
-
-/// Wire tab and view-mode signals for the library stack.
-fn wire_library_signals(
-    state: &Arc<AppState>,
-    stack: &ViewStack,
-    album_stack: Stack,
-    artist_stack: Stack,
-    narrow_state: Arc<NarrowState>,
-) {
-    let tab_rx = state.active_tab.subscribe();
-    let s1 = stack.clone();
-    let st1 = Arc::clone(state);
-    let a1 = album_stack.clone();
-    let r1 = artist_stack.clone();
-    let n1 = Arc::clone(&narrow_state);
-    state
-        .handles
-        .lock()
-        .retain_task(spawn_future_local(async move {
-            while let Ok(tab) = tab_rx.recv().await {
-                handle_tab_switch(&s1, &st1, tab, &a1, &r1, &n1);
-            }
-        }));
-    let s2 = Arc::clone(state);
-    let a2 = album_stack;
-    let r2 = artist_stack;
-    let n2 = narrow_state;
-    state
-        .handles
-        .lock()
-        .retain_task(spawn_future_local(async move {
-            let rx = s2.view_mode.subscribe();
-            while let Ok(m) = rx.recv().await {
-                switch_mode_for_active_tab(&s2, m, &a2, &r2, &n2);
-            }
-        }));
-}
 
 /// Fan out narrow-window changes as zoom notifications.
 ///
