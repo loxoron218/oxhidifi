@@ -122,14 +122,14 @@ mod tests {
     }
 
     #[test]
-    fn general_section_lists_five_items() -> Result<()> {
+    fn general_section_lists_six_items() -> Result<()> {
         let section = build_general_section();
         ensure!(
             section.title().as_deref() == Some("General"),
             "first section must be titled General"
         );
         ensure!(
-            section.n_items() == 5,
+            section.n_items() == 6,
             "General must list panel, tab, and opener shortcuts"
         );
         Ok(())

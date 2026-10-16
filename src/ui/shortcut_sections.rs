@@ -59,11 +59,11 @@ fn make_section(title: &str, probe_label: &str) -> ShortcutsSection {
     section
 }
 
-/// Build the General section: panel, tab cycling, and the dialog opener.
+/// Build the General section: panel, tab cycling, and the dialog openers.
 ///
 /// # Returns
 ///
-/// * `ShortcutsSection` - General section with five items.
+/// * `ShortcutsSection` - General section with six items.
 #[must_use]
 pub fn build_general_section() -> ShortcutsSection {
     let section = make_section("General", "General section accessibility probe");
@@ -86,6 +86,11 @@ pub fn build_general_section() -> ShortcutsSection {
         "Previous library tab",
         "Albums, Artists, Signal; wraps around",
         "<Control><Shift>Tab",
+    ));
+    section.add(shortcuts_item(
+        "Preferences",
+        "Open preferences dialog",
+        "<Control>comma",
     ));
     section.add(shortcuts_item(
         "Keyboard shortcuts",

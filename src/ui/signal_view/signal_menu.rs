@@ -240,7 +240,7 @@ mod tests {
             "signal menu must carry the copy action"
         );
         ensure!(
-            menu.prefs_button().tooltip_text().as_deref() == Some("Open preferences"),
+            menu.prefs_button().tooltip_text().as_deref() == Some("Open preferences (Ctrl+,)"),
             "signal menu must carry the preferences entry"
         );
         ensure!(

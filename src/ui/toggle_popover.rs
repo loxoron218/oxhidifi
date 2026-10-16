@@ -49,7 +49,7 @@ pub fn build_preferences_button(state: &Arc<AppState>, parent: &Window) -> Butto
                 .tooltip_text("Preferences content")
                 .build(),
         )
-        .tooltip_text("Open preferences")
+        .tooltip_text("Open preferences (Ctrl+,)")
         .css_classes(["flat"])
         .hexpand(true)
         .build();
