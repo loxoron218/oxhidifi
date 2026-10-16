@@ -11,7 +11,10 @@ use libadwaita::{
 
 use crate::{
     storage::{active_tab::ActiveTab, database::SqliteStorage},
-    ui::{nav_tags::is_detail_tag, signal_handlers::ValueSignal},
+    ui::{
+        nav_tags::{DetailTarget, is_detail_tag, parse_detail_tag},
+        signal_handlers::ValueSignal,
+    },
 };
 
 /// Save the active tab to memory and notify subscribers.
@@ -58,6 +61,27 @@ pub fn is_detail_visible(nav_view: &NavigationView) -> bool {
     nav_view
         .visible_page_tag()
         .is_some_and(|tag| is_detail_tag(tag.as_str()))
+}
+
+/// Return the visible detail page's playback target, if any.
+///
+/// Parses the visible page tag via
+/// [`parse_detail_tag`](crate::ui::nav_tags::parse_detail_tag) so `Space`
+/// can start playback for the album or artist in view. Legacy `detail`
+/// tags and the `library` page yield `None`.
+///
+/// # Arguments
+///
+/// * `nav_view` - Navigation view hosting the `library` and detail pages.
+///
+/// # Returns
+///
+/// * `Option<DetailTarget>` - Visible album/artist target, or `None` when no per-entity detail page
+///   is visible.
+#[must_use]
+pub fn visible_detail_target(nav_view: &NavigationView) -> Option<DetailTarget> {
+    let tag = nav_view.visible_page_tag()?;
+    parse_detail_tag(tag.as_str())
 }
 
 /// Build the `library` navigation page hosting the library view stack.
@@ -109,8 +133,13 @@ pub mod tests {
         storage::active_tab::ActiveTab::{Albums, Artists, Signal},
         ui::{
             detail_nav::handle_navigation_event,
-            nav_tags::{detail_album_tag, detail_artist_tag},
-            navigation::{build_library_page, is_detail_visible, persist_active_tab},
+            nav_tags::{
+                DetailTarget::{Album, Artist},
+                detail_album_tag, detail_artist_tag,
+            },
+            navigation::{
+                build_library_page, is_detail_visible, persist_active_tab, visible_detail_target,
+            },
         },
     };
 
@@ -300,6 +329,34 @@ pub mod tests {
         ensure!(
             !is_detail_visible(&nav_view),
             "library-only stack must not report a detail page"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn visible_detail_target_reports_pushed_entity() -> Result<()> {
+        let (state, nav_view, nav_tx) = test_nav_view()?;
+        ensure!(
+            visible_detail_target(&nav_view).is_none(),
+            "library must yield no detail target"
+        );
+
+        handle_navigation_event(&state, &nav_view, &nav_tx, ArtistDetail(3));
+        ensure!(
+            visible_detail_target(&nav_view) == Some(Artist(3)),
+            "visible artist tag must parse to its target"
+        );
+
+        handle_navigation_event(&state, &nav_view, &nav_tx, AlbumDetail(4));
+        ensure!(
+            visible_detail_target(&nav_view) == Some(Album(4)),
+            "drilled-down album must shadow the artist target"
+        );
+
+        handle_navigation_event(&state, &nav_view, &nav_tx, Back);
+        ensure!(
+            visible_detail_target(&nav_view) == Some(Artist(3)),
+            "first Back must reveal the artist target again"
         );
         Ok(())
     }

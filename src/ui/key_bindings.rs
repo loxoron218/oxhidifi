@@ -2,7 +2,8 @@
 //!
 //! Escape hides the sidebar when shown; `Ctrl+B` toggles the sidebar; `Ctrl+`/`Ctrl-` (including
 //! the numpad) zoom the active view; `Ctrl+G` toggles grid/column; plain `Space`
-//! toggles play/pause while the player panel is shown; `Ctrl+Tab` cycles
+//! toggles the open panel when it has an active track, else starts the
+//! visible album/artist detail page; `Ctrl+Tab` cycles
 //! library tabs forward and `Ctrl+Shift+Tab` cycles back. `Ctrl+?` opens the
 //! keyboard shortcuts dialog (see the sibling [`shortcuts`](crate::ui::shortcuts)
 //! module). Zoom and view-toggle are ignored on the `Signal` tab and while a

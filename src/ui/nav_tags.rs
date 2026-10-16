@@ -4,6 +4,19 @@
 //! live tag (`Duplicate page tag in AdwNavigationView: detail`), split from
 //! `navigation` to keep each module under the file-size limit.
 
+/// Detail playback target encoded in a navigation tag.
+///
+/// Mirrors the per-entity tags built by [`detail_album_tag`] and
+/// [`detail_artist_tag`] so `Space` can start playback for the visible
+/// detail page without threading widget state through key controllers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DetailTarget {
+    /// Album detail page showing this album id.
+    Album(i64),
+    /// Artist detail page showing this artist id.
+    Artist(i64),
+}
+
 /// Tag for an album detail page.
 ///
 /// Unique per album so drill-down (artist detail → album detail) pushes a new
@@ -37,6 +50,36 @@ pub fn detail_artist_tag(artist_id: i64) -> String {
     format!("detail-artist-{artist_id}")
 }
 
+/// Parse a navigation tag into its detail playback target.
+///
+/// Accepts only the per-entity `detail-album-{id}` and
+/// `detail-artist-{id}` forms; legacy `detail`, `library`, and malformed
+/// ids yield `None`.
+///
+/// # Arguments
+///
+/// * `tag` - Navigation page tag.
+///
+/// # Returns
+///
+/// * `Option<DetailTarget>` - Parsed target, or `None` when the tag is not a per-entity detail tag.
+#[must_use]
+pub fn parse_detail_tag(tag: &str) -> Option<DetailTarget> {
+    if let Some(suffix) = tag.strip_prefix("detail-album-") {
+        match suffix.parse() {
+            Ok(id) => return Some(DetailTarget::Album(id)),
+            Err(_) => return None,
+        }
+    }
+    if let Some(suffix) = tag.strip_prefix("detail-artist-") {
+        match suffix.parse() {
+            Ok(id) => return Some(DetailTarget::Artist(id)),
+            Err(_) => return None,
+        }
+    }
+    None
+}
+
 /// Whether a navigation tag belongs to a detail page.
 ///
 /// # Arguments
@@ -55,7 +98,10 @@ pub fn is_detail_tag(tag: &str) -> bool {
 mod tests {
     use anyhow::{Result, ensure};
 
-    use crate::ui::nav_tags::{detail_album_tag, detail_artist_tag, is_detail_tag};
+    use crate::ui::nav_tags::{
+        DetailTarget::{Album, Artist},
+        detail_album_tag, detail_artist_tag, is_detail_tag, parse_detail_tag,
+    };
 
     #[test]
     fn detail_tags_are_unique_per_entity() -> Result<()> {
@@ -77,6 +123,30 @@ mod tests {
             "album tag must count as detail"
         );
         ensure!(!is_detail_tag("library"), "library must not count");
+        Ok(())
+    }
+
+    #[test]
+    fn parse_detail_tag_round_trips_per_entity_tags() -> Result<()> {
+        ensure!(
+            parse_detail_tag(&detail_album_tag(4)) == Some(Album(4)),
+            "album tag must parse to its album id"
+        );
+        ensure!(
+            parse_detail_tag(&detail_artist_tag(3)) == Some(Artist(3)),
+            "artist tag must parse to its artist id"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn parse_detail_tag_rejects_non_entity_tags() -> Result<()> {
+        for tag in ["library", "detail", "detail-album-", "detail-artist-x"] {
+            ensure!(
+                parse_detail_tag(tag).is_none(),
+                "non-entity tag must not parse"
+            );
+        }
         Ok(())
     }
 }

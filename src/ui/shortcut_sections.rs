@@ -105,7 +105,7 @@ pub fn build_playback_section() -> ShortcutsSection {
     let section = make_section("Playback", "Playback section accessibility probe");
     section.add(shortcuts_item(
         "Play / pause",
-        "Only while the player panel is shown",
+        "Panel music when open, else visible album/artist",
         "space",
     ));
     section
