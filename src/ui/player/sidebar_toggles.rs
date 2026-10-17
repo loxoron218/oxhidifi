@@ -82,11 +82,16 @@ mod tests {
 
     #[test]
     fn wire_sidebar_toggles_signature_shape() {
-        fn assert_shape<
-            F: Fn(&Arc<AppState>, &OverlaySplitView, &ToggleButton, &ToggleButton, &Arc<AtomicBool>),
-        >(
-            _: F,
-        ) {
+        fn assert_shape<F>(_: F)
+        where
+            F: Fn(
+                &Arc<AppState>,
+                &OverlaySplitView,
+                &ToggleButton,
+                &ToggleButton,
+                &Arc<AtomicBool>,
+            ),
+        {
         }
         assert_shape(wire_sidebar_toggles);
     }

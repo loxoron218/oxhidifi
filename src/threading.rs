@@ -228,8 +228,16 @@ mod tests {
 
     #[test]
     fn thread_manager_send_and_sync() {
-        fn assert_send<T: Send>() {}
-        fn assert_sync<T: Sync>() {}
+        fn assert_send<T>()
+        where
+            T: Send,
+        {
+        }
+        fn assert_sync<T>()
+        where
+            T: Sync,
+        {
+        }
         assert_send::<ThreadManager>();
         assert_sync::<ThreadManager>();
     }

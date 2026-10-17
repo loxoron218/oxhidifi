@@ -31,12 +31,14 @@ pub fn drain_consumer(consumer: &mut Consumer<f32>) {
 }
 
 /// Fill a single output sample from the consumer, handling silence and latency.
-fn fill_output_sample<T: SizedSample + FromSample<f32>>(
+fn fill_output_sample<T>(
     sample: &mut T,
     consumer: &mut Consumer<f32>,
     first_sample: &mut bool,
     vol: f32,
-) {
+) where
+    T: SizedSample + FromSample<f32>,
+{
     let (value, is_ok) = consumer.pop().map_or((0.0, false), |v| (v, true));
     if is_ok && !*first_sample {
         *first_sample = true;
@@ -51,14 +53,17 @@ fn fill_output_sample<T: SizedSample + FromSample<f32>>(
 /// # Errors
 ///
 /// Returns [`OutputError`] if the output stream cannot be created.
-pub fn build_stream<T: SizedSample + FromSample<f32>>(
+pub fn build_stream<T>(
     device: &Device,
     config: &StreamConfig,
     mut consumer: Consumer<f32>,
     flush_flag: Arc<AtomicBool>,
     device_lost: Arc<AtomicBool>,
     volume: Arc<AtomicU32>,
-) -> Result<Stream, OutputError> {
+) -> Result<Stream, OutputError>
+where
+    T: SizedSample + FromSample<f32>,
+{
     let stream = device
         .build_output_stream(
             *config,

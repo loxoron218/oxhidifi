@@ -18,12 +18,14 @@ use crate::{
 };
 
 /// Parse a `"sort:N"` widget name into a sort item and push to `new_sort`.
-fn process_row<T: SortListBounds, S: BuildHasher>(
+fn process_row<T, S>(
     row: &ListBoxRow,
     order_map: &HashMap<T::Criteria, SortOrder, S>,
     new_sort: &mut Vec<T>,
 ) where
     T::Criteria: 'static,
+    T: SortListBounds,
+    S: BuildHasher,
 {
     let name = row.widget_name();
     let Some(suffix) = name.strip_prefix("sort:") else {
@@ -69,18 +71,24 @@ where
 }
 
 /// Reconstructs album sort items from a `ListBox`'s current order.
-pub fn reconstruct_albums_sort<S: BuildHasher>(
+pub fn reconstruct_albums_sort<S>(
     list_box: &ListBox,
     order_map: &HashMap<AlbumSortCriteria, SortOrder, S>,
-) -> Vec<AlbumSortItem> {
+) -> Vec<AlbumSortItem>
+where
+    S: BuildHasher,
+{
     reconstruct_sort_list(list_box, order_map, process_row::<AlbumSortItem, S>)
 }
 
 /// Reconstructs artist sort items from a `ListBox`'s current order.
-pub fn reconstruct_artists_sort<S: BuildHasher>(
+pub fn reconstruct_artists_sort<S>(
     list_box: &ListBox,
     order_map: &HashMap<ArtistSortCriteria, SortOrder, S>,
-) -> Vec<ArtistSortItem> {
+) -> Vec<ArtistSortItem>
+where
+    S: BuildHasher,
+{
     reconstruct_sort_list(list_box, order_map, process_row::<ArtistSortItem, S>)
 }
 

@@ -256,12 +256,15 @@ pub fn build_artist_icon_column() -> ColumnViewColumn {
 }
 
 /// Build a label column with a shared factory, bind, and sorter.
-pub fn build_label_column<T: Clone + Send + 'static>(
+pub fn build_label_column<T>(
     title: &str,
     get_text: impl Fn(&T) -> String + 'static,
     compare: impl Fn(&T, &T) -> Ordering + 'static,
     expand: bool,
-) -> ColumnViewColumn {
+) -> ColumnViewColumn
+where
+    T: Clone + Send + 'static,
+{
     let factory = SignalListItemFactory::new();
 
     let mut handles = UiHandles::default();
@@ -310,11 +313,14 @@ pub fn build_label_column<T: Clone + Send + 'static>(
 }
 
 /// Build a text column that sorts by the given extractor function.
-pub fn build_string_column<T: Clone + Send + 'static>(
+pub fn build_string_column<T>(
     title: &str,
     extract: fn(&T) -> String,
     expand: bool,
-) -> ColumnViewColumn {
+) -> ColumnViewColumn
+where
+    T: Clone + Send + 'static,
+{
     build_label_column(
         title,
         extract,
@@ -324,12 +330,15 @@ pub fn build_string_column<T: Clone + Send + 'static>(
 }
 
 /// Build an integer column with a format function.
-pub fn build_int_column<T: Clone + Send + 'static>(
+pub fn build_int_column<T>(
     title: &str,
     extract: fn(&T) -> i32,
     format: fn(i32) -> String,
     expand: bool,
-) -> ColumnViewColumn {
+) -> ColumnViewColumn
+where
+    T: Clone + Send + 'static,
+{
     build_label_column(
         title,
         move |d: &T| format(extract(d)),

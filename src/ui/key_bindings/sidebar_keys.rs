@@ -49,8 +49,16 @@ mod tests {
 
     #[test]
     fn handler_signature_shapes() {
-        fn assert_predicate<F: Fn(&OverlaySplitView) -> bool>(_: F) {}
-        fn assert_toggle<F: Fn(&OverlaySplitView)>(_: F) {}
+        fn assert_predicate<F>(_: F)
+        where
+            F: Fn(&OverlaySplitView) -> bool,
+        {
+        }
+        fn assert_toggle<F>(_: F)
+        where
+            F: Fn(&OverlaySplitView),
+        {
+        }
         assert_predicate(handle_escape_key);
         assert_toggle(handle_sidebar_toggle);
     }

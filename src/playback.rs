@@ -115,13 +115,16 @@ pub enum PlaybackError {
 /// # Errors
 ///
 /// Returns `std::io::Error` if writing to `writer` fails.
-pub fn write_wav_header<W: Write>(
+pub fn write_wav_header<W>(
     writer: &mut W,
     channels: u16,
     sample_rate: u32,
     bits_per_sample: u16,
     data_size: u32,
-) -> Result<()> {
+) -> Result<()>
+where
+    W: Write,
+{
     let riff_size = 36u32.saturating_add(data_size);
 
     writer.write_all(b"RIFF")?;

@@ -60,7 +60,11 @@ mod tests {
 
     #[test]
     fn focus_helper_signature_shape() {
-        fn assert_shape<F: Fn(Option<&Widget>) -> bool>(_: F) {}
+        fn assert_shape<F>(_: F)
+        where
+            F: Fn(Option<&Widget>) -> bool,
+        {
+        }
         assert_shape(focus_is_text_entry);
     }
 

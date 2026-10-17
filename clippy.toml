@@ -1,5 +1,18 @@
 # check-private-items = true
 absolute-paths-max-segments = 1
+allowed-duplicate-crates = [
+    "block-buffer",
+    "cpufeatures",
+    "crypto-common",
+    "digest",
+    "hashbrown",
+    "jni-sys",
+    "sha2",
+    "syn",
+    "thiserror",
+    "thiserror-impl",
+    "windows-sys",
+]
 allow-expect-in-consts = false
 allow-mixed-uninlined-format-args = false
 allow-unwrap-in-consts = false

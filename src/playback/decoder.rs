@@ -85,7 +85,10 @@ impl Decoder {
     ///
     /// Returns [`DecoderError`] if the file cannot be opened, probed, or
     /// decoded.
-    pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, DecoderError> {
+    pub fn open<P>(path: P) -> Result<Self, DecoderError>
+    where
+        P: AsRef<Path>,
+    {
         let path = path.as_ref();
         let src = File::open(path).map_err(|e| OpenError(format!("{}: {e}", path.display())))?;
 

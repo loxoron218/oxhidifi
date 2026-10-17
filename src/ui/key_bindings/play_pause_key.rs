@@ -176,7 +176,11 @@ mod tests {
 
     #[test]
     fn handler_signature_shape() {
-        fn assert_shape<F: Fn(&AppState, &OverlaySplitView, Key, ModifierType) -> bool>(_: F) {}
+        fn assert_shape<F>(_: F)
+        where
+            F: Fn(&AppState, &OverlaySplitView, Key, ModifierType) -> bool,
+        {
+        }
         assert_shape(handle_play_pause_key);
     }
 

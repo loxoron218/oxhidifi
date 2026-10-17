@@ -21,12 +21,15 @@ use crate::{
 };
 
 /// Compare two albums by a single sort item, applying the configured order.
-fn cmp_albums<S: BuildHasher>(
+fn cmp_albums<S>(
     a: &Album,
     b: &Album,
     item: AlbumSortItem,
     artist_names: &HashMap<i64, String, S>,
-) -> Ordering {
+) -> Ordering
+where
+    S: BuildHasher,
+{
     let mut cmp = match item.criteria {
         Title => a.title.cmp(&b.title),
         Artist => {
@@ -50,11 +53,14 @@ fn cmp_albums<S: BuildHasher>(
 /// Single‑pass `sort_unstable_by` over indices — each criteria is checked
 /// in priority order until a non‑equal comparison is found. Borrows the
 /// album data so rebuilds never deep‑clone the `Vec<Album>`.
-pub fn sorted_album_indices<S: BuildHasher>(
+pub fn sorted_album_indices<S>(
     albums: &[Album],
     artist_names: &HashMap<i64, String, S>,
     sort_items: &[AlbumSortItem],
-) -> Vec<usize> {
+) -> Vec<usize>
+where
+    S: BuildHasher,
+{
     let mut indices: Vec<usize> = (0..albums.len()).collect();
     indices.sort_unstable_by(|&a, &b| {
         let Some(a_album) = albums.get(a) else {

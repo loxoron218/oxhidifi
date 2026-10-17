@@ -92,11 +92,10 @@ mod tests {
 
     #[test]
     fn wire_close_request_signature_shape() {
-        fn assert_shape<
+        fn assert_shape<F>(_: F)
+        where
             F: Fn(&Application, &ApplicationWindow, &OverlaySplitView, &Arc<AppState>),
-        >(
-            _: F,
-        ) {
+        {
         }
         assert_shape(wire_close_request);
     }

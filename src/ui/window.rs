@@ -297,7 +297,8 @@ mod tests {
 
     #[test]
     fn build_content_signature_shape() {
-        fn assert_shape<
+        fn assert_shape<F>(_: F)
+        where
             F: Fn(
                 &Arc<AppState>,
                 &Arc<NarrowState>,
@@ -312,9 +313,7 @@ mod tests {
                 SwitcherGroup,
                 NavigationView,
             ),
-        >(
-            _: F,
-        ) {
+        {
         }
         assert_shape(build_content);
     }
@@ -332,7 +331,11 @@ mod tests {
 
     #[test]
     fn window_builder_signature_shape() {
-        fn assert_shape<F: Fn(&Application, &Arc<AppState>) -> ApplicationWindow>(_: F) {}
+        fn assert_shape<F>(_: F)
+        where
+            F: Fn(&Application, &Arc<AppState>) -> ApplicationWindow,
+        {
+        }
         assert_shape(build_window);
     }
 

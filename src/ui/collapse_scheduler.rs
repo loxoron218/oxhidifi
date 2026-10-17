@@ -178,11 +178,10 @@ mod tests {
 
     #[test]
     fn responsive_breakpoints_signature_shape() {
-        fn assert_shape<
+        fn assert_shape<F>(_: F)
+        where
             F: Fn(&ApplicationWindow, &OverlaySplitView, &Arc<NarrowState>, &SwitcherGroup),
-        >(
-            _: F,
-        ) {
+        {
         }
         assert_shape(add_responsive_breakpoints);
     }

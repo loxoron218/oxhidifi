@@ -349,11 +349,10 @@ fn navigate_to_event(state: &Arc<AppState>, event: NavigationEvent) {
 }
 
 /// Extract the id at the given sort‑model position.
-fn id_at_position<T: Clone + Send + 'static>(
-    cv: &ColumnView,
-    position: u32,
-    get_id: fn(&T) -> i64,
-) -> Option<i64> {
+fn id_at_position<T>(cv: &ColumnView, position: u32, get_id: fn(&T) -> i64) -> Option<i64>
+where
+    T: Clone + Send + 'static,
+{
     let selection = cv.model()?;
     let selection = selection.downcast_ref::<NoSelection>()?;
     let model = selection.model()?;

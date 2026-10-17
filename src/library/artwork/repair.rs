@@ -56,7 +56,10 @@ pub struct ArtworkRepairSummary {
 /// # Returns
 ///
 /// * `ArtworkRepairSummary` - Counts of checked, repaired, cleared, and failed albums.
-pub async fn repair_missing_artwork<S: Storage>(storage: &S) -> ArtworkRepairSummary {
+pub async fn repair_missing_artwork<S>(storage: &S) -> ArtworkRepairSummary
+where
+    S: Storage,
+{
     let albums = match storage.get_all_albums().await {
         Ok(albums) => albums,
         Err(e) => {
@@ -103,13 +106,16 @@ pub async fn repair_missing_artwork<S: Storage>(storage: &S) -> ArtworkRepairSum
 /// Repair a single album's artwork path.
 ///
 /// Returns [`AlbumRepairOutcome::Skipped`] when there is nothing to do.
-async fn repair_one_album<S: Storage>(
+async fn repair_one_album<S>(
     storage: &S,
     album_id: i64,
     title: &str,
     artist_id: i64,
     artwork_path: Option<&str>,
-) -> AlbumRepairOutcome {
+) -> AlbumRepairOutcome
+where
+    S: Storage,
+{
     let Some(stored) = artwork_path else {
         return AlbumRepairOutcome::Skipped;
     };
@@ -152,14 +158,17 @@ async fn repair_one_album<S: Storage>(
 /// Returns [`AlbumRepairOutcome::Repaired`] on success and
 /// [`AlbumRepairOutcome::Failed`] when the cache write or database update
 /// fails.
-async fn store_reextracted_artwork<S: Storage>(
+async fn store_reextracted_artwork<S>(
     storage: &S,
     album_id: i64,
     artist_id: i64,
     title: &str,
     data: &[u8],
     ext: &str,
-) -> AlbumRepairOutcome {
+) -> AlbumRepairOutcome
+where
+    S: Storage,
+{
     let key = artwork_cache_key(artist_id, title);
     let cached = match cache_artwork(&key, data, ext) {
         Ok(cached) => cached,
@@ -183,7 +192,10 @@ async fn store_reextracted_artwork<S: Storage>(
 /// Load the first track's audio file path for an album.
 ///
 /// Returns `None` when the album has no tracks or the track query fails.
-async fn first_album_audio_path<S: Storage>(storage: &S, album_id: i64) -> Option<PathBuf> {
+async fn first_album_audio_path<S>(storage: &S, album_id: i64) -> Option<PathBuf>
+where
+    S: Storage,
+{
     match storage.get_tracks_by_album(album_id).await {
         Ok(tracks) => tracks
             .first()
@@ -196,7 +208,10 @@ async fn first_album_audio_path<S: Storage>(storage: &S, album_id: i64) -> Optio
 }
 
 /// Clear an album's artwork path, logging on failure.
-async fn clear_artwork<S: Storage>(storage: &S, album_id: i64) {
+async fn clear_artwork<S>(storage: &S, album_id: i64)
+where
+    S: Storage,
+{
     if let Err(e) = storage.update_album_artwork(album_id, None).await {
         warn!(error = %e, album_id, "Failed to clear stale artwork path");
     }
