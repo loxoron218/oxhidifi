@@ -171,7 +171,7 @@ mod tests {
     };
 
     use crate::{
-        app::mocks::{find_descendants, isolated_app_state},
+        app::preview_state::{find_descendants, isolated_app_state},
         ui::preferences::display::build_view_page,
     };
 

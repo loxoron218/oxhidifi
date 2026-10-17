@@ -100,6 +100,10 @@ pub async fn run(pool: &SqlitePool) -> Result<(), StorageError> {
 /// Add format, `bit_depth`, and `sample_rate` columns to the albums table.
 ///
 /// These columns are populated during scanning and used by the column view.
+///
+/// # Errors
+///
+/// Returns [`StorageError`] if any column migration or backfill query fails.
 async fn add_album_format_columns(pool: &SqlitePool) -> Result<(), StorageError> {
     if !column_exists(pool, "format").await {
         _ = query("ALTER TABLE albums ADD COLUMN format TEXT NOT NULL DEFAULT ''")
@@ -145,6 +149,10 @@ async fn column_exists(pool: &SqlitePool, name: &str) -> bool {
 }
 
 /// Create database indexes for query performance.
+///
+/// # Errors
+///
+/// Returns [`StorageError`] if any index creation query fails.
 async fn create_indexes(pool: &SqlitePool) -> Result<(), StorageError> {
     _ = query("CREATE INDEX IF NOT EXISTS idx_track_album_id ON tracks(album_id)")
         .execute(pool)

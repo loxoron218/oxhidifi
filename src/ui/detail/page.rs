@@ -20,7 +20,7 @@ use {
 
 use crate::{
     app::runtime::NavigationEvent::{self, Back},
-    ui::signal_handlers::UiHandles,
+    ui::signal_bus::UiHandles,
 };
 
 /// Build the wrapper box with back navigation and header bar for a detail page.

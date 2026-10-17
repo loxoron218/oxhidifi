@@ -1,7 +1,7 @@
 //! US4 acceptance: device footer card and processing-speed readout.
 //!
 //! Submodule of the `signal_path` test target rooted at
-//! `tests/signal_inspector.rs`; fixtures live in `crate::signal_fixtures`. Covers
+//! `tests/signal_inspector.rs`; fixtures live in `crate::signal_inputs`. Covers
 //! FR-009 (exactly one MVP footer card for the active output device, manual
 //! link hidden) and FR-010 (speed shown iff any in-app alteration incl.
 //! volume-only is active, hidden when bit-perfect or Limited-only).
@@ -21,7 +21,7 @@ mod tests {
         },
     };
 
-    use crate::signal_fixtures::{
+    use crate::signal_inputs::{
         bit_perfect_input, dsd_input, flac_audio, make_device, playing_input,
     };
 

@@ -89,7 +89,7 @@ mod tests {
 
     use crate::{
         app::{
-            mocks::pump_in_test_runtime,
+            preview_state::pump_in_test_runtime,
             runtime::{AppState, NavigationEvent::AlbumDetail},
         },
         ui::gallery::{

@@ -23,7 +23,7 @@ pub mod popover_zoom;
 pub mod preferences;
 pub mod shortcut_sections;
 pub mod shortcuts;
-pub mod signal_handlers;
+pub mod signal_bus;
 pub mod signal_view;
 pub mod status;
 pub mod switching;

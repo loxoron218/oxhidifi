@@ -16,6 +16,11 @@ pub enum XdgError {
 }
 
 /// Resolve an XDG directory from an environment variable with a fallback path.
+///
+/// # Errors
+///
+/// Returns [`XdgError::MissingHome`] if the environment variable is unset or empty and `HOME` is
+/// not set.
 fn resolve_xdg_dir(env_var: &str, fallback: &str) -> Result<PathBuf, XdgError> {
     if let Some(dir) = var_os(env_var)
         .map(PathBuf::from)

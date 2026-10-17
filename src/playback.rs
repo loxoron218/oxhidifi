@@ -8,7 +8,7 @@ pub mod devices;
 pub mod engine;
 pub mod gapless;
 pub mod layout;
-pub mod native_support;
+pub mod native_probe;
 pub mod output;
 pub mod pause_resume;
 pub mod pipeline;
@@ -25,7 +25,7 @@ pub mod volume;
 pub mod worker;
 
 #[cfg(test)]
-pub mod engine_fixture;
+pub mod engine_setup;
 
 use std::{
     io::{Result, Write},

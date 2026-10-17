@@ -27,7 +27,7 @@ use crate::{
     storage::sort_rules::SortOrder::{self, Ascending, Descending},
     ui::{
         drag::{SortListBounds, SortListBuilder, adjust_insert_index},
-        signal_handlers::UiHandles,
+        signal_bus::UiHandles,
     },
 };
 
@@ -227,7 +227,7 @@ mod tests {
     };
 
     use crate::{
-        app::mocks::find_descendants,
+        app::preview_state::find_descendants,
         storage::sort_rules::SortOrder::{self, Ascending, Descending},
         ui::drag::{SortItem, SortListBuilder},
     };

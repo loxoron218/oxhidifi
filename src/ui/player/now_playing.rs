@@ -27,7 +27,7 @@ use crate::{
     ui::{
         image_decode::{DecodedCover, raw_to_texture},
         player::panel_widgets::{COVER_MIN_SIZE, MetaResult, PlaybackWidgets, TrackLabels},
-        signal_handlers::UiHandles,
+        signal_bus::UiHandles,
         texture_pool::CoverArtCache,
     },
 };

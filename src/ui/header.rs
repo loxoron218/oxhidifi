@@ -260,7 +260,7 @@ mod tests {
 
     use crate::{
         app::{
-            mocks::isolated_app_state,
+            preview_state::isolated_app_state,
             runtime::NavigationEvent::{AlbumDetail, Back},
         },
         storage::view_mode::ViewMode::{Column, Grid},

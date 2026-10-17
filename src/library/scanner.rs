@@ -29,7 +29,7 @@ use crate::{
         Storage,
         StorageError::{self, Database},
     },
-    ui::signal_handlers::ValueSignal,
+    ui::signal_bus::ValueSignal,
 };
 
 /// Filesystem-based library scanner with storage integration.
@@ -78,6 +78,10 @@ impl<S: Storage> Debug for FsScanner<S> {
 
 impl<S: Storage + 'static> LibraryScanner for FsScanner<S> {
     /// Trigger a full scan of all configured directories.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StorageError`] if the library directories cannot be listed.
     async fn scan_all(&self) -> Result<(), StorageError> {
         let dirs = self.storage.list_library_directories().await?;
 
@@ -90,12 +94,20 @@ impl<S: Storage + 'static> LibraryScanner for FsScanner<S> {
     }
 
     /// Trigger a scan of a specific directory.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StorageError`] if the directory scan cannot be started.
     async fn scan_directory(&self, path: &Path) -> Result<(), StorageError> {
         self.scan_dir(path).await;
         Ok(())
     }
 
     /// Cancel any in-progress scan.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StorageError`] if the cancellation signal cannot be sent.
     fn cancel(&self) -> Result<(), StorageError> {
         self.cancel_tx
             .send(true)

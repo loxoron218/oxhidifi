@@ -19,7 +19,7 @@ use crate::{
     app::runtime::AppState,
     library::scanner::{FsScanner, LibraryScanner},
     storage::{Storage, database::SqliteStorage},
-    ui::signal_handlers::ValueSignal,
+    ui::signal_bus::ValueSignal,
 };
 
 /// Build the "Add Music Folder" button with click handler.

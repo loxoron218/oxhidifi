@@ -70,8 +70,9 @@ pub fn process_decoded_batch(
 }
 
 /// Update the resampler for a gapless transition, reusing buffers when possible.
-///
 /// Returns `Ok(())` on success, or an error string if reconfiguration fails.
+/// # Errors
+/// Returns an error string if the resampler cannot be reconfigured or created.
 fn update_resampler(
     resampler: &mut Option<AudioResampler>,
     next_sr: u32,
@@ -99,6 +100,9 @@ fn update_resampler(
 }
 
 /// Handle empty batch (track finished).
+/// # Panics
+/// Panics in debug builds if the queue reports a pending track via `peek_next` but `next` returns
+/// `None`.
 fn handle_empty_batch(
     engine_shared: &Arc<EngineShared>,
     ctx: &mut LoopCtx,
@@ -320,7 +324,7 @@ mod tests {
     use crate::playback::{
         decoder::Decoder,
         engine::{DecodeCommand::PreloadNext, EngineShared},
-        engine_fixture::two_track_shared_engine,
+        engine_setup::two_track_shared_engine,
         pipeline::{LoopCtx, handle_decode_cmd, preload_next_upcoming, process_decoded_batch},
         ring_push::push_samples,
         write_wav_header,

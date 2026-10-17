@@ -289,7 +289,7 @@ mod tests {
             MixerSample,
             SystemMixerSource::{PipeWirePulse, Unknown},
         },
-        native_support::{
+        native_probe::{
             MIXER_FAILURES, mixer_open_allowed, native_level_readable, note_mixer_result,
             parse_pactl_mute, parse_pactl_volume, parse_wpctl_volume, sample_pipewire_system,
         },

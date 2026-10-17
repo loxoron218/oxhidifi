@@ -38,7 +38,7 @@ use crate::{
             },
             narrow_flag::NarrowState,
         },
-        signal_handlers::UiHandles,
+        signal_bus::UiHandles,
         zoom::list_cover_size,
     },
 };

@@ -186,7 +186,7 @@ struct ValueSignalInner<T> {
 mod tests {
     use anyhow::{Result, ensure};
 
-    use crate::ui::signal_handlers::ValueSignal;
+    use crate::ui::signal_bus::ValueSignal;
 
     #[test]
     fn borrow_returns_initial_value() {

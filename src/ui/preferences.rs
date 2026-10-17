@@ -21,7 +21,7 @@ use crate::{
         preferences::{
             audio::build_audio_page, directories::build_library_page, display::build_view_page,
         },
-        signal_handlers::UiHandles,
+        signal_bus::UiHandles,
     },
 };
 

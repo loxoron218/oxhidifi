@@ -22,6 +22,10 @@ use oxhidifi::app::{lifecycle::run_application, xdg_paths::dirs_data_home};
 ///
 /// Returns a `NonBlocking` guard that must be kept alive for the duration of
 /// the program; dropping it flushes and shuts down the file writer.
+///
+/// # Errors
+///
+/// Returns an error if the XDG data home cannot be resolved or the log directory cannot be created.
 fn init_logging() -> Result<WorkerGuard> {
     let log_dir = dirs_data_home()
         .context("Failed to resolve XDG data home for logging")?

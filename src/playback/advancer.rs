@@ -102,7 +102,7 @@ mod tests {
 
     use crate::playback::{
         advancer::{finalize_track, try_auto_advance},
-        engine_fixture::{engine_with_queue, make_shared_engine, two_track_shared_engine},
+        engine_setup::{engine_with_queue, make_shared_engine, two_track_shared_engine},
         state::{
             PlaybackEvent::{Paused, TrackFinished},
             PlaybackStatus::{Playing, Stopped},

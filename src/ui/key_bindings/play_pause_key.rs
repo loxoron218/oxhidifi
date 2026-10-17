@@ -163,7 +163,7 @@ mod tests {
     };
 
     use crate::{
-        app::{mocks::isolated_app_state, runtime::AppState},
+        app::{preview_state::isolated_app_state, runtime::AppState},
         playback::state::PlaybackStatus::{self, Paused, Playing, Stopped},
         ui::{
             key_bindings::play_pause_key::{

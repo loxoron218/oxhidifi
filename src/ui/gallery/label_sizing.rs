@@ -58,6 +58,10 @@ pub fn format_max_chars(size: i32) -> i32 {
 ///
 /// * `overlay` - Cover/avatar overlay whose parent card is needed.
 /// * `context` - Lookup site for error context.
+///
+/// # Errors
+///
+/// Returns [`LabelSizingError`] if the overlay has no parent or the parent is not a card container.
 fn card_container(overlay: &Overlay, context: &'static str) -> Result<GtkBox, LabelSizingError> {
     let parent = overlay
         .parent()
@@ -74,6 +78,10 @@ fn card_container(overlay: &Overlay, context: &'static str) -> Result<GtkBox, La
 ///
 /// * `anchor` - Widget preceding the wanted label.
 /// * `context` - Lookup site for error context.
+///
+/// # Errors
+///
+/// Returns [`LabelSizingError`] if the next sibling is missing or is not a label.
 fn sibling_label(anchor: &Widget, context: &'static str) -> Result<Label, LabelSizingError> {
     let sibling = anchor
         .next_sibling()

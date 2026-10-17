@@ -17,7 +17,7 @@ use libadwaita::{
     HeaderBar, ViewSwitcher, ViewSwitcherBar, glib::idle_add_local_once, gtk::Widget,
 };
 
-use crate::ui::{gallery::narrow_flag::NarrowState, signal_handlers::UiHandles};
+use crate::ui::{gallery::narrow_flag::NarrowState, signal_bus::UiHandles};
 
 /// Schedules deferred narrow-mode UI changes.
 ///

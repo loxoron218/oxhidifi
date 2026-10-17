@@ -203,7 +203,7 @@ mod tests {
     };
 
     use crate::{
-        app::{mocks::isolated_app_state, runtime::AppState},
+        app::{preview_state::isolated_app_state, runtime::AppState},
         storage::{
             catalog::{Album, Track},
             formats::FormatInfo,

@@ -204,7 +204,7 @@ mod tests {
     };
 
     use crate::{
-        app::mocks::{find_descendants, isolated_app_state},
+        app::preview_state::{find_descendants, isolated_app_state},
         playback::devices::DeviceInfo,
         storage::sort_rules::ArtistPlayOrder,
         ui::preferences::{

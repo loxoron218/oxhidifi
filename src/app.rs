@@ -8,4 +8,4 @@ pub mod watch_loop;
 pub mod xdg_paths;
 
 #[cfg(test)]
-pub mod mocks;
+pub mod preview_state;

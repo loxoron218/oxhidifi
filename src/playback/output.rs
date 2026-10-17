@@ -23,7 +23,7 @@ use {
 use crate::playback::{
     alsa_mixer::AlsaVolumeControl,
     devices::OutputMode::{self, BitPerfect, Resampled},
-    native_support::{open_alsa_volume, supports_native},
+    native_probe::{open_alsa_volume, supports_native},
 };
 
 /// Holds a CPAL output stream and its configuration.

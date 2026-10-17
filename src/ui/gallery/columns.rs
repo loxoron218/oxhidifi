@@ -33,7 +33,7 @@ use crate::{
     ui::{
         gallery::{boxed_data::AlbumData, grid_batch::GRID_BATCH_SIZE},
         image_decode::{DecodedCover, raw_to_texture},
-        signal_handlers::UiHandles,
+        signal_bus::UiHandles,
         texture_pool::CoverArtCache,
         zoom::list_cover_size,
     },

@@ -93,7 +93,7 @@ mod tests {
     };
 
     use crate::{
-        app::mocks::test_card,
+        app::preview_state::test_card,
         ui::{
             gallery::{
                 card::build_placeholder,

@@ -26,7 +26,7 @@ use crate::{
         ScanEvent,
         ScanEvent::{ScanCompleted, ScanError, ScanProgress, ScanStarted},
     },
-    ui::signal_handlers::UiHandles,
+    ui::signal_bus::UiHandles,
 };
 
 /// Status bar showing scanning progress and library information.

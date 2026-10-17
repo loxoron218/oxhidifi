@@ -103,6 +103,11 @@ pub fn artwork_cache_key(artist_id: i64, title: &str) -> String {
 }
 
 /// Ensure the artwork cache directory exists.
+///
+/// # Errors
+///
+/// Returns [`ArtworkError`] if the XDG cache home cannot be resolved or the cache directory cannot
+/// be created.
 fn ensure_artwork_cache_dir() -> Result<PathBuf, ArtworkError> {
     let cache_dir = dirs_cache_home()
         .map_err(|e| ArtworkError::FileNotFound(format!("Cannot resolve XDG cache home: {e}")))?
@@ -126,6 +131,10 @@ fn ensure_artwork_cache_dir() -> Result<PathBuf, ArtworkError> {
 /// original per FR-003b and stored as `{key}_{size}.{ext}` for each thumbnail
 /// size. Thumbnail generation failures are logged as warnings
 /// but do not fail the overall cache operation.
+///
+/// # Errors
+///
+/// Returns [`ArtworkError`] if the artwork file cannot be written.
 fn cache_artwork_in(
     cache_dir: &Path,
     key: &str,

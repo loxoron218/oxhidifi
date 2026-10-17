@@ -24,7 +24,7 @@ use libadwaita::{
 
 use crate::ui::{
     gallery::narrow_flag::NarrowState, narrow_scheduler::NarrowScheduler,
-    pane_switcher::SwitcherGroup, signal_handlers::UiHandles,
+    pane_switcher::SwitcherGroup, signal_bus::UiHandles,
 };
 
 /// Schedules deferred `OverlaySplitView` collapse changes.
@@ -167,7 +167,7 @@ mod tests {
     };
 
     use crate::{
-        app::mocks::pump_in_test_runtime,
+        app::preview_state::pump_in_test_runtime,
         ui::{
             collapse_scheduler::{CollapseScheduler, add_responsive_breakpoints},
             gallery::narrow_flag::NarrowState,

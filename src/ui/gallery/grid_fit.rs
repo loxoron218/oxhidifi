@@ -148,7 +148,7 @@ mod tests {
     };
 
     use crate::{
-        app::{mocks::test_card, runtime::AppState},
+        app::{preview_state::test_card, runtime::AppState},
         storage::{
             catalog::Album,
             formats::FormatInfo,

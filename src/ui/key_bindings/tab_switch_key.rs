@@ -87,7 +87,7 @@ mod tests {
     };
 
     use crate::{
-        app::{mocks::isolated_app_state, runtime::AppState},
+        app::{preview_state::isolated_app_state, runtime::AppState},
         storage::active_tab::ActiveTab::{Albums, Artists, Signal},
         ui::key_bindings::tab_switch_key::{handle_tab_switch_key, next_tab_for_key},
     };

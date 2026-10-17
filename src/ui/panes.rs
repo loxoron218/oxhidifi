@@ -229,7 +229,7 @@ mod tests {
     };
 
     use crate::{
-        app::{mocks::pump_in_test_runtime, runtime::AppState},
+        app::{preview_state::pump_in_test_runtime, runtime::AppState},
         ui::{gallery::narrow_flag::NarrowState, panes::build_content},
     };
 

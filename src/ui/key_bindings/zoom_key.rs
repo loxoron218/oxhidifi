@@ -67,7 +67,7 @@ mod tests {
     };
 
     use crate::{
-        app::{mocks::isolated_app_state, runtime::AppState},
+        app::{preview_state::isolated_app_state, runtime::AppState},
         storage::{
             active_tab::ActiveTab::Signal,
             view_mode::ViewMode::{Column, Grid},

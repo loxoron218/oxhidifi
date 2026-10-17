@@ -10,7 +10,7 @@ use std::{
 
 use async_channel::Receiver;
 
-use crate::ui::signal_handlers::ValueSignal;
+use crate::ui::signal_bus::ValueSignal;
 
 /// Tracks whether the window is in narrow‑width mode.
 ///

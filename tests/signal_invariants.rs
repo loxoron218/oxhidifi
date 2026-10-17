@@ -1,7 +1,7 @@
 //! Snapshot contract invariants 1–3 (verdict precedence and speed presence).
 //!
 //! Submodule of the `signal_path` test target rooted at
-//! `tests/signal_inspector.rs`; fixtures live in `crate::signal_fixtures`.
+//! `tests/signal_inspector.rs`; fixtures live in `crate::signal_inputs`.
 //! Covers the
 //! Phase 2 foundation: bit-perfect hides speed, volume-only is processed
 //! with speed, and limited wins over enhancements while keeping speed iff an
@@ -26,7 +26,7 @@ mod tests {
         volume::format_volume_db,
     };
 
-    use crate::signal_fixtures::{bit_perfect_input, make_device, playing_input};
+    use crate::signal_inputs::{bit_perfect_input, make_device, playing_input};
 
     fn make_stage(position: u32, kind: StageKind, verdict: QualityVerdict) -> PathStage {
         PathStage {

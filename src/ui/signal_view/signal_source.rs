@@ -13,7 +13,7 @@ use crate::playback::{
     alsa_mixer::{MixerSample, SystemMixerSource::AlsaShared, sample_mixer_volumes},
     devices::alsa_card_name,
     engine::PlaybackEngine,
-    native_support::{
+    native_probe::{
         mixer_open_allowed, native_level_readable, note_mixer_result, sample_pipewire_system,
     },
     signal_path::stage_assemble::is_shared_mixer,
@@ -235,7 +235,7 @@ mod tests {
     use anyhow::{Result, ensure};
 
     use crate::{
-        playback::native_support::{mixer_retry_due, note_mixer_result},
+        playback::native_probe::{mixer_retry_due, note_mixer_result},
         ui::signal_view::signal_source::{
             MixerProbe, SpeedEma, resolve_live_source, sample_wall_nanos,
         },

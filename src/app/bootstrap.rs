@@ -134,7 +134,7 @@ mod tests {
     use crate::{
         app::{
             bootstrap::{emit_session_events, persist_session_on_shutdown, run_startup_checks},
-            mocks::{build_app_state, fresh_storage},
+            preview_state::{build_app_state, fresh_storage},
             runtime::AppState,
             watch_loop::spawn_watcher_loop,
         },

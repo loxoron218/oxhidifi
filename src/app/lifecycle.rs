@@ -317,9 +317,9 @@ mod tests {
     use crate::{
         app::{
             lifecycle::{APP_ID, LifecycleError, dispatch_quit_on_main, run_application},
-            mocks::pump_in_test_runtime,
+            preview_state::pump_in_test_runtime,
         },
-        ui::signal_handlers::UiHandles,
+        ui::signal_bus::UiHandles,
     };
 
     static QUIT_SHUTDOWN_EMITTED: AtomicBool = AtomicBool::new(false);

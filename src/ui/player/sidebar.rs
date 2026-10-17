@@ -159,7 +159,7 @@ mod tests {
     };
 
     use crate::{
-        app::{mocks::pump_in_test_runtime, runtime::AppState},
+        app::{preview_state::pump_in_test_runtime, runtime::AppState},
         ui::player::{
             panel_widgets::{
                 COVER_MIN_SIZE, MetaResult, PLAYER_COVER_LOGICAL_SIZE, PLAYER_COVER_SIZE,

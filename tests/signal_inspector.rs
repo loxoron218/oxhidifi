@@ -11,12 +11,12 @@
 //! `us2_verdict_precedence` (human 9/10 manual via quickstart 1-3);
 //! SC-001/SC-004/SC-005 via GTK/quickstart validation.
 //!
-//! Layout: `signal_fixtures` (shared deterministic inputs),
+//! Layout: `signal_inputs` (shared deterministic inputs),
 //! `signal_invariants` (snapshot invariants 1–3), and `signal_us4` (US4
 //! footer/speed contracts) are submodules of this target so every file
 //! respects the 400-line gate. Mirrors the `tests/abx` sharing pattern.
 
-pub mod signal_fixtures;
+pub mod signal_inputs;
 pub mod signal_invariants;
 pub mod signal_us4;
 
@@ -39,7 +39,7 @@ mod tests {
         volume::format_volume_db,
     };
 
-    use crate::signal_fixtures::{dsd_input, playing_input};
+    use crate::signal_inputs::{dsd_input, playing_input};
 
     fn assert_built(input: &SnapshotInput, verdict: QualityVerdict, speed: bool) -> Result<()> {
         let snapshot = build_snapshot(input)?;

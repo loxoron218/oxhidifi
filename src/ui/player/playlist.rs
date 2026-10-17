@@ -29,7 +29,7 @@ use crate::{
     storage::Storage,
     ui::{
         player::{queue_entry::QueueItemData, row_factory::build_row_factory},
-        signal_handlers::UiHandles,
+        signal_bus::UiHandles,
     },
 };
 

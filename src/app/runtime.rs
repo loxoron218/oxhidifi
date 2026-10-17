@@ -32,7 +32,7 @@ use crate::{
     },
     threading::ThreadManager,
     ui::{
-        signal_handlers::{UiHandles, ValueSignal},
+        signal_bus::{UiHandles, ValueSignal},
         texture_pool::CoverArtCache,
     },
 };

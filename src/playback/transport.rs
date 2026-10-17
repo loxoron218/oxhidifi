@@ -27,66 +27,124 @@ use crate::playback::{
 
 impl PlaybackTransport for PlaybackEngine {
     /// Play a specific track by ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PlaybackError::TrackNotFound`] if no path is registered for `track_id`.
     fn play_track(&self, track_id: i64) -> Result<(), PlaybackError> {
         play_single(&self.shared, track_id)
     }
 
     /// Play a list of track IDs starting from `start_index`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PlaybackError::QueueEmpty`] if `queue` is empty or `start_index` is out of bounds,
+    /// [`PlaybackError::QueueFull`] if the queue exceeds capacity, or
+    /// [`PlaybackError::TrackNotFound`] if a path is missing.
     fn play_at(&self, queue: Vec<i64>, start_index: usize) -> Result<(), PlaybackError> {
         play_list_at(&self.shared, queue, start_index)
     }
 
     /// Play a list of track IDs as a queue.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PlaybackError::QueueEmpty`] if `queue` is empty, [`PlaybackError::QueueFull`] if
+    /// it exceeds capacity, or [`PlaybackError::TrackNotFound`] if a path is missing.
     fn play_queue(&self, queue: Vec<i64>) -> Result<(), PlaybackError> {
         play_list(&self.shared, queue)
     }
 
     /// Play a list of track IDs as a fresh queue, always resetting playback.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PlaybackError::QueueEmpty`] if `queue` is empty, [`PlaybackError::QueueFull`] if
+    /// it exceeds capacity, or [`PlaybackError::TrackNotFound`] if a path is missing.
     fn play_queue_fresh(&self, queue: Vec<i64>) -> Result<(), PlaybackError> {
         play_list_fresh(&self.shared, queue)
     }
 
     /// Toggle between play and pause.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PlaybackError`] if the saved track cannot restart or seek fails.
     fn toggle_pause(&self) -> Result<(), PlaybackError> {
         toggle_pause_or_resume(&self.shared)
     }
 
     /// Stop playback entirely.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PlaybackError`] on failure (currently infallible).
     fn stop(&self) -> Result<(), PlaybackError> {
         stop_playback(&self.shared)
     }
 
     /// Advance to the next track.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PlaybackError::QueueEmpty`] if there is no next track, or
+    /// [`PlaybackError::TrackNotFound`] if its path is missing.
     fn next_track(&self) -> Result<(), PlaybackError> {
         advance_next(&self.shared)
     }
 
     /// Go to the previous track.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PlaybackError::QueueEmpty`] if there is no previous track, or
+    /// [`PlaybackError::TrackNotFound`] if its path is missing.
     fn previous_track(&self) -> Result<(), PlaybackError> {
         advance_previous(&self.shared)
     }
 
     /// Set the playback volume.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PlaybackError`] on failure (currently infallible).
     fn set_volume(&self, volume: f64) -> Result<(), PlaybackError> {
         apply_volume(&self.shared, volume)
     }
 
     /// Mute or unmute playback.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PlaybackError`] on failure (currently infallible).
     fn set_muted(&self, muted: bool) -> Result<(), PlaybackError> {
         apply_muted(&self.shared, muted)
     }
 
     /// Set the output mode (resampled vs bit-perfect).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PlaybackError`] on failure (currently infallible).
     fn set_output_mode(&self, mode: OutputMode) -> Result<(), PlaybackError> {
         apply_output_mode(&self.shared, mode)
     }
 
     /// Enable or disable gapless playback.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PlaybackError`] on failure (currently infallible).
     fn set_gapless_enabled(&self, enabled: bool) -> Result<(), PlaybackError> {
         apply_gapless(&self.shared, enabled)
     }
 
     /// Enable or disable shuffle playback.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PlaybackError`] on failure (currently infallible).
     fn set_shuffle_enabled(&self, enabled: bool) -> Result<(), PlaybackError> {
         apply_shuffle(&self.shared, enabled)
     }
@@ -97,6 +155,10 @@ impl PlaybackTransport for PlaybackEngine {
     }
 
     /// Seek to a position in seconds.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PlaybackError`] if seeking fails (currently infallible).
     fn seek_to(&self, position_seconds: f64) -> Result<(), PlaybackError> {
         seek_to_position(&self.shared, position_seconds)
     }
