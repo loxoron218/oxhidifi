@@ -105,7 +105,7 @@ impl SettingsStore {
     /// Get whether album labels are shown under cover art.
     #[must_use]
     pub const fn get_show_album_labels(&self) -> bool {
-        self.settings.show_album_labels
+        self.settings.display.show_album_labels
     }
 
     /// Get the preferred audio device name.
@@ -141,7 +141,13 @@ impl SettingsStore {
     /// Get whether album sections on artist detail pages start collapsed.
     #[must_use]
     pub const fn get_artist_albums_collapsed(&self) -> bool {
-        self.settings.artist_albums_collapsed
+        self.settings.display.artist_albums_collapsed
+    }
+
+    /// Get whether the welcome tour dialog has been shown.
+    #[must_use]
+    pub const fn get_welcome_seen(&self) -> bool {
+        self.settings.welcome_seen
     }
 
     /// Get whether the side player panel (sidebar) is visible.
@@ -221,7 +227,7 @@ mod tests {
             "sidebar should default to hidden"
         );
         store.update_memory(|s| {
-            s.show_album_labels = false;
+            s.display.show_album_labels = false;
             s.window.sidebar_visible = true;
         });
         assert!(
@@ -233,7 +239,7 @@ mod tests {
             "sidebar should reflect update_memory"
         );
         store.update_memory(|s| {
-            s.show_album_labels = true;
+            s.display.show_album_labels = true;
             s.window.sidebar_visible = false;
         });
         assert!(

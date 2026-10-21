@@ -210,16 +210,13 @@ mod tests {
         libadwaita::{
             PreferencesDialog, PreferencesPage,
             gdk::{Key, ModifierType},
-            gtk::{self, Window, accessible::Property::Label, test},
-            prelude::{
-                AccessibleExtManual, ListModelExt, PreferencesDialogExt, PreferencesPageExt,
-                WidgetExt,
-            },
+            gtk::{self, test},
+            prelude::{ListModelExt, PreferencesDialogExt, PreferencesPageExt, WidgetExt},
         },
     };
 
     use crate::{
-        app::runtime::AppState,
+        app::{preview_state::test_parent_window, runtime::AppState},
         ui::preferences::{
             assemble_preferences_dialog, current_prefs_page_index, next_prefs_page_index,
         },
@@ -227,11 +224,7 @@ mod tests {
 
     fn assembled_dialog() -> Result<(PreferencesDialog, PreferencesPage)> {
         let state = Arc::new(AppState::mock()?);
-        let parent = Window::builder()
-            .css_classes(["test-parent", "background"])
-            .tooltip_text("Test parent window")
-            .build();
-        parent.update_property(&[Label("Test parent window")]);
+        let parent = test_parent_window();
         let (dialog, audio) = assemble_preferences_dialog(&state, &parent);
         Ok((dialog, audio))
     }

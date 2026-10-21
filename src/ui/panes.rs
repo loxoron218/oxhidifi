@@ -23,6 +23,7 @@ use crate::{
         signal_view::signal_poll::wire_signal_tab,
         status::StatusBar,
         switching::wire_tab_tracking,
+        welcome::show_welcome_if_first_run,
     },
 };
 
@@ -191,6 +192,8 @@ pub fn build_content(
     );
 
     toast_overlay.set_child(Some(&split_view));
+
+    show_welcome_if_first_run(state, parent);
 
     let nav_tx = state.navigation_tx.clone();
     let nav_state = Arc::clone(state);

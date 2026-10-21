@@ -18,7 +18,7 @@ use {
         gtk::{
             Adjustment, Box, Button, Label,
             Orientation::{Horizontal, Vertical},
-            Picture, Scale, Widget,
+            Picture, Scale, Widget, Window,
             accessible::Property::Label as PropertyLabel,
         },
         prelude::{AccessibleExtManual, WidgetExt},
@@ -298,4 +298,21 @@ pub fn test_card() -> Box {
         .build();
     card.update_property(&[PropertyLabel("Test card")]);
     card
+}
+
+/// Build a parent window for dialog tests.
+///
+/// Shared by dialog regression tests to avoid copy-pasted parent scaffolds.
+///
+/// # Returns
+///
+/// * `Window` - Window with `test-parent` class and accessibility label.
+#[must_use]
+pub fn test_parent_window() -> Window {
+    let parent = Window::builder()
+        .css_classes(["test-parent", "background"])
+        .tooltip_text("Test parent window")
+        .build();
+    parent.update_property(&[PropertyLabel("Test parent window")]);
+    parent
 }

@@ -25,7 +25,10 @@ use {
 use crate::{
     app::runtime::AppState,
     storage::{Storage, view_mode::ViewMode},
-    ui::gallery::{folder_picker::build_add_folder_button, narrow_flag::NarrowState},
+    ui::{
+        gallery::{folder_picker::build_add_folder_button, narrow_flag::NarrowState},
+        welcome::build_tour_button,
+    },
 };
 
 /// Parameters for building an empty state view.
@@ -93,11 +96,13 @@ pub fn build_empty_state(state: &Arc<AppState>, params: &EmptyStateParams) -> Bo
     description.update_property(&[PropertyLabel(params.description_label)]);
 
     let add_folder_button = build_add_folder_button(state);
+    let tour_button = build_tour_button(state);
 
     container.append(&icon);
     container.append(&heading);
     container.append(&description);
     container.append(&add_folder_button);
+    container.append(&tour_button);
 
     container
 }

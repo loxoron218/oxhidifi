@@ -52,7 +52,7 @@ impl SqliteStorage {
     pub async fn set_artist_albums_collapsed(&self, collapsed: bool) -> Result<(), StorageError> {
         self.settings
             .write()
-            .update_memory(|s| s.artist_albums_collapsed = collapsed);
+            .update_memory(|s| s.display.artist_albums_collapsed = collapsed);
         self.save_settings_async()
             .await
             .map_err(|e| Database(format!("Failed to save album collapse state: {e}")))?;
@@ -66,7 +66,7 @@ impl SqliteStorage {
     pub fn set_artist_albums_collapsed_memory(&self, collapsed: bool) {
         self.settings
             .write()
-            .update_memory(|s| s.artist_albums_collapsed = collapsed);
+            .update_memory(|s| s.display.artist_albums_collapsed = collapsed);
     }
 }
 
@@ -119,7 +119,7 @@ mod tests {
         );
         let file_settings: UserSettings = from_str(&read_to_string(&settings_path)?)?;
         ensure!(
-            file_settings.artist_albums_collapsed,
+            file_settings.display.artist_albums_collapsed,
             "collapsed state must reach the settings file on disk"
         );
         storage.set_artist_albums_collapsed_memory(false);

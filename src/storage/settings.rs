@@ -6,6 +6,7 @@ use crate::{
     playback::devices::OutputMode::{self, Resampled},
     storage::{
         active_tab::ActiveTab::{self, Albums},
+        gallery_display::GalleryDisplay,
         sort_rules::{
             AlbumSortItem, ArtistPlayOrder, ArtistSortItem, default_albums_sort,
             default_artists_sort,
@@ -36,10 +37,11 @@ pub struct UserSettings {
     /// Window geometry and side panel visibility (flattened in JSON).
     #[serde(flatten)]
     pub window: WindowState,
+    /// Gallery display flags (flattened in JSON).
+    #[serde(flatten)]
+    pub display: GalleryDisplay,
     /// Whether gapless playback is enabled.
     pub gapless_enabled: bool,
-    /// Whether to show album title/artist/format labels under cover art.
-    pub show_album_labels: bool,
     /// Output mode: resampled (software volume) or bit-perfect (hardware volume).
     pub output_mode: OutputMode,
     /// Track IDs from the last playback session (for queue restoration).
@@ -62,8 +64,8 @@ pub struct UserSettings {
     pub list_zoom_level: u8,
     /// Album ordering for artist-wide playback ("Play all albums").
     pub artist_play_order: ArtistPlayOrder,
-    /// Whether album sections on artist detail pages start collapsed.
-    pub artist_albums_collapsed: bool,
+    /// Whether the welcome tour dialog has been shown (first-run only).
+    pub welcome_seen: bool,
 }
 
 impl Default for UserSettings {
@@ -74,8 +76,8 @@ impl Default for UserSettings {
             view_mode: Grid,
             active_tab: Albums,
             window: WindowState::default(),
+            display: GalleryDisplay::default(),
             gapless_enabled: true,
-            show_album_labels: true,
             output_mode: Resampled,
             last_queue: Vec::new(),
             last_queue_index: None,
@@ -87,7 +89,7 @@ impl Default for UserSettings {
             grid_zoom_level: DEFAULT_GRID_ZOOM,
             list_zoom_level: DEFAULT_LIST_ZOOM,
             artist_play_order: ArtistPlayOrder::default(),
-            artist_albums_collapsed: false,
+            welcome_seen: false,
         }
     }
 }
@@ -103,6 +105,7 @@ mod tests {
         playback::devices::OutputMode::{BitPerfect, Resampled},
         storage::{
             active_tab::ActiveTab::{Albums, Artists},
+            gallery_display::GalleryDisplay,
             settings::{DEFAULT_GRID_ZOOM, DEFAULT_LIST_ZOOM, UserSettings, default_artists_sort},
             sort_rules::{
                 AlbumSortCriteria::{BitDepth, Title},
@@ -131,7 +134,10 @@ mod tests {
                 sidebar_visible: true,
             },
             gapless_enabled: false,
-            show_album_labels: false,
+            display: GalleryDisplay {
+                show_album_labels: false,
+                artist_albums_collapsed: true,
+            },
             output_mode: BitPerfect,
             last_queue: vec![1, 2, 3],
             last_queue_index: Some(1),
@@ -155,7 +161,7 @@ mod tests {
             grid_zoom_level: 3,
             list_zoom_level: 2,
             artist_play_order: TitleDesc,
-            artist_albums_collapsed: true,
+            welcome_seen: true,
         }
     }
 
@@ -197,7 +203,7 @@ mod tests {
             "gapless_enabled should round-trip"
         );
         ensure!(
-            restored.show_album_labels == original.show_album_labels,
+            restored.display.show_album_labels == original.display.show_album_labels,
             "show_album_labels should round-trip"
         );
         ensure!(
@@ -245,8 +251,12 @@ mod tests {
             "artist_play_order should round-trip"
         );
         ensure!(
-            restored.artist_albums_collapsed == original.artist_albums_collapsed,
+            restored.display.artist_albums_collapsed == original.display.artist_albums_collapsed,
             "artist_albums_collapsed should round-trip"
+        );
+        ensure!(
+            restored.welcome_seen == original.welcome_seen,
+            "welcome_seen should round-trip"
         );
         Ok(())
     }
@@ -287,8 +297,12 @@ mod tests {
             "missing artist_play_order must default to DateAsc"
         );
         ensure!(
-            !settings.artist_albums_collapsed,
+            !settings.display.artist_albums_collapsed,
             "missing artist_albums_collapsed must default to expanded"
+        );
+        ensure!(
+            !settings.welcome_seen,
+            "missing welcome_seen must default to unseen"
         );
         Ok(())
     }
@@ -333,8 +347,12 @@ mod tests {
             "a legacy file without play order must default to DateAsc"
         );
         ensure!(
-            !settings.artist_albums_collapsed,
+            !settings.display.artist_albums_collapsed,
             "a legacy file without collapse state must default to expanded"
+        );
+        ensure!(
+            !settings.welcome_seen,
+            "a legacy file without welcome state must default to unseen"
         );
         Ok(())
     }
@@ -372,6 +390,6 @@ mod tests {
         assert!(!settings.window.maximized);
         assert!(!settings.window.sidebar_visible);
         assert_eq!(settings.output_mode, Resampled);
-        assert!(!settings.artist_albums_collapsed);
+        assert!(!settings.display.artist_albums_collapsed);
     }
 }

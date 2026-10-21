@@ -5,6 +5,7 @@ pub mod catalog;
 pub mod config;
 pub mod database;
 pub mod formats;
+pub mod gallery_display;
 pub mod migrations;
 pub mod settings;
 pub mod sort_rules;

@@ -35,7 +35,7 @@ fn configure_preferences(store: &mut SettingsStore) {
         s.window.maximized = true;
         s.window.sidebar_visible = true;
         s.gapless_enabled = false;
-        s.show_album_labels = false;
+        s.display.show_album_labels = false;
         s.output_mode = BitPerfect;
     });
 }
@@ -86,7 +86,7 @@ mod tests {
         ensure!(s.window.maximized, "window maximized not restored");
         ensure!(s.window.sidebar_visible, "sidebar visibility not restored");
         ensure!(!s.gapless_enabled, "gapless toggle not restored");
-        ensure!(!s.show_album_labels, "album labels not restored");
+        ensure!(!s.display.show_album_labels, "album labels not restored");
         ensure!(s.output_mode == BitPerfect, "output mode not restored");
 
         Ok(())

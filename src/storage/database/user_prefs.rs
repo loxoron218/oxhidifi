@@ -70,7 +70,7 @@ impl SqliteStorage {
     pub async fn set_show_album_labels(&self, enabled: bool) -> Result<(), StorageError> {
         self.settings
             .write()
-            .update_memory(|s| s.show_album_labels = enabled);
+            .update_memory(|s| s.display.show_album_labels = enabled);
         self.save_settings_async()
             .await
             .map_err(|e| Database(format!("Failed to save album labels setting: {e}")))?;
@@ -238,6 +238,21 @@ impl SqliteStorage {
             .write()
             .update_memory(|s| s.output_mode = mode);
     }
+
+    /// Get whether the welcome tour dialog has been shown.
+    pub fn get_welcome_seen(&self) -> bool {
+        self.settings.read().get_welcome_seen()
+    }
+
+    /// Mark the welcome tour dialog as seen in memory.
+    ///
+    /// The debounced disk write is triggered via [`Self::save_settings`],
+    /// which runs in the background so callers are not blocked.
+    pub fn set_welcome_seen_memory(&self) {
+        self.settings
+            .write()
+            .update_memory(|s| s.welcome_seen = true);
+    }
 }
 
 #[cfg(test)]
@@ -343,6 +358,22 @@ mod tests {
         ensure!(
             storage.get_output_mode() == BitPerfect,
             "output mode must round-trip through the memory setter"
+        );
+        Ok(())
+    }
+
+    #[test]
+    async fn welcome_seen_memory_round_trip() -> Result<()> {
+        let dir = tempdir()?;
+        let storage = storage_in(&dir).await?;
+        ensure!(
+            !storage.get_welcome_seen(),
+            "welcome dialog must default to unseen"
+        );
+        storage.set_welcome_seen_memory();
+        ensure!(
+            storage.get_welcome_seen(),
+            "welcome seen must round-trip through the memory setter"
         );
         Ok(())
     }

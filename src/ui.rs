@@ -29,6 +29,7 @@ pub mod status;
 pub mod switching;
 pub mod texture_pool;
 pub mod toggle_popover;
+pub mod welcome;
 pub mod window;
 pub mod window_close;
 pub mod window_geometry;
