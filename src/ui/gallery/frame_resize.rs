@@ -160,12 +160,13 @@ fn album_cover_resolver(
 ///
 /// # Arguments
 ///
+/// * `state` - Application state
+/// * `mode_stack` - Stack holding grid and column views
 /// * `cover_size` - Cover size to resize to (narrow-resolved by the caller).
 ///
 /// # Returns
 ///
-/// `true` when a batch was scheduled, `false` when the grid is absent and
-/// the caller must rebuild instead.
+/// `true` when a batch was scheduled, `false` otherwise.
 pub fn apply_album_resize(state: &Arc<AppState>, mode_stack: &Stack, cover_size: i32) -> bool {
     let snapshot = album_resize_snapshot(state);
     let resolve_cards = album_cover_resolver(&snapshot.idx_to_album, &snapshot.cover_cache);
@@ -187,6 +188,8 @@ pub fn apply_album_resize(state: &Arc<AppState>, mode_stack: &Stack, cover_size:
 ///
 /// # Arguments
 ///
+/// * `state` - Application state
+/// * `mode_stack` - Stack holding grid and column views
 /// * `cover_size` - Cover size to resize to (narrow-resolved by the caller).
 ///
 /// # Returns

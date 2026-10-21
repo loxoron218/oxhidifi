@@ -43,7 +43,7 @@ use crate::{
 /// # Arguments
 ///
 /// * `state` - Application state
-/// * `narrow_mode` - Narrow‑mode tracker for adaptive column hiding
+/// * `narrow_state` - Narrow‑mode tracker for adaptive column hiding
 pub fn build_artist_grid(state: &Arc<AppState>, narrow_state: &Arc<NarrowState>) -> LibraryGrid {
     let nm = Arc::clone(narrow_state);
     let populate =
@@ -166,6 +166,8 @@ fn rebuild_artist_current_mode(
 ///
 /// # Arguments
 ///
+/// * `state` - Application state
+/// * `mode_stack` - Stack holding grid and column views
 /// * `cover_size` - Avatar size to resize to (already resolved for narrow windows by the caller).
 ///
 /// # Returns

@@ -54,6 +54,12 @@ use crate::{
 ///
 /// # Arguments
 ///
+/// * `cached` - Shared artist data
+/// * `remaining` - Remaining indices to build
+/// * `overlays` - Built card overlays
+/// * `flow` - `FlowBox` receiving cards
+/// * `state` - Application state
+/// * `build_seq` - Build generation for staleness checks
 /// * `cover_size` - Avatar size to build cards at (already resolved for narrow windows by the
 ///   caller).
 fn fill_artist_grid(
@@ -96,9 +102,12 @@ fn fill_artist_grid(
 ///
 /// # Arguments
 ///
+/// * `state` - Application state
+/// * `stack` - Stack receiving the mode view
+/// * `narrow_state` - Narrow-width tracker for the initial avatar size
+/// * `mode` - View mode to build
 /// * `cached` - Shared artist data
 /// * `indices` - Display order of `cached.artists` (e.g. a sorted index vector)
-/// * `narrow_state` - Narrow-width tracker for the initial avatar size
 fn build_artist_mode(
     state: &Arc<AppState>,
     stack: &Stack,
@@ -182,7 +191,10 @@ fn show_artists_empty(state: &Arc<AppState>, stack: &Stack) {
 ///
 /// # Arguments
 ///
+/// * `state` - Application state
+/// * `stack` - Stack receiving the mode view
 /// * `narrow_state` - Narrow-width tracker for the initial avatar size.
+/// * `mode` - View mode to build
 pub fn lazy_build_artist_mode(
     state: &Arc<AppState>,
     stack: &Stack,

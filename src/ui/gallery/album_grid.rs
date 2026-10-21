@@ -62,7 +62,7 @@ use crate::{
 /// # Arguments
 ///
 /// * `state` - Application state
-/// * `narrow_mode` - Narrow‑mode tracker for adaptive column hiding
+/// * `narrow_state` - Narrow‑mode tracker for adaptive column hiding
 pub fn build_album_grid(state: &Arc<AppState>, narrow_state: &Arc<NarrowState>) -> LibraryGrid {
     let nm = Arc::clone(narrow_state);
     let lg = build_library_grid(
@@ -86,10 +86,7 @@ pub fn build_album_grid(state: &Arc<AppState>, narrow_state: &Arc<NarrowState>) 
     lg
 }
 
-/// Resolve the album cover size to render for the current narrow state.
-///
-/// Snaps the stored zoom level down on narrow windows so two columns keep
-/// fitting the minimum window width; the stored preference is untouched.
+/// Resolve the album cover size for the current narrow state.
 ///
 /// # Arguments
 ///
@@ -194,6 +191,10 @@ fn rebuild_album_current_mode(
 ///
 /// # Arguments
 ///
+/// * `state` - Application state
+/// * `stack` - Stack receiving the mode view
+/// * `narrow_state` - Narrow-width tracker for the initial cover size
+/// * `mode` - View mode to build
 /// * `cached` - Shared album data (albums, artist names, format info)
 /// * `indices` - Display order of `cached.albums` (e.g. a sorted index vector)
 fn build_album_mode(

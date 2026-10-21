@@ -102,6 +102,7 @@ impl AudioOutput {
     /// * `ring_capacity` - Capacity of the ring buffer
     /// * `device_lost` - Shared flag indicating device loss
     /// * `volume_atomic` - Shared atomic volume value
+    /// * `desired_mode` - Desired output mode
     ///
     /// # Returns
     ///

@@ -122,7 +122,7 @@ pub fn build_empty_state(state: &Arc<AppState>, params: &EmptyStateParams) -> Bo
 /// # Arguments
 ///
 /// * `state` - Application state
-/// * `narrow_mode` - Narrow‑width tracker for adaptive column hiding
+/// * `narrow_state` - Narrow‑width tracker for adaptive column hiding
 /// * `setup_fn` - Closure that populates a `Stack` with both views; receives `(&Stack, state,
 ///   narrow_state, initial_mode)`.  Called once at startup and again on library refresh to
 ///   re-populate in‑place.
@@ -280,10 +280,6 @@ pub fn clear_container(container: &Box) {
 ///
 /// Creates a vertically centered box that can be populated with
 /// empty state content (icon, text, buttons).
-///
-/// # Arguments
-///
-/// * `state` - Application state (reserved for future use)
 #[must_use]
 pub fn build_empty_container(_: &Arc<AppState>) -> Box {
     let container = Box::builder()
